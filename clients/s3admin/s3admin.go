@@ -2,18 +2,18 @@
 //
 // Every subsystem that touches the shared object store — clients/projects (the
 // deploy blob store) and clients/s3 (the /v1/s3 file-manager control plane) —
-// builds its *minio.Client here, from the SAME admin credentials
+// builds its *s3.Client here, from the SAME admin credentials
 // (S3_ADMIN_*). There is no second S3 client construction anywhere in the
 // binary: one endpoint, one credential source, one connect path (DRY).
 //
 // The backend is the SeaweedFS S3 gateway (s3.hanzo.svc:9000), which speaks the
-// S3 API, so minio-go is the client. The gateway is reached over the internal
+// S3 API, so hanzoai/s3-go is the client. The gateway is reached over the internal
 // admin endpoint for control operations; a SEPARATE public-host client
 // (PublicClient) is used only to MINT presigned URLs that a browser can follow,
 // since a presign is a pure signature over the client's endpoint and never makes
 // a network call — so the signed host is the browser-routable one.
 //
-// This package depends on nothing but minio-go: it is a leaf, so both
+// This package depends on nothing but hanzoai/s3-go: it is a leaf, so both
 // projects and the s3 subsystem import it without any import cycle.
 package s3admin
 
@@ -23,7 +23,7 @@ import (
 	"strconv"
 	"strings"
 
-	minio "github.com/hanzoai/s3-go"
+	s3 "github.com/hanzoai/s3-go"
 	"github.com/hanzoai/s3-go/pkg/credentials"
 )
 
@@ -78,14 +78,14 @@ func (a Admin) Configured() bool { return a.ak != "" && a.sk != "" }
 // Region is the signing region (exposed so callers can pass it to MakeBucket).
 func (a Admin) Region() string { return a.region }
 
-// Client builds a minio client bound to the INTERNAL admin endpoint. Use it for
+// Client builds a S3 client bound to the INTERNAL admin endpoint. Use it for
 // every control/data operation the server performs itself (list, create, stat,
 // delete, and streamed put/get through the server).
-func (a Admin) Client() (*minio.Client, error) {
+func (a Admin) Client() (*s3.Client, error) {
 	if !a.Configured() {
 		return nil, fmt.Errorf("s3admin: S3_ADMIN_ACCESS_KEY/SECRET_KEY not set")
 	}
-	return minio.New(a.endpoint, &minio.Options{
+	return s3.New(a.endpoint, &s3.Options{
 		Creds:  credentials.NewStaticV4(a.ak, a.sk, ""),
 		Secure: a.secure,
 		Region: a.region,
@@ -97,15 +97,15 @@ func (a Admin) Client() (*minio.Client, error) {
 // download (they degrade to a server-streamed path or an honest error).
 func (a Admin) PresignConfigured() bool { return a.Configured() && a.publicEndpoint != "" }
 
-// PublicClient builds a minio client bound to the PUBLIC host. Its ONLY use is
+// PublicClient builds a S3 client bound to the PUBLIC host. Its ONLY use is
 // minting presigned URLs (PresignedGetObject / PresignedPutObject) — those sign
 // over this client's endpoint without any network call, so the URL a browser
 // receives targets the public, routable host and not the in-cluster admin one.
-func (a Admin) PublicClient() (*minio.Client, error) {
+func (a Admin) PublicClient() (*s3.Client, error) {
 	if !a.PresignConfigured() {
 		return nil, fmt.Errorf("s3admin: no public endpoint configured for presigning")
 	}
-	return minio.New(a.publicEndpoint, &minio.Options{
+	return s3.New(a.publicEndpoint, &s3.Options{
 		Creds:  credentials.NewStaticV4(a.ak, a.sk, ""),
 		Secure: a.publicSecure,
 		Region: a.region,
@@ -113,7 +113,7 @@ func (a Admin) PublicClient() (*minio.Client, error) {
 }
 
 // hostOnly strips a scheme and any trailing slash from a configured public
-// endpoint, since minio.New wants a bare host[:port]. "https://s3.hanzo.ai/" →
+// endpoint, since s3.New wants a bare host[:port]. "https://s3.hanzo.ai/" →
 // "s3.hanzo.ai".
 func hostOnly(s string) string {
 	s = strings.TrimSpace(s)
