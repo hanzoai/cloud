@@ -93,36 +93,38 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	mounted = s
 	routes(app, s)
 	s.Log.Info("guide mounted", "brand", deps.Brand,
+		"principles", len(s.State.defBlueprint.Principles),
 		"steps", len(s.State.defBlueprint.Steps), "strategies", len(s.State.defBlueprint.Strategies),
-		"version", s.State.defBlueprint.Version, "seeded", seeded)
+		"version", s.State.defBlueprint.Version, "seedVersion", seedVersion, "seededOrUpgraded", seeded)
 	return nil
 }
 
-// seedBlueprints seeds the embedded fixtures into the shared store, seed-if-absent: the
-// base blueprint under brand "" plus each embedded brand blueprint under its key. The
-// canonical JSON of the PARSED blueprint is stored (so the persisted seed is exactly
-// what the engine runs, independent of input syntax). Idempotent by (brand): a brand
-// that already carries a row (a prior seed, or an admin edit) is left untouched.
+// seedBlueprints seeds the embedded fixtures into the shared store, VERSION-AWARE: the base
+// blueprint under brand "" plus each embedded brand blueprint under its key. The canonical
+// JSON of the PARSED blueprint is stored (so the persisted seed is exactly what the engine
+// runs, independent of input syntax). Per brand (SeedOrUpgrade): seed when absent; upgrade
+// an UNEDITED seed when the embedded seedVersion is newer; NEVER touch an admin-edited
+// brand. Returns how many brands were seeded or upgraded (a no-op redeploy returns 0).
 func seedBlueprints(ctx context.Context, store *BlueprintStore) (int, error) {
 	now := time.Now().Unix()
-	seed := func(brand string, bp Blueprint) (bool, error) {
+	seed := func(brand string, bp Blueprint) (SeedAction, error) {
 		doc, err := json.Marshal(bp)
 		if err != nil {
-			return false, fmt.Errorf("marshal %q seed: %w", brand, err)
+			return SeedNone, fmt.Errorf("marshal %q seed: %w", brand, err)
 		}
-		return store.SeedIfAbsent(ctx, brand, doc, now)
+		return store.SeedOrUpgrade(ctx, brand, doc, seedVersion, now)
 	}
 	count := 0
-	if ok, err := seed("", defaultBlueprint); err != nil {
+	if act, err := seed("", defaultBlueprint); err != nil {
 		return count, err
-	} else if ok {
+	} else if act != SeedNone {
 		count++
 	}
 	for _, brand := range BrandCurriculums() {
 		bp, _ := brandBlueprint(brand)
-		if ok, err := seed(brand, bp); err != nil {
+		if act, err := seed(brand, bp); err != nil {
 			return count, err
-		} else if ok {
+		} else if act != SeedNone {
 			count++
 		}
 	}
