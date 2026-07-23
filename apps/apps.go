@@ -61,6 +61,7 @@ import (
 	"github.com/hanzoai/cloud/clients/authors"
 	"github.com/hanzoai/cloud/clients/automations"
 	"github.com/hanzoai/cloud/clients/base"
+	"github.com/hanzoai/cloud/clients/benchmark"
 	"github.com/hanzoai/cloud/clients/billing"
 	"github.com/hanzoai/cloud/clients/bots"
 	"github.com/hanzoai/cloud/clients/captable"
@@ -77,7 +78,6 @@ import (
 	"github.com/hanzoai/cloud/clients/do"
 	"github.com/hanzoai/cloud/clients/domain"
 	"github.com/hanzoai/cloud/clients/entitlements"
-	"github.com/hanzoai/cloud/clients/benchmark"
 	"github.com/hanzoai/cloud/clients/eval"
 	"github.com/hanzoai/cloud/clients/exec"
 	"github.com/hanzoai/cloud/clients/flags"
@@ -111,6 +111,7 @@ import (
 	"github.com/hanzoai/cloud/clients/provisioning"
 	"github.com/hanzoai/cloud/clients/pubsub"
 	"github.com/hanzoai/cloud/clients/referrals"
+	"github.com/hanzoai/cloud/clients/research"
 	"github.com/hanzoai/cloud/clients/rollingcap"
 	"github.com/hanzoai/cloud/clients/runtime"
 	"github.com/hanzoai/cloud/clients/sbom"
@@ -351,6 +352,10 @@ func Wire() []cloud.MountSpec {
 		{Name: "product", Mount: product.Mount},
 		{Name: "evals", Mount: eval.Mount},
 		{Name: "benchmark", Mount: benchmark.Mount},
+		// The R&D EVIDENCE plane (HIP-0512) + its R&D Ops Board UI at /research —
+		// the arena's sibling: benchmark measures, research is the versioned diary
+		// every product's runs accrue into. Non-staged: mounts under the default.
+		{Name: "research", Mount: research.Mount, Shutdown: ctxShutdown(research.Shutdown)},
 		{Name: "treasury", Mount: treasury.Mount, Shutdown: ctxShutdown(treasury.Shutdown)},
 		{Name: "admin", Mount: admin.Mount},
 		// Launch-control gate (per-service waitlist): the COMPLETE feature — host→service
