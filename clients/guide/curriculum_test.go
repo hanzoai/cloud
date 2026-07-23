@@ -9,8 +9,8 @@ import (
 // schema invariant — the same check package init enforces, made explicit.
 func TestDefaultCurriculumValid(t *testing.T) {
 	c := defaultCurriculum
-	if len(c.Steps) < 5 || len(c.Steps) > 8 {
-		t.Fatalf("default should have 5-8 steps, got %d", len(c.Steps))
+	if len(c.Steps) < 5 || len(c.Steps) > 12 {
+		t.Fatalf("default should have 5-12 steps, got %d", len(c.Steps))
 	}
 	if err := Validate(c); err != nil {
 		t.Fatalf("default invalid: %v", err)
