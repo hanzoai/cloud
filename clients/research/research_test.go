@@ -145,6 +145,60 @@ func TestRetractionWithdraws(t *testing.T) {
 	}
 }
 
+// TestSupersessionIsSeqNotClientTS is the N2 cross-tool case: supersession is by the
+// server's append clock (seq), NOT client ts. A backfilled experiment carries a big
+// wall-clock ts (~1.7e9); an SDK live correction/retraction sends NONE (ts=0). Ordering by
+// ts would sort the ts=0 record BEFORE the ts=big backfill so it would never win — the
+// exact 91.4→69.7 stale-correction bug in the intended backfill+live-SDK workflow. Under
+// seq (latest-append-wins) the later record supersedes regardless of ts.
+func TestSupersessionIsSeqNotClientTS(t *testing.T) {
+	st, ctx := newStore(t)
+	big := int64(1_700_000_000) // an uploader's int(time.time())
+	// Experiment: ts=big backfill, then ts=0 SDK correction → correction must win.
+	eid := "benchmark:enso:livecodebench"
+	mkE := func(v float64, rev string, ts int64) Experiment {
+		return Experiment{ID: eid, Kind: "benchmark", Subject: "enso", Task: "livecodebench", Metric: "accuracy", Value: v, N: 200, Revision: rev, TS: ts}
+	}
+	if _, _, err := st.ingest(ctx, proj, []Experiment{mkE(91.4, "original", big)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.ingest(ctx, proj, []Experiment{mkE(69.7, "corrected", 0)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if exps, _ := st.listExperiments(ctx, "", ""); len(exps) != 1 || exps[0].Value != 69.7 {
+		t.Fatalf("ts=0 correction of ts=big backfill: canonical=%v, want 69.7 (seq-authoritative)", exps)
+	}
+	// A ts=0 SDK retraction of the ts=big-lineage id must WITHDRAW it.
+	if _, _, err := st.ingest(ctx, proj, []Experiment{mkE(69.7, "retracted", 0)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if exps, _ := st.listExperiments(ctx, "", ""); len(exps) != 0 {
+		t.Fatalf("ts=0 retraction of ts=big lineage: canonical=%d, want 0 (withdrawn)", len(exps))
+	}
+
+	// Attempt: same cross-tool case — ts=big backfill answer, ts=0 SDK correction wins.
+	mkA := func(ans string, rev string, ts int64) Attempt {
+		return Attempt{Benchmark: "livecodebench", Item: "q1", Model: "enso", Answer: ans, Correct: ans == "A", Revision: rev, TS: ts}
+	}
+	if _, _, err := st.ingest(ctx, proj, nil, []Attempt{mkA("B", "original", big)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.ingest(ctx, proj, nil, []Attempt{mkA("A", "corrected", 0)}); err != nil {
+		t.Fatal(err)
+	}
+	var ans string
+	if err := st.db.QueryRowContext(ctx, `SELECT a.answer FROM attempt a WHERE `+canonicalAttWhere+` AND a.benchmark='livecodebench'`).Scan(&ans); err != nil {
+		t.Fatal(err)
+	}
+	if ans != "A" {
+		t.Fatalf("ts=0 attempt correction of ts=big backfill: canonical answer=%q, want A", ans)
+	}
+	c, _ := st.counts(ctx)
+	if c.ExperimentsRetained != 3 || c.AttemptsRetained != 2 {
+		t.Fatalf("retained counts=%+v, want exp=3 att=2 (every version retained)", c)
+	}
+}
+
 // TestProvenanceDistinctVersions: the SAME number on a DIFFERENT git sha / lib version is
 // a distinct RETAINED version — the longitudinal "which lib version regressed this"
 // record — and provenance is returned queryable on read.
