@@ -25,10 +25,13 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
-// aiMeterProvider is the commerce provider/service label every inference debit
+// AIMeterProvider is the commerce provider/service label every inference debit
 // carries, so LLM spend is attributable and the per-scope + account caps sum over
-// (project, "ai").
-const aiMeterProvider = "ai"
+// (project, "ai"). It is exported so any OTHER inference path that does not run
+// through this wrapper — a BYO model invoked with the org's own provider token
+// (e.g. Cloudflare Workers AI) — debits the SAME product axis and shares the same
+// per-scope caps, rather than inventing a parallel usage label.
+const AIMeterProvider = "ai"
 
 // defaultAIPriceUUSDPer1kTokens is the fallback inference price in micro-USD per
 // 1000 tokens ($2 / 1M tokens) when no operator override is set. A clearly-named,
@@ -52,7 +55,7 @@ type meteredAI struct {
 func meteredAIClient(inner types.AIClient, deps Deps) types.AIClient {
 	m := &meteredAI{
 		inner: inner,
-		meter: NewResourceMeter(deps, aiMeterProvider),
+		meter: NewResourceMeter(deps, AIMeterProvider),
 		log:   deps.Logger,
 		rate:  aiPriceUUSDPer1kTokens(),
 	}
@@ -80,7 +83,7 @@ func (m *meteredAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) 
 	// for its data scope (BYO keys, RAG). billedOrg falls back to req.Org when the
 	// caller did not split them (home==effective for a normal caller).
 	payer := billedOrg(req.BillingOrg, req.Org)
-	if err := m.gate(ctx, payer, req.Project, estTokens(req.Prompt)); err != nil {
+	if err := m.gate(ctx, payer, req.Project, EstTokens(req.Prompt)); err != nil {
 		return nil, err
 	}
 	resp, err := m.inner.ChatCompletion(ctx, req)
@@ -93,7 +96,7 @@ func (m *meteredAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) 
 			total = resp.PromptTokens + resp.CompletionTokens
 		}
 		if total <= 0 {
-			total = estTokens(req.Prompt) // gateway omitted usage → fall back to the estimate.
+			total = EstTokens(req.Prompt) // gateway omitted usage → fall back to the estimate.
 		}
 		m.record(payer, req.Project, req.Model, metering.Usage{
 			PromptTokens:     resp.PromptTokens,
@@ -110,7 +113,7 @@ func (m *meteredAI) Embed(ctx context.Context, req *types.EmbedRequest) ([][]flo
 	if req == nil || len(req.Inputs) == 0 {
 		return m.inner.Embed(ctx, req) // nothing to bill; let the transport no-op.
 	}
-	toks := estTokens(req.Inputs...)
+	toks := EstTokens(req.Inputs...)
 	payer := billedOrg(req.BillingOrg, req.Org) // HOME org pays; req.Org stays the data scope.
 	if err := m.gate(ctx, payer, req.Project, toks); err != nil {
 		return nil, err
@@ -146,7 +149,7 @@ func (m *meteredAI) gate(ctx context.Context, org, project string, tokens int) e
 	// server-minted identity claim, so it is unvalidated here → a project-scoped
 	// cap stays soft. The request-edge BillingGate already hardens the validated
 	// project axis for the inbound LLM path.
-	return m.meter.Gate(ctx, org, project, false, aiMeterProvider, m.cents(tokens))
+	return m.meter.Gate(ctx, org, project, false, AIMeterProvider, m.cents(tokens))
 }
 
 // record debits the EXACT micro-USD cost to the org's billing account, attributed
@@ -162,8 +165,8 @@ func (m *meteredAI) record(org, project, model string, u metering.Usage, tokens 
 	u.AmountMicros = m.micros(tokens)
 	u.Project = project
 	u.Model = model
-	u.Service = aiMeterProvider
-	m.meter.MeterUsage(org, aiMeterProvider, u)
+	u.Service = AIMeterProvider
+	m.meter.MeterUsage(org, AIMeterProvider, u)
 }
 
 // micros converts a token count to the debit in micro-USD at the configured rate.
@@ -177,20 +180,28 @@ func (m *meteredAI) micros(tokens int) int64 {
 // cents converts a token count to whole cents (round UP, min 1 when there is any
 // cost) for the conservative pre-call gate — the gate must never under-reserve.
 func (m *meteredAI) cents(tokens int) int64 {
-	micros := m.micros(tokens)
+	return MicrosToGateCents(m.micros(tokens))
+}
+
+// MicrosToGateCents converts a micro-USD amount to the whole cents a pre-call
+// balance gate must RESERVE: round UP (a gate must never under-reserve), with a
+// 1-cent floor for any positive amount. 1 cent = 10_000 micro-USD. Shared by the
+// LLM meter and every other inference path (Workers AI) so one rule prices the
+// gate everywhere.
+func MicrosToGateCents(micros int64) int64 {
 	if micros <= 0 {
 		return 0
 	}
-	if c := (micros + 9999) / 10000; c >= 1 { // ceil: 1 cent = 10_000 micro-USD.
+	if c := (micros + 9999) / 10000; c >= 1 { // ceil.
 		return c
 	}
 	return 1
 }
 
-// estTokens is a deterministic, provider-agnostic token estimate (~4 chars/token)
+// EstTokens is a deterministic, provider-agnostic token estimate (~4 chars/token)
 // used to price embeddings (no usage returned) and to pre-gate chat before the
 // completion tokens are known.
-func estTokens(texts ...string) int {
+func EstTokens(texts ...string) int {
 	var chars int
 	for _, t := range texts {
 		chars += len(t)
@@ -218,4 +229,48 @@ func aiPriceUUSDPer1kTokens() int64 {
 		return defaultAIPriceUUSDPer1kTokens
 	}
 	return n
+}
+
+// defaultBYOFeeBps is the platform routing fee on a BYO inference call, in basis
+// points of the EQUIVALENT metered price (100 bps = 1%). A BYO call runs on the
+// org's OWN provider token — the provider already billed the org for the compute —
+// so Hanzo charges only this thin fee for gating/metering/observing the call, never
+// the full inference cost (that would double-bill). A clearly-named policy default,
+// overridable per deployment; 0 makes BYO inference free (and thus un-metered).
+const defaultBYOFeeBps int64 = 100
+
+// BYOFeeBps resolves the BYO inference platform fee (basis points) from
+// CLOUD_AI_BYO_FEE_BPS, else the policy default. A negative/invalid value falls
+// through to the default so a typo cannot silently zero out the fee; 0 is honored
+// (free BYO). This is the ONE BYO fee knob for the whole binary.
+func BYOFeeBps() int64 {
+	s := strings.TrimSpace(os.Getenv("CLOUD_AI_BYO_FEE_BPS"))
+	if s == "" {
+		return defaultBYOFeeBps
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || n < 0 {
+		return defaultBYOFeeBps
+	}
+	return n
+}
+
+// BYOInferenceFeeMicros is the platform routing fee (micro-USD) for a BYO inference
+// of `tokens` tokens: BYOFeeBps of the EQUIVALENT metered price (aiPriceUUSDPer1kTokens),
+// so a BYO model invoked with the org's own provider token (Cloudflare Workers AI)
+// debits the SAME usage spine and the SAME per-scope caps as a Hanzo-served call,
+// only at the thin BYO fee rather than the full inference cost. This is the ONE BYO
+// fee model — no per-provider variant. Zero rate or zero fee ⟹ 0 (un-metered).
+func BYOInferenceFeeMicros(tokens int) int64 {
+	if tokens <= 0 {
+		return 0
+	}
+	rate := aiPriceUUSDPer1kTokens()
+	bps := BYOFeeBps()
+	if rate <= 0 || bps <= 0 {
+		return 0
+	}
+	// Divide progressively to bound the intermediate product (no int64 overflow for
+	// sane token/rate/bps): equivalent micros = tokens*rate/1000; fee = *bps/10000.
+	return int64(tokens) * rate / 1000 * bps / 10000
 }
