@@ -6,12 +6,12 @@
 package org
 
 // condstore.go is the concrete atomic-CAS object store the fence needs:
-// minio-go's native If-Match / If-None-Match conditional PUT against the same
-// S3-compatible SeaweedFS gateway clients/s3 already speaks to. It satisfies
+// hanzoai/s3-go's native If-Match / If-None-Match conditional PUT against the same
+// SeaweedFS S3 gateway clients/s3 already speaks to. It satisfies
 // github.com/hanzoai/vfs/replica.ConditionalStore, the seam FencedStore (per-org
 // DB ship) and CASFencer (per-org lease) compose over.
 //
-// WHY minio-go directly and not vfs's block layer: the vfs content-addressable
+// WHY the S3 client directly and not vfs's block layer: the vfs content-addressable
 // backend exposes NO conditional-write primitive — "overwriting is allowed" is its
 // contract — so the fence, which is a CONDITIONAL write, cannot ride that path. It
 // addresses a dedicated object per shard directly against the gateway, exactly as
@@ -19,8 +19,8 @@ package org
 // vendored. Build one from s3admin's admin client:
 //
 //	a := s3admin.New()
-//	client, err := a.Client()          // admin-credentialed minio client
-//	cs := &MinioConditionalStore{Client: client, Bucket: orgBucket}
+//	client, err := a.Client()          // admin-credentialed S3 client
+//	cs := &S3ConditionalStore{Client: client, Bucket: orgBucket}
 //	dbFence := replica.NewFencedStore(cs)      // per-org DB fenced ship
 //	fencer  := NewCASFencer(cs, membership)    // per-org monotone lease round
 
@@ -32,30 +32,30 @@ import (
 	"io"
 
 	"github.com/hanzoai/vfs/replica"
-	minio "github.com/hanzoai/s3-go"
+	s3 "github.com/hanzoai/s3-go"
 )
 
-// MinioConditionalStore is a replica.ConditionalStore over minio-go's native
-// optimistic-locking extension (SetMatchETag / SetMatchETagExcept). The server —
-// not this process — evaluates the precondition atomically, which is the property
-// the fence's correctness depends on.
-type MinioConditionalStore struct {
-	Client *minio.Client
+// S3ConditionalStore is a replica.ConditionalStore over the SeaweedFS S3 gateway's
+// native optimistic-locking extension (SetMatchETag / SetMatchETagExcept). The
+// server — not this process — evaluates the precondition atomically, which is the
+// property the fence's correctness depends on.
+type S3ConditionalStore struct {
+	Client *s3.Client
 	Bucket string
 }
 
-// NewMinioConditionalStore builds a ConditionalStore over an already-constructed
-// minio client and bucket. The caller owns the client lifecycle (credentials, TLS,
+// NewS3ConditionalStore builds a ConditionalStore over an already-constructed
+// S3 client and bucket. The caller owns the client lifecycle (credentials, TLS,
 // endpoint) — this type adds only the conditional-write semantics.
-func NewMinioConditionalStore(client *minio.Client, bucket string) *MinioConditionalStore {
-	return &MinioConditionalStore{Client: client, Bucket: bucket}
+func NewS3ConditionalStore(client *s3.Client, bucket string) *S3ConditionalStore {
+	return &S3ConditionalStore{Client: client, Bucket: bucket}
 }
 
 // Get returns the object bytes and its ETag from ONE GET response (obj.Stat reads
 // the header of the same request io.ReadAll drains), so the version is guaranteed
 // consistent with the bytes. Absent key maps to replica.ErrNotFound.
-func (s *MinioConditionalStore) Get(ctx context.Context, key string) ([]byte, string, error) {
-	obj, err := s.Client.GetObject(ctx, s.Bucket, key, minio.GetObjectOptions{})
+func (s *S3ConditionalStore) Get(ctx context.Context, key string) ([]byte, string, error) {
+	obj, err := s.Client.GetObject(ctx, s.Bucket, key, s3.GetObjectOptions{})
 	if err != nil {
 		return nil, "", fmt.Errorf("condstore: get %s/%s: %w", s.Bucket, key, err)
 	}
@@ -78,8 +78,8 @@ func (s *MinioConditionalStore) Get(ctx context.Context, key string) ([]byte, st
 // expectVersion (SetMatchETag), or iff the object does not exist when
 // expectVersion is "" (SetMatchETagExcept "*"). A failed precondition is mapped to
 // replica.ErrConflict.
-func (s *MinioConditionalStore) PutIfVersion(ctx context.Context, key string, data []byte, expectVersion string) (string, error) {
-	opts := minio.PutObjectOptions{ContentType: "application/octet-stream"}
+func (s *S3ConditionalStore) PutIfVersion(ctx context.Context, key string, data []byte, expectVersion string) (string, error) {
+	opts := s3.PutObjectOptions{ContentType: "application/octet-stream"}
 	if expectVersion == "" {
 		opts.SetMatchETagExcept("*") // object must not exist yet.
 	} else {
@@ -96,7 +96,7 @@ func (s *MinioConditionalStore) PutIfVersion(ctx context.Context, key string, da
 }
 
 func isNoSuchKey(err error) bool {
-	var resp minio.ErrorResponse
+	var resp s3.ErrorResponse
 	if errors.As(err, &resp) {
 		return resp.Code == "NoSuchKey"
 	}
@@ -104,11 +104,11 @@ func isNoSuchKey(err error) bool {
 }
 
 func isPreconditionFailed(err error) bool {
-	var resp minio.ErrorResponse
+	var resp s3.ErrorResponse
 	if errors.As(err, &resp) {
 		return resp.Code == "PreconditionFailed" || resp.StatusCode == 412
 	}
 	return false
 }
 
-var _ replica.ConditionalStore = (*MinioConditionalStore)(nil)
+var _ replica.ConditionalStore = (*S3ConditionalStore)(nil)
