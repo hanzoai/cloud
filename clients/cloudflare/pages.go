@@ -1,9 +1,9 @@
 package cloudflare
 
-// pages.go — Cloudflare Pages, WIRED. Each handler resolves the caller-org token
-// (authClient for reads, authWrite for mutations) and the account id (resolveAccount),
-// then proxies to the CF Pages API under /accounts/{account_id}/pages/*. Request
-// bodies are decoded into the typed params ported from the platform's cloudflare.ts
+// pages.go — Cloudflare Pages, WIRED. Each handler takes the caller-org client + its
+// account id through the ONE shared preamble — acctClient for reads, acctWrite (org
+// admin) for mutations — then proxies to /accounts/{account_id}/pages/* via cl.pass.
+// Request bodies decode into the typed params ported from the platform's cloudflare.ts
 // (PagesProjectCreateParams et al.), so only modeled fields reach Cloudflare;
 // responses relay verbatim (no field loss).
 
@@ -72,11 +72,7 @@ type PagesProjectCreate struct {
 // ── handlers ────────────────────────────────────────────────────────────────────
 
 func pagesList(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, org, err := authClient(s, c)
-	if err != nil {
-		return err
-	}
-	acct, err := cl.resolveAccount(c.Context(), org, c)
+	cl, acct, err := acctClient(s, c)
 	if err != nil {
 		return err
 	}
@@ -84,11 +80,7 @@ func pagesList(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func pagesGet(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, org, err := authClient(s, c)
-	if err != nil {
-		return err
-	}
-	acct, err := cl.resolveAccount(c.Context(), org, c)
+	cl, acct, err := acctClient(s, c)
 	if err != nil {
 		return err
 	}
@@ -100,11 +92,7 @@ func pagesGet(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func pagesCreate(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, org, err := authWrite(s, c)
-	if err != nil {
-		return err
-	}
-	acct, err := cl.resolveAccount(c.Context(), org, c)
+	cl, acct, err := acctWrite(s, c)
 	if err != nil {
 		return err
 	}
@@ -119,11 +107,7 @@ func pagesCreate(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func pagesDelete(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, org, err := authWrite(s, c)
-	if err != nil {
-		return err
-	}
-	acct, err := cl.resolveAccount(c.Context(), org, c)
+	cl, acct, err := acctWrite(s, c)
 	if err != nil {
 		return err
 	}
@@ -135,11 +119,7 @@ func pagesDelete(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func pagesDeploy(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, org, err := authWrite(s, c)
-	if err != nil {
-		return err
-	}
-	acct, err := cl.resolveAccount(c.Context(), org, c)
+	cl, acct, err := acctWrite(s, c)
 	if err != nil {
 		return err
 	}
@@ -161,11 +141,7 @@ func pagesDeploy(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func pagesDomainAdd(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, org, err := authWrite(s, c)
-	if err != nil {
-		return err
-	}
-	acct, err := cl.resolveAccount(c.Context(), org, c)
+	cl, acct, err := acctWrite(s, c)
 	if err != nil {
 		return err
 	}
@@ -187,11 +163,7 @@ func pagesDomainAdd(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func pagesDomainDelete(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, org, err := authWrite(s, c)
-	if err != nil {
-		return err
-	}
-	acct, err := cl.resolveAccount(c.Context(), org, c)
+	cl, acct, err := acctWrite(s, c)
 	if err != nil {
 		return err
 	}
