@@ -63,6 +63,44 @@ func eventsWhere(org string, start, end time.Time) (string, []any) {
 		[]any{tsLiteral(start), tsLiteral(end), org}
 }
 
+// Behavior-lens group-key expressions. Each is a SERVER-CHOSEN constant SQL
+// expression (never user input), so interpolating it into breakdownSQL is
+// injection-safe — the org + time bounds stay bound parameters via eventsWhere.
+//   - pageKeyExpr: the requested path ("where people go / what they look at").
+//   - referrerKeyExpr: the external referrer domain, falling back to the raw
+//     referrer when the domain didn't parse; a missing referrer OR a same-origin
+//     one (referrer_domain == domain(url), i.e. a self-referral) buckets to
+//     "(direct)" — the origin/referral split callers expect.
+//   - sourceKeyExpr: utm_source, with empty campaigns bucketed to "(none)".
+const (
+	pageKeyExpr     = "path"
+	referrerKeyExpr = "multiIf(referrer_domain != '' AND referrer_domain != domain(url), referrer_domain, referrer_domain = '' AND referrer != '', referrer, '(direct)')"
+	sourceKeyExpr   = "if(utm_source != '', utm_source, '(none)')"
+)
+
+// breakdownSQL builds ONE pageview breakdown over hanzo.events grouped by keyExpr
+// — the read core of the behavior lenses (topPages/topReferrers/topSources). Each
+// returned bucket carries its pageviews (count of $pageview rows) and visitors
+// (uniqExact distinct_id), plus the in-window pageview grand total via
+// `sum(pageviews) OVER ()`: because every pageview maps to exactly one bucket, that
+// window total is the TRUE total pageviews in-window, so buildBreakdown's pct is an
+// honest share of the whole (not merely of the returned top-N).
+//
+// Tenancy: keyExpr is a package constant (never user input) and limit is a
+// validated int, so the only user-derived values — org + time bounds — stay bound
+// parameters through eventsWhere. The isolation boundary is identical to every
+// other query this package builds.
+func breakdownSQL(keyExpr, org string, start, end time.Time, limit int) (string, []any) {
+	where, args := eventsWhere(org, start, end)
+	sql := fmt.Sprintf(
+		"SELECT k, pageviews, visitors, sum(pageviews) OVER () AS total FROM ("+
+			"SELECT %s AS k, count() AS pageviews, uniqExact(distinct_id) AS visitors "+
+			"FROM %s WHERE %s AND event = '$pageview' GROUP BY k"+
+			") ORDER BY pageviews DESC, visitors DESC LIMIT %d",
+		keyExpr, eventsTable, where, limit)
+	return sql, args
+}
+
 // tsLiteral formats a time as a datastore DateTime literal (UTC). Bound as a
 // string arg — identical to ai/object/cloud_usage.go's cloudUsageTS.
 func tsLiteral(t time.Time) string { return t.UTC().Format("2006-01-02 15:04:05") }
@@ -167,6 +205,26 @@ type TopProducts struct {
 	Source    string       `json:"source"`
 }
 
+// BreakdownRow is one bucket of a behavior lens (a path, a referrer domain, a
+// utm source). pct is the bucket's share of TOTAL pageviews in-window (the
+// window-fn denominator), so a top-N list honestly shows the long tail rather
+// than re-normalizing to the shown rows.
+type BreakdownRow struct {
+	Key       string  `json:"key"`
+	Pageviews int64   `json:"pageviews"`
+	Visitors  int64   `json:"visitors"`
+	Pct       float64 `json:"pct"` // share of total pageviews in-window, 0..100
+}
+
+// Breakdown is a ranked behavior lens over hanzo.events. Honest-empty
+// (Available=false) when the events table is absent/errored — never fabricated.
+type Breakdown struct {
+	Available bool           `json:"available"`
+	Reason    string         `json:"reason,omitempty"`
+	Items     []BreakdownRow `json:"items"`
+	Source    string         `json:"source"`
+}
+
 type Top struct {
 	Range    string      `json:"range"`
 	Start    string      `json:"start"`
@@ -174,6 +232,12 @@ type Top struct {
 	Scope    Scope       `json:"scope"`
 	Models   TopModels   `json:"models"`
 	Products TopProducts `json:"products"`
+	// Behavior lenses (events lens): WHERE people go / WHAT they look at
+	// (topPages) and where they come FROM (topReferrers organic/referral,
+	// topSources campaigns). Honest-empty until the beacon fills hanzo.events.
+	Pages     Breakdown `json:"topPages"`
+	Referrers Breakdown `json:"topReferrers"`
+	Sources   Breakdown `json:"topSources"`
 }
 
 // ── Pure assemblers ─────────────────────────────────────────────────────────
@@ -314,6 +378,33 @@ func buildTopProducts(rows []map[string]any, ok bool) TopProducts {
 		})
 	}
 	return TopProducts{Available: true, Items: items, Source: eventsTable}
+}
+
+// buildBreakdown assembles a behavior lens from breakdownSQL rows. ok=false
+// (events table absent/errored) → honest-empty with a non-nil empty list, exactly
+// like buildTopProducts. pct is each bucket's share of the in-window pageview total
+// carried by the window-fn `total` column (identical on every row); an empty
+// result yields total 0 → all pct 0. Pure — the tests drive it with mock rows.
+func buildBreakdown(rows []map[string]any, ok bool) Breakdown {
+	if !ok {
+		return Breakdown{Available: false, Reason: "no web analytics events yet", Items: []BreakdownRow{}, Source: eventsTable}
+	}
+	var total int64
+	if len(rows) > 0 {
+		total = aInt64(rows[0]["total"])
+	}
+	items := make([]BreakdownRow, 0, len(rows))
+	for _, r := range rows {
+		items = append(items, BreakdownRow{
+			Key:       aString(r["k"]),
+			Pageviews: aInt64(r["pageviews"]),
+			Visitors:  aInt64(r["visitors"]),
+		})
+	}
+	for i := range items {
+		items[i].Pct = pctOf(items[i].Pageviews, total)
+	}
+	return Breakdown{Available: true, Items: items, Source: eventsTable}
 }
 
 // ── Value coercion ──────────────────────────────────────────────────────────
