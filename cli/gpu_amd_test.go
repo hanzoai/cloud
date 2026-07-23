@@ -82,14 +82,31 @@ func writeNode(t *testing.T, root, id, props string) {
 	}
 }
 
-// TestPickAmdMemUnified — an APU whose VRAM is a token carve-out reports the GTT
-// unified pool (evo: 1 GiB VRAM vs ~118 GiB GTT); a discrete card keeps its VRAM.
+// TestPickAmdMemUnified — an APU whose VRAM is a token carve-out reports the
+// machine's unified RAM snapped to hardware capacity (evo: 1 GiB VRAM, 118 GiB
+// GTT, 124.4 GiB kernel-visible of 128 GiB physical → 128 GiB); a discrete card
+// keeps its VRAM.
 func TestPickAmdMemUnified(t *testing.T) {
-	if miB, unified := pickAmdMem(1024, 120832); !unified || miB != 120832 {
-		t.Errorf("APU: got (%d, %v), want (120832, true)", miB, unified)
+	if miB, unified := pickAmdMem(1024, 120832, 127411); !unified || miB != 131072 {
+		t.Errorf("APU: got (%d, %v), want (131072, true)", miB, unified)
 	}
-	if miB, unified := pickAmdMem(24576, 8192); unified || miB != 24576 {
+	if miB, unified := pickAmdMem(24576, 8192, 127411); unified || miB != 24576 {
 		t.Errorf("discrete: got (%d, %v), want (24576, false)", miB, unified)
+	}
+}
+
+// TestSnapUnified — a small firmware gap snaps up to the DIMM capacity; a big
+// carve-out is real lost capacity and stays as-is; exact multiples stand.
+func TestSnapUnified(t *testing.T) {
+	for _, c := range []struct{ in, want int64 }{
+		{127411, 131072}, // evo: 124.4 GiB visible of 128 GiB physical
+		{131072, 131072}, // exact 128 GiB
+		{119194, 119194}, // ~116 GiB visible (16 GiB BIOS carve) — 11.6 GiB gap, keep honest
+		{63488, 65536},   // 62 GiB visible of 64 GiB
+	} {
+		if got := snapUnified(c.in); got != c.want {
+			t.Errorf("snapUnified(%d) = %d, want %d", c.in, got, c.want)
+		}
 	}
 }
 
