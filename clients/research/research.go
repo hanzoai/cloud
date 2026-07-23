@@ -44,6 +44,7 @@ package research
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -118,16 +119,45 @@ type IngestRequest struct {
 	Attempts    []Attempt    `json:"attempts"`
 }
 
+// artifactKinds is the allowed set for a diary artifact: a rendered snapshot of the
+// canonical board, or a gateway-generated report page.
+var artifactKinds = map[string]bool{"snapshot": true, "report": true}
+
+// Artifact is one research-diary record — a raw-artifact-class manifest tied to a run: a
+// snapshot (a PNG of the canonical board) or a report (a generated page). sha256 is the
+// content-hash IDENTITY (idempotent — a re-POST of the same bytes is a no-op, the
+// hash-addressed half of the earned label); the bytes live at ref (blob store). Private
+// by default; public only via the separate visibility grant. Carries the same provenance
+// as a run.
+type Artifact struct {
+	SHA256         string          `json:"sha256"`
+	Kind           string          `json:"kind"`
+	Ref            string          `json:"ref"`
+	RunID          string          `json:"run_id"`
+	Project        string          `json:"project"`
+	Visibility     string          `json:"visibility"`
+	RetentionClass string          `json:"retention_class"`
+	GitSHA         string          `json:"git_sha"`
+	GitBranch      string          `json:"git_branch"`
+	GitDirty       bool            `json:"git_dirty"`
+	LibVersions    json.RawMessage `json:"lib_versions,omitempty"`
+	TS             int64           `json:"ts"`
+}
+
 // GrantRequest is a SEPARATE authorization decision for a stable id's records:
 // visibility (private/org/public) and the training/commons consent flags. A nil field is
 // left unchanged. This is the only path that elevates a record beyond private.
 type GrantRequest struct {
 	Project     string  `json:"project"`
-	ID          string  `json:"id"`
+	ID          string  `json:"id"`     // an experiment (run) stable id
+	SHA256      string  `json:"sha256"` // OR an artifact content hash
 	Visibility  *string `json:"visibility"`
 	Trainable   *bool   `json:"trainable"`
 	Publishable *bool   `json:"publishable"`
 }
+
+// maxArtifactPage bounds a diary feed read.
+const maxArtifactPage = 500
 
 // runStatuses is the HIP-0512 §5 run-execution vocabulary. status is a STORED field a
 // producer sets and the board renders — the live leasing state machine
@@ -178,6 +208,8 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	g.Get("/projects", cloud.Handle(s, getProjects))         // every project + real totals
 	g.Get("/totals", cloud.Handle(s, getTotals))             // headline aggregate + per-kind
 	g.Post("/grants", cloud.Handle(s, postGrant))            // visibility/consent (separate auth)
+	g.Post("/artifacts", cloud.Handle(s, postArtifact))      // record a diary artifact (idempotent by sha256)
+	g.Get("/artifacts", cloud.Handle(s, listArtifacts))      // chronological diary feed (newest-first)
 }
 
 var shutdownStores = func() error { return nil }
@@ -330,8 +362,8 @@ func postGrant(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := c.Bind(&req); err != nil {
 		return errJSON(c, http.StatusBadRequest, "invalid grant body")
 	}
-	if req.ID == "" {
-		return errJSON(c, http.StatusBadRequest, "grant needs a stable id")
+	if req.ID == "" && req.SHA256 == "" {
+		return errJSON(c, http.StatusBadRequest, "grant needs a stable id or an artifact sha256")
 	}
 	if req.Visibility != nil && !visibilities[*req.Visibility] {
 		return errJSON(c, http.StatusUnprocessableEntity, "visibility must be private, org, or public")
@@ -340,15 +372,80 @@ func postGrant(s *cloud.Service[state], c *zip.Ctx) error {
 	if project == "" {
 		project = principal.Project(c)
 	}
-	n, err := st.setGrant(c.Context(), project, req.ID, req.Visibility, req.Trainable, req.Publishable)
+	// An artifact grant (by sha256) sets only visibility — the same private-by-default
+	// rule as runs. A run grant (by id) sets visibility + consent flags.
+	var n int
+	var err error
+	if req.SHA256 != "" {
+		if req.Visibility == nil {
+			return errJSON(c, http.StatusBadRequest, "artifact grant needs a visibility")
+		}
+		n, err = st.setArtifactVisibility(c.Context(), project, req.SHA256, *req.Visibility)
+	} else {
+		n, err = st.setGrant(c.Context(), project, req.ID, req.Visibility, req.Trainable, req.Publishable)
+	}
 	if err != nil {
 		s.Log.Error("research grant failed", "org", org, "err", err)
 		return errJSON(c, http.StatusInternalServerError, "research grant failed")
 	}
 	if n == 0 {
-		return errJSON(c, http.StatusNotFound, "no records for that stable id")
+		return errJSON(c, http.StatusNotFound, "no records for that target")
 	}
 	return c.JSON(http.StatusOK, map[string]any{"updated": n})
+}
+
+// postArtifact records one diary artifact idempotently by its sha256 content hash, then
+// rolls it up best-effort. project is the SERVER's value; visibility is forced private.
+func postArtifact(s *cloud.Service[state], c *zip.Ctx) error {
+	st, org, done := orgStore(s, c)
+	if st == nil {
+		return done
+	}
+	project := principal.Project(c)
+	var a Artifact
+	if err := c.Bind(&a); err != nil {
+		return errJSON(c, http.StatusBadRequest, "invalid artifact body")
+	}
+	if a.SHA256 == "" || a.Ref == "" {
+		return errJSON(c, http.StatusUnprocessableEntity, "artifact needs a sha256 and a ref")
+	}
+	if !artifactKinds[a.Kind] {
+		return errJSON(c, http.StatusUnprocessableEntity, "kind must be snapshot or report")
+	}
+	ctx := c.Context()
+	created, err := st.putArtifact(ctx, project, a)
+	if err != nil {
+		s.Log.Error("research artifact failed", "org", org, "err", err)
+		return errJSON(c, http.StatusInternalServerError, "research artifact failed")
+	}
+	rolledUp := true
+	if err := s.State.wh.rollUpArtifact(ctx, org, project, a, time.Now()); err != nil {
+		rolledUp = false
+	}
+	return c.JSON(http.StatusOK, map[string]any{"sha256": a.SHA256, "created": created == 1, "rolled_up": rolledUp})
+}
+
+// listArtifacts returns the chronological diary feed newest-first, filtered by ?run=,
+// ?project= (default the caller's project scope), and ?since= (unix seconds).
+func listArtifacts(s *cloud.Service[state], c *zip.Ctx) error {
+	st, org, done := orgStore(s, c)
+	if st == nil {
+		return done
+	}
+	project := c.Query("project")
+	if project == "" {
+		project = principal.Project(c)
+	}
+	var since int64
+	if v := strings.TrimSpace(c.Query("since")); v != "" {
+		since, _ = strconv.ParseInt(v, 10, 64)
+	}
+	arts, err := st.listArtifacts(c.Context(), project, c.Query("run"), since, maxArtifactPage)
+	if err != nil {
+		s.Log.Error("research artifacts list failed", "org", org, "err", err)
+		return errJSON(c, http.StatusInternalServerError, "research artifacts list failed")
+	}
+	return c.JSON(http.StatusOK, map[string]any{"data": arts, "total": len(arts)})
 }
 
 // errJSON writes an error status in-band (status + {error} JSON, nil returned) — the
