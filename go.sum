@@ -1153,6 +1153,8 @@ github.com/hanzoai/thinking v0.1.1 h1:JuJ9s3q53NRSHSU+/zEdg089vppuNUKK/9BG7bairL
 github.com/hanzoai/thinking v0.1.1/go.mod h1:2lkNDDi+7mAipRhZZ57uqoqrzLKGBdoU5Rb6fGSOoR4=
 github.com/hanzoai/vfs v0.6.4 h1:7T1b/ONc2/3RhYwIAYB8MYAjXbP5fqnqsK2gZ3yQOSU=
 github.com/hanzoai/vfs v0.6.4/go.mod h1:NyQJ+POT174+iJj6fxncG748FjMgUfaVpSgaH00vOMU=
+github.com/hanzoai/vfs v0.6.6 h1:+4qrHjDOIqgUN1wryU9b5xphDKzTVyBa4CEwbhFSlYw=
+github.com/hanzoai/vfs v0.6.6/go.mod h1:OiiFWLgrTCMAJimUEgoSy1b/qXHpN34PN3RQwE49e1U=
 github.com/hanzoai/zen v1.4.2 h1:q9kyp7aN58wHDO5GIFJ0IUmFt3dJe7sLt2nR2xZ9mVY=
 github.com/hanzoai/zen v1.4.2/go.mod h1:gUs+2PLEiGD104AR4U5ZIUqMuJ0YriI9xQjkD3JlfxA=
 github.com/hanzos3/go-sdk v1.0.2 h1:EOJQGVnwclkzIyRJyWqtqmA2muyaSsF4y+7KYC4Vhdw=
