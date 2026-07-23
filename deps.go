@@ -57,6 +57,12 @@ type Deps struct {
 	// land at {DataDir}/orgs/{orgSlug}/{service}.db per HIP-0302.
 	DataDir string
 
+	// Durable is the per-deployment HA-durability factory an OrgStore wires
+	// WithDurable: the shared ha election + vfs FencedStore over the SeaweedFS S3
+	// gateway + per-org envelope Cipher. nil ⇒ local-only (no object store creds,
+	// dev/single-node), and every OrgStore is exactly the pre-durability cache.
+	Durable *Durability
+
 	// AIDefaultModel is the served model a subsystem uses when a caller supplies
 	// none (CLOUD_AI_DEFAULT_MODEL, default deepseek-v4-flash). It is the ONE
 	// cloud-side model default, sourced from config so no subsystem hardcodes a
