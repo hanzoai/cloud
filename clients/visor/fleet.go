@@ -70,6 +70,8 @@ type byoWorker struct {
 	Status        string   `json:"status"`   // online | offline
 	Rocm          string   `json:"rocm,omitempty"`
 	Hip           string   `json:"hip,omitempty"`
+	Cuda          string   `json:"cuda,omitempty"`
+	Driver        string   `json:"driver,omitempty"`
 	GPUs          []byoGPU `json:"gpus"`
 	LastHeartbeat string   `json:"lastHeartbeat,omitempty"`
 	FirstSeen     string   `json:"firstSeen,omitempty"`
@@ -103,6 +105,8 @@ type fleetRegistration struct {
 	JobQueue     string               `json:"jobQueue"`
 	Rocm         string               `json:"rocm,omitempty"`
 	Hip          string               `json:"hip,omitempty"`
+	Cuda         string               `json:"cuda,omitempty"`
+	Driver       string               `json:"driver,omitempty"`
 	GPUs         []byoGPU             `json:"gpus"`
 	Capabilities []string             `json:"capabilities,omitempty"`
 	Engine       *engineAdvertisement `json:"engine,omitempty"`
@@ -138,6 +142,8 @@ func byoWorkers(org string) []byoWorker {
 			Status:        byoStatus(a.LastHeartbeatTime, now),
 			Rocm:          reg.Rocm,
 			Hip:           reg.Hip,
+			Cuda:          reg.Cuda,
+			Driver:        reg.Driver,
 			GPUs:          reg.GPUs,
 			LastHeartbeat: a.LastHeartbeatTime,
 			FirstSeen:     a.StartTime,
