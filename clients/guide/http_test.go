@@ -22,8 +22,8 @@ func TestHTTPGateRequiresPrincipal(t *testing.T) {
 	}
 }
 
-// TestHTTPOverviewDefault: a fresh org gets the built-in default with progress and
-// the first available step as next.
+// TestHTTPOverviewDefault: a fresh org gets the seeded base blueprint (the historic
+// playbook) with progress and the first available step as next.
 func TestHTTPOverviewDefault(t *testing.T) {
 	app := newApp(t)
 	r := req(t, app, http.MethodGet, "/v1/guide", "acme", nil)
@@ -31,28 +31,28 @@ func TestHTTPOverviewDefault(t *testing.T) {
 		t.Fatalf("overview want 200, got %d (%s)", r.Code, r.Body)
 	}
 	v := decode[overviewView](t, r.Body)
-	if v.Version != "builtin-2" || v.Custom {
-		t.Fatalf("fresh org should use builtin default, got version=%q custom=%v", v.Version, v.Custom)
+	if v.Version != "1" || v.Custom {
+		t.Fatalf("fresh org should use the seeded base blueprint, got version=%q custom=%v", v.Version, v.Custom)
 	}
 	if v.Progress.Total != len(v.Steps) || v.Progress.Done != 0 {
 		t.Fatalf("fresh progress want {done:0,total:%d}, got %+v", len(v.Steps), v.Progress)
 	}
-	if v.Progress.Next != "company" {
-		t.Fatalf("next want company, got %q", v.Progress.Next)
+	if v.Progress.Next != "incorporate" {
+		t.Fatalf("next want incorporate, got %q", v.Progress.Next)
 	}
-	// company is the journey root (available); positioning is blocked by company.
+	// incorporate is the journey root (available); gsuite is blocked by incorporate.
 	byID := map[string]stepView{}
 	for _, s := range v.Steps {
 		byID[s.ID] = s
 	}
-	if !byID["company"].Available {
-		t.Fatal("company (the journey root) must be available")
+	if !byID["incorporate"].Available {
+		t.Fatal("incorporate (the journey root) must be available")
 	}
-	if byID["positioning"].Available || len(byID["positioning"].BlockedBy) == 0 {
-		t.Fatalf("positioning must be blocked by company, got %+v", byID["positioning"])
+	if byID["gsuite"].Available || len(byID["gsuite"].BlockedBy) == 0 {
+		t.Fatalf("gsuite must be blocked by incorporate, got %+v", byID["gsuite"])
 	}
-	if !byID["positioning"].Automatable {
-		t.Fatal("positioning binds content_generate and must be automatable")
+	if !byID["incorporate"].Automatable {
+		t.Fatal("incorporate binds company_form and must be automatable")
 	}
 }
 
@@ -61,8 +61,8 @@ func TestHTTPOverviewDefault(t *testing.T) {
 func TestHTTPTransitionsAndGating(t *testing.T) {
 	app := newApp(t)
 
-	// landing is blocked by positioning → 409 with blockedBy.
-	r := req(t, app, http.MethodPost, "/v1/guide/steps/landing/done", "acme", nil)
+	// password-manager is blocked by gsuite → 409 with blockedBy.
+	r := req(t, app, http.MethodPost, "/v1/guide/steps/password-manager/done", "acme", nil)
 	if r.Code != http.StatusConflict {
 		t.Fatalf("blocked done want 409, got %d (%s)", r.Code, r.Body)
 	}
@@ -70,39 +70,39 @@ func TestHTTPTransitionsAndGating(t *testing.T) {
 		BlockedBy []string `json:"blockedBy"`
 	}
 	_ = json.Unmarshal(r.Body, &conflict)
-	if len(conflict.BlockedBy) != 1 || conflict.BlockedBy[0] != "positioning" {
+	if len(conflict.BlockedBy) != 1 || conflict.BlockedBy[0] != "gsuite" {
 		t.Fatalf("409 must name the blocker, got %v", conflict.BlockedBy)
 	}
 
-	// Walk the chain: company (root) → positioning unlocks → landing unlocks.
-	if r := req(t, app, http.MethodPost, "/v1/guide/steps/company/done", "acme", nil); r.Code != http.StatusOK {
-		t.Fatalf("done company want 200, got %d (%s)", r.Code, r.Body)
+	// Walk the chain: incorporate (root) → gsuite unlocks → password-manager unlocks.
+	if r := req(t, app, http.MethodPost, "/v1/guide/steps/incorporate/done", "acme", nil); r.Code != http.StatusOK {
+		t.Fatalf("done incorporate want 200, got %d (%s)", r.Code, r.Body)
 	}
-	if r := req(t, app, http.MethodPost, "/v1/guide/steps/positioning/done", "acme", nil); r.Code != http.StatusOK {
-		t.Fatalf("done positioning want 200, got %d (%s)", r.Code, r.Body)
+	if r := req(t, app, http.MethodPost, "/v1/guide/steps/gsuite/done", "acme", nil); r.Code != http.StatusOK {
+		t.Fatalf("done gsuite want 200, got %d (%s)", r.Code, r.Body)
 	}
-	if r := req(t, app, http.MethodPost, "/v1/guide/steps/landing/done", "acme", nil); r.Code != http.StatusOK {
-		t.Fatalf("done landing after unlock want 200, got %d (%s)", r.Code, r.Body)
+	if r := req(t, app, http.MethodPost, "/v1/guide/steps/password-manager/done", "acme", nil); r.Code != http.StatusOK {
+		t.Fatalf("done password-manager after unlock want 200, got %d (%s)", r.Code, r.Body)
 	}
 
-	// Overview now reflects three done and moved next forward.
+	// Overview now reflects three done.
 	v := decode[overviewView](t, req(t, app, http.MethodGet, "/v1/guide", "acme", nil).Body)
 	if v.Progress.Done != 3 {
 		t.Fatalf("done want 3, got %d", v.Progress.Done)
 	}
 
 	// Skip is ungated even on a blocked step; reset returns to todo.
-	if r := req(t, app, http.MethodPost, "/v1/guide/steps/referral/skip", "acme", nil); r.Code != http.StatusOK {
+	if r := req(t, app, http.MethodPost, "/v1/guide/steps/slack/skip", "acme", nil); r.Code != http.StatusOK {
 		t.Fatalf("skip want 200, got %d", r.Code)
 	}
-	if r := req(t, app, http.MethodPost, "/v1/guide/steps/positioning/reset", "acme", nil); r.Code != http.StatusOK {
+	if r := req(t, app, http.MethodPost, "/v1/guide/steps/gsuite/reset", "acme", nil); r.Code != http.StatusOK {
 		t.Fatalf("reset want 200, got %d", r.Code)
 	}
-	// After reset, positioning is todo again → landing re-blocks.
+	// After reset, gsuite is todo again → password-manager re-blocks.
 	v = decode[overviewView](t, req(t, app, http.MethodGet, "/v1/guide", "acme", nil).Body)
 	for _, s := range v.Steps {
-		if s.ID == "landing" && s.Available {
-			t.Fatal("landing must re-block after positioning reset")
+		if s.ID == "password-manager" && s.Available {
+			t.Fatal("password-manager must re-block after gsuite reset")
 		}
 	}
 }
@@ -125,7 +125,7 @@ func TestHTTPCustomCurriculumReplaceAndRevert(t *testing.T) {
 		"version": "org-1",
 		"steps": []map[string]any{
 			{"id": "s1", "title": "First"},
-			{"id": "s2", "title": "Second", "dependencies": []string{"s1"}},
+			{"id": "s2", "title": "Second", "deps": []string{"s1"}},
 		},
 	}
 	if r := req(t, app, http.MethodPut, "/v1/guide/curriculum", "acme", custom); r.Code != http.StatusOK {
@@ -138,8 +138,8 @@ func TestHTTPCustomCurriculumReplaceAndRevert(t *testing.T) {
 
 	// Malformed PUT (cycle) → 422, active curriculum unchanged.
 	bad := map[string]any{"version": "x", "steps": []map[string]any{
-		{"id": "a", "title": "A", "dependencies": []string{"b"}},
-		{"id": "b", "title": "B", "dependencies": []string{"a"}},
+		{"id": "a", "title": "A", "deps": []string{"b"}},
+		{"id": "b", "title": "B", "deps": []string{"a"}},
 	}}
 	if r := req(t, app, http.MethodPut, "/v1/guide/curriculum", "acme", bad); r.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("cyclic put want 422, got %d (%s)", r.Code, r.Body)
@@ -149,13 +149,13 @@ func TestHTTPCustomCurriculumReplaceAndRevert(t *testing.T) {
 		t.Fatalf("a rejected PUT must not corrupt the active curriculum, got %q", v.Version)
 	}
 
-	// DELETE reverts to default.
+	// DELETE reverts to the seeded base blueprint.
 	if r := req(t, app, http.MethodDelete, "/v1/guide/curriculum", "acme", nil); r.Code != http.StatusOK {
 		t.Fatalf("delete curriculum want 200, got %d", r.Code)
 	}
 	v = decode[overviewView](t, req(t, app, http.MethodGet, "/v1/guide", "acme", nil).Body)
-	if v.Custom || v.Version != "builtin-2" {
-		t.Fatalf("delete should revert to builtin default, got version=%q custom=%v", v.Version, v.Custom)
+	if v.Custom || v.Version != "1" {
+		t.Fatalf("delete should revert to the seeded base, got version=%q custom=%v", v.Version, v.Custom)
 	}
 }
 
@@ -163,8 +163,8 @@ func TestHTTPCustomCurriculumReplaceAndRevert(t *testing.T) {
 // per-org store).
 func TestHTTPPerOrgIsolation(t *testing.T) {
 	app := newApp(t)
-	// company is the journey root (no dependencies) — a clean single completion.
-	if r := req(t, app, http.MethodPost, "/v1/guide/steps/company/done", "acme", nil); r.Code != http.StatusOK {
+	// incorporate is the journey root (no dependencies) — a clean single completion.
+	if r := req(t, app, http.MethodPost, "/v1/guide/steps/incorporate/done", "acme", nil); r.Code != http.StatusOK {
 		t.Fatalf("acme done: %d", r.Code)
 	}
 	acme := decode[overviewView](t, req(t, app, http.MethodGet, "/v1/guide", "acme", nil).Body)
@@ -188,16 +188,12 @@ func TestHTTPDoStepDelegatesToAgent(t *testing.T) {
 	mounted.State.model = "zen"
 	mounted.State.invoke = func(_ context.Context, org, tool string, args map[string]any) (any, error) {
 		gotOrg = org
-		return map[string]any{"doc": "Positioning-1", "tool": tool}, nil
+		return map[string]any{"doc": "Company-1", "tool": tool}, nil
 	}
 	mounted.State.toolOK = func(string) bool { return true }
 
-	// positioning is gated by the journey root (company) — complete it first.
-	if r := req(t, app, http.MethodPost, "/v1/guide/steps/company/done", "acme", nil); r.Code != http.StatusOK {
-		t.Fatalf("done company want 200, got %d (%s)", r.Code, r.Body)
-	}
-
-	r := req(t, app, http.MethodPost, "/v1/guide/steps/positioning/do", "acme", nil)
+	// incorporate is the journey root (no deps) and binds company_form — do it directly.
+	r := req(t, app, http.MethodPost, "/v1/guide/steps/incorporate/do", "acme", nil)
 	if r.Code != http.StatusOK {
 		t.Fatalf("do want 200, got %d (%s)", r.Code, r.Body)
 	}
@@ -215,11 +211,11 @@ func TestHTTPDoStepDelegatesToAgent(t *testing.T) {
 		t.Fatalf("agent must act as the caller's org, got %q", gotOrg)
 	}
 
-	// The step is now done, and its acted signal keeps it done on the next read.
+	// The step is now done and stays done on the next read.
 	v := decode[overviewView](t, req(t, app, http.MethodGet, "/v1/guide", "acme", nil).Body)
 	for _, s := range v.Steps {
-		if s.ID == "positioning" && s.State != StateDone {
-			t.Fatalf("positioning must be done after do, got %q", s.State)
+		if s.ID == "incorporate" && s.State != StateDone {
+			t.Fatalf("incorporate must be done after do, got %q", s.State)
 		}
 	}
 	// The action is on the ledger.
@@ -231,8 +227,8 @@ func TestHTTPDoStepDelegatesToAgent(t *testing.T) {
 		t.Fatalf("expected one successful action on the ledger, got %+v", actions.Data)
 	}
 
-	// do on a blocked step is 409.
-	if r := req(t, app, http.MethodPost, "/v1/guide/steps/launch/do", "acme", nil); r.Code != http.StatusConflict {
-		t.Fatalf("do on blocked launch want 409, got %d", r.Code)
+	// do on a blocked step is 409 (slack is gated by gsuite, still todo).
+	if r := req(t, app, http.MethodPost, "/v1/guide/steps/slack/do", "acme", nil); r.Code != http.StatusConflict {
+		t.Fatalf("do on blocked slack want 409, got %d", r.Code)
 	}
 }

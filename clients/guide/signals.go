@@ -85,10 +85,14 @@ const customersThreshold = 25
 
 // standardModules / standardConnectors are the curated sets the profile probes for
 // its SignalSet. An unregistered name honest-degrades to false through the seams, so
-// the vocabulary is safe to carry ahead of a lane/provider landing.
+// the vocabulary is safe to carry ahead of a lane/provider landing. The connector set
+// includes the providers the strategies corpus joins against (facebook/google-ads/
+// mailchimp/sms — the Guide's connect:<provider> steps), so a `has:<capability>` tag
+// resolves to a real observed signal (strategies.go hasSignal); an org that never
+// connected a provider reads false, never a spurious true.
 var (
 	standardModules    = []string{"cms", "erp", "kb", "help"}
-	standardConnectors = []string{"stripe", "shopify"}
+	standardConnectors = []string{"stripe", "shopify", "facebook", "google-ads", "mailchimp", "sms"}
 )
 
 // SignalSet is the observed growth facts about ONE org: signal name → present. It is

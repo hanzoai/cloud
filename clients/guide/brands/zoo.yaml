@@ -1,4 +1,4 @@
-# zoo.yaml — the Zoo brand's default Business AI Guide curriculum (white-label).
+# zoo.yaml — the Zoo brand's default Business AI Guide blueprint (white-label).
 #
 # Zoo Labs Foundation is an open AI research network (DeAI / DeSci). The journey
 # reframes the base launch playbook for a research org: form the foundation, open
@@ -7,128 +7,49 @@
 # /v1/analytics, /v1/automations), white-labeled as Zoo. It is DATA: this file is
 # the whole customization — no code change (see clients/guide/brands.go).
 #
-# Same schema as default.yaml (Step / Curriculum). AI-ready steps bind the real
-# content_generate tool; assisted steps guide the researcher to the Zoo surface.
+# Same Blueprint schema as base.yaml (see blueprint.go — Section / Step / Strategy /
+# Template, each with an `enabled` lever). This brand ships a thin STEPS-only journey
+# (no sections/strategies/templates); AI-ready steps bind the real content_generate
+# tool, assisted steps guide the researcher to the Zoo surface. It is seeded into the
+# shared brand-blueprint store on Mount and is then SuperAdmin-editable, exactly like
+# the base blueprint.
 version: zoo-1
+brand: zoo
 title: Launch your research org on Zoo
+enabled: true
 steps:
-  - id: foundation
-    title: Form your foundation
-    why: >
-      A legal research entity is what grants, memberships, and collaborations
-      attach to — the foundation everything else builds on.
-    how: >
-      Run the entity wizard in Zoo Company (/v1/company): choose a non-profit or
-      foundation structure and file. The Research AI drafts the details; you submit.
-    done: Your foundation is formed (an entity is on file).
-    dependencies: []
-    draft: >
-      Draft the founding basics for a new open-AI research foundation on Zoo: a
-      suggested name, entity type, and a one-line research mission. Return plain text.
-
-  - id: members
-    title: Open membership and governance
-    why: >
-      Your members and their voting power are the source of truth for who governs
-      the research and its funding.
-    how: >
-      Issue membership and governance rights in Zoo Cap Table (/v1/captable),
-      reading from the foundation you just formed.
-    done: A membership ledger exists with founding members.
-    dependencies: [foundation]
-
+  - {id: foundation, title: "Form your foundation", detail: "Run the entity wizard in Zoo Company (/v1/company) — the legal research entity grants, memberships, and collaborations attach to.", deps: [], enabled: true, draft: "Draft the founding basics for a new open-AI research foundation on Zoo: a suggested name, entity type, and a one-line research mission. Return plain text."}
+  - {id: members, title: "Open membership and governance", detail: "Issue membership and governance rights in Zoo Cap Table (/v1/captable) — your members and their voting power are the source of truth for who governs the research and its funding.", deps: [foundation], enabled: true}
   - id: thesis
-    title: Publish your research thesis
-    why: >
-      A sharp one-line thesis is the seed every artifact grows from — the paper
-      abstract, the grant pitch, the contributor call.
-    how: >
-      Draft a thesis Campaign in Zoo Content (/v1/content). The Research AI can
-      write the first draft for you.
-    done: A research thesis exists as a Content Campaign draft.
-    dependencies: [foundation]
+    title: "Publish your research thesis"
+    detail: "Draft a thesis Campaign in Zoo Content (/v1/content) — a sharp one-line thesis is the seed every artifact grows from. The Research AI can write the first draft."
+    deps: [foundation]
+    enabled: true
     signal: acted
     tool: content_generate
+    draftInto: brief
     draft: >
       Write a single crisp research thesis (one sentence) plus three supporting
       bullets for an open-AI research org launching on Zoo. Return plain text.
-    draftInto: brief
     args:
       doctype: Campaign
       title: Research thesis
-
   - id: site
-    title: Publish your research site
-    why: >
-      A public research site is where interest converts — the destination every
-      paper, grant, and collaborator link points at.
-    how: >
-      Generate a site Asset in Zoo Content and publish it. The Research AI drafts
-      the copy and creates the draft asset for you.
-    done: A research-site Asset exists (draft or published).
-    dependencies: [thesis]
+    title: "Publish your research site"
+    detail: "Generate a site Asset in Zoo Content and publish it — the public destination every paper, grant, and collaborator link points at. The Research AI drafts the copy."
+    deps: [thesis]
+    enabled: true
     signal: acted
     tool: content_generate
+    draftInto: brief
     draft: >
       Write research-site copy — a headline, subheadline, three research pillars,
       and a call to contribute — for the thesis above. Return plain text sections.
-    draftInto: brief
     args:
       doctype: Asset
       title: Research site
-
-  - id: signals
-    title: Turn on analytics
-    why: >
-      You cannot improve what you cannot see. Analytics shows whether your site and
-      calls for contributors are working.
-    how: >
-      Instrument your site so events flow to Zoo Analytics (/v1/analytics). Once
-      events arrive for your org this step completes itself.
-    done: Insights events exist for your org (analytics is emitting).
-    dependencies: [site]
-    signal: analytics
-
-  - id: contributors
-    title: Open a contributor waitlist
-    why: >
-      A contributor waitlist captures interest from researchers before you are
-      fully live and turns it into a network you can activate.
-    how: >
-      Enable the Zoo waitlist surface (/v1/waitlist) and point your site's
-      contribute CTA at it.
-    done: A contributor waitlist is live and collecting entries.
-    dependencies: [site]
-
-  - id: grants
-    title: Open a grant program
-    why: >
-      Grants turn your treasury into research output — the highest-leverage way an
-      open network funds the work it wants to see.
-    how: >
-      Configure a grant program in Zoo Referrals (/v1/referrals) and share the
-      application link from your site.
-    done: A grant program is configured for your org.
-    dependencies: [site]
-
-  - id: autopilot
-    title: Turn on the daily research loop
-    why: >
-      The agentic research org runs itself: a scheduled loop that drafts, reviews,
-      and publishes updates and calls for contributors every day.
-    how: >
-      Enable a scheduled flow in Zoo Automations (/v1/automations) —
-      generate → review → publish — so the Research AI runs your outreach daily.
-    done: An automation flow is enabled and running on a schedule.
-    dependencies: [signals, contributors]
-
-  - id: launch
-    title: Launch
-    why: >
-      Everything above is the runway. Launch is announcing your research to the
-      world and opening it to contributors.
-    how: >
-      With your foundation, thesis, site, analytics, waitlist, and grants in place,
-      announce across your channels.
-    done: You have publicly launched.
-    dependencies: [site, signals, contributors, grants]
+  - {id: signals, title: "Turn on analytics", detail: "Instrument your site so events flow to Zoo Analytics (/v1/analytics). Once events arrive for your org this step completes itself.", deps: [site], enabled: true, signal: analytics}
+  - {id: contributors, title: "Open a contributor waitlist", detail: "Enable the Zoo waitlist surface (/v1/waitlist) and point your site's contribute CTA at it — capture researcher interest before you are fully live.", deps: [site], enabled: true}
+  - {id: grants, title: "Open a grant program", detail: "Configure a grant program in Zoo Referrals (/v1/referrals) and share the application link — grants turn your treasury into research output.", deps: [site], enabled: true}
+  - {id: autopilot, title: "Turn on the daily research loop", detail: "Enable a scheduled flow in Zoo Automations (/v1/automations) — generate → review → publish — so the Research AI runs your outreach daily.", deps: [signals, contributors], enabled: true}
+  - {id: launch, title: "Launch", detail: "With your foundation, thesis, site, analytics, waitlist, and grants in place, announce your research to the world and open it to contributors.", deps: [site, signals, contributors, grants], enabled: true}

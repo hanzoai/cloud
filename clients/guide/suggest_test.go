@@ -85,12 +85,12 @@ func TestHTTPSuggest(t *testing.T) {
 	if err := json.Unmarshal(r.Body, &resp); err != nil {
 		t.Fatalf("decode suggest: %v (%s)", err, r.Body)
 	}
-	// A fresh org's best next is the journey's first quest, company.
-	if resp.Next != "company" {
-		t.Fatalf("fresh-org next want company, got %q", resp.Next)
+	// A fresh org's best next is the journey's first quest, incorporate.
+	if resp.Next != "incorporate" {
+		t.Fatalf("fresh-org next want incorporate, got %q", resp.Next)
 	}
-	if len(resp.Suggestions) == 0 || resp.Suggestions[0].StepID != "company" {
-		t.Fatalf("company must lead the suggestions, got %v", ids(resp.Suggestions))
+	if len(resp.Suggestions) == 0 || resp.Suggestions[0].StepID != "incorporate" {
+		t.Fatalf("incorporate must lead the suggestions, got %v", ids(resp.Suggestions))
 	}
 	// No analytics warehouse in tests → funnel unavailable + the "instrument" recommendation.
 	if resp.Funnel.Available {
@@ -123,11 +123,11 @@ func TestHTTPChat(t *testing.T) {
 	if strings.TrimSpace(resp.Reply) == "" {
 		t.Fatal("chat must always reply (deterministic fallback when the AI plane is down)")
 	}
-	// The fallback names the top real quest (company).
-	if !strings.Contains(resp.Reply, "Form your company") {
+	// The fallback names the top real quest (incorporate).
+	if !strings.Contains(resp.Reply, "Incorporate + get an EIN") {
 		t.Fatalf("fallback reply must name the top real quest, got %q", resp.Reply)
 	}
-	if len(resp.Suggestions) == 0 || resp.Suggestions[0].StepID != "company" {
+	if len(resp.Suggestions) == 0 || resp.Suggestions[0].StepID != "incorporate" {
 		t.Fatalf("chat must surface the candidate quests, got %v", ids(resp.Suggestions))
 	}
 }
