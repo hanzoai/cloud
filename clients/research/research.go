@@ -37,6 +37,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
+	researchui "github.com/hanzoai/cloud/clients/research/ui"
 	"github.com/zap-proto/zip"
 )
 
@@ -144,6 +145,13 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	g.Get("/experiments", cloud.Handle(s, listExperiments))  // list, latest-run-canonical
 	g.Get("/projects", cloud.Handle(s, getProjects))         // every project + real totals
 	g.Get("/totals", cloud.Handle(s, getTotals))             // headline aggregate + per-kind
+
+	// The R&D Ops Board (clients/research/ui) is a static bundle embedded in THIS
+	// binary — mount it at /research so cloud serves the dashboard same-origin with the
+	// plane it reads (GET projects/totals/experiments), exactly as tasks mounts its UI.
+	board := zip.AdaptNetHTTP(http.StripPrefix("/research", researchui.Handler()))
+	app.All("/research", board)
+	app.All("/research/*", board)
 }
 
 // shutdownStores is set at mount to the store cache's CloseAll so the package-level
