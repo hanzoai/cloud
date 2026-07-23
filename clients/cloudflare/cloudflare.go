@@ -1,10 +1,19 @@
 // Package cloudflare is the per-org Cloudflare asset plane for the unified Hanzo
-// Cloud binary — the /v1/integrations/cloudflare/* surface that manages an org's Cloudflare
-// Pages, Workers, and (Phase 2) R2/KV/D1 through the SAME per-org, KMS-sealed API
-// token the org connected via clients/integrations. It is a sibling of hanzodns
-// (which owns /v1/dns as a separate CoreDNS process): both drive Cloudflare with an
-// org's own scoped token, so the platform never reaches Cloudflare with a global
-// env token again — one token, one custody boundary, one org.
+// Cloud binary — the first-class /v1/cloudflare/* surface (sibling of /v1/dns and
+// /v1/domain) that manages an org's Cloudflare Zones/Analytics, Pages, Workers,
+// Workers AI, R2, KV, and D1 through the SAME per-org, KMS-sealed API token the org
+// connected via clients/integrations. Connecting the provider stays on the
+// integrations plane (/v1/integrations/cloudflare/{connect,callback}); MANAGING the
+// resources is this first-class plane — "how you connected" and "what you manage"
+// are separated, one concern each. Every call drives Cloudflare with the org's own
+// scoped token, so the platform never reaches Cloudflare with a global env token —
+// one token, one custody boundary, one org.
+//
+// Workers AI is the one exception to pure passthrough: an /ai/run is INFERENCE, so
+// it meters through the SAME unified usage/billing spine (cloud.AIMeterProvider) and
+// emits to the SAME gen_ai o11y span plane as every other model call — at the thin
+// BYO fee, since the org's own token already paid Cloudflare for the compute. There
+// is no Cloudflare-specific usage or o11y path.
 //
 // TENANT ISOLATION (the crown jewel). Every handler resolves the caller's org from
 // the VALIDATED principal (principal.Org → the X-Org-Id the identity boundary minted
@@ -79,9 +88,21 @@ func cfAPIBase() string {
 	return "https://api.cloudflare.com/client/v4"
 }
 
-// cfHTTPClient is the shared client for every Cloudflare call. A bounded timeout so a
-// slow/hung Cloudflare never wedges a request goroutine.
-var cfHTTPClient = &http.Client{Timeout: 30 * time.Second}
+// cfHTTPClient is the ONE client for every Cloudflare call (connection-pooled). Its
+// Timeout is the outer ceiling; each call tightens it with a per-request deadline via
+// send, so a slow/hung Cloudflare never wedges a goroutine.
+var cfHTTPClient = &http.Client{Timeout: timeoutAI}
+
+const (
+	// timeout bounds a metadata/relay call; timeoutAI a Workers AI run (inference is
+	// slower). Passed explicitly to send — the caller states its own bound, no magic.
+	timeout   = 30 * time.Second
+	timeoutAI = 120 * time.Second
+	// maxBody bounds an enveloped JSON response (list/get/query results); maxRawBody a
+	// raw KV value (CF caps a value at 25 MiB).
+	maxBody    = 4 << 20
+	maxRawBody = 25 << 20
+)
 
 var (
 	// nameRE bounds a Cloudflare NAME path segment (Pages project, Worker script,
@@ -93,26 +114,44 @@ var (
 	idRE = regexp.MustCompile(`^[0-9a-fA-F]{32}$`)
 )
 
-// state is this subsystem's own data — none. Token custody lives in integrations;
-// the account id is resolved per request. So the value is the shared Base only.
-type state struct{}
+// state is this subsystem's own data. Token custody lives in integrations and the
+// account id is resolved per request, so the only field is aiBill: the meter that
+// prices Workers AI inference.
+type state struct {
+	// aiBill meters Workers AI runs through the SAME usage/billing spine as every
+	// LLM call (provider cloud.AIMeterProvider = "ai"), so a BYO Workers AI run
+	// debits the same product axis and shares the same per-scope caps — never a
+	// Cloudflare-specific usage path. It is the ONLY resource this subsystem owns.
+	aiBill *cloud.ResourceMeter
+}
 
-// Mount wires /v1/integrations/cloudflare/* onto app. The subsystem is stateless (no store, no
-// goroutine): it reads the per-org token in-process per request and proxies to
-// Cloudflare, so there is nothing to build or tear down.
+// Mount wires /v1/cloudflare/* onto app. The subsystem holds no store and runs no
+// goroutine: it reads the per-org token in-process per request and proxies to
+// Cloudflare. The build closure captures deps to construct the "ai"-provider meter
+// (Base.Bill is provider "cloudflare"; Workers AI must bill under "ai").
 func Mount(app *zip.App, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "cloudflare",
-		func(cloud.Base) (state, error) { return state{}, nil },
+		func(cloud.Base) (state, error) {
+			return state{aiBill: cloud.NewResourceMeter(deps, cloud.AIMeterProvider)}, nil
+		},
 		routes)
 }
 
-// routes registers the /v1/integrations/cloudflare surface. Every route runs through authClient
-// (validated-org gate + fail-closed per-org token) FIRST, so no route is a softer
-// target than another. Pages + Workers are WIRED; R2/KV/D1 are typed Phase-2 stubs
-// that answer an honest 501 (never a fake success).
+// routes registers the first-class /v1/cloudflare surface. Every route runs through
+// authClient (validated-org gate + fail-closed per-org token) FIRST — reads require
+// a validated org, mutations additionally require org admin (authWrite) — so no
+// route is a softer target than another.
 func routes(app *zip.App, s *cloud.Service[state]) {
-	g := app.Group("/v1/integrations/cloudflare")
-	// Pages (wired) — account-scoped.
+	g := app.Group("/v1/cloudflare")
+
+	// Zones + Analytics (read) — enumerate the org's zones and read a zone's traffic
+	// analytics; the zone ids feed Workers routes and analytics. Zone/record
+	// MANAGEMENT stays with the Hanzo DNS plane (/v1/dns); this only surfaces CF zones.
+	g.Get("/zones", cloud.Handle(s, zonesList))
+	g.Get("/zones/:zone", cloud.Handle(s, zoneGet))
+	g.Get("/zones/:zone/analytics", cloud.Handle(s, zoneAnalytics))
+
+	// Pages — account-scoped.
 	g.Get("/pages/projects", cloud.Handle(s, pagesList))
 	g.Post("/pages/projects", cloud.Handle(s, pagesCreate))
 	g.Get("/pages/projects/:project", cloud.Handle(s, pagesGet))
@@ -121,8 +160,8 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	g.Post("/pages/projects/:project/domains", cloud.Handle(s, pagesDomainAdd))
 	g.Delete("/pages/projects/:project/domains/:domain", cloud.Handle(s, pagesDomainDelete))
 
-	// Workers (wired) — scripts + workers.dev subdomain are account-scoped; routes
-	// are zone-scoped.
+	// Workers — scripts + workers.dev subdomain are account-scoped; routes are
+	// zone-scoped.
 	g.Get("/workers/scripts", cloud.Handle(s, workersScriptList))
 	g.Put("/workers/scripts/:script", cloud.Handle(s, workersScriptPut))
 	g.Delete("/workers/scripts/:script", cloud.Handle(s, workersScriptDelete))
@@ -132,17 +171,29 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	g.Post("/workers/zones/:zone/routes", cloud.Handle(s, workersRouteCreate))
 	g.Delete("/workers/zones/:zone/routes/:route", cloud.Handle(s, workersRouteDelete))
 
-	// R2 / KV / D1 (Phase-2 stubs) — routes + typed provider methods exist; bodies
-	// ship in Phase 2. Each answers an honest 501, never a misleading 200.
+	// Workers AI (inference) — run a CF-hosted model with the org's own token. The
+	// model rides a wildcard: CF model ids look like @cf/meta/llama-3-8b-instruct.
+	// Metered through the unified AI spine + emitted to the one gen_ai span plane.
+	g.Post("/ai/run/*", cloud.Handle(s, aiRun))
+
+	// R2 — account-scoped buckets.
 	g.Get("/r2/buckets", cloud.Handle(s, r2BucketList))
 	g.Post("/r2/buckets", cloud.Handle(s, r2BucketCreate))
 	g.Delete("/r2/buckets/:bucket", cloud.Handle(s, r2BucketDelete))
+
+	// KV — namespaces and a namespace's key values.
 	g.Get("/kv/namespaces", cloud.Handle(s, kvNamespaceList))
 	g.Post("/kv/namespaces", cloud.Handle(s, kvNamespaceCreate))
 	g.Delete("/kv/namespaces/:namespace", cloud.Handle(s, kvNamespaceDelete))
+	g.Get("/kv/namespaces/:namespace/values/:key", cloud.Handle(s, kvValueGet))
+	g.Put("/kv/namespaces/:namespace/values/:key", cloud.Handle(s, kvValuePut))
+	g.Delete("/kv/namespaces/:namespace/values/:key", cloud.Handle(s, kvValueDelete))
+
+	// D1 — databases and a query against one.
 	g.Get("/d1/databases", cloud.Handle(s, d1DatabaseList))
 	g.Post("/d1/databases", cloud.Handle(s, d1DatabaseCreate))
 	g.Delete("/d1/databases/:database", cloud.Handle(s, d1DatabaseDelete))
+	g.Post("/d1/databases/:database/query", cloud.Handle(s, d1Query))
 }
 
 // ── client (the cfDo shape, reused verbatim from hanzodns) ──────────────────────
@@ -185,10 +236,48 @@ func (e cfEnvelope) err(status int) error {
 	return &cfError{upstream: status, msg: fmt.Sprintf("cloudflare API error (status %d)", status)}
 }
 
-// cfDo performs a Cloudflare API v4 call, JSON-encoding body, unwrapping the
-// {success, errors, result} envelope, and decoding result into out. It fails closed:
-// a transport error, an unsuccessful envelope, or a non-2xx status yields an error,
-// and the error NEVER contains the token. (The hanzodns cfDo shape, verbatim.)
+// send is the ONE authed Cloudflare request: issue method+path with the per-org
+// Bearer (the token rides ONLY this header — never a query, log, or error), bound the
+// call by to, read at most limit bytes, and return the raw status + content type +
+// body. Every response shape — envelope unwrap (exec), verbatim relay (pass), raw
+// value (getRaw), AI run (runAI) — composes over this one primitive, so the
+// request/auth/read dance lives in exactly one place. A transport failure is
+// token-free by construction.
+func (cl *client) send(ctx context.Context, method, path, contentType string, body io.Reader, to time.Duration, limit int64) (int, string, []byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, to)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, method, cl.base+path, body)
+	if err != nil {
+		return 0, "", nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+cl.token)
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	resp, err := cfHTTPClient.Do(req)
+	if err != nil {
+		// A transport error can echo the request URL but never the header; keep the
+		// message token-free regardless.
+		return 0, "", nil, fmt.Errorf("cloudflare request failed")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, limit))
+	return resp.StatusCode, resp.Header.Get("Content-Type"), data, nil
+}
+
+// envErr maps a Cloudflare response to a token-free error from its {success,errors}
+// envelope, carrying the upstream status for cfErr's remap. It returns nil ONLY for a
+// successful envelope — the shared fail-closed check for every enveloped response.
+func envErr(status int, data []byte) error {
+	var env cfEnvelope
+	if len(data) > 0 {
+		_ = json.Unmarshal(data, &env)
+	}
+	return env.err(status)
+}
+
+// cfDo performs a Cloudflare API v4 call, JSON-encoding body and decoding the
+// {success,errors,result} envelope's result into out. Thin over exec.
 func (cl *client) cfDo(ctx context.Context, method, path string, body, out any) error {
 	var reader io.Reader
 	var contentType string
@@ -200,46 +289,26 @@ func (cl *client) cfDo(ctx context.Context, method, path string, body, out any) 
 		reader = bytes.NewReader(b)
 		contentType = "application/json"
 	}
-	return cl.do(ctx, method, path, contentType, reader, out)
+	return cl.exec(ctx, method, path, contentType, reader, out)
 }
 
 // cfUpload performs a Cloudflare call with a pre-built body + content type (the
-// multipart Worker-script upload), sharing cfDo's fail-closed envelope handling.
+// multipart Worker-script upload, a raw KV value write), sharing exec's envelope.
 func (cl *client) cfUpload(ctx context.Context, method, path, contentType string, body []byte, out any) error {
-	return cl.do(ctx, method, path, contentType, bytes.NewReader(body), out)
+	return cl.exec(ctx, method, path, contentType, bytes.NewReader(body), out)
 }
 
-// do is the shared request core for cfDo and cfUpload: Bearer-only auth, bounded
-// response read, envelope unwrap, fail-closed. Token appears ONLY in the header.
-func (cl *client) do(ctx context.Context, method, path, contentType string, body io.Reader, out any) error {
-	req, err := http.NewRequestWithContext(ctx, method, cl.base+path, body)
+// exec is send + the {success,errors,result} envelope shape: fail closed on an
+// unsuccessful envelope, then decode result into out. A 204 is success with no result.
+func (cl *client) exec(ctx context.Context, method, path, contentType string, body io.Reader, out any) error {
+	status, _, data, err := cl.send(ctx, method, path, contentType, body, timeout, maxBody)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+cl.token)
-	if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
-	}
-
-	resp, err := cfHTTPClient.Do(req)
-	if err != nil {
-		// Never wrap err: a transport error can echo the request URL but never the
-		// header. Keep the message token-free regardless.
-		return fmt.Errorf("cloudflare request failed")
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode == http.StatusNoContent {
+	if status == http.StatusNoContent {
 		return nil
 	}
-
-	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-
-	var env cfEnvelope
-	if len(data) > 0 {
-		_ = json.Unmarshal(data, &env)
-	}
-	if err := env.err(resp.StatusCode); err != nil {
+	if err := envErr(status, data); err != nil {
 		return err
 	}
 	if out != nil {
@@ -280,7 +349,7 @@ func writeResult(c *zip.Ctx, out json.RawMessage) error {
 
 // ── request gate + token custody ────────────────────────────────────────────────
 
-// actingOrgHeader is stamped on every SERVED /v1/integrations/cloudflare response with the org
+// actingOrgHeader is stamped on every SERVED /v1/cloudflare response with the org
 // whose Cloudflare token was actually used. A per-org caller (the platform BFF) MUST
 // assert it equals the org it requested: if a misdeployed, non-org-switch-capable
 // service credential made the identity boundary PIN X-Org-Id to the token's OWN
@@ -322,6 +391,29 @@ func authWrite(s *cloud.Service[state], c *zip.Ctx) (*client, string, error) {
 		return nil, "", zip.ErrForbidden("this action requires org admin")
 	}
 	return authClient(s, c)
+}
+
+// acctClient resolves BOTH the caller-org client and its account id — the
+// account-scoped READ preamble every Pages/Workers/Workers-AI/R2/KV/D1 handler shares,
+// so the auth+account dance is written once. Zone-scoped handlers (workers routes,
+// zones, analytics) need no account and use authClient directly.
+func acctClient(s *cloud.Service[state], c *zip.Ctx) (*client, string, error) {
+	cl, org, err := authClient(s, c)
+	if err != nil {
+		return nil, "", err
+	}
+	acct, err := cl.resolveAccount(c.Context(), org, c)
+	return cl, acct, err
+}
+
+// acctWrite is acctClient for a mutation: org-admin FIRST (authWrite), then account.
+func acctWrite(s *cloud.Service[state], c *zip.Ctx) (*client, string, error) {
+	cl, org, err := authWrite(s, c)
+	if err != nil {
+		return nil, "", err
+	}
+	acct, err := cl.resolveAccount(c.Context(), org, c)
+	return cl, acct, err
 }
 
 // resolveAccount resolves the Cloudflare account id for account-scoped endpoints
@@ -383,19 +475,44 @@ func cfErr(err error) error {
 	return zip.Errorf(http.StatusBadGateway, "%s", err.Error())
 }
 
-// ── Phase-2 stub plumbing ───────────────────────────────────────────────────────
+// ── raw relay + query passthrough ───────────────────────────────────────────────
 
-// errPhase2 marks a provider capability whose route + typed method exist but whose
-// body ships in Phase 2. stubResult maps it to an honest 501 — never a fake 200, so
-// a caller is never misled into thinking a no-op succeeded.
-var errPhase2 = errors.New("cloudflare: not yet implemented (phase 2)")
-
-// stubResult maps a Phase-2 provider seam's result to the wire: errPhase2 → 501, any
-// real error surfaces as-is, and even a nil still yields 501 (a stub can never report
-// success). This guarantees a stub route NEVER returns a misleading 200.
-func stubResult(c *zip.Ctx, capability string, err error) error {
-	if err != nil && !errors.Is(err, errPhase2) {
-		return cfErr(err)
+// getRaw performs a GET whose 2xx body is NOT the {success,errors,result} envelope
+// but a raw stored value (a KV value), relaying it verbatim with its content type. A
+// non-2xx IS an envelope, so it fails closed through envErr — token-free. Thin over
+// send.
+func (cl *client) getRaw(ctx context.Context, path string) ([]byte, string, error) {
+	status, ct, data, err := cl.send(ctx, http.MethodGet, path, "", nil, timeout, maxRawBody)
+	if err != nil {
+		return nil, "", err
 	}
-	return zip.Errorf(http.StatusNotImplemented, "cloudflare %s is not yet wired (phase 2)", capability)
+	if status/100 != 2 {
+		if e := envErr(status, data); e != nil {
+			return nil, "", e
+		}
+		return nil, "", &cfError{upstream: status, msg: fmt.Sprintf("cloudflare error (status %d)", status)}
+	}
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	return data, ct, nil
+}
+
+// query builds a "?..."-encoded upstream query string from an ALLOWLISTED set of
+// inbound query keys, so a read handler can forward pagination/window params
+// (page, per_page, since, until, …) without opening arbitrary passthrough. Values
+// are url.Values-escaped and the upstream HOST + PATH are fixed by the caller, so a
+// hostile value stays a query value — it can inject neither path structure nor a
+// different host (no SSRF). Overlong values (>256 bytes) are dropped.
+func query(c *zip.Ctx, keys ...string) string {
+	q := url.Values{}
+	for _, k := range keys {
+		if v := strings.TrimSpace(c.Query(k)); v != "" && len(v) <= 256 {
+			q.Set(k, v)
+		}
+	}
+	if len(q) == 0 {
+		return ""
+	}
+	return "?" + q.Encode()
 }
