@@ -22,6 +22,7 @@ reverse).
 | `/v1/compute/bots` | Hosting: `@hanzo/bot` Node containers | `clients/bots` | Shipped |
 | `/v1/tasks` | Durable engine | `clients/tasks` | Shipped |
 | `/v1/gpus` + fleet | BYO GPU presence | `clients/fleet` + `clients/visor` | Shipped |
+| `/v1/cloud` | Cloud accounts: link DO/AWS/GCP/Azure, discover native k8s clusters, fold into the fleet | `clients/venue` (new) | In flight (branch `feat/cloud-account-connectors`; blue-held for red) |
 | IAM | Identity: users, orgs, roles | IAM | Shipped |
 | KMS | Secret custody: sealed secrets | `clients/kms` | Shipped |
 
