@@ -41,6 +41,7 @@ func resetGithubApp() {
 	ghApp.loadedFor = ""
 	ghApp.tokens = map[int64]cachedInstallToken{}
 	ghApp.mu.Unlock()
+	resetGrantCache() // the per-installation grant-set cache is App state too
 }
 
 // mockGitHub stands in for the GitHub API: it mints installation tokens, reports an
