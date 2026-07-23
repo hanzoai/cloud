@@ -440,6 +440,16 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/connector/github/webhook", cloud.Terminal(cloud.Handle(s, githubWebhook)))
 	app.Get("/v1/integrations/github/repos", cloud.Handle(s, githubRepos))
 	app.Post("/v1/integrations/github/repos/import", cloud.Handle(s, githubImport))
+	// GitHub Pages management (github_pages.go), one repo as a resource. Registered
+	// AFTER the literal /repos/import so registration-order matching keeps the literal
+	// unshadowed; the :repo routes all carry a /pages suffix, so /repos/import (no
+	// suffix) never matches them. Org-authed via the principal; the repo is resolved
+	// against the installation's granted set (owner is server-derived).
+	app.Get("/v1/integrations/github/repos/:repo/pages", cloud.Handle(s, githubPagesGet))
+	app.Post("/v1/integrations/github/repos/:repo/pages", cloud.Handle(s, githubPagesEnable))
+	app.Put("/v1/integrations/github/repos/:repo/pages", cloud.Handle(s, githubPagesUpdate))
+	app.Delete("/v1/integrations/github/repos/:repo/pages", cloud.Handle(s, githubPagesDisable))
+	app.Post("/v1/integrations/github/repos/:repo/pages/builds", cloud.Handle(s, githubPagesBuild))
 	// ChatBridge adapters (bridge.go + discord/teams/telegram). Same discipline as
 	// the slack bridge: the literal paths register BEFORE the /:provider wildcards so
 	// they win under registration-order matching. All PUBLIC at the JWT layer — auth

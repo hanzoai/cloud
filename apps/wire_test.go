@@ -75,6 +75,7 @@ var frozen = []struct {
 	{"git", false, false},            // was order 132
 	{"sync", false, true},            // /v1/sync engine (owns per-org DB handles → Shutdown)
 	{"visor", false, false},          // was order 133
+	{"venue", false, false},          // new: /v1/cloud connect-a-cloud-account plane (after visor); folds discovered clusters into the fleet
 	{"captable", false, true},        // was order 133
 	{"code", false, true},            // was order 134
 	{"zero-trust", false, false},     // was order 134
@@ -102,7 +103,7 @@ var frozen = []struct {
 	{"product", false, false},        // was order 145
 	{"evals", false, false},          // was order 145
 	{"benchmark", false, false},      // benchmark plane (after evals, before treasury)
-	{"research", false, true},        // R&D evidence plane (after benchmark); Shutdown closes per-org stores
+	{"research", false, true},        // R&D evidence plane + /research board (HIP-0512), arena sibling after benchmark; Shutdown closes per-org stores
 	{"treasury", false, true},        // was order 146
 	{"admin", false, false},          // was order 146
 	{"admission", false, true},       // launch-control gate: composes flags (registry+seed+mode route+Enforce); Shutdown closes the registry store
