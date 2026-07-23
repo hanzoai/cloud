@@ -3,6 +3,7 @@ package guide
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	aiobject "github.com/hanzoai/ai/object"
 )
@@ -14,21 +15,33 @@ import (
 // true.
 type Detector func(ctx context.Context, org string, step Step) (bool, error)
 
-// newDetectors wires the shipped auto-detect signals. storeFor resolves the
-// caller's per-org store for the self-ledger "acted" signal; external detectors
-// ignore it and probe sibling subsystem state directly.
+// newDetectors wires the auto-detect signals. storeFor resolves the caller's per-org
+// store for the self-ledger "acted" signal; sig is the injected cross-subsystem read
+// seam the growth signals probe (Signals, bound at the composition root) — guide
+// imports no sibling subsystem, so a nil seam field honest-degrades its signal to
+// not-present, never a spurious true.
 //
+// Self-contained + analytics:
 //   - "acted":     a prior "do it for me" call on the step's tool succeeded, so the
-//     real effect (e.g. a Content draft) landed. Self-contained and
-//     always available.
+//     real effect (e.g. a Content draft) landed. Always available.
 //   - "analytics": insights events exist for the org in the shared analytics
 //     warehouse ("analytics is emitting"). Honest-degrading when the
 //     warehouse is unreachable/uninitialised.
 //
-// The map is the ONLY coupling point: tests inject their own detectors to exercise
-// the reconcile logic deterministically, and a future curriculum can name a new
-// signal the day a new detector is registered here.
-func newDetectors(storeFor func(ctx context.Context, org string) (*Store, error)) map[string]Detector {
+// Growth signals (read the platform's OWN truth, org-scoped, honest-degrading) —
+// registered under their KIND so a parameterized step signal resolves here via
+// lookupDetector, ONE detector serving every param:
+//   - "module":    module:<name>     the org installed a framework module (Signals.ModuleInstalled).
+//   - "connected": connected:<prov>  the org connected an integration provider — boolean, never the token.
+//   - "funnel":    funnel:<stage>    the org's analytics funnel reached a stage (visitors/signups/orders).
+//   - "deployed":                    the org has a live deployment (Signals.HasDeployment).
+//   - "revenue":                     the org has recorded revenue > 0 (Signals.RevenueCents).
+//   - "customers": customers:>=<N>   the org's own record count crossed a threshold (Signals.RecordCount).
+//
+// The map is THE coupling point: tests inject their own detectors (or a fake sig) to
+// exercise the logic deterministically, and a curriculum can name a new signal the
+// day its detector is registered here.
+func newDetectors(storeFor func(ctx context.Context, org string) (*Store, error), sig Signals) map[string]Detector {
 	return map[string]Detector{
 		"acted": func(ctx context.Context, org string, step Step) (bool, error) {
 			if step.Tool == "" {
@@ -41,7 +54,71 @@ func newDetectors(storeFor func(ctx context.Context, org string) (*Store, error)
 			return st.HasSuccessfulAction(ctx, step.Tool)
 		},
 		"analytics": detectAnalyticsEmitting,
+
+		kindModule: func(ctx context.Context, org string, step Step) (bool, error) {
+			_, name, _ := strings.Cut(step.Signal, ":")
+			if sig.ModuleInstalled == nil || name == "" {
+				return false, nil
+			}
+			return sig.ModuleInstalled(ctx, org, name), nil
+		},
+		kindConnected: func(ctx context.Context, org string, step Step) (bool, error) {
+			_, provider, _ := strings.Cut(step.Signal, ":")
+			if sig.ConnectorPresent == nil || provider == "" {
+				return false, nil
+			}
+			return sig.ConnectorPresent(ctx, org, provider), nil
+		},
+		kindFunnel: func(ctx context.Context, org string, step Step) (bool, error) {
+			_, stage, _ := strings.Cut(step.Signal, ":")
+			return funnelStagePresent(analyticsFunnel(ctx, org), stage), nil
+		},
+		SignalDeployed: func(ctx context.Context, org string, _ Step) (bool, error) {
+			if sig.HasDeployment == nil {
+				return false, nil
+			}
+			return sig.HasDeployment(ctx, org)
+		},
+		SignalRevenue: func(ctx context.Context, org string, _ Step) (bool, error) {
+			if sig.RevenueCents == nil {
+				return false, nil
+			}
+			cents, err := sig.RevenueCents(ctx, org)
+			if err != nil {
+				return false, err
+			}
+			return cents > 0, nil
+		},
+		kindCustomers: func(ctx context.Context, org string, step Step) (bool, error) {
+			if sig.RecordCount == nil {
+				return false, nil
+			}
+			n, err := sig.RecordCount(ctx, org)
+			if err != nil {
+				return false, err
+			}
+			return n >= parseThreshold(step.Signal, customersThreshold), nil
+		},
 	}
+}
+
+// lookupDetector resolves a step's signal to its detector: an EXACT registered
+// signal (acted, analytics, deployed, revenue) or a parameterized growth signal
+// "<kind>:<param>" (module:cms, connected:stripe, funnel:signups, customers:>=100)
+// whose KIND is registered. The parameterized detector reads its param from
+// step.Signal, so the Detector map stays the single coupling point even as the
+// vocabulary grows. Exact wins over kind, so a curriculum could still register a
+// fully-specified override signal without shadowing the family.
+func lookupDetector(dets map[string]Detector, signal string) (Detector, bool) {
+	if d, ok := dets[signal]; ok {
+		return d, true
+	}
+	if kind, _, ok := strings.Cut(signal, ":"); ok {
+		if d, ok := dets[kind]; ok {
+			return d, true
+		}
+	}
+	return nil, false
 }
 
 // eventsTable is the shared analytics warehouse's insights-event table, keyed on
@@ -97,7 +174,7 @@ func reconcile(ctx context.Context, org string, c Curriculum, states map[string]
 		if s.Signal == "" || terminal(stateOf(states, s.ID)) {
 			continue
 		}
-		det, ok := dets[s.Signal]
+		det, ok := lookupDetector(dets, s.Signal)
 		if !ok {
 			continue
 		}
