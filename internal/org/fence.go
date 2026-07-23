@@ -102,6 +102,16 @@ func (f *CASFencer) Acquire(ctx context.Context, orgID string) (ha.Lease, error)
 	return f.claim(ctx, orgID, self)
 }
 
+// ElectsSelf reports whether this replica is the HRW-elected writer for orgID under the
+// CURRENT live membership — the election half of Acquire WITHOUT the lease CAS, so it does
+// no I/O. It is the cheap gate a degraded (read-only) store consults to decide whether a
+// membership change has made it the owner and it should attempt promotion. Fail-closed on
+// an empty set (no safe owner ⇒ not self).
+func (f *CASFencer) ElectsSelf(orgID string) bool {
+	members := f.view.Members()
+	return len(members) > 0 && IsOwner(orgID, f.view.Self(), members)
+}
+
 // claim reads the current lease and either renews it (owner == self: keep round)
 // or takes it over (strictly bump the round to recorded+1, via a version-
 // conditioned CAS so two racing claimers cannot both win the same round).
