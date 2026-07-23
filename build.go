@@ -2,6 +2,7 @@ package cloud
 
 import (
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -834,8 +835,38 @@ func buildDurability(cfg *Config, log luxlog.Logger) (*Durability, func() []ha.M
 	log.Info("durability enabled", "bucket", durableBucket, "self", self, "peers", len(peers), "atomic_cas", true, "encrypted", cipher != nil)
 	// members.Members is the live election snapshot; hand it to the shard router so it
 	// routes on the SAME set the fencer elects over — the store-layer owner and the routed
-	// owner never disagree.
-	return org.NewDurability(cond, members, cipher), members.Members
+	// owner never disagree. WithCheckpoint WIRES the ship checkpoint (durableCheckpoint) so
+	// ship-before-ack folds the WAL into the real path before reading it — the crypto
+	// envelope's re-encrypt integration point (P5).
+	return org.NewDurability(cond, members, cipher, org.WithCheckpoint(durableCheckpoint)), members.Members
+}
+
+// durableCheckpoint folds the WAL into the real on-disk file before a durable ship reads
+// it — the checkpoint the codec runs before snapshotting (WithCheckpoint). It is a TRUNCATE
+// checkpoint with the busy fail-closed guard: busy!=0 means a reader held the WAL so the
+// main file is missing committed frames, and shipping it would silently lose an acked write.
+//
+// Correct as-is for the WRITE-time-encrypting backends — cgo libsqlcipher (page-level) and
+// the pure-Go codec VFS — where the real path already holds fresh ciphertext after the
+// checkpoint. THE ENVELOPE INTEGRATION POINT (P5): when the pure-Go encryption ENVELOPE
+// backend lands (encryption deferred to Checkpoint/Close, the real path stale until
+// re-encrypted), this MUST route through the driver's re-encrypting Checkpoint so the ship
+// reads FRESH ciphertext — return sqlitedrv.Checkpoint(db) here — else it ships stale bytes
+// and loses acked writes on takeover.
+func durableCheckpoint(ctx context.Context, db *sql.DB) error {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("durable checkpoint conn: %w", err)
+	}
+	defer conn.Close()
+	var busy, logFrames, checkpointed int
+	if err := conn.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &logFrames, &checkpointed); err != nil {
+		return fmt.Errorf("durable checkpoint: %w", err)
+	}
+	if busy != 0 {
+		return fmt.Errorf("durable checkpoint did not complete (busy=%d, log=%d, checkpointed=%d) — refusing to ship a snapshot missing committed WAL frames", busy, logFrames, checkpointed)
+	}
+	return nil
 }
 
 // disabledDurability records that the durable plane is OFF, at ERROR when the
