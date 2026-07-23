@@ -555,7 +555,7 @@ func (s *store) totals(ctx context.Context, project string) (Totals, error) {
 	var t Totals
 	t.Project = project
 	if err := s.db.QueryRowContext(ctx, `SELECT
-  SUM(CASE WHEN `+canonAnsExp+` THEN 1 ELSE 0 END),
+  COALESCE(SUM(CASE WHEN `+canonAnsExp+` THEN 1 ELSE 0 END),0),
   COUNT(*),
   COUNT(DISTINCT e.project),
   COALESCE(SUM(CASE WHEN `+canonAnsExp+` THEN e.cost_usd ELSE 0 END),0)
@@ -564,7 +564,7 @@ FROM experiment e WHERE 1=1`+expWhere, eArgs...).
 		return Totals{}, fmt.Errorf("research totals experiments: %w", err)
 	}
 	if err := s.db.QueryRowContext(ctx, `SELECT
-  SUM(CASE WHEN `+canonAnsAtt+` THEN 1 ELSE 0 END),
+  COALESCE(SUM(CASE WHEN `+canonAnsAtt+` THEN 1 ELSE 0 END),0),
   COUNT(*),
   COUNT(DISTINCT CASE WHEN `+canonAnsAtt+` THEN a.model END),
   COUNT(DISTINCT CASE WHEN `+canonAnsAtt+` THEN a.benchmark END)
