@@ -491,7 +491,7 @@ require (
 	github.com/hanzoai/pubsub-go v1.53.0 // indirect
 	github.com/hanzoai/search-go v0.36.0 // indirect
 	github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible // indirect
-	github.com/hanzoai/tasks v1.51.3
+	github.com/hanzoai/tasks v1.51.4
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/go-metrics v0.5.4 // indirect
