@@ -549,13 +549,33 @@ var amdSoftware = sync.OnceValue(func() amdSoft {
 })
 
 // pickAmdMem chooses the honest memory figure for a card: dedicated VRAM for a
-// discrete GPU, the GTT pool for an APU whose "VRAM" is a token carve-out (Strix
-// Halo reports 1 GiB VRAM + a ~120 GiB unified GTT pool). Unified when GTT wins.
-func pickAmdMem(vramMiB, gttMiB int64) (miB int64, unified bool) {
+// discrete GPU; for an APU whose "VRAM" is a token carve-out (Strix Halo: 1 GiB
+// VRAM beside a ~118 GiB GTT pool) the figure is the MACHINE's unified RAM —
+// the same convention Apple silicon reports (an M4 Max says 128 GiB, not the
+// wired-down remainder) — snapped to hardware capacity. Unified when GTT wins.
+func pickAmdMem(vramMiB, gttMiB, hostMiB int64) (miB int64, unified bool) {
 	if gttMiB > vramMiB*4 {
-		return gttMiB, true
+		m := gttMiB
+		if hostMiB > m {
+			m = hostMiB
+		}
+		return snapUnified(m), true
 	}
 	return vramMiB, false
+}
+
+// snapUnified rounds a kernel-visible unified-memory figure up to the hardware
+// DIMM capacity (the next 16 GiB multiple) when the gap is a plausible firmware
+// reservation (≤ 6 GiB): a 128 GiB Strix Halo shows 124.4 GiB to Linux because
+// BIOS + the VRAM carve-out are invisible to the OS. A larger gap (say a 16 GiB
+// carve-out) is real capacity the pool lost — reported as-is, never invented.
+func snapUnified(miB int64) int64 {
+	const step = 16 << 10 // 16 GiB in MiB
+	next := ((miB + step - 1) / step) * step
+	if next-miB <= 6<<10 {
+		return next
+	}
+	return miB
 }
 
 // amdMem is one card's memory inventory in MiB: dedicated VRAM plus the GTT
@@ -612,8 +632,9 @@ func fillAmdVRAM(gpus []gpuInfo, mems []amdMem) []gpuInfo {
 	if len(mems) != len(gpus) {
 		return gpus
 	}
+	hostMiB := detectMemTotal() / (1 << 20)
 	for i := range gpus {
-		miB, unified := pickAmdMem(mems[i].vramMiB, mems[i].gttMiB)
+		miB, unified := pickAmdMem(mems[i].vramMiB, mems[i].gttMiB, hostMiB)
 		gpus[i].MemoryTotal = fmt.Sprintf("%d MiB", miB)
 		gpus[i].Unified = unified
 	}
