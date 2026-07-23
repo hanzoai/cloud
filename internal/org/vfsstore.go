@@ -16,7 +16,7 @@ type vfsClient interface {
 }
 
 // vfsStore adapts hanzoai/vfs to the Store surface. This is the ONLY object-store
-// binding — SeaweedFS via vfs, no minio, no external S3 SDK. Versioning is
+// binding — SeaweedFS via vfs, no third-party S3 SDK. Versioning is
 // content-addressable (SHA-256 of the payload), matching vfs's model.
 type vfsStore struct{ vfs vfsClient }
 

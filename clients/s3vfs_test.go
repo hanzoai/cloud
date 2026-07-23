@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	minio "github.com/hanzoai/s3-go"
+	s3 "github.com/hanzoai/s3-go"
 
 	"github.com/hanzoai/cloud/clients/s3admin"
 	"github.com/hanzoai/cloud/types"
@@ -24,11 +24,11 @@ func TestMapS3Err(t *testing.T) {
 		wantNil    bool
 	}{
 		{"nil", nil, false, true},
-		{"NoSuchKey", minio.ErrorResponse{Code: "NoSuchKey"}, true, false},
-		{"NoSuchKey wrapped", fmt.Errorf("get: %w", minio.ErrorResponse{Code: "NoSuchKey"}), true, false},
-		{"NoSuchBucket", minio.ErrorResponse{Code: "NoSuchBucket"}, false, false},
-		{"AccessDenied", minio.ErrorResponse{Code: "AccessDenied"}, false, false},
-		{"SlowDown throttle", minio.ErrorResponse{Code: "SlowDown"}, false, false},
+		{"NoSuchKey", s3.ErrorResponse{Code: "NoSuchKey"}, true, false},
+		{"NoSuchKey wrapped", fmt.Errorf("get: %w", s3.ErrorResponse{Code: "NoSuchKey"}), true, false},
+		{"NoSuchBucket", s3.ErrorResponse{Code: "NoSuchBucket"}, false, false},
+		{"AccessDenied", s3.ErrorResponse{Code: "AccessDenied"}, false, false},
+		{"SlowDown throttle", s3.ErrorResponse{Code: "SlowDown"}, false, false},
 		{"plain conn error", fmt.Errorf("dial tcp: connection refused"), false, false},
 	}
 	for _, c := range cases {
