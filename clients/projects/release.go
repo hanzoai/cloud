@@ -44,7 +44,7 @@ import (
 	"strings"
 	"time"
 
-	minio "github.com/hanzoai/s3-go"
+	s3 "github.com/hanzoai/s3-go"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/sites"
@@ -151,7 +151,7 @@ func sourcePrefix(org, raw string) (string, error) {
 // enumerating an arbitrarily large prefix, and it only ever holds the manifest
 // (keys + sizes + etags), never object bodies — a release of any size costs the
 // same memory here.
-func scanSource(ctx context.Context, cli *minio.Client, bucket, src string) ([]releaseObject, int64, error) {
+func scanSource(ctx context.Context, cli *s3.Client, bucket, src string) ([]releaseObject, int64, error) {
 	var (
 		objs  []releaseObject
 		total int64
@@ -159,7 +159,7 @@ func scanSource(ctx context.Context, cli *minio.Client, bucket, src string) ([]r
 	// A trailing slash makes this a strict directory listing: `<src>/` can never
 	// match a sibling prefix that merely shares a name stem (e.g. "build" must not
 	// pull in "build-old").
-	lister := cli.ListObjects(ctx, bucket, minio.ListObjectsOptions{Prefix: src + "/", Recursive: true})
+	lister := cli.ListObjects(ctx, bucket, s3.ListObjectsOptions{Prefix: src + "/", Recursive: true})
 	for obj := range lister {
 		if obj.Err != nil {
 			return nil, 0, fmt.Errorf("list source: %w", obj.Err)
@@ -245,20 +245,20 @@ func releaseID(objs []releaseObject) string {
 // Metadata is REPLACED on the destination with the same content-type and cache
 // policy the artifact upload path writes (sites.CacheControlFor), so a promoted
 // site and an uploaded one serve identically.
-func copyRelease(ctx context.Context, cli *minio.Client, bucket, src, dst, htmlOverride string, objs []releaseObject) error {
+func copyRelease(ctx context.Context, cli *s3.Client, bucket, src, dst, htmlOverride string, objs []releaseObject) error {
 	for _, o := range objs {
 		ct := mime.TypeByExtension(path.Ext(o.rel))
 		if ct == "" {
 			ct = "application/octet-stream"
 		}
 		info, err := cli.CopyObject(ctx,
-			minio.CopyDestOptions{
+			s3.CopyDestOptions{
 				Bucket: bucket, Object: dst + "/" + o.rel,
 				ReplaceMetadata: true,
 				ContentType:     ct,
 				CacheControl:    sites.CacheControlFor(o.rel, htmlOverride),
 			},
-			minio.CopySrcOptions{
+			s3.CopySrcOptions{
 				Bucket: bucket, Object: src + "/" + o.rel,
 				MatchETag: o.etag,
 			})
@@ -281,7 +281,7 @@ func copyRelease(ctx context.Context, cli *minio.Client, bucket, src, dst, htmlO
 // rejection (HTTP 412 / PreconditionFailed), i.e. the source object no longer
 // carries the ETag the manifest was built from.
 func isPreconditionFailed(err error) bool {
-	var resp minio.ErrorResponse
+	var resp s3.ErrorResponse
 	if errors.As(err, &resp) {
 		return resp.StatusCode == http.StatusPreconditionFailed || resp.Code == "PreconditionFailed"
 	}

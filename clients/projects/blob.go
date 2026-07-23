@@ -14,7 +14,7 @@ import (
 	"path"
 	"strings"
 
-	minio "github.com/hanzoai/s3-go"
+	s3 "github.com/hanzoai/s3-go"
 
 	"github.com/hanzoai/cloud/clients/s3admin"
 	"github.com/hanzoai/cloud/clients/sites"
@@ -49,7 +49,7 @@ func openBlobStore() *blobStore {
 
 func (b *blobStore) configured() bool { return b.admin.Configured() }
 
-func (b *blobStore) client() (*minio.Client, error) { return b.admin.Client() }
+func (b *blobStore) client() (*s3.Client, error) { return b.admin.Client() }
 
 // sitePrefix is the deterministic S3 key prefix for a project's current live site:
 // "<org>/<slug>". org and slug are both validated slugs, so the join is
@@ -276,7 +276,7 @@ func (b *blobStore) uploadSite(ctx context.Context, org, slug, htmlOverride stri
 			ct = "application/octet-stream"
 		}
 		_, err := cli.PutObject(ctx, b.bucket, key, bytes.NewReader(data), int64(len(data)),
-			minio.PutObjectOptions{ContentType: ct, CacheControl: sites.CacheControlFor(rel, htmlOverride)})
+			s3.PutObjectOptions{ContentType: ct, CacheControl: sites.CacheControlFor(rel, htmlOverride)})
 		if err != nil {
 			return "", 0, 0, fmt.Errorf("put %q: %w", key, err)
 		}
@@ -288,13 +288,13 @@ func (b *blobStore) uploadSite(ctx context.Context, org, slug, htmlOverride stri
 
 // ensureBucket creates the projects bucket if absent and installs an anonymous
 // read-only policy so deployed sites are reachable directly over S3.
-func (b *blobStore) ensureBucket(ctx context.Context, cli *minio.Client) error {
+func (b *blobStore) ensureBucket(ctx context.Context, cli *s3.Client) error {
 	exists, err := cli.BucketExists(ctx, b.bucket)
 	if err != nil {
 		return fmt.Errorf("bucket exists: %w", err)
 	}
 	if !exists {
-		if err := cli.MakeBucket(ctx, b.bucket, minio.MakeBucketOptions{Region: b.admin.Region()}); err != nil {
+		if err := cli.MakeBucket(ctx, b.bucket, s3.MakeBucketOptions{Region: b.admin.Region()}); err != nil {
 			if ex, _ := cli.BucketExists(ctx, b.bucket); !ex {
 				return fmt.Errorf("make bucket: %w", err)
 			}
@@ -309,9 +309,9 @@ func (b *blobStore) ensureBucket(ctx context.Context, cli *minio.Client) error {
 
 // purgePrefix removes every object under prefix so a redeploy never leaves stale
 // files behind (a deploy is the full site, not a diff).
-func purgePrefix(ctx context.Context, cli *minio.Client, bucket, prefix string) error {
-	objCh := cli.ListObjects(ctx, bucket, minio.ListObjectsOptions{Prefix: prefix + "/", Recursive: true})
-	toDelete := make(chan minio.ObjectInfo)
+func purgePrefix(ctx context.Context, cli *s3.Client, bucket, prefix string) error {
+	objCh := cli.ListObjects(ctx, bucket, s3.ListObjectsOptions{Prefix: prefix + "/", Recursive: true})
+	toDelete := make(chan s3.ObjectInfo)
 	go func() {
 		defer close(toDelete)
 		for obj := range objCh {
@@ -321,7 +321,7 @@ func purgePrefix(ctx context.Context, cli *minio.Client, bucket, prefix string) 
 			toDelete <- obj
 		}
 	}()
-	for rmErr := range cli.RemoveObjects(ctx, bucket, toDelete, minio.RemoveObjectsOptions{}) {
+	for rmErr := range cli.RemoveObjects(ctx, bucket, toDelete, s3.RemoveObjectsOptions{}) {
 		if rmErr.Err != nil {
 			return rmErr.Err
 		}
@@ -336,7 +336,7 @@ func purgePrefix(ctx context.Context, cli *minio.Client, bucket, prefix string) 
 // The Principal MUST be the scalar string "*" and the Resource a scalar string
 // (not {"AWS":["*"]} / arrays): SeaweedFS's S3 policy engine rejects the array
 // forms with "Policy has invalid resource". This scalar form is equally valid
-// on AWS S3 and MinIO, so it is the one canonical policy for every backend.
+// on AWS S3 and SeaweedFS, so it is the one canonical policy for every backend.
 func publicReadPolicy(bucket string) string {
 	return `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":["s3:GetObject"],"Resource":"arn:aws:s3:::` + bucket + `/*"}]}`
 }
