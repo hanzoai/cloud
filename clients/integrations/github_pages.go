@@ -9,7 +9,10 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
@@ -151,18 +154,86 @@ type pagesRepo struct {
 	defaultBranch string
 }
 
+// grantTTL bounds how long a cached installation grant set is trusted. A revoked repo
+// can widen the isolation window by at most grantTTL, so keep it short.
+const grantTTL = 45 * time.Second
+
+type grantEntry struct {
+	repos []githubRepo
+	exp   time.Time
+}
+
+// grantCache memoizes each installation's granted repo set for grantTTL, keyed by
+// INSTALLATION ID — never the org name. Per-installation keying is the isolation
+// invariant: an org that reconnects to a different installation gets a different key
+// (never a stale grant from the old one), and the TTL bounds how long a revoked grant
+// is honored. It caps installationRepos (up to 100 upstream calls) to at most once per
+// grantTTL per installation — collapsing the status-poll self-DoS (LOW-1) without ever
+// widening cross-tenant scope.
+var (
+	grantMu    sync.Mutex
+	grantCache = map[int64]grantEntry{}
+)
+
+// resetGrantCache drops every cached grant set. Called by resetGithubApp so a test's
+// fresh mock is never shadowed by a prior test's grants.
+func resetGrantCache() {
+	grantMu.Lock()
+	grantCache = map[int64]grantEntry{}
+	grantMu.Unlock()
+}
+
+// grantedRepos returns the installation's granted repo set — from the per-installation
+// cache when fresh, else one installationRepos fetch that is then cached for grantTTL.
+func grantedRepos(ctx context.Context, instID int64, token string) ([]githubRepo, error) {
+	grantMu.Lock()
+	if e, ok := grantCache[instID]; ok && time.Now().Before(e.exp) {
+		repos := e.repos
+		grantMu.Unlock()
+		return repos, nil
+	}
+	grantMu.Unlock()
+	repos, err := installationRepos(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	grantMu.Lock()
+	grantCache[instID] = grantEntry{repos: repos, exp: time.Now().Add(grantTTL)}
+	grantMu.Unlock()
+	return repos, nil
+}
+
+// installationID resolves the org's connected GitHub installation id — the grant-cache
+// key. githubTokenForOrg has already proven the connection exists (409 otherwise), so
+// this only re-reads the custodied id; a malformed id is an honest 502.
+func installationID(org string) (int64, error) {
+	conn, ok := ConnectionFor(org, "github")
+	if !ok {
+		return 0, zip.Errorf(http.StatusConflict, "github is not connected for this organization")
+	}
+	id, err := strconv.ParseInt(strings.TrimSpace(conn.ExternalID), 10, 64)
+	if err != nil {
+		return 0, zip.Errorf(http.StatusBadGateway, "invalid github installation id")
+	}
+	return id, nil
+}
+
 // resolveGrantedRepo mints the org's installation token and confirms repoName is in
-// the installation's GRANTED set, returning that token plus the repo's server-side
-// full_name and default branch (from GitHub, never the client). Fail-closed: an
-// unknown or ungranted repo yields a 404 — an org can never address a repo its
-// installation was not granted, and the owner in the GitHub API path is never taken
-// from the request.
+// the installation's GRANTED set (via grantedRepos, cached per-installation), returning
+// that token plus the repo's server-side full_name and default branch (from GitHub,
+// never the client). Fail-closed: an unknown or ungranted repo yields a 404 — an org
+// can never address a repo its installation was not granted, and the owner in the
+// GitHub API path is never taken from the request.
 func resolveGrantedRepo(ctx context.Context, org, repoName string) (pagesRepo, error) {
 	tok, herr := githubTokenForOrg(ctx, org)
 	if herr != nil {
 		return pagesRepo{}, herr
 	}
-	repos, err := installationRepos(ctx, tok)
+	instID, herr := installationID(org)
+	if herr != nil {
+		return pagesRepo{}, herr
+	}
+	repos, err := grantedRepos(ctx, instID, tok)
 	if err != nil {
 		return pagesRepo{}, zip.Errorf(http.StatusBadGateway, "list github repositories: %v", err)
 	}
@@ -189,10 +260,10 @@ func splitFullName(full string) (owner, name string, ok bool) {
 // "" for the site resource or "/builds" for a build. The token rides only the
 // Authorization header; owner/name are path-escaped (defense in depth — they come
 // from GitHub). Returns the raw status and a bounded body.
-func (pr pagesRepo) request(ctx context.Context, method, subpath string, body []byte) (int, []byte, error) {
+func (pr pagesRepo) request(ctx context.Context, method, subpath string, body []byte) (int, []byte, http.Header, error) {
 	owner, name, ok := splitFullName(pr.fullName)
 	if !ok {
-		return 0, nil, fmt.Errorf("invalid repository full name")
+		return 0, nil, nil, fmt.Errorf("invalid repository full name")
 	}
 	endpoint := strings.TrimRight(githubAPIBase, "/") + "/repos/" +
 		url.PathEscape(owner) + "/" + url.PathEscape(name) + "/pages" + subpath
@@ -202,7 +273,7 @@ func (pr pagesRepo) request(ctx context.Context, method, subpath string, body []
 	}
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, rdr)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+pr.token)
 	req.Header.Set("Accept", "application/vnd.github+json")
@@ -212,18 +283,27 @@ func (pr pagesRepo) request(ctx context.Context, method, subpath string, body []
 	}
 	resp, err := githubHTTP.Do(req)
 	if err != nil {
-		return 0, nil, fmt.Errorf("github call: %w", err)
+		return 0, nil, nil, fmt.Errorf("github call: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	return resp.StatusCode, b, nil
+	return resp.StatusCode, b, resp.Header, nil
 }
 
-// pagesErr maps a GitHub non-2xx status to an honest client error. GitHub error
-// bodies carry a validation message (never the token, which lives only in the request
-// header), so surfacing a truncated body aids the operator without leaking a secret.
-// A 403 means the App lacks the Pages permission — actionable, so it is called out.
-func pagesErr(status int, body []byte) error {
+// pagesErr maps a GitHub non-2xx status to an honest client error. A 403/429 that is
+// really a rate limit (x-ratelimit-remaining: 0, a retry-after header, or a rate-limit
+// message body) is surfaced as 429 with the retry hint — NOT as a permissions problem
+// (LOW-2), so a self-inflicted rate-limit is not misreported as "re-authorize". A
+// genuine permission 403 keeps the actionable re-authorize message. GitHub error
+// bodies carry only a validation message (never the token, which lives only in the
+// request header — and truncateBody redacts any credential-shaped substring anyway).
+func pagesErr(status int, body []byte, hdr http.Header) error {
+	if rl, retry := rateLimited(status, body, hdr); rl {
+		if retry != "" {
+			return zip.Errorf(http.StatusTooManyRequests, "github rate limit reached; retry after %ss", retry)
+		}
+		return zip.Errorf(http.StatusTooManyRequests, "github rate limit reached; retry shortly")
+	}
 	switch status {
 	case http.StatusForbidden:
 		return zip.Errorf(http.StatusForbidden,
@@ -233,6 +313,30 @@ func pagesErr(status int, body []byte) error {
 	default:
 		return zip.Errorf(http.StatusBadGateway, "github pages http %d: %s", status, truncateBody(body))
 	}
+}
+
+// rateLimited reports whether a GitHub response is a rate-limit rejection (primary:
+// 403 + x-ratelimit-remaining 0; secondary: 403/429 + retry-after or a rate-limit
+// message), plus the Retry-After seconds when GitHub supplied them. A plain 403 with
+// no rate-limit signal is NOT rate-limited — it falls through to the permission case.
+func rateLimited(status int, body []byte, hdr http.Header) (bool, string) {
+	if status != http.StatusForbidden && status != http.StatusTooManyRequests {
+		return false, ""
+	}
+	var retry string
+	if hdr != nil {
+		retry = strings.TrimSpace(hdr.Get("Retry-After"))
+		if hdr.Get("X-RateLimit-Remaining") == "0" {
+			return true, retry
+		}
+		if retry != "" {
+			return true, retry
+		}
+	}
+	if b := strings.ToLower(string(body)); strings.Contains(b, "rate limit") || strings.Contains(b, "secondary rate") {
+		return true, retry
+	}
+	return status == http.StatusTooManyRequests, retry
 }
 
 // ── handlers ─────────────────────────────────────────────────────────────────
@@ -267,7 +371,7 @@ func githubPagesGet(_ *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	status, body, callErr := pr.request(c.Context(), http.MethodGet, "", nil)
+	status, body, hdr, callErr := pr.request(c.Context(), http.MethodGet, "", nil)
 	if callErr != nil {
 		return zip.Errorf(http.StatusBadGateway, "github pages: %v", callErr)
 	}
@@ -275,7 +379,7 @@ func githubPagesGet(_ *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusNotFound, "github pages is not enabled for this repository")
 	}
 	if status/100 != 2 {
-		return pagesErr(status, body)
+		return pagesErr(status, body, hdr)
 	}
 	var site githubPagesSite
 	if err := json.Unmarshal(body, &site); err != nil {
@@ -317,12 +421,12 @@ func githubPagesEnable(_ *cloud.Service[state], c *zip.Ctx) error {
 		out["source"] = map[string]string{"branch": branch, "path": path}
 	}
 	raw, _ := json.Marshal(out)
-	status, body, callErr := pr.request(c.Context(), http.MethodPost, "", raw)
+	status, body, hdr, callErr := pr.request(c.Context(), http.MethodPost, "", raw)
 	if callErr != nil {
 		return zip.Errorf(http.StatusBadGateway, "github pages: %v", callErr)
 	}
 	if status/100 != 2 {
-		return pagesErr(status, body)
+		return pagesErr(status, body, hdr)
 	}
 	var site githubPagesSite
 	_ = json.Unmarshal(body, &site)
@@ -375,7 +479,7 @@ func githubPagesUpdate(_ *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrBadRequest("no fields to update (cname, httpsEnforced, buildType, or branch)")
 	}
 	raw, _ := json.Marshal(out)
-	status, body, callErr := pr.request(c.Context(), http.MethodPut, "", raw)
+	status, body, hdr, callErr := pr.request(c.Context(), http.MethodPut, "", raw)
 	if callErr != nil {
 		return zip.Errorf(http.StatusBadGateway, "github pages: %v", callErr)
 	}
@@ -383,7 +487,7 @@ func githubPagesUpdate(_ *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusNotFound, "github pages is not enabled for this repository")
 	}
 	if status/100 != 2 {
-		return pagesErr(status, body)
+		return pagesErr(status, body, hdr)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"repo": repo, "updated": true})
 }
@@ -394,7 +498,7 @@ func githubPagesDisable(_ *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	status, body, callErr := pr.request(c.Context(), http.MethodDelete, "", nil)
+	status, body, hdr, callErr := pr.request(c.Context(), http.MethodDelete, "", nil)
 	if callErr != nil {
 		return zip.Errorf(http.StatusBadGateway, "github pages: %v", callErr)
 	}
@@ -402,7 +506,7 @@ func githubPagesDisable(_ *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusNotFound, "github pages is not enabled for this repository")
 	}
 	if status/100 != 2 {
-		return pagesErr(status, body)
+		return pagesErr(status, body, hdr)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"repo": repo, "disabled": true})
 }
@@ -413,7 +517,7 @@ func githubPagesBuild(_ *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	status, body, callErr := pr.request(c.Context(), http.MethodPost, "/builds", nil)
+	status, body, hdr, callErr := pr.request(c.Context(), http.MethodPost, "/builds", nil)
 	if callErr != nil {
 		return zip.Errorf(http.StatusBadGateway, "github pages: %v", callErr)
 	}
@@ -421,7 +525,7 @@ func githubPagesBuild(_ *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusNotFound, "github pages is not enabled for this repository")
 	}
 	if status/100 != 2 {
-		return pagesErr(status, body)
+		return pagesErr(status, body, hdr)
 	}
 	var b struct {
 		URL    string `json:"url"`
