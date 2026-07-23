@@ -103,6 +103,7 @@ func routes(app *zip.App, s *cloud.Service[core.State]) {
 	g.Get("/applications", core.Guard(s, applications))
 	g.Get("/products", core.Guard(s, products))
 	g.Get("/compute", core.Guard(s, compute))
+	g.Get("/storage", core.Guard(s, storage))
 	g.Get("/o11y", core.Guard(s, o11y))
 	g.Get("/aimetrics", core.Guard(s, aimetrics))
 	g.Post("/sync", core.Guard(s, syncNow))
