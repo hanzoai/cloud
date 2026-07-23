@@ -117,15 +117,19 @@ func TestEnsureCatalogAssetSkipsWhenStudioUnconfigured(t *testing.T) {
 	}
 }
 
-// A product event for an org that never installed the marketing lane is a quiet skip.
-func TestEnsureCatalogAssetSkipsWhenLaneNotInstalled(t *testing.T) {
+// A product event for a fresh org is a quiet skip, never an error loop. marketing is
+// always-on, so the Asset lane always resolves; the render pipeline (a configured
+// studio) is now the gate. A fresh org with no studio quietly skips as "not_configured"
+// (before marketing went always-on this skipped as "not_installed" — the lane is now
+// default-on, so the honest skip reason is the missing render pipeline).
+func TestEnsureCatalogAssetSkipsForFreshOrg(t *testing.T) {
 	_ = mountWith(t, cloud.Deps{})
 	res, err := EnsureCatalogAsset(context.Background(), "noinstall", "valentina")
 	if err != nil {
-		t.Fatalf("not-installed must be a quiet skip, got: %v", err)
+		t.Fatalf("a fresh org must be a quiet skip, got: %v", err)
 	}
-	if res.Skipped != "not_installed" {
-		t.Fatalf("expected not_installed skip, got %+v", res)
+	if res.Created || res.Skipped != "not_configured" {
+		t.Fatalf("expected a quiet not_configured skip for a fresh org, got %+v", res)
 	}
 }
 
