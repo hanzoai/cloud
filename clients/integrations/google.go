@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -209,10 +210,19 @@ func googlePostForm(ctx context.Context, endpoint string, form url.Values, out a
 	return nil
 }
 
+// secretRE matches credential-shaped substrings — GitHub tokens (gho/ghp/ghr/ghs/ghu_,
+// github_pat_) and a Bearer header value — so truncateBody redacts them from any
+// surfaced provider error body. Defense in depth: a token rides only the request
+// header and no provider echoes it back, but a reflected body must never surface one.
+var secretRE = regexp.MustCompile(`(?i)(gh[oprsu]_[A-Za-z0-9_]{10,}|github_pat_[A-Za-z0-9_]+|bearer\s+[^\s"']+)`)
+
+// truncateBody sanitizes then bounds a foreign error body for safe surfacing: it
+// redacts any credential-shaped substring first, then caps the result to 256 bytes.
 func truncateBody(b []byte) string {
+	s := secretRE.ReplaceAllString(string(b), "[redacted]")
 	const n = 256
-	if len(b) > n {
-		return string(b[:n])
+	if len(s) > n {
+		return s[:n]
 	}
-	return string(b)
+	return s
 }

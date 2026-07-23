@@ -29,12 +29,13 @@ type recordedReq struct {
 // resource — recording every request so a test can assert the exact owner/name/body
 // the handler sent. noPages makes the site resource 404 (Pages not enabled).
 type pagesMock struct {
-	mu      sync.Mutex
-	reqs    []recordedReq
-	repos   []map[string]any
-	getSite map[string]any
-	noPages bool
-	srv     *httptest.Server
+	mu            sync.Mutex
+	reqs          []recordedReq
+	repos         []map[string]any
+	getSite       map[string]any
+	noPages       bool
+	repoListCalls int // count of GET /installation/repositories (grant-set enumerations)
+	srv           *httptest.Server
 }
 
 func newPagesMock(t *testing.T, repos []map[string]any) *pagesMock {
@@ -50,6 +51,9 @@ func newPagesMock(t *testing.T, repos []map[string]any) *pagesMock {
 		case strings.HasPrefix(p, "/app/installations/"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"account": map[string]any{"login": "acme-gh"}})
 		case p == "/installation/repositories":
+			m.mu.Lock()
+			m.repoListCalls++
+			m.mu.Unlock()
 			_ = json.NewEncoder(w).Encode(map[string]any{"total_count": len(m.repos), "repositories": m.repos})
 		case strings.HasSuffix(p, "/pages/builds"):
 			m.record(r)
