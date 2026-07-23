@@ -172,9 +172,11 @@ type artBlob struct {
 	Content []byte `json:"content"`
 }
 
-// metaRecord is the per-store monotone append clock. Its seq is advanced (inside
-// the ingest transaction) once per newly-appended version, so canonical =
-// latest-append-wins is server-authoritative and un-forgeable.
+// metaRecord backs two singleton kindMeta records, keyed by distinct ids so they
+// never interfere: id "seq" is the per-store monotone append clock (advanced inside
+// the ingest tx once per newly-appended version, so canonical = latest-append-wins
+// is server-authoritative and un-forgeable); id "legacy-migrated" is the one-time
+// migration marker (its existence is the signal; the Seq value is unused there).
 type metaRecord struct {
 	Seq int64 `json:"seq"`
 }
@@ -227,30 +229,37 @@ type legacyArt struct {
 // orm cutover reads as empty (the tables still hold the rows, but the orm reads look
 // only at _entities), silently vanishing every logged run.
 //
-// It is gated on old-table existence (a greenfield store skips it) and idempotent:
-// every row is CreateIfAbsent'd under the SAME stable id the ORM would mint, so a
-// re-open re-migrates to a no-op and never duplicates. Each version keeps its OLD
-// seq value, so canonical/supersession is preserved EXACTLY — a corrected run stays
-// canonical — and the append clock is advanced past every migrated seq so a later
-// ingest supersedes correctly. content_hash, revision, status, visibility/consent,
-// all provenance, and the artifact blobs are carried verbatim. Rows are read by
-// COLUMN NAME (SELECT *), so a table left by ANY older schema — even the outage-era
-// one missing provenance columns — migrates without referencing a column that may
-// not exist: the migration itself can never hit "no such column".
+// It runs ONCE: a completed migration leaves a marker (a kindMeta record separate
+// from the seq clock), so every later open short-circuits without re-scanning the
+// legacy tables. It is also idempotent even without the marker — every row is
+// CreateIfAbsent'd under the SAME stable id the ORM would mint, so a re-run never
+// duplicates. Each version keeps its OLD seq value, so canonical/supersession is
+// preserved EXACTLY — a corrected run stays canonical — and the append clock is
+// advanced past every migrated seq so a later ingest supersedes correctly.
+// content_hash, revision, status, visibility/consent, all provenance, and the
+// artifact blobs are carried verbatim. Rows are read by COLUMN NAME (SELECT *), so a
+// table left by ANY older schema — even the outage-era one missing provenance
+// columns — migrates without referencing a column that may not exist: the migration
+// itself can never hit "no such column". A greenfield store (no legacy tables) marks
+// done immediately. A failure fails the open (fail-secure, via openStore).
 func (s *store) migrateLegacy(ctx context.Context) error {
+	done, err := s.legacyMigrated(ctx)
+	if err != nil {
+		return err
+	}
+	if done {
+		return nil
+	}
 	present, err := s.legacyTables(ctx)
 	if err != nil {
 		return err
 	}
 	if len(present) == 0 {
-		return nil // greenfield: no pre-orm tables
+		return s.markLegacyMigrated(ctx) // greenfield: nothing to carry
 	}
 	exps, atts, arts, err := s.readLegacy(ctx, present)
 	if err != nil {
 		return err
-	}
-	if len(exps) == 0 && len(atts) == 0 && len(arts) == 0 {
-		return nil // empty legacy tables
 	}
 	return s.db.RunInTransactionWith(ctx, &orm.TxOptions{}, func(tx orm.DB) error {
 		maxSeq, err := loadSeq(ctx, tx)
@@ -289,8 +298,41 @@ func (s *store) migrateLegacy(ctx context.Context) error {
 		}
 		// Never lower the clock: max(current, every migrated seq). A re-open where
 		// later ingests already advanced it leaves it untouched.
-		return putSeq(ctx, tx, maxSeq)
+		if err := putSeq(ctx, tx, maxSeq); err != nil {
+			return err
+		}
+		// Mark done in the SAME tx: the marker commits iff the migration commits.
+		return markLegacyMigratedTx(ctx, tx)
 	})
+}
+
+// legacyMark is the id (in kindMeta, distinct from the seq clock's "seq") of the
+// record whose existence records that the one-time legacy migration has completed.
+const legacyMark = "legacy-migrated"
+
+// legacyMigrated reports whether the one-time legacy migration has already run.
+func (s *store) legacyMigrated(ctx context.Context) (bool, error) {
+	var m metaRecord
+	switch err := s.db.Get(ctx, s.db.NewKey(kindMeta, legacyMark, 0, nil), &m); {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, ormdb.ErrNoSuchEntity):
+		return false, nil
+	default:
+		return false, err
+	}
+}
+
+// markLegacyMigrated writes the completion marker (greenfield path, no tx).
+func (s *store) markLegacyMigrated(ctx context.Context) error {
+	_, err := s.db.Put(ctx, s.db.NewKey(kindMeta, legacyMark, 0, nil), &metaRecord{})
+	return err
+}
+
+// markLegacyMigratedTx writes the completion marker inside the migration tx.
+func markLegacyMigratedTx(ctx context.Context, tx orm.DB) error {
+	_, err := tx.Put(ctx, tx.NewKey(kindMeta, legacyMark, 0, nil), &metaRecord{})
+	return err
 }
 
 // legacyTables reports which pre-orm tables are present in the file.
