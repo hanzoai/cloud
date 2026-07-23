@@ -45,11 +45,15 @@ var (
 )
 
 // metaScopes is the requested permission set: ads + page + instagram + insights
-// READ. ads_management (campaign create/spend) is intentionally absent until the
-// execution path exists.
+// READ, and nothing else. Two WRITE-capable scopes are intentionally absent until a
+// write path is wired and the connector is re-documented as write-scoped:
+//   - ads_management     — campaign create/spend.
+//   - business_management — read+WRITE of Business Manager assets (users, ad
+//     accounts, system users). Ad-account ENUMERATION uses /me/adaccounts under
+//     ads_read, so no read path needs it; custodying a ~60-day token with
+//     business-asset write authority no reader uses would violate least privilege.
 var metaScopes = []string{
 	"ads_read",
-	"business_management",
 	"pages_show_list",
 	"pages_read_engagement",
 	"read_insights",
