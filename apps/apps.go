@@ -64,6 +64,7 @@ import (
 	"github.com/hanzoai/cloud/clients/benchmark"
 	"github.com/hanzoai/cloud/clients/billing"
 	"github.com/hanzoai/cloud/clients/bots"
+	"github.com/hanzoai/cloud/clients/campaign"
 	"github.com/hanzoai/cloud/clients/captable"
 	"github.com/hanzoai/cloud/clients/catalogsync"
 	"github.com/hanzoai/cloud/clients/channels"
@@ -300,6 +301,13 @@ func Wire() []cloud.MountSpec {
 		// twin of crm/marketing. Owns a DB handle, so its Shutdown closes it cleanly
 		// on SIGTERM (ctxShutdown adapts func() error).
 		{Name: "ads", Mount: ads.Mount, Shutdown: ctxShutdown(ads.Shutdown)},
+		// Top-level GTM orchestration /v1/campaign/* — the capability layer that fans a
+		// campaign VALUE out to its channels (paid→ads, organic→publish, email→marketing),
+		// each CONSUMING the connector plane via integrations.TokenFor. Metrics read from
+		// the ONE analytics plane (never a second store); creative A/B composes the
+		// experiment seam. The paid channel executor is wired in wire_seams.go. Owns a DB
+		// handle, so its Shutdown closes it cleanly on SIGTERM.
+		{Name: "campaign", Mount: campaign.Mount, Shutdown: ctxShutdown(campaign.Shutdown)},
 		// GDA/SDM validator onboarding /v1/validators/* — wallet-sig + ETH-mainnet
 		// GenesisNFT ownerOf → seal luxd staking identity into KMS → write a NEW-node
 		// LuxNetwork CR (node.lux.cloud, never the live luxd) → enqueue an owner-gated
