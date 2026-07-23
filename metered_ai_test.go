@@ -190,16 +190,19 @@ func TestMeteredAI_ModelListerPreserved(t *testing.T) {
 }
 
 // BYOInferenceFeeMicros is the shared BYO fee model any BYO inference path (Workers
-// AI) prices with: BYOFeeBps of the equivalent metered price — never the full cost.
+// AI) prices with: BYOFeeBps of the equivalent metered price, FLOORED per call. The
+// token-proportional part is isolated by disabling the floor; the floor has its own
+// assertions below.
 func TestBYOInferenceFee(t *testing.T) {
 	t.Setenv("CLOUD_AI_PRICE_UUSD_PER_1K", "2000") // equiv price = tokens*2 micro-USD
+	t.Setenv("CLOUD_AI_BYO_FLOOR_UUSD", "0")       // isolate the token-proportional part
 
 	// Default 100 bps (1%): 1000 tokens → equiv 2000 micros → fee 20 micros.
 	if got := BYOInferenceFeeMicros(1000); got != 20 {
 		t.Fatalf("BYOInferenceFeeMicros(1000) = %d, want 20", got)
 	}
 	if got := BYOInferenceFeeMicros(0); got != 0 {
-		t.Fatalf("zero tokens must be free, got %d", got)
+		t.Fatalf("zero tokens with the floor disabled must be free, got %d", got)
 	}
 
 	// Configurable bps.
@@ -208,16 +211,46 @@ func TestBYOInferenceFee(t *testing.T) {
 		t.Fatalf("BYOInferenceFeeMicros(1000) @5%% = %d, want 100", got)
 	}
 
-	// Zero fee ⟹ free/un-metered BYO (mirrors price==0 pass-through).
+	// Zero bps disables the token-proportional part (floor still disabled here).
 	t.Setenv("CLOUD_AI_BYO_FEE_BPS", "0")
 	if got := BYOInferenceFeeMicros(1000); got != 0 {
-		t.Fatalf("zero bps must be free, got %d", got)
+		t.Fatalf("zero bps + zero floor must be free, got %d", got)
 	}
 
-	// A negative/invalid override falls through to the default — never silently zero.
+	// A negative/invalid bps override falls through to the default — never silently zero.
 	t.Setenv("CLOUD_AI_BYO_FEE_BPS", "-3")
 	if got := BYOFeeBps(); got != defaultBYOFeeBps {
 		t.Fatalf("invalid bps = %d, want default %d", got, defaultBYOFeeBps)
+	}
+}
+
+// The per-call FLOOR is the F-1 fix: a call the token estimate cannot price (a non-text
+// modality: 0 tokens) is still charged ≥ the floor, so it cannot slip through free and
+// un-gated. The floor also dominates a cheaper token fee.
+func TestBYOInferenceFloor(t *testing.T) {
+	t.Setenv("CLOUD_AI_PRICE_UUSD_PER_1K", "2000")
+	t.Setenv("CLOUD_AI_BYO_FEE_BPS", "100")
+	t.Setenv("CLOUD_AI_BYO_FLOOR_UUSD", "100")
+
+	// 0 tokens (non-text) → the floor, never 0.
+	if got := BYOInferenceFeeMicros(0); got != 100 {
+		t.Fatalf("BYOInferenceFeeMicros(0) = %d, want the floor 100", got)
+	}
+	// Small token fee (1000 tokens → 20) is dominated by the floor.
+	if got := BYOInferenceFeeMicros(1000); got != 100 {
+		t.Fatalf("BYOInferenceFeeMicros(1000) = %d, want max(floor 100, fee 20) = 100", got)
+	}
+	// A large token fee exceeds the floor and wins (100000 → 2000 > 100).
+	if got := BYOInferenceFeeMicros(100000); got != 2000 {
+		t.Fatalf("BYOInferenceFeeMicros(100000) = %d, want the token fee 2000", got)
+	}
+	// The default floor is non-zero, so out of the box no call is free/un-gated.
+	if BYOFloorMicros() != defaultBYOFloorMicros || defaultBYOFloorMicros <= 0 {
+		t.Fatalf("default floor must be > 0; got %d", defaultBYOFloorMicros)
+	}
+	// Any positive floor forces the gate reservation to ≥ 1 cent (gate always runs).
+	if MicrosToGateCents(BYOInferenceFeeMicros(0)) < 1 {
+		t.Fatal("floored fee must reserve ≥ 1 cent so the gate never short-circuits")
 	}
 }
 
