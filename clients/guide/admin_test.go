@@ -2,11 +2,13 @@ package guide
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
@@ -90,12 +92,19 @@ func TestBlueprintAdminRequiresSuperAdmin(t *testing.T) {
 		Version int    `json:"version"`
 		Brand   string `json:"brand"`
 		Counts  struct {
-			Steps int `json:"steps"`
+			Principles int `json:"principles"`
+			Steps      int `json:"steps"`
+			Strategies int `json:"strategies"`
 		} `json:"counts"`
 	}
 	_ = json.Unmarshal(r.Body, &got)
+	// The seeded base blueprint is the full Zen of Hanzo genome (v1 seed): 64-principle
+	// spine, 67 journey steps, and the 1002-strategy corpus (888 modern + 114 heritage).
 	if got.Version != 1 || got.Counts.Steps != 67 {
 		t.Fatalf("SuperAdmin should read the seeded base blueprint (v1, 67 steps), got %+v", got)
+	}
+	if got.Counts.Principles != 64 || got.Counts.Strategies != 1002 {
+		t.Fatalf("seeded blueprint must carry the full genome (64 principles, 1002 strategies), got %+v", got.Counts)
 	}
 }
 
@@ -203,4 +212,75 @@ func hasStep(v overviewView, id string) bool {
 		}
 	}
 	return false
+}
+
+// TestAuthoringFallbackClonesFixture is the LOW-1 PoC: when the blueprint store is absent
+// (pre-seed / unreachable), authoringBlueprint returns the embedded fixture as the base to
+// edit. It MUST return a CLONE — an in-place edit (patchIn, the real PATCH path) must never
+// mutate the process-wide shared defBlueprint.
+func TestAuthoringFallbackClonesFixture(t *testing.T) {
+	fixture := Blueprint{
+		Version:    "fix",
+		Sections:   []Section{{ID: "sec", Title: "Sec"}},
+		Steps:      []Step{{ID: "s1", Title: "S1"}},
+		Strategies: []Strategy{{ID: "a", Category: "c", Action: "x"}},
+		Templates:  []Template{{ID: "t1", Title: "T1", Body: "b"}},
+		Principles: []Principle{{N: 1, Slug: "p1"}},
+	}
+	st := state{defBlueprint: fixture} // blueprints == nil → the fixture fallback branch
+
+	bp, _, _, err := st.authoringBlueprint(context.Background())
+	if err != nil {
+		t.Fatalf("authoringBlueprint: %v", err)
+	}
+	// Edit every collection IN PLACE exactly as patchIn does (items[i] = merged).
+	if _, err := patchIn(bp.Strategies, "a", func(s Strategy) string { return s.ID }, []byte(`{"enabled":false}`)); err != nil {
+		t.Fatalf("patch strategy: %v", err)
+	}
+	if _, err := patchIn(bp.Steps, "s1", func(s Step) string { return s.ID }, []byte(`{"title":"MUT"}`)); err != nil {
+		t.Fatalf("patch step: %v", err)
+	}
+	if _, err := patchIn(bp.Sections, "sec", func(s Section) string { return s.ID }, []byte(`{"title":"MUT"}`)); err != nil {
+		t.Fatalf("patch section: %v", err)
+	}
+
+	// The shared embedded fixture must be pristine — no edit leaked through the slice backing.
+	if st.defBlueprint.Strategies[0].Enabled != nil {
+		t.Fatal("LOW-1: an in-place strategy edit leaked into the shared fixture")
+	}
+	if st.defBlueprint.Steps[0].Title != "S1" {
+		t.Fatalf("LOW-1: an in-place step edit leaked into the shared fixture: %q", st.defBlueprint.Steps[0].Title)
+	}
+	if st.defBlueprint.Sections[0].Title != "Sec" {
+		t.Fatalf("LOW-1: an in-place section edit leaked into the shared fixture: %q", st.defBlueprint.Sections[0].Title)
+	}
+}
+
+// TestPutOverwritesCorruptStoredRow is the LOW-2 PoC: a corrupt / schema-drifted stored row
+// makes the parsing reads (GET) 500, but a VALID PUT must STILL overwrite it — putBlueprint
+// fetches the write key WITHOUT parsing the stored doc, so authoring is never wedged.
+func TestPutOverwritesCorruptStoredRow(t *testing.T) {
+	app := newApp(t)
+	// Append an unparseable "schema-drifted" version as the latest (valid JSON, but an empty
+	// journey that fails Validate — exactly the case that trips authoringBlueprint's Parse).
+	if _, err := mounted.State.blueprints.SaveVersion(context.Background(), "", []byte(`{"version":"drifted","steps":[]}`), time.Now().Unix()); err != nil {
+		t.Fatalf("inject corrupt version: %v", err)
+	}
+	// The parsing read is now wedged (the trap the fix addresses).
+	if r := reqH(t, app, http.MethodGet, "/v1/guide/blueprint", superHdr, nil); r.Code != http.StatusInternalServerError {
+		t.Fatalf("GET over a corrupt stored row should 500 (the trap), got %d", r.Code)
+	}
+	// A valid PUT MUST still overwrite the corrupt row.
+	valid := map[string]any{"version": "recovered", "steps": []map[string]any{{"id": "ok", "title": "OK"}}}
+	if r := reqH(t, app, http.MethodPut, "/v1/guide/blueprint", superHdr, valid); r.Code != http.StatusOK {
+		t.Fatalf("LOW-2: a valid PUT must overwrite a corrupt stored row, got %d (%s)", r.Code, r.Body)
+	}
+	// Reads recover: the parsing GET works again, and a normal org resolves the recovery.
+	if r := reqH(t, app, http.MethodGet, "/v1/guide/blueprint", superHdr, nil); r.Code != http.StatusOK {
+		t.Fatalf("GET should recover after the valid PUT, got %d", r.Code)
+	}
+	ov := decode[overviewView](t, req(t, app, http.MethodGet, "/v1/guide", "acme", nil).Body)
+	if ov.Version != "recovered" {
+		t.Fatalf("the recovery PUT must be active, got version %q", ov.Version)
+	}
 }
