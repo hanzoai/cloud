@@ -59,6 +59,15 @@ func validCategory(c Category) bool {
 	return false
 }
 
+// counselRequired reports whether a category is one whose documents MUST carry the
+// counsel-review notice — formation instruments and securities (equity). It is the ONE
+// source of truth for the boundary, coupled to the CATEGORY rather than a per-template
+// flag, so a new org template in one of these categories can never generate a
+// securities-class document without the notice.
+func counselRequired(c Category) bool {
+	return c == CategoryFormation || c == CategoryEquity
+}
+
 // Field declares one merge field a template consumes: the key used in the template
 // body ({{.key}}) and a human label. Every declared field is REQUIRED — the engine
 // fails closed on a missing one rather than rendering a blank into a contract.

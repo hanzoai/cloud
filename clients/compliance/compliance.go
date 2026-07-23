@@ -28,11 +28,13 @@ const auditActionPrefix = "compliance."
 
 // state is compliance's own data; shared deps live in the embedded cloud.Base. It
 // holds the sealed record store, the verification provider seam (Manual by default;
-// a real provider when configured), and the shared audit recorder (nil-safe).
+// a real provider when configured), the OPTIONAL signature-authenticated provider
+// webhook receiver (nil unless configured), and the shared audit recorder (nil-safe).
 type state struct {
-	store *Store
-	idv   idv.Provider
-	audit *audit.Recorder
+	store   *Store
+	idv     idv.Provider
+	webhook *idv.Webhook
+	audit   *audit.Recorder
 }
 
 // mounted is the process-wide handle so Shutdown can close the store (mirrors
@@ -61,17 +63,25 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("compliance.Mount: idv provider: %w", err)
 	}
+	// The signature-authenticated provider webhook is FAIL-CLOSED at mount, like the
+	// provider itself: a named-but-unresolvable secret fails the mount rather than
+	// silently serving an unauthenticated endpoint. Nil (the default) means no webhook
+	// path is served at all.
+	webhook, err := idv.WebhookFromConfig(kmsGetter(deps), os.Getenv)
+	if err != nil {
+		return fmt.Errorf("compliance.Mount: idv webhook: %w", err)
+	}
 	store, err := openStore(filepath.Join(deps.DataDir, "compliance.db"))
 	if err != nil {
 		return fmt.Errorf("compliance.Mount: open store: %w", err)
 	}
 	s := &cloud.Service[state]{
 		Base:  cloud.NewBase(deps, "compliance"),
-		State: state{store: store, idv: provider, audit: deps.Audit},
+		State: state{store: store, idv: provider, webhook: webhook, audit: deps.Audit},
 	}
 	mounted = s
 	routes(app, s)
-	s.Log.Info("compliance mounted", "brand", deps.Brand, "provider", provider.Name(), "audit", deps.Audit != nil)
+	s.Log.Info("compliance mounted", "brand", deps.Brand, "provider", provider.Name(), "webhook", webhook != nil, "audit", deps.Audit != nil)
 	return nil
 }
 
@@ -102,9 +112,14 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 
 	g.Post("/verifications", cloud.Handle(s, startVerification))
 	g.Get("/verifications", cloud.Handle(s, listVerifications))
-	g.Post("/verifications/callback", cloud.Handle(s, verificationCallback))
+	// A terminal status is reachable by exactly three orthogonal paths, never a raw
+	// client assertion: a SIGNATURE-authenticated provider webhook (push), an internal
+	// provider RECONCILE (pull), or a role-gated, attributed reviewer DECISION. The
+	// webhook route is static, registered before :id (Fiber first-match).
+	g.Post("/verifications/webhook", cloud.Handle(s, verificationWebhook))
 	g.Get("/verifications/:id", cloud.Handle(s, getVerification))
 	g.Post("/verifications/:id/refresh", cloud.Handle(s, refreshVerification))
+	g.Post("/verifications/:id/decision", cloud.Handle(s, decideVerification))
 
 	g.Post("/accreditation", cloud.Handle(s, createAccreditation))
 	g.Get("/accreditation", cloud.Handle(s, listAccreditation))
@@ -350,10 +365,39 @@ func getVerification(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, checkView(chk))
 }
 
-// refreshVerification polls the provider for the current decision and records it. For
-// the Manual provider this stays pending (its decisions arrive via the callback);
-// for a hosted provider it reflects the provider's settled status. Provider-reported
-// only — a poll error is a 502, never a verification.
+// reconcileCheck is the ONE provider-consult core: it reads the wired provider's
+// settled status for a check and records it, ATTRIBUTED to the provider. It is the
+// single source of a provider_verified/provider_rejected record — used by BOTH the
+// internal poll (refreshVerification) and the signature-authenticated webhook, which
+// differ only in how they authenticate and locate the check. For the Manual provider
+// Check stays pending, so no provider terminal is ever manufactured. Returns the
+// (possibly updated) check and whether it changed.
+func reconcileCheck(s *cloud.Service[state], ctx context.Context, chk Check) (Check, bool, error) {
+	res, err := s.State.idv.Check(ctx, chk.Org, chk.ProviderRef)
+	if err != nil {
+		return chk, false, err
+	}
+	if !res.Status.Valid() || res.Status == chk.Status {
+		return chk, false, nil
+	}
+	now := time.Now().Unix()
+	decidedBy := ""
+	decidedAt := int64(0)
+	if res.Status.Terminal() {
+		decidedBy = s.State.idv.Name() // provider-attributed: the terminal came from the provider API
+		decidedAt = now
+	}
+	if err := s.State.store.UpdateCheckStatus(ctx, chk.Org, chk.ID, res.Status, decidedBy, now, decidedAt); err != nil {
+		return chk, false, err
+	}
+	chk.Status, chk.DecidedBy, chk.UpdatedAt, chk.DecidedAt = res.Status, decidedBy, now, decidedAt
+	return chk, true, nil
+}
+
+// refreshVerification is the internal PULL reconcile: an org member triggers a poll of
+// the wired provider for the current decision. For the Manual provider this stays
+// pending; for a hosted provider it reflects the provider's settled status,
+// provider-attributed. A poll error is a 502, never a verification.
 func refreshVerification(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
@@ -366,82 +410,109 @@ func refreshVerification(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get check: %v", err)
 	}
-	res, err := s.State.idv.Check(c.Context(), org, chk.ProviderRef)
+	chk, changed, err := reconcileCheck(s, c.Context(), chk)
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "verification refresh failed")
 	}
-	if res.Status.Valid() && res.Status != chk.Status {
-		chk.Status = res.Status
-		chk.UpdatedAt = time.Now().Unix()
-		decidedBy := ""
-		if res.Status.Terminal() {
-			decidedBy, chk.DecidedBy = s.State.idv.Name(), s.State.idv.Name()
-			chk.DecidedAt = chk.UpdatedAt
-		}
-		if err := s.State.store.UpdateCheckStatus(c.Context(), org, chk.ID, chk.Status, decidedBy, chk.UpdatedAt, chk.DecidedAt); err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "update check: %v", err)
-		}
+	if changed {
 		emitAudit(s, c, "compliance.verification.refresh", audit.Resource{Type: "compliance.check", ID: chk.ID},
 			"success", http.StatusOK, map[string]any{"checkId": chk.ID, "provider": chk.Provider, "status": chk.Status})
 	}
 	return c.JSON(http.StatusOK, checkView(chk))
 }
 
-// verificationCallback records a provider webhook or an org reviewer's decision — the
-// authenticated, audited path to a terminal status for the manual flow. The status
-// must be a valid provider status; the acting principal is recorded as DecidedBy, so
-// a settled decision is always attributable. This is a privileged action.
-func verificationCallback(s *cloud.Service[state], c *zip.Ctx) error {
+// verificationWebhook is the external PUSH reconcile: a provider (or a Hanzo relay)
+// signals that a verification settled. It authenticates by HMAC SIGNATURE (not an
+// internal principal — an external caller has no validated org), locates the check by
+// the provider reference the signed payload names, and RECONCILES the status from the
+// provider API. The body carries no trusted decision, so a valid signature cannot
+// force a status — the wired provider is the source of truth, and Manual stays
+// pending. Disabled (501) unless a webhook secret is configured.
+func verificationWebhook(s *cloud.Service[state], c *zip.Ctx) error {
+	if s.State.webhook == nil {
+		return zip.Errorf(http.StatusNotImplemented, "verification webhook is not configured")
+	}
+	body := c.Fiber().Body()
+	if len(body) > maxBody {
+		return zip.Errorf(http.StatusRequestEntityTooLarge, "request body too large")
+	}
+	valid, err := s.State.webhook.Verify(c.Context(), c.Header(idv.WebhookRefHeader), body)
+	if err != nil {
+		return zip.Errorf(http.StatusBadGateway, "webhook secret unavailable")
+	}
+	if !valid {
+		return zip.Errorf(http.StatusUnauthorized, "invalid signature")
+	}
+	ref, ok := s.State.webhook.Reference(body)
+	if !ok {
+		return zip.ErrBadRequest("a provider reference is required")
+	}
+	// The org is resolved FROM the matched record (the reference is globally unique),
+	// so the webhook can only ever touch the one tenant that owns it. An unknown
+	// reference is a benign 200 no-op — no retry-storm, no cross-tenant probe.
+	chk, err := s.State.store.GetCheckByProviderRef(c.Context(), ref)
+	if err == errNotFound {
+		return c.JSON(http.StatusOK, map[string]any{"ignored": "unknown reference"})
+	}
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "get check: %v", err)
+	}
+	chk, changed, err := reconcileCheck(s, c.Context(), chk)
+	if err != nil {
+		return zip.Errorf(http.StatusBadGateway, "verification reconcile failed")
+	}
+	if changed {
+		emitWebhookAudit(s, c, chk)
+	}
+	return c.JSON(http.StatusOK, checkView(chk))
+}
+
+// decideVerification records a privileged reviewer's MANUAL decision on a verification.
+// It is the human-in-the-loop path — the ONLY route to a passing status when no real
+// provider is wired — and it produces a DISTINCT reviewer_confirmed, NEVER a
+// provider_verified (a provider decision is the provider's to report, via the webhook
+// or a reconcile). It is ROLE-GATED (an org admin or platform reviewer) AND ATTRIBUTED
+// (the reviewer's user id is DecidedBy), so a manual pass is always accountable.
+func decideVerification(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
+	if !principal.IsSuperAdmin(c) && !principal.IsOrgAdmin(c) {
+		return zip.ErrForbidden("a verification decision requires an org admin or platform reviewer")
+	}
+	reviewer := c.User()
+	if reviewer == "" {
+		return zip.ErrForbidden("a verification decision requires a signed-in reviewer")
+	}
 	var body struct {
-		ID     string     `json:"id"`
-		Ref    string     `json:"ref"`
 		Status idv.Status `json:"status"`
 	}
 	if err := decode(c, &body); err != nil {
 		return err
 	}
-	if !body.Status.Valid() {
-		return zip.ErrBadRequest("status must be one of pending, provider_verified, provider_rejected, manual_review, expired")
+	// A reviewer CONFIRMS (a pass) or WITHHOLDS to review — never asserts a provider
+	// decision. provider_verified/provider_rejected belong to the provider paths.
+	if body.Status != idv.StatusReviewerConfirmed && body.Status != idv.StatusReview {
+		return zip.ErrBadRequest("decision status must be reviewer_confirmed or manual_review")
 	}
-	var chk Check
-	var err error
-	switch {
-	case strings.TrimSpace(body.ID) != "":
-		chk, err = s.State.store.GetCheck(c.Context(), org, body.ID)
-	case strings.TrimSpace(body.Ref) != "":
-		chk, err = s.State.store.GetCheckByRef(c.Context(), org, body.Ref)
-	default:
-		return zip.ErrBadRequest("id or ref is required")
-	}
-	if err == errNotFound {
-		return zip.ErrNotFound("verification not found")
-	}
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get check: %v", err)
-	}
-
 	now := time.Now().Unix()
-	decidedBy := c.User() // the attributable reviewer/service that recorded the decision
-	if decidedBy == "" {
-		decidedBy = chk.Provider
-	}
 	decidedAt := int64(0)
 	if body.Status.Terminal() {
 		decidedAt = now
 	}
-	if err := s.State.store.UpdateCheckStatus(c.Context(), org, chk.ID, body.Status, decidedBy, now, decidedAt); err != nil {
+	if err := s.State.store.UpdateCheckStatus(c.Context(), org, c.Param("id"), body.Status, reviewer, now, decidedAt); err != nil {
 		if err == errNotFound {
 			return zip.ErrNotFound("verification not found")
 		}
 		return zip.Errorf(http.StatusInternalServerError, "update check: %v", err)
 	}
-	chk.Status, chk.DecidedBy, chk.UpdatedAt, chk.DecidedAt = body.Status, decidedBy, now, decidedAt
+	chk, err := s.State.store.GetCheck(c.Context(), org, c.Param("id"))
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "get check: %v", err)
+	}
 	emitAudit(s, c, "compliance.verification.decision", audit.Resource{Type: "compliance.check", ID: chk.ID},
-		"success", http.StatusOK, map[string]any{"checkId": chk.ID, "status": chk.Status, "decidedBy": decidedBy})
+		"success", http.StatusOK, map[string]any{"checkId": chk.ID, "status": chk.Status, "decidedBy": reviewer})
 	return c.JSON(http.StatusOK, checkView(chk))
 }
 
@@ -470,15 +541,17 @@ func createAccreditation(s *cloud.Service[state], c *zip.Ctx) error {
 	if !validAccBasis(body.Basis) {
 		return zip.ErrBadRequest("basis must be income, net_worth, professional_license, or entity")
 	}
-	// A create records an ASSERTED or provider_verified state only. reviewer_confirmed
-	// / rejected / expired are REVIEWER decisions — they go through the decision
-	// endpoint so a confirmation is always attributed to a human reviewer.
+	// A create records only an ASSERTED state — the subject's own assertion, with no
+	// verifier. Every CONFIRMED state (provider_verified, reviewer_confirmed) and every
+	// rejected/expired state is a DECISION that goes through the decision endpoint, so
+	// it is always ATTRIBUTED to the reviewer who recorded it — a create can never
+	// stamp a confirmation with no verifier.
 	st := body.Status
 	if st == "" {
 		st = AccAsserted
 	}
-	if st != AccAsserted && st != AccProviderVerified {
-		return zip.ErrBadRequest("on create, status may be asserted or provider_verified; a reviewer_confirmed/rejected/expired state is set via the decision endpoint")
+	if st != AccAsserted {
+		return zip.ErrBadRequest("on create, status may only be asserted; a provider_verified/reviewer_confirmed/rejected/expired state is set via the decision endpoint")
 	}
 	// The subject must exist within the org.
 	if _, err := s.State.store.GetSubject(c.Context(), org, body.SubjectID); err == errNotFound {
@@ -536,8 +609,11 @@ func getAccreditation(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 // decideAccreditation records an org reviewer's decision on an accreditation record.
-// The status must be a reviewer decision; the reviewer's identity is recorded and the
-// action is audited. Human-in-the-loop — the platform never confirms on its own.
+// The status must be a decision the reviewer is recording — a reviewer confirmation, a
+// provider verification the reviewer has evidence of (a CPA/attorney letter, a
+// verifier report), a rejection, or an expiry — and the reviewer's identity is
+// recorded as ReviewerSub and audited. Human-in-the-loop: the platform never confirms
+// on its own, and even a provider_verified state carries the reviewer who recorded it.
 func decideAccreditation(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
@@ -549,8 +625,8 @@ func decideAccreditation(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := decode(c, &body); err != nil {
 		return err
 	}
-	if body.Status != AccReviewerConfirmed && body.Status != AccRejected && body.Status != AccExpired {
-		return zip.ErrBadRequest("decision status must be reviewer_confirmed, rejected, or expired")
+	if body.Status != AccReviewerConfirmed && body.Status != AccProviderVerified && body.Status != AccRejected && body.Status != AccExpired {
+		return zip.ErrBadRequest("decision status must be reviewer_confirmed, provider_verified, rejected, or expired")
 	}
 	reviewer := c.User()
 	if reviewer == "" {
@@ -706,6 +782,31 @@ func emitAudit(s *cloud.Service[state], c *zip.Ctx, action string, res audit.Res
 	}
 	if _, err := s.State.audit.Append(c.Context(), rec); err != nil {
 		s.Log.Warn("compliance audit append failed", "err", err, "action", action)
+	}
+}
+
+// emitWebhookAudit records a signature-authenticated provider reconcile. There is NO
+// user principal (the caller authenticated by HMAC, not a session), so the actor is
+// the record's OWN org + the provider name — never a client-supplied org — and the
+// auth method is recorded as "webhook", not "gateway". Nil recorder → no-op.
+func emitWebhookAudit(s *cloud.Service[state], c *zip.Ctx, chk Check) {
+	if s.State.audit == nil {
+		return
+	}
+	rec := audit.Record{
+		Actor:     audit.Actor{Org: chk.Org, Sub: chk.Provider},
+		Action:    "compliance.verification.webhook",
+		Resource:  audit.Resource{Type: "compliance.check", ID: chk.ID},
+		Auth:      audit.AuthContext{Method: "webhook"},
+		Outcome:   audit.Outcome{Result: "success", Status: http.StatusOK},
+		Method:    c.Method(),
+		Path:      c.Path(),
+		SourceIP:  clientIP(c),
+		RequestID: c.RequestID(),
+		After:     audit.Redact(mustJSON(map[string]any{"checkId": chk.ID, "provider": chk.Provider, "status": chk.Status, "decidedBy": chk.DecidedBy})),
+	}
+	if _, err := s.State.audit.Append(c.Context(), rec); err != nil {
+		s.Log.Warn("compliance webhook audit append failed", "err", err)
 	}
 }
 
