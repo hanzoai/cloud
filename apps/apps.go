@@ -129,6 +129,7 @@ import (
 	"github.com/hanzoai/cloud/clients/treasury"
 	"github.com/hanzoai/cloud/clients/usage"
 	"github.com/hanzoai/cloud/clients/validators"
+	"github.com/hanzoai/cloud/clients/venue"
 	"github.com/hanzoai/cloud/clients/visor"
 	"github.com/hanzoai/cloud/clients/wallets"
 	"github.com/hanzoai/cloud/clients/websearch"
@@ -315,6 +316,12 @@ func Wire() []cloud.MountSpec {
 		// DB handles, so its Shutdown closes them on SIGTERM.
 		{Name: "sync", Mount: sync.Mount, Shutdown: ctxShutdown(sync.Shutdown)},
 		{Name: "visor", Mount: visor.Mount},
+		// Connect-a-cloud-account plane /v1/cloud/*: an org links its DigitalOcean /
+		// AWS / GCP / Azure accounts (labeled, KMS-sealed, keyless where possible),
+		// Hanzo DISCOVERS each account's native Kubernetes clusters and FOLDS them into
+		// the ONE fleet (clients/fleet.Register) — so they surface in visor's
+		// /v1/clusters and run work like any BYO/managed cluster. No second registry.
+		{Name: "venue", Mount: venue.Mount},
 		// Cap table on Base via goja. STAGED behind CLOUD_ENABLE.
 		{Name: "captable", Mount: captable.Mount, Shutdown: captable.Shutdown},
 		{Name: "code", Mount: code.Mount, Shutdown: code.Shutdown},
