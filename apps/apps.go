@@ -71,6 +71,7 @@ import (
 	"github.com/hanzoai/cloud/clients/cloudflare"
 	"github.com/hanzoai/cloud/clients/code"
 	"github.com/hanzoai/cloud/clients/company"
+	"github.com/hanzoai/cloud/clients/compliance"
 	"github.com/hanzoai/cloud/clients/content"
 	"github.com/hanzoai/cloud/clients/crm"
 	"github.com/hanzoai/cloud/clients/dataroom"
@@ -98,6 +99,7 @@ import (
 	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/hanzoai/cloud/clients/knowledge"
 	"github.com/hanzoai/cloud/clients/leaderboard"
+	"github.com/hanzoai/cloud/clients/legal"
 	"github.com/hanzoai/cloud/clients/link"
 	"github.com/hanzoai/cloud/clients/marketing"
 	"github.com/hanzoai/cloud/clients/marketplace"
@@ -435,6 +437,14 @@ func Wire() []cloud.MountSpec {
 		// google token custody; captable/dataroom facades) and before the /v1/* AI
 		// catch-all so its routes resolve here.
 		{Name: "company", Mount: company.Mount, Shutdown: company.Shutdown},
+		// The corporate back-office surfaces — orthogonal to company/captable/billing:
+		// Hanzo Compliance (/v1/compliance) orchestrates KYC/KYB verification providers
+		// + tracks accreditation state + surfaces the SOC 2 audit posture; Hanzo Legal
+		// (/v1/legal) is the versioned template + generation engine + e-sign/filing seams.
+		// Both are TOOLING with providers/professionals in the loop, never advice or
+		// certification. They mount before the /v1/* AI catch-all so their routes resolve.
+		{Name: "compliance", Mount: compliance.Mount, Shutdown: ctxShutdown(compliance.Shutdown), OwnsHealth: true},
+		{Name: "legal", Mount: legal.Mount, Shutdown: ctxShutdown(legal.Shutdown), OwnsHealth: true},
 		// Chat orchestrator — POST /v1/chat: ONE LLM tool-calling round over the tool
 		// plane. It COMPOSES the ai completion path (in-process, so per-org billing
 		// runs) + the unified tool registry, and splits the model's tool calls into

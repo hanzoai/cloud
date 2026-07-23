@@ -117,6 +117,8 @@ var frozen = []struct {
 	{"referrals", false, false},      // was order 149
 	{"guide", false, true},           // new: Business AI Guide (after referrals, before ai)
 	{"company", false, true},         // new: Hanzo Company formation state machine (after guide)
+	{"compliance", true, true},       // new: Hanzo Compliance — KYC/KYB + accreditation + audit posture (after company)
+	{"legal", true, true},            // new: Hanzo Legal — template + generation engine + e-sign/filing (after compliance)
 	{"agent", false, false},          // new: /v1/agent tool-calling round (before zen/ai catch-all)
 	{"zen", false, false},            // zen* claim middleware before ai's catch-all (hip-00NN)
 	{"ai", false, false},             // was order 150
