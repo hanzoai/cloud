@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"text/template"
+	"text/template/parse"
 )
 
 // templates.go is the PURE generation engine plus the built-in standardized library.
@@ -30,9 +31,10 @@ func MissingFields(t Template, data map[string]string) []string {
 
 // Render executes a template against its merge data and returns the rendered document
 // bytes. It fails closed on a missing required field (before AND during execution via
-// missingkey=error). A CounselReview template is prefixed with CounselNotice so the
-// boundary rides on the document itself — the engine cannot emit such a document
-// without it.
+// missingkey=error). The CounselNotice is prepended whenever the template is
+// CounselReview OR its category REQUIRES counsel review (formation/equity securities),
+// so the boundary rides on the document itself — the engine cannot emit a
+// securities-class document without it, regardless of how the flag was set.
 func Render(t Template, data map[string]string) ([]byte, error) {
 	if missing := MissingFields(t, data); len(missing) > 0 {
 		return nil, fmt.Errorf("missing required fields: %s", strings.Join(missing, ", "))
@@ -42,13 +44,109 @@ func Render(t Template, data map[string]string) ([]byte, error) {
 		return nil, fmt.Errorf("parse template %q: %w", t.ID, err)
 	}
 	var buf bytes.Buffer
-	if t.CounselReview {
+	if t.CounselReview || counselRequired(t.Category) {
 		buf.WriteString(CounselNotice)
 	}
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return nil, fmt.Errorf("render template %q: %w", t.ID, err)
 	}
 	return buf.Bytes(), nil
+}
+
+// ValidateOverride reports whether t is a storable override: its body PARSES and every
+// merge field the body references is DECLARED in t.Fields. An undeclared reference is
+// refused because the fail-closed missing-field check (MissingFields) only inspects
+// DECLARED fields and missingkey=error only catches ABSENT keys — so an undeclared
+// field passed as an empty string would otherwise render a silent blank into a legal
+// document. Requiring body refs ⊆ declared fields makes MissingFields authoritative.
+func ValidateOverride(t Template) error {
+	refs, err := bodyFieldRefs(t.Body)
+	if err != nil {
+		return fmt.Errorf("template does not parse: %w", err)
+	}
+	declared := make(map[string]bool, len(t.Fields))
+	for _, f := range t.Fields {
+		declared[f.Key] = true
+	}
+	var undeclared []string
+	for ref := range refs {
+		if !declared[ref] {
+			undeclared = append(undeclared, ref)
+		}
+	}
+	if len(undeclared) > 0 {
+		sort.Strings(undeclared)
+		return fmt.Errorf("template body references undeclared fields: %s", strings.Join(undeclared, ", "))
+	}
+	return nil
+}
+
+// bodyFieldRefs returns the set of top-level merge fields a template body references
+// ({{.key}} directly, or inside an if/range/with control or a pipeline). It parses the
+// body and walks the parse tree, so it sees exactly what execution would substitute.
+func bodyFieldRefs(body string) (map[string]bool, error) {
+	tmpl, err := template.New("").Option("missingkey=error").Parse(body)
+	if err != nil {
+		return nil, err
+	}
+	refs := map[string]bool{}
+	for _, t := range tmpl.Templates() {
+		if t.Tree != nil {
+			collectFieldRefs(t.Tree.Root, refs)
+		}
+	}
+	return refs, nil
+}
+
+// collectFieldRefs walks a parse tree, recording the leading identifier of every field
+// access ({{.key ...}} → "key"). It descends into the control nodes an override body
+// may legitimately use (if/range/with, plus embedded template invocations).
+func collectFieldRefs(n parse.Node, refs map[string]bool) {
+	switch v := n.(type) {
+	case *parse.ListNode:
+		if v == nil {
+			return
+		}
+		for _, c := range v.Nodes {
+			collectFieldRefs(c, refs)
+		}
+	case *parse.ActionNode:
+		collectPipeRefs(v.Pipe, refs)
+	case *parse.IfNode:
+		collectPipeRefs(v.Pipe, refs)
+		collectFieldRefs(v.List, refs)
+		collectFieldRefs(v.ElseList, refs)
+	case *parse.RangeNode:
+		collectPipeRefs(v.Pipe, refs)
+		collectFieldRefs(v.List, refs)
+		collectFieldRefs(v.ElseList, refs)
+	case *parse.WithNode:
+		collectPipeRefs(v.Pipe, refs)
+		collectFieldRefs(v.List, refs)
+		collectFieldRefs(v.ElseList, refs)
+	case *parse.TemplateNode:
+		collectPipeRefs(v.Pipe, refs)
+	}
+}
+
+// collectPipeRefs records field refs from every argument of every command in a
+// pipeline, descending into nested pipelines (e.g. {{.a | printf .b}}).
+func collectPipeRefs(p *parse.PipeNode, refs map[string]bool) {
+	if p == nil {
+		return
+	}
+	for _, cmd := range p.Cmds {
+		for _, arg := range cmd.Args {
+			switch a := arg.(type) {
+			case *parse.FieldNode:
+				if len(a.Ident) > 0 {
+					refs[a.Ident[0]] = true
+				}
+			case *parse.PipeNode:
+				collectPipeRefs(a, refs)
+			}
+		}
+	}
 }
 
 // field is a terse constructor for the library below.
