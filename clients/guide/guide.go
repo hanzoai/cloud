@@ -73,6 +73,7 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/guide", cloud.Handle(s, overview))
 
 	g := app.Group("/v1/guide")
+	g.Get("/analytics", cloud.Handle(s, gtmAnalytics))
 	g.Get("/curriculum", cloud.Handle(s, getCurriculum))
 	g.Put("/curriculum", cloud.Handle(s, putCurriculum))
 	g.Delete("/curriculum", cloud.Handle(s, deleteCurriculum))
@@ -188,6 +189,7 @@ type overviewView struct {
 	Custom   bool         `json:"custom"`
 	Progress progressView `json:"progress"`
 	Steps    []stepView   `json:"steps"`
+	Funnel   *Funnel      `json:"funnel,omitempty"`
 }
 
 func buildOverview(cur Curriculum, custom bool, rows map[string]StateRow) overviewView {
@@ -224,7 +226,28 @@ func overview(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}
-	return c.JSON(http.StatusOK, buildOverview(cur, custom, rows))
+	ov := buildOverview(cur, custom, rows)
+	// Fold the analytics lens in so the overview shows the real funnel alongside the
+	// checklist — the AI-GTM read. Best-effort: a degraded warehouse yields an
+	// unavailable Funnel, never a failed overview.
+	f := analyticsFunnel(c.Context(), org)
+	ov.Funnel = &f
+	return c.JSON(http.StatusOK, ov)
+}
+
+// gtmAnalytics answers GET /v1/guide/analytics: the org's funnel from the analytics
+// lens plus the derived GTM recommendations. It is the Business AI's data-grounded
+// read — what the funnel is doing and the next-best action to move the weakest stage.
+func gtmAnalytics(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	f := analyticsFunnel(c.Context(), org)
+	return c.JSON(http.StatusOK, map[string]any{
+		"funnel":          f,
+		"recommendations": f.recommend(),
+	})
 }
 
 func getCurriculum(s *cloud.Service[state], c *zip.Ctx) error {
