@@ -57,6 +57,39 @@ Both actions live together on the GPUs page: bring your own **or** spin up cloud
 
 ## What a connected GPU does
 
+### `fn.run` — run a script on your node (functions-runner)
+
+Any linked node with [uv](https://docs.astral.sh/uv/) claims `fn.run` jobs: an
+inline Python script executed in an ephemeral `uv run` environment on the node's
+own GPU stack (ROCm, CUDA, Metal — whatever the box has). Same org-scoped queue,
+same claim loop; the submitter is running code on their OWN fleet, exactly like a
+CI runner.
+
+```sh
+TOKEN=$(hanzo auth token)
+curl -s https://api.hanzo.ai/v1/tasks/namespaces/gpu-jobs/activities \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{
+  "activityId": "train-001", "runId": "train-001",
+  "activityType": {"name": "fn.run"}, "taskQueue": "gpu-jobs",
+  "heartbeatTimeout": "120s",
+  "input": {
+    "name": "smoke",
+    "script": "import torch; print(torch.cuda.is_available())",
+    "requirements": ["torch"],
+    "timeoutSeconds": 3600
+  }
+}'
+# poll the result:
+curl -s -H "Authorization: Bearer $TOKEN" \
+  https://api.hanzo.ai/v1/tasks/namespaces/gpu-jobs/activities/train-001/train-001
+```
+
+The result carries `output` (last 128 KiB of combined stdout/stderr), `exitCode`,
+and `durationMs`; a nonzero exit fails the activity with the traceback as the
+cause. Timeout defaults to 1h, caps at 6h.
+
+
+
 ### `studio.render` — Studio diffusion worker (default)
 
 `hanzo link` claims `studio.render` jobs from the org's `gpu-jobs` queue and
