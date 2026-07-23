@@ -44,6 +44,7 @@ const iamMaxBody = 4 << 20
 // iamClient is the confidential-client caller. clientID/clientSecret authenticate
 // as the `hanzo-console` app; an empty pair means "not configured" (handlers 501).
 type iamClient struct {
+	serviceToken string // IAM_SERVICE_TOKEN — the Bearer for the admin provision endpoint
 	base         string
 	clientID     string
 	clientSecret string
@@ -56,8 +57,90 @@ func newIAMClient() *iamClient {
 		base:         base,
 		clientID:     strings.TrimSpace(os.Getenv("IAM_MINT_CLIENT_ID")),
 		clientSecret: strings.TrimSpace(os.Getenv("IAM_MINT_CLIENT_SECRET")),
+		serviceToken: strings.TrimSpace(os.Getenv("IAM_SERVICE_TOKEN")),
 		http:         &http.Client{Timeout: 15 * time.Second},
 	}
+}
+
+// provisionResult is the /v1/iam/admin/provision response: the converged org, its
+// hashed credential (accessSecret shown ONCE on first mint), and whether THIS call
+// newly granted the identity's one-time trial — the funding signal.
+type provisionResult struct {
+	Org          string `json:"org"`
+	AccessKey    string `json:"accessKey"`
+	AccessSecret string `json:"accessSecret"`
+	TrialGranted bool   `json:"trialGranted"`
+	Error        string `json:"error"`
+}
+
+// provisionReady reports whether the service-token provisioning path is wired.
+func (c *iamClient) provisionReady() bool { return c != nil && c.serviceToken != "" }
+
+// provision drives the ONE atomic IAM onboarding op: create the org, move the named
+// user in as its admin, mint its hashed credential, and claim its trial — the
+// service-token endpoint that replaces the create-org + move-user pair, so there is
+// no orphan between two writes and a mid-flight retry converges. orgSlug is the
+// caller's already-resolved slug (IAM honors it verbatim).
+func (c *iamClient) provision(ctx context.Context, owner, name, orgSlug string, personal bool) (provisionResult, error) {
+	if !c.provisionReady() {
+		return provisionResult{}, errNotConfigured
+	}
+	body, err := json.Marshal(map[string]any{
+		"owner": owner, "name": name, "orgSlug": orgSlug, "personal": personal,
+	})
+	if err != nil {
+		return provisionResult{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/v1/iam/admin/provision", strings.NewReader(string(body)))
+	if err != nil {
+		return provisionResult{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.serviceToken)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return provisionResult{}, fmt.Errorf("iam unreachable: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, iamMaxBody))
+	if err != nil {
+		return provisionResult{}, err
+	}
+	var out provisionResult
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return provisionResult{}, fmt.Errorf("iam provision non-json response (%d)", resp.StatusCode)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 || out.Error != "" {
+		msg := out.Error
+		if msg == "" {
+			msg = fmt.Sprintf("iam status %d", resp.StatusCode)
+		}
+		return provisionResult{}, fmt.Errorf("iam provision: %s", msg)
+	}
+	return out, nil
+}
+
+// userRow is the subset of an IAM user the onboarding path reads to resolve the
+// caller's authoritative identity + verified email (the trial-credit dedup key).
+type userRow struct {
+	Owner string `json:"owner"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+// getUserRow resolves the user by the caller's id (the same read the move did) into
+// its authoritative (owner, name, email).
+func (c *iamClient) getUserRow(ctx context.Context, id string) (userRow, error) {
+	raw, err := c.getUser(ctx, id)
+	if err != nil {
+		return userRow{}, err
+	}
+	var row userRow
+	if err := json.Unmarshal(raw, &row); err != nil {
+		return userRow{}, fmt.Errorf("iam get-user: decode: %w", err)
+	}
+	return row, nil
 }
 
 // configured reports whether the confidential client is wired. Handlers 501 when
