@@ -32,7 +32,8 @@ import (
 //	PUT    /v1/company/structure           set structure/jurisdiction/name
 //	POST   /v1/company/founders            set founders
 //	POST   /v1/company/kyc                 start founder KYC (idv seam)
-//	POST   /v1/company/kyc/callback        record a KYC result {email,status}
+//	POST   /v1/company/kyc/refresh         reconcile founder KYC with the wired provider
+//	POST   /v1/company/kyc/decision        reviewer decision on a founder {email,status}
 //	POST   /v1/company/payment             charge the $999 formation fee
 //	POST   /v1/company/documents           generate formation docs → data room + file
 //	POST   /v1/company/esign               request signatures on the docs
@@ -108,7 +109,8 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	g.Put("/structure", cloud.Handle(s, setStructure))
 	g.Post("/founders", cloud.Handle(s, setFounders))
 	g.Post("/kyc", cloud.Handle(s, startKYC))
-	g.Post("/kyc/callback", cloud.Handle(s, kycCallback))
+	g.Post("/kyc/refresh", cloud.Handle(s, kycRefresh))
+	g.Post("/kyc/decision", cloud.Handle(s, kycDecision))
 	g.Post("/payment", cloud.Handle(s, pay))
 	g.Post("/documents", cloud.Handle(s, generateDocuments))
 	g.Post("/esign", cloud.Handle(s, requestEsign))
@@ -338,6 +340,14 @@ func startKYC(s *cloud.Service[state], c *zip.Ctx) error {
 		if err != nil {
 			return zip.Errorf(http.StatusBadGateway, "kyc start for %s: %v", f.Founders[i].Email, err)
 		}
+		// A start is never a decision: clamp any terminal status a provider returns at
+		// inquiry time back to pending (belt-and-suspenders over the idv seam's own
+		// downgrade), so the payment gate can never open at start. A terminal status
+		// arrives only via kycRefresh (provider) or kycDecision (reviewer), each of
+		// which records a decider.
+		if status == KYCVerified || status == KYCReviewerConfirmed || status == KYCFailed {
+			status = KYCPending
+		}
 		f.Founders[i].KYCRef = ref
 		f.Founders[i].KYCStatus = status
 		sessions = append(sessions, map[string]string{"email": f.Founders[i].Email, "ref": ref, "verifyUrl": url, "status": status})
@@ -348,10 +358,64 @@ func startKYC(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"provider": s.State.prov.kyc.Name(), "sessions": sessions, "formation": f})
 }
 
-func kycCallback(s *cloud.Service[state], c *zip.Ctx) error {
+// kycRefresh reconciles each pending founder's KYC with the WIRED provider — the PULL
+// path to a provider-reported terminal status. For the manual provider Check stays
+// pending; for a real provider it reflects the settled decision, ATTRIBUTED to the
+// provider. It NEVER trusts a client-asserted status — the status comes from the
+// provider seam — so a client cannot force a pass here, and an already-passing founder
+// (e.g. a reviewer confirmation) is left untouched.
+func kycRefresh(s *cloud.Service[state], c *zip.Ctx) error {
 	f, _, err := load(s, c)
 	if err != nil {
 		return err
+	}
+	if err := requireStage(f, StageFounders); err != nil {
+		return err
+	}
+	provider := s.State.prov.kyc.Name()
+	changed := false
+	for i := range f.Founders {
+		fo := &f.Founders[i]
+		if fo.KYCRef == "" || kycPass(*fo) {
+			continue // not started, or already settled to a pass — never overwrite a pass
+		}
+		status, err := s.State.prov.kyc.Check(c.Context(), fo.KYCRef)
+		if err != nil {
+			return zip.Errorf(http.StatusBadGateway, "kyc check for %s: %v", fo.Email, err)
+		}
+		// Only a provider PASS or FAIL settles the founder; anything else stays pending.
+		// A pass is attributed to the provider that reported it.
+		switch status {
+		case KYCVerified:
+			fo.KYCStatus, fo.DecidedBy, changed = KYCVerified, provider, true
+		case KYCFailed:
+			fo.KYCStatus, fo.DecidedBy, changed = KYCFailed, provider, true
+		}
+	}
+	if changed {
+		if err := save(s, c, f); err != nil {
+			return err
+		}
+	}
+	return c.JSON(http.StatusOK, map[string]any{"provider": provider, "formation": f})
+}
+
+// kycDecision records a privileged reviewer's MANUAL decision on a founder's KYC — the
+// human-in-the-loop path, and the ONLY route to a pass when no real provider is wired.
+// It produces a DISTINCT KYCReviewerConfirmed, never a provider "verified". Because
+// Hanzo forms the entity and carries the formation KYC/AML obligation, the reviewer is
+// a HANZO platform reviewer (SuperAdmin), and the decision is ATTRIBUTED to them.
+func kycDecision(s *cloud.Service[state], c *zip.Ctx) error {
+	f, _, err := load(s, c)
+	if err != nil {
+		return err
+	}
+	if !principal.IsSuperAdmin(c) {
+		return zip.ErrForbidden("a founder KYC decision requires a Hanzo platform reviewer")
+	}
+	reviewer := c.User()
+	if reviewer == "" {
+		return zip.ErrForbidden("a founder KYC decision requires a signed-in reviewer")
 	}
 	var body struct {
 		Email  string `json:"email"`
@@ -361,13 +425,14 @@ func kycCallback(s *cloud.Service[state], c *zip.Ctx) error {
 		return err
 	}
 	status := strings.ToLower(strings.TrimSpace(body.Status))
-	if status != KYCVerified && status != KYCFailed && status != KYCPending {
-		return zip.ErrBadRequest("status must be one of verified, failed, pending")
+	if status != KYCReviewerConfirmed && status != KYCFailed {
+		return zip.ErrBadRequest("status must be reviewer_confirmed or failed")
 	}
+	email := strings.TrimSpace(body.Email)
 	found := false
 	for i := range f.Founders {
-		if f.Founders[i].Email == strings.TrimSpace(body.Email) {
-			f.Founders[i].KYCStatus = status
+		if f.Founders[i].Email == email {
+			f.Founders[i].KYCStatus, f.Founders[i].DecidedBy = status, reviewer
 			found = true
 		}
 	}
