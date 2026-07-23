@@ -682,6 +682,11 @@ func verifyConn(s *cloud.Service[state], c *zip.Ctx) error {
 	if !found {
 		return zip.ErrNotFound("connector not connected")
 	}
+	// Freeze on disable (LOW-2): verify USES the stored credential, so a disabled
+	// connector is not re-verified — consistent with the token exits.
+	if err := gateEnabled(c.Context(), s, orgScope, org, "", p.ID, ""); err != nil {
+		return err
+	}
 	if !kmsReady(s) {
 		return zip.Errorf(http.StatusServiceUnavailable, "%s", kms.ErrMasterKeyMissing.Error())
 	}
@@ -1013,17 +1018,12 @@ func tokenFor(s *cloud.Service[state], ctx context.Context, org, provider, name 
 	if !found {
 		return nil, fmt.Errorf("integrations: %s not connected for org", provider)
 	}
-	// Enablement gate (fail-closed): a disabled org connector yields NO token, so a
-	// capability surface (/v1/cloudflare, /v1/clusters, the bridge) that consumes it
-	// stops acting the moment it is disabled. A store error also denies. A missing
-	// config row is enabled-by-default, so every already-connected connector is
-	// unaffected until explicitly disabled.
-	cfg, cfgFound, cerr := s.State.store.GetExtConfig(ctx, orgScope, org, "", provider, "")
-	if cerr != nil {
-		return nil, fmt.Errorf("integrations: enablement check: %w", cerr)
-	}
-	if cfgFound && !cfg.Enabled {
-		return nil, fmt.Errorf("integrations: %s connector is disabled", provider)
+	// Enablement gate — the ONE choke point (gateEnabled). Fail-closed: a disabled
+	// org connector (or a store error) yields NO token, so every capability surface
+	// consuming it through this seam stops the moment it is disabled. Missing config
+	// row = enabled-by-default, so already-connected connectors are unaffected.
+	if err := gateEnabled(ctx, s, orgScope, org, "", provider, ""); err != nil {
+		return nil, err
 	}
 	if !kmsReady(s) {
 		return nil, kms.ErrMasterKeyMissing

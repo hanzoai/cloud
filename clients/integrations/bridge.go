@@ -298,6 +298,11 @@ func getUserLink(s *cloud.Service[state], org, provider, extUser string) (userLi
 	if !kmsReady(s) {
 		return userLink{}, false, kms.ErrMasterKeyMissing
 	}
+	// Enablement gate — same choke (gateEnabled): a disabled chat connector stops
+	// resolving user links, so the bridge goes inert the moment the org disables it.
+	if err := gateEnabled(context.Background(), s, orgScope, org, "", provider, ""); err != nil {
+		return userLink{}, false, err
+	}
 	raw, err := kmsGet(s, kmsPath(org, provider), userSecretName(extUser))
 	if errors.Is(err, kms.ErrSecretNotFound) {
 		return userLink{}, false, nil

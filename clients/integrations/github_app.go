@@ -129,6 +129,15 @@ func InstallationToken(ctx context.Context, org string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("integrations: github not connected for org")
 	}
+	// Enablement gate — the ONE github choke point (gateEnabled): githubTokenForOrg
+	// (Pages/repo APIs), spawnImport, and the git-object-plane outbound mirror ALL
+	// mint through here, so `disable` freezes every installation-token exit at once.
+	// Fail-closed (disabled or store error → no token). github declares Secrets:nil
+	// so the generic KMS-delete-on-disconnect path never touched this — the gate is
+	// the only thing that can stop a live App installation from minting.
+	if err := gateEnabled(ctx, mounted, orgScope, org, "", "github", ""); err != nil {
+		return "", err
+	}
 	id, err := strconv.ParseInt(strings.TrimSpace(conn.ExternalID), 10, 64)
 	if err != nil {
 		return "", fmt.Errorf("integrations: invalid github installation id")
@@ -357,6 +366,12 @@ func githubTokenForOrg(ctx context.Context, org string) (string, error) {
 	}
 	tok, err := InstallationToken(ctx, org)
 	if err != nil {
+		// A disabled connector surfaces as the gate's 403 (InstallationToken →
+		// gateEnabled), not a 502 "mint failed" — propagate a ready HTTPError as-is
+		// so the Pages/repo callers return the honest "connector is disabled".
+		if he, ok := httpErr(err); ok {
+			return "", he
+		}
 		return "", zip.Errorf(http.StatusBadGateway, "mint github installation token: %v", err)
 	}
 	return tok, nil
