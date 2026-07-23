@@ -42,8 +42,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
+	"unicode"
 
 	"github.com/spf13/cobra"
 )
@@ -152,6 +154,8 @@ type engineAdvertisement struct {
 type gpuInfo struct {
 	Name        string `json:"name"`
 	MemoryTotal string `json:"memoryTotal,omitempty"`
+	Arch        string `json:"arch,omitempty"`    // native target, e.g. "gfx1151" (AMD)
+	Unified     bool   `json:"unified,omitempty"` // memory is a unified CPU/GPU pool (APU / SoC)
 }
 
 // registration is the fleet presence activity's Input — the shape cloud's
@@ -172,6 +176,8 @@ type registration struct {
 	Memory       int64                `json:"memory,omitempty"`
 	Version      string               `json:"version"`
 	JobQueue     string               `json:"jobQueue"`
+	Rocm         string               `json:"rocm,omitempty"` // host ROCm version (AMD only)
+	Hip          string               `json:"hip,omitempty"`  // host HIP version (AMD only)
 	GPUs         []gpuInfo            `json:"gpus"`
 	Capabilities []string             `json:"capabilities,omitempty"`
 	Engine       *engineAdvertisement `json:"engine,omitempty"`
@@ -338,11 +344,11 @@ func detectNvidiaGPUs() []gpuInfo {
 func detectAmdGPUs() []gpuInfo {
 	if out, err := exec.Command("rocm-smi", "--showproductname", "--csv").Output(); err == nil {
 		if gpus := parseRocmSmiCSV(out); len(gpus) > 0 {
-			return fillAmdVRAM(gpus, amdVRAMTotals(sysfsDRM))
+			return apuProcessorNames(fillAmdVRAM(gpus, amdVRAMTotals(sysfsDRM)), detectCPUModel())
 		}
 	}
 	if gpus := parseKfdTopology(sysfsKfdNodes); len(gpus) > 0 {
-		return fillAmdVRAM(gpus, amdVRAMTotals(sysfsDRM))
+		return apuProcessorNames(fillAmdVRAM(gpus, amdVRAMTotals(sysfsDRM)), detectCPUModel())
 	}
 	if out, err := exec.Command("vulkaninfo", "--summary").Output(); err == nil {
 		if gpus := parseVulkaninfoSummary(out); len(gpus) > 0 {
@@ -388,12 +394,17 @@ func parseRocmSmiCSV(out []byte) []gpuInfo {
 		if name == "" {
 			continue
 		}
+		arch := ""
 		if gfx >= 0 && gfx < len(fields) {
 			if v := strings.TrimSpace(fields[gfx]); v != "" {
+				arch = v
 				name += " (" + v + ")"
 			}
 		}
-		gpus = append(gpus, gpuInfo{Name: name})
+		if fam := amdFamily(arch); fam != "" {
+			name = fam + " \u00b7 " + name
+		}
+		gpus = append(gpus, gpuInfo{Name: name, Arch: arch})
 	}
 	return gpus
 }
@@ -422,7 +433,12 @@ func parseKfdTopology(nodesDir string) []gpuInfo {
 		if simd <= 0 || gfxVer <= 0 {
 			continue // CPU node or non-GPU
 		}
-		gpus = append(gpus, gpuInfo{Name: "AMD GPU (" + gfxName(gfxVer) + ")"})
+		arch := gfxName(gfxVer)
+		name := "AMD GPU (" + arch + ")"
+		if fam := amdFamily(arch); fam != "" {
+			name = fam + " (" + arch + ")"
+		}
+		gpus = append(gpus, gpuInfo{Name: name, Arch: arch})
 	}
 	return gpus
 }
@@ -452,9 +468,99 @@ func gfxName(v int) string {
 	return fmt.Sprintf("gfx%d%d%d", v/10000, (v/100)%100, v%100)
 }
 
-// amdVRAMTotals returns each amdgpu card's total VRAM in MiB, in DRM card order,
-// read from /sys/class/drm/card*/device/mem_info_vram_total (vendor 0x1002).
-func amdVRAMTotals(drmDir string) []int64 {
+// amdFamily maps a gfx target to the APU/SoC family marketing name, so the board
+// says what the silicon IS ("AMD Strix Halo"), not just the iGPU series. Discrete
+// cards return "" and keep their own name.
+func amdFamily(arch string) string {
+	switch arch {
+	case "gfx1151":
+		return "AMD Strix Halo"
+	case "gfx1150":
+		return "AMD Strix Point"
+	case "gfx1103":
+		return "AMD Phoenix"
+	}
+	return ""
+}
+
+// apuProcessorNames renders a unified-memory APU as the PROCESSOR it is — the
+// cpuinfo marketing name ("AMD Ryzen AI Max+ 395 w/ Radeon 8060S") beats the
+// iGPU series, because that is the product the owner bought. Discrete cards and
+// non-Ryzen hosts keep their existing names.
+func apuProcessorNames(gpus []gpuInfo, cpuModel string) []gpuInfo {
+	name := amdAPUName(cpuModel)
+	if name == "" {
+		return gpus
+	}
+	for i, g := range gpus {
+		if !g.Unified {
+			continue
+		}
+		if g.Arch != "" {
+			gpus[i].Name = name + " (" + g.Arch + ")"
+		} else {
+			gpus[i].Name = name
+		}
+	}
+	return gpus
+}
+
+// amdAPUName normalizes an AMD APU cpuinfo model into its marketing name:
+// "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S" -> "AMD Ryzen AI Max+ 395 w/ Radeon
+// 8060S". BIOS strings shout; the board should not. Non-Ryzen models return "".
+func amdAPUName(cpuModel string) string {
+	m := strings.Join(strings.Fields(cpuModel), " ")
+	if !strings.Contains(strings.ToLower(m), "ryzen") {
+		return ""
+	}
+	words := strings.Split(m, " ")
+	for i, w := range words {
+		if w == "AMD" || w == "AI" || w != strings.ToUpper(w) {
+			continue // brand/initialism stays; mixed-case is already right
+		}
+		if strings.ContainsFunc(w, unicode.IsDigit) {
+			continue // model numbers ("8060S", "395") keep their casing
+		}
+		if r := []rune(w); len(r) > 1 && strings.ContainsFunc(w, unicode.IsLetter) {
+			words[i] = string(r[0]) + strings.ToLower(string(r[1:]))
+		}
+	}
+	return strings.Join(words, " ")
+}
+
+// amdSoft is the host ROCm/HIP toolchain inventory, detected once: ROCm from
+// /opt/rocm/.info/version, HIP from `hipconfig --version` (which exists even on
+// TheRock-style installs that lack the .info file). Empty on non-AMD hosts.
+type amdSoft struct{ rocm, hip string }
+
+var amdSoftware = sync.OnceValue(func() amdSoft {
+	var v amdSoft
+	if b, err := os.ReadFile("/opt/rocm/.info/version"); err == nil {
+		v.rocm = strings.TrimSpace(string(b))
+	}
+	if out, err := exec.Command("hipconfig", "--version").Output(); err == nil {
+		v.hip = strings.TrimSpace(string(out))
+	}
+	return v
+})
+
+// pickAmdMem chooses the honest memory figure for a card: dedicated VRAM for a
+// discrete GPU, the GTT pool for an APU whose "VRAM" is a token carve-out (Strix
+// Halo reports 1 GiB VRAM + a ~120 GiB unified GTT pool). Unified when GTT wins.
+func pickAmdMem(vramMiB, gttMiB int64) (miB int64, unified bool) {
+	if gttMiB > vramMiB*4 {
+		return gttMiB, true
+	}
+	return vramMiB, false
+}
+
+// amdMem is one card's memory inventory in MiB: dedicated VRAM plus the GTT
+// (system-memory) pool an APU actually computes in.
+type amdMem struct{ vramMiB, gttMiB int64 }
+
+// amdVRAMTotals returns each amdgpu card's memory totals in MiB, in DRM card order,
+// read from /sys/class/drm/card*/device/mem_info_{vram,gtt}_total (vendor 0x1002).
+func amdVRAMTotals(drmDir string) []amdMem {
 	entries, err := os.ReadDir(drmDir)
 	if err != nil {
 		return nil
@@ -469,32 +575,43 @@ func amdVRAMTotals(drmDir string) []int64 {
 	sort.Slice(cards, func(i, j int) bool {
 		return atoiSafe(strings.TrimPrefix(cards[i], "card")) < atoiSafe(strings.TrimPrefix(cards[j], "card"))
 	})
-	var mems []int64
+	readMiB := func(path string) int64 {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return 0
+		}
+		var n int64
+		if _, err := fmt.Sscan(strings.TrimSpace(string(b)), &n); err != nil || n <= 0 {
+			return 0
+		}
+		return n / (1024 * 1024)
+	}
+	var mems []amdMem
 	for _, c := range cards {
 		dev := filepath.Join(drmDir, c, "device")
 		if vendor, _ := os.ReadFile(filepath.Join(dev, "vendor")); strings.TrimSpace(string(vendor)) != "0x1002" {
 			continue
 		}
-		b, err := os.ReadFile(filepath.Join(dev, "mem_info_vram_total"))
-		if err != nil {
+		vram := readMiB(filepath.Join(dev, "mem_info_vram_total"))
+		if vram == 0 {
 			continue
 		}
-		var bytesTotal int64
-		if _, err := fmt.Sscan(strings.TrimSpace(string(b)), &bytesTotal); err == nil && bytesTotal > 0 {
-			mems = append(mems, bytesTotal/(1024*1024))
-		}
+		mems = append(mems, amdMem{vramMiB: vram, gttMiB: readMiB(filepath.Join(dev, "mem_info_gtt_total"))})
 	}
 	return mems
 }
 
-// fillAmdVRAM attaches VRAM totals to the GPU list positionally when the counts
+// fillAmdVRAM attaches memory totals to the GPU list positionally when the counts
 // match (the common single-GPU case always does); otherwise the names stand alone.
-func fillAmdVRAM(gpus []gpuInfo, memsMiB []int64) []gpuInfo {
-	if len(memsMiB) != len(gpus) {
+// An APU reports its unified GTT pool, not the token VRAM carve-out.
+func fillAmdVRAM(gpus []gpuInfo, mems []amdMem) []gpuInfo {
+	if len(mems) != len(gpus) {
 		return gpus
 	}
 	for i := range gpus {
-		gpus[i].MemoryTotal = fmt.Sprintf("%d MiB", memsMiB[i])
+		miB, unified := pickAmdMem(mems[i].vramMiB, mems[i].gttMiB)
+		gpus[i].MemoryTotal = fmt.Sprintf("%d MiB", miB)
+		gpus[i].Unified = unified
 	}
 	return gpus
 }
@@ -909,6 +1026,8 @@ func (w *worker) buildRegistration() registration {
 		Memory:       w.memory,
 		Version:      Version,
 		JobQueue:     w.jobsNS,
+		Rocm:         amdSoftware().rocm,
+		Hip:          amdSoftware().hip,
 		GPUs:         w.gpus,
 		Capabilities: w.capabilities(),
 		Engine:       w.engine,
