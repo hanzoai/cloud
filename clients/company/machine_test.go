@@ -7,9 +7,10 @@ import (
 )
 
 // verifiedFounder is a KYC-passed founder owning the whole company — the minimal
-// input that satisfies guardKYCVerified.
+// input that satisfies guardKYCVerified: a passing status AND a named decider (a
+// provider pass or a reviewer confirmation is always attributed).
 func verifiedFounder() Founder {
-	return Founder{Name: "Ada Lovelace", Email: "ada@example.com", EquityBps: 10000, KYCStatus: KYCVerified}
+	return Founder{Name: "Ada Lovelace", Email: "ada@example.com", EquityBps: 10000, KYCStatus: KYCVerified, DecidedBy: "provider:test"}
 }
 
 // fullFormation returns a formation at structure with everything the DOWNSTREAM
@@ -128,7 +129,7 @@ func TestKYCGate(t *testing.T) {
 	f := fullFormation()
 	f.Stage = StageFounders
 	f.Founders = []Founder{
-		{Name: "Ada", Email: "ada@x.com", KYCStatus: KYCVerified},
+		{Name: "Ada", Email: "ada@x.com", KYCStatus: KYCVerified, DecidedBy: "provider:test"},
 		{Name: "Bo", Email: "bo@x.com", KYCStatus: KYCPending}, // one unverified
 	}
 	if err := Advance(f, StagePayment); err == nil {
@@ -140,10 +141,35 @@ func TestKYCGate(t *testing.T) {
 		t.Fatalf("kyc gate: blocked transition must not advance, got %s", f.Stage)
 	}
 
-	// Verify the second founder; the transition now succeeds.
-	f.Founders[1].KYCStatus = KYCVerified
+	// Verify the second founder (attributed); the transition now succeeds.
+	f.Founders[1].KYCStatus, f.Founders[1].DecidedBy = KYCVerified, "provider:test"
 	if err := Advance(f, StagePayment); err != nil {
 		t.Fatalf("kyc gate: all-verified advance failed: %v", err)
+	}
+}
+
+// TestKYCGateRejectsUnattributedVerified proves the gate is fail-closed against a
+// FORGED status: a founder whose KYCStatus is "verified" but was never settled by a
+// provider or reviewer (no DecidedBy — exactly what a client write would leave) does
+// NOT pass. Only an attributed pass advances.
+func TestKYCGateRejectsUnattributedVerified(t *testing.T) {
+	f := fullFormation()
+	f.Stage = StageFounders
+	f.Founders = []Founder{{Name: "Mallory", Email: "m@x.com", KYCStatus: KYCVerified}} // no DecidedBy
+
+	if err := Advance(f, StagePayment); err == nil {
+		t.Fatal("kyc gate: an unattributed 'verified' (a forge) must not pass")
+	} else if errors.Is(err, errIllegalTransition) {
+		t.Fatalf("kyc gate: the edge exists — failure must be the guard: %v", err)
+	}
+	if f.Stage != StageFounders {
+		t.Fatalf("kyc gate: blocked transition must not advance, got %s", f.Stage)
+	}
+
+	// A reviewer confirmation (attributed) passes; so does a provider pass.
+	f.Founders[0].KYCStatus, f.Founders[0].DecidedBy = KYCReviewerConfirmed, "u_reviewer"
+	if err := Advance(f, StagePayment); err != nil {
+		t.Fatalf("kyc gate: attributed reviewer_confirmed must pass: %v", err)
 	}
 }
 
