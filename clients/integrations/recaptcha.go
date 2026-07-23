@@ -49,13 +49,21 @@ func recaptchaVerify(ctx context.Context, in VerifyInput) (*ExchangeResult, erro
 	if jerr := json.Unmarshal(raw, &r); jerr != nil {
 		return nil, fmt.Errorf("recaptcha verify: decode")
 	}
-	// A verified secret either succeeds (never, with our dummy response) or fails
-	// ONLY about the response. Any secret-shaped complaint means the key is bad.
+	// A valid secret with our deliberately-invalid dummy response fails ONLY about the
+	// response. Accept iff success (unexpected but valid) OR the complaint is the
+	// response AND nothing else — an ALLOWLIST (fail-closed): an unknown code, an empty
+	// error set, or any secret/key/request complaint means the key is NOT proven good.
+	sawResponse := false
 	for _, code := range r.ErrorCodes {
 		switch strings.ToLower(strings.TrimSpace(code)) {
-		case "invalid-input-secret", "missing-input-secret", "bad-request", "invalid-keys":
+		case "invalid-input-response", "timeout-or-duplicate":
+			sawResponse = true
+		default: // invalid-input-secret / missing-input-secret / invalid-keys / bad-request / anything unknown
 			return nil, fmt.Errorf("recaptcha rejected the secret key")
 		}
+	}
+	if !r.Success && !sawResponse {
+		return nil, fmt.Errorf("recaptcha did not confirm the secret key")
 	}
 	return &ExchangeResult{Tokens: map[string]string{apiKeySecret: secret}}, nil
 }
