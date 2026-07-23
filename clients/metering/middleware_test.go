@@ -40,7 +40,10 @@ func (s *commerceStub) server() *httptest.Server {
 			return
 		}
 		// balance
-		_, _ = io.WriteString(w, `{"available":`+itoa(s.available)+`}`)
+		s.mu.Lock()
+		avail := s.available
+		s.mu.Unlock()
+		_, _ = io.WriteString(w, `{"available":`+itoa(avail)+`}`)
 	}))
 }
 
@@ -50,11 +53,82 @@ func (s *commerceStub) records() (int, int64, string) {
 	return s.recordedCnt, s.recordedAmt, s.recordedUsr
 }
 
+// setAvailable simulates a pre-pay deposit landing (or exhaustion): it moves the
+// spendable balance the gate reads before the next request.
+func (s *commerceStub) setAvailable(v int64) {
+	s.mu.Lock()
+	s.available = v
+	s.mu.Unlock()
+}
+
 func gatewayReq() *http.Request {
 	r := httptest.NewRequest(http.MethodGet, "/search?q=foo", nil)
 	r.Header.Set(metering.HeaderOrgID, "hanzo")
 	r.Header.Set(metering.HeaderUserID, "alice")
 	return r
+}
+
+// TestMiddleware_PrePayLifecycle is the pre-pay business model end to end: a freshly
+// provisioned org starts at a ZERO balance, so a metered request is REFUSED (402, no
+// free floor, nothing recorded); after a pre-pay deposit lands, the SAME request is
+// SERVED and DEBITS the balance; when the balance is later exhausted, it is refused
+// again. No trial credit anywhere — usage is pre-paid.
+func TestMiddleware_PrePayLifecycle(t *testing.T) {
+	stub := &commerceStub{available: 0} // fresh provisioned org: zero balance
+	srv := stub.server()
+	defer srv.Close()
+
+	c, _ := metering.New(metering.Config{BaseURL: srv.URL, Token: "t", Org: "hanzo"})
+	served := 0
+	h := c.Middleware(metering.MiddlewareConfig{
+		Provider: "enso",
+		Price: func(_ *http.Request, status int, _ metering.AuthInput) int64 {
+			if status == http.StatusOK {
+				return 7
+			}
+			return 0
+		},
+	})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		served++
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte("ok"))
+	}))
+
+	// 1) ZERO balance → REFUSED (402); handler never runs; nothing recorded.
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, gatewayReq())
+	if rr.Code != http.StatusPaymentRequired {
+		t.Fatalf("zero-balance request: status=%d, want 402", rr.Code)
+	}
+	if served != 0 {
+		t.Fatalf("zero-balance request must NOT be served (no free floor)")
+	}
+	if n, _, _ := stub.records(); n != 0 {
+		t.Fatalf("refused request must not debit, got %d records", n)
+	}
+
+	// 2) A pre-pay deposit lands → positive balance → SERVED + DEBITS.
+	stub.setAvailable(5000)
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, gatewayReq())
+	if rr.Code != 200 || served != 1 {
+		t.Fatalf("after pre-pay: status=%d served=%d, want 200 served=1", rr.Code, served)
+	}
+	waitFor(t, func() bool { n, _, _ := stub.records(); return n == 1 })
+	if _, amt, _ := stub.records(); amt != 7 {
+		t.Fatalf("served request must debit the balance, got amount=%d want 7", amt)
+	}
+
+	// 3) Balance exhausted → refused again (no free floor after the credit runs out).
+	stub.setAvailable(0)
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, gatewayReq())
+	if rr.Code != http.StatusPaymentRequired {
+		t.Fatalf("exhausted-balance request: status=%d, want 402", rr.Code)
+	}
+	if served != 1 {
+		t.Fatalf("exhausted request must NOT be served, served=%d want 1", served)
+	}
 }
 
 func TestMiddleware_GatesAndRecords(t *testing.T) {
