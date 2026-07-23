@@ -140,6 +140,7 @@ func Shutdown() error { return shutdownStores() }
 
 func routes(app *zip.App, s *cloud.Service[state]) {
 	shutdownStores = s.State.stores.CloseAll
+	mountedStores = s.State.stores // the in-process evidence seam (compose.go)
 	g := app.Group("/v1/research")
 	g.Post("/experiments", cloud.Handle(s, postExperiments)) // ingest (idempotent) → SQLite → roll up
 	g.Get("/experiments", cloud.Handle(s, listExperiments))  // list, latest-run-canonical

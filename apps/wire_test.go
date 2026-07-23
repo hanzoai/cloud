@@ -104,6 +104,7 @@ var frozen = []struct {
 	{"evals", false, false},          // was order 145
 	{"benchmark", false, false},      // benchmark plane (after evals, before treasury)
 	{"research", false, true},        // R&D evidence plane + /research board (HIP-0512), arena sibling after benchmark; Shutdown closes per-org stores
+	{"experiments", false, true},     // unified A/B EXPERIMENT primitive: composes flags(assign)+analytics(measure)+research(evidence); Shutdown closes the registry stores
 	{"treasury", false, true},        // was order 146
 	{"admin", false, false},          // was order 146
 	{"admission", false, true},       // launch-control gate: composes flags (registry+seed+mode route+Enforce); Shutdown closes the registry store
