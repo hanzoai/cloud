@@ -31,6 +31,7 @@ func init() {
 		Name:         "GitHub",
 		Description:  "Install the Hanzo GitHub App to mirror your org's repositories into git.hanzo.ai and keep them in sync.",
 		Category:     "Developer",
+		Capabilities: []string{"git-sync", "automations-trigger"},
 		Scopes:       nil, // GitHub Apps use installation PERMISSIONS, not OAuth scopes.
 		RedirectPath: callbackPath("github"),
 		Secrets:      nil, // no token custodied: installation tokens are minted on demand, never sealed.
