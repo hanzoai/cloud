@@ -191,20 +191,269 @@ type store struct {
 
 // openStore layers orm's record model over the already-opened per-org *sql.DB. The
 // seam signature is unchanged (cloud.OrgStore hands a pragma'd, cek-encrypted
-// connection); orm's initSchema creates its `_entities` table if absent — the only
-// "migration" there is, and it is idempotent and field-agnostic.
+// connection); orm's initSchema creates its `_entities` table if absent. It then
+// carries any pre-orm raw-SQL evidence forward (migrateLegacy) so an existing store
+// is never silently read as empty. A migration failure FAILS the open (fail-secure)
+// rather than serving an empty board over real data.
 func openStore(raw *sql.DB) (*store, error) {
 	db, err := orm.AdaptSQLite(raw)
 	if err != nil {
 		_ = raw.Close()
 		return nil, fmt.Errorf("research open store: %w", err)
 	}
-	return &store{db: db, raw: raw}, nil
+	s := &store{db: db, raw: raw}
+	if err := s.migrateLegacy(context.Background()); err != nil {
+		_ = raw.Close()
+		return nil, fmt.Errorf("research legacy migration: %w", err)
+	}
+	return s, nil
 }
 
 // Close closes the underlying connection the OrgStore opened. orm borrows the
 // connection, so closing the store closes the file exactly once here.
 func (s *store) Close() error { return s.raw.Close() }
+
+// ── legacy migration (pre-orm raw-SQL tables → _entities) ─────────────────────
+
+// legacyArt pairs an artifact's migrated metadata with its stored bytes.
+type legacyArt struct {
+	meta    artRecord
+	content []byte
+}
+
+// migrateLegacy carries a store's pre-orm evidence — the raw-SQL experiment /
+// attempt / artifact tables the original store wrote in this same per-org file —
+// forward into orm's _entities, ONCE, on open. Without it a store that predates the
+// orm cutover reads as empty (the tables still hold the rows, but the orm reads look
+// only at _entities), silently vanishing every logged run.
+//
+// It is gated on old-table existence (a greenfield store skips it) and idempotent:
+// every row is CreateIfAbsent'd under the SAME stable id the ORM would mint, so a
+// re-open re-migrates to a no-op and never duplicates. Each version keeps its OLD
+// seq value, so canonical/supersession is preserved EXACTLY — a corrected run stays
+// canonical — and the append clock is advanced past every migrated seq so a later
+// ingest supersedes correctly. content_hash, revision, status, visibility/consent,
+// all provenance, and the artifact blobs are carried verbatim. Rows are read by
+// COLUMN NAME (SELECT *), so a table left by ANY older schema — even the outage-era
+// one missing provenance columns — migrates without referencing a column that may
+// not exist: the migration itself can never hit "no such column".
+func (s *store) migrateLegacy(ctx context.Context) error {
+	present, err := s.legacyTables(ctx)
+	if err != nil {
+		return err
+	}
+	if len(present) == 0 {
+		return nil // greenfield: no pre-orm tables
+	}
+	exps, atts, arts, err := s.readLegacy(ctx, present)
+	if err != nil {
+		return err
+	}
+	if len(exps) == 0 && len(atts) == 0 && len(arts) == 0 {
+		return nil // empty legacy tables
+	}
+	return s.db.RunInTransactionWith(ctx, &orm.TxOptions{}, func(tx orm.DB) error {
+		maxSeq, err := loadSeq(ctx, tx)
+		if err != nil {
+			return err
+		}
+		for i := range exps {
+			r := exps[i]
+			if _, err := tx.CreateIfAbsent(ctx, tx.NewKey(kindExp, expKeyID(r.Project, r.ID, r.ContentHash), 0, nil), &r); err != nil {
+				return err
+			}
+			if r.Seq > maxSeq {
+				maxSeq = r.Seq
+			}
+		}
+		for i := range atts {
+			r := atts[i]
+			if _, err := tx.CreateIfAbsent(ctx, tx.NewKey(kindAtt, attKeyID(r.Project, r.Benchmark, r.Item, r.Model, r.ContentHash), 0, nil), &r); err != nil {
+				return err
+			}
+			if r.Seq > maxSeq {
+				maxSeq = r.Seq
+			}
+		}
+		for i := range arts {
+			m := arts[i].meta
+			made, err := tx.CreateIfAbsent(ctx, tx.NewKey(kindArt, artKeyID(m.SHA256), 0, nil), &m)
+			if err != nil {
+				return err
+			}
+			if made {
+				if _, err := tx.CreateIfAbsent(ctx, tx.NewKey(kindArtBlob, artBlobKeyID(m.SHA256), 0, nil), &artBlob{Content: arts[i].content}); err != nil {
+					return err
+				}
+			}
+		}
+		// Never lower the clock: max(current, every migrated seq). A re-open where
+		// later ingests already advanced it leaves it untouched.
+		return putSeq(ctx, tx, maxSeq)
+	})
+}
+
+// legacyTables reports which pre-orm tables are present in the file.
+func (s *store) legacyTables(ctx context.Context) (map[string]bool, error) {
+	rows, err := s.raw.QueryContext(ctx,
+		`SELECT name FROM sqlite_master WHERE type='table' AND name IN ('experiment','attempt','artifact')`)
+	if err != nil {
+		return nil, fmt.Errorf("research legacy detect: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	present := map[string]bool{}
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return nil, err
+		}
+		present[n] = true
+	}
+	return present, rows.Err()
+}
+
+// readLegacy loads every row of the present pre-orm tables into the orm record
+// shapes. Reads run BEFORE the migration transaction (each fully drains + closes its
+// rows) so the single writer connection is free when the tx opens.
+func (s *store) readLegacy(ctx context.Context, present map[string]bool) ([]expRecord, []attRecord, []legacyArt, error) {
+	var exps []expRecord
+	var atts []attRecord
+	var arts []legacyArt
+	if present["experiment"] {
+		ms, err := s.scanLegacy(ctx, `SELECT * FROM experiment ORDER BY seq`)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("research legacy read experiment: %w", err)
+		}
+		for _, m := range ms {
+			exps = append(exps, expRecord{
+				Project: lstr(m, "project", "default"), ID: lstr(m, "id", ""),
+				ContentHash: lstr(m, "content_hash", ""), Seq: lint(m, "seq"),
+				Revision: revisionOf(lstr(m, "revision", "original")), Status: runStatus(lstr(m, "status", "complete")),
+				Visibility: lstr(m, "visibility", "private"), Trainable: lbool(m, "trainable"), Publishable: lbool(m, "publishable"),
+				Kind: lstr(m, "kind", ""), Subject: lstr(m, "subject", ""), Task: lstr(m, "task", ""), Metric: lstr(m, "metric", ""),
+				Value: lfloat(m, "value"), N: int(lint(m, "n")), NTotal: int(lint(m, "n_total")), CostUSD: lfloat(m, "cost_usd"),
+				Meta: ljson(m, "meta"), GitSHA: lstr(m, "git_sha", ""), GitBranch: lstr(m, "git_branch", ""),
+				GitDirty: lbool(m, "git_dirty"), LibVersions: ljson(m, "lib_versions"), TS: lint(m, "ts"),
+			})
+		}
+	}
+	if present["attempt"] {
+		ms, err := s.scanLegacy(ctx, `SELECT * FROM attempt ORDER BY seq`)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("research legacy read attempt: %w", err)
+		}
+		for _, m := range ms {
+			atts = append(atts, attRecord{
+				Project: lstr(m, "project", "default"), Benchmark: lstr(m, "benchmark", ""),
+				Item: lstr(m, "item", ""), Model: lstr(m, "model", ""), ContentHash: lstr(m, "content_hash", ""),
+				Seq: lint(m, "seq"), Revision: revisionOf(lstr(m, "revision", "original")), Status: runStatus(lstr(m, "status", "complete")),
+				Gold: lstr(m, "gold", ""), Answer: lstr(m, "answer", ""), Correct: lbool(m, "correct"),
+				Response: lstr(m, "response", ""), Source: sourceOf(lstr(m, "source", "")), TS: lint(m, "ts"),
+			})
+		}
+	}
+	if present["artifact"] {
+		ms, err := s.scanLegacy(ctx, `SELECT * FROM artifact`)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("research legacy read artifact: %w", err)
+		}
+		for _, m := range ms {
+			sha := lstr(m, "sha256", "")
+			if sha == "" {
+				continue
+			}
+			var content []byte
+			if b, ok := m["content"].([]byte); ok {
+				content = append([]byte(nil), b...) // copy: the scan buffer is reused
+			}
+			arts = append(arts, legacyArt{
+				meta: artRecord{
+					SHA256: sha, Kind: lstr(m, "kind", ""), Ref: lstr(m, "ref", ""),
+					RunID: lstr(m, "run_id", ""), Project: lstr(m, "project", "default"),
+					Visibility: lstr(m, "visibility", "private"), RetentionClass: lstr(m, "retention_class", "raw-artifact"),
+					GitSHA: lstr(m, "git_sha", ""), GitBranch: lstr(m, "git_branch", ""),
+					GitDirty: lbool(m, "git_dirty"), LibVersions: ljson(m, "lib_versions"), TS: lint(m, "ts"),
+				},
+				content: content,
+			})
+		}
+	}
+	return exps, atts, arts, nil
+}
+
+// scanLegacy runs a raw query and returns every row as a column-name→value map, so
+// the caller reads by name and a column absent in an older schema simply yields a
+// default (never a "no such column" on the query).
+func (s *store) scanLegacy(ctx context.Context, query string) ([]map[string]any, error) {
+	rows, err := s.raw.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+	var out []map[string]any
+	for rows.Next() {
+		vals := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return nil, err
+		}
+		m := make(map[string]any, len(cols))
+		for i, c := range cols {
+			m[c] = vals[i]
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// legacy value extractors: SQLite hands back int64 / float64 / string / []byte / nil,
+// so each coerces the driver's dynamic type and defaults an absent (older-schema) or
+// NULL column to the old table's column default.
+func lstr(m map[string]any, k, def string) string {
+	switch v := m[k].(type) {
+	case string:
+		return v
+	case []byte:
+		return string(v)
+	default:
+		return def
+	}
+}
+
+func lint(m map[string]any, k string) int64 {
+	switch v := m[k].(type) {
+	case int64:
+		return v
+	case float64:
+		return int64(v)
+	default:
+		return 0
+	}
+}
+
+func lbool(m map[string]any, k string) bool { return lint(m, k) != 0 }
+
+func lfloat(m map[string]any, k string) float64 {
+	switch v := m[k].(type) {
+	case float64:
+		return v
+	case int64:
+		return float64(v)
+	default:
+		return 0
+	}
+}
+
+func ljson(m map[string]any, k string) json.RawMessage {
+	return json.RawMessage(jsonObj(json.RawMessage(lstr(m, k, ""))))
+}
 
 // ── content hashes (version identity) — UNCHANGED from the raw-SQL store ───────
 
@@ -351,6 +600,13 @@ func putSeq(ctx context.Context, tx orm.DB, seq int64) error {
 // its stable id AND that latest version is not retracted. If the latest is a
 // retraction, the id has NO canonical — WITHDRAWN (a retraction is honored, not
 // ignored). Every version is retained regardless.
+//
+// SCALE NOTE: allExp/allAtt/allArt load a whole kind and fold it in memory (O(N) per
+// request in the org's own history), which is right while a per-org corpus is small
+// but degrades an org's own board at large history (org-bounded, never cross-tenant).
+// The escalation, when a kind grows past comfortable in-memory folding, is a
+// per-field orm-indexed Query.Filter (e.g. by project) plus a stored canonical flag
+// maintained on write — not a return to hand-written per-column SQL.
 
 func (s *store) allExp(ctx context.Context) ([]expRecord, error) {
 	var recs []expRecord
@@ -640,25 +896,35 @@ func (r artRecord) toArtifact() Artifact {
 }
 
 // setArtifactVisibility records the SEPARATE visibility grant for one artifact by
-// sha256 — the same private-by-default rule as runs. Returns rows touched (1 on a
-// scoped match, 0 otherwise).
+// sha256 — the same private-by-default rule as runs. The read-modify-write runs in
+// one transaction (as setGrant does) so a concurrent grant cannot interleave between
+// the read and the write. Returns rows touched (1 on a scoped match, 0 otherwise).
 func (s *store) setArtifactVisibility(ctx context.Context, project, sha256Hex, visibility string) (int, error) {
-	var meta artRecord
+	n := 0
 	key := s.db.NewKey(kindArt, artKeyID(sha256Hex), 0, nil)
-	if err := s.db.Get(ctx, key, &meta); err != nil {
-		if errors.Is(err, ormdb.ErrNoSuchEntity) {
-			return 0, nil
+	err := s.db.RunInTransactionWith(ctx, &orm.TxOptions{}, func(tx orm.DB) error {
+		n = 0
+		var meta artRecord
+		if err := tx.Get(ctx, key, &meta); err != nil {
+			if errors.Is(err, ormdb.ErrNoSuchEntity) {
+				return nil
+			}
+			return err
 		}
+		if project != "" && meta.Project != project {
+			return nil
+		}
+		meta.Visibility = visibility
+		if _, err := tx.Put(ctx, key, &meta); err != nil {
+			return err
+		}
+		n = 1
+		return nil
+	})
+	if err != nil {
 		return 0, fmt.Errorf("research artifact grant: %w", err)
 	}
-	if project != "" && meta.Project != project {
-		return 0, nil
-	}
-	meta.Visibility = visibility
-	if _, err := s.db.Put(ctx, key, &meta); err != nil {
-		return 0, fmt.Errorf("research artifact grant: %w", err)
-	}
-	return 1, nil
+	return n, nil
 }
 
 // ── ops-board aggregates ──────────────────────────────────────────────────────
