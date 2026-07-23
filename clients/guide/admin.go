@@ -43,21 +43,38 @@ func superAdmin(s *cloud.Service[state], fn func(*cloud.Service[state], *zip.Ctx
 // the row it serves. Post-seed the DB always carries a row; the fixture fallback covers
 // only a pre-seed / unreachable DB, where a write creates version 1 under the base key.
 func (st state) authoringBlueprint(ctx context.Context) (Blueprint, string, int, error) {
+	// The fixture fallbacks return a CLONE, never the shared st.defBlueprint by value: a
+	// caller (patchBlueprintItem → patchIn) edits the returned blueprint IN PLACE, and a
+	// by-value struct copy would share the embedded fixture's slice backing — a pre-seed
+	// PATCH would corrupt the process-wide fixture. clone() gives independent slices.
 	if st.blueprints == nil {
-		return st.defBlueprint, "", 0, nil
+		return st.defBlueprint.clone(), "", 0, nil
 	}
 	doc, version, key, ok, err := st.blueprints.LatestResolved(ctx, st.brand)
 	if err != nil {
 		return Blueprint{}, "", 0, err
 	}
 	if !ok {
-		return st.defBlueprint, key, 0, nil // pre-seed / unreachable: fixture as the base
+		return st.defBlueprint.clone(), key, 0, nil // pre-seed / unreachable: fixture as the base
 	}
 	bp, err := Parse(doc)
 	if err != nil {
 		return Blueprint{}, "", 0, err // a stored doc that no longer parses — refuse, don't guess
 	}
 	return bp, key, version, nil
+}
+
+// writeKey resolves the brand KEY an author write targets WITHOUT parsing the stored doc.
+// putBlueprint / listBlueprintVersions need only the key, so they must not depend on the
+// current stored doc parsing: a corrupt or schema-drifted row must still be replaceable by
+// a valid PUT (and its versions listable). LatestResolved returns the resolution key
+// regardless of whether a row exists (brand → base "").
+func (st state) writeKey(ctx context.Context) (string, error) {
+	if st.blueprints == nil {
+		return "", nil // pre-seed / no store: writes create version 1 under the base key
+	}
+	_, _, key, _, err := st.blueprints.LatestResolved(ctx, st.brand)
+	return key, err
 }
 
 // saveBlueprint persists a new version of the brand blueprint under key. The blueprint's
@@ -97,7 +114,12 @@ func putBlueprint(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
 	}
-	_, key, _, err := s.State.authoringBlueprint(c.Context())
+	if s.State.blueprints == nil {
+		return zip.Errorf(http.StatusInternalServerError, "guide: blueprint store unavailable")
+	}
+	// Fetch the write key WITHOUT parsing the current stored doc: a corrupt / schema-drifted
+	// row must not block a valid PUT from overwriting it (fail-closed on write path).
+	key, err := s.State.writeKey(c.Context())
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}
@@ -106,7 +128,7 @@ func putBlueprint(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}
 	auditBlueprint(s, c, "guide.blueprint.put", key, version, map[string]any{
-		"sections": len(bp.Sections), "steps": len(bp.Steps),
+		"principles": len(bp.Principles), "sections": len(bp.Sections), "steps": len(bp.Steps),
 		"strategies": len(bp.Strategies), "templates": len(bp.Templates),
 	})
 	return c.JSON(http.StatusOK, blueprintResponse(bp, key, version))
@@ -118,7 +140,8 @@ func listBlueprintVersions(s *cloud.Service[state], c *zip.Ctx) error {
 	if s.State.blueprints == nil {
 		return zip.Errorf(http.StatusInternalServerError, "guide: blueprint store unavailable")
 	}
-	_, key, _, err := s.State.authoringBlueprint(c.Context())
+	// Key without parsing: a corrupt stored doc must not block listing the version history.
+	key, err := s.State.writeKey(c.Context())
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}
@@ -242,6 +265,7 @@ func blueprintResponse(bp Blueprint, key string, version int) map[string]any {
 		"version":   version,
 		"blueprint": explicitEnabled(bp),
 		"counts": map[string]int{
+			"principles": len(bp.Principles),
 			"sections":   len(bp.Sections),
 			"steps":      len(bp.Steps),
 			"strategies": len(bp.Strategies),
@@ -252,9 +276,12 @@ func blueprintResponse(bp Blueprint, key string, version int) map[string]any {
 
 // explicitEnabled returns a copy of bp with every enable pointer made explicit (nil →
 // the default-on true), so the admin FE sees an unambiguous on/off on every item. The
-// slices are copied so the in-memory blueprint is untouched.
+// slices are copied so the in-memory blueprint is untouched. Principles carry no enable
+// lever (the spine is the fixed backbone) but are copied too, so the returned Blueprint is
+// fully independent of the source.
 func explicitEnabled(bp Blueprint) Blueprint {
 	bp.Enabled = boolPtr(on(bp.Enabled))
+	bp.Principles = append([]Principle(nil), bp.Principles...)
 	bp.Sections = append([]Section(nil), bp.Sections...)
 	for i := range bp.Sections {
 		bp.Sections[i].Enabled = boolPtr(on(bp.Sections[i].Enabled))

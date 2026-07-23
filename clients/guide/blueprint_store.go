@@ -18,8 +18,15 @@ import (
 //
 // Versioning mirrors the legal-template discipline: every author write appends a new
 // version; the seed is version 1; the latest version is authoritative. Old versions
-// stay for point-in-time recovery / audit. A redeploy re-seeds ONLY when a brand has no
-// row (seed-if-absent), so admin edits (version >= 2) are never clobbered.
+// stay for point-in-time recovery / audit.
+//
+// Provenance is EXPLICIT, not inferred from version number: every row carries a `source`
+// ("seed" | "admin") and the seed row carries the `seed_version` generation it was seeded
+// from. The seed occupies version 1 with source="seed"; an admin write (SaveVersion)
+// appends version >= 2 with source="admin". This is what makes the seed VERSION-AWARE
+// (SeedOrUpgrade): on Mount a brand with NO row is seeded; a brand whose seed is still
+// UNEDITED (no source="admin" row) and older than the embedded seedVersion is UPGRADED in
+// place; a brand that was EVER admin-edited is NEVER touched — the load-bearing invariant.
 
 // BlueprintStore persists brand blueprints as versioned canonical-JSON docs.
 type BlueprintStore struct {
@@ -63,43 +70,132 @@ CREATE TABLE IF NOT EXISTS guide_blueprint (
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("guide blueprint migrate: %w", err)
 	}
+	// Add the provenance columns (version-aware seed) if this DB predates them. SQLite has
+	// no ADD COLUMN IF NOT EXISTS, so gate on the live schema.
+	cols, err := s.columns("guide_blueprint")
+	if err != nil {
+		return err
+	}
+	if !cols["source"] {
+		if _, err := s.db.Exec(`ALTER TABLE guide_blueprint ADD COLUMN source TEXT NOT NULL DEFAULT 'seed'`); err != nil {
+			return fmt.Errorf("guide blueprint add source: %w", err)
+		}
+	}
+	if !cols["seed_version"] {
+		if _, err := s.db.Exec(`ALTER TABLE guide_blueprint ADD COLUMN seed_version INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return fmt.Errorf("guide blueprint add seed_version: %w", err)
+		}
+	}
+	// Enforce the provenance invariant idempotently: a version >= 2 row is an admin edit (the
+	// seed always occupies version 1). This backfills a LEGACY row that predates the source
+	// column — created by the old SaveVersion, defaulted to 'seed' — to 'admin', so a legacy
+	// admin edit is never mistaken for an upgradeable seed. The `AND source='seed'` guard
+	// makes it a no-op once every version>=2 row is 'admin' (self-healing, no false flips: a
+	// seed upgrade keeps version 1, and every new admin write is stamped 'admin' at write).
+	if _, err := s.db.Exec(`UPDATE guide_blueprint SET source='admin' WHERE version >= 2 AND source='seed'`); err != nil {
+		return fmt.Errorf("guide blueprint backfill source: %w", err)
+	}
 	return nil
+}
+
+// columns returns the set of column names on table (a trusted constant identifier; PRAGMA
+// takes no bind parameter for the table name).
+func (s *BlueprintStore) columns(table string) (map[string]bool, error) {
+	rows, err := s.db.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		return nil, fmt.Errorf("table_info %s: %w", table, err)
+	}
+	defer func() { _ = rows.Close() }()
+	cols := map[string]bool{}
+	for rows.Next() {
+		var (
+			cid, notnull, pk int
+			name, typ        string
+			dflt             sql.NullString
+		)
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			return nil, fmt.Errorf("scan table_info: %w", err)
+		}
+		cols[name] = true
+	}
+	return cols, rows.Err()
 }
 
 // Close closes the underlying database. Idempotent-safe via sql.DB.
 func (s *BlueprintStore) Close() error { return s.db.Close() }
 
-// hasBrand reports whether ANY version exists for brand — the seed-if-absent predicate.
-func (s *BlueprintStore) hasBrand(ctx context.Context, brand string) (bool, error) {
-	var one int
-	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM guide_blueprint WHERE brand=? LIMIT 1`, brand).Scan(&one)
+// SeedAction is the outcome of a SeedOrUpgrade call (for logging / test assertions).
+type SeedAction string
+
+const (
+	SeedNone     SeedAction = "unchanged" // admin-edited, or seed already current
+	SeedInserted SeedAction = "seeded"    // no row existed → fresh seed at version 1
+	SeedUpgraded SeedAction = "upgraded"  // unedited seed replaced with a newer generation
+)
+
+// SeedOrUpgrade is the VERSION-AWARE seed — the ONE way the embedded fixture reaches the
+// DB. Given the embedded doc + its monotonic seedVersion, it:
+//
+//   - NEVER touches a brand that carries an admin edit (source="admin") — the hard
+//     invariant: any admin edit at any version survives forever (returns SeedNone);
+//   - seeds version 1 (source="seed", stamped seedVersion) when the brand has no row;
+//   - UPGRADES the existing UNEDITED seed in place (same version 1) when the embedded
+//     seedVersion is strictly newer than the stored one — so a deployment seeded with an
+//     older corpus picks up new defaults on redeploy;
+//   - otherwise is a no-op (the seed is already at this generation).
+//
+// Idempotent: re-running with the same seedVersion over an already-current seed is SeedNone.
+func (s *BlueprintStore) SeedOrUpgrade(ctx context.Context, brand string, doc []byte, seedVersion int, now int64) (SeedAction, error) {
+	// 1. An admin edit makes the brand off-limits to the seeder, forever.
+	var adminN int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM guide_blueprint WHERE brand=? AND source='admin'`, brand).Scan(&adminN); err != nil {
+		return SeedNone, fmt.Errorf("seed check admin: %w", err)
+	}
+	if adminN > 0 {
+		return SeedNone, nil
+	}
+	// 2. The unedited seed row (there is at most one, at version 1) and its generation.
+	var stored sql.NullInt64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT seed_version FROM guide_blueprint WHERE brand=? AND source='seed' ORDER BY version LIMIT 1`, brand).
+		Scan(&stored)
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+		// Atomic insert-if-absent — no TOCTOU with a concurrent seeder (a second replica over
+		// a shared file): the WHERE NOT EXISTS lets exactly one writer win; the loser is a
+		// no-op, never a primary-key conflict.
+		res, err := s.db.ExecContext(ctx,
+			`INSERT INTO guide_blueprint (brand, version, doc, updated_at, source, seed_version)
+			 SELECT ?,1,?,?,'seed',?
+			 WHERE NOT EXISTS (SELECT 1 FROM guide_blueprint WHERE brand=?)`,
+			brand, string(doc), now, seedVersion, brand)
+		if err != nil {
+			return SeedNone, fmt.Errorf("seed blueprint: %w", err)
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			return SeedInserted, nil
+		}
+		return SeedNone, nil // a concurrent writer seeded first
 	}
 	if err != nil {
-		return false, fmt.Errorf("has brand: %w", err)
+		return SeedNone, fmt.Errorf("seed check version: %w", err)
 	}
-	return true, nil
+	// 3. Unedited seed present → upgrade in place ONLY when the embedded generation is newer.
+	if seedVersion > int(stored.Int64) {
+		if _, err := s.db.ExecContext(ctx,
+			`UPDATE guide_blueprint SET doc=?, seed_version=?, updated_at=? WHERE brand=? AND source='seed'`,
+			string(doc), seedVersion, now, brand); err != nil {
+			return SeedNone, fmt.Errorf("upgrade seed: %w", err)
+		}
+		return SeedUpgraded, nil
+	}
+	return SeedNone, nil
 }
 
-// SeedIfAbsent inserts doc as version 1 for brand IFF no row exists for that brand. It
-// is idempotent: a redeploy over an already-seeded (or admin-edited) brand is a no-op,
-// so an admin's version-2+ edits are never clobbered. Returns whether it seeded.
-func (s *BlueprintStore) SeedIfAbsent(ctx context.Context, brand string, doc []byte, now int64) (bool, error) {
-	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO guide_blueprint (brand, version, doc, updated_at)
-		 SELECT ?, 1, ?, ?
-		 WHERE NOT EXISTS (SELECT 1 FROM guide_blueprint WHERE brand=?)`,
-		brand, string(doc), now, brand)
-	if err != nil {
-		return false, fmt.Errorf("seed blueprint: %w", err)
-	}
-	n, _ := res.RowsAffected()
-	return n > 0, nil
-}
-
-// SaveVersion appends a new version for brand (max version + 1) and returns it. This is
-// the author write — every edit is a new immutable version (point-in-time recovery).
+// SaveVersion appends a new admin version for brand (max version + 1) and returns it. This
+// is the author write — every edit is a new immutable version (point-in-time recovery),
+// stamped source="admin" so SeedOrUpgrade will never clobber it. seed_version is 0 on an
+// admin row (the field is meaningful only for the seed).
 func (s *BlueprintStore) SaveVersion(ctx context.Context, brand string, doc []byte, now int64) (int, error) {
 	var max sql.NullInt64
 	if err := s.db.QueryRowContext(ctx, `SELECT MAX(version) FROM guide_blueprint WHERE brand=?`, brand).Scan(&max); err != nil {
@@ -110,7 +206,7 @@ func (s *BlueprintStore) SaveVersion(ctx context.Context, brand string, doc []by
 		version = int(max.Int64) + 1
 	}
 	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO guide_blueprint (brand, version, doc, updated_at) VALUES (?,?,?,?)`,
+		`INSERT INTO guide_blueprint (brand, version, doc, updated_at, source, seed_version) VALUES (?,?,?,?,'admin',0)`,
 		brand, version, string(doc), now); err != nil {
 		return 0, fmt.Errorf("save blueprint version: %w", err)
 	}
