@@ -95,12 +95,59 @@ func metaBuild(cfg Config, secret string, batch []Conversion) metaBody {
 			EventSourceURL: cv.URL,
 			UserData:       metaUserData(cv.User),
 		}
-		if cv.Value > 0 {
-			e.CustomData = map[string]any{"value": cv.Value, "currency": cv.Currency}
+		if cd := metaCustomData(cv); len(cd) > 0 {
+			e.CustomData = cd
 		}
 		data = append(data, e)
 	}
 	return metaBody{Data: data, AccessToken: secret, TestEventCode: cfg.get("testEventCode")}
+}
+
+// metaCustomData renders a conversion's commerce fields into Meta's custom_data:
+// value/currency, and — for an ecommerce event — the native content signals
+// (content_ids, contents[{id,quantity,item_price}], content_type, num_items) that
+// Meta's dynamic ads and Purchase optimization read. A purchase also carries order_id,
+// its native dedup key. Empty when the event carries neither value nor items.
+func metaCustomData(cv Conversion) map[string]any {
+	cd := map[string]any{}
+	if cv.Value > 0 {
+		cd["value"] = cv.Value
+		cd["currency"] = cv.Currency
+	}
+	if len(cv.Items) > 0 {
+		ids := make([]string, 0, len(cv.Items))
+		contents := make([]map[string]any, 0, len(cv.Items))
+		num := 0
+		for _, it := range cv.Items {
+			if it.ID != "" {
+				ids = append(ids, it.ID)
+			}
+			c := map[string]any{}
+			if it.ID != "" {
+				c["id"] = it.ID
+			}
+			if it.Quantity > 0 {
+				c["quantity"] = it.Quantity
+				num += int(it.Quantity)
+			} else {
+				num++
+			}
+			if it.Price > 0 {
+				c["item_price"] = it.Price
+			}
+			contents = append(contents, c)
+		}
+		if len(ids) > 0 {
+			cd["content_ids"] = ids
+		}
+		cd["contents"] = contents
+		cd["content_type"] = "product"
+		cd["num_items"] = num
+	}
+	if cv.Standard == EventPurchase && cv.EventID != "" {
+		cd["order_id"] = cv.EventID
+	}
+	return cd
 }
 
 // metaEventTime clamps to now when the event carries no timestamp (Meta rejects a
