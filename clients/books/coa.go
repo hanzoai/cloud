@@ -57,6 +57,7 @@ const (
 	OwnerEquity     = "3000" // owner equity
 	RoundOff        = "3900" // round-off difference sink (see Post)
 	CustomerWallet  = "2000" // PREPAID CREDITS — a liability / deferred revenue
+	VendorPayable   = "2001" // accounts payable to a vendor for a scanned bill (party)
 	OSSPayout       = "2100" // owed to OSS maintainers (party)
 	SalesTaxPayable = "2200" // collected sales tax owed to authorities (party)
 	AccruedInfra    = "2300" // accrued cloud/GPU infra cost owed (COGS accrual sink)
@@ -66,6 +67,16 @@ const (
 	CloudCOGS       = "5000" // cloud / GPU cost of goods sold
 	ProcessorFees   = "5100" // payment-processor fees
 	PromoCredit     = "5200" // promotional credit given away
+	// Scanner expense categories — the fixed buckets a scanned bill (scan.go) maps its
+	// merchant/category into. Each is a real debit-normal expense account so a booked bill
+	// always lands in a named line, never a guessed one; an unrecognized category falls to
+	// 5900 Uncategorized (below) for a human to reclassify.
+	SoftwareExpense  = "5300" // software & SaaS subscriptions
+	OfficeExpense    = "5400" // office supplies & equipment
+	TravelExpense    = "5500" // travel & transport
+	MealsExpense     = "5600" // meals & entertainment
+	MarketingExpense = "5700" // marketing & advertising
+	ServicesExpense  = "5800" // professional & contractor services
 	// UncategorizedExpense is the DEFAULT debit sink for a bank OUTFLOW the bank
 	// engine could not categorize (bank_map.go). It exists so an outflow always
 	// books against a real expense account — never a guessed one — and surfaces as
@@ -82,6 +93,7 @@ var chartOfAccounts = []Account{
 	{Number: AR, Name: "Accounts receivable", Type: Asset, Party: Receivable},
 	// Liabilities (credit-normal)
 	{Number: CustomerWallet, Name: "Customer wallet (prepaid credits)", Type: Liability},
+	{Number: VendorPayable, Name: "Vendor payable (bills)", Type: Liability, Party: Payable},
 	{Number: OSSPayout, Name: "OSS payout payable", Type: Liability, Party: Payable},
 	{Number: SalesTaxPayable, Name: "Sales tax payable", Type: Liability, Party: Payable},
 	// Accrued infra is an AGGREGATE cost accrual (matching COGS to recognized revenue),
@@ -99,6 +111,12 @@ var chartOfAccounts = []Account{
 	{Number: CloudCOGS, Name: "Cloud / GPU COGS", Type: Expense},
 	{Number: ProcessorFees, Name: "Processor fees", Type: Expense},
 	{Number: PromoCredit, Name: "Promotional credit", Type: Expense},
+	{Number: SoftwareExpense, Name: "Software & SaaS", Type: Expense},
+	{Number: OfficeExpense, Name: "Office & supplies", Type: Expense},
+	{Number: TravelExpense, Name: "Travel & transport", Type: Expense},
+	{Number: MealsExpense, Name: "Meals & entertainment", Type: Expense},
+	{Number: MarketingExpense, Name: "Marketing & advertising", Type: Expense},
+	{Number: ServicesExpense, Name: "Professional services", Type: Expense},
 	{Number: UncategorizedExpense, Name: "Uncategorized expense", Type: Expense},
 }
 

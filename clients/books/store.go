@@ -136,6 +136,43 @@ CREATE TABLE IF NOT EXISTS bank_settlement (
   external_id       TEXT NOT NULL,
   settled_at        TEXT NOT NULL,
   UNIQUE(connector, external_id)
+);
+-- books_inbox is the per-org queue of uploaded-but-unbooked documents (scan.go). A
+-- document enters 'unsorted' on upload, moves to 'draft' once the scanner extracts its
+-- fields, and 'booked' once a reviewed voucher posts. hash (sha256 of the file bytes) is
+-- UNIQUE, so re-uploading the same file is an idempotent no-op — one row per document,
+-- never a duplicate in the queue. extracted holds the scanner's JSON summary for the list.
+CREATE TABLE IF NOT EXISTS books_inbox (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  filename   TEXT NOT NULL DEFAULT '',
+  hash       TEXT NOT NULL,
+  status     TEXT NOT NULL,
+  extracted  TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  UNIQUE(hash)
+);
+CREATE INDEX IF NOT EXISTS books_inbox_status ON books_inbox(status);
+-- books_vendor resolves a raw merchant string (as printed on a receipt) to a canonical
+-- vendor and its default expense category (a COA account number). aliases is a JSON array
+-- of alternate spellings; a scan whose merchant matches the canonical name or any alias
+-- auto-fills the category. canonical is UNIQUE — one row per vendor.
+CREATE TABLE IF NOT EXISTS books_vendor (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  canonical        TEXT NOT NULL,
+  aliases          TEXT NOT NULL DEFAULT '[]',
+  default_category TEXT NOT NULL DEFAULT '',
+  UNIQUE(canonical)
+);
+-- books_rule is the auto-categorization rule set: a match pattern → a category (COA
+-- account number), highest priority first. A scanned merchant containing a rule's pattern
+-- self-classifies, so once a human sets a rule a known vendor's future bills book
+-- automatically. pattern is UNIQUE — one rule per pattern.
+CREATE TABLE IF NOT EXISTS books_rule (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  pattern  TEXT NOT NULL,
+  category TEXT NOT NULL,
+  priority INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(pattern)
 );`
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("books migrate: %w", err)
