@@ -124,7 +124,10 @@ func (c *httpController) configured() bool { return c.adminToken != "" }
 // accountEmail / accountPassword derive the per-org credential deterministically,
 // so provisioning is stateless and idempotent: the same org always resolves to
 // the same zrok account without any local persistence.
-func accountEmail(org string) string { return "share+" + org + "@hanzo.ai" }
+// accountEmail derives the per-org account email. A hyphen (not "+") — a
+// plus-addressed local part trips some validators, and this is a stable
+// account identity, not a routing alias.
+func accountEmail(org string) string { return "share-" + org + "@hanzo.ai" }
 
 func (c *httpController) accountPassword(org string) string {
 	m := hmac.New(sha256.New, c.secret)
