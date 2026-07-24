@@ -100,4 +100,7 @@ func routes(app *zip.App, s *cloud.Service[*state]) {
 	g.Get("/:id", cloud.Handle(s, getEndpoint))
 	g.Put("/:id", cloud.Handle(s, updateEndpoint))
 	g.Delete("/:id", cloud.Handle(s, deleteEndpoint))
+	g.Get("/:id/deliveries", cloud.Handle(s, listDeliveries))
+	g.Post("/:id/test", cloud.Handle(s, testEndpoint))
+	g.Post("/:id/rotate-secret", cloud.Handle(s, rotateSecret))
 }
