@@ -64,6 +64,7 @@ var frozen = []struct {
 	{"help", false, false},           // new: Hanzo Support public plane /v1/help (after knowledge; framework lane with a companion subsystem, no store → no Shutdown)
 	{"content", false, true},         // new: marketing content loop (after knowledge)
 	{"catalogsync", false, true},     // new: reverse loop (product.created → render) after content
+	{"webhooks", false, true},        // new: platform-global /v1/webhooks registry + bus-driven dispatcher (after catalogsync); owns per-org stores + worker pool → Shutdown
 	{"ml", true, false},              // was order 130
 	{"usage", false, false},          // was order 131
 	{"leaderboard", false, true},     // new: gamified usage analytics (after usage), owns opt-in SQLite (Shutdown)
@@ -81,6 +82,7 @@ var frozen = []struct {
 	{"captable", false, true},        // was order 133
 	{"code", false, true},            // was order 134
 	{"zero-trust", false, false},     // was order 134
+	{"share", false, false},          // ngrok-native public sharing (/v1/share/*)
 	{"dataroom", true, true},         // was order 134
 	{"graph", false, false},          // was order 135
 	{"security", true, true},         // was order 136
@@ -108,6 +110,7 @@ var frozen = []struct {
 	{"benchmark", false, false},      // benchmark plane (after evals, before treasury)
 	{"research", false, true},        // R&D evidence plane + /research board (HIP-0512), arena sibling after benchmark; Shutdown closes per-org stores
 	{"experiments", false, true},     // unified A/B EXPERIMENT primitive: composes flags(assign)+analytics(measure)+research(evidence); Shutdown closes the registry stores
+	{"books", false, true},           // AI bookkeeper (/v1/books, per-org SQLite); Shutdown closes org stores
 	{"treasury", false, true},        // was order 146
 	{"admin", false, false},          // was order 146
 	{"admission", false, true},       // launch-control gate: composes flags (registry+seed+mode route+Enforce); Shutdown closes the registry store
