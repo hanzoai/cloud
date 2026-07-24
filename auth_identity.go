@@ -48,6 +48,13 @@ type idClaims struct {
 	PreferredUsername string       `json:"preferred_username"` // id fallback
 	Email             string       `json:"email"`
 	IsAdmin           bool         `json:"isAdmin"`
+	// Type is IAM's account kind: "application" for a client_credentials MACHINE
+	// identity (object/token_oauth.go stamps Type:"application"), else a human kind
+	// ("normal-user", …). It is the discriminator that keeps a machine token — of ANY
+	// app, not only the KMS-sync one — from ever being granted SuperAdmin. Empty on a
+	// token that predates the claim ⟹ treated as non-machine (fail toward the KMS-aud
+	// check below, never toward granting admin).
+	Type              string       `json:"type"`
 	Orgs              []model.OrgRef `json:"orgs"` // membership SET (home first); empty on legacy tokens
 }
 
@@ -193,6 +200,21 @@ func isKMSMachinePrincipal(claims *idClaims) bool {
 		}
 	}
 	return false
+}
+
+// isMachinePrincipal reports whether a validated token is a MACHINE (non-human)
+// identity — the predicate SanitizeIdentity uses to DENY SuperAdmin and the org-admin
+// signal. A client_credentials token carries IAM's `type` == "application"
+// (object/token_oauth.go), which catches EVERY machine app regardless of its audience;
+// this is the fix for the audience-decomplection widening SuperAdmin's reach — a
+// generic admin-org machine app must not become platform-admin just because it belongs
+// to the admin org. It UNIONS the owner-bound KMS-sync check so a machine token is
+// still excluded even on the (defensive) path where `type` is absent but the
+// <owner>-platform-kms audience is present. Fail-closed: unknown/empty type is treated
+// as NON-machine so a real human admin (who may carry no `type`) is never locked out —
+// the KMS-aud fallback still catches the one machine family we can identify audience-only.
+func isMachinePrincipal(claims *idClaims) bool {
+	return claims.Type == "application" || isKMSMachinePrincipal(claims)
 }
 
 // validate parses raw, verifies its signature against the JWKS, and enforces
