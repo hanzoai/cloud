@@ -27,6 +27,17 @@ var standardOf = map[string]StandardEvent{
 	"signup_completed": EventSignUp,
 	"checkout_started": EventStartCheckout,
 	"order_completed":  EventPurchase,
+
+	// Ecommerce — the ONLY source of the commerce standard events. Both the
+	// @hanzo/event canonical (Segment-style) names AND the schema.org / GA4 action
+	// names a site may emit collapse onto the same StandardEvent, so an ecommerce
+	// event maps to each platform's native conversion regardless of source vocabulary.
+	"product_viewed": EventViewContent,
+	"product_view":   EventViewContent,
+	"product_added":  EventAddToCart,
+	"add_to_cart":    EventAddToCart,
+	"begin_checkout": EventStartCheckout,
+	"purchase":       EventPurchase,
 }
 
 // Translate maps one canonical event onto the normalized Conversion every adapter
@@ -42,8 +53,62 @@ func Translate(ev analytics.SinkEvent) Conversion {
 		Currency:   conversionCurrency(ev),
 		User:       liftUser(ev),
 		URL:        ev.URL,
+		Referrer:   ev.Referrer,
+		Items:      liftItems(ev),
 		Properties: ev.Properties,
 	}
+}
+
+// liftItems lifts the ecommerce line items from an event: an explicit items/products
+// array in the properties (each row a product map), else a single item synthesized
+// from the first-class product id + quantity. nil when the event carries no commerce
+// items — a non-commerce event yields none and every adapter omits the field.
+func liftItems(ev analytics.SinkEvent) []Item {
+	for _, key := range []string{"items", "products"} {
+		raw, ok := ev.Properties[key].([]any)
+		if !ok || len(raw) == 0 {
+			continue
+		}
+		out := make([]Item, 0, len(raw))
+		for _, r := range raw {
+			if m, ok := r.(map[string]any); ok {
+				out = append(out, itemOf(m))
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	if id := strings.TrimSpace(ev.ProductID); id != "" {
+		return []Item{{ID: id, Quantity: float64(ev.Quantity)}}
+	}
+	return nil
+}
+
+// itemOf renders one raw product map into a normalized Item, tolerant of the GA4
+// (item_id/item_name/price), Segment (product_id/sku/name), and schema.org (id/name)
+// key vocabularies so ANY tracker's items array maps without the caller re-keying.
+func itemOf(m map[string]any) Item {
+	return Item{
+		ID:       strProp(m, "item_id", "id", "sku", "product_id", "productId"),
+		Name:     strProp(m, "item_name", "name", "title"),
+		Category: strProp(m, "item_category", "category"),
+		Brand:    strProp(m, "item_brand", "brand"),
+		Variant:  strProp(m, "item_variant", "variant"),
+		Price:    firstFloat(m, "price", "item_price", "value", "amount"),
+		Quantity: firstFloat(m, "quantity", "qty"),
+	}
+}
+
+// firstFloat returns the first numeric value across keys (0 if none) — the multi-key
+// float reader (floatProp is single-key) the item lift uses for price/quantity.
+func firstFloat(p map[string]any, keys ...string) float64 {
+	for _, k := range keys {
+		if f, ok := floatProp(p, k); ok {
+			return f
+		}
+	}
+	return 0
 }
 
 // conversionValue is the monetary value of a conversion in MAJOR units: the event's

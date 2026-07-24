@@ -113,7 +113,49 @@ func ga4EventOf(cv Conversion) ga4Event {
 	if cv.EventID != "" {
 		params["event_id"] = cv.EventID
 	}
+	// A purchase carries GA4's native transaction_id (its ecommerce dedup + reporting
+	// key), sourced from the same dedup id the pixel shares.
+	if cv.Standard == EventPurchase && cv.EventID != "" {
+		params["transaction_id"] = cv.EventID
+	}
+	// Ecommerce line items → GA4's native items[] (view_item / add_to_cart /
+	// begin_checkout / purchase all read it alongside value + currency).
+	if len(cv.Items) > 0 {
+		params["items"] = ga4Items(cv.Items)
+	}
 	return ga4Event{Name: name, Params: params}
+}
+
+// ga4Items renders the normalized items into GA4's items[] param, omitting empty
+// fields so a sink only sees what the event carried.
+func ga4Items(items []Item) []map[string]any {
+	out := make([]map[string]any, 0, len(items))
+	for _, it := range items {
+		m := map[string]any{}
+		if it.ID != "" {
+			m["item_id"] = it.ID
+		}
+		if it.Name != "" {
+			m["item_name"] = it.Name
+		}
+		if it.Category != "" {
+			m["item_category"] = it.Category
+		}
+		if it.Brand != "" {
+			m["item_brand"] = it.Brand
+		}
+		if it.Variant != "" {
+			m["item_variant"] = it.Variant
+		}
+		if it.Price > 0 {
+			m["price"] = it.Price
+		}
+		if it.Quantity > 0 {
+			m["quantity"] = it.Quantity
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 // ga4ClientID is the visitor id MP keys on: the external (distinct/anonymous) id.
