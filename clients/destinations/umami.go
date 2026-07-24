@@ -61,7 +61,7 @@ type umamiPayload struct {
 	Hostname   string         `json:"hostname,omitempty"`
 	URL        string         `json:"url,omitempty"`
 	Referrer   string         `json:"referrer,omitempty"`
-	DistinctID string         `json:"distinctId,omitempty"`
+	DistinctID string         `json:"id,omitempty"` // Umami keys the session on `id`: sessionId = id ? uuid(website,id) : uuid(website,ip,ua,salt)
 	Timestamp  int64          `json:"timestamp,omitempty"`
 	Data       map[string]any `json:"data,omitempty"`
 }
