@@ -140,6 +140,7 @@ import (
 	"github.com/hanzoai/cloud/clients/venue"
 	"github.com/hanzoai/cloud/clients/visor"
 	"github.com/hanzoai/cloud/clients/wallets"
+	"github.com/hanzoai/cloud/clients/webhooks"
 	"github.com/hanzoai/cloud/clients/websearch"
 	"github.com/hanzoai/cloud/clients/world"
 	"github.com/hanzoai/cloud/clients/x402"
@@ -299,6 +300,13 @@ func Wire() []cloud.MountSpec {
 		// After content (whose EnsureCatalogAsset it drives). Inert until CLOUD_COMMERCE_NATS_URL
 		// names the NATS carrying commerce catalog events — the reverse of the forward edge.
 		{Name: "catalogsync", Mount: catalogsync.Mount, Shutdown: catalogsync.Shutdown},
+		// The platform-global webhook layer: /v1/webhooks registry (per-org SQLite) +
+		// ONE durable JetStream consumer that delivers ANY bus event to org-registered
+		// HTTP subscribers. A bus consumer like catalogsync — placed adjacent to it and
+		// after the commerce embed whose COMMERCE stream it reads. Fail-soft: the
+		// registry serves even with the bus down; the consumer retries in the background.
+		// Owns per-org store handles + a worker pool → Shutdown drains both.
+		{Name: "webhooks", Mount: webhooks.Mount, Shutdown: webhooks.Shutdown},
 		{Name: "ml", Mount: ml.Mount, OwnsHealth: true},
 		{Name: "usage", Mount: usage.Mount},
 		// Gamified usage analytics: /v1/usage/leaderboard + /v1/usage/activity + the
