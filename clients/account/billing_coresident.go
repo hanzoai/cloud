@@ -46,8 +46,12 @@ import (
 //   - Neither: refuse. A bearer-less request with a forged X-Org-Id has no validated
 //     principal and is fail-closed here, before the read handler runs.
 //
-// The pin rewrites the request URI's query string in place; fasthttp's SetQueryString
-// resets the parsed-args cache, so the handler's later c.Query() reads the pinned values.
+// The pin rewrites the request URI's query string AND (on a write) the JSON body in place;
+// fasthttp's SetQueryString resets the parsed-args cache and SetBody replaces the body
+// bytes, so the handler's later c.Query() / c.Bind() read the pinned values. Pinning the
+// body is what keeps a co-resident WRITE handler that reads its subject from the body
+// (commerce's CreatePaymentMethod reads customerId from the JSON body) IDOR-safe — query-only
+// pinning would leave a client-named customerId/userId in the body untouched.
 func PinBillingSubject() zip.Handler {
 	return func(c *zip.Ctx) error {
 		inQuery, _ := url.ParseQuery(string(c.Fiber().Request().URI().QueryString()))
@@ -69,7 +73,17 @@ func PinBillingSubject() zip.Handler {
 			Account: principal.BillingAccount(c),
 		}).Subject()
 
+		// Pin the subject on BOTH the query AND the write body — the SAME two-helper
+		// scoping billingData applies (scopedBillingSearch + scopedBillingBody). A
+		// co-resident WRITE handler that reads its subject from the body (commerce's
+		// CreatePaymentMethod → customerId) is only IDOR-safe if the body is pinned too.
+		// scopedBillingBody overwrites the subject keys and preserves every other field
+		// (card, type, sourceId, …); a non-JSON / empty body is returned unchanged, so a
+		// GET read carries no body and is unaffected.
 		c.Fiber().Request().URI().SetQueryString(scopedBillingSearch(inQuery, subject).Encode())
+		if len(c.Body()) > 0 {
+			c.Fiber().Request().SetBody(scopedBillingBody(c.Body(), subject))
+		}
 		return c.Next()
 	}
 }

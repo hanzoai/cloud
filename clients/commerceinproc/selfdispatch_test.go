@@ -186,3 +186,124 @@ func TestSpendAlertsAuthorizeShadowsBridge(t *testing.T) {
 		}
 	})
 }
+
+// assertPostShadowsBridge is the shared body of every "co-resident POST billing WRITE shadows
+// the self-proxying /v1/billing/* bridge wildcard" regression — the whole class the P0 that
+// broke console Billing → Credits belonged to. specificPattern is the route as registered
+// co-resident (may carry a :param); requestPath is the concrete path the browser POSTs.
+//
+// It models both arrangements on the POST transport this seam owns:
+//   - build(false) registers ONLY the account bridge's self-proxying POST /v1/billing/*
+//     wildcard (like MountBridge at order 122): billingData → commerceDo re-dials COMMERCE_URL
+//     (the public edge = this binary) BY PATH through THIS transport, re-entering the wildcard
+//     until the depth-8 guard refuses — the exact user-facing 502.
+//   - build(true) ALSO registers the specific commerce route FIRST (like mountCommerce at
+//     order 100), so it shadows the wildcard and the write runs once at depth 1 — no loop.
+func assertPostShadowsBridge(t *testing.T, specificPattern, requestPath string) {
+	t.Helper()
+	const okBody = `{"status":"ok"}`
+	newReq := func() *http.Request {
+		req, _ := http.NewRequest(http.MethodPost, BaseURL("")+requestPath, strings.NewReader(`{"sourceId":"cnon:card-nonce-ok"}`))
+		req.Header.Set("Authorization", "Bearer service-token")
+		req.Header.Set("X-Org-Id", "hanzo")
+		return req
+	}
+	build := func(withSpecific bool) (app *zip.App, specificHits, wildcardHits *int32) {
+		var sHits, wHits int32
+		app = zip.New(zip.Config{})
+		if withSpecific {
+			app.Post(specificPattern, func(c *zip.Ctx) error {
+				atomic.AddInt32(&sHits, 1)
+				return c.Bytes(http.StatusOK, []byte(okBody))
+			})
+		}
+		app.Post("/v1/billing/*", func(c *zip.Ctx) error {
+			atomic.AddInt32(&wHits, 1)
+			resp, err := Client(5 * time.Second).Do(newReq())
+			if err != nil { // the depth guard's refusal surfaces here — the 502 the user saw.
+				return c.Bytes(http.StatusBadGateway, []byte(err.Error()))
+			}
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			return c.Bytes(resp.StatusCode, body)
+		})
+		return app, &sHits, &wHits
+	}
+	do := func() (int, string) {
+		resp, err := Client(5 * time.Second).Do(newReq())
+		if err != nil {
+			t.Fatalf("dispatch: %v", err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(body)
+	}
+
+	// BUG (no co-resident handler): the wildcard self-loops until the depth guard refuses, so
+	// it is entered exactly maxDepth times and the outer request surfaces the depth-exceeded
+	// 502 carrying the EXACT re-entrancy refusal for THIS route.
+	t.Run("bug_wildcard_self_loops", func(t *testing.T) {
+		t.Cleanup(func() { SetHandler(nil) })
+		app, specificHits, wildcardHits := build(false)
+		SetApp(app)
+		status, body := do()
+		t.Logf("no-shadow %s => status=%d wildcardHits=%d body=%s", requestPath, status, atomic.LoadInt32(wildcardHits), body)
+		if got := atomic.LoadInt32(specificHits); got != 0 {
+			t.Fatalf("specific hits = %d, want 0 (no specific route registered)", got)
+		}
+		if got := atomic.LoadInt32(wildcardHits); got != maxDepth {
+			t.Fatalf("wildcard entered %d times, want maxDepth=%d (the self-dispatch loop)", got, maxDepth)
+		}
+		if status != http.StatusBadGateway ||
+			!strings.Contains(body, "dispatch depth") ||
+			!strings.Contains(body, "POST "+requestPath) {
+			t.Fatalf("outer status=%d body=%q, want 502 carrying the depth-exceeded refusal for POST %s", status, body, requestPath)
+		}
+	})
+
+	// FIX (co-resident specific route registered ahead of the wildcard): it shadows the
+	// wildcard, so the handler runs once at depth 1, the wildcard's self-proxy NEVER fires,
+	// and the write returns 200 — no loop, no depth-8 502.
+	t.Run("fix_specific_route_shadows_wildcard", func(t *testing.T) {
+		t.Cleanup(func() { SetHandler(nil) })
+		app, specificHits, wildcardHits := build(true)
+		SetApp(app)
+		status, body := do()
+		t.Logf("shadowed %s => status=%d specificHits=%d wildcardHits=%d body=%s",
+			requestPath, status, atomic.LoadInt32(specificHits), atomic.LoadInt32(wildcardHits), body)
+		if got := atomic.LoadInt32(specificHits); got != 1 {
+			t.Fatalf("specific route entered %d times, want exactly 1 (served in-process at depth 1)", got)
+		}
+		if got := atomic.LoadInt32(wildcardHits); got != 0 {
+			t.Fatalf("wildcard self-dispatch fired %d times, want 0 — the specific route must shadow it", got)
+		}
+		if status != http.StatusOK {
+			t.Fatalf("outer status = %d, want 200 (the co-resident write, no self-dispatch 502)", status)
+		}
+	})
+}
+
+// TestTopupTokenShadowsBridge — the reported P0: POST /v1/billing/topup/token (inline Square
+// card top-up) self-dispatched to the depth-8 502 until commerce's TopupWithToken was
+// registered co-resident (apps/commerce.go mountCommerce).
+func TestTopupTokenShadowsBridge(t *testing.T) {
+	assertPostShadowsBridge(t, "/v1/billing/topup/token", "/v1/billing/topup/token")
+}
+
+// TestPaymentMethodsShadowsBridge — the save-card write (POST /v1/billing/payment-methods →
+// commerce CreatePaymentMethod), same self-dispatch class, now shadowed co-resident.
+func TestPaymentMethodsShadowsBridge(t *testing.T) {
+	assertPostShadowsBridge(t, "/v1/billing/payment-methods", "/v1/billing/payment-methods")
+}
+
+// TestSubscriptionCancelShadowsBridge — POST /v1/billing/subscriptions/:id/cancel →
+// commerce CancelBillingSubscription, same class, now shadowed co-resident.
+func TestSubscriptionCancelShadowsBridge(t *testing.T) {
+	assertPostShadowsBridge(t, "/v1/billing/subscriptions/:id/cancel", "/v1/billing/subscriptions/sub_1/cancel")
+}
+
+// TestSubscriptionReactivateShadowsBridge — POST /v1/billing/subscriptions/:id/reactivate →
+// commerce ReactivateBillingSubscription, same class, now shadowed co-resident.
+func TestSubscriptionReactivateShadowsBridge(t *testing.T) {
+	assertPostShadowsBridge(t, "/v1/billing/subscriptions/:id/reactivate", "/v1/billing/subscriptions/sub_1/reactivate")
+}
