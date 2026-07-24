@@ -63,6 +63,7 @@ import (
 	"github.com/hanzoai/cloud/clients/base"
 	"github.com/hanzoai/cloud/clients/benchmark"
 	"github.com/hanzoai/cloud/clients/billing"
+	"github.com/hanzoai/cloud/clients/books"
 	"github.com/hanzoai/cloud/clients/bots"
 	"github.com/hanzoai/cloud/clients/campaign"
 	"github.com/hanzoai/cloud/clients/captable"
@@ -123,6 +124,7 @@ import (
 	"github.com/hanzoai/cloud/clients/sbom"
 	"github.com/hanzoai/cloud/clients/security"
 	"github.com/hanzoai/cloud/clients/settings"
+	"github.com/hanzoai/cloud/clients/share"
 	"github.com/hanzoai/cloud/clients/sign"
 	"github.com/hanzoai/cloud/clients/social"
 	"github.com/hanzoai/cloud/clients/storage"
@@ -139,7 +141,6 @@ import (
 	"github.com/hanzoai/cloud/clients/visor"
 	"github.com/hanzoai/cloud/clients/wallets"
 	"github.com/hanzoai/cloud/clients/websearch"
-	"github.com/hanzoai/cloud/clients/share"
 	"github.com/hanzoai/cloud/clients/world"
 	"github.com/hanzoai/cloud/clients/x402"
 	"github.com/hanzoai/cloud/clients/zt"
@@ -402,6 +403,10 @@ func Wire() []cloud.MountSpec {
 		// research — so it mounts AFTER all three. It owns only the experiment registry
 		// store → Shutdown. clients/campaign composes it (experiments.Assign/Analyze).
 		{Name: "experiments", Mount: experiments.Mount, Shutdown: ctxShutdown(experiments.Shutdown)},
+		// The revenue BOOKS spine (/v1/books): a native double-entry general ledger that
+		// reads commerce transactions (the sole posting source) and books the accounting twin —
+		// plus bank import (PDF/OFX/CSV/Plaid/Teller), reconciliation, and the AI Ask brain.
+		{Name: "books", Mount: books.Mount, Shutdown: ctxShutdown(books.Shutdown)},
 		{Name: "treasury", Mount: treasury.Mount, Shutdown: ctxShutdown(treasury.Shutdown)},
 		{Name: "admin", Mount: admin.Mount},
 		// Launch-control gate (per-service waitlist): the COMPLETE feature — host→service
