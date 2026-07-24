@@ -149,10 +149,11 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce, *fakeG
 	s := &cloud.Service[state]{
 		Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "authors"),
 		State: state{
-			store:     store,
-			commerce:  fc,
-			forge:     fg,
-			badgeBase: "https://hanzo.app",
+			store:         store,
+			commerce:      fc,
+			forge:         fg,
+			badgeBase:     "https://hanzo.app",
+			maintainerOrg: "hanzo",
 		},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
@@ -563,29 +564,35 @@ func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
 	req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgA", false, map[string]any{"repoUrl": "acme/widgets"})
 	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false, map[string]any{"repoUrl": "acme/widgets", "project": "proj-b"})
 	approve(t, app, idA)
-	fc.setSpend("orgB", 10000) // spend $100 × 25% share → accrue 2500c pending
+	fc.setSpend("orgB", 10000) // spend $100 × 20% share → accrue 2000c pending
 	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
+
+	// Amounts are SHARE-DERIVED so this proof never drifts when the share changes:
+	// accrued = spend × 20%; a credits payout takes 3/5, cash takes the rest.
+	const accrued = 10000 * defaultShareBps / bpsDenom // 2000c @ 20%
+	const firstPay = accrued * 3 / 5                   // 1200c credits
+	const restPay = accrued - firstPay                 // 800c cash
 
 	// Non-admin is refused on payout.
 	if st, _ := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "orgA", false, map[string]any{"amountCents": 100, "method": "credits"}); st != http.StatusForbidden {
 		t.Fatalf("non-admin payout want 403, got %d", st)
 	}
-	// Over-pending → 400 (2500 available, ask 3000).
-	if st, _ := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 3000, "method": "credits"}); st != http.StatusBadRequest {
+	// Over-pending → 400 (accrued available, ask accrued+500).
+	if st, _ := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": accrued + 500, "method": "credits"}); st != http.StatusBadRequest {
 		t.Fatalf("over-pending payout want 400, got %d", st)
 	}
 
-	// Credits payout of 1500c → ONE grant into orgA's wallet, paid moves.
-	st, body := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 1500, "method": "credits", "reference": "ledger-1"})
+	// Credits payout of firstPay → ONE grant into orgA's wallet, paid moves.
+	st, body := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": firstPay, "method": "credits", "reference": "ledger-1"})
 	if st != http.StatusOK {
 		t.Fatalf("credits payout want 200, got %d (%s)", st, body)
 	}
-	if fc.bal("orgA") != 1500 || fc.depositCount() != 1 {
-		t.Fatalf("credits payout wallet=%d deposits=%d, want 1500/1", fc.bal("orgA"), fc.depositCount())
+	if fc.bal("orgA") != firstPay || fc.depositCount() != 1 {
+		t.Fatalf("credits payout wallet=%d deposits=%d, want %d/1", fc.bal("orgA"), fc.depositCount(), firstPay)
 	}
 	a, _ := s.State.store.GetByID(ctx, idA)
-	if a.PaidCents != 1500 || a.PendingCents() != 1000 {
-		t.Fatalf("after credits payout: paid=%d pending=%d (want 1500/1000)", a.PaidCents, a.PendingCents())
+	if a.PaidCents != firstPay || a.PendingCents() != restPay {
+		t.Fatalf("after credits payout: paid=%d pending=%d (want %d/%d)", a.PaidCents, a.PendingCents(), firstPay, restPay)
 	}
 	pd := envData(t, body)
 	var payout struct {
@@ -594,21 +601,21 @@ func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
 		Txn         string `json:"txn"`
 	}
 	_ = json.Unmarshal(pd["payout"], &payout)
-	if payout.AmountCents != 1500 || payout.Method != "credits" || payout.Txn == "" {
+	if payout.AmountCents != firstPay || payout.Method != "credits" || payout.Txn == "" {
 		t.Fatalf("payout view wrong: %+v", payout)
 	}
 
-	// Cash payout of the remaining 1000c via wire → RECORD-ONLY (no new grant).
-	st, _ = req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 1000, "method": "wire", "reference": "wire-xyz"})
+	// Cash payout of the rest via wire → RECORD-ONLY (no new grant).
+	st, _ = req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": restPay, "method": "wire", "reference": "wire-xyz"})
 	if st != http.StatusOK {
 		t.Fatalf("cash payout want 200, got %d", st)
 	}
-	if fc.depositCount() != 1 || fc.bal("orgA") != 1500 {
+	if fc.depositCount() != 1 || fc.bal("orgA") != firstPay {
 		t.Fatalf("cash payout moved money: deposits=%d bal=%d", fc.depositCount(), fc.bal("orgA"))
 	}
 	a, _ = s.State.store.GetByID(ctx, idA)
-	if a.PaidCents != 2500 || a.PendingCents() != 0 {
-		t.Fatalf("after cash payout: paid=%d pending=%d (want 2500/0)", a.PaidCents, a.PendingCents())
+	if a.PaidCents != accrued || a.PendingCents() != 0 {
+		t.Fatalf("after cash payout: paid=%d pending=%d (want %d/0)", a.PaidCents, a.PendingCents(), accrued)
 	}
 	// Drained → any further payout is 400.
 	if st, _ := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 1, "method": "credits"}); st != http.StatusBadRequest {
@@ -681,7 +688,7 @@ func TestAdminGateAndDirectory(t *testing.T) {
 }
 
 // TestGitLabVerifyAndLedger proves the GitLab forge works end to end (canonicalize →
-// file-verify a gitlab.com repo → deploy → accrue @25% share) AND that each accrual
+// file-verify a gitlab.com repo → deploy → accrue @20% share) AND that each accrual
 // appends an immutable ledger row whose compute_proof is NULL (the hanzod attestation
 // is a follow-up, never fabricated).
 func TestGitLabVerifyAndLedger(t *testing.T) {
@@ -714,14 +721,14 @@ func TestGitLabVerifyAndLedger(t *testing.T) {
 		t.Fatalf("gitlab verify wrong: %+v", vr.Repo)
 	}
 
-	// orgH deploys it, orgG is approved, orgH spends $100 → royalty @25% = 2500c.
+	// orgH deploys it, orgG is approved, orgH spends $100 → royalty @20% = 2000c.
 	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgH", false, map[string]any{"repoUrl": "gitlab.com/glorg/gltool", "project": "proj-h"})
 	approve(t, app, cr.ID)
 	fc.setSpend("orgH", 10000)
 	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
 
 	a, _ := s.State.store.GetByID(ctx, cr.ID)
-	const want = 10000 * defaultShareBps / bpsDenom // 2500 @ 25%
+	const want = 10000 * defaultShareBps / bpsDenom // 2000 @ 20%
 	if a.AccruedCents != want {
 		t.Fatalf("gitlab author accrued = %d, want %d", a.AccruedCents, want)
 	}
@@ -745,6 +752,113 @@ func TestGitLabVerifyAndLedger(t *testing.T) {
 	rows2, _ := s.State.store.ListLedger(ctx, cr.ID, 100)
 	if len(rows2) != 1 {
 		t.Fatalf("re-sweep appended a ledger row: %d, want 1 (append-only, at-most-once)", len(rows2))
+	}
+}
+
+// TestAutoPayoutDrainsPendingIdempotent is the AUTOMATION proof: the scheduler's
+// sweepAndPayout accrues AND pays an approved author's pending royalty in one pass
+// (no human sweep/payout call), and a second pass in the same period pays NOTHING more
+// — the pending guard makes auto-payout at-most-once, never a double-pay.
+func TestAutoPayoutDrainsPendingIdempotent(t *testing.T) {
+	app, s, fc, fg := mount(t)
+	ctx := context.Background()
+	idA, _ := connectOrg(t, app, s, "orgA", "acmedev")
+	fg.setLinked("orgA", "acmedev", "tok_a")
+	fg.setAdmin("tok_a", "acme", "widgets")
+	req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgA", false, map[string]any{"repoUrl": "acme/widgets"})
+	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false, map[string]any{"repoUrl": "acme/widgets", "project": "proj-b"})
+	approve(t, app, idA)
+	fc.setSpend("orgB", 10000) // $100 × 20% → 2000c
+
+	// The automatic loop accrues AND pays in one pass — the closed money loop.
+	sweepAndPayout(s)
+	const want = 10000 * defaultShareBps / bpsDenom // 2000
+	a, _ := s.State.store.GetByID(ctx, idA)
+	if a.AccruedCents != want || a.PaidCents != want || a.PendingCents() != 0 {
+		t.Fatalf("auto loop: accrued=%d paid=%d pending=%d, want %d/%d/0", a.AccruedCents, a.PaidCents, a.PendingCents(), want, want)
+	}
+	// External author → the payout is a credits grant into their wallet, exactly once.
+	if fc.bal("orgA") != want || fc.depositCount() != 1 {
+		t.Fatalf("auto payout wallet=%d deposits=%d, want %d/1", fc.bal("orgA"), fc.depositCount(), want)
+	}
+	// IDEMPOTENT: a second automatic pass (same period) accrues nothing more and pays
+	// nothing more — pending is 0, so RecordPayout's guard refuses. No double-pay.
+	sweepAndPayout(s)
+	a, _ = s.State.store.GetByID(ctx, idA)
+	if a.PaidCents != want || a.AccruedCents != want || fc.depositCount() != 1 {
+		t.Fatalf("double auto-pay! accrued=%d paid=%d deposits=%d, want %d/%d/1", a.AccruedCents, a.PaidCents, fc.depositCount(), want, want)
+	}
+}
+
+// TestHanzoForkRoutesToTreasury is the ATTRIBUTION proof: an EXTERNAL org deploying a
+// Hanzo-maintained template (owner ∈ hanzoai) auto-attributes to the treasury SYSTEM
+// author (org=hanzo) with NO human verify step, accrues 20%, and the automatic payout
+// routes that royalty to the Hanzo treasury ("pay ourselves") — it NEVER lands in an
+// external commerce wallet. A self-deploy by the Hanzo org itself earns nothing.
+func TestHanzoForkRoutesToTreasury(t *testing.T) {
+	app, s, fc, _ := mount(t) // maintainerOrg = "hanzo"
+	ctx := context.Background()
+
+	// An external org deploys hanzoai/chat-starter — recordDeploy auto-attributes it.
+	st, body := req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false,
+		map[string]any{"repoUrl": "https://github.com/hanzoai/chat-starter", "project": "proj-b"})
+	if st != http.StatusCreated || !recorded(t, body) {
+		t.Fatalf("hanzo-fork deploy want 201 recorded, got %d (%s)", st, body)
+	}
+	// The treasury system author now exists (org=hanzo), approved, 20%, owning the repo.
+	sys, err := s.State.store.GetByOrg(ctx, "hanzo")
+	if err != nil {
+		t.Fatalf("treasury system author missing: %v", err)
+	}
+	if sys.Status != StatusApproved || sys.ShareBps != defaultShareBps {
+		t.Fatalf("system author wrong: %+v", sys)
+	}
+	repos, _ := s.State.store.ListRepos(ctx, sys.ID, 10)
+	if len(repos) != 1 || repos[0].RepoURL != "github.com/hanzoai/chat-starter" || repos[0].Method != MethodMaintainer {
+		t.Fatalf("maintained repo attribution wrong: %+v", repos)
+	}
+
+	// orgB spends $100 → Hanzo earns 20% = 2000c, auto-paid INTO the treasury.
+	fc.setSpend("orgB", 10000)
+	sweepAndPayout(s)
+	const want = 10000 * defaultShareBps / bpsDenom // 2000
+	sys, _ = s.State.store.GetByID(ctx, sys.ID)
+	if sys.AccruedCents != want || sys.PaidCents != want || sys.PendingCents() != 0 {
+		t.Fatalf("treasury author accrued=%d paid=%d pending=%d, want %d/%d/0", sys.AccruedCents, sys.PaidCents, sys.PendingCents(), want, want)
+	}
+	// The royalty went to the treasury reserve, NOT a customer wallet: zero deposits.
+	if fc.depositCount() != 0 {
+		t.Fatalf("hanzo-fork royalty hit an external commerce wallet (%d deposits) — must credit the treasury", fc.depositCount())
+	}
+
+	// A self-deploy by the Hanzo org itself never earns (self excluded from accrual).
+	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "hanzo", false,
+		map[string]any{"repoUrl": "hanzoai/chat-starter", "project": "proj-self"})
+	fc.setSpend("hanzo", 50000)
+	sweepAndPayout(s)
+	sys, _ = s.State.store.GetByID(ctx, sys.ID)
+	if sys.AccruedCents != want {
+		t.Fatalf("self-deploy accrued to treasury: %d, want %d (self excluded)", sys.AccruedCents, want)
+	}
+}
+
+// TestIsMaintainedRepo proves the Hanzo-fork detector: brand-owned repos (hanzoai/*,
+// hanzo/*, hanzo-*) route to the treasury; everything else does not; white-label by
+// brand (a lux deployment claims luxfi/*, never hanzoai/*).
+func TestIsMaintainedRepo(t *testing.T) {
+	for _, r := range []string{"github.com/hanzoai/chat", "github.com/hanzo/site", "github.com/hanzo-labs/x", "gitlab.com/hanzoai/y"} {
+		if !isMaintainedRepo(r, "hanzo") {
+			t.Fatalf("isMaintainedRepo(%q, hanzo) = false, want true", r)
+		}
+	}
+	for _, r := range []string{"github.com/acme/widgets", "github.com/hanzoworld/x", "github.com/luxfi/node", ""} {
+		if isMaintainedRepo(r, "hanzo") {
+			t.Fatalf("isMaintainedRepo(%q, hanzo) = true, want false", r)
+		}
+	}
+	// White-label: a lux deployment claims luxfi/*, not hanzoai/*.
+	if !isMaintainedRepo("github.com/luxfi/node", "lux") || isMaintainedRepo("github.com/hanzoai/chat", "lux") {
+		t.Fatal("white-label maintainer detection wrong for brand=lux")
 	}
 }
 
