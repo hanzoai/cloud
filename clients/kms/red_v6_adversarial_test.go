@@ -88,13 +88,12 @@ func getBearerHdr(t *testing.T, app *zip.App, path, token string, hdr map[string
 	return resp
 }
 
-// ── Vector 1: multi-value aud with a static-allowlist member ────────────────────
+// ── Vector 1: multi-value aud carrying a victim's machine aud ────────────────────
 //
-// acme presents aud = ["hanzo-console" (STATIC-allowlisted), "maxpower-platform-kms"
-// (the VICTIM's machine aud)]. AnyAudience OR-matches, so this token VALIDATES via
-// "hanzo-console". The attack: the presence of the victim-bound machine aud, or the
-// intersection semantics, must NOT let acme reach maxpower. Owner (=acme, signed)
-// governs.
+// acme presents aud = ["hanzo-console", "maxpower-platform-kms" (the VICTIM's machine
+// aud)]. The token validates (audience is not a gate). The attack: the presence of the
+// victim-bound machine aud in the set must NOT let acme reach maxpower. Owner (=acme,
+// signed) governs.
 func TestRed_MultiValueAud_OwnerStillGoverns(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -130,13 +129,12 @@ func TestRed_MultiValueAud_OwnerStillGoverns(t *testing.T) {
 //	must NOT thereby become SuperAdmin — owner==adminOrg ALONE is not admin; the
 //	code requires isAdmin=true. So it can read only the admin org's own secrets.
 //
-// (b) The RESIDUAL: the SAME token but isAdmin=TRUE. This models an isAdmin-bearing
+// (b) The machine-principal exception: the SAME owner==AdminOrg but isAdmin=TRUE. A
 //
-//	token whose ONLY audience is the per-tenant machine aud (not in the static
-//	allowlist) — pre-V6 that 403s at validation; POST-V6 the machine-aud
-//	acceptance admits it to the SuperAdmin path and it reads EVERY tenant. The
-//	in-binary code does NOT defend against this; the sole barrier is the external
-//	invariant "IAM never stamps isAdmin=true on a machine-aud token."
+//	real admin is SuperAdmin from any app (audience is not a gate), but a MACHINE
+//	principal — identified by its OWN <owner>-platform-kms aud — is DENIED SuperAdmin
+//	by isKMSMachinePrincipal and pinned to its own org. A client_credentials machine
+//	identity must never wield platform-admin.
 func TestRed_AdminOrgMachineToken(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -167,20 +165,21 @@ func TestRed_AdminOrgMachineToken(t *testing.T) {
 		t.Fatalf("admin-org machine token + X-Org-Id:maxpower switch = %d, want 403", resp.StatusCode)
 	}
 
-	// (b) RESIDUAL — NOW CLOSED by Blue's fix (isKMSMachinePrincipal): isAdmin=TRUE,
-	//     aud == the machine aud ONLY (NOT in the static allowlist).
-	//     Contrast probe: isAdmin=true with an ARBITRARY aud is 403 (validation never
-	//     admits it, so isAdmin is never consulted).
+	// (b) The DISCRIMINATOR is isKMSMachinePrincipal, not the audience. A REAL admin
+	//     (isAdmin=true) gets SuperAdmin whatever app minted the token — audience is not a
+	//     gate, owner==adminOrg + isAdmin is the authority — so an admin token with an
+	//     arbitrary aud reads the victim cross-org → 200.
 	arbAdminTrue := mintRed(t, key, "admin", []string{"some-random-app"}, true, future)
-	if resp := getWithBearer(t, app, victimPath, arbAdminTrue); resp.StatusCode != 403 {
-		t.Fatalf("isAdmin=true + arbitrary aud → victim = %d, want 403 (not admitted)", resp.StatusCode)
+	if resp := getWithBearer(t, app, victimPath, arbAdminTrue); resp.StatusCode != 200 {
+		t.Fatalf("isAdmin=true + arbitrary aud → victim = %d, want 200 (a real admin is admin from any app)", resp.StatusCode)
 	}
-	//     Swap the arbitrary aud for the machine aud: the token now VALIDATES (V6), but
-	//     SanitizeIdentity denies SuperAdmin to a MACHINE principal, so it is pinned to
-	//     owner=admin and CANNOT read the victim → 403 (was 200 pre-fix — residual closed).
+	//     The ONE exception: a MACHINE principal (its OWN <owner>-platform-kms aud present)
+	//     is DENIED SuperAdmin by isKMSMachinePrincipal even with isAdmin=true, so it is
+	//     pinned to owner=admin and CANNOT read the victim → 403 (a machine identity must
+	//     never wield platform-admin).
 	machAdminTrue := mintRed(t, key, "admin", []string{"admin-platform-kms"}, true, future)
 	if resp := getWithBearer(t, app, victimPath, machAdminTrue); resp.StatusCode != 403 {
-		t.Fatalf("RESIDUAL must be CLOSED: isAdmin=true + machine aud → victim = %d, want 403 "+
+		t.Fatalf("machine principal (isAdmin=true + own machine aud) → victim = %d, want 403 "+
 			"(a machine principal must NEVER receive SuperAdmin)", resp.StatusCode)
 	}
 	//     The fix gates ONLY the admin grant: the machine principal still reads its OWN
@@ -215,8 +214,8 @@ func TestRed_TrimCollapseOwner_FailsClosed(t *testing.T) {
 		}
 	}
 
-	// Empty owner with the bare-suffix aud: kmsMachineAudience("")=="" so no machine
-	// aud is added; the bare "-platform-kms" is not in the allowlist → anonymous → 403.
+	// Empty owner with the bare-suffix aud: the token validates (audience is not a gate)
+	// but owner is empty → no org scope → the guard 403s the victim read (fail closed).
 	empty := mintRed(t, key, "", []string{"-platform-kms"}, false, future)
 	if resp := getWithBearer(t, app, victimPath, empty); resp.StatusCode != 403 {
 		t.Fatalf("empty-owner bare-suffix aud = %d, want 403 (fail closed)", resp.StatusCode)

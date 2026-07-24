@@ -120,7 +120,7 @@ func TestSanitizeIdentity(t *testing.T) {
 		t.Fatalf("genkey2: %v", err)
 	}
 	jwks := jwksServer(t, &key.PublicKey)
-	v := newIdentityValidator(testIssuer, jwks.URL, []string{"hanzo-console"}, 0)
+	v := newIdentityValidator(testIssuer, jwks.URL, 0)
 	future := time.Now().Add(time.Hour)
 	past := time.Now().Add(-time.Hour)
 
@@ -129,7 +129,7 @@ func TestSanitizeIdentity(t *testing.T) {
 	normalUser := signWith(t, key, tokenClaims("hanzo-console", "acme", "joe@acme.io", false, future))
 	expiredAdmin := signWith(t, key, tokenClaims("hanzo-console", "admin", "z@hanzo.ai", true, past))
 	wrongKeyAdmin := signWith(t, otherKey, tokenClaims("hanzo-console", "admin", "z@hanzo.ai", true, future))
-	wrongAudAdmin := signWith(t, key, tokenClaims("evil-app", "admin", "z@hanzo.ai", true, future))
+	arbitraryAudAdmin := signWith(t, key, tokenClaims("some-other-first-party-app", "admin", "z@hanzo.ai", true, future))
 	// Owners whose IAM name carries whitespace — the RED CRIT-2 residual vector.
 	// The whitespace rides in the JWT `owner` claim (JSON-preserved, so it is
 	// transport-independent, unlike a header which fasthttp OWS-trims), so a
@@ -211,17 +211,21 @@ func TestSanitizeIdentity(t *testing.T) {
 			wantOrg:   "",
 		},
 		{
-			name:      "wrong-audience admin token is anonymous",
-			mutate:    bearer(wrongAudAdmin),
-			wantAdmin: false,
-			wantOrg:   "",
+			// Audience is not an access gate: an admin-org token validates whatever app
+			// minted it (aud is informational), so a real admin gets SuperAdmin from ANY
+			// first-party app — owner==adminOrg is the authority, not the aud. The only
+			// admin-org token DENIED SuperAdmin is a KMS-sync machine principal (next case).
+			name:      "admin token with an arbitrary audience still gets SuperAdmin",
+			mutate:    bearer(arbitraryAudAdmin),
+			wantAdmin: true,
+			wantOrg:   "admin",
 		},
 		{
-			// V6 residual close: a KMS-sync MACHINE principal (aud=<owner>-platform-kms)
-			// in the admin org with isAdmin=true VALIDATES (V6 accepts the machine aud)
-			// but is DENIED SuperAdmin — pinned to its own org, never cross-org. So
-			// the machine-audience widening cannot be leveraged into an admin bypass.
-			name:      "admin-org machine principal is denied SuperAdmin (V6 decoupling)",
+			// A KMS-sync MACHINE principal (aud=<owner>-platform-kms) in the admin org
+			// with isAdmin=true VALIDATES like any token but is DENIED SuperAdmin —
+			// isKMSMachinePrincipal gates it out, pinned to its own org, never cross-org.
+			// A client_credentials machine identity must never wield platform-admin.
+			name:      "admin-org machine principal is denied SuperAdmin",
 			mutate:    bearer(signWith(t, key, tokenClaims("admin-platform-kms", "admin", "z@hanzo.ai", true, future))),
 			wantAdmin: false,
 			wantOrg:   "admin",
@@ -305,7 +309,7 @@ func TestSanitizeIdentity_OrgAdminHeader(t *testing.T) {
 		t.Fatalf("genkey: %v", err)
 	}
 	jwks := jwksServer(t, &key.PublicKey)
-	v := newIdentityValidator(testIssuer, jwks.URL, []string{"hanzo-console"}, 0)
+	v := newIdentityValidator(testIssuer, jwks.URL, 0)
 	future := time.Now().Add(time.Hour)
 
 	var gotAdmin, gotOrgAdmin, gotOrg string
@@ -416,7 +420,7 @@ func TestSanitizeIdentity_StampsUserName(t *testing.T) {
 		t.Fatalf("genkey: %v", err)
 	}
 	jwks := jwksServer(t, &key.PublicKey)
-	v := newIdentityValidator(testIssuer, jwks.URL, []string{"hanzo-console"}, 0)
+	v := newIdentityValidator(testIssuer, jwks.URL, 0)
 
 	c := tokenClaims("hanzo-console", "hanzo", "z@hanzo.ai", false, time.Now().Add(time.Hour))
 	c.Subject = "2d4d67ab-30f1-474e-b81f-f60461852259" // the JWT subject: a UUID
@@ -454,7 +458,7 @@ func TestSanitizeIdentity_UserNameForgeryStripped(t *testing.T) {
 		t.Fatalf("genkey: %v", err)
 	}
 	jwks := jwksServer(t, &key.PublicKey)
-	v := newIdentityValidator(testIssuer, jwks.URL, []string{"hanzo-console"}, 0)
+	v := newIdentityValidator(testIssuer, jwks.URL, 0)
 
 	c := tokenClaims("hanzo-console", "hanzo", "z@hanzo.ai", false, time.Now().Add(time.Hour))
 	c.Name = "z"
@@ -519,7 +523,7 @@ func TestIdentityValidator(t *testing.T) {
 	key, _ := rsa.GenerateKey(rand.Reader, 2048)
 	other, _ := rsa.GenerateKey(rand.Reader, 2048)
 	jwks := jwksServer(t, &key.PublicKey)
-	v := newIdentityValidator(testIssuer, jwks.URL, []string{"hanzo-console"}, 0)
+	v := newIdentityValidator(testIssuer, jwks.URL, 0)
 	future := time.Now().Add(time.Hour)
 
 	t.Run("valid token", func(t *testing.T) {
@@ -543,11 +547,6 @@ func TestIdentityValidator(t *testing.T) {
 		c.Issuer = ""
 		if _, err := v.validate(signWith(t, key, c)); err == nil {
 			t.Fatal("missing issuer must be rejected")
-		}
-	})
-	t.Run("wrong audience rejected", func(t *testing.T) {
-		if _, err := v.validate(signWith(t, key, tokenClaims("evil-app", "admin", "", true, future))); err == nil {
-			t.Fatal("wrong audience must be rejected")
 		}
 	})
 	t.Run("expired rejected", func(t *testing.T) {
@@ -604,7 +603,7 @@ func TestSuperAdminGate_IsAdminOrgMembership(t *testing.T) {
 		t.Fatalf("genkey: %v", err)
 	}
 	jwks := jwksServer(t, &key.PublicKey)
-	v := newIdentityValidator(testIssuer, jwks.URL, []string{"hanzo-console"}, 0)
+	v := newIdentityValidator(testIssuer, jwks.URL, 0)
 	app, got := newIdentityApp(t, v) // adminOrg = "admin"
 	future := time.Now().Add(time.Hour)
 

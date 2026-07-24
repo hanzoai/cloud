@@ -14,7 +14,7 @@ package kms_test
 // So a 200 on victimPath == "the token got SuperAdmin"; 403 == "admin denied".
 // The whole test reduces the slip question to a single observable status code.
 //
-// Harness (e2eCfg): AdminOrg="admin", static allowlist JWTAudiences=["hanzo-console"].
+// Harness (e2eCfg): AdminOrg="admin"; audience is not gated (trust = signature+issuer+expiry).
 // Reuses mintRed / getWithBearer / getBearerHdr / sealPlatformSecret from the e2e +
 // red_v6_adversarial files (same kms_test package).
 
@@ -103,11 +103,10 @@ func TestRed_MultiValueAud_AdminSlip(t *testing.T) {
 // a real admin whose aud carries a FOREIGN tenant's machine aud (NOT its own) must
 // KEEP SuperAdmin. kmsMachineAudience(owner="admin")="admin-platform-kms"; the set
 // carries "maxpower-platform-kms", which is NOT the owner's machine aud, so
-// isKMSMachinePrincipal returns false and admin is retained. This is CORRECT (not a
-// hole): the V6 widening only ever admits a token via its OWN <owner>-platform-kms,
-// so a foreign machine aud never enabled validation-via-widening; this token
-// validated purely via the static "hanzo-console" member and was a bona-fide admin
-// pre-V6. Denying it would be an over-block that breaks multi-aud admin tokens.
+// isKMSMachinePrincipal returns false and admin is retained. This is CORRECT: the
+// admin-deny gate is OWNER-BOUND — it fires only on the owner's own machine aud, so a
+// foreign machine aud in the set never strips a bona-fide admin. Denying it would be
+// an over-block that breaks multi-aud admin tokens.
 func TestRed_ForeignMachineAudInSet_RealAdminKept(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -127,13 +126,13 @@ func TestRed_ForeignMachineAudInSet_RealAdminKept(t *testing.T) {
 			"(a foreign machine aud must NOT strip admin; that would be an over-block)", resp.StatusCode)
 	}
 
-	// Sanity contrast on the SAME app: owner=admin + isAdmin=true + only the FOREIGN
-	// machine aud (NO static member). This does NOT validate — the widening adds only
-	// admin-platform-kms, and maxpower-platform-kms is not in the static allowlist →
-	// anonymous → 403. Proves the foreign machine aud grants no validation of its own.
-	faOnly := mintRed(t, key, "admin", []string{paasOrgA + "-platform-kms"}, true, future)
-	if resp := getWithBearer(t, app, victimPath, faOnly); resp.StatusCode != 403 {
-		t.Fatalf("owner=admin, aud=[maxpower-platform-kms] only, isAdmin=true → victim = %d, "+
-			"want 403 (foreign machine aud is not owner-bound; token must not validate)", resp.StatusCode)
+	// Contrast — the DISCRIMINATOR is the owner's OWN machine aud, not any machine aud:
+	// swap the foreign maxpower-platform-kms for admin's OWN admin-platform-kms and the
+	// SAME shape becomes a machine principal → isKMSMachinePrincipal fires → admin stripped
+	// → victim read 403. So a FOREIGN machine aud keeps admin (fa above); the OWN machine
+	// aud strips it — the gate is owner-bound.
+	ownMach := mintRed(t, key, "admin", []string{"hanzo-console", "admin-platform-kms"}, true, future)
+	if resp := getWithBearer(t, app, victimPath, ownMach); resp.StatusCode != 403 {
+		t.Fatalf("owner=admin carrying its OWN machine aud → victim = %d, want 403 (own machine aud strips admin)", resp.StatusCode)
 	}
 }
