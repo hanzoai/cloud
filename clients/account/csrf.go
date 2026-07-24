@@ -173,6 +173,23 @@ func requireCSRF(s *cloud.Service[state], next zip.Handler) zip.Handler {
 	}
 }
 
+// RequireCSRF exposes the ambient-cookie anti-CSRF gate as a STANDALONE middleware for a
+// co-resident money-WRITE route registered OUTSIDE this package — specifically
+// apps/commerce.go's POST /v1/billing/topup/token, which shadows the account-bridge's
+// POST /v1/billing/* wildcard (order 100 < 122) that would otherwise have wrapped the
+// write in requireCSRF. Moving the route co-resident to break the commerceinproc
+// self-dispatch loop must NOT silently drop that anti-CSRF gate, so the identical
+// enforcement rides along as its own handler. It binds to the SAME process-wide key
+// (sharedCSRFKey) the GET /v1/csrf issuer and the bridge verifier use, so a token minted
+// at /v1/csrf verifies here byte-identically. Enforces ONLY on the ambient-cookie path (a
+// Bearer/gateway/API caller is not CSRF-able); on success it c.Next()s into the rest of
+// the chain. The minimal Service carries only the shared key — requireCSRF/verifyCSRF
+// read nothing else off it.
+func RequireCSRF() zip.Handler {
+	s := &cloud.Service[state]{State: state{csrfKey: sharedCSRFKey(nil)}}
+	return requireCSRF(s, func(c *zip.Ctx) error { return c.Next() })
+}
+
 // issueCSRFToken serves GET /v1/csrf: for a VALIDATED caller, a fresh token
 // bound to their identity. no-store so it is never cached by a shared proxy. This is
 // the same-origin endpoint the embedded SPA reads (its response body is unreadable to
