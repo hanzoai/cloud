@@ -376,6 +376,12 @@ func start(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := s.State.store.UpdateApplication(c.Context(), a); err != nil {
 		s.Log.Warn("persist start failed (continuing)", "app", a.Slug, "err", err)
 	}
+	// Reset the compute watermark to now so the meter bills only THIS live span,
+	// never the stopped gap the app just resumed from (FinalizeLive does the same for
+	// the deploy→live path).
+	if err := s.State.store.StampComputeMeter(c.Context(), a.Org, a.ID, a.UpdatedAt); err != nil {
+		s.Log.Warn("stamp compute meter failed (continuing)", "app", a.Slug, "err", err)
+	}
 	return c.JSON(http.StatusOK, toAppView(a))
 }
 
