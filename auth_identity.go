@@ -125,43 +125,41 @@ var jwtSigAlgs = []gojose.SignatureAlgorithm{
 // (cert-hanzo/cert-lux/cert-zoo/...), keyed by the token kid, so a single
 // jwksURL verifies all brands. Only the issuer-string comparison had to widen.
 type identityValidator struct {
-	issuers   []string
-	audiences []string
-	cache     *jwksCache
-	keys      keyResolver // resolves an opaque API key to a principal; nil ⟹ keys stay anonymous
+	issuers []string
+	cache   *jwksCache
+	keys    keyResolver // resolves an opaque API key to a principal; nil ⟹ keys stay anonymous
 }
 
 // newIdentityValidator builds a validator whose trusted-issuer set is the primary
 // issuer UNIONED with every white-label brand issuer (BrandIssuers) plus any
 // WHITELABEL_ISSUERS override. ttl<=0 uses the 15m JWKS default. The union is
 // fail-secure: it only ADDS the known-good brand issuers, never an arbitrary one.
-func newIdentityValidator(issuer, jwksURL string, audiences []string, ttl time.Duration) *identityValidator {
+//
+// Trust is IAM-native: signature (JWKS) + issuer (this set) + expiry. There is NO
+// per-app audience allowlist — the `aud` (a minting app's client_id) is IAM's to
+// assign, not cloud's to mirror, so a new first-party app needs zero cloud change.
+func newIdentityValidator(issuer, jwksURL string, ttl time.Duration) *identityValidator {
 	return &identityValidator{
-		issuers:   trustedIssuers(issuer),
-		audiences: audiences,
-		cache:     newJWKSCache(jwksURL, ttl),
-		keys:      sharedKeys(), // ONE resolver+cache, shared with OrgForKey (analytics capture)
+		issuers: trustedIssuers(issuer),
+		cache:   newJWKSCache(jwksURL, ttl),
+		keys:    sharedKeys(), // ONE resolver+cache, shared with OrgForKey (analytics capture)
 	}
 }
 
 // kmsMachineAudSuffix is the fixed suffix of a per-org PaaS-KMS sync machine
-// identity's audience. Each org's KMS sync authenticates as a dedicated,
-// NON-shared IAM application named "<org>-platform-kms" (Organization=<org>,
-// client_credentials grant), so IAM stamps the token's aud == the app's own
-// clientId == "<org>-platform-kms" (a non-shared app's audience is its clientId,
-// object/token_jwt.go tokenAudience) and owner == <org>
-// (object/token_oauth.go GetClientCredentialsToken sets owner = app.Organization).
+// identity's audience. Each org's KMS sync authenticates as a dedicated, NON-shared
+// IAM application named "<org>-platform-kms" (Organization=<org>, client_credentials
+// grant), so IAM stamps the token's aud == the app's own clientId == "<org>-platform-kms"
+// (object/token_jwt.go tokenAudience) and owner == <org> (object/token_oauth.go
+// GetClientCredentialsToken sets owner = app.Organization).
 //
-// That audience is, by construction, absent from CLOUD_JWT_AUDIENCES — it is
-// per-org, not a fixed app — which is EXACTLY why the sync stayed pending: the
-// machine token failed the audience check below, SanitizeIdentity treated it as
-// anonymous, and the /v1/kms org-scope guard 403'd it before the store. The fix is
-// to accept this one audience, but ONLY when it equals the token's OWN owner claim
-// plus this suffix, so it certifies "the KMS sync identity for its own org" and
-// grants nothing wider. Org-scoping is still enforced downstream by owner at the guard
-// (owner == :org); this only lets a legitimately-minted, owner-scoped machine token
-// clear validation. A per-org application means a per-org clientSecret — never
-// a shared platform-wide reader, which would be a cross-org hole.
+// Validation no longer consults the audience at all (trust is signature + issuer +
+// expiry), so a machine token clears validate() like any other. This suffix survives
+// for the OPPOSITE reason: to RECOGNISE a machine principal (isKMSMachinePrincipal) so
+// SanitizeIdentity can DENY it SuperAdmin even when it carries owner==adminOrg — a
+// client_credentials machine identity must never wield platform-admin. The match is
+// bound to the token's OWN owner claim (<owner>-platform-kms), so it certifies "the
+// KMS sync identity for its own org" and grants nothing wider.
 const kmsMachineAudSuffix = "-platform-kms"
 
 // kmsMachineAudience returns the audience an org org's PaaS-KMS sync identity
@@ -214,14 +212,13 @@ func (v *identityValidator) validate(raw string) (*idClaims, error) {
 		return nil, err
 	}
 
-	// Fail SECURE on a misconfigured (empty) trust set: an empty issuer OR audience
-	// allowlist must REJECT every token, never silently disable that axis. In
-	// production both are always resolved non-empty (BrandIssuers + the baked
-	// audience defaults, unioned in config.go so they are "never empty"), so this
-	// fires ONLY on an operator misconfiguration (CLOUD_JWT_AUDIENCES="" emptying the
-	// resolved set, or an empty issuer set) — and then it denies, it never admits (I2).
-	if len(v.issuers) == 0 || len(v.audiences) == 0 {
-		return nil, fmt.Errorf("identity validator misconfigured: empty issuer or audience allowlist")
+	// Fail SECURE on a misconfigured (empty) trust set: with no trusted issuer every
+	// token must be REJECTED, never silently admitted. In production the set is always
+	// non-empty (the primary issuer + BrandIssuers, unioned in config.go so it is
+	// "never empty"), so this fires ONLY on an operator misconfiguration — and then it
+	// denies, it never admits (I2).
+	if len(v.issuers) == 0 {
+		return nil, fmt.Errorf("identity validator misconfigured: empty issuer set")
 	}
 
 	// Reject a missing issuer: an empty issuer must never pass the set check.
@@ -234,28 +231,22 @@ func (v *identityValidator) validate(raw string) (*idClaims, error) {
 	if claims.Expiry == nil {
 		return nil, fmt.Errorf("missing expiry")
 	}
-	// Issuer must be one of the trusted brand issuers. go-jose's jwt.Expected
-	// checks a SINGLE issuer, so the issuer is validated here against the set and
-	// left out of Expected (audience + expiry stay with Expected).
+	// Issuer must be one of the trusted brand issuers. go-jose's jwt.Expected checks a
+	// SINGLE issuer, so the issuer is validated here against the set and left out of
+	// Expected (only expiry/not-before stay with Expected).
 	if !issuerAllowed(claims.Issuer, v.issuers) {
 		return nil, fmt.Errorf("untrusted issuer %q", claims.Issuer)
 	}
-	// Audience: the static allowlist (CLOUD_JWT_AUDIENCES / brand app client_ids)
-	// PLUS the per-org PaaS-KMS sync machine audience bound to THIS token's own
-	// owner (<owner>-platform-kms). The machine audience is added only when the
-	// allowlist is active (non-empty — always so in production) and only for the
-	// token's own org, so accepting it never widens org-scoping: the /v1/kms guard still
-	// gates on owner == :org. Without this, a real client_credentials machine token
-	// (aud == its per-org clientId, never in the allowlist) fails here and the
-	// sync silently stays pending — the activation blocker.
-	// The audience allowlist is guaranteed non-empty (checked above), so the
-	// audience axis is ALWAYS enforced — never silently skipped.
-	auds := v.audiences
-	if mach := kmsMachineAudience(claims.Owner); mach != "" {
-		auds = append(append(make([]string, 0, len(v.audiences)+1), v.audiences...), mach)
-	}
-	expected := jwt.Expected{AnyAudience: jwt.Audience(auds)}
-	if err := claims.Claims.ValidateWithLeeway(expected, 2*time.Minute); err != nil {
+	// Audience is NOT an access gate. A valid signature from a trusted issuer (both
+	// checked above) proves IAM minted this token for one of ITS OWN registered apps;
+	// the `aud` merely names which app. Cloud does not keep a per-app allowlist to
+	// mirror IAM's registry — that mirror drifted and silently 401'd every new
+	// first-party app until hand-edited. Org scope is the `owner` claim, enforced by
+	// every downstream guard; SuperAdmin is owner==adminOrg AND !isKMSMachinePrincipal
+	// (SanitizeIdentity). Expiry + not-before are STILL enforced here: Expected{} with a
+	// zero Time validates against time.Now(); an empty AnyAudience skips ONLY the
+	// audience match (go-jose/v4 jwt/validation.go).
+	if err := claims.Claims.ValidateWithLeeway(jwt.Expected{}, 2*time.Minute); err != nil {
 		return nil, fmt.Errorf("claims: %w", err)
 	}
 	return &claims, nil
