@@ -43,6 +43,12 @@ const (
 const (
 	MethodOAuth = "oauth"
 	MethodFile  = "file"
+	// MethodMaintainer = the repo is owned by the platform maintainer (owner ∈ the
+	// brand's GitHub orgs, e.g. hanzoai / hanzo-*): ownership is intrinsic to the
+	// namespace, so a Hanzo-maintained template is auto-verified under the treasury
+	// SYSTEM author with no OAuth/file proof — its creator royalty accrues to the
+	// Hanzo treasury ("pay ourselves") rather than an external author wallet.
+	MethodMaintainer = "maintainer"
 )
 
 // Author is one OSS author org enrolled in the deploy-royalty program. Org is
@@ -395,6 +401,23 @@ func (s *Store) Connect(ctx context.Context, id, org, githubLogin, verifyCode st
 	}
 	a, gerr := s.GetByOrg(ctx, org)
 	return a, false, gerr
+}
+
+// EnsureSystemAuthor idempotently seeds a SYSTEM author (the Hanzo treasury
+// "pay ourselves" identity) at status=approved, identity-verified, sharing shareBps.
+// It owns the platform-maintained OSS templates so their creator royalty accrues to
+// the treasury. A repeat call is a no-op that returns the existing row — never
+// resetting its accrual, paid, or share. Returns the author keyed by org (org is
+// UNIQUE, so one system author per treasury org).
+func (s *Store) EnsureSystemAuthor(ctx context.Context, id, org, githubLogin string, shareBps, now int64) (Author, error) {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO authors (id, org, github_login, verify_code, status, share_bps, created_at, verified_at, approved_at)
+		 VALUES (?,?,?,?,?,?,?,?,?)`,
+		id, org, githubLogin, "", StatusApproved, shareBps, now, now, now)
+	if err != nil && !isUnique(err) {
+		return Author{}, fmt.Errorf("ensure system author: %w", err)
+	}
+	return s.GetByOrg(ctx, org)
 }
 
 func (s *Store) getByID(ctx context.Context, id string) (Author, error) {
