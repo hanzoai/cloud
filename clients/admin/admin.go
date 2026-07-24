@@ -333,13 +333,8 @@ func usage(s *cloud.Service[core.State], c *zip.Ctx) error {
 }
 
 // ── /v1/admin/products — workload registry (ProductRow[]) ────────────────────
-
-// products is the workload/drift registry. That inventory is the platform.hanzo.ai apps
-// table / operator reconcile state, NOT an in-binary source. admin exposes the gated
-// endpoint and returns the real empty registry until that feed is wired.
-func products(s *cloud.Service[core.State], c *zip.Ctx) error {
-	return core.OKList(c, []productRow{}, 0)
-}
+// The handler + the fleet projection live in products.go: it reads the operator App-CR +
+// drift observation through the in-process paas.CurrentFleet seam (reuse, never fork).
 
 // ── /v1/admin/overview — Platform Overview tiles (OverviewData) ───────────────
 
@@ -394,12 +389,18 @@ func overview(s *cloud.Service[core.State], c *zip.Ctx) error {
 	}
 	sources = append(sources, core.SrcOf("o11y", oErr, o11yRows, now))
 
+	// Fleet workload registry — the operator App-CR + drift observation via the paas seam
+	// (products.go). A nil/unready seam degrades to an honest-empty rollup (zeros, no error);
+	// a hard observation error marks the "fleet" source degraded without failing the overview.
+	fleetRows, fleetRoll, fleetErr := fleetProducts(ctx)
+	sources = append(sources, core.SrcOf("fleet", fleetErr, len(fleetRows), now))
+
 	return core.OK(c, overviewData{
 		Orgs:           orgCount,
 		Users:          userCount,
-		Products:       0, // workload registry feed pending (platform apps table)
-		ActiveProducts: 0,
-		Drift:          0,
+		Products:       fleetRoll.Total,
+		ActiveProducts: fleetRoll.Active,
+		Drift:          fleetRoll.Drift,
 		SpendCents30d:  spend,
 		Tokens30d:      0, // fleet token counters pending (insights/datastore)
 		CreditsCents:   credits,
