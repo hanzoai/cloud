@@ -2,6 +2,7 @@ package share
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -9,25 +10,17 @@ import (
 // credential it was asked to provision.
 type fakeController struct {
 	configuredV bool
-	accounts    map[string]string // email -> password (created)
-	token       string
+	tokenV      string
 	overviewV   overviewResp
-	loginErr    error
+	tokenErr    error
 }
 
 func (f *fakeController) configured() bool { return f.configuredV }
-func (f *fakeController) ensureAccount(_ context.Context, email, password string) error {
-	if f.accounts == nil {
-		f.accounts = map[string]string{}
+func (f *fakeController) token(_ context.Context, _ string, _ bool) (string, error) {
+	if f.tokenErr != nil {
+		return "", f.tokenErr
 	}
-	f.accounts[email] = password
-	return nil
-}
-func (f *fakeController) login(_ context.Context, email, password string) (string, error) {
-	if f.loginErr != nil {
-		return "", f.loginErr
-	}
-	return f.token, nil
+	return f.tokenV, nil
 }
 func (f *fakeController) overview(_ context.Context, _ string) (overviewResp, error) {
 	return f.overviewV, nil
@@ -36,10 +29,18 @@ func (f *fakeController) overview(_ context.Context, _ string) (overviewResp, er
 // TestAccountDeterminism — the per-org email + password are pure functions of
 // the org, so provisioning is stateless and idempotent (same org → same creds).
 func TestAccountDeterminism(t *testing.T) {
-	if accountEmail("acme") != "share-acme@hanzo.ai" {
-		t.Errorf("email = %q", accountEmail("acme"))
-	}
 	c := &httpController{secret: []byte("k")}
+	// email is per-org, deterministic, and carries an HMAC freshness suffix.
+	e1, e2 := c.accountEmail("acme"), c.accountEmail("acme")
+	if e1 != e2 {
+		t.Error("email not deterministic")
+	}
+	if !strings.HasPrefix(e1, "share-acme-") || !strings.HasSuffix(e1, "@hanzo.ai") {
+		t.Errorf("email shape = %q", e1)
+	}
+	if c.accountEmail("acme") == c.accountEmail("other") {
+		t.Error("email not org-scoped")
+	}
 	if c.accountPassword("acme") != c.accountPassword("acme") {
 		t.Error("password not deterministic")
 	}
@@ -67,14 +68,5 @@ func TestShareURL(t *testing.T) {
 	t.Setenv("SHARE_URL_TEMPLATE", "https://{token}.share.hanzo.ai")
 	if got := shareURL("abc123"); got != "https://abc123.share.hanzo.ai" {
 		t.Errorf("shareURL = %q", got)
-	}
-}
-
-// TestPasswordForFake — a fake controller (not *httpController) gets a stable
-// stand-in password so handler tests need no network.
-func TestPasswordForFake(t *testing.T) {
-	f := &fakeController{}
-	if passwordFor(f, "acme") != passwordFor(f, "acme") {
-		t.Error("fake password not stable")
 	}
 }
