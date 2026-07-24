@@ -22,16 +22,14 @@
 // and a forged X-User-IsAdmin header is still stripped on ingress.
 //
 // MINT ONLY WHAT THIS DEPLOYMENT WILL ACCEPT. The callback runs the exchanged token
-// through cloud's OWN validator (cloud.NewTokenValidator — the same JWKS, issuer set
-// and audience allowlist the boundary uses) BEFORE writing the cookie, and makes the
-// admin-org decision on those VERIFIED claims. This is not defence in depth against
-// IAM; it is the thing that makes a misconfiguration fail FAST and LOUD. The audience
-// allowlist is env-overridable (jwtAudiencesFromEnv REPLACES the baked default), so a
-// deployment whose CLOUD_JWT_AUDIENCES / GATEWAY_ALLOWED_AUDIENCES omits this
-// console's client_id would otherwise mint a cookie the boundary refuses on the very
-// next request — 403 → document-bounce to sign-in → IAM session still live → instant
-// code → mint → 403, looping until the browser gives up. Validating here turns that
-// infinite loop into one clear error naming the real reason.
+// through cloud's OWN validator (cloud.NewTokenValidator — the same JWKS + trusted
+// issuer set the boundary uses) BEFORE writing the cookie, and makes the admin-org
+// decision on those VERIFIED claims. This is not defence in depth against IAM; it is
+// the thing that makes a misconfiguration fail FAST and LOUD. A deployment whose
+// trusted-issuer set omits this token's issuer would otherwise mint a cookie the
+// boundary refuses on the very next request — 403 → document-bounce to sign-in → IAM
+// session still live → instant code → mint → 403, looping until the browser gives up.
+// Validating here turns that infinite loop into one clear error naming the real reason.
 //
 // PUBLIC CLIENT, PKCE. The deploy plane holds no client secret: it drives IAM's
 // authorization-code flow with PKCE S256 (RFC 7636), which IAM accepts with an
