@@ -71,6 +71,90 @@ func TestBankOutflowCategorizes(t *testing.T) {
 	}
 }
 
+// seedScanBill posts a scanned bill directly through the choke point: Dr expense / Cr 2001
+// VendorPayable for the total, tagged (scan, id) with the vendor as its description — the
+// accrual an outflow later settles.
+func seedScanBill(t *testing.T, st *store, id, vendor, expense string, total int64, issuedAt string) {
+	t.Helper()
+	ok, err := st.post(context.Background(), Voucher{
+		SourceKind: scanSourceKind, SourceID: id, PostingAt: issuedAt, Description: vendor,
+		Legs: []Leg{{Account: expense, Debit: total}, {Account: VendorPayable, Credit: total}},
+	}, RoundOffAllowance)
+	if err != nil || !ok {
+		t.Fatalf("seed scan bill %s: ok=%v err=%v", id, ok, err)
+	}
+}
+
+// TestBankOutflowSettlesScannedPayable proves the fix for the double-count finding: a bank
+// OUTFLOW that pays a scanned bill SETTLES the accrued payable (Dr 2001 / Cr 1000) instead of
+// re-booking the expense — so the spend is counted ONCE and the AP nets to zero, not twice
+// with a dangling liability.
+func TestBankOutflowSettlesScannedPayable(t *testing.T) {
+	ctx := context.Background()
+	st := newBookStore(t, "books")
+
+	// A scanned AWS bill accrues $99 of Cloud COGS against VendorPayable.
+	seedScanBill(t, st, "scan:aws", "Amazon Web Services", CloudCOGS, 9900, "2026-07-01T00:00:00Z")
+
+	// The bank pays it 20 days later — same amount, vendor named in the descriptor, in-window.
+	res, err := mapAndPost(ctx, st, bankTxn("pay-aws", Outflow, 9900, "2026-07-21T00:00:00Z", "AMAZON WEB SERVICES"))
+	if err != nil {
+		t.Fatalf("map settling outflow: %v", err)
+	}
+	if res.Status != statusSettled || !res.VoucherPosted {
+		t.Fatalf("an outflow paying a scanned bill must SETTLE it, got %+v", res)
+	}
+
+	tb, _ := trialBalance(ctx, st, "", "")
+	if !tb.Balanced {
+		t.Fatalf("settlement: NOT balanced: debit=%d credit=%d", tb.TotalDebit, tb.TotalCredit)
+	}
+	// Expense booked ONCE ($99) — the accrual, not doubled by the payment.
+	if cd, _ := closingOf(tb, CloudCOGS); cd != 9900 {
+		t.Fatalf("Cloud COGS must be booked ONCE ($99.00), got debit=%d", cd)
+	}
+	// VendorPayable nets to zero (accrued then paid), no dangling AP.
+	if d, c := closingOf(tb, VendorPayable); d != 0 || c != 0 {
+		t.Fatalf("VendorPayable must net to ZERO after payment, got debit=%d credit=%d", d, c)
+	}
+	// Cash left the bank once.
+	if _, bc := closingOf(tb, Bank); bc != 9900 {
+		t.Fatalf("Bank must Cr the one $99.00 payment, got credit=%d", bc)
+	}
+}
+
+// TestBankOutflowNoPayableMatchBooksExpense proves the vendor gate fails secure: a same-amount,
+// in-window outflow whose descriptor does NOT name the scanned bill's vendor is booked as a
+// FRESH expense (Dr expense / Cr Bank), leaving the unrelated payable OPEN — it never pays down
+// a bill it cannot be shown to belong to.
+func TestBankOutflowNoPayableMatchBooksExpense(t *testing.T) {
+	ctx := context.Background()
+	st := newBookStore(t, "books")
+
+	seedScanBill(t, st, "scan:aws", "Amazon Web Services", CloudCOGS, 9900, "2026-07-01T00:00:00Z")
+
+	// A $99 debit to an UNRELATED vendor — same amount, in-window, but not AWS.
+	res, err := mapAndPost(ctx, st, bankTxn("pay-other", Outflow, 9900, "2026-07-10T00:00:00Z", "Staples"))
+	if err != nil {
+		t.Fatalf("map outflow: %v", err)
+	}
+	if res.Status != statusPosted {
+		t.Fatalf("an unrelated outflow must book a fresh expense, got %+v", res)
+	}
+	tb, _ := trialBalance(ctx, st, "", "")
+	// The AWS payable stays OPEN ($99 credit) — the unrelated debit did not consume it.
+	if d, c := closingOf(tb, VendorPayable); c-d != 9900 {
+		t.Fatalf("the AWS payable must stay OPEN ($99.00 credit), got debit=%d credit=%d", d, c)
+	}
+	// Cloud COGS carries only the scan accrual; the unrelated debit landed in Uncategorized.
+	if cd, _ := closingOf(tb, CloudCOGS); cd != 9900 {
+		t.Fatalf("Cloud COGS must hold only the scan accrual, got debit=%d", cd)
+	}
+	if ud, _ := closingOf(tb, UncategorizedExpense); ud != 9900 {
+		t.Fatalf("the unrelated outflow must book a fresh Uncategorized expense, got debit=%d", ud)
+	}
+}
+
 // TestBankInflowMatchedClearsSquare proves a bank deposit that MATCHES a prior Square
 // capture CLEARS 1010 → 1000 (a reconciliation) and recognizes NO revenue — the
 // double-count guard. It seeds the capture through the P0 spine (a commerce deposit books
