@@ -298,6 +298,63 @@ func TestInboxUploadIdempotent(t *testing.T) {
 	}
 }
 
+// TestScanEconomicIdentityDedup proves the fix for the byte-hash-only idempotency finding: the
+// SAME real-world bill re-scanned into a DIFFERENT file hash (a different scanID) is caught by
+// its economic identity (vendor, total, issue date), so it does not double-book — while an
+// override, and a genuinely different bill, both book.
+func TestScanEconomicIdentityDedup(t *testing.T) {
+	ctx := context.Background()
+	st := newBookStore(t, "books")
+
+	// Book the original scan: Dr 5300 net + Dr 2200 tax / Cr 2001 $108, vendor "GitHub".
+	v := Voucher{
+		SourceKind: scanSourceKind, SourceID: "hash-a", PostingAt: "2026-07-05T00:00:00Z",
+		Description: "GitHub",
+		Legs: []Leg{
+			{Account: SoftwareExpense, Debit: 10000},
+			{Account: SalesTaxPayable, Debit: 800},
+			{Account: VendorPayable, Credit: 10800},
+		},
+	}
+	idA := voucherIdentity(v)
+	if idA.Vendor != "github" || idA.Total != 10800 || idA.Issued != "2026-07-05" {
+		t.Fatalf("identity derived wrong: %+v", idA)
+	}
+	ok, err := st.post(ctx, v, RoundOffAllowance)
+	if err != nil || !ok {
+		t.Fatalf("book original: ok=%v err=%v", ok, err)
+	}
+	if err := st.recordScanIdentity(ctx, idA, "hash-a", v.PostingAt); err != nil {
+		t.Fatalf("record identity: %v", err)
+	}
+
+	// The SAME bill re-scanned at a different DPI → a new file hash, but the same identity
+	// ("GitHub", $108.00, 2026-07-05, formatted with a trailing space to prove normalization).
+	reV := v
+	reV.SourceID = "hash-b"
+	reV.Description = "GitHub "
+	idB := voucherIdentity(reV)
+	prior, dup, err := st.scanIdentityBooked(ctx, idB, "hash-b")
+	if err != nil {
+		t.Fatalf("dedup check: %v", err)
+	}
+	if !dup || prior != "hash-a" {
+		t.Fatalf("a re-scan of the same bill must be flagged a duplicate of hash-a, got dup=%v prior=%q", dup, prior)
+	}
+
+	// Re-booking the SAME scan id is NOT a duplicate of itself — post() already makes it idempotent.
+	if _, dup, _ := st.scanIdentityBooked(ctx, idA, "hash-a"); dup {
+		t.Fatalf("the same scan id must not flag itself as a duplicate")
+	}
+
+	// A genuinely different bill (different total) is not a duplicate.
+	otherV := v
+	otherV.Legs = []Leg{{Account: SoftwareExpense, Debit: 5000}, {Account: VendorPayable, Credit: 5000}}
+	if _, dup, _ := st.scanIdentityBooked(ctx, voucherIdentity(otherV), "hash-c"); dup {
+		t.Fatalf("a different-total bill must not flag as a duplicate")
+	}
+}
+
 // TestParseExtractionRejectsBadMoney proves the extractor fails closed on malformed money
 // (tax exceeding total, non-positive total) rather than proposing an unbalanced draft.
 func TestParseExtractionRejectsBadMoney(t *testing.T) {
