@@ -398,13 +398,59 @@ func estimateWith(id string, doc []byte, rc RateCard) (Estimate, error) {
 
 	est.VCPUHours = round4(est.VCPUHours)
 	est.GBHours = round4(est.GBHours)
-	micro := int64(math.Round(
-		est.VCPUHours*float64(rc.MicroUSDPerVCPUHour) +
-			est.GBHours*float64(rc.MicroUSDPerGBHour)))
-	est.MicroUSDPerHour = micro
-	est.CentsPerHour = float64(micro) / float64(microUSDPerCent)
-	est.CentsPerMonth = int64(math.Round(float64(micro) * float64(hoursPerMonth) / float64(microUSDPerCent)))
+	est.MicroUSDPerHour, est.CentsPerHour, est.CentsPerMonth = priceFootprint(est.VCPUHours, est.GBHours, rc)
 	return est, nil
+}
+
+// priceFootprint applies the rate card to a summed (vCPU-hr, GB-hr) footprint,
+// yielding the exact integer microdollars-per-hour plus its derived cents views.
+// It is the ONE cost formula, shared by the multi-service template estimator
+// (estimateWith) and the single-service running-app estimator (EstimateService),
+// so a compose template and a bare deployment of the same footprint are priced
+// identically — the metering path reads the same numbers the console displays.
+func priceFootprint(vcpuHr, gbHr float64, rc RateCard) (microPerHour int64, centsPerHour float64, centsPerMonth int64) {
+	microPerHour = int64(math.Round(vcpuHr*float64(rc.MicroUSDPerVCPUHour) + gbHr*float64(rc.MicroUSDPerGBHour)))
+	centsPerHour = float64(microPerHour) / float64(microUSDPerCent)
+	centsPerMonth = int64(math.Round(float64(microPerHour) * float64(hoursPerMonth) / float64(microUSDPerCent)))
+	return
+}
+
+// EstimateService prices ONE running service — a single container image at N
+// replicas — with the process rate card. It is the single-container analogue of
+// EstimateTemplate: a platform app (clients/platform) is one image at N replicas,
+// not a compose stack, so the deploy-compute meter prices a running deployment
+// through THIS seam while a multi-service blueprint prices through EstimateTemplate.
+// Same kernel — class inferred from the image, class-default footprint × replicas,
+// priced by the SAME RateCard via priceFootprint — so a bare deployment and a
+// one-service template of the same image cost identically. est.MicroUSDPerHour is
+// the exact per-hour figure the deploy path meters the deploying org on (the cost
+// basis the 20% author royalty is then taken from). replicas < 1 is treated as 1.
+func EstimateService(image string, replicas int) Estimate {
+	if replicas < 1 {
+		replicas = 1
+	}
+	image = strings.TrimSpace(image)
+	svc := composeService{Image: image}
+	class := serviceClass(image, svc) // name=image → the image drives both image- and name-inference
+	vcpu, gb, provenance := sizing(class, svc)
+	vcpu *= float64(replicas)
+	gb *= float64(replicas)
+	vcpuHr, gbHr := round4(vcpu), round4(gb)
+	micro, centsHr, centsMo := priceFootprint(vcpuHr, gbHr, rates)
+	return Estimate{
+		TemplateID: image,
+		SBOM: []Service{{
+			Name: image, Image: image, Type: class,
+			VCPU: vcpuHr, GB: gbHr, Replicas: replicas, Sized: provenance,
+		}},
+		VCPUHours:       vcpuHr,
+		GBHours:         gbHr,
+		MicroUSDPerHour: micro,
+		CentsPerHour:    centsHr,
+		CentsPerMonth:   centsMo,
+		RateCard:        rates,
+		Estimate:        true,
+	}
 }
 
 // round4 fixes a float to 4 decimals so equality in tests is exact and the JSON is
