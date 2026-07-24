@@ -15,6 +15,7 @@ import (
 // bank txn statuses — the lifecycle of a normalized bank row.
 const (
 	statusPosted     = "posted"     // outflow booked to an expense
+	statusSettled    = "settled"    // outflow matched a scanned VendorPayable → paid it down
 	statusReconciled = "reconciled" // inflow matched a Square-clearing settlement → cleared
 	statusUnmatched  = "unmatched"  // inflow with no match → clarifying question raised
 	statusTransfer   = "transfer"   // own-account move → recorded, no GL effect
@@ -249,4 +250,79 @@ func (s *store) claimCapture(ctx context.Context, amount int64, fromInclusive, t
 		return "", false, err
 	}
 	return captureID, true, nil
+}
+
+// claimPayable atomically reserves ONE specific unconsumed scanned VendorPayable for a bank
+// OUTFLOW to pay down, and reports whether it succeeded. A payable is a scan CREDIT on 2001
+// (booked when a receipt was scanned: Dr expense / Cr 2001 for the bill total); each may be
+// paid from the bank exactly once. It is the OUTFLOW-side twin of claimCapture. In a single
+// transaction it either (a) returns the payable THIS same outflow already claimed —
+// crash-safe idempotency — or (b) claims the OLDEST scanned payable of exactly `amount`,
+// posted in [fromInclusive, toInclusive], that no prior payment consumed AND whose vendor the
+// outflow descriptor names (descHay), recording the consumption so no other outflow re-claims
+// it. ok=false means no such payable is open — the outflow is a fresh expense, not a bill
+// payment, so the caller books Dr expense / Cr Bank (never guess a settlement, fail secure).
+func (s *store) claimPayable(ctx context.Context, amount int64, fromInclusive, toInclusive, connector, externalID, paidAt, descHay string) (string, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// (a) idempotent replay: this outflow already paid a payable.
+	var existing string
+	switch err := tx.QueryRowContext(ctx,
+		`SELECT payable_source_id FROM bank_payment WHERE connector = ? AND external_id = ?`,
+		connector, externalID).Scan(&existing); err {
+	case nil:
+		return existing, true, nil
+	case sql.ErrNoRows:
+		// fall through to claim a fresh payable
+	default:
+		return "", false, fmt.Errorf("books claimPayable lookup: %w", err)
+	}
+
+	// (b) among the unconsumed scanned VendorPayable credits of exactly this amount in-window,
+	// oldest first, claim the first whose vendor the outflow descriptor names. Only a scan
+	// CREDIT on 2001 is an open bill; remarks carries the vendor for the identity gate. The
+	// gate keeps a coincidental same-amount outflow from paying down an unrelated vendor's bill.
+	rows, err := tx.QueryContext(ctx,
+		`SELECT source_id, remarks FROM gl_entry
+		 WHERE account = ? AND source_kind = ? AND credit = ?
+		   AND posting_at >= ? AND posting_at <= ?
+		   AND source_id NOT IN (SELECT payable_source_id FROM bank_payment)
+		 ORDER BY posting_at ASC, id ASC`,
+		VendorPayable, scanSourceKind, amount, fromInclusive, toInclusive)
+	if err != nil {
+		return "", false, fmt.Errorf("books claimPayable select: %w", err)
+	}
+	var payableID string
+	for rows.Next() {
+		var sid, remarks string
+		if err := rows.Scan(&sid, &remarks); err != nil {
+			_ = rows.Close()
+			return "", false, fmt.Errorf("books claimPayable scan: %w", err)
+		}
+		if vendorNamed(descHay, remarks) {
+			payableID = sid
+			break
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return "", false, fmt.Errorf("books claimPayable rows: %w", err)
+	}
+	if payableID == "" {
+		return "", false, nil // no open payable this outflow plausibly pays → fresh expense
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO bank_payment (payable_source_id, connector, external_id, paid_at)
+		 VALUES (?,?,?,?)`,
+		payableID, connector, externalID, paidAt); err != nil {
+		return "", false, fmt.Errorf("books claimPayable insert: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return "", false, err
+	}
+	return payableID, true, nil
 }
