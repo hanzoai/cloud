@@ -17,6 +17,24 @@ import (
 // errNotFound is the store's one "no such row" sentinel; the API layer maps it to 404.
 var errNotFound = errors.New("webhooks: endpoint not found")
 
+const (
+	// maxDeliveryRowsPerEndpoint caps the delivery log per endpoint: recordDelivery
+	// prunes everything older than the newest N rows on every insert, so the log is
+	// self-bounding without a background sweep.
+	maxDeliveryRowsPerEndpoint = 500
+
+	// maxDeliveryError bounds the stored (truncated) attempt error text.
+	maxDeliveryError = 512
+)
+
+// usageCounts is a per-endpoint delivery tally over a time window: Deliveries is the
+// number of COMPLETED deliveries (each attempt-group contributes exactly one terminal
+// row — status 'ok' or 'failed'), Failures the subset that ultimately failed.
+type usageCounts struct {
+	Deliveries int
+	Failures   int
+}
+
 // store wraps one org's *sql.DB. cloud.OrgStore opens (and migrates) it exactly once
 // per org file and calls Close on shutdown.
 type store struct {
@@ -49,7 +67,21 @@ CREATE TABLE IF NOT EXISTS endpoint (
   created_at  TEXT NOT NULL,
   updated_at  TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS endpoint_status ON endpoint(status);`
+CREATE INDEX IF NOT EXISTS endpoint_status ON endpoint(status);
+
+CREATE TABLE IF NOT EXISTS delivery (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  endpoint_id TEXT    NOT NULL,
+  delivery_id TEXT    NOT NULL,
+  subject     TEXT    NOT NULL,
+  attempt     INTEGER NOT NULL,
+  status      TEXT    NOT NULL,
+  http_status INTEGER NOT NULL DEFAULT 0,
+  error       TEXT    NOT NULL DEFAULT '',
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  created     TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS delivery_endpoint ON delivery(endpoint_id, id DESC);`
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("webhooks migrate: %w", err)
 	}
@@ -138,6 +170,96 @@ func (s *store) del(ctx context.Context, id string) (bool, error) {
 	}
 	n, _ := res.RowsAffected()
 	return n > 0, nil
+}
+
+// setSecret rotates an endpoint's signing secret, stamping updated_at and leaving every
+// other field (url/events/status/description/created_at) untouched. It returns the stored
+// row (secret populated) so the caller can reveal the NEW secret once, or errNotFound.
+func (s *store) setSecret(ctx context.Context, id, secret, updatedAt string) (Endpoint, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE endpoint SET secret = ?, updated_at = ? WHERE id = ?`, secret, updatedAt, id)
+	if err != nil {
+		return Endpoint{}, fmt.Errorf("webhooks set secret: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return Endpoint{}, errNotFound
+	}
+	return s.get(ctx, id)
+}
+
+// recordDelivery appends ONE delivery-attempt row, then prunes the endpoint's log back to
+// the newest maxDeliveryRowsPerEndpoint rows (opportunistic retention on insert — no
+// background sweep). It is called best-effort from the delivery goroutine; the caller
+// swallows any error so a log write can never affect delivery.
+func (s *store) recordDelivery(ctx context.Context, r DeliveryRow) error {
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO delivery (endpoint_id, delivery_id, subject, attempt, status, http_status, error, duration_ms, created)
+		 VALUES (?,?,?,?,?,?,?,?,?)`,
+		r.EndpointID, r.DeliveryID, r.Subject, r.Attempt, r.Status, r.HTTPStatus, r.Error, r.DurationMs, r.Created); err != nil {
+		return fmt.Errorf("webhooks record delivery: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`DELETE FROM delivery WHERE endpoint_id = ? AND id NOT IN (
+		   SELECT id FROM delivery WHERE endpoint_id = ? ORDER BY id DESC LIMIT ?)`,
+		r.EndpointID, r.EndpointID, maxDeliveryRowsPerEndpoint); err != nil {
+		return fmt.Errorf("webhooks prune delivery: %w", err)
+	}
+	return nil
+}
+
+// deliveries returns an endpoint's delivery-attempt log, newest first, capped at limit and
+// optionally filtered to one status (e.g. "failed"). An empty status means all rows.
+func (s *store) deliveries(ctx context.Context, endpointID string, limit int, status string) ([]DeliveryRow, error) {
+	q := `SELECT endpoint_id, delivery_id, subject, attempt, status, http_status, error, duration_ms, created
+	      FROM delivery WHERE endpoint_id = ?`
+	args := []any{endpointID}
+	if status != "" {
+		q += ` AND status = ?`
+		args = append(args, status)
+	}
+	q += ` ORDER BY id DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("webhooks deliveries: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := []DeliveryRow{}
+	for rows.Next() {
+		var r DeliveryRow
+		if err := rows.Scan(&r.EndpointID, &r.DeliveryID, &r.Subject, &r.Attempt, &r.Status, &r.HTTPStatus, &r.Error, &r.DurationMs, &r.Created); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// usage tallies every endpoint's completed/failed deliveries since the given RFC3339
+// instant in ONE grouped aggregate (created is stored as sortable RFC3339-UTC, so a
+// lexical >= is a time comparison). Endpoints with no rows in the window are simply
+// absent from the map — the caller defaults them to a zero tally.
+func (s *store) usage(ctx context.Context, since string) (map[string]usageCounts, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT endpoint_id,
+		        SUM(CASE WHEN status IN ('ok','failed') THEN 1 ELSE 0 END),
+		        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END)
+		 FROM delivery WHERE created >= ? GROUP BY endpoint_id`, since)
+	if err != nil {
+		return nil, fmt.Errorf("webhooks usage: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]usageCounts{}
+	for rows.Next() {
+		var id string
+		var deliveries, failures int
+		if err := rows.Scan(&id, &deliveries, &failures); err != nil {
+			return nil, err
+		}
+		out[id] = usageCounts{Deliveries: deliveries, Failures: failures}
+	}
+	return out, rows.Err()
 }
 
 // scanner abstracts *sql.Row and *sql.Rows so scan serves both get and query.
