@@ -149,6 +149,11 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		ctx, cancel := context.WithCancel(context.Background())
 		s.State.cancel = cancel
 		go runBuildReconciler(s, ctx)
+		// Meter running deployments' compute onto their org's ledger every interval —
+		// the last wire in the OSS compute-royalty loop (computemeter.go). Same cancel
+		// context as the reconciler, so Shutdown stops both; single-writer by the same
+		// topology the build meter relies on.
+		go runComputeMeter(s, ctx)
 	}
 
 	log.Info("platform control plane mounted",
