@@ -139,6 +139,7 @@ import (
 	"github.com/hanzoai/cloud/clients/visor"
 	"github.com/hanzoai/cloud/clients/wallets"
 	"github.com/hanzoai/cloud/clients/websearch"
+	"github.com/hanzoai/cloud/clients/share"
 	"github.com/hanzoai/cloud/clients/world"
 	"github.com/hanzoai/cloud/clients/x402"
 	"github.com/hanzoai/cloud/clients/zt"
@@ -347,6 +348,10 @@ func Wire() []cloud.MountSpec {
 		{Name: "captable", Mount: captable.Mount, Shutdown: captable.Shutdown},
 		{Name: "code", Mount: code.Mount, Shutdown: code.Shutdown},
 		{Name: "zero-trust", Mount: zt.Mount},
+		// ngrok-native public sharing: /v1/share/* provisions a per-org zrok
+		// account so `hanzo share <port>` publishes a local service to a public
+		// https://<token>.share.hanzo.ai URL. Fail-closed until ZROK_ADMIN_TOKEN.
+		{Name: "share", Mount: share.Mount},
 		// Data rooms via goja + per-tenant Base. STAGED behind CLOUD_ENABLE. OwnsHealth.
 		{Name: "dataroom", Mount: dataroom.Mount, Shutdown: dataroom.Shutdown, OwnsHealth: true},
 		{Name: "graph", Mount: graph.Mount},
