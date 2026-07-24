@@ -48,6 +48,55 @@ func TestTranslateCommerce(t *testing.T) {
 	}
 }
 
+// TestTranslateEcommerce verifies the ecommerce vocabulary (both the @hanzo/event
+// canonical names and the schema.org/GA4 action names) maps onto the commerce standard
+// events, and that line items lift from a properties array or a first-class product id.
+func TestTranslateEcommerce(t *testing.T) {
+	names := map[string]StandardEvent{
+		"product_viewed":   EventViewContent,
+		"product_view":     EventViewContent,
+		"product_added":    EventAddToCart,
+		"add_to_cart":      EventAddToCart,
+		"checkout_started": EventStartCheckout,
+		"begin_checkout":   EventStartCheckout,
+		"order_completed":  EventPurchase,
+		"purchase":         EventPurchase,
+	}
+	for name, want := range names {
+		if got := Translate(analytics.SinkEvent{Name: name}).Standard; got != want {
+			t.Errorf("Translate(%q).Standard = %q, want %q", name, got, want)
+		}
+	}
+	// Items lift from a properties array, tolerating GA4/Segment/schema.org keys.
+	cv := Translate(analytics.SinkEvent{
+		Name: "order_completed",
+		Properties: map[string]any{
+			"items": []any{
+				map[string]any{"item_id": "SKU1", "item_name": "Widget", "price": 24.99, "quantity": float64(2)},
+				map[string]any{"sku": "SKU2", "name": "Gadget", "item_price": 10.0},
+			},
+		},
+	})
+	if len(cv.Items) != 2 {
+		t.Fatalf("want 2 items, got %d (%+v)", len(cv.Items), cv.Items)
+	}
+	if cv.Items[0].ID != "SKU1" || cv.Items[0].Name != "Widget" || cv.Items[0].Price != 24.99 || cv.Items[0].Quantity != 2 {
+		t.Errorf("item0: %+v", cv.Items[0])
+	}
+	if cv.Items[1].ID != "SKU2" || cv.Items[1].Name != "Gadget" || cv.Items[1].Price != 10.0 {
+		t.Errorf("item1: %+v", cv.Items[1])
+	}
+	// A first-class product id synthesizes a single item when no array is present.
+	cv2 := Translate(analytics.SinkEvent{Name: "product_added", ProductID: "SKU9", Quantity: 3})
+	if len(cv2.Items) != 1 || cv2.Items[0].ID != "SKU9" || cv2.Items[0].Quantity != 3 {
+		t.Fatalf("synthesized item: %+v", cv2.Items)
+	}
+	// No commerce data ⇒ no items (a non-commerce event carries none).
+	if items := Translate(analytics.SinkEvent{Name: "$pageview"}).Items; items != nil {
+		t.Errorf("pageview items = %+v, want nil", items)
+	}
+}
+
 // TestTranslateLiftUser verifies the match-key set is lifted from the raw properties
 // and the distinct id — the keys the adapters hash before send.
 func TestTranslateLiftUser(t *testing.T) {

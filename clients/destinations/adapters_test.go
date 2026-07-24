@@ -156,6 +156,225 @@ func TestMetaSendEndToEnd(t *testing.T) {
 	}
 }
 
+// ── ecommerce mapping (GA4 items[] + Meta content signals) ───────────────────
+
+func TestGA4EcommerceItems(t *testing.T) {
+	groups := ga4Group([]Conversion{{
+		Standard: EventPurchase, Name: "order_completed", Value: 49.98, Currency: "USD", EventID: "ord-1",
+		User:  UserData{ExternalID: "v1"},
+		Items: []Item{{ID: "SKU1", Name: "Widget", Category: "tools", Brand: "Acme", Price: 24.99, Quantity: 2}},
+	}})
+	if len(groups) != 1 || len(groups[0].Events) != 1 {
+		t.Fatalf("groups: %+v", groups)
+	}
+	p := groups[0].Events[0].Params
+	if groups[0].Events[0].Name != "purchase" {
+		t.Errorf("event name = %q, want purchase", groups[0].Events[0].Name)
+	}
+	if p["value"] != 49.98 || p["currency"] != "USD" {
+		t.Errorf("value/currency: %+v", p)
+	}
+	// Purchase carries GA4's native transaction id (from the shared dedup id).
+	if p["transaction_id"] != "ord-1" {
+		t.Errorf("transaction_id = %v, want ord-1", p["transaction_id"])
+	}
+	items, ok := p["items"].([]map[string]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("items = %v", p["items"])
+	}
+	it := items[0]
+	if it["item_id"] != "SKU1" || it["item_name"] != "Widget" || it["item_category"] != "tools" || it["item_brand"] != "Acme" {
+		t.Errorf("item fields: %+v", it)
+	}
+	if it["price"] != 24.99 || it["quantity"] != 2.0 {
+		t.Errorf("item price/qty: %+v", it)
+	}
+	// A non-purchase ecommerce event still carries items but no transaction_id.
+	vc := ga4EventOf(Conversion{Standard: EventViewContent, Name: "product_viewed", User: UserData{ExternalID: "v1"},
+		Items: []Item{{ID: "SKU2"}}})
+	if vc.Name != "view_item" {
+		t.Errorf("view name = %q, want view_item", vc.Name)
+	}
+	if _, has := vc.Params["transaction_id"]; has {
+		t.Error("non-purchase must not carry transaction_id")
+	}
+	if items, _ := vc.Params["items"].([]map[string]any); len(items) != 1 || items[0]["item_id"] != "SKU2" {
+		t.Errorf("view_item items: %+v", vc.Params["items"])
+	}
+}
+
+func TestMetaEcommerceContents(t *testing.T) {
+	body := metaBuild(Config{"pixelId": "PX"}, "tok", []Conversion{{
+		Standard: EventPurchase, Name: "order_completed", Value: 59.98, Currency: "USD", EventID: "ord-9",
+		User: UserData{Email: "a@b.com"},
+		Items: []Item{
+			{ID: "SKU1", Price: 24.99, Quantity: 2},
+			{ID: "SKU2", Price: 10.0, Quantity: 1},
+		},
+	}})
+	if body.Data[0].EventName != "Purchase" {
+		t.Fatalf("event name = %q, want Purchase", body.Data[0].EventName)
+	}
+	cd := body.Data[0].CustomData
+	if cd["value"] != 59.98 || cd["currency"] != "USD" {
+		t.Errorf("value/currency: %+v", cd)
+	}
+	if cd["content_type"] != "product" {
+		t.Errorf("content_type: %+v", cd["content_type"])
+	}
+	// Purchase carries Meta's native order id (its dedup key).
+	if cd["order_id"] != "ord-9" {
+		t.Errorf("order_id: %+v", cd["order_id"])
+	}
+	ids, _ := cd["content_ids"].([]string)
+	if len(ids) != 2 || ids[0] != "SKU1" || ids[1] != "SKU2" {
+		t.Errorf("content_ids: %+v", cd["content_ids"])
+	}
+	if cd["num_items"] != 3 {
+		t.Errorf("num_items = %v, want 3", cd["num_items"])
+	}
+	contents, _ := cd["contents"].([]map[string]any)
+	if len(contents) != 2 || contents[0]["id"] != "SKU1" || contents[0]["quantity"] != 2.0 || contents[0]["item_price"] != 24.99 {
+		t.Errorf("contents: %+v", cd["contents"])
+	}
+}
+
+// ── Umami (Hanzo Analytics — public /api/send, credential-less) ───────────────
+
+func TestUmamiBuild(t *testing.T) {
+	// A pageview is sent WITHOUT a name (Umami's pageview vs. custom-event rule) and
+	// its URL splits into hostname + path.
+	pv := umamiBuild(Config{"websiteId": "W1"}, Conversion{
+		Standard: EventPageView, Name: "$pageview", URL: "https://shop.example/pricing?x=1", Referrer: "https://google.com",
+		User: UserData{ExternalID: "v1"},
+	})
+	if pv.Type != "event" || pv.Payload.Website != "W1" {
+		t.Fatalf("envelope: %+v", pv)
+	}
+	if pv.Payload.Name != "" {
+		t.Errorf("pageview must have no name, got %q", pv.Payload.Name)
+	}
+	if pv.Payload.Hostname != "shop.example" || pv.Payload.URL != "/pricing?x=1" {
+		t.Errorf("url split: host=%q url=%q", pv.Payload.Hostname, pv.Payload.URL)
+	}
+	if pv.Payload.Referrer != "https://google.com" || pv.Payload.DistinctID != "v1" {
+		t.Errorf("referrer/distinct: %+v", pv.Payload)
+	}
+	// A commerce event carries its canonical name (sans $) + value/currency data.
+	pur := umamiBuild(Config{"websiteId": "W1"}, Conversion{
+		Standard: EventPurchase, Name: "order_completed", Value: 30, Currency: "USD", User: UserData{ExternalID: "v2"},
+	})
+	if pur.Payload.Name != "order_completed" {
+		t.Errorf("name = %q", pur.Payload.Name)
+	}
+	if pur.Payload.Data["value"] != 30.0 || pur.Payload.Data["currency"] != "USD" {
+		t.Errorf("data: %+v", pur.Payload.Data)
+	}
+}
+
+func TestUmamiSendEndToEnd(t *testing.T) {
+	var gotEnv umamiEnvelope
+	var gotUA, gotXFF, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		gotXFF = r.Header.Get("X-Forwarded-For")
+		gotPath = r.URL.Path
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &gotEnv)
+		_, _ = w.Write([]byte("token-abc")) // Umami returns a plain text token
+	}))
+	defer srv.Close()
+	old := umamiHost
+	umamiHost = srv.URL
+	defer func() { umamiHost = old }()
+
+	// Credential-less: the secret argument is empty and ignored.
+	res, err := umami{}.Send(context.Background(), Config{"websiteId": "W9"}, "",
+		[]Conversion{{Standard: EventPurchase, Name: "order_completed", Value: 5, Currency: "USD",
+			User: UserData{ExternalID: "v1", UserAgent: "Mozilla/5.0", IP: "203.0.113.7"}}})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if res.Sent != 1 {
+		t.Fatalf("sent = %d", res.Sent)
+	}
+	if gotPath != "/api/send" {
+		t.Errorf("path = %q, want /api/send", gotPath)
+	}
+	if gotEnv.Payload.Website != "W9" || gotEnv.Payload.Name != "order_completed" {
+		t.Errorf("envelope: %+v", gotEnv.Payload)
+	}
+	// The END USER's UA + IP are forwarded so Umami attributes the session/geo.
+	if gotUA != "Mozilla/5.0" || gotXFF != "203.0.113.7" {
+		t.Errorf("forwarded UA/IP: ua=%q xff=%q", gotUA, gotXFF)
+	}
+}
+
+func TestUmamiRequiresWebsite(t *testing.T) {
+	if _, err := (umami{}).Send(context.Background(), Config{}, "", nil); err == nil {
+		t.Fatal("missing websiteId must error")
+	}
+}
+
+// ── PostHog (Hanzo Insights — /batch capture, api_key in body) ────────────────
+
+func TestPostHogBuild(t *testing.T) {
+	body := posthogBuild("phc_key", []Conversion{
+		{Standard: EventPurchase, Name: "order_completed", Value: 12, Currency: "USD", URL: "https://x.example/y", User: UserData{ExternalID: "v1"}},
+		{Standard: EventPageView, Name: "$pageview", User: UserData{ExternalID: ""}}, // no distinct id → dropped
+	})
+	if body.APIKey != "phc_key" {
+		t.Fatalf("api_key = %q", body.APIKey)
+	}
+	if len(body.Batch) != 1 {
+		t.Fatalf("want 1 event (empty distinct dropped), got %d", len(body.Batch))
+	}
+	e := body.Batch[0]
+	if e.Event != "order_completed" || e.DistinctID != "v1" {
+		t.Errorf("event/distinct: %+v", e)
+	}
+	if e.Properties["value"] != 12.0 || e.Properties["currency"] != "USD" || e.Properties["$current_url"] != "https://x.example/y" {
+		t.Errorf("properties: %+v", e.Properties)
+	}
+}
+
+func TestPostHogSendEndToEnd(t *testing.T) {
+	var gotBody posthogBatch
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &gotBody)
+		_, _ = w.Write([]byte(`{"status":1}`))
+	}))
+	defer srv.Close()
+	old := posthogHost
+	posthogHost = srv.URL
+	defer func() { posthogHost = old }()
+
+	res, err := posthog{}.Send(context.Background(), Config{}, "phc_secret",
+		[]Conversion{{Standard: EventLead, Name: "plan_clicked", User: UserData{ExternalID: "v1"}}})
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if res.Sent != 1 {
+		t.Fatalf("sent = %d", res.Sent)
+	}
+	if gotPath != "/batch" {
+		t.Errorf("path = %q, want /batch", gotPath)
+	}
+	// The api_key rides the BODY (never the URL); the mock echoes it back for the assert.
+	if gotBody.APIKey != "phc_secret" || len(gotBody.Batch) != 1 || gotBody.Batch[0].Event != "plan_clicked" {
+		t.Errorf("body: %+v", gotBody)
+	}
+}
+
+func TestPostHogRequiresKey(t *testing.T) {
+	if _, err := (posthog{}).Send(context.Background(), Config{}, "", nil); err == nil {
+		t.Fatal("missing api_key must error")
+	}
+}
+
 // ── scaffolds (payload shape against the same interface) ──────────────────────
 
 func TestTikTokBuild(t *testing.T) {
@@ -224,9 +443,9 @@ func TestXBuildAndScaffold(t *testing.T) {
 	}
 }
 
-// TestRegistryComplete asserts all six platforms self-registered with a coherent Spec.
+// TestRegistryComplete asserts every platform self-registered with a coherent Spec.
 func TestRegistryComplete(t *testing.T) {
-	want := []string{"ga4", "meta", "tiktok", "linkedin", "x", "reddit"}
+	want := []string{"ga4", "meta", "tiktok", "linkedin", "x", "reddit", "umami", "posthog"}
 	m := snapshot()
 	for _, id := range want {
 		d, ok := m[id]
