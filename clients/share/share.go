@@ -70,17 +70,9 @@ func enable(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	email := accountEmail(org)
-	// Only the real controller derives passwords; the interface hides it, so ask
-	// the concrete client. A fake in tests returns a fixed credential.
-	pw := passwordFor(s.State.cl, org)
-	if err := s.State.cl.ensureAccount(c.Context(), email, pw); err != nil {
-		s.Log.Warn("share ensureAccount failed", "org", org, "err", err)
-		return zip.Errorf(http.StatusBadGateway, "share controller unavailable")
-	}
-	tok, err := s.State.cl.login(c.Context(), email, pw)
+	tok, err := s.State.cl.token(c.Context(), org, true)
 	if err != nil {
-		s.Log.Warn("share login failed", "org", org, "err", err)
+		s.Log.Warn("share provision failed", "org", org, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "share controller unavailable")
 	}
 	return c.JSON(http.StatusOK, enableResp{
@@ -110,11 +102,10 @@ func listShares(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	email := accountEmail(org)
-	pw := passwordFor(s.State.cl, org)
-	tok, err := s.State.cl.login(c.Context(), email, pw)
+	tok, err := s.State.cl.token(c.Context(), org, false)
 	if err != nil {
-		// Not provisioned yet (no account) → no shares. Honest empty, not 500.
+		// Not provisioned yet (errNoAccount) or controller down → no shares.
+		// Honest empty, not 500 — the console never error-toasts on load.
 		return c.JSON(http.StatusOK, map[string]any{"shares": []shareView{}})
 	}
 	ov, err := s.State.cl.overview(c.Context(), tok)
@@ -135,15 +126,6 @@ func listShares(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 	}
 	return c.JSON(http.StatusOK, map[string]any{"shares": out})
-}
-
-// passwordFor asks the concrete client for the org's deterministic password;
-// a fake controller (tests) that doesn't implement it falls back to a constant.
-func passwordFor(cl controller, org string) string {
-	if h, ok := cl.(*httpController); ok {
-		return h.accountPassword(org)
-	}
-	return "test-password-" + org
 }
 
 // shareURL renders a share token into its public URL via SHARE_URL_TEMPLATE.
