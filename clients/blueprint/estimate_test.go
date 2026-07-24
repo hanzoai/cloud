@@ -127,6 +127,63 @@ services:
 	}
 }
 
+// TestEstimateService proves the single-service seam the deploy-compute meter
+// uses: a running platform app is one image at N replicas, priced by the SAME
+// rate card + class inference as a compose template, so EstimateService and a
+// one-service EstimateCompose of the same image agree exactly. The per-hour
+// microdollar figures are hand-computed from the default rate card (12000 µ$/vCPU-hr,
+// 6000 µ$/GB-hr) — the exact number the org is metered per running hour.
+func TestEstimateService(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		image    string
+		replicas int
+		class    string
+		micro    int64 // µ$/hr
+		month    int64 // ¢/mo
+	}{
+		// db default 1.0 vCPU / 2.0 GB → 1*12000 + 2*6000 = 24000 µ$/hr; round(24000*730/10000)=1752¢.
+		{"postgres single", "postgres:16", 1, "db", 24000, 1752},
+		// cache default 0.5 / 1.0 → 0.5*12000 + 1*6000 = 12000 µ$/hr; round(12000*730/10000)=876¢.
+		{"redis single", "redis:7", 1, "cache", 12000, 876},
+		// unknown image → "other" 0.25 / 0.5 → 0.25*12000 + 0.5*6000 = 6000 µ$/hr.
+		{"generic app", "ghcr.io/acme/api:v1", 1, "other", 6000, 438},
+		// replicas scale linearly: db × 3 = 3.0 / 6.0 → 72000 µ$/hr.
+		{"postgres x3", "postgres:16", 3, "db", 72000, 5256},
+		// replicas < 1 is clamped to 1 (never free by a zero-replica record).
+		{"zero replicas clamps to 1", "postgres:16", 0, "db", 24000, 1752},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			est := EstimateService(tc.image, tc.replicas)
+			if est.MicroUSDPerHour != tc.micro {
+				t.Fatalf("MicroUSDPerHour = %d, want %d", est.MicroUSDPerHour, tc.micro)
+			}
+			if est.CentsPerMonth != tc.month {
+				t.Fatalf("CentsPerMonth = %d, want %d", est.CentsPerMonth, tc.month)
+			}
+			if len(est.SBOM) != 1 {
+				t.Fatalf("SBOM len = %d, want 1", len(est.SBOM))
+			}
+			if est.SBOM[0].Type != tc.class || est.SBOM[0].Image != tc.image {
+				t.Fatalf("SBOM[0] = %+v, want type %q image %q", est.SBOM[0], tc.class, tc.image)
+			}
+			if !est.Estimate {
+				t.Fatal("Estimate flag must be true")
+			}
+		})
+	}
+
+	// Parity: EstimateService(image,1) equals a one-service compose of the same image.
+	svc := EstimateService("postgres:16", 1)
+	comp, err := EstimateCompose("one", []byte("services:\n  postgres:16:\n    image: postgres:16\n"))
+	if err != nil {
+		t.Fatalf("EstimateCompose: %v", err)
+	}
+	if svc.MicroUSDPerHour != comp.MicroUSDPerHour {
+		t.Fatalf("EstimateService µ$/hr %d != one-service compose %d", svc.MicroUSDPerHour, comp.MicroUSDPerHour)
+	}
+}
+
 func TestEmptyAndMalformed(t *testing.T) {
 	if _, err := EstimateCompose("empty", []byte("volumes:\n  x:\n")); err == nil {
 		t.Fatal("compose with no services must error")
