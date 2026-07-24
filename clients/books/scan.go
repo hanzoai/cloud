@@ -22,6 +22,7 @@ package books
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -141,6 +142,10 @@ func scanHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 type BookRequest struct {
 	ScanID  string  `json:"scanId"`
 	Voucher Voucher `json:"voucher"`
+	// Override books this bill even when one of the SAME economic identity
+	// (vendor, total, issue date) already posted — the explicit human confirmation that a
+	// same-looking bill is a genuine second spend, not the same receipt re-scanned.
+	Override bool `json:"override,omitempty"`
 }
 
 // BookResponse reports the outcome of a scan book: posted=false means the same scan already
@@ -181,9 +186,28 @@ func scanBookHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 	if v.Description == "" {
 		v.Description = "Scanned bill " + scanID
 	}
+	// Economic-identity dedup: the file-hash scanID makes an exact re-upload idempotent, but the
+	// SAME real-world bill re-scanned (different DPI, edited whitespace, changed PDF metadata)
+	// yields a NEW hash — which would double-book. Block a bill whose (vendor, total, issue date)
+	// already posted under a DIFFERENT scan unless the human explicitly overrides.
+	id := voucherIdentity(v)
+	if !in.Override {
+		if prior, dup, err := st.scanIdentityBooked(c.Context(), id, scanID); err != nil {
+			return zip.Errorf(http.StatusInternalServerError, "dedup check failed")
+		} else if dup {
+			return zip.ErrConflict(fmt.Sprintf(
+				"a bill from %s for %s dated %s already booked (scan %s) — set override to book a duplicate",
+				id.Vendor, dollars(id.Total), id.Issued, prior))
+		}
+	}
 	posted, err := st.post(c.Context(), v, RoundOffAllowance)
 	if err != nil {
 		return zip.ErrBadRequest(err.Error()) // an unbalanced reviewed voucher is a client error
+	}
+	if posted {
+		if err := st.recordScanIdentity(c.Context(), id, scanID, v.PostingAt); err != nil {
+			return zip.Errorf(http.StatusInternalServerError, "identity record failed")
+		}
 	}
 	if err := st.markInboxBooked(c.Context(), scanID); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "inbox update failed")
@@ -367,6 +391,80 @@ func (st *store) buildDraft(ctx context.Context, ex Extracted, scanID string) (S
 		}}
 	}
 	return draft, nil
+}
+
+// scanIdentity is the ECONOMIC identity of a booked bill — its vendor, exact total in cents,
+// and issue date. It is the natural key that catches the SAME real-world receipt re-scanned
+// into a new file hash (a byte-level difference the sha256 scanID does not see), so the same
+// spend cannot double-book on a re-print / re-scan.
+type scanIdentity struct {
+	Vendor string
+	Total  int64
+	Issued string
+}
+
+// voucherIdentity derives a reviewed voucher's economic identity from what is actually posted
+// (not the draft): the vendor is its description, the total is the VendorPayable credit (the
+// bill total; falling back to Σdebit if a reviewer restructured the legs), and the issue date
+// is the date portion of the posting time. Deriving it from the voucher means the guard tracks
+// the real booking even after a human edits it.
+func voucherIdentity(v Voucher) scanIdentity {
+	var total int64
+	for _, l := range v.Legs {
+		if l.Account == VendorPayable {
+			total += l.Credit
+		}
+	}
+	if total == 0 {
+		for _, l := range v.Legs {
+			total += l.Debit
+		}
+	}
+	issued := v.PostingAt
+	if len(issued) >= 10 {
+		issued = issued[:10] // YYYY-MM-DD prefix of the RFC3339 posting time
+	}
+	return scanIdentity{Vendor: normVendor(v.Description), Total: total, Issued: issued}
+}
+
+// normVendor canonicalizes a vendor string for identity comparison: lowercased, trimmed, and
+// internal whitespace collapsed, so "GitHub", "github", and "  GitHub " share one identity.
+func normVendor(s string) string {
+	return strings.ToLower(strings.Join(strings.Fields(s), " "))
+}
+
+// scanIdentityBooked reports whether a bill of this economic identity has already posted under
+// a DIFFERENT scan (exceptScanID excludes the same scan re-booking itself, which post() already
+// makes idempotent). It is the read half of the economic-dedup guard.
+func (s *store) scanIdentityBooked(ctx context.Context, id scanIdentity, exceptScanID string) (string, bool, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT scan_id FROM scan_identity
+		 WHERE vendor = ? AND total_cents = ? AND issued_at = ? AND scan_id <> ?`,
+		id.Vendor, id.Total, id.Issued, exceptScanID)
+	var sid string
+	switch err := row.Scan(&sid); err {
+	case nil:
+		return sid, true, nil
+	case sql.ErrNoRows:
+		return "", false, nil
+	default:
+		return "", false, fmt.Errorf("books scanIdentityBooked: %w", err)
+	}
+}
+
+// recordScanIdentity records a booked bill's economic identity, idempotent on the natural key —
+// an override that books a second voucher of the same identity does NOT overwrite the first, so
+// the guard keeps firing for later non-override bookings.
+func (s *store) recordScanIdentity(ctx context.Context, id scanIdentity, scanID, bookedAt string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO scan_identity (vendor, total_cents, issued_at, scan_id, booked_at)
+		 VALUES (?,?,?,?,?)
+		 ON CONFLICT(vendor, total_cents, issued_at) DO NOTHING`,
+		id.Vendor, id.Total, id.Issued, scanID, bookedAt)
+	if err != nil {
+		return fmt.Errorf("books recordScanIdentity: %w", err)
+	}
+	return nil
 }
 
 // scanPostingAt converts a YYYY-MM-DD issue date into an RFC3339 UTC midnight posting time
