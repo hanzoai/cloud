@@ -1066,6 +1066,8 @@ github.com/hanzoai/agent v0.1.3 h1:zzV4t8kN/m/wTLrqzEy0fxxONSZbx3XSVH7TIR9gZNU=
 github.com/hanzoai/agent v0.1.3/go.mod h1:Z3hCBdSeN/nGV4o+3F4psQ2bbFk17+tMP5l+G2ssNNA=
 github.com/hanzoai/ai v1.831.0 h1:LSsI7gCooUN4bdrNRZE2dQXVSaDJpKHDZcBBOPMoqXU=
 github.com/hanzoai/ai v1.831.0/go.mod h1:Qj9xhRkEWYgYlEJyjIZDvOX2yGe9Ylg6AvF1Op+aIRU=
+github.com/hanzoai/ai v1.831.1 h1:Ik9RYAOYgjsSsEfhgj4/ggJ0+OyYUBV9uYLB7tIWGgA=
+github.com/hanzoai/ai v1.831.1/go.mod h1:iZMupp7r/NsFt8kb3BXCj/0bpu0E82fIalK2UyEsKfw=
 github.com/hanzoai/authz v1.10.7 h1:JrHljH29mbmVi8u6/6EVG7R0NiFhIYYm2WUBBuBmFq0=
 github.com/hanzoai/authz v1.10.7/go.mod h1:9wf6n6BvrvxRULUtL3yc+vmprwwvAGZLGJoMHhiQSK4=
 github.com/hanzoai/base v1.5.7 h1:490temFA2Bz4/QD5lWRKWFWJp+k7FfIJCOi3FXMA80w=
@@ -1124,6 +1126,8 @@ github.com/hanzoai/notify v1.6.18 h1:YLIKheJSMhGqRuo7NRsMicHjAWSVFV6j6ZGqm2H+IBM
 github.com/hanzoai/notify v1.6.18/go.mod h1:O8OZj1cfUAIY39ROTPpiaVH8jv947VNfAGor2AZ/ebQ=
 github.com/hanzoai/o11y v1.5.28 h1:kOqV7vdDdezB+q9YEvrVOq3kviraVs1Pst7IsD0LbI0=
 github.com/hanzoai/o11y v1.5.28/go.mod h1:0N4ISLvuFsN/Dw74uWwNH3yBTsqBYB+BAgqfBJToyZ0=
+github.com/hanzoai/o11y v1.5.30 h1:jh0BSAijR98eT5lvhq5/o3sRTU+YsVHtrGVym+a7cKo=
+github.com/hanzoai/o11y v1.5.30/go.mod h1:lI8yn6GRGJ4ZK2CEfuduZ9yGrr7QFo3AZr7FrFwg0M8=
 github.com/hanzoai/orm v0.6.7 h1:YvWhEdRlzC1O9tkAa+Qqi87yRlpwfLGVlCmtib2sbsI=
 github.com/hanzoai/orm v0.6.7/go.mod h1:WiTSrm7QW+kjYzJACtU7WcHquSJ2WTLRoj7/3B/ylr8=
 github.com/hanzoai/otel-collector v1.2.0 h1:lBDL5lKotq89JaqchcM+/oxEnjrjazEI2JJfDhotudc=

@@ -146,6 +146,11 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	// its Service CR here — the direct-CR replacement for the image-update.yml
 	// GitOps hop (release.go).
 	registerReleaser(s)
+
+	// In-process fleet seam: publish THIS board's observer so the admin god-view
+	// (/v1/admin/products + the overview drift KPIs) reuses the SAME App-CR + drift
+	// observation instead of forking a second k8s client (fleet.go).
+	PublishFleet(fleetObserver{s: s})
 }
 
 // guard authorizes the PaaS fleet board off ONE IAM identity, exactly like the
@@ -272,6 +277,7 @@ type AppView struct {
 	Env         string   `json:"env"`  // main|test|dev
 	Repo        string   `json:"repo"` // owner/repo, e.g. hanzoai/iam
 	Registry    string   `json:"registry"`
+	Role        string   `json:"role"` // operator spec.role (sql|kv|generic|ingress|…) or "" — the one declared class field
 	DeclaredTag string   `json:"declaredTag"`
 	RunningTag  string   `json:"runningTag"`
 	LatestTag   string   `json:"latestTag"`
@@ -627,6 +633,7 @@ func observeCR(obj *unstructured.Unstructured, namespace, env, runningTag string
 	name := obj.GetName()
 	repository, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "repository")
 	declaredTag, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "tag")
+	role, _, _ := unstructured.NestedString(obj.Object, "spec", "role")
 
 	status, _, _ := unstructured.NestedMap(obj.Object, "status")
 	phase, _, _ := unstructured.NestedString(obj.Object, "status", "phase")
@@ -640,6 +647,7 @@ func observeCR(obj *unstructured.Unstructured, namespace, env, runningTag string
 		Env:         env,
 		Repo:        repoFromRepository(repository),
 		Registry:    repository,
+		Role:        role,
 		DeclaredTag: declaredTag,
 		RunningTag:  runningTag,
 		LatestTag:   "", // GH-release reader is a follow-up phase (release-reader.ts)
