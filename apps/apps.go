@@ -63,6 +63,7 @@ import (
 	"github.com/hanzoai/cloud/clients/base"
 	"github.com/hanzoai/cloud/clients/benchmark"
 	"github.com/hanzoai/cloud/clients/billing"
+	"github.com/hanzoai/cloud/clients/books"
 	"github.com/hanzoai/cloud/clients/bots"
 	"github.com/hanzoai/cloud/clients/campaign"
 	"github.com/hanzoai/cloud/clients/captable"
@@ -398,6 +399,12 @@ func Wire() []cloud.MountSpec {
 		// store → Shutdown. clients/campaign composes it (experiments.Assign/Analyze).
 		{Name: "experiments", Mount: experiments.Mount, Shutdown: ctxShutdown(experiments.Shutdown)},
 		{Name: "treasury", Mount: treasury.Mount, Shutdown: ctxShutdown(treasury.Shutdown)},
+		// The revenue BOOKS spine (/v1/books): a native double-entry general ledger that
+		// records prepaid-credit revenue on per-org Base/SQLite. It READS commerce's
+		// transactions (the sole posting source) and books the accounting twin —
+		// deposit → Cr Customer Wallet (a liability), usage → Cr Usage revenue (the
+		// recognition moment). Mounts beside treasury/billing; owns its stores → Shutdown.
+		{Name: "books", Mount: books.Mount, Shutdown: ctxShutdown(books.Shutdown)},
 		{Name: "admin", Mount: admin.Mount},
 		// Launch-control gate (per-service waitlist): the COMPLETE feature — host→service
 		// registry + brand seed + the waitlist.<svc> switch registration + the
