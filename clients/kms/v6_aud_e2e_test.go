@@ -1,21 +1,19 @@
 package kms_test
 
-// V6 END-TO-END (the activation blocker). A REAL, RSA-signed client_credentials-
-// style bearer — owner=<org>, aud=<org>-platform-kms (the tenant's own IAM
-// application clientId, which is by construction NEVER in the configured audience
-// allowlist) — flows through cloud's ACTUAL SanitizeIdentity middleware
-// (cloud.IdentityMiddleware) and the ACTUAL /v1/kms org-scope guard.
+// KMS MACHINE-TOKEN END-TO-END. A REAL, RSA-signed client_credentials-style bearer —
+// owner=<org>, aud=<org>-platform-kms (the tenant's own IAM application clientId) —
+// flows through cloud's ACTUAL SanitizeIdentity middleware (cloud.IdentityMiddleware)
+// and the ACTUAL /v1/kms org-scope guard.
 //
-// This is the gap Red flagged: the existing kms_test/paas_sync_test do() helper
-// HEADER-INJECTS X-Org-Id / X-User-Id and never exercises validation. Here the org
-// is derived by SanitizeIdentity from the SIGNED owner claim, exactly as in
+// Audience is NOT an access gate: trust is signature + issuer + expiry, and reach is
+// the SIGNED owner claim (guard: owner == :org). So a machine token validates like any
+// other and is isolated to its own org by owner. The existing kms_test/paas_sync_test
+// do() helper HEADER-INJECTS X-Org-Id / X-User-Id and never exercises validation; here
+// the org is derived by SanitizeIdentity from the signed owner claim, exactly as in
 // production, so the test proves the whole chain:
 //
-//   real signed machine token → SanitizeIdentity (audience accepted, owner derived)
+//   real signed machine token → SanitizeIdentity (signature/issuer/expiry, owner derived)
 //                             → /v1/kms guard (owner == :org) → 200 own org / 403 else
-//
-// If the V6 audience fix regressed, case (1) would 403 (machine aud rejected →
-// anonymous → guard denies) and the sync would stay pending — the failure this locks.
 
 import (
 	"crypto/rand"
@@ -93,11 +91,8 @@ func e2eCfg(t *testing.T, jwksURL string) *cloud.Config {
 	return &cloud.Config{
 		Brand:     "hanzo",
 		Domain:    "api.hanzo.ai",
-		IAMIssuer: e2eIssuer,
-		JWKSURL:   jwksURL,
-		// The machine aud (<org>-platform-kms) is deliberately ABSENT here, so a 200
-		// below proves the OWNER-BOUND machine-aud FIX, not a broadened allowlist.
-		JWTAudiences:    []string{"hanzo-console"},
+		IAMIssuer:       e2eIssuer,
+		JWKSURL:         jwksURL,
 		AdminOrg:        "admin",
 		DataDir:         t.TempDir(),
 		Enable:          []string{"kms"},
@@ -148,11 +143,11 @@ func TestPaaSSyncMachineTokenEndToEnd(t *testing.T) {
 	aPath := "/v1/kms/orgs/" + paasOrgA + paasEnvPath
 	future := time.Now().Add(time.Hour)
 
-	// (1) maxpower's REAL machine token reads maxpower's secret → 200. Its aud
-	// (maxpower-platform-kms) is NOT in the allowlist; acceptance is the V6 fix.
+	// (1) maxpower's REAL machine token reads maxpower's secret → 200. Audience is not an
+	// access gate (trust is signature + issuer + expiry); owner=maxpower is the scope.
 	own := mintMachineToken(t, key, paasOrgA, paasOrgA+"-platform-kms", future)
 	if resp := getWithBearer(t, app, aPath, own); resp.StatusCode != 200 {
-		t.Fatalf("machine token → own org = %d, want 200 (activation blocker still open?)", resp.StatusCode)
+		t.Fatalf("machine token → own org = %d, want 200", resp.StatusCode)
 	} else if got := decode(t, resp.Body)["value"]; got != paasValueA {
 		t.Fatalf("read value=%v, want the sealed secret", got)
 	}
@@ -164,16 +159,18 @@ func TestPaaSSyncMachineTokenEndToEnd(t *testing.T) {
 		t.Fatalf("cross-tenant machine token (acme→maxpower) = %d, want 403", resp.StatusCode)
 	}
 
-	// (3) Owner-bound: a maxpower token bearing acme's machine aud is INVALID — the
-	// audience is bound to the token's OWN owner, so validation fails → anonymous →
-	// guard 403. Proves the aud is not a blanket "*-platform-kms" wildcard.
-	if resp := getWithBearer(t, app, aPath, mintMachineToken(t, key, paasOrgA, paasOrgB+"-platform-kms", future)); resp.StatusCode != 403 {
-		t.Fatalf("owner-mismatched machine aud = %d, want 403", resp.StatusCode)
+	// (3) Audience is not a gate: a token with a brand-new, never-registered aud still
+	// reads its OWN org (owner=maxpower) → 200 — the "new first-party app just works with
+	// zero cloud change" invariant. The aud never widens reach beyond the owner.
+	if resp := getWithBearer(t, app, aPath, mintMachineToken(t, key, paasOrgA, "a-brand-new-app-never-registered", future)); resp.StatusCode != 200 {
+		t.Fatalf("never-registered aud reading OWN org = %d, want 200 (aud is not a gate)", resp.StatusCode)
 	}
 
-	// (4) A token with an arbitrary audience is not accepted → 403 (fix is scoped).
-	if resp := getWithBearer(t, app, aPath, mintMachineToken(t, key, paasOrgA, "some-random-app", future)); resp.StatusCode != 403 {
-		t.Fatalf("arbitrary-audience token = %d, want 403", resp.StatusCode)
+	// (4) …and the aud still cannot cross tenants: owner=maxpower bearing acme's machine
+	// aud reading ACME's path is denied by owner-scope → 403 (owner governs, not aud).
+	bPath := "/v1/kms/orgs/" + paasOrgB + paasEnvPath
+	if resp := getWithBearer(t, app, bPath, mintMachineToken(t, key, paasOrgA, paasOrgB+"-platform-kms", future)); resp.StatusCode != 403 {
+		t.Fatalf("owner=maxpower token reading acme path = %d, want 403 (owner scopes, not aud)", resp.StatusCode)
 	}
 
 	// (5) An expired machine token is anonymous → 403 (fail closed on expiry).
