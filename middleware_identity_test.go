@@ -130,6 +130,12 @@ func TestSanitizeIdentity(t *testing.T) {
 	expiredAdmin := signWith(t, key, tokenClaims("hanzo-console", "admin", "z@hanzo.ai", true, past))
 	wrongKeyAdmin := signWith(t, otherKey, tokenClaims("hanzo-console", "admin", "z@hanzo.ai", true, future))
 	arbitraryAudAdmin := signWith(t, key, tokenClaims("some-other-first-party-app", "admin", "z@hanzo.ai", true, future))
+	// M1: a GENERIC admin-org MACHINE token — type=="application", ordinary app aud
+	// (NOT -platform-kms), isAdmin=true. It must be DENIED SuperAdmin (type is the
+	// discriminator once aud is no longer a gate).
+	adminMachine := tokenClaims("some-admin-app", "admin", "z@hanzo.ai", true, future)
+	adminMachine.Type = "application"
+	adminMachineTok := signWith(t, key, adminMachine)
 	// Owners whose IAM name carries whitespace — the RED CRIT-2 residual vector.
 	// The whitespace rides in the JWT `owner` claim (JSON-preserved, so it is
 	// transport-independent, unlike a header which fasthttp OWS-trims), so a
@@ -225,8 +231,17 @@ func TestSanitizeIdentity(t *testing.T) {
 			// with isAdmin=true VALIDATES like any token but is DENIED SuperAdmin —
 			// isKMSMachinePrincipal gates it out, pinned to its own org, never cross-org.
 			// A client_credentials machine identity must never wield platform-admin.
-			name:      "admin-org machine principal is denied SuperAdmin",
+			name:      "admin-org KMS-machine principal is denied SuperAdmin",
 			mutate:    bearer(signWith(t, key, tokenClaims("admin-platform-kms", "admin", "z@hanzo.ai", true, future))),
+			wantAdmin: false,
+			wantOrg:   "admin",
+		},
+		{
+			// M1 (red): a GENERIC admin-org machine app (type=="application", ordinary
+			// aud, isAdmin=true) is DENIED SuperAdmin — isMachinePrincipal catches it via
+			// `type`, not just the -platform-kms audience. It falls through org-scoped.
+			name:      "admin-org application-type token is denied SuperAdmin (M1)",
+			mutate:    bearer(adminMachineTok),
 			wantAdmin: false,
 			wantOrg:   "admin",
 		},
