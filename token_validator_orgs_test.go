@@ -22,7 +22,7 @@ func TestVerifiedIdentityCarriesOrgs(t *testing.T) {
 		t.Fatal(err)
 	}
 	jwks := jwksServer(t, &key.PublicKey)
-	v := &TokenValidator{v: newIdentityValidator(testIssuer, jwks.URL, []string{"hanzo-team"}, 0)}
+	v := &TokenValidator{v: newIdentityValidator(testIssuer, jwks.URL, 0)}
 
 	claims := tokenClaims("hanzo-team", "maxpower", "dave@example.com", false, time.Now().Add(time.Hour))
 	claims.Orgs = []model.OrgRef{
@@ -51,7 +51,7 @@ func TestVerifiedIdentityLegacyNoOrgs(t *testing.T) {
 		t.Fatal(err)
 	}
 	jwks := jwksServer(t, &key.PublicKey)
-	v := &TokenValidator{v: newIdentityValidator(testIssuer, jwks.URL, []string{"hanzo-team"}, 0)}
+	v := &TokenValidator{v: newIdentityValidator(testIssuer, jwks.URL, 0)}
 
 	claims := tokenClaims("hanzo-team", "acme", "ada@example.com", false, time.Now().Add(time.Hour))
 	id, err := v.Validate(signWith(t, key, claims))
