@@ -113,6 +113,38 @@ func metricsFrom(period, cumulative sums, months int, from, to string) Metrics {
 	return m
 }
 
+// MetricsResponse is the GET /v1/books/metrics payload: the raw deterministic snapshot
+// (int64 cents, the canonical numbers) PLUS the same figures already formatted through the
+// ONE money formatter (formatUSD), so a consumer surfaces books' numbers in books' format
+// and never re-derives either. It is the single grounded read the unified /v1/ask advisor
+// composes — every figure is the ledger, aggregated, never a guess.
+type MetricsResponse struct {
+	Metrics
+	Figures []Figure `json:"figures"`
+}
+
+// metricsFigures renders the COMPLETE metric snapshot as formatted figures, in the order a
+// founder reads a one-line business summary. It reuses the shared formatters (formatUSD,
+// marginPct, runwayValue) so a figure here is byte-identical to the same figure anywhere in
+// the books surface — books owns both the number and its format.
+func metricsFigures(m Metrics) []Figure {
+	p := m.Period
+	fig := func(label, value string) Figure { return Figure{Label: label, Value: value, Period: p} }
+	return []Figure{
+		fig("Revenue", formatUSD(m.Revenue)),
+		fig("MRR", formatUSD(m.MRR)),
+		fig("ARR", formatUSD(m.ARR)),
+		fig("Gross margin", marginPct(m)),
+		fig("Gross profit", formatUSD(m.GrossProfit)),
+		fig("COGS", formatUSD(m.COGS)),
+		fig("Burn", formatUSD(m.Burn)),
+		fig("Net income", formatUSD(m.NetIncome)),
+		fig("Cash", formatUSD(m.Cash)),
+		fig("Deferred revenue", formatUSD(m.DeferredRevenue)),
+		fig("Runway", runwayValue(m)),
+	}
+}
+
 // net is an account's signed net (debit − credit) over a sums window. The four *Amt helpers
 // place it on the account's NATURAL display sign, exactly as the statements do: assets and
 // expenses are debit-normal (shown as net), income and liabilities credit-normal (flipped).
