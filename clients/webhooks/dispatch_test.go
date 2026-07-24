@@ -338,6 +338,89 @@ func TestBusEndToEnd(t *testing.T) {
 	}
 }
 
+// TestDeliverRecordsPerAttempt proves the delivery log captures ONE row per attempt across
+// a retry: a 500 then 200 writes attempt 1 "retrying" (http 500) and attempt 2 "ok" (http
+// 200), newest first, both sharing the group's delivery id.
+func TestDeliverRecordsPerAttempt(t *testing.T) {
+	d := newTestDispatcher(t)
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&calls, 1) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	deliv := newUUID()
+	job := deliveryJob{org: "acme", endpointID: "wh_log", url: srv.URL, secret: "sk", subject: "commerce.order.created", delivery: deliv, body: []byte("{}")}
+	d.deliver(context.Background(), job)
+
+	st, err := d.stores.For("acme", "")
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	rows, err := st.deliveries(context.Background(), "wh_log", 50, "")
+	if err != nil {
+		t.Fatalf("deliveries: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("want 2 delivery rows (one per attempt), got %d: %+v", len(rows), rows)
+	}
+	// newest first: attempt 2 (ok, 200), then attempt 1 (retrying, 500).
+	if rows[0].Attempt != 2 || rows[0].Status != "ok" || rows[0].HTTPStatus != 200 {
+		t.Fatalf("row[0] want attempt 2 ok/200, got %+v", rows[0])
+	}
+	if rows[1].Attempt != 1 || rows[1].Status != "retrying" || rows[1].HTTPStatus != 500 {
+		t.Fatalf("row[1] want attempt 1 retrying/500, got %+v", rows[1])
+	}
+	for _, r := range rows {
+		if r.DeliveryID != deliv {
+			t.Fatalf("delivery id mismatch: %q vs %q", r.DeliveryID, deliv)
+		}
+		if r.Subject != "commerce.order.created" {
+			t.Fatalf("subject = %q", r.Subject)
+		}
+	}
+}
+
+// TestDeliveryRetentionPrune proves recordDelivery caps the per-endpoint log at
+// maxDeliveryRowsPerEndpoint, keeping the newest rows and pruning the oldest on insert.
+func TestDeliveryRetentionPrune(t *testing.T) {
+	d := newTestDispatcher(t)
+	st, err := d.stores.For("acme", "")
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	ctx := context.Background()
+	total := maxDeliveryRowsPerEndpoint + 20
+	for i := 0; i < total; i++ {
+		if err := st.recordDelivery(ctx, DeliveryRow{
+			EndpointID: "wh_ret", DeliveryID: newUUID(), Subject: "s", Attempt: i,
+			Status: "ok", HTTPStatus: 200, Created: time.Now().UTC().Format(time.RFC3339),
+		}); err != nil {
+			t.Fatalf("record %d: %v", i, err)
+		}
+	}
+	rows, err := st.deliveries(ctx, "wh_ret", maxDeliveryRowsPerEndpoint+100, "")
+	if err != nil {
+		t.Fatalf("deliveries: %v", err)
+	}
+	if len(rows) != maxDeliveryRowsPerEndpoint {
+		t.Fatalf("retention: want %d rows, got %d", maxDeliveryRowsPerEndpoint, len(rows))
+	}
+	// The newest insert (Attempt == total-1) survives; everything older than the cap is gone.
+	if rows[0].Attempt != total-1 {
+		t.Fatalf("newest surviving row Attempt = %d, want %d", rows[0].Attempt, total-1)
+	}
+	for _, r := range rows {
+		if r.Attempt < total-maxDeliveryRowsPerEndpoint {
+			t.Fatalf("stale row survived prune: Attempt %d", r.Attempt)
+		}
+	}
+}
+
 // ---- test helpers ----
 
 // parseSig splits a `t=<unix>,v1=<hex>` header into its parts.
