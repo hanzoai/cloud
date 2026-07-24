@@ -395,7 +395,10 @@ func (s *Store) Policy(ctx context.Context) (ledger.Policy, error) {
 	err := s.db.QueryRowContext(ctx,
 		`SELECT revenue_share_bps, updated_at FROM treasury_policy WHERE id=1`).Scan(&p.RevenueShareBps, &p.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return ledger.Policy{}, nil // unset → 0%, an honest default
+		// Unset → the canonical 20% default (not 0%): a fresh treasury sweeps the same
+		// creator/revenue share the rest of the platform uses. A SuperAdmin who wants a
+		// different rate (including 0) writes an explicit policy row via SetPolicy.
+		return ledger.Policy{RevenueShareBps: ledger.DefaultRevenueShareBps}, nil
 	}
 	if err != nil {
 		return ledger.Policy{}, fmt.Errorf("read policy: %w", err)
