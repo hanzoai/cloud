@@ -120,7 +120,24 @@ type Conversion struct {
 	Currency   string
 	User       UserData
 	URL        string
+	Referrer   string // referring URL (a first-party analytics dimension)
+	Items      []Item // ecommerce line items (nil for non-commerce events)
 	Properties map[string]any
+}
+
+// Item is one normalized ecommerce line item — the interlingua between an event's raw
+// items/products array (or a first-class product id) and each platform's product
+// schema (GA4 items[], Meta contents[]/content_ids[]). The translator lifts it ONCE
+// (liftItems); every adapter renders it into its platform's shape. An empty field is
+// omitted by each renderer, so a sink only ever sees what the event actually carried.
+type Item struct {
+	ID       string  // SKU / product id → GA4 item_id, Meta content id
+	Name     string  // → GA4 item_name
+	Category string  // → GA4 item_category
+	Brand    string  // → GA4 item_brand
+	Variant  string  // → GA4 item_variant
+	Price    float64 // unit price → GA4 price, Meta item_price
+	Quantity float64 // → GA4 quantity, Meta quantity
 }
 
 // Result is a Send outcome: how many events the platform accepted. Some APIs do not
