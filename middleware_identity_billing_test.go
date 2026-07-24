@@ -31,7 +31,7 @@ func billingClaims(owner, name, billingAccount string) idClaims {
 // X-Billing-Account-Id a downstream handler observes.
 func identityProbe(t *testing.T, key *rsa.PrivateKey, jwksURL string, tok string, mutate func(*http.Request)) string {
 	t.Helper()
-	v := newIdentityValidator(testIssuer, jwksURL, []string{"hanzo-console"}, 0)
+	v := newIdentityValidator(testIssuer, jwksURL, 0)
 	var got string
 	app := zip.New(zip.Config{})
 	app.Use(SanitizeIdentity(v, "admin"))
@@ -150,7 +150,7 @@ func TestSanitizeIdentity_AnonymousCarriesNoBillingAccount(t *testing.T) {
 		t.Fatalf("genkey: %v", err)
 	}
 	jwks := jwksServer(t, &key.PublicKey)
-	v := newIdentityValidator(testIssuer, jwks.URL, []string{"hanzo-console"}, 0)
+	v := newIdentityValidator(testIssuer, jwks.URL, 0)
 
 	var got string
 	app := zip.New(zip.Config{})
