@@ -1,0 +1,17 @@
+# Hanzo blueprint: PostgreSQL — a single managed Postgres instance.
+# Declares an explicit compute reservation, so the estimator sizes it exactly.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    deploy:
+      resources:
+        reservations:
+          cpus: "1.0"
+          memory: 2G
+volumes:
+  pgdata:

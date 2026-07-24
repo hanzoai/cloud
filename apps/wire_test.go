@@ -59,6 +59,7 @@ var frozen = []struct {
 	{"functions", false, false},      // was order 128
 	{"tracker", false, false},        // was order 129
 	{"templates", false, false},      // was order 129
+	{"blueprint", true, false},       // new: OSS-template compute-cost basis /v1/blueprint (after templates); owns health, embedded content → no Shutdown
 	{"framework", false, true},       // was order 129
 	{"knowledge", false, false},      // was order 130
 	{"help", false, false},           // new: Hanzo Support public plane /v1/help (after knowledge; framework lane with a companion subsystem, no store → no Shutdown)
