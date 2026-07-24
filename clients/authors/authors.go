@@ -26,7 +26,7 @@
 //  4. The ACCRUAL SWEEP (POST /v1/admin/authors/sweep, the cron path; also lazy on
 //     the author's own dashboard read) folds over each approved author's DISTINCT
 //     deploying orgs (excluding the author's own): royalty = that org's metered spend
-//     THIS PERIOD × the author's share (default 5%), accrued at-most-once per
+//     THIS PERIOD × the author's share (default 20%), accrued at-most-once per
 //     (author, deploying_org, period).
 //  5. Staff PAY OUT accrued royalty (POST /v1/admin/authors/:id/payout): "credits"
 //     issues a commerce grant into the author's wallet; cash methods are record-only.
@@ -70,9 +70,12 @@ import (
 // payout lands in the commerce Credit/trial bucket (grant:* → Credit per DepositKind),
 // distinct from grant:referral / grant:affiliate / grant:admin only by its tag.
 const (
-	// defaultShareBps is the royalty a new author earns, in basis points (2500 = 25%
-	// of a deploying org's metered platform spend). The ONE royalty constant.
-	defaultShareBps int64 = 2500
+	// defaultShareBps is the royalty a new author earns, in basis points (2000 = 20%
+	// of a deploying org's metered platform spend). The ONE royalty constant — 20%
+	// is the canonical creator share across the OSS marketplace (oss.hanzo.ai, the
+	// platform templates page, and the "Earn 20%" CTA). Was 2500/25%; the flow
+	// comment said 5% — both reconciled to the ONE decided value, 20%.
+	defaultShareBps int64 = 2000
 	// bpsDenom converts basis points to a fraction (spend × shareBps / 10000).
 	bpsDenom int64 = 10000
 	// grantCurrency is the ledger currency for a credits payout.
