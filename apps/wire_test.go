@@ -124,6 +124,7 @@ var frozen = []struct {
 	{"compliance", true, true},       // new: Hanzo Compliance — KYC/KYB + accreditation + audit posture (after company)
 	{"legal", true, true},            // new: Hanzo Legal — template + generation engine + e-sign/filing (after compliance)
 	{"agent", false, false},          // new: /v1/agent tool-calling round (before zen/ai catch-all)
+	{"ask", false, false},            // new: unified grounded advisor /v1/ask (before zen/ai catch-all)
 	{"zen", false, false},            // zen* claim middleware before ai's catch-all (hip-00NN)
 	{"ai", false, false},             // was order 150
 	{"plugins", false, false},        // was order 900

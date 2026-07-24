@@ -29,6 +29,27 @@ func accountsHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 	return booksJSON(c, accts)
 }
 
+// metricsHandler returns the org's deterministic SaaS-metrics snapshot over an optional
+// (?from, ?to] window — MRR/ARR/revenue/COGS/burn/margin/cash/deferred/runway — as the raw
+// int64-cent figures AND their formatted forms. It is the ONE grounded read the unified
+// /v1/ask advisor replays in-process (under the caller's own creds), so a figure it surfaces
+// is the ledger, not a model's guess. Read-only, no-store, scoped to the caller's own org.
+func metricsHandler(s *cloud.Service[*state], c *zip.Ctx) error {
+	org, ok := principal.Org(c)
+	if !ok {
+		return zip.ErrUnauthorized("sign in to view books")
+	}
+	st, err := s.State.storeFor(org, sandboxQuery(c))
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "books open failed")
+	}
+	m, err := computeMetrics(c.Context(), st, c.Query("from"), c.Query("to"))
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "books metrics failed")
+	}
+	return booksJSON(c, MetricsResponse{Metrics: m, Figures: metricsFigures(m)})
+}
+
 // glHandler returns the org's most recent GL Entry rows (newest first, ?limit=).
 func glHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)

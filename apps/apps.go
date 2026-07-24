@@ -57,6 +57,7 @@ import (
 	"github.com/hanzoai/cloud/clients/agents"
 	"github.com/hanzoai/cloud/clients/agentskills"
 	"github.com/hanzoai/cloud/clients/analytics"
+	"github.com/hanzoai/cloud/clients/ask"
 	"github.com/hanzoai/cloud/clients/auditlog"
 	"github.com/hanzoai/cloud/clients/authors"
 	"github.com/hanzoai/cloud/clients/automations"
@@ -471,6 +472,16 @@ func Wire() []cloud.MountSpec {
 		// beego /v1/chat alias behind its /v1/* glob is thereby shadowed, while ai
 		// keeps /v1/chat/completions + /v1/completions.
 		{Name: "agent", Mount: agent.Mount},
+		// The UNIFIED GROUNDED ADVISOR — POST /v1/ask. DISTINCT from /v1/chat/completions
+		// (ai's RAW model) and /v1/agent (tool-calling): it routes a plain-language question
+		// to the domain(s) that can GROUND it, reads the REAL figures from each domain's own
+		// endpoint IN-PROCESS under the caller's own creds (agent.go's replay pattern, so
+		// per-tenant isolation is inherited), hands the model the EXACT figures, and returns
+		// the grounded answer + figures + the domain reads that backed them. The model NEVER
+		// invents a figure. Contributors plug in via a registry (books today; o11y/billing
+		// next) WITHOUT a router edit. Mounts BEFORE the ai /v1/* catch-all so /v1/ask wins
+		// Fiber's first-match; after books/agent so the domains it composes are wired.
+		{Name: "ask", Mount: ask.Mount},
 		// The bare /v1/* AI catch-all — the LAST route position. Every owning subsystem above
 		// wins its own namespace (Fiber first-match); AI is the fallback for the rest of /v1/*.
 		// zen mounts as a /v1-scoped Claim middleware BEFORE ai: it routes zen* models
