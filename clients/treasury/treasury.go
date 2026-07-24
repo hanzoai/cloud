@@ -200,6 +200,42 @@ func ReserveCents(ctx context.Context) (int64, bool) {
 	return bal, true
 }
 
+// Credit is the INBOUND mirror of Reserve: it credits amountCents into the platform
+// reserve fund (revenue:platform → fund:reserve), idempotently keyed by ref. It is
+// the "pay ourselves" seam — when a growth loop's royalty is owed to HANZO itself
+// (a Hanzo-maintained OSS template deployed by another org), the creator share is
+// realized into the treasury reserve instead of paid out to an external wallet.
+//
+// It reuses the ledger-of-record's Seed primitive (a fixed-amount reserve credit,
+// distinct KindSeed, idempotent by ref) — NOT a new ledger. Idempotency by ref makes
+// a retry a no-op: the reserve is credited AT MOST ONCE per ref, the mirror of the
+// loops' at-most-once accrual latch.
+//
+//   - credited=true  → posted (or already posted for this ref). entryID is the
+//     journal entry id (empty on passthrough), for the caller to record.
+//   - credited=false → only on an unexpected ledger error (err set); the caller
+//     leaves its own reservation intact and reconciles.
+//
+// When treasury is NOT mounted (a partial deploy or a growth-loop unit test that does
+// not wire treasury) Credit is a PASSTHROUGH returning credited=true — the same
+// degrade-gracefully contract Reserve uses.
+func Credit(ctx context.Context, program, ref, memo string, amountCents int64) (credited bool, entryID string, err error) {
+	s := mounted
+	if s == nil {
+		return true, "", nil // unmounted → passthrough (backward-safe)
+	}
+	entry, created, err := s.State.record.Seed(ctx, ref, memo, amountCents, time.Now().Unix())
+	if err != nil {
+		return false, "", err
+	}
+	if created {
+		emitAudit(s, ctx, "treasury.credit", program, entry.ID, map[string]any{
+			"program": program, "ref": ref, "amountCents": amountCents, "entryId": entry.ID,
+		})
+	}
+	return true, entry.ID, nil
+}
+
 // ── customer surface ─────────────────────────────────────────────────────────
 
 // myTreasury answers GET /v1/finance/treasury for any validated caller: the
