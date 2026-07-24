@@ -260,6 +260,11 @@ func TestUmamiBuild(t *testing.T) {
 	if pv.Payload.Referrer != "https://google.com" || pv.Payload.DistinctID != "v1" {
 		t.Errorf("referrer/distinct: %+v", pv.Payload)
 	}
+	// The visitor id MUST serialize under Umami's `id` session key, never the ignored
+	// `distinctId` — the exact JSON-tag regression a struct-field assert cannot catch.
+	if raw, _ := json.Marshal(pv.Payload); !strings.Contains(string(raw), `"id":"v1"`) || strings.Contains(string(raw), "distinctId") {
+		t.Errorf("visitor id must serialize as `id`, got %s", raw)
+	}
 	// A commerce event carries its canonical name (sans $) + value/currency data.
 	pur := umamiBuild(Config{"websiteId": "W1"}, Conversion{
 		Standard: EventPurchase, Name: "order_completed", Value: 30, Currency: "USD", User: UserData{ExternalID: "v2"},
@@ -274,12 +279,13 @@ func TestUmamiBuild(t *testing.T) {
 
 func TestUmamiSendEndToEnd(t *testing.T) {
 	var gotEnv umamiEnvelope
-	var gotUA, gotXFF, gotPath string
+	var gotUA, gotXFF, gotPath, gotRaw string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotUA = r.Header.Get("User-Agent")
 		gotXFF = r.Header.Get("X-Forwarded-For")
 		gotPath = r.URL.Path
 		b, _ := io.ReadAll(r.Body)
+		gotRaw = string(b)
 		_ = json.Unmarshal(b, &gotEnv)
 		_, _ = w.Write([]byte("token-abc")) // Umami returns a plain text token
 	}))
@@ -308,6 +314,11 @@ func TestUmamiSendEndToEnd(t *testing.T) {
 	if gotUA != "Mozilla/5.0" || gotXFF != "203.0.113.7" {
 		t.Errorf("forwarded UA/IP: ua=%q xff=%q", gotUA, gotXFF)
 	}
+	// The visitor id lands on the wire under Umami's `id` session key (not `distinctId`),
+	// so identity stitches to the known visitor instead of falling back to IP+UA.
+	if gotEnv.Payload.DistinctID != "v1" || !strings.Contains(gotRaw, `"id":"v1"`) || strings.Contains(gotRaw, "distinctId") {
+		t.Errorf("visitor id must serialize as `id`: distinct=%q raw=%s", gotEnv.Payload.DistinctID, gotRaw)
+	}
 }
 
 func TestUmamiRequiresWebsite(t *testing.T) {
@@ -316,7 +327,7 @@ func TestUmamiRequiresWebsite(t *testing.T) {
 	}
 }
 
-// ── PostHog (Hanzo Insights — /batch capture, api_key in body) ────────────────
+// ── PostHog (Hanzo Insights — /v1/e capture, api_key in body) ─────────────────
 
 func TestPostHogBuild(t *testing.T) {
 	body := posthogBuild("phc_key", []Conversion{
@@ -360,8 +371,8 @@ func TestPostHogSendEndToEnd(t *testing.T) {
 	if res.Sent != 1 {
 		t.Fatalf("sent = %d", res.Sent)
 	}
-	if gotPath != "/batch" {
-		t.Errorf("path = %q, want /batch", gotPath)
+	if gotPath != "/v1/e" {
+		t.Errorf("path = %q, want /v1/e", gotPath)
 	}
 	// The api_key rides the BODY (never the URL); the mock echoes it back for the assert.
 	if gotBody.APIKey != "phc_secret" || len(gotBody.Batch) != 1 || gotBody.Batch[0].Event != "plan_clicked" {
