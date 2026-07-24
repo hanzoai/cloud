@@ -137,6 +137,21 @@ CREATE TABLE IF NOT EXISTS bank_settlement (
   settled_at        TEXT NOT NULL,
   UNIQUE(connector, external_id)
 );
+-- bank_payment is the OUTFLOW-side twin of bank_settlement: it records which scanned
+-- VendorPayable (a scan CREDIT on 2001) a bank OUTFLOW has paid down. A scanned bill accrues
+-- Dr expense / Cr 2001; the bank debit that pays it must SETTLE the payable (Dr 2001 / Cr 1000),
+-- not re-book the expense — otherwise the spend is counted twice and the AP dangles forever.
+-- This per-payable consumed-state keeps that honest: payable_source_id is the paid payable's
+-- voucher source_id (PK ⇒ a bill is paid at most once), and (connector, external_id) is the
+-- outflow that paid it (UNIQUE ⇒ one outflow clears one payable, a re-sync is an idempotent
+-- no-op).
+CREATE TABLE IF NOT EXISTS bank_payment (
+  payable_source_id TEXT PRIMARY KEY,
+  connector         TEXT NOT NULL,
+  external_id       TEXT NOT NULL,
+  paid_at           TEXT NOT NULL,
+  UNIQUE(connector, external_id)
+);
 -- books_inbox is the per-org queue of uploaded-but-unbooked documents (scan.go). A
 -- document enters 'unsorted' on upload, moves to 'draft' once the scanner extracts its
 -- fields, and 'booked' once a reviewed voucher posts. hash (sha256 of the file bytes) is
@@ -173,6 +188,21 @@ CREATE TABLE IF NOT EXISTS books_rule (
   category TEXT NOT NULL,
   priority INTEGER NOT NULL DEFAULT 0,
   UNIQUE(pattern)
+);
+-- scan_identity is the ECONOMIC-identity index of booked bills: the natural key
+-- (vendor, total_cents, issued_at) of every scanned bill that posted. The file-hash scanId
+-- makes an exact re-upload idempotent, but a re-print / re-scan at a different DPI / edited
+-- whitespace yields a NEW hash for the SAME real-world bill — which would double-book. This
+-- catches that: a second booking of an identity already here is blocked unless the human
+-- overrides. PK ⇒ one row per economic bill (an override books a duplicate voucher but does
+-- not add a second identity row, so the guard keeps firing for later non-override bookings).
+CREATE TABLE IF NOT EXISTS scan_identity (
+  vendor      TEXT NOT NULL,
+  total_cents INTEGER NOT NULL,
+  issued_at   TEXT NOT NULL,
+  scan_id     TEXT NOT NULL,
+  booked_at   TEXT NOT NULL,
+  PRIMARY KEY (vendor, total_cents, issued_at)
 );`
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("books migrate: %w", err)
