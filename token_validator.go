@@ -22,8 +22,8 @@ import (
 	model "github.com/hanzoai/iam/pkg/model"
 )
 
-// VerifiedIdentity is what a token PROVED, after signature, issuer, audience and
-// expiry all checked out. It is deliberately the small subset a caller can act on;
+// VerifiedIdentity is what a token PROVED, after signature, issuer and expiry all
+// checked out. It is deliberately the small subset a caller can act on;
 // the authorization decision still belongs to the caller (deploy compares Owner to
 // the admin org) and, independently, to SanitizeIdentity on every later request.
 type VerifiedIdentity struct {
@@ -58,14 +58,13 @@ type VerifiedIdentity struct {
 // Safe for concurrent use; the underlying JWKS cache is shared and stale-on-error.
 type TokenValidator struct{ v *identityValidator }
 
-// NewTokenValidator builds a validator bound to issuer, with the SAME JWKS
-// endpoint and the SAME audience allowlist SanitizeIdentity uses — jwksURLFor and
-// jwtAudiencesFromEnv are the single source for both, so a token this accepts is a
-// token the boundary accepts, and the two can never drift apart into a mint-then-
-// refuse loop.
+// NewTokenValidator builds a validator bound to issuer, with the SAME JWKS endpoint
+// SanitizeIdentity uses — jwksURLFor is the single source for both, so a token this
+// accepts is a token the boundary accepts, and the two can never drift apart into a
+// mint-then-refuse loop.
 func NewTokenValidator(issuer string) *TokenValidator {
 	issuer = strings.TrimRight(strings.TrimSpace(issuer), "/")
-	return &TokenValidator{v: newIdentityValidator(issuer, jwksURLFor(issuer), jwtAudiencesFromEnv(), 0)}
+	return &TokenValidator{v: newIdentityValidator(issuer, jwksURLFor(issuer), 0)}
 }
 
 // Validate verifies raw and returns what it proved. The error is the real reason
