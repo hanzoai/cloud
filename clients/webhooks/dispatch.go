@@ -85,14 +85,19 @@ var streams = []streamSource{
 }
 
 // deliveryJob is a self-contained unit of work: the resolved subscriber + the exact
-// bytes to sign and send. It carries the org's endpoint secret, so the worker never
-// touches the store.
+// bytes to sign and send. It carries the org's endpoint secret, so the delivery path
+// needs no store read. It also carries org + endpointID SOLELY so the worker can write
+// the (best-effort) per-attempt delivery-log row — never for the delivery itself. A job
+// with an empty org/endpointID (the delivery-only unit tests) is delivered but not
+// logged.
 type deliveryJob struct {
-	url      string
-	secret   string
-	subject  string
-	delivery string // stable UUID across the attempt-group
-	body     []byte
+	org        string
+	endpointID string
+	url        string
+	secret     string
+	subject    string
+	delivery   string // stable UUID across the attempt-group
+	body       []byte
 }
 
 // dispatcher owns the bus consumer, the worker pool, and the delivery HTTP client.
@@ -264,7 +269,7 @@ func (d *dispatcher) handle(ctx context.Context, m *infra.StreamMessage) error {
 		if !e.matches(subject) {
 			continue
 		}
-		job := deliveryJob{url: e.URL, secret: e.Secret, subject: subject, delivery: newUUID(), body: m.Data}
+		job := deliveryJob{org: org, endpointID: e.ID, url: e.URL, secret: e.Secret, subject: subject, delivery: newUUID(), body: m.Data}
 		select {
 		case d.jobs <- job: // QUEUED — the ack below covers it, not the retries
 		case <-ctx.Done():
@@ -274,15 +279,31 @@ func (d *dispatcher) handle(ctx context.Context, m *infra.StreamMessage) error {
 	return nil
 }
 
+// attemptResult is the outcome of ONE signed POST: whether it delivered, whether a
+// failure is worth retrying, the HTTP status (0 on a network/timeout error), a short
+// error string (empty on success), and the wall-clock the attempt took. It is what both
+// the retry ladder and the synchronous test-send consume — the ONE delivery primitive.
+type attemptResult struct {
+	ok         bool
+	retryable  bool
+	httpStatus int
+	err        string
+	duration   time.Duration
+}
+
 // deliver runs the retry ladder for ONE job: up to maxAttempts POSTs, retrying only on a
-// network error, 5xx, or 429, and treating any other 4xx as a permanent failure.
+// network error, 5xx, or 429, and treating any other 4xx as a permanent failure. Each
+// attempt is logged (best-effort) as one delivery row — "retrying" while a further
+// attempt will follow, "ok"/"failed" for the terminal one.
 func (d *dispatcher) deliver(ctx context.Context, job deliveryJob) {
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		ok, retryable := d.attempt(ctx, job)
-		if ok {
+		res := d.attempt(ctx, job)
+		willRetry := !res.ok && res.retryable && attempt < maxAttempts
+		d.recordAttempt(ctx, job, attempt, statusLabel(res.ok, willRetry), res)
+		if res.ok {
 			return
 		}
-		if !retryable {
+		if !res.retryable {
 			d.log.Warn("webhook delivery failed permanently", "url", job.url, "event", job.subject, "delivery", job.delivery)
 			return
 		}
@@ -294,18 +315,21 @@ func (d *dispatcher) deliver(ctx context.Context, job deliveryJob) {
 	d.log.Warn("webhook delivery exhausted retries", "url", job.url, "event", job.subject, "delivery", job.delivery)
 }
 
-// attempt makes ONE signed POST. It returns (delivered, retryable). The signature's
-// timestamp is fresh per attempt (so a retry is not a replay of a stale-t request); the
-// delivery id is stable across the group.
-func (d *dispatcher) attempt(ctx context.Context, job deliveryJob) (ok, retryable bool) {
-	ts := time.Now().Unix()
+// attempt makes ONE signed POST and reports the full outcome. The signature's timestamp
+// is fresh per attempt (so a retry is not a replay of a stale-t request); the delivery id
+// is stable across the group. This is the SINGLE sign+POST both the dispatcher (looped)
+// and the /v1/webhooks/:id/test handler (once) call — there is no parallel test path.
+func (d *dispatcher) attempt(ctx context.Context, job deliveryJob) attemptResult {
+	start := time.Now()
+	ts := start.Unix()
 	sig := signPayload(job.secret, ts, job.body)
 
 	actx, cancel := context.WithTimeout(ctx, attemptTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(actx, http.MethodPost, job.url, bytes.NewReader(job.body))
 	if err != nil {
-		return false, false // an unbuildable request is permanent (never retried)
+		// An unbuildable request is permanent (never retried).
+		return attemptResult{err: err.Error(), duration: time.Since(start)}
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Webhook-Signature", fmt.Sprintf("t=%d,v1=%s", ts, sig))
@@ -314,18 +338,64 @@ func (d *dispatcher) attempt(ctx context.Context, job deliveryJob) (ok, retryabl
 
 	resp, err := d.http.Do(req)
 	if err != nil {
-		return false, true // network/timeout ⇒ retry
+		return attemptResult{retryable: true, err: err.Error(), duration: time.Since(start)} // network/timeout ⇒ retry
 	}
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
 
+	res := attemptResult{httpStatus: resp.StatusCode, duration: time.Since(start)}
 	switch {
 	case resp.StatusCode >= 200 && resp.StatusCode < 300:
-		return true, false
+		res.ok = true
 	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500:
-		return false, true
+		res.retryable = true
+		res.err = fmt.Sprintf("HTTP %d", resp.StatusCode)
 	default:
-		return false, false // 4xx (except 429) ⇒ permanent
+		res.err = fmt.Sprintf("HTTP %d", resp.StatusCode) // 4xx (except 429) ⇒ permanent
+	}
+	return res
+}
+
+// statusLabel maps an attempt outcome to its stored delivery-row status: "ok" on
+// success, "retrying" when a further attempt will follow, else "failed" (permanent or
+// last of the ladder). Every attempt-group ends in exactly one terminal ok/failed row.
+func statusLabel(ok, willRetry bool) string {
+	switch {
+	case ok:
+		return "ok"
+	case willRetry:
+		return "retrying"
+	default:
+		return "failed"
+	}
+}
+
+// recordAttempt best-effort persists ONE delivery-attempt row for job. A job with no
+// org/endpointID (the delivery-only unit tests) is skipped, so no spurious per-org store
+// is created; any store or write error is logged and swallowed — the delivery log must
+// never affect delivery, and it runs in the worker goroutine, off the consumer's ack path.
+func (d *dispatcher) recordAttempt(ctx context.Context, job deliveryJob, attempt int, status string, res attemptResult) {
+	if job.org == "" || job.endpointID == "" {
+		return
+	}
+	st, err := d.stores.For(job.org, "")
+	if err != nil {
+		d.log.Warn("webhooks: open store for delivery log", "org", job.org, "err", err)
+		return
+	}
+	row := DeliveryRow{
+		EndpointID: job.endpointID,
+		DeliveryID: job.delivery,
+		Subject:    job.subject,
+		Attempt:    attempt,
+		Status:     status,
+		HTTPStatus: res.httpStatus,
+		Error:      clip(res.err, maxDeliveryError),
+		DurationMs: res.duration.Milliseconds(),
+		Created:    time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := st.recordDelivery(ctx, row); err != nil {
+		d.log.Warn("webhooks: record delivery log", "org", job.org, "endpoint", job.endpointID, "err", err)
 	}
 }
 
