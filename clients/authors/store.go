@@ -48,7 +48,7 @@ const (
 // Author is one OSS author org enrolled in the deploy-royalty program. Org is
 // UNIQUE (one author per org). GithubLogin is the linked GitHub identity; VerifyCode
 // is the stable per-author token placed in hanzo.json for the file method. ShareBps
-// is the royalty rate in basis points (500 = 5% of a deploying org's metered spend).
+// is the royalty rate in basis points (2000 = 20% of a deploying org's metered spend).
 type Author struct {
 	ID           string `json:"id"`
 	Org          string `json:"-"` // the author's own org; admin view re-exposes it
