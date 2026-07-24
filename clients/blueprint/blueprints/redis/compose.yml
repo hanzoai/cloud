@@ -1,0 +1,11 @@
+# Hanzo blueprint: Redis — an in-memory cache / broker.
+# No resource hints, so the estimator applies the default "cache" footprint.
+services:
+  cache:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1"]
+    volumes:
+      - redisdata:/data
+volumes:
+  redisdata:
