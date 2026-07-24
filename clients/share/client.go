@@ -48,6 +48,10 @@ const accountHeader = "x-token"
 
 const maxBody = 4 << 20
 
+// zrokMediaType is the ONLY content type the zrok controller's go-swagger API
+// consumes/produces (specs/zrok.yml). application/json returns 415/500.
+const zrokMediaType = "application/zrok.v1+json"
+
 func envTrim(k string) string { return strings.TrimSpace(os.Getenv(k)) }
 
 func controllerBase() string {
@@ -139,9 +143,9 @@ func (c *httpController) do(ctx context.Context, method, path string, body any, 
 		return 0, err
 	}
 	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", zrokMediaType)
 	}
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", zrokMediaType)
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
@@ -163,7 +167,7 @@ func (c *httpController) do(ctx context.Context, method, path string, body any, 
 // controller answers 4xx/5xx on a duplicate email) is treated as success so
 // provisioning is idempotent — login below is the source of the live token.
 func (c *httpController) ensureAccount(ctx context.Context, email, password string) error {
-	code, err := c.do(ctx, http.MethodPost, "/api/v1/account",
+	code, err := c.do(ctx, http.MethodPost, "/api/v2/account",
 		map[string]string{"email": email, "password": password},
 		map[string]string{adminHeader: c.adminToken}, nil)
 	if err != nil {
@@ -180,7 +184,7 @@ func (c *httpController) ensureAccount(ctx context.Context, email, password stri
 // JSON string per specs/zrok.yml). This is the token the share CLI enables with.
 func (c *httpController) login(ctx context.Context, email, password string) (string, error) {
 	var tok string
-	code, err := c.do(ctx, http.MethodPost, "/api/v1/login",
+	code, err := c.do(ctx, http.MethodPost, "/api/v2/login",
 		map[string]string{"email": email, "password": password}, nil, &tok)
 	if err != nil {
 		return "", err
@@ -194,7 +198,7 @@ func (c *httpController) login(ctx context.Context, email, password string) (str
 // overview returns the account's shares/environments for the org's dashboard.
 func (c *httpController) overview(ctx context.Context, accountToken string) (overviewResp, error) {
 	var ov overviewResp
-	code, err := c.do(ctx, http.MethodGet, "/api/v1/overview", nil,
+	code, err := c.do(ctx, http.MethodGet, "/api/v2/overview", nil,
 		map[string]string{accountHeader: accountToken}, &ov)
 	if err != nil {
 		return ov, err
