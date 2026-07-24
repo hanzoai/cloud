@@ -1,15 +1,15 @@
 package cloud
 
-// V6 (the activation blocker) — the identity validator must accept a per-org
-// PaaS-KMS sync machine token: a client_credentials JWT whose aud is the org's
-// own IAM application clientId "<owner>-platform-kms" (a per-org value, NEVER in
-// CLOUD_JWT_AUDIENCES) — but ONLY when that audience is bound to the token's OWN
-// owner claim. Before the fix the machine token failed the audience check,
-// SanitizeIdentity resolved anonymous, and the /v1/kms guard 403'd it, so the sync
-// silently stayed pending. These are white-box unit tests of validate() itself;
-// the end-to-end proof through SanitizeIdentity + the real guard lives in
-// clients/kms (v6_aud_e2e_test.go). Reuses the jwksServer/signWith/tokenClaims
-// helpers from middleware_identity_test.go (same package).
+// The per-org PaaS-KMS sync identity authenticates as its own IAM application
+// "<owner>-platform-kms" (client_credentials), so its token carries owner=<org> and
+// aud=<owner>-platform-kms. Validation no longer gates on the audience at all (trust
+// is signature + issuer + expiry), so a machine token clears validate() like any
+// other. The owner-bound machine aud survives only to IDENTIFY such a principal
+// (isKMSMachinePrincipal) so SanitizeIdentity can DENY it SuperAdmin even in the admin
+// org — a client_credentials machine identity must never wield platform-admin. These
+// are white-box unit tests of that identification; the end-to-end proof through
+// SanitizeIdentity + the real guard lives in clients/kms (v6_aud_e2e_test.go). Reuses
+// the jwksServer/signWith/tokenClaims helpers from middleware_identity_test.go.
 
 import (
 	"crypto/rand"
@@ -18,19 +18,16 @@ import (
 	"time"
 )
 
-func TestIdentityValidator_KMSMachineAudience(t *testing.T) {
+func TestIdentityValidator_KMSMachinePrincipal(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("genkey: %v", err)
 	}
 	jwks := jwksServer(t, &key.PublicKey)
-	// The static allowlist deliberately contains NO *-platform-kms audience, so any
-	// acceptance below can come ONLY from the owner-bound machine-aud rule, not the
-	// allowlist — this is what makes it a fix and not a config workaround.
-	v := newIdentityValidator(testIssuer, jwks.URL, []string{"hanzo-console"}, 0)
+	v := newIdentityValidator(testIssuer, jwks.URL, 0)
 	future := time.Now().Add(time.Hour)
 
-	t.Run("machine token for its own org is accepted", func(t *testing.T) {
+	t.Run("own-org machine token validates and is recognised as a machine principal", func(t *testing.T) {
 		c, err := v.validate(signWith(t, key, tokenClaims("maxpower-platform-kms", "maxpower", "", false, future)))
 		if err != nil {
 			t.Fatalf("machine token rejected: %v", err)
@@ -38,34 +35,51 @@ func TestIdentityValidator_KMSMachineAudience(t *testing.T) {
 		if c.Owner != "maxpower" {
 			t.Fatalf("owner=%q, want maxpower", c.Owner)
 		}
-	})
-
-	t.Run("machine aud for a DIFFERENT org is rejected (owner-bound)", func(t *testing.T) {
-		// owner=maxpower but aud=acme-platform-kms: the accepted machine aud is bound
-		// to the token's OWN owner (maxpower-platform-kms), so this must fail — it is
-		// not a blanket "*-platform-kms" wildcard.
-		if _, err := v.validate(signWith(t, key, tokenClaims("acme-platform-kms", "maxpower", "", false, future))); err == nil {
-			t.Fatal("cross-org machine audience must be rejected (owner-bound)")
+		if !isKMSMachinePrincipal(c) {
+			t.Fatal("aud==<owner>-platform-kms must be recognised as a machine principal")
 		}
 	})
 
-	t.Run("arbitrary audience still rejected (fix is scoped, not a disable)", func(t *testing.T) {
-		if _, err := v.validate(signWith(t, key, tokenClaims("some-random-app", "maxpower", "", false, future))); err == nil {
-			t.Fatal("an arbitrary audience must still be rejected")
+	t.Run("admin-org machine token is recognised so SuperAdmin is denied", func(t *testing.T) {
+		c, err := v.validate(signWith(t, key, tokenClaims("admin-platform-kms", "admin", "", true, future)))
+		if err != nil {
+			t.Fatalf("admin machine token rejected: %v", err)
+		}
+		if !isKMSMachinePrincipal(c) {
+			t.Fatal("admin-org machine token must be recognised (SanitizeIdentity denies it SuperAdmin)")
 		}
 	})
 
-	t.Run("machine aud with empty owner is rejected (fail closed)", func(t *testing.T) {
-		// aud="-platform-kms" with owner="": kmsMachineAudience("")=="" so no machine
-		// audience is granted and the bare suffix is not in the allowlist.
-		if _, err := v.validate(signWith(t, key, tokenClaims("-platform-kms", "", "", false, future))); err == nil {
-			t.Fatal("machine aud with empty owner must be rejected")
+	t.Run("machine aud bound to a DIFFERENT org is not this owner's machine principal", func(t *testing.T) {
+		// owner=maxpower, aud=acme-platform-kms: the machine-principal match is bound to
+		// the token's OWN owner (maxpower-platform-kms), not a "*-platform-kms" wildcard.
+		// It validates (aud is not gated) and is owner-scoped to maxpower downstream.
+		c, err := v.validate(signWith(t, key, tokenClaims("acme-platform-kms", "maxpower", "", false, future)))
+		if err != nil {
+			t.Fatalf("token rejected: %v", err)
+		}
+		if isKMSMachinePrincipal(c) {
+			t.Fatal("a cross-org machine aud must not count as this owner's machine principal")
 		}
 	})
 
-	t.Run("normal static-allowlist token still accepted (regression)", func(t *testing.T) {
-		if _, err := v.validate(signWith(t, key, tokenClaims("hanzo-console", "maxpower", "", false, future))); err != nil {
-			t.Fatalf("static-allowlist token rejected: %v", err)
+	t.Run("ordinary app token is not a machine principal", func(t *testing.T) {
+		c, err := v.validate(signWith(t, key, tokenClaims("hanzo-console", "maxpower", "", false, future)))
+		if err != nil {
+			t.Fatalf("token rejected: %v", err)
+		}
+		if isKMSMachinePrincipal(c) {
+			t.Fatal("an ordinary app token is not a machine principal")
+		}
+	})
+
+	t.Run("empty-owner token is never a machine principal (fail closed)", func(t *testing.T) {
+		c, err := v.validate(signWith(t, key, tokenClaims("-platform-kms", "", "", false, future)))
+		if err != nil {
+			t.Fatalf("token rejected: %v", err)
+		}
+		if isKMSMachinePrincipal(c) {
+			t.Fatal(`empty-owner token must never be a machine principal (kmsMachineAudience("")=="")`)
 		}
 	})
 
