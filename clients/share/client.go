@@ -24,6 +24,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,6 +43,17 @@ const defaultURLTemplate = "https://{token}.share.hanzo.ai"
 
 // adminHeader is the zrok admin apiKey header (specs/zrok.yml securityDefinitions).
 const adminHeader = "x-token"
+
+// apiBase is the zrok controller API base path. The live controller serves
+// /api/v2 today; our fork migrates it to /v1 (unified Hanzo root). Env-driven so
+// the cutover is a CR edit, not a cloud rebuild — flip ZROK_API_BASE to /v1 the
+// moment the /v1 zrok image is deployed.
+func apiBase() string {
+	if v := envTrim("ZROK_API_BASE"); v != "" {
+		return "/" + strings.Trim(v, "/")
+	}
+	return "/api/v2"
+}
 
 // accountHeader carries an account token on account-scoped calls (overview).
 const accountHeader = "x-token"
@@ -87,8 +99,9 @@ func namespaceToken() string { return envTrim("SHARE_NAMESPACE") }
 // controller is the slice of the zrok control API this surface needs; an
 // interface so handlers unit-test against a fake with no network.
 type controller interface {
-	ensureAccount(ctx context.Context, email, password string) error
-	login(ctx context.Context, email, password string) (string, error)
+	// token resolves the org's account token, login-first; create mints it when
+	// absent (enable) vs errNoAccount when not (listShares).
+	token(ctx context.Context, org string, create bool) (string, error)
 	overview(ctx context.Context, accountToken string) (overviewResp, error)
 	configured() bool
 }
@@ -127,7 +140,16 @@ func (c *httpController) configured() bool { return c.adminToken != "" }
 // accountEmail derives the per-org account email. A hyphen (not "+") — a
 // plus-addressed local part trips some validators, and this is a stable
 // account identity, not a routing alias.
-func accountEmail(org string) string { return "share-" + org + "@hanzo.ai" }
+// accountEmail is a per-org, globally-FRESH, deterministic address: the HMAC
+// suffix makes it unguessable and, crucially, distinct from any email a human
+// or a prior scheme ever created — zrok SOFT-deletes accounts (a deleted email
+// stays in the unique index and can never be recreated), so a plain
+// share-<org>@ that was ever touched is burned forever. This escapes that.
+func (c *httpController) accountEmail(org string) string {
+	m := hmac.New(sha256.New, c.secret)
+	m.Write([]byte("share-email:" + org))
+	return "share-" + org + "-" + hex.EncodeToString(m.Sum(nil))[:8] + "@hanzo.ai"
+}
 
 func (c *httpController) accountPassword(org string) string {
 	m := hmac.New(sha256.New, c.secret)
@@ -166,11 +188,33 @@ func (c *httpController) do(ctx context.Context, method, path string, body any, 
 	return resp.StatusCode, nil
 }
 
-// ensureAccount creates the per-org account; an already-existing account (the
-// controller answers 4xx/5xx on a duplicate email) is treated as success so
-// provisioning is idempotent — login below is the source of the live token.
-func (c *httpController) ensureAccount(ctx context.Context, email, password string) error {
-	code, err := c.do(ctx, http.MethodPost, "/api/v2/account",
+// errNoAccount marks a login-only lookup for an org that has not provisioned.
+var errNoAccount = errors.New("no share account for org")
+
+// token resolves the org's zrok account token, LOGIN-FIRST: an existing account
+// (the common case) costs one login and never touches the admin API. Only when
+// login fails does it create the account (once) and log in again. create=false
+// is the read path (listShares) — it returns errNoAccount instead of minting an
+// account just to list, so a GET never provisions.
+func (c *httpController) token(ctx context.Context, org string, create bool) (string, error) {
+	email, password := c.accountEmail(org), c.accountPassword(org)
+	if tok, err := c.login(ctx, email, password); err == nil {
+		return tok, nil
+	}
+	if !create {
+		return "", errNoAccount
+	}
+	if err := c.createAccount(ctx, email, password); err != nil {
+		return "", err
+	}
+	return c.login(ctx, email, password)
+}
+
+// createAccount mints the per-org account (admin). A duplicate-email rejection is
+// NOT success here (login-first already ruled out a usable existing account, so a
+// duplicate means a soft-deleted/mispassworded row) — it surfaces honestly.
+func (c *httpController) createAccount(ctx context.Context, email, password string) error {
+	code, err := c.do(ctx, http.MethodPost, apiBase()+"/account",
 		map[string]string{"email": email, "password": password},
 		map[string]string{adminHeader: c.adminToken}, nil)
 	if err != nil {
@@ -179,7 +223,9 @@ func (c *httpController) ensureAccount(ctx context.Context, email, password stri
 	if code == http.StatusUnauthorized {
 		return fmt.Errorf("zrok admin unauthorized (ZROK_ADMIN_TOKEN)")
 	}
-	// 201 created OR any duplicate-email rejection → the account now exists.
+	if code/100 != 2 {
+		return fmt.Errorf("zrok create account failed (HTTP %d)", code)
+	}
 	return nil
 }
 
@@ -187,7 +233,7 @@ func (c *httpController) ensureAccount(ctx context.Context, email, password stri
 // JSON string per specs/zrok.yml). This is the token the share CLI enables with.
 func (c *httpController) login(ctx context.Context, email, password string) (string, error) {
 	var tok string
-	code, err := c.do(ctx, http.MethodPost, "/api/v2/login",
+	code, err := c.do(ctx, http.MethodPost, apiBase()+"/login",
 		map[string]string{"email": email, "password": password}, nil, &tok)
 	if err != nil {
 		return "", err
@@ -201,7 +247,7 @@ func (c *httpController) login(ctx context.Context, email, password string) (str
 // overview returns the account's shares/environments for the org's dashboard.
 func (c *httpController) overview(ctx context.Context, accountToken string) (overviewResp, error) {
 	var ov overviewResp
-	code, err := c.do(ctx, http.MethodGet, "/api/v2/overview", nil,
+	code, err := c.do(ctx, http.MethodGet, apiBase()+"/overview", nil,
 		map[string]string{accountHeader: accountToken}, &ov)
 	if err != nil {
 		return ov, err
