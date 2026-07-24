@@ -10,8 +10,9 @@ import (
 // posthog.go forwards conversions to Hanzo Insights (insights.hanzo.ai) — our PostHog
 // fork — via its capture contract. Config: an optional host override; the project write
 // key (api_key, e.g. phc_…) is the Secret, resolved from KMS and carried in the BODY
-// (never the URL/header/log). The batch endpoint /batch sends the whole batch in one
-// request: {api_key, batch:[{event, distinct_id, properties, timestamp}, …]}.
+// (never the URL/header/log). The canonical ingest endpoint /v1/e sends the whole batch
+// in one request: {api_key, batch:[{event, distinct_id, properties, timestamp}, …]} —
+// capture-rs's untagged RawRequest::Batch variant on /v1/e accepts that body verbatim.
 //
 // PostHog keys every event on distinct_id; a conversion with no resolvable visitor id is
 // dropped (PostHog rejects an empty distinct_id), mirroring GA4's client_id rule. Event
@@ -41,7 +42,7 @@ func (posthog) Spec() Spec {
 	}
 }
 
-// posthogBatch is the /batch capture body: the project key + the events. Exposed to
+// posthogBatch is the /v1/e capture body: the project key + the events. Exposed to
 // tests as the pure render of a batch.
 type posthogBatch struct {
 	APIKey string         `json:"api_key"`
@@ -117,7 +118,7 @@ func (d posthog) Send(ctx context.Context, cfg Config, secret string, batch []Co
 	if host == "" {
 		host = posthogHost
 	}
-	endpoint := strings.TrimRight(host, "/") + "/batch"
+	endpoint := strings.TrimRight(host, "/") + "/v1/e"
 	// PostHog capture returns {status:1} (or 1) on 200; out=nil discards the body.
 	if err := postJSON(ctx, posthogID, endpoint, nil, body, nil); err != nil {
 		return Result{}, err
