@@ -1,10 +1,40 @@
 # LLM.md — hanzoai/cloud
 
-Guidance for AI agents working in this repo. `hanzoai/cloud` (HIP-0106) is ONE Go
-binary + CLI that mounts every Hanzo subsystem into a single process; the same
-artifact serves `api.hanzo.ai`, `api.lux.cloud`, `api.zoo.cloud`, `api.osage.cloud`
-and every white-label reseller. Brand, enabled subsystems, and org scope are
-deployment configuration.
+**Canonical repo.** `hanzoai/cloud` (HIP-0106) is the Open AI Cloud as ONE Go
+binary + `hanzo` CLI: every Hanzo subsystem (iam, base, kms, ai, gateway,
+commerce, o11y, tasks, …) mounted into a single multi-org process. The same
+artifact serves `api.hanzo.ai`, `api.lux.cloud`, `api.zoo.cloud`,
+`api.osage.cloud`, and every white-label reseller — brand, enabled subsystems,
+and org scope are deployment configuration. This is the impl home for the cloud
+control plane; the OpenAPI it emits at `GET /v1/openapi.json` is the single
+source for the generated per-language SDKs.
+
+## Role in the SDK model
+- Full Cloud SDK is GENERATED from THIS binary's OpenAPI; SDK impl lives in
+  `hanzo-<lang>/sdk`, docs/wrappers in `hanzoai/<lang>-sdk`, meta in `hanzoai/sdk`.
+- AI/agents flagship lib is separate: Python `hanzo` (`hanzoai/python-sdk`),
+  Node `@hanzo/ai` (`hanzo-js/ai`). Completeness: Python > Rust > C++ > Go.
+- DRY: one impl, one place; discovery repos link OUT, never duplicate impl.
+- Full spec: `~/work/hanzo/SDK-ARCHITECTURE.md`.
+
+## Brand rules (hard)
+- Hanzo is a full AI cloud, NOT a proxy — never "LLM gateway", never position vs
+  LiteLLM. Zen models are our OWN family; never name upstream models.
+- `/v1/` only, never `/api/`. Voice: "Hanzo — the Open AI Cloud."
+
+## Install / run
+- `docker run -p 8080:8080 ghcr.io/hanzoai/cloud:vX.Y.Z` (pin a released tag) ·
+  `go install github.com/hanzoai/cloud/cmd/hanzo@latest` · `brew install hanzoai/tap/hanzo`
+- Build in MODULE mode only: `make build` / `GOWORK=off go build ./...` — never
+  workspace mode (see "Build & module graph" below).
+
+## Key entry points
+- `cmd/cloud` — server binary · `cmd/hanzo` (`cli/`) — control CLI · `webui.go` — embedded console
+- `apps/apps.go:Wire()` — composition root (the one ordered subsystem slice)
+- `deps.go` / `cloud.Deps` — process-wide handles · `clients/<name>/` — every subsystem
+- `openapi/` — live spec derived from the router (no checked-in spec file)
+
+---
 
 ## Open Cloud planes
 
