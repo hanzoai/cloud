@@ -314,6 +314,99 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 		commercebilling.DeleteSpendAlert,
 	)
 
+	// POST /v1/billing/topup/token — the INLINE Square card top-up (the console's
+	// "Billing → Credits → add credits": the Square Web Payments SDK tokenizes the card
+	// IN THE BROWSER → a single-use nonce → this endpoint charges it and credits the
+	// caller's balance). commerce's api.Route() billing bundle is NOT compiled into the
+	// co-resident embed, so — exactly like plans/invoices/spend-alerts above — without
+	// this registration the POST fell through to the account bridge's /v1/billing/*
+	// wildcard (order 122). That wildcard is service-token-forwardable for topup/token
+	// (billing.go billingForwardable), so billingData re-forwarded it to COMMERCE_URL
+	// (default the public api.hanzo.ai edge = THIS binary) over commerceinproc's
+	// self-routing transport, re-entering the SAME wildcard until the depth-8 guard
+	// refused → the "commerceinproc: in-process dispatch depth 8 exceeded" 502 that broke
+	// top-up outright. Registering commerce's real TopupWithToken co-resident here
+	// (order 100 < 122) shadows the wildcard and serves the charge in-process at depth 1
+	// — no HTTP hop, no self-dispatch. topup/token STAYS in billingForwardable as the
+	// split-deploy fallback (a standalone commerce still serves it); co-residence just
+	// wins first.
+	//
+	// Chain — the browser money-WRITE posture, byte-for-byte what the bridge applied:
+	//   RequireCSRF        — the ambient-cookie anti-CSRF gate the bridge's requireCSRF
+	//                        wrapped POST /v1/billing/* with (a Bearer/gateway caller is
+	//                        not CSRF-able; an ambient-cookie write needs the token).
+	//   RequestContext     — the gated request context commerce's handler + ledger read.
+	//   IAMTokenRequired   — resolves the org from the gateway-validated X-Org-Id into
+	//                        Locals("organization"), which TopupWithToken.GetOrganization
+	//                        + topupDestination read as the org billing key.
+	//   PinBillingSubject  — pins ?user= to the caller's OWN account.Payer subject (the
+	//                        SAME rule the ai spend-gate debits and billingData pins), so
+	//                        the credit lands on the caller's subject (person=org/name) and
+	//                        can never be widened; fail-closed for an unvalidated caller —
+	//                        the IDOR boundary stays exactly where billingData put it.
+	// The card PAN never touches this binary: TopupWithToken charges the Square nonce only,
+	// and the settled charge itself is the mint authority (mintauth.WithAuthorized).
+	app.Post("/v1/billing/topup/token",
+		accountclient.RequireCSRF(),
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercebilling.TopupWithToken,
+	)
+
+	// The remaining console billing WRITES that share topup/token's self-dispatch loop
+	// class — each is a POST the console makes (billingForwardable in billing.go), each had
+	// NO co-resident handler, so each fell through to the account bridge's /v1/billing/*
+	// wildcard (order 122) and re-entered it over commerceinproc until the depth-8 guard
+	// refused (the same "in-process dispatch depth 8 exceeded" 502 that broke top-up). Each
+	// commerce handler exists in the vendored module (v1.49.13); registering them co-resident
+	// (order 100 < 122) shadows the wildcard and serves the write in-process at depth 1. They
+	// STAY in billingForwardable as the split-deploy fallback (same precedent as topup/token
+	// + spend-alerts). Chain matches the bridge's write posture byte-for-byte:
+	//
+	//   - RequireCSRF        — the ambient-cookie anti-CSRF gate the bridge wrapped POST
+	//                          /v1/billing/* with (Bearer/gateway callers are not CSRF-able).
+	//   - RequestContext     — the gated request context commerce's handlers read.
+	//   - IAMTokenRequired   — resolves the org from the gateway-validated X-Org-Id into
+	//                          Locals("organization") — the namespace GetOrganization reads.
+	//   - PinBillingSubject  — pins the caller's OWN account.Payer subject into BOTH query and
+	//                          body AND fail-closes an unvalidated caller. It is the auth gate
+	//                          on every one, and the IDOR control on the subject-scoped one.
+	//
+	// payment-methods (save a card-on-file / vault a Square nonce) is SUBJECT-scoped: commerce's
+	// CreatePaymentMethod reads `customerId` from the BODY, so PinBillingSubject's body-pin is
+	// load-bearing here — a member can only vault a card for their OWN subject, exactly the
+	// boundary billingData's scopedBillingBody enforced. The Square nonce goes to Square; the
+	// PAN never touches this binary.
+	app.Post("/v1/billing/payment-methods",
+		accountclient.RequireCSRF(),
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercebilling.CreatePaymentMethod,
+	)
+
+	// subscriptions/:id/{cancel,reactivate} are org-NAMESPACE-scoped: commerce's handlers
+	// resolve the subscription by `:id` WITHIN the caller's org namespace (a foreign org's id
+	// is a 404 miss), so tenancy is the namespace IAMTokenRequired resolves and PinBillingSubject
+	// is the fail-closed-anon auth gate — its pinned subject params are ignored by these
+	// handlers (the SAME role it plays for the org-scoped payment-config read). The bridge's
+	// subject-pin was likewise a no-op for these, so nothing is dropped.
+	app.Post("/v1/billing/subscriptions/:id/cancel",
+		accountclient.RequireCSRF(),
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercebilling.CancelBillingSubscription,
+	)
+	app.Post("/v1/billing/subscriptions/:id/reactivate",
+		accountclient.RequireCSRF(),
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercebilling.ReactivateBillingSubscription,
+	)
+
 	// In-process seams:
 	//   - commerceinproc routes the S2S billing byte-stream into the co-resident
 	//     app (the metering debit path) instead of a socket to a standalone pod.
