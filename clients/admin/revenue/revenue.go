@@ -134,22 +134,20 @@ func Revenue(s *cloud.Service[core.State], c *zip.Ctx) error {
 }
 
 // revenueOf reads one org's money view (balance + spend + plan/MRR). Returns (row, ok):
-// ok is false when the spend OR balance read failed, so the caller can mark the fleet
-// total PARTIAL rather than presenting an undercount as complete.
+// ok is false when the balance/spend read failed, so the caller can mark the fleet total
+// PARTIAL rather than presenting an undercount as complete.
+//
+// Balance + spend come from the ONE per-org money read (core.OrgMoney): co-resident that
+// reads cloud's native finance wallet — the SAME balances the ai gate enforces and the
+// overview folds — so the revenue board no longer reads the money source as down when
+// commerce is in-process. MRR stays a subscriptions read (a separate endpoint); its
+// absence degrades the row to pay-as-you-go and never marks the money source down.
 func revenueOf(s *cloud.Service[core.State], ctx context.Context, o iam.Org) (RevenueCustomer, bool) {
 	row := RevenueCustomer{Org: o.Name, Display: core.Display(o.DisplayName, o.Name), Plan: "pay-as-you-go"}
-	ok := true
 
-	if sp, err := s.State.Commerce.Spend(ctx, o.Name); err == nil {
-		row.SpendCents = int64(sp.Consumed)
-	} else {
-		ok = false
-	}
-	if credits, err := s.State.Commerce.Credits(ctx, o.Name); err == nil {
-		row.BalanceCents = int64(credits)
-	} else {
-		ok = false
-	}
+	spend, balance, ok := core.OrgMoney(s, ctx, o.Name)
+	row.SpendCents = spend
+	row.BalanceCents = balance
 	if pl, err := s.State.Commerce.Plan(ctx, o.Name); err == nil {
 		row.MRRCents = int64(pl.MRR)
 		row.Plan = pl.Name
