@@ -1,0 +1,28 @@
+# Hanzo blueprint: Ghost — the open-source publishing platform + its MySQL database.
+# Neither service declares resources, so the estimator applies default web + db.
+services:
+  ghost:
+    image: ghost:5-alpine
+    restart: unless-stopped
+    ports:
+      - "2368:2368"
+    environment:
+      database__client: mysql
+      database__connection__host: db
+      database__connection__user: ghost
+      database__connection__password: ${DB_PASSWORD:-ghost}
+      database__connection__database: ghost
+    depends_on:
+      - db
+  db:
+    image: mysql:8
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-ghost}
+      MYSQL_DATABASE: ghost
+      MYSQL_USER: ghost
+      MYSQL_PASSWORD: ${DB_PASSWORD:-ghost}
+    volumes:
+      - ghostdb:/var/lib/mysql
+volumes:
+  ghostdb:
