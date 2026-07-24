@@ -98,6 +98,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/orgs/:org/entitlements", s.get)
 	app.Post("/v1/orgs/:org/entitlements", s.post)
 
+	// The ENTITLEMENT (commerce) projection the @hanzogui/shell reads — the READ
+	// side of the unified paywall (projection.go), distinct from the ENABLEMENT
+	// store above. ONE more app.Get on this existing subsystem: it does NOT add a
+	// Wire spec, so apps/wire_test.go TestWireOrderMatchesFrozen stays green.
+	app.Get("/v1/entitlements", s.projection)
+
 	log.Info("entitlements surface mounted", "prefix", "/v1/orgs/:org/entitlements", "brand", deps.Brand, "commerce", deps.Commerce != nil)
 	return nil
 }
