@@ -29,6 +29,17 @@ func echoQuery(c *zip.Ctx) error {
 	})
 }
 
+// echoBody is the downstream stand-in for a commerce WRITE handler (e.g. CreatePaymentMethod)
+// that reads its subject from the JSON BODY: it reports the body it observes AFTER the pin, so
+// a test can assert the subject the handler would persist and that non-subject fields survive.
+func echoBody(c *zip.Ctx) error {
+	var got map[string]any
+	if len(c.Body()) > 0 {
+		_ = json.Unmarshal(c.Body(), &got)
+	}
+	return c.JSON(200, got)
+}
+
 func pinApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
@@ -38,6 +49,7 @@ func pinApp(t *testing.T) *zip.App {
 		t.Fatalf("MountAccount: %v", err)
 	}
 	app.Get("/probe", PinBillingSubject(), echoQuery)
+	app.Post("/probe", PinBillingSubject(), echoBody)
 	return app
 }
 
@@ -64,6 +76,33 @@ func TestPinBillingSubject_PinsCallerAndDropsOrg(t *testing.T) {
 	}
 	if got["status"] != "open" {
 		t.Fatalf("non-subject filter must survive, got status=%q", got["status"])
+	}
+}
+
+// TestPinBillingSubject_PinsBodyForWrites — a POST whose JSON body names a FOREIGN subject
+// (customerId/userId/user) has every subject key overwritten with the caller's OWN subject
+// before the handler binds it, while non-subject fields survive. This is the boundary
+// commerce's CreatePaymentMethod (which reads customerId from the body) relies on to be
+// IDOR-safe co-resident — byte-identical to billingData's scopedBillingBody on the bridge.
+func TestPinBillingSubject_PinsBodyForWrites(t *testing.T) {
+	app := pinApp(t)
+	code, body := callH(t, app, http.MethodPost, "/probe", alice,
+		`{"customerId":"victim","userId":"victim","user":"victim","card":{"last4":"4242"}}`)
+	if code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", code, body)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("bad body: %s", body)
+	}
+	for _, k := range billingSubjectKeys {
+		if got[k] != "acme" { // alice/acme resolves to the org subject "acme"
+			t.Fatalf("handler must see body %s=acme (caller's own subject), got %v", k, got[k])
+		}
+	}
+	card, ok := got["card"].(map[string]any)
+	if !ok || card["last4"] != "4242" {
+		t.Fatalf("non-subject body field must survive the pin, got card=%v", got["card"])
 	}
 }
 
