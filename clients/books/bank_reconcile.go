@@ -78,6 +78,72 @@ func matchInflow(ctx context.Context, st *store, bt BankTxn) (reconStatus, error
 	return rs, nil
 }
 
+// payWindow is how far BEFORE a bank OUTFLOW a scanned bill may have been issued and still be
+// the bill this payment settles. Unlike a card settlement (days), a vendor invoice is paid on
+// net terms — often net-30/net-60 after the issue date the scan records — so this is generous.
+const payWindow = 60 * 24 * time.Hour
+
+// matchOutflow decides whether a bank OUTFLOW pays a scanned VendorPayable rather than being a
+// fresh expense. It returns the paid payable's source_id and matched=true only when the outflow
+// can claim a SPECIFIC unconsumed scanned bill of the exact amount, issued in the
+// [posted−payWindow, posted] window, whose vendor the outflow descriptor names. Failing to
+// place it in time, or finding no such open bill, yields matched=false — the caller then books
+// Dr expense / Cr Bank as before. This is the OUTFLOW-side twin of matchInflow.
+func matchOutflow(ctx context.Context, st *store, bt BankTxn) (string, bool, error) {
+	posted, err := time.Parse(time.RFC3339, bt.PostedAt)
+	if err != nil {
+		return "", false, nil // fail closed: an outflow we cannot place in time is a fresh expense
+	}
+	from := posted.Add(-payWindow).UTC().Format(time.RFC3339)
+	to := posted.UTC().Format(time.RFC3339)
+	hay := strings.ToLower(bt.Merchant + " " + bt.Description)
+	return st.claimPayable(ctx, bt.AmountCents, from, to, bt.Connector, bt.ExternalID, bt.PostedAt, hay)
+}
+
+// vendorNamed reports whether a bank outflow's descriptor (descHay, already lowercased) names
+// the vendor a scanned payable was booked against — the identity gate that keeps a coincidental
+// same-amount outflow from paying down an unrelated bill. It matches on the whole vendor string
+// or any of its significant name tokens (≥4 chars, dropping generic legal suffixes), so
+// "AMAZON WEB SERVICES" pays an "Amazon Web Services" bill but an unrelated same-amount debit
+// does not.
+func vendorNamed(descHay, vendor string) bool {
+	v := strings.ToLower(strings.TrimSpace(vendor))
+	if v == "" {
+		return false
+	}
+	if strings.Contains(descHay, v) {
+		return true
+	}
+	for _, tok := range nameTokens(v) {
+		if strings.Contains(descHay, tok) {
+			return true
+		}
+	}
+	return false
+}
+
+// nameSuffixes are generic legal/entity words that carry no vendor identity, dropped from the
+// token set so two unrelated "… LLC" vendors are not matched on the suffix alone.
+var nameSuffixes = map[string]bool{
+	"corp": true, "corporation": true, "incorporated": true, "company": true,
+	"limited": true, "holdings": true, "sarl": true, "gmbh": true,
+}
+
+// nameTokens splits a vendor name into its significant identity tokens: alphanumeric runs of
+// at least 4 characters that are not generic legal suffixes.
+func nameTokens(v string) []string {
+	fields := strings.FieldsFunc(v, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9')
+	})
+	out := make([]string, 0, len(fields))
+	for _, f := range fields {
+		if len(f) >= 4 && !nameSuffixes[f] {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // isSettlement reports whether a bank inflow's descriptor names the payment processor whose
 // captures clear through 1010 Square-clearing. This is the stronger-than-amount key that
 // separates a real settlement from a coincidental same-amount deposit: a processor payout
