@@ -482,7 +482,7 @@ func TestSweepAccruesSpendTimesShareIdempotent(t *testing.T) {
 		t.Fatalf("accrual sweep want 1, got %d (%s)", code, body)
 	}
 	a, _ := s.State.store.GetByID(ctx, idA)
-	const want = 10000 * defaultShareBps / bpsDenom // 2500
+	const want = 10000 * defaultShareBps / bpsDenom // 2000 (20% share)
 	if a.AccruedCents != want || a.PendingCents() != want {
 		t.Fatalf("accrued=%d pending=%d, want %d (orgB spend×share, self excluded)", a.AccruedCents, a.PendingCents(), want)
 	}
@@ -509,7 +509,7 @@ func TestLazyAccrualOnAuthorRead(t *testing.T) {
 	req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgA", false, map[string]any{"repoUrl": "acme/widgets"})
 	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false, map[string]any{"repoUrl": "acme/widgets", "project": "proj-b"})
 	approve(t, app, idA)
-	fc.setSpend("orgB", 5000) // $50 × 25% share → royalty 1250c ($12.50)
+	fc.setSpend("orgB", 5000) // $50 × 20% share → royalty 1000c ($10.00)
 
 	code, body := req(t, app, http.MethodGet, "/v1/authors", "orgA", false, nil)
 	if code != http.StatusOK {
@@ -535,7 +535,7 @@ func TestLazyAccrualOnAuthorRead(t *testing.T) {
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
-	const want = 5000 * defaultShareBps / bpsDenom // 1250
+	const want = 5000 * defaultShareBps / bpsDenom // 1000
 	if !v.IsAuthor || v.Status != StatusApproved || v.GithubLogin != "acmedev" || !v.Verified {
 		t.Fatalf("dashboard head wrong: %+v", v)
 	}
