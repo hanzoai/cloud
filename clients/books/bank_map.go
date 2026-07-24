@@ -66,6 +66,34 @@ func mapAndPost(ctx context.Context, st *store, bt BankTxn) (BankResult, error) 
 		return BankResult{Status: statusTransfer}, nil
 
 	case Outflow:
+		// A scanned bill already accrued this spend as Dr expense / Cr 2001 VendorPayable. If
+		// this outflow PAYS that bill, it must SETTLE the payable (Dr 2001 / Cr 1000), NOT
+		// re-book the expense — booking Dr expense / Cr 1000 again would DOUBLE-COUNT the spend
+		// and strand the AP forever. So first try to claim an open scanned payable this outflow
+		// pays down; only when none matches is it a fresh expense.
+		if payableID, settles, err := matchOutflow(ctx, st, bt); err != nil {
+			return BankResult{}, err
+		} else if settles {
+			v := Voucher{
+				SourceKind:  bankSourceKind,
+				SourceID:    bankSourceID(bt),
+				PostingAt:   bt.PostedAt,
+				Description: "bank payment of scanned bill " + payableID + " — " + descOf(bt),
+				Legs: []Leg{
+					{Account: VendorPayable, Debit: bt.AmountCents},
+					{Account: Bank, Credit: bt.AmountCents},
+				},
+			}
+			posted, err := st.post(ctx, v, RoundOffAllowance)
+			if err != nil {
+				return BankResult{}, err
+			}
+			if err := st.insertBankTxn(ctx, bt, raw, v.SourceID, statusSettled); err != nil {
+				return BankResult{}, err
+			}
+			return BankResult{Status: statusSettled, VoucherPosted: posted}, nil
+		}
+
 		acct := categorize(bt)
 		v := Voucher{
 			SourceKind:  bankSourceKind,
