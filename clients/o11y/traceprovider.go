@@ -98,7 +98,13 @@ func installTraceProvider(ctx context.Context, serviceName string) func(context.
 	}
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exp),
-		sdktrace.WithResource(resource.NewSchemaless(attribute.String("service.name", serviceName))),
+		sdktrace.WithResource(resource.NewSchemaless(
+			attribute.String("service.name", serviceName),
+			// deployment.environment on the resource so o11y's Environment column
+			// resolves instead of defaulting to "default". Every span this provider
+			// exports (cloud's own + the adopted ai gen_ai spans) inherits it.
+			attribute.String("deployment.environment", deploymentEnvironment()),
+		)),
 	)
 	otel.SetTracerProvider(tp)
 
@@ -140,4 +146,15 @@ func firstNonEmptyEnv(keys ...string) string {
 		}
 	}
 	return ""
+}
+
+// deploymentEnvironment resolves the process deployment environment for the OTel
+// resource. Env-overridable (DEPLOYMENT_ENVIRONMENT / OTEL_DEPLOYMENT_ENVIRONMENT /
+// ENVIRONMENT); defaults to "production" because this provider installs only when a
+// sink/wire is configured — i.e. a real deployment.
+func deploymentEnvironment() string {
+	if v := firstNonEmptyEnv("DEPLOYMENT_ENVIRONMENT", "OTEL_DEPLOYMENT_ENVIRONMENT", "ENVIRONMENT"); v != "" {
+		return v
+	}
+	return "production"
 }
