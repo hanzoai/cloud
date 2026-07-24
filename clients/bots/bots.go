@@ -134,6 +134,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // routes registers the bots surface. The static /run literal and the :runId param
 // are resolved by specificity, so /v1/bots/run can never bind as a run id.
 func routes(app *zip.App, s *cloud.Service[state]) {
+	// UNIFIED PAYWALL (server-side enforcement). To gate this group behind the
+	// caller's plan, prepend the middleware to the group:
+	//   g := app.Group("/v1/bots", entitlements.RequireProduct(deps.Commerce, "bot"))
+	// DEFERRED — DO NOT ENABLE YET: the "bot" product is ABSENT from @hanzo/plans
+	// licensing.product_ids (v1.4.4), so enforcing now would 402 every org. Flip on
+	// once the catalog licenses "bot" to a tier. See clients/entitlements.
 	g := app.Group("/v1/bots")
 	g.Post("/run", cloud.Handle(s, run))
 	app.Get("/v1/bots", cloud.Handle(s, list))
