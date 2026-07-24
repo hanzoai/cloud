@@ -122,6 +122,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		State: state{store: store, projects: iamProjects{}, k8s: k, kmsIdentity: newKMSOrgIdentity(deps.KMS),
 			sitesHost: getenv("CLOUD_PLATFORM_SITES_HOST", "hanzo.app")}}
 	mounted = s
+	// UNIFIED PAYWALL (server-side enforcement). To gate the /v1/platform surface
+	// behind the caller's plan, wrap it with entitlements.RequireProduct(deps.Commerce,
+	// "platform") — note routes() registers FLAT app.Get paths (not a group), so
+	// enabling means converting them to app.Group("/v1/platform", mw) or wrapping each.
+	// DEFERRED — DO NOT ENABLE YET: the "platform" product is ABSENT from @hanzo/plans
+	// licensing.product_ids (v1.4.4), so enforcing now would 402 every org. Flip on
+	// once the catalog licenses "platform" to a tier. See clients/entitlements.
 	routes(app, s)
 
 	// The cloud's own embedded-git apex is a trusted build source (clients/git
