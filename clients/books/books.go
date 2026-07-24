@@ -110,6 +110,7 @@ func routes(app *zip.App, s *cloud.Service[*state]) {
 	app.Get("/v1/books/accounts", cloud.Handle(s, accountsHandler))
 	app.Get("/v1/books/gl", cloud.Handle(s, glHandler))
 	app.Get("/v1/books/trial-balance", cloud.Handle(s, trialBalanceHandler))
+	app.Get("/v1/books/metrics", cloud.Handle(s, metricsHandler))
 	app.Get("/v1/books/pnl", cloud.Handle(s, pnlHandler))
 	app.Get("/v1/books/balance-sheet", cloud.Handle(s, balanceSheetHandler))
 	app.Get("/v1/books/export", cloud.Handle(s, exportHandler))
