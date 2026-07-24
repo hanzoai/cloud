@@ -124,6 +124,10 @@ func routes(app *zip.App, s *cloud.Service[*state]) {
 	// The shared BANK engine surface (bank_api.go): OFX/CSV import, connector sync,
 	// transaction + unreconciled reads, and the Plaid/Teller link plumbing stubs.
 	bankRoutes(app, s)
+	// The SCANNER suite (scan.go): receipt/invoice extraction → a reviewed draft → the
+	// one Post(); the inbox queue, vendor + rule auto-categorization, and the unified
+	// filterable transactions read over the booked ledger.
+	scannerRoutes(app, s)
 }
 
 // storeFor resolves the caller's OWN book store for the requested ledger (live/sandbox).
