@@ -36,7 +36,7 @@ func (f *fakeController) overview(_ context.Context, _ string) (overviewResp, er
 // TestAccountDeterminism — the per-org email + password are pure functions of
 // the org, so provisioning is stateless and idempotent (same org → same creds).
 func TestAccountDeterminism(t *testing.T) {
-	if accountEmail("acme") != "share+acme@hanzo.ai" {
+	if accountEmail("acme") != "share-acme@hanzo.ai" {
 		t.Errorf("email = %q", accountEmail("acme"))
 	}
 	c := &httpController{secret: []byte("k")}
