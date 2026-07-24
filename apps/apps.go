@@ -64,6 +64,7 @@ import (
 	"github.com/hanzoai/cloud/clients/base"
 	"github.com/hanzoai/cloud/clients/benchmark"
 	"github.com/hanzoai/cloud/clients/billing"
+	"github.com/hanzoai/cloud/clients/blueprint"
 	"github.com/hanzoai/cloud/clients/books"
 	"github.com/hanzoai/cloud/clients/bots"
 	"github.com/hanzoai/cloud/clients/campaign"
@@ -281,6 +282,15 @@ func Wire() []cloud.MountSpec {
 		{Name: "functions", Mount: functions.Mount},
 		{Name: "tracker", Mount: tracker.Mount},
 		{Name: "templates", Mount: templates.Mount},
+		// OSS-template compute-cost basis /v1/blueprint/* — parses a blueprint's
+		// docker-compose into its SBOM (bill of container images) and prices the
+		// stack's CPU/memory footprint through a documented rate card. The per-hour
+		// rate the deploy path meters an org on, and the "~$X/mo to run" the console
+		// shows; it is the compute cost the 20% author royalty (clients/authors) is
+		// taken from. OwnsHealth: serves its own /v1/blueprint/health. Reference
+		// content (embedded blueprints), no store → no Shutdown. After templates, its
+		// sibling catalog concern; before the AI /v1/* catch-all.
+		{Name: "blueprint", Mount: blueprint.Mount, OwnsHealth: true},
 		{Name: "framework", Mount: framework.Mount, Shutdown: ctxShutdown(framework.Shutdown)},
 		{Name: "knowledge", Mount: knowledge.Mount},
 		// Hanzo Support PUBLIC plane /v1/help/* (help center KB read + customer ticket

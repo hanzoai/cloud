@@ -53,6 +53,7 @@ reverse).
 | `/v1/tasks` | Durable engine | `clients/tasks` | Shipped |
 | `/v1/gpus` + fleet | BYO GPU presence | `clients/fleet` + `clients/visor` | Shipped |
 | `/v1/cloud` | Cloud accounts: link DO/AWS/GCP/Azure, discover native k8s clusters, fold into the fleet | `clients/venue` (new) | In flight (branch `feat/cloud-account-connectors`; blue-held for red) |
+| `/v1/blueprint` | Cost: OSS-template SBOM (compose→images) + compute-cost estimate | `clients/blueprint` (new) | Shipped |
 | IAM | Identity: users, orgs, roles | IAM | Shipped |
 | KMS | Secret custody: sealed secrets | `clients/kms` | Shipped |
 
@@ -274,6 +275,22 @@ package under `clients/<name>` that obeys these seams — nothing more.
   creative A/B by composing `experiments.Assign`/`experiments.Analyze` — it never
   reinvents assignment or evidence. Add a new variant KIND by putting a payload on
   the variant; the primitive does not care what it is.
+- **The OSS-template compute cost is DERIVED from the compose, not a fourth ledger
+  (`clients/blueprint`, `/v1/blueprint`).** A blueprint's `docker-compose.yml` is
+  parsed to its SBOM (the bill of container images) and its services' CPU/memory
+  footprint priced through ONE documented rate card (microdollars per vCPU-/GB-hour,
+  DigitalOcean-droplet-derived + platform margin; tunable via
+  `CLOUD_BLUEPRINT_UCPU_HR`/`_UGB_HR`). Sizing is the declared
+  `deploy.resources.reservations`/`limits` (or legacy `cpus`/`mem_*`) else a default
+  footprint per inferred class (db/cache/web/worker/other). `blueprint.EstimateTemplate(id)`
+  returns `{sbom, vcpuHr, gbHr, microUsdPerHour, estCentsPerMonth}`: `estCentsPerMonth`
+  is the "~$X/mo to run" the console shows; `microUsdPerHour` is the exact rate the
+  deploy path meters the deploying org on via the SAME commerce spine `resource_billing`
+  uses. The author royalty (`clients/authors`, `defaultShareBps=2000`) already accrues
+  20% of a deploying org's metered spend — this plane only DEFINES the compute component
+  of that spend from a real rate card; it never touches the ledger or the accrual sweep.
+  Distinct from `clients/sbom` (CycloneDX packages INSIDE one image, keyed by digest);
+  this is the bill of IMAGES a stack runs, keyed by template.
 
 ## Identity vocabulary is IAM-native
 
