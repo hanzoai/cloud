@@ -113,3 +113,17 @@ func sha256hex(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
 }
+
+// ── first-party analytics data (Umami, PostHog) ──────────────────────────────
+
+// analyticsData renders a conversion's normalized commerce fields (value + currency)
+// into the data map the FIRST-PARTY analytics sinks (Umami, PostHog) record. It is
+// non-PII by construction — the email/phone/click match keys the translator lifted for
+// ad advanced-matching are deliberately NOT forwarded to a product-analytics sink.
+// nil when the event carries no value (a non-commerce event ⇒ no commerce data).
+func analyticsData(cv Conversion) map[string]any {
+	if cv.Value <= 0 {
+		return nil
+	}
+	return map[string]any{"value": cv.Value, "currency": cv.Currency}
+}
