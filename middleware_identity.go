@@ -292,7 +292,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 // for the boundary, so Serve and integration tests wire it identically — no second
 // copy of the validator-construction glue to drift.
 func IdentityMiddleware(cfg *Config) zip.Handler {
-	return SanitizeIdentity(newIdentityValidator(cfg.IAMIssuer, cfg.JWKSURL, cfg.JWTAudiences, 0), cfg.AdminOrg)
+	return SanitizeIdentity(newIdentityValidator(cfg.IAMIssuer, cfg.JWKSURL, 0), cfg.AdminOrg)
 }
 
 // sanitizeSubScopes re-injects the org SUB-SCOPES (X-Project-Id, X-App-Id) for a
