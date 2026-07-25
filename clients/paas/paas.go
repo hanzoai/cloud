@@ -44,6 +44,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -107,6 +108,79 @@ func nsClass(ns string) (tenant, env string, ok bool) {
 // envOf is nsClass's env projection ("" when the namespace is not ours).
 func envOf(ns string) string { _, env, _ := nsClass(ns); return env }
 
+// namespacesGVR backs discovery. Listing NAMESPACES is the honest question — "which
+// namespaces are ours?" — and asks it of the one authority that knows. Deriving the
+// set from a cluster-wide CR list would answer a different question ("where are
+// there CRs?") and pull every tenant's objects through this process to do it.
+var namespacesGVR = schema.GroupVersionResource{Version: "v1", Resource: "namespaces"}
+
+// nsScanTTL bounds how stale a discovered scan set may be. A new tenant namespace
+// appears on the board within this window without a redeploy.
+const nsScanTTL = 60 * time.Second
+
+// discoverNamespaces returns every namespace in the cluster that nsClass recognises,
+// first-party ones first (main before test/dev, so a bare app name still resolves to
+// production) then tenants in stable order.
+//
+// This is what finally makes tenant-<org> workloads visible: they were classified
+// correctly but never SCANNED, because the scan set was a literal list. Discovery
+// asks the cluster instead of hardcoding an answer that goes stale the moment a
+// tenant is onboarded.
+//
+// Fail-SAFE, never fail-open: if the list fails we fall back to the first-party set,
+// which is narrower than the truth — a tenant admin can lose visibility of its own
+// namespace, never gain visibility of someone else's. nsClass still filters, so a
+// namespace that is not ours can never enter the set however discovery goes.
+func discoverNamespaces(s *cloud.Service[state], ctx context.Context) []string {
+	cache := s.State.scan
+	if cache != nil {
+		cache.mu.Lock()
+		if cache.ns != nil && time.Since(cache.at) < nsScanTTL {
+			cached := append([]string(nil), cache.ns...)
+			cache.mu.Unlock()
+			return cached
+		}
+		cache.mu.Unlock()
+	}
+
+	if s.State.dyn == nil {
+		return scanOrder()
+	}
+	list, err := s.State.dyn.Resource(namespacesGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return scanOrder()
+	}
+	// The first-party set is ALWAYS present: it is known-good by definition, and a
+	// namespace that does not exist simply yields no CRs (observeFleet tolerates
+	// NotFound). Discovery only ever ADDS tenants — so an empty or partial listing
+	// degrades to today's behavior instead of blanking the board.
+	firstParty := scanOrder()
+	known := make(map[string]bool, len(list.Items))
+	for i := range list.Items {
+		if _, _, ok := nsClass(list.Items[i].GetName()); ok {
+			known[list.Items[i].GetName()] = true
+		}
+	}
+	out := make([]string, 0, len(known)+len(firstParty))
+	for _, ns := range firstParty { // stable, main-first
+		out = append(out, ns)
+		delete(known, ns)
+	}
+	rest := make([]string, 0, len(known))
+	for ns := range known {
+		rest = append(rest, ns)
+	}
+	sort.Strings(rest)
+	out = append(out, rest...)
+
+	if cache != nil {
+		cache.mu.Lock()
+		cache.ns, cache.at = out, time.Now()
+		cache.mu.Unlock()
+	}
+	return append([]string(nil), out...)
+}
+
 // appNameRE constrains the :app path segment to a DNS-1123 label (every Service
 // CR metadata.name satisfies this). Validated at the boundary; it is the
 // injection guard for the CR name a deploy/read targets.
@@ -124,6 +198,20 @@ const userAgent = "hanzo-cloud-paas"
 type state struct {
 	dyn     dynamic.Interface // nil when no kubeconfig resolved (fail-closed)
 	initErr string            // why dyn is nil, surfaced by health + ready()
+
+	// the discovered scan set (discoverNamespaces), rebuilt every nsScanTTL so a
+	// newly-onboarded tenant namespace appears without a redeploy. A POINTER:
+	// cloud.Service stores State by value, so a mutex living directly in `state`
+	// would be copied (go vet: "assignment copies lock value") and each copy would
+	// guard nothing. One cache, shared by every copy of the struct.
+	scan *nsCache
+}
+
+// nsCache is the discovered scan set behind its own lock.
+type nsCache struct {
+	mu sync.Mutex
+	ns []string
+	at time.Time
 }
 
 // Mount wires the /v1/paas/* surface onto app. Every handler is behind the IAM
@@ -136,7 +224,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // build resolves the in-process k8s dynamic client (fail-closed: when no kubeconfig
 // resolves the subsystem still mounts and every endpoint 503s honestly).
 func build(b cloud.Base) (state, error) {
-	var st state
+	st := state{scan: &nsCache{}}
 	if dyn, err := newDynamic(); err != nil {
 		st.initErr = err.Error()
 		b.Log.Warn("kubernetes client unavailable; /v1/paas endpoints will fail closed", "err", err)
@@ -231,8 +319,8 @@ func operatorGuard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 // from the validated principal — never a client header — so it cannot be widened by
 // a forged X-Org-Id. An OrgAdmin whose org owns no scanned namespace gets an empty
 // set (an empty board / a clean 404), never another org's data.
-func scopedNamespaces(c *zip.Ctx) []string {
-	all := scanOrder()
+func scopedNamespaces(s *cloud.Service[state], ctx context.Context, c *zip.Ctx) []string {
+	all := discoverNamespaces(s, ctx)
 	if principal.IsSuperAdmin(c) {
 		return all
 	}
@@ -254,8 +342,8 @@ func scopedNamespaces(c *zip.Ctx) []string {
 // in prod-first scan order. It composes the AUTH confinement (scopedNamespaces) with
 // the optional env SELECTION — orthogonal: env can only narrow WITHIN the caller's
 // own authorized set, never reach outside it.
-func targetNamespaces(c *zip.Ctx) []string {
-	nss := scopedNamespaces(c)
+func targetNamespaces(s *cloud.Service[state], ctx context.Context, c *zip.Ctx) []string {
+	nss := scopedNamespaces(s, ctx, c)
 	env := strings.TrimSpace(c.Query("env"))
 	if env == "" {
 		return nss
@@ -322,7 +410,7 @@ func listApps(s *cloud.Service[state], c *zip.Ctx) error {
 	// a SuperAdmin, the caller's own org namespaces for an OrgAdmin (empty board for
 	// an org that owns none). The tenant boundary is applied at the scan, before any
 	// CR is read, so a non-super caller never even lists another org's apps.
-	views, err := observeFleet(s, c.Context(), scopedNamespaces(c))
+	views, err := observeFleet(s, c.Context(), scopedNamespaces(s, c.Context(), c))
 	if err != nil {
 		return err
 	}
@@ -375,7 +463,7 @@ func getApp(s *cloud.Service[state], c *zip.Ctx) error {
 	if !appNameRE.MatchString(name) {
 		return zip.ErrBadRequest("app must be a DNS-1123 label")
 	}
-	for _, ns := range targetNamespaces(c) {
+	for _, ns := range targetNamespaces(s, c.Context(), c) {
 		obj, err := s.State.dyn.Resource(appsGVR).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
@@ -467,7 +555,7 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	if nsForEnv(env) == "" {
 		return zip.ErrBadRequest("env must be one of main|test|dev")
 	}
-	ns, err := resolveTargetIn(s, c.Context(), name, targetNamespaces(c))
+	ns, err := resolveTargetIn(s, c.Context(), name, targetNamespaces(s, c.Context(), c))
 	if err != nil {
 		return err
 	}
