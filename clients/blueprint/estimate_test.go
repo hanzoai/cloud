@@ -258,3 +258,37 @@ func TestInferClass(t *testing.T) {
 		}
 	}
 }
+
+// TestRatesAndSizingExported guards the ONE-owner rule: clients/authors must be able
+// to DISCLOSE the cost model without re-declaring a rate or a footprint, so the two
+// accessors have to publish the LIVE card (post env overlay) and a deterministic
+// sizing table.
+func TestRatesAndSizingExported(t *testing.T) {
+	if got := Rates(); got != DefaultRateCard() {
+		t.Fatalf("Rates() = %+v, want the shipped card %+v", got, DefaultRateCard())
+	}
+
+	// The overlay is what ops actually tunes; Rates() must follow it, not the default.
+	saved := rates
+	t.Cleanup(func() { rates = saved })
+	t.Setenv("CLOUD_BLUEPRINT_UCPU_HR", "20000")
+	rates = rateCardFromEnv()
+	if got := Rates(); got.MicroUSDPerVCPUHour != 20_000 || got.MicroUSDPerGBHour != defaultMicroUSDPerGBHour {
+		t.Fatalf("Rates() after overlay = %+v, want vCPU 20000 / GB %d", got, defaultMicroUSDPerGBHour)
+	}
+	rates = saved
+
+	sizing := Sizing()
+	if len(sizing) != len(defaultSize) {
+		t.Fatalf("Sizing() = %d rows, want %d (every class)", len(sizing), len(defaultSize))
+	}
+	for i, row := range sizing {
+		if i > 0 && sizing[i-1].Type >= row.Type {
+			t.Fatalf("Sizing() not sorted at %d: %q after %q", i, row.Type, sizing[i-1].Type)
+		}
+		f, ok := defaultSize[row.Type]
+		if !ok || f.vcpu != row.VCPU || f.gb != row.GB {
+			t.Fatalf("Sizing() row %+v does not match defaultSize", row)
+		}
+	}
+}
