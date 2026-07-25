@@ -46,6 +46,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/cloud/clients/k8s"
 	"io"
 	"net/http"
 	"os"
@@ -77,7 +78,6 @@ var (
 	trainjobGVR   = schema.GroupVersionResource{Group: "trainer.kubeflow.org", Version: "v1alpha1", Resource: "trainjobs"}
 	experimentGVR = schema.GroupVersionResource{Group: "kubeflow.org", Version: "v1beta1", Resource: "experiments"}
 	trialGVR      = schema.GroupVersionResource{Group: "kubeflow.org", Version: "v1beta1", Resource: "trials"}
-	nsGVR         = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "namespaces"}
 )
 
 // resourceKind binds a GVR to the apiVersion/kind strings needed to build an
@@ -462,7 +462,7 @@ func health(s *cloud.Service[state], name string, gvrs ...schema.GroupVersionRes
 			return c.JSON(http.StatusServiceUnavailable, res)
 		}
 		ctx := c.Context()
-		if _, err := s.State.dyn.Resource(nsGVR).List(ctx, metav1.ListOptions{Limit: 1}); err != nil {
+		if _, err := s.State.dyn.Resource(k8s.Namespaces).List(ctx, metav1.ListOptions{Limit: 1}); err != nil {
 			res["status"], res["k8s"], res["error"] = "degraded", false, err.Error()
 			return c.JSON(http.StatusServiceUnavailable, res)
 		}
@@ -536,7 +536,7 @@ func tenantNS(rawOrg, rawProject string, isAdmin bool) (ns, org, project string,
 // ensureNamespace idempotently creates the tenant namespace before the first
 // resource lands in it.
 func ensureNamespace(s *cloud.Service[state], ctx context.Context, ns, org, project string) error {
-	if _, err := s.State.dyn.Resource(nsGVR).Get(ctx, ns, metav1.GetOptions{}); err == nil {
+	if _, err := s.State.dyn.Resource(k8s.Namespaces).Get(ctx, ns, metav1.GetOptions{}); err == nil {
 		return nil
 	} else if !apierrors.IsNotFound(err) {
 		return err
@@ -553,7 +553,7 @@ func ensureNamespace(s *cloud.Service[state], ctx context.Context, ns, org, proj
 			"labels": labels,
 		},
 	}}
-	if _, err := s.State.dyn.Resource(nsGVR).Create(ctx, obj, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
+	if _, err := s.State.dyn.Resource(k8s.Namespaces).Create(ctx, obj, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
 		return err
 	}
 	return nil

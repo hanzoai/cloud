@@ -47,6 +47,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud/clients/k8s"
+
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
@@ -54,23 +56,20 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// appsGVR is the operator App CR — the one workload kind the fleet runs on. The
+// k8s.Apps is the operator App CR — the one workload kind the fleet runs on. The
 // drift board reads it across the platform namespaces. Asserted in the tests; a
 // typo here silently breaks the whole board.
-var appsGVR = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "apps"}
 
-// deploymentsGVR is the live Deployment behind each Service — the source of the
+// k8s.Deployments is the live Deployment behind each Service — the source of the
 // RUNNING tag (the operator Service CR status does not surface the running image,
 // so the running tag is observed from the Deployment's container, exactly as the
 // platform inventory reads it in inventory.ts). Read-only for this subsystem.
-var deploymentsGVR = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
 
 // nsClass is THE namespace classifier: the one place that decides what a platform
 // namespace MEANS. Total — every input yields a decision and an unrecognised
@@ -108,11 +107,10 @@ func nsClass(ns string) (tenant, env string, ok bool) {
 // envOf is nsClass's env projection ("" when the namespace is not ours).
 func envOf(ns string) string { _, env, _ := nsClass(ns); return env }
 
-// namespacesGVR backs discovery. Listing NAMESPACES is the honest question — "which
+// k8s.Namespaces backs discovery. Listing NAMESPACES is the honest question — "which
 // namespaces are ours?" — and asks it of the one authority that knows. Deriving the
 // set from a cluster-wide CR list would answer a different question ("where are
 // there CRs?") and pull every tenant's objects through this process to do it.
-var namespacesGVR = schema.GroupVersionResource{Version: "v1", Resource: "namespaces"}
 
 // nsScanTTL bounds how stale a discovered scan set may be. A new tenant namespace
 // appears on the board within this window without a redeploy.
@@ -146,7 +144,7 @@ func discoverNamespaces(s *cloud.Service[state], ctx context.Context) []string {
 	if s.State.dyn == nil {
 		return scanOrder()
 	}
-	list, err := s.State.dyn.Resource(namespacesGVR).List(ctx, metav1.ListOptions{})
+	list, err := s.State.dyn.Resource(k8s.Namespaces).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return scanOrder()
 	}
@@ -464,7 +462,7 @@ func getApp(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrBadRequest("app must be a DNS-1123 label")
 	}
 	for _, ns := range targetNamespaces(s, c.Context(), c) {
-		obj, err := s.State.dyn.Resource(appsGVR).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{})
+		obj, err := s.State.dyn.Resource(k8s.Apps).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				continue
@@ -490,7 +488,7 @@ func observeFleet(s *cloud.Service[state], ctx context.Context, namespaces []str
 		// whole board, so the declared/health/phase columns still render.
 		running := runningTagsIn(s, ctx, ns)
 		env := envOf(ns)
-		list, err := s.State.dyn.Resource(appsGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
+		list, err := s.State.dyn.Resource(k8s.Apps).Namespace(ns).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				continue
@@ -561,7 +559,7 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	restartedAt := time.Now().UTC().Format(time.RFC3339)
 	patch := fmt.Sprintf(`{"spec":{"template":{"metadata":{"annotations":{%q:%q}}}}}`, restartedAtAnnotation, restartedAt)
-	if _, err := s.State.dyn.Resource(deploymentsGVR).Namespace(ns).Patch(
+	if _, err := s.State.dyn.Resource(k8s.Deployments).Namespace(ns).Patch(
 		c.Context(), name, k8stypes.MergePatchType, []byte(patch), metav1.PatchOptions{}); err != nil {
 		if apierrors.IsNotFound(err) {
 			return zip.ErrNotFound("app " + name + " has no Deployment to restart in " + ns)
@@ -589,7 +587,7 @@ func resolveTarget(s *cloud.Service[state], ctx context.Context, name string) (s
 // (an OrgAdmin owning no scanned namespace) resolves to a clean 404, never a leak.
 func resolveTargetIn(s *cloud.Service[state], ctx context.Context, name string, namespaces []string) (string, error) {
 	for _, ns := range namespaces {
-		if _, err := s.State.dyn.Resource(appsGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err == nil {
+		if _, err := s.State.dyn.Resource(k8s.Apps).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err == nil {
 			return ns, nil
 		} else if !apierrors.IsNotFound(err) {
 			return "", k8sErr(s, "get", err)
@@ -611,7 +609,7 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 		res["status"], res["k8s"], res["error"] = "degraded", false, s.State.initErr
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
-	if _, err := s.State.dyn.Resource(appsGVR).Namespace("hanzo").List(c.Context(), metav1.ListOptions{Limit: 1}); err != nil {
+	if _, err := s.State.dyn.Resource(k8s.Apps).Namespace("hanzo").List(c.Context(), metav1.ListOptions{Limit: 1}); err != nil {
 		res["status"], res["k8s"], res["crd"], res["error"] = "degraded", true, false, err.Error()
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
@@ -632,7 +630,7 @@ func ready(s *cloud.Service[state]) error {
 // the missing access so the operator knows exactly what to grant the cloud service
 // account (get/list on apps.hanzo.ai). Mirrors ml.k8sErr.
 func k8sErr(s *cloud.Service[state], op string, err error) error {
-	s.Log.Error("k8s op failed", "op", op, "resource", appsGVR.Resource, "err", err)
+	s.Log.Error("k8s op failed", "op", op, "resource", k8s.Apps.Resource, "err", err)
 	if apierrors.IsForbidden(err) {
 		return zip.Errorf(http.StatusBadGateway,
 			"%s apps: kubernetes RBAC denied (cloud service account needs %s on apps.hanzo.ai): %v",
@@ -790,7 +788,7 @@ func observeCR(obj *unstructured.Unstructured, namespace, env, runningTag string
 // error yields an empty map so the board still renders declared/health/phase.
 func runningTagsIn(s *cloud.Service[state], ctx context.Context, namespace string) map[string]string {
 	out := map[string]string{}
-	list, err := s.State.dyn.Resource(deploymentsGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	list, err := s.State.dyn.Resource(k8s.Deployments).Namespace(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		s.Log.Warn("list deployments for running tag failed; running tag will be empty",
 			"namespace", namespace, "err", err)
@@ -808,7 +806,7 @@ func runningTagsIn(s *cloud.Service[state], ctx context.Context, namespace strin
 // is never mistaken for the app), falling back to the first container. Mirrors
 // inventory.ts runningTagFromDeployment. Best-effort: any error → "".
 func runningTagOf(s *cloud.Service[state], ctx context.Context, namespace, name, declaredRepository string) string {
-	d, err := s.State.dyn.Resource(deploymentsGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	d, err := s.State.dyn.Resource(k8s.Deployments).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return ""
 	}
