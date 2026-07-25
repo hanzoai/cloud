@@ -4,28 +4,33 @@ name: CI/CD
 # THE LAW: `.github/workflows` holds exactly one file — a sync nudge that runs
 # zero CI. Everything that gates, builds or deploys lives here.
 #
-# It absorbs the three pipelines that used to run beside each other, and in
-# doing so fixes what kept them apart from being a pipeline at all:
+# It absorbs the three pipelines that used to run beside each other:
 #
 #   .github/workflows/cicd.yml  → `gate` (unchanged: the ~7-line caller; every
 #     real detail still lives in the repo-root hanzo.yml, which
 #     platform.hanzo.ai reads too, so no build logic moved)
 #   .github/workflows/containment.yml → `containment` (verbatim; only its own
 #     self-exclusion path follows the file)
-#   .hanzo/workflows/deploy.yml → `deploy`, now `needs:` BOTH gates
+#   .hanzo/workflows/deploy.yml → deleted, not moved (below)
 #
-# The needs: edge is the point. deploy.yml fired on `push: main` independently
-# of either gate, so a red suite or a containment breach still cut an image and
-# patched the operator — the gates could only ever report a fact the deploy had
-# already ignored. Gates and deploy in one graph is the only way one can block
-# the other.
+# CI gates. It does not deploy, and deliberately builds no cloud image: that
+# image and its v* tags have ONE owner, clients/platform/release.go (POST
+# /v1/runner {release:true}) — a second builder on the same commit is the
+# double-build hanzo.yml's images: block already refuses for this reason.
+# deploy.yml claimed to do both and could do neither: it shelled
+# `buildctl-daemonless.sh`, absent from the image this fleet actually serves for
+# `hanzo-build-linux-amd64` (catthehacker/ubuntu:act-24.04 —
+# universe:infra/k8s/git-runner/statefulset.yaml), read a GIT_CLONE_TOKEN secret
+# that exists on neither the repo nor the org, and ended in a `kubectl patch app`
+# that cd.hanzo.ai's selfHeal undoes on its next poll. Rollout is, and stays, a
+# reviewed tag pin in hanzoai/universe.
 on:
   push:
     branches: [main]
   pull_request:
   # The sync (sync-from-github.yml) dispatches this workflow by name after a
   # fast-forward: a push made with the workflow token does not trigger workflows,
-  # so without this trigger every synced commit would build nothing. deploy.yml
+  # so without this trigger every synced commit would gate nothing. deploy.yml
   # declared no dispatch trigger, which is why that curl could only 404.
   workflow_dispatch:
 concurrency:
@@ -42,7 +47,7 @@ jobs:
   # DESIGN (SHA256-of-public-inputs commitments, symmetric-HMAC
   # proof-of-possession, seed-derived threshold shares — see
   # clients/controlplane/doc.go) and MUST NEVER reach a release/serve binary.
-  # Three independent checks; any one failing blocks the merge AND the deploy:
+  # Three independent checks; any one failing blocks the merge:
   #
   #   1. grep (tag)    — no build/release invocation anywhere in the repo
   #      (Dockerfile, Makefile, shell scripts, any workflow) may pass a `-tags`
@@ -181,26 +186,3 @@ jobs:
 
           echo "OK: containment holds — clients/controlplane has zero buildable files by default and is linked into no cmd/ binary"
 
-  deploy:
-    needs: [gate, containment]
-    # main only: a PR builds and gates, it does not ship. `github.ref` is the
-    # branch on push and on the sync's dispatch alike, so one condition covers both.
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    runs-on: hanzo-build-linux-amd64
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build + push image
-        run: |
-          SHA="${GITHUB_SHA::8}"
-          buildctl-daemonless.sh build --frontend=dockerfile.v0 \
-            --opt context="${{ github.server_url }}/${{ github.repository }}.git#${GITHUB_SHA}" \
-            --opt filename=Dockerfile --opt platform=linux/amd64 \
-            --secret id=GIT_AUTH_TOKEN,env=GIT_AUTH_TOKEN \
-            --output "type=image,name=ghcr.io/hanzoai/cloud:${SHA},push=true" --progress=plain
-        env:
-          GIT_AUTH_TOKEN: ${{ secrets.GIT_CLONE_TOKEN }}
-      - name: Deploy — declare tag to operator
-        run: |
-          for app in cloud cloud-iam2-canary cloud-reader; do
-            kubectl -n hanzo patch app "$app" --type=merge -p "{\"spec\":{\"image\":{\"repository\":\"ghcr.io/hanzoai/cloud\",\"tag\":\"${GITHUB_SHA::8}\"}}}"
-          done
