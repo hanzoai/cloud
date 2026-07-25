@@ -19,6 +19,7 @@ package provisioning
 import (
 	"context"
 	"encoding/base64"
+	"github.com/hanzoai/cloud/clients/k8s"
 	"os"
 	"testing"
 
@@ -48,7 +49,7 @@ func TestPatchAddonSecret_RealAPIServer(t *testing.T) {
 	ctx := context.Background()
 
 	const ns = "tenant-acme"
-	if _, err := dyn.Resource(nsGVR).Create(ctx, &unstructured.Unstructured{Object: map[string]any{
+	if _, err := dyn.Resource(k8s.Namespaces).Create(ctx, &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "v1", "kind": "Namespace",
 		"metadata": map[string]any{"name": ns},
 	}}, metav1.CreateOptions{}); err != nil {
