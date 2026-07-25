@@ -17,6 +17,7 @@ package paas
 import (
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud/clients/k8s"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -208,7 +209,7 @@ func TestGetApp_OrgAdmin_200(t *testing.T) {
 // the fake, "" when absent.
 func restartedAt(t *testing.T, s *cloud.Service[state], ns, name string) string {
 	t.Helper()
-	obj, err := s.State.dyn.Resource(deploymentsGVR).Namespace(ns).Get(context.Background(), name, metav1.GetOptions{})
+	obj, err := s.State.dyn.Resource(k8s.Deployments).Namespace(ns).Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("get deployment %s/%s: %v", ns, name, err)
 	}
