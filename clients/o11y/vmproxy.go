@@ -87,6 +87,22 @@ var vmProxyQueries = map[string]struct{}{
 	"lux_validator_bootstrapped":   {},
 	"lux_network_validators_up":    {},
 	"lux_network_validators_total": {},
+	// Lux Network board — the ABSOLUTE fleet signals. Everything above this line
+	// describes validators relative to each other, and a fleet that has STOPPED
+	// agrees with itself perfectly: same height, same hash, all up, all peered. A
+	// board reading only those series shows a full row of green for a frozen chain.
+	// These four cannot be satisfied that way — tip age is measured against our own
+	// clock, and the other three count conditions no amount of agreement can hide.
+	"lux_network_c_tip_age_seconds":   {},
+	"lux_network_block_height_spread": {},
+	"lux_network_tip_hash_variants":   {},
+	"lux_network_ready_but_rpc_dead":  {},
+	// Lux Network board — live alert state. vmalert remote-writes its firing set to
+	// the same VictoriaMetrics this proxy already reads, so the board renders what is
+	// ACTUALLY firing over the existing authenticated path — no second data path, no
+	// second ingress, no second access boundary to get wrong. Aggregated by name and
+	// severity so the series stays small and carries no instance-level detail.
+	`sum by (alertname, network, severity) (ALERTS{alertstate="firing",brand="lux"})`: {},
 }
 
 // handleVMQuery proxies the board's instant query: GET /v1/o11y/vm/query?query=up.
