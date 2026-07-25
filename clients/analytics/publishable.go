@@ -198,7 +198,11 @@ func foldException(e CaptureEvent) CaptureEvent {
 	for k, v := range e.Properties {
 		props[k] = v
 	}
-	props["$exception"] = e.Error
+	// Redact the exception's free-text (message/stack) at the fold point so the
+	// stored row AND the raw destinations fan-out (forward.go, which sees events
+	// BEFORE the warehouse scrub) both carry a clean $exception — never a token,
+	// query secret, or PII lifted from a stack frame.
+	props["$exception"] = scrubException(e.Error)
 	e.Properties = props
 	e.Error = nil
 	return e
