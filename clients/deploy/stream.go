@@ -17,6 +17,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud/clients/k8s"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -131,7 +132,7 @@ func streamAppWatch(s *cloud.Service[state], sc scope, ctx context.Context, w *b
 	events := make(chan streamEvent, 16)
 	started := 0
 	for _, ns := range sc.namespaces() {
-		watcher, err := s.State.dyn.Resource(appsCRGVR).Namespace(ns).Watch(ctx, metav1.ListOptions{})
+		watcher, err := s.State.dyn.Resource(k8s.Apps).Namespace(ns).Watch(ctx, metav1.ListOptions{})
 		if err != nil {
 			// Degrade, don't fail: the initial state stands and the keep-alive holds
 			// the connection open. The operator can grant the `watch` verb to turn on
