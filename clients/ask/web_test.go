@@ -9,6 +9,7 @@ package ask
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -159,6 +160,68 @@ func TestBuildWebQuery(t *testing.T) {
 	}
 }
 
+// ── synthesis model chain (the availability fix) ──────────────────────────────
+
+func TestSynthModelsPerModeDefaults(t *testing.T) {
+	// research/deep lead with a strong model; search/news with a fast one.
+	if got := synthModels("", webModes["research"], ""); got[0] != "zen5" {
+		t.Fatalf("research must lead with zen5, got %v", got)
+	}
+	if got := synthModels("", webModes["deep"], ""); got[0] != "zen5" {
+		t.Fatalf("deep must lead with zen5, got %v", got)
+	}
+	if got := synthModels("", webModes["search"], ""); got[0] != "zen5-flash" {
+		t.Fatalf("search must lead with zen5-flash, got %v", got)
+	}
+	// every mode default carries a fallback, so a primary outage has somewhere to go.
+	if got := synthModels("", webModes["research"], ""); len(got) < 2 {
+		t.Fatalf("research chain must carry a fallback, got %v", got)
+	}
+}
+
+func TestSynthModelsCallerAndEnvOverride(t *testing.T) {
+	// caller's explicit model wins outright — their single choice.
+	if got := synthModels("anthropic/claude-opus-4.8", webModes["research"], "zen5"); len(got) != 1 || got[0] != "anthropic/claude-opus-4.8" {
+		t.Fatalf("caller model must win outright, got %v", got)
+	}
+	// per-mode env override heads the chain, ahead of the mode default.
+	t.Setenv("CLOUD_ASK_MODEL_RESEARCH", "zen5-pro")
+	if got := synthModels("", webModes["research"], "zen5"); got[0] != "zen5-pro" {
+		t.Fatalf("per-mode env override must head the chain, got %v", got)
+	}
+	// global env override applies when no per-mode override is set.
+	t.Setenv("CLOUD_ASK_MODEL_RESEARCH", "")
+	t.Setenv("CLOUD_ASK_MODEL", "enso")
+	if got := synthModels("", webModes["search"], "zen5"); got[0] != "enso" {
+		t.Fatalf("global env override must head the chain, got %v", got)
+	}
+}
+
+func TestSynthModelsBackstopAndDedupe(t *testing.T) {
+	// the cloud-wide default is appended as a final backstop...
+	got := synthModels("", webModes["search"], "deepseek-v4-flash")
+	if got[len(got)-1] != "deepseek-v4-flash" {
+		t.Fatalf("cloud default must be the final backstop, got %v", got)
+	}
+	// ...and a default already present in the mode chain is not duplicated.
+	for _, m := range []string{"zen5", "zen5-flash"} {
+		chain := synthModels("", webModes["research"], m)
+		n := 0
+		for _, g := range chain {
+			if g == m {
+				n++
+			}
+		}
+		if n != 1 {
+			t.Fatalf("model %q must appear exactly once, chain=%v", m, chain)
+		}
+	}
+	// never empty, even with no env override and a blank default.
+	if got := synthModels("", webModes["research"], ""); len(got) == 0 {
+		t.Fatal("chain must never be empty")
+	}
+}
+
 // ── streaming + parsing helpers ────────────────────────────────────────────────
 
 func TestChunkText(t *testing.T) {
@@ -232,6 +295,60 @@ func (f *webAI) ChatCompletion(_ context.Context, req *types.ChatRequest) (*type
 	}
 }
 func (f *webAI) Embed(context.Context, *types.EmbedRequest) ([][]float32, error) { return nil, nil }
+
+// modelAI answers only for models in ok (model→content); any other model returns a
+// transport error, so a test drives synthesize's fallback chain by choosing which
+// models "work". An empty-string content models an available model that returns a
+// blank completion (also a skip). tried records the order models were attempted.
+type modelAI struct {
+	ok    map[string]string
+	tried []string
+}
+
+func (m *modelAI) ChatCompletion(_ context.Context, req *types.ChatRequest) (*types.ChatResponse, error) {
+	m.tried = append(m.tried, req.Model)
+	if content, hit := m.ok[req.Model]; hit {
+		return &types.ChatResponse{Content: content, PromptTokens: 20, CompletionTokens: 8, TotalTokens: 28}, nil
+	}
+	return nil, fmt.Errorf("model %q unavailable", req.Model)
+}
+func (m *modelAI) Embed(context.Context, *types.EmbedRequest) ([][]float32, error) { return nil, nil }
+
+// TestSynthesizeFallsOverToAvailableModel proves the availability fix: when the
+// primary model errors AND the first fallback returns an empty completion, the loop
+// advances to the next model rather than emitting the degraded note.
+func TestSynthesizeFallsOverToAvailableModel(t *testing.T) {
+	ai := &modelAI{ok: map[string]string{"zen5-flash": "", "deepseek-v4-flash": "A grounded, well-cited report."}}
+	s := newWebService(ai)
+	p := baseParams(webModes["research"])
+	p.model = "zen5"                                          // errors (not in ok)
+	p.fallbacks = []string{"zen5-flash", "deepseek-v4-flash"} // empty, then real
+	answer, usage := synthesize(s, context.Background(), p, nil)
+	if usage == nil {
+		t.Fatal("a working fallback must yield billable usage")
+	}
+	if answer != "A grounded, well-cited report." {
+		t.Fatalf("must return the fallback's answer, got %q", answer)
+	}
+	if want := []string{"zen5", "zen5-flash", "deepseek-v4-flash"}; strings.Join(ai.tried, ",") != strings.Join(want, ",") {
+		t.Fatalf("must try the chain in order until one works: tried %v", ai.tried)
+	}
+}
+
+// TestSynthesizeAllModelsDownDegradesHonestly proves the loop still degrades
+// honestly — and bills nothing (nil usage) — only when EVERY model is down.
+func TestSynthesizeAllModelsDownDegradesHonestly(t *testing.T) {
+	s := newWebService(&modelAI{ok: map[string]string{}}) // nothing available
+	p := baseParams(webModes["research"])
+	p.model, p.fallbacks = "zen5", []string{"zen5-flash"}
+	answer, usage := synthesize(s, context.Background(), p, nil)
+	if usage != nil {
+		t.Fatal("no model available must yield nil usage (not billed)")
+	}
+	if !strings.Contains(answer, "unavailable") {
+		t.Fatalf("must degrade to the honest note, got %q", answer)
+	}
+}
 
 type recSink struct {
 	order  []string
