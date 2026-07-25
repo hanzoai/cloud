@@ -9,7 +9,7 @@ import (
 
 // posthog.go forwards conversions to Hanzo Insights (insights.hanzo.ai) — our PostHog
 // fork — via its capture contract. Config: an optional host override; the project write
-// key (api_key, e.g. phc_…) is the Secret, resolved from KMS and carried in the BODY
+// key (api_key — a Hanzo Insights project token, hi_…) is the Secret, resolved from KMS and carried in the BODY
 // (never the URL/header/log). The canonical ingest endpoint /v1/e sends the whole batch
 // in one request: {api_key, batch:[{event, distinct_id, properties, timestamp}, …]} —
 // capture-rs's untagged RawRequest::Batch variant on /v1/e accepts that body verbatim.
