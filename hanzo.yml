@@ -1,17 +1,18 @@
 # Canonical CI config for hanzoai/cloud — read by the hanzoai/ci reusable
-# (.github/workflows/cicd.yml) and platform.hanzo.ai.
+# (.hanzo/workflows/cicd.yml, the `gate` job) and platform.hanzo.ai.
 #
-# The cloud MAIN image has NO images: entry — release.yml OWNS it + the v* tags
-# (the tag-is-a-receipt invariant: main push → build → smoke → push image → tag).
-# Declaring the cloud image here too would double-build and re-open the
-# phantom-tag hole release.yml exists to close. The images: block below is ONLY
-# the decoupled native flags staticlib (cloud-flags) — a distinct artifact on
-# its own version, never a v* git tag — so cloud's Dockerfile pulls it (FROM
-# ${FLAGS_IMAGE} AS flagslib) instead of recompiling Rust every release. CI's
-# other job here is the TEST GATE on every push/PR, on OUR arc pool.
+# The cloud MAIN image has NO images: entry — clients/platform/release.go OWNS it
+# + the v* tags (the tag-is-a-receipt invariant: main push → build → smoke → push
+# image → tag). That is the in-cloud port of the old release.yml, reached at
+# POST /v1/runner {release:true}; declaring the cloud image here too would
+# double-build and re-open the phantom-tag hole it exists to close. The images:
+# block below is ONLY the decoupled native flags staticlib (cloud-flags) — a
+# distinct artifact on its own version, never a v* git tag — so cloud's
+# Dockerfile pulls it (FROM ${FLAGS_IMAGE} AS flagslib) instead of recompiling
+# Rust every release. CI's other job here is the TEST GATE on every push/PR.
 #
 # NO deploy: cloud is operator-managed — universe records desired state and the
-# operator reconciles the Service CR; release.yml notifies universe with a
+# operator reconciles the Service CR; the release path notifies universe with a
 # proven tag.
 images:
   - name: cloud-flags

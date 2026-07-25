@@ -1,52 +1,79 @@
-name: containment
-
-# Guards the Stage-1 byzantine ceremony containment (clients/controlplane,
-# build tag `controlplane`). Its increment-1 crypto is stub/forgeable BY
-# DESIGN (SHA256-of-public-inputs commitments, symmetric-HMAC
-# proof-of-possession, seed-derived threshold shares — see
-# clients/controlplane/doc.go) and MUST NEVER reach a release/serve binary.
-# Three independent checks; any one failing blocks the PR:
+name: CI/CD
+# The ONE pipeline for cloud, on our own runners against git.hanzo.ai.
 #
-#   1. grep (tag)    — no build/release invocation anywhere in the repo
-#      (Dockerfile, Makefile, shell scripts, any workflow) may pass a `-tags`
-#      value containing `controlplane` to go build/vet/run/install. The
-#      package's own `//go:build controlplane` tag declarations
-#      (clients/controlplane/*) are the thing being guarded, not a violation,
-#      and are excluded by path.
-#   2. grep (spoof)  — no build/release invocation may pass
-#      `-X testing.testBinary=1` (or any -ldflags containing it) to a REAL
-#      `go build`. That linker flag is what `go test` itself uses to make
-#      testing.Testing() report true (cmd/go/internal/load/test.go) — the
-#      runtime guard in containment.go trusts that signal, so this is the one
-#      concrete way to spoof it in a non-test binary. This grep is what turns
-#      "someone could type this" into "CI fails the PR that types it".
-#   3. build         — `go build ./...` (no tag — exactly what the Dockerfile
-#      and Makefile run) must not link clients/controlplane into any cmd/
-#      main, and `go build ./clients/controlplane/...` with no tag must match
-#      zero buildable packages (proves the tag still gates every file in it).
+# THE LAW: `.github/workflows` holds exactly one file — a sync nudge that runs
+# zero CI. Everything that gates, builds or deploys lives here.
 #
-# Runtime belt-and-suspenders (defense in depth, not a substitute for the
-# above): clients/controlplane/containment.go fail-closed panics if its stub
-# crypto is ever constructed outside a go-test binary (testing.Testing()==
-# false) — see TestContainment_NonHarnessProcessRefuses in
-# containment_test.go. KNOWN RESIDUAL: testing.Testing() is a linker-set
-# string var (testing.testBinary), not cryptographically bound to "actually
-# is a test" — `-ldflags="-X testing.testBinary=1"` spoofs it in a real
-# binary. Check #2 above is the mitigation: it fails the PR that would ship
-# that flag. Closing the residual for real needs a signal `go build` cannot
-# produce at all (increment-2, tracked in doc.go) rather than one merely
-# absent by convention.
-
+# It absorbs the three pipelines that used to run beside each other, and in
+# doing so fixes what kept them apart from being a pipeline at all:
+#
+#   .github/workflows/cicd.yml  → `gate` (unchanged: the ~7-line caller; every
+#     real detail still lives in the repo-root hanzo.yml, which
+#     platform.hanzo.ai reads too, so no build logic moved)
+#   .github/workflows/containment.yml → `containment` (verbatim; only its own
+#     self-exclusion path follows the file)
+#   .hanzo/workflows/deploy.yml → `deploy`, now `needs:` BOTH gates
+#
+# The needs: edge is the point. deploy.yml fired on `push: main` independently
+# of either gate, so a red suite or a containment breach still cut an image and
+# patched the operator — the gates could only ever report a fact the deploy had
+# already ignored. Gates and deploy in one graph is the only way one can block
+# the other.
 on:
-  pull_request:
   push:
     branches: [main]
-
-permissions:
-  contents: read
-
+  pull_request:
+  # The sync (sync-from-github.yml) dispatches this workflow by name after a
+  # fast-forward: a push made with the workflow token does not trigger workflows,
+  # so without this trigger every synced commit would build nothing. deploy.yml
+  # declared no dispatch trigger, which is why that curl could only 404.
+  workflow_dispatch:
+concurrency:
+  group: cicd-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  controlplane-containment:
+  # Test gate + the decoupled native flags staticlib image, driven by hanzo.yml.
+  gate:
+    uses: hanzoai/ci/.github/workflows/build.yml@v1
+    secrets: inherit
+
+  # Guards the Stage-1 byzantine ceremony containment (clients/controlplane,
+  # build tag `controlplane`). Its increment-1 crypto is stub/forgeable BY
+  # DESIGN (SHA256-of-public-inputs commitments, symmetric-HMAC
+  # proof-of-possession, seed-derived threshold shares — see
+  # clients/controlplane/doc.go) and MUST NEVER reach a release/serve binary.
+  # Three independent checks; any one failing blocks the merge AND the deploy:
+  #
+  #   1. grep (tag)    — no build/release invocation anywhere in the repo
+  #      (Dockerfile, Makefile, shell scripts, any workflow) may pass a `-tags`
+  #      value containing `controlplane` to go build/vet/run/install. The
+  #      package's own `//go:build controlplane` tag declarations
+  #      (clients/controlplane/*) are the thing being guarded, not a violation,
+  #      and are excluded by path.
+  #   2. grep (spoof)  — no build/release invocation may pass
+  #      `-X testing.testBinary=1` (or any -ldflags containing it) to a REAL
+  #      `go build`. That linker flag is what `go test` itself uses to make
+  #      testing.Testing() report true (cmd/go/internal/load/test.go) — the
+  #      runtime guard in containment.go trusts that signal, so this is the one
+  #      concrete way to spoof it in a non-test binary. This grep is what turns
+  #      "someone could type this" into "CI fails the PR that types it".
+  #   3. build         — `go build ./...` (no tag — exactly what the Dockerfile
+  #      and Makefile run) must not link clients/controlplane into any cmd/
+  #      main, and `go build ./clients/controlplane/...` with no tag must match
+  #      zero buildable packages (proves the tag still gates every file in it).
+  #
+  # Runtime belt-and-suspenders (defense in depth, not a substitute for the
+  # above): clients/controlplane/containment.go fail-closed panics if its stub
+  # crypto is ever constructed outside a go-test binary (testing.Testing()==
+  # false) — see TestContainment_NonHarnessProcessRefuses in
+  # containment_test.go. KNOWN RESIDUAL: testing.Testing() is a linker-set
+  # string var (testing.testBinary), not cryptographically bound to "actually
+  # is a test" — `-ldflags="-X testing.testBinary=1"` spoofs it in a real
+  # binary. Check #2 above is the mitigation: it fails the PR that would ship
+  # that flag. Closing the residual for real needs a signal `go build` cannot
+  # produce at all (increment-2, tracked in doc.go) rather than one merely
+  # absent by convention.
+  containment:
     runs-on: [hanzo-build-linux-amd64]
     steps:
       - uses: actions/checkout@v4
@@ -69,7 +96,7 @@ jobs:
                . 2>/dev/null \
                | grep -v '\.git/' \
                | grep -v 'clients/controlplane/' \
-               | grep -v '.github/workflows/containment.yml:'; then
+               | grep -v '.hanzo/workflows/cicd.yml:'; then
             echo "::error::found a build/release invocation passing -tags controlplane — clients/controlplane's stub crypto must never enter a release/serve binary (see clients/controlplane/doc.go)"
             hits=1
           fi
@@ -77,7 +104,7 @@ jobs:
           if grep -RnE -- 'testing\.testBinary' \
                --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.claude --exclude-dir=vendor \
                . 2>/dev/null \
-               | grep -v '.github/workflows/containment.yml:'; then
+               | grep -v '.hanzo/workflows/cicd.yml:'; then
             echo "::error::found a reference to testing.testBinary outside the Go toolchain itself — this is the linker var that spoofs testing.Testing() in a real (non go-test) binary; the containment.go runtime guard trusts that signal, so setting it anywhere in a real build path defeats it (see doc.go)"
             hits=1
           fi
@@ -153,3 +180,27 @@ jobs:
           fi
 
           echo "OK: containment holds — clients/controlplane has zero buildable files by default and is linked into no cmd/ binary"
+
+  deploy:
+    needs: [gate, containment]
+    # main only: a PR builds and gates, it does not ship. `github.ref` is the
+    # branch on push and on the sync's dispatch alike, so one condition covers both.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: hanzo-build-linux-amd64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build + push image
+        run: |
+          SHA="${GITHUB_SHA::8}"
+          buildctl-daemonless.sh build --frontend=dockerfile.v0 \
+            --opt context="${{ github.server_url }}/${{ github.repository }}.git#${GITHUB_SHA}" \
+            --opt filename=Dockerfile --opt platform=linux/amd64 \
+            --secret id=GIT_AUTH_TOKEN,env=GIT_AUTH_TOKEN \
+            --output "type=image,name=ghcr.io/hanzoai/cloud:${SHA},push=true" --progress=plain
+        env:
+          GIT_AUTH_TOKEN: ${{ secrets.GIT_CLONE_TOKEN }}
+      - name: Deploy — declare tag to operator
+        run: |
+          for app in cloud cloud-iam2-canary cloud-reader; do
+            kubectl -n hanzo patch app "$app" --type=merge -p "{\"spec\":{\"image\":{\"repository\":\"ghcr.io/hanzoai/cloud\",\"tag\":\"${GITHUB_SHA::8}\"}}}"
+          done
