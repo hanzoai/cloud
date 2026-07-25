@@ -22,7 +22,9 @@ import (
 
 // webMode is one web-grounding profile. plan toggles multi-query expansion;
 // maxQueries and maxSources bound the loop; newsBias recency-biases the web query;
-// system is the synthesis prompt; feeCents is the default per-answer price.
+// system is the synthesis prompt; feeCents is the default per-answer price; models
+// is the synthesis model fallback chain (primary first) — research/deep lead with a
+// strong model for a quality report, search/news with a fast one.
 type webMode struct {
 	name       string
 	plan       bool
@@ -31,16 +33,23 @@ type webMode struct {
 	newsBias   bool
 	system     string
 	feeCents   int64
+	models     []string
 }
 
 // webModes is the registry. search/news are fast single-pass; research/deep plan
 // sub-queries over a wider source set and synthesize a report. Deeper modes cost
 // more (they do more work) — a legitimate product dimension, priced as policy.
+//
+// models is the per-mode synthesis chain: research/deep default to zen5 (a capable
+// Hanzo model that streams FREE on the binary's M2M identity — a strong, always-
+// reachable report writer), search/news to zen5-flash (the fast tier). zen5-flash
+// backs research and zen5 backs search, so either mode still answers if its primary
+// is down; the cloud-wide default is appended as a final backstop in synthModels.
 var webModes = map[string]webMode{
-	"search":   {name: "search", plan: false, maxQueries: 1, maxSources: 6, system: answerSystem, feeCents: 2},
-	"news":     {name: "news", plan: false, maxQueries: 1, maxSources: 6, newsBias: true, system: answerSystem, feeCents: 2},
-	"research": {name: "research", plan: true, maxQueries: 4, maxSources: 12, system: researchSystem, feeCents: 5},
-	"deep":     {name: "deep", plan: true, maxQueries: 6, maxSources: 16, system: researchSystem, feeCents: 10},
+	"search":   {name: "search", plan: false, maxQueries: 1, maxSources: 6, system: answerSystem, feeCents: 2, models: []string{"zen5-flash", "zen5"}},
+	"news":     {name: "news", plan: false, maxQueries: 1, maxSources: 6, newsBias: true, system: answerSystem, feeCents: 2, models: []string{"zen5-flash", "zen5"}},
+	"research": {name: "research", plan: true, maxQueries: 4, maxSources: 12, system: researchSystem, feeCents: 5, models: []string{"zen5", "zen5-flash"}},
+	"deep":     {name: "deep", plan: true, maxQueries: 6, maxSources: 16, system: researchSystem, feeCents: 10, models: []string{"zen5", "zen5-flash"}},
 }
 
 // isWebMode reports whether a request mode selects the web grounding domain. An
@@ -99,13 +108,60 @@ func envCents(key string) (int64, bool) {
 	return n, true
 }
 
-// pickModel prefers the caller's model, else the cloud-side default. Never a
-// hardcoded id.
-func pickModel(req, def string) string {
-	if m := strings.TrimSpace(req); m != "" {
-		return m
+// defaultSynthModel is the resilient synthesis anchor: a capable Hanzo model that
+// streams FREE on the binary's M2M identity, so it stays reachable even when a paid
+// or third-party model is throttled, out of balance, or its provider is down. It is
+// the last-resort backstop if a mode/env/config chain ever resolves to nothing.
+const defaultSynthModel = "zen5"
+
+// synthModels resolves the SYNTHESIS model fallback chain for a web request, most
+// specific first. The loop tries these in order until one returns a real answer, so
+// a single model's outage advances to the next capable model instead of emitting a
+// degraded "model unavailable" note:
+//
+//	1. caller's explicit model (in.Model) — honored outright, their one choice
+//	2. per-mode env override CLOUD_ASK_MODEL_<MODE>, else global CLOUD_ASK_MODEL
+//	3. the mode's capable defaults (research/deep → a strong model, search/news → a
+//	   fast one) — every entry a catalog model that streams free on the M2M identity
+//	4. the cloud-wide default (deps.AIDefaultModel) as a final backstop
+//
+// Blanks are dropped and duplicates collapsed (order preserved). An empty result —
+// impossible in practice, the registry always seeds a mode default — falls back to
+// defaultSynthModel so synthesis always has at least one model to try.
+func synthModels(reqModel string, m webMode, def string) []string {
+	if r := strings.TrimSpace(reqModel); r != "" {
+		return []string{r}
 	}
-	return def
+	chain := make([]string, 0, len(m.models)+2)
+	if env := envModel("CLOUD_ASK_MODEL_"+strings.ToUpper(m.name), "CLOUD_ASK_MODEL"); env != "" {
+		chain = append(chain, env)
+	}
+	chain = append(chain, m.models...)
+	chain = append(chain, def)
+
+	seen := make(map[string]bool, len(chain))
+	out := make([]string, 0, len(chain))
+	for _, s := range chain {
+		if s = strings.TrimSpace(s); s == "" || seen[s] {
+			continue
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	if len(out) == 0 {
+		return []string{defaultSynthModel}
+	}
+	return out
+}
+
+// envModel returns the first non-empty, trimmed environment value among keys.
+func envModel(keys ...string) string {
+	for _, k := range keys {
+		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // pickSystem lets a caller override the synthesis prompt; else the mode's default.
