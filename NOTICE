@@ -1,0 +1,32 @@
+Hanzo Cloud
+Copyright (c) 2026 Hanzo Industries, Inc.
+
+This product includes software from the following upstream projects. Their names
+appear here and NOWHERE ELSE in this codebase's user-visible surfaces — Hanzo
+products are named for Hanzo (Hanzo Analytics, Hanzo Insights, Hanzo IAM, …).
+
+Umami (https://github.com/umami-software/umami), licensed under MIT:
+
+    Copyright (c) 2022 Umami Software, Inc. <hello@umami.is>
+
+  Hanzo Analytics (analytics.hanzo.ai) is a fork. The cloud destination adapter
+  speaks its public collect contract.
+
+PostHog (https://github.com/PostHog/posthog), licensed under MIT:
+
+    Copyright (c) 2020-present PostHog Inc.
+
+  Hanzo Insights (insights.hanzo.ai) is a fork. The cloud destination adapter
+  speaks its capture contract.
+
+Casibase (https://github.com/casibase/casibase), licensed under Apache-2.0:
+
+    Copyright (c) The Casibase Authors
+
+  The Hanzo AI module (the /v1 AI, RAG, and search surfaces) derives from it.
+
+Casdoor (https://github.com/casdoor/casdoor), licensed under Apache-2.0:
+
+    Copyright (c) The Casdoor Authors
+
+  Hanzo IAM (hanzo.id) derives from it.
