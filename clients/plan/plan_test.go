@@ -47,8 +47,11 @@ func TestPlans_Vocab(t *testing.T) {
 	if err := json.Unmarshal(resp.Body, &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if len(body.Namespaces) != 10 {
-		t.Fatalf("namespaces = %d, want 10 (team added in plans v1.4.1)", len(body.Namespaces))
+	// Lower bound, not an exact pin: the entitlement vocabulary only GROWS as the
+	// @hanzo/plans catalog adds products (10 at v1.4.1, 12 at v1.4.4), so an exact
+	// count is a staleness magnet — matches the `Keys < 40` lower bound just below.
+	if len(body.Namespaces) < 10 {
+		t.Fatalf("namespaces = %d, want >=10", len(body.Namespaces))
 	}
 	if len(body.Keys) < 40 {
 		t.Fatalf("entitlement keys = %d, want >=40", len(body.Keys))
