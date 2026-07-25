@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud/clients/k8s"
 	"net/http"
 	"testing"
 
@@ -46,7 +47,7 @@ func TestRunCreatesAutoscaledServiceCR(t *testing.T) {
 
 	// The operator Service CR must exist in tenant-maxpower with the run's image,
 	// autoscaling bounds, port and org label — written by the SHARED applyService.
-	obj, err := k.dyn.Resource(appsGVR).Namespace("tenant-maxpower").Get(context.Background(), "api", metav1.GetOptions{})
+	obj, err := k.dyn.Resource(k8s.Apps).Namespace("tenant-maxpower").Get(context.Background(), "api", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Service CR not created in tenant-maxpower: %v", err)
 	}
