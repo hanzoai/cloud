@@ -47,14 +47,46 @@ import (
 // o11y wildcard (order 70) — so the specific route wins Fiber's in-order match, exactly
 // like /v1/o11y/{logs,metrics,status}.
 
-// vmProxyQueries is the EXACT allowlist of PromQL the infra-health board issues: the
-// instant `up` inventory and the two range trends `sum(up)` / `count(up)`. The proxy
-// admits ONLY these — anything else is a 400 — so the client picks from a fixed,
-// server-owned set and never supplies a raw query (scope.go's contract).
+// vmProxyQueries is the EXACT allowlist of PromQL the infra-health boards issue. The
+// proxy admits ONLY these — anything else is a 400 — so the client picks from a fixed,
+// server-owned set and never supplies a raw query (scope.go's contract). Two groups:
+//
+//   - Platform health (the generic Hanzo infra board): the instant `up` inventory and
+//     the two range trends `sum(up)` / `count(up)`.
+//   - Lux Network (the console.lux.cloud SuperAdmin investor board, LuxNetworkModule):
+//     a FIXED, parameter-free set over the lux-k8s series federated into this hub —
+//     per-node memory %, top-pod memory, named-service available/desired replicas
+//     (Deployments + the kms StatefulSet; the console dedupes multi-namespace workloads
+//     client-side), and the luxd validator series (per-instance up/height/peers/
+//     bootstrapped + the per-network up/total rollup). Every selector is pinned to
+//     `cluster="lux-k8s"` (or the intrinsically Lux `lux_*` names), so this can never
+//     read another cluster's series. These are the byte-for-byte twins of the console's
+//     `LUX_QUERIES` (clients/o11y ⇄ lib/api/lux-infra.ts) — the query string the board
+//     sends must equal a key here after TrimSpace, or it is rejected.
 var vmProxyQueries = map[string]struct{}{
+	// Platform health board.
 	"up":        {},
 	"sum(up)":   {},
 	"count(up)": {},
+	// Lux Network board — node/pod resource pressure (the OOM view + top consumers).
+	`100*(1 - sum by (node)(node_memory_MemAvailable_bytes{cluster="lux-k8s"}) / sum by (node)(node_memory_MemTotal_bytes{cluster="lux-k8s"}))`: {},
+	`topk(12, sum by (namespace,pod)(container_memory_working_set_bytes{cluster="lux-k8s",pod!=""}))`:                                           {},
+	// Lux Network board — named-service AVAILABLE/DESIRED replicas. Deployments (the
+	// regex is fully anchored in PromQL, so lux-safe never over-matches lux-safe-cgw;
+	// the console dedupes multi-namespace workloads to a canonical namespace) + the kms
+	// StatefulSet. This is the canonical available/desired signal the grid renders.
+	`kube_deployment_status_replicas_available{cluster="lux-k8s",deployment=~"lux-admin|lux-safe|lux-safe-cgw|lux-bitcoin|lux-coin|lux-finance|lux-invest|lux-market|lux-industries|lux-blog|iam|bootnode-web|bridge-server|bridge-ui|explorer"}`: {},
+	`kube_deployment_spec_replicas{cluster="lux-k8s",deployment=~"lux-admin|lux-safe|lux-safe-cgw|lux-bitcoin|lux-coin|lux-finance|lux-invest|lux-market|lux-industries|lux-blog|iam|bootnode-web|bridge-server|bridge-ui|explorer"}`:             {},
+	`kube_statefulset_status_replicas_ready{cluster="lux-k8s",namespace="lux-kms-go",statefulset="kms"}`:                                                                                                                                          {},
+	`kube_statefulset_replicas{cluster="lux-k8s",namespace="lux-kms-go",statefulset="kms"}`:                                                                                                                                                       {},
+	// Lux Network board — validators. Per-instance liveness (all networks; the console
+	// groups by the `network` label) + the per-network rollup.
+	"lux_validator_up":             {},
+	"lux_validator_c_block_height": {},
+	"lux_validator_peers":          {},
+	"lux_validator_bootstrapped":   {},
+	"lux_network_validators_up":    {},
+	"lux_network_validators_total": {},
 }
 
 // handleVMQuery proxies the board's instant query: GET /v1/o11y/vm/query?query=up.
