@@ -44,6 +44,7 @@
 // Surface:
 //
 //	GET  /v1/authors                       (org)          my status, login, verified, repos, deploys, accrued/pending/paid, payouts
+//	GET  /v1/authors/basis                 (org)          why my number is my number: share, cost model, immutable rows, reconciliation
 //	POST /v1/authors/connect               (org)          link GitHub (IAM-linked account or supplied login) + mint verify code
 //	POST /v1/authors/repos/verify          (org)          verify repo ownership (oauth admin-check OR hanzo.json file)
 //	POST /v1/authors/deploys/record        (org=deployer) record a deploy of a verified author repo (provenance → royalty)
@@ -52,6 +53,7 @@
 //	POST /v1/admin/authors/:id/approve      (SuperAdmin) admit to earning (+ optional share override)
 //	POST /v1/admin/authors/:id/suspend      (SuperAdmin) suspend
 //	POST /v1/admin/authors/:id/payout       (SuperAdmin) record a payout (credits → grant; cash → record-only)
+//	GET  /v1/admin/authors/:id/basis        (SuperAdmin) the SAME basis payload the author reads (support mirror)
 //
 // serve.go auto-registers GET /v1/authors/health.
 package authors
@@ -183,6 +185,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // routes registers the authors surface.
 func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/authors", cloud.Handle(s, myAuthors))
+	app.Get("/v1/authors/basis", cloud.Handle(s, basis))
 	app.Post("/v1/authors/connect", cloud.Handle(s, connect))
 	app.Post("/v1/authors/repos/verify", cloud.Handle(s, verifyRepo))
 	app.Post("/v1/authors/deploys/record", cloud.Handle(s, recordDeploy))
@@ -191,6 +194,7 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/admin/authors/:id/approve", cloud.Handle(s, adminApprove))
 	app.Post("/v1/admin/authors/:id/suspend", cloud.Handle(s, adminSuspend))
 	app.Post("/v1/admin/authors/:id/payout", cloud.Handle(s, adminPayout))
+	app.Get("/v1/admin/authors/:id/basis", cloud.Handle(s, adminBasis))
 }
 
 // ── customer surface ─────────────────────────────────────────────────────────
@@ -246,7 +250,7 @@ func myAuthors(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list payouts: %v", err)
 	}
-	ledger, err := s.State.store.ListLedger(ctx, a.ID, ledgerLimit)
+	ledger, err := s.State.store.ListLedger(ctx, a.ID, "", ledgerLimit)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list ledger: %v", err)
 	}

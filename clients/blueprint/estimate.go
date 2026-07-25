@@ -75,6 +75,31 @@ func DefaultRateCard() RateCard {
 // (or in a pure test) still prices correctly.
 var rates = DefaultRateCard()
 
+// Rates publishes the LIVE card (post env overlay) so a client that must EXPLAIN a
+// cost it did not itself compute — clients/authors disclosing the royalty basis —
+// reads the one the estimator actually applied, not the shipped default. Returned by
+// value: blueprint stays the only owner of the price.
+func Rates() RateCard { return rates }
+
+// ClassFootprint is one published row of the sizing table: the per-replica footprint
+// applied to a service of that class when its compose declares none.
+type ClassFootprint struct {
+	Type string  `json:"type"`
+	VCPU float64 `json:"vcpu"`
+	GB   float64 `json:"gb"`
+}
+
+// Sizing publishes defaultSize, sorted by class so the disclosure is byte-stable
+// across processes (Go map order is not).
+func Sizing() []ClassFootprint {
+	out := make([]ClassFootprint, 0, len(defaultSize))
+	for class, f := range defaultSize {
+		out = append(out, ClassFootprint{Type: class, VCPU: f.vcpu, GB: f.gb})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Type < out[j].Type })
+	return out
+}
+
 // ── SBOM + estimate wire types ───────────────────────────────────────────────
 
 // Service is one row of the bill of materials: the compose service, its container
