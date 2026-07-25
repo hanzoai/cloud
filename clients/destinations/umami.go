@@ -20,7 +20,7 @@ import (
 // correctly, never the cloud's own. A pageview is sent WITHOUT a name (Umami's pageview
 // vs. custom-event distinction); every other event carries its canonical name.
 
-const umamiID = "umami"
+const umamiID = "analytics"
 
 // umamiHost is the default Hanzo Analytics collect host. A package var so a test points
 // it at a mock and an org may override per-connection; never mutated in production.
@@ -35,7 +35,7 @@ type umami struct{}
 func init() { register(umami{}) }
 
 func (umami) ID() string       { return umamiID }
-func (umami) Name() string     { return "Hanzo Analytics (Umami)" }
+func (umami) Name() string     { return "Hanzo Analytics" }
 func (umami) Category() string { return categoryAnalytics }
 
 func (umami) Spec() Spec {
@@ -121,7 +121,7 @@ func splitURL(raw string) (host, path string) {
 func (d umami) Send(ctx context.Context, cfg Config, _ string, batch []Conversion) (Result, error) {
 	website := cfg.get("websiteId")
 	if website == "" {
-		return Result{}, fmt.Errorf("umami: websiteId is required")
+		return Result{}, fmt.Errorf("analytics: websiteId is required")
 	}
 	endpoint := umamiEndpoint(cfg)
 	sent := 0
