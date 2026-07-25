@@ -19,7 +19,7 @@ import (
 // names are the RAW canonical Hanzo names (order_completed, …): a product-analytics sink
 // records the native vocabulary, unlike the ad adapters' conversion taxonomy.
 
-const posthogID = "posthog"
+const posthogID = "insights"
 
 // posthogHost is the default Hanzo Insights host. A package var so a test points it at a
 // mock and an org may override per-connection; never mutated in production.
@@ -30,7 +30,7 @@ type posthog struct{}
 func init() { register(posthog{}) }
 
 func (posthog) ID() string       { return posthogID }
-func (posthog) Name() string     { return "Hanzo Insights (PostHog)" }
+func (posthog) Name() string     { return "Hanzo Insights" }
 func (posthog) Category() string { return categoryAnalytics }
 
 func (posthog) Spec() Spec {
@@ -108,7 +108,7 @@ func posthogProps(cv Conversion) map[string]any {
 
 func (d posthog) Send(ctx context.Context, cfg Config, secret string, batch []Conversion) (Result, error) {
 	if strings.TrimSpace(secret) == "" {
-		return Result{}, fmt.Errorf("posthog: api_key is required")
+		return Result{}, fmt.Errorf("insights: api_key is required")
 	}
 	body := posthogBuild(secret, batch)
 	if len(body.Batch) == 0 {
