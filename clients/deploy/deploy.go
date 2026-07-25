@@ -44,6 +44,8 @@ import (
 	"net/http"
 	"regexp"
 
+	"github.com/hanzoai/cloud/clients/k8s"
+
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 
@@ -57,12 +59,11 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// appsCRGVR is the operator App CR (apps.hanzo.ai) — the one workload kind this
+// k8s.Apps is the operator App CR (apps.hanzo.ai) — the one workload kind this
 // plane reads. Each App IS a GitOps Application: the desired state for one
 // workload, which the operator reconciles into a Deployment + Service + Ingress
 // (+ HPA/PDB/Pods). Group hanzo.ai disambiguates it from the core/v1 Service (a
 // CHILD it reconciles), which is why a resource ref always carries its group.
-var appsCRGVR = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "apps"}
 
 // Static-plane sites are NOT App CRs — a site is a `staticFiles` Middleware (its
 // S3 origin) + an IngressRoute (its host), served straight from S3 with zero pods.
@@ -80,7 +81,6 @@ var (
 // DELIBERATELY absent: the tree never surfaces materialized env. Order is the
 // display order.
 var (
-	deploymentsGVR = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
 	replicaSetsGVR = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "replicasets"}
 	podsGVR        = schema.GroupVersionResource{Version: "v1", Resource: "pods"}
 	coreSvcGVR     = schema.GroupVersionResource{Version: "v1", Resource: "services"}
@@ -95,8 +95,8 @@ var (
 // the resource endpoint can never be steered at an arbitrary cluster object.
 // Keyed by "group/Kind" (group "" for the core API group).
 var kindGVR = map[string]schema.GroupVersionResource{
-	"hanzo.ai/App":                        appsCRGVR,
-	"apps/Deployment":                     deploymentsGVR,
+	"hanzo.ai/App":                        k8s.Apps,
+	"apps/Deployment":                     k8s.Deployments,
 	"apps/ReplicaSet":                     replicaSetsGVR,
 	"/Pod":                                podsGVR,
 	"/Service":                            coreSvcGVR,
@@ -225,7 +225,7 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 		res["status"], res["k8s"] = "degraded", false
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
-	if _, err := s.State.dyn.Resource(appsCRGVR).Namespace("hanzo").List(c.Context(), metav1.ListOptions{Limit: 1}); err != nil {
+	if _, err := s.State.dyn.Resource(k8s.Apps).Namespace("hanzo").List(c.Context(), metav1.ListOptions{Limit: 1}); err != nil {
 		s.Log.Warn("deploy health: App CRD list failed", "err", err)
 		res["status"], res["k8s"], res["crd"] = "degraded", true, false
 		return c.JSON(http.StatusServiceUnavailable, res)
@@ -277,16 +277,16 @@ func resolveNamespace(s *cloud.Service[state], c *zip.Ctx, name string) (string,
 // mutation (sync/rollback) patches the App CR it read. A miss is an IsNotFound
 // error.
 func getAppCR(s *cloud.Service[state], ctx context.Context, ns, name string) (*unstructured.Unstructured, schema.GroupVersionResource, error) {
-	obj, err := s.State.dyn.Resource(appsCRGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	obj, err := s.State.dyn.Resource(k8s.Apps).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return nil, schema.GroupVersionResource{}, err
 	}
-	return obj, appsCRGVR, nil
+	return obj, k8s.Apps, nil
 }
 
 // listAppCRs lists every App CR in ns.
 func listAppCRs(s *cloud.Service[state], ctx context.Context, ns string) ([]unstructured.Unstructured, error) {
-	list, err := s.State.dyn.Resource(appsCRGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
+	list, err := s.State.dyn.Resource(k8s.Apps).Namespace(ns).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil, nil

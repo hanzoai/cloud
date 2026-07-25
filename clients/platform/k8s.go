@@ -24,6 +24,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/clients/k8s"
+
 	"github.com/hanzoai/cloud/clients/provisioning"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,20 +38,19 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// appsGVR is the operator App CR — the workload kind a tenant app is written as.
+// k8s.Apps is the operator App CR — the workload kind a tenant app is written as.
 // A role-less App dispatches to the operator's service profile
 // (controllers/app.rs `classify("") => Dispatch::Service`), so an App carries a
 // tenant workload with the default profile: one Deployment + one core Service.
 // A user app is one of these CRs in its tenant namespace.
-var appsGVR = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "apps"}
 
 // resolveCR reports whether the named tenant App CR exists (and, for the caller's
 // patch, its GVR). A lookup error other than not-found is returned as-is — a
 // tenant write must never proceed on an unknown cluster state.
 func (k *k8sClient) resolveCR(ctx context.Context, ns, name string) (schema.GroupVersionResource, bool, error) {
-	_, err := k.dyn.Resource(appsGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	_, err := k.dyn.Resource(k8s.Apps).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
 	if err == nil {
-		return appsGVR, true, nil
+		return k8s.Apps, true, nil
 	}
 	if !apierrors.IsNotFound(err) {
 		return schema.GroupVersionResource{}, false, err
@@ -61,14 +62,13 @@ func (k *k8sClient) resolveCR(ctx context.Context, ns, name string) (schema.Grou
 // not-found is returned as the error — an honest "unknown", never an invented
 // object.
 func (k *k8sClient) getCR(ctx context.Context, ns, name string) (*unstructured.Unstructured, error) {
-	return k.dyn.Resource(appsGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	return k.dyn.Resource(k8s.Apps).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
 }
 
 // jobsGVR is the batch/v1 Job used to launch an in-cluster BuildKit build.
 var jobsGVR = schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "jobs"}
 
-// namespacesGVR lets the deploy path ensure the tenant namespace exists.
-var namespacesGVR = schema.GroupVersionResource{Version: "v1", Resource: "namespaces"}
+// k8s.Namespaces lets the deploy path ensure the tenant namespace exists.
 
 // resourceQuotasGVR / limitRangesGVR let ensureNamespace bound a tenant's total
 // footprint (MED-3). Both are core/v1 namespaced objects.
@@ -266,7 +266,7 @@ func (k *k8sClient) buildImageRef(org, app, tag string) string {
 // BLOCKS on the RoleBinding) and the async build reconciler (ensureTenantReady,
 // which only PROBES) build on it, so there is exactly one namespace-create rule.
 func (k *k8sClient) ensureNamespaceExists(ctx context.Context, ns, org string) error {
-	_, err := k.dyn.Resource(namespacesGVR).Get(ctx, ns, metav1.GetOptions{})
+	_, err := k.dyn.Resource(k8s.Namespaces).Get(ctx, ns, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		obj := &unstructured.Unstructured{Object: map[string]any{
 			"apiVersion": "v1",
@@ -279,7 +279,7 @@ func (k *k8sClient) ensureNamespaceExists(ctx context.Context, ns, org string) e
 				},
 			},
 		}}
-		if _, cErr := k.dyn.Resource(namespacesGVR).Create(ctx, obj, metav1.CreateOptions{}); cErr != nil && !apierrors.IsAlreadyExists(cErr) {
+		if _, cErr := k.dyn.Resource(k8s.Namespaces).Create(ctx, obj, metav1.CreateOptions{}); cErr != nil && !apierrors.IsAlreadyExists(cErr) {
 			return cErr
 		}
 		return nil
@@ -547,7 +547,7 @@ func (k *k8sClient) applyService(ctx context.Context, org, project string, a App
 		return err
 	}
 	if !found {
-		_, cErr := k.dyn.Resource(appsGVR).Namespace(ns).Create(ctx, desired, metav1.CreateOptions{})
+		_, cErr := k.dyn.Resource(k8s.Apps).Namespace(ns).Create(ctx, desired, metav1.CreateOptions{})
 		return cErr
 	}
 	// Redeploy: merge-patch only .spec (+ labels), leaving the operator status and
@@ -594,7 +594,7 @@ func (k *k8sClient) deleteService(ctx context.Context, org, name string) error {
 		return err
 	}
 	ns := tenantNamespace(org)
-	err := k.dyn.Resource(appsGVR).Namespace(ns).Delete(ctx, name, metav1.DeleteOptions{})
+	err := k.dyn.Resource(k8s.Apps).Namespace(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
