@@ -2,6 +2,7 @@ package paas
 
 import (
 	"context"
+	"github.com/hanzoai/cloud/clients/k8s"
 	"strings"
 	"testing"
 
@@ -15,8 +16,8 @@ import (
 // did (7 rows rendered for a 69-app fleet).
 func TestAppsGVR(t *testing.T) {
 	want := schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "apps"}
-	if appsGVR != want {
-		t.Fatalf("appsGVR = %v, want %v", appsGVR, want)
+	if k8s.Apps != want {
+		t.Fatalf("k8s.Apps = %v, want %v", k8s.Apps, want)
 	}
 }
 
@@ -87,7 +88,7 @@ func TestReleaseRefusesAGitDeclaredWorkload(t *testing.T) {
 		}
 	}
 	// The CR must be untouched — a refusal writes nothing.
-	obj, gErr := s.State.dyn.Resource(appsGVR).Namespace("hanzo").Get(context.Background(), "cloud", metav1.GetOptions{})
+	obj, gErr := s.State.dyn.Resource(k8s.Apps).Namespace("hanzo").Get(context.Background(), "cloud", metav1.GetOptions{})
 	if gErr != nil {
 		t.Fatalf("get App CR: %v", gErr)
 	}
