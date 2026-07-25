@@ -60,6 +60,13 @@ var theAllowlist = []string{
 	"lux_validator_bootstrapped",
 	"lux_network_validators_up",
 	"lux_network_validators_total",
+	// Lux Network — absolute fleet signals (not satisfiable by mutual agreement).
+	"lux_network_c_tip_age_seconds",
+	"lux_network_block_height_spread",
+	"lux_network_tip_hash_variants",
+	"lux_network_ready_but_rpc_dead",
+	// Lux Network — live firing alert set, aggregated.
+	`sum by (alertname, network, severity) (ALERTS{alertstate="firing",brand="lux"})`,
 }
 
 // ── the allowlist SET is EXACTLY the declared contract (no more, no less) ───────
