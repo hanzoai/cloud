@@ -186,31 +186,132 @@ func TestWaitForJob(t *testing.T) {
 	}
 }
 
-// version-compute wiring over the REAL GitHub response shapes: it folds the repo's
-// git tags with ghcr.io/hanzoai/cloud's pushed container tags and bumps the max.
-func TestComputeReleaseVersion(t *testing.T) {
-	t.Setenv("GH_PAT", "test-token")
+// releaseAPI stands in for both upstreams the version compute reads: GitHub (git
+// tags) and the OCI registry (published image tags, token + paginated tags/list).
+// pages are served in order and the Link header chains them, exactly as GHCR does.
+type releaseAPI struct {
+	gitTags []string
+	pages   [][]string
+	regCode int // non-200 to make the registry fail
+	hits    int // registry tags/list requests served
+}
+
+func (a *releaseAPI) start(t *testing.T) {
+	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/repos/hanzoai/cloud/tags":
-			_ = json.NewEncoder(w).Encode([]map[string]string{{"name": "v1.786.42"}, {"name": "v1.700.0"}})
-		case "/orgs/hanzoai/packages/container/cloud/versions":
-			_ = json.NewEncoder(w).Encode([]map[string]any{
-				{"metadata": map[string]any{"container": map[string]any{"tags": []string{"v1.786.43", "1.786", "latest"}}}},
-			})
+		switch {
+		case r.URL.Path == "/repos/hanzoai/cloud/tags":
+			out := make([]map[string]string, 0, len(a.gitTags))
+			for _, tag := range a.gitTags {
+				out = append(out, map[string]string{"name": tag})
+			}
+			_ = json.NewEncoder(w).Encode(out)
+		case r.URL.Path == "/token":
+			_ = json.NewEncoder(w).Encode(map[string]string{"token": "anon-pull"})
+		case r.URL.Path == "/v2/hanzoai/cloud/tags/list":
+			if a.regCode != 0 {
+				w.WriteHeader(a.regCode)
+				_ = json.NewEncoder(w).Encode(map[string]string{"message": "denied"})
+				return
+			}
+			page := a.hits
+			a.hits++
+			if page < len(a.pages)-1 {
+				w.Header().Set("Link", fmt.Sprintf(`</v2/hanzoai/cloud/tags/list?last=%d&n=1000>; rel="next"`, page))
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"tags": a.pages[page]})
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
-	defer srv.Close()
-	defer swapAPIBase(srv.URL)()
+	t.Cleanup(srv.Close)
+	t.Cleanup(swapAPIBase(srv.URL))
+	t.Cleanup(swapRegistryBase(srv.URL))
+}
+
+// version-compute wiring over the REAL upstream shapes: it folds the repo's git tags
+// with the registry's published tags and bumps the max.
+func TestComputeReleaseVersion(t *testing.T) {
+	t.Setenv("GH_PAT", "test-token")
+	api := &releaseAPI{
+		gitTags: []string{"v1.786.42", "v1.700.0"},
+		pages:   [][]string{{"v1.786.43", "1.786", "latest"}},
+	}
+	api.start(t)
 
 	got, err := computeReleaseVersion(testService(), context.Background(), releaseRepoSlug)
 	if err != nil {
 		t.Fatalf("computeReleaseVersion: %v", err)
 	}
-	if got != "1.786.44" { // container 1.786.43 beats git 1.786.42 → next patch.
-		t.Fatalf("want 1.786.44 (container-max+1), got %s", got)
+	if got != "1.786.44" { // published 1.786.43 beats git 1.786.42 → next patch.
+		t.Fatalf("want 1.786.44 (published-max+1), got %s", got)
+	}
+}
+
+// REGRESSION (shipped, 2026-07-25): the published-tag read answered 403 — the PAT
+// lacked `read:packages` — and the failure was swallowed as a warning, so the version
+// was computed from git tags alone. Git had stalled at 1.786.42 while the registry had
+// reached 1.786.99, and the "next" release came out BELOW a published image, aimed at
+// overwriting it. A partial view has no maximum: the compute must fail, not guess.
+func TestComputeReleaseVersion_RefusesPartialView(t *testing.T) {
+	t.Setenv("GH_PAT", "test-token")
+	api := &releaseAPI{gitTags: []string{"v1.786.42"}, regCode: http.StatusForbidden}
+	api.start(t)
+
+	got, err := computeReleaseVersion(testService(), context.Background(), releaseRepoSlug)
+	if err == nil {
+		t.Fatalf("published-tag read failed but compute returned %q — a version below a pushed image", got)
+	}
+	if !strings.Contains(err.Error(), "published image tags") {
+		t.Fatalf("want an error naming the unreadable list, got %v", err)
+	}
+}
+
+// The registry pages its tag list (GHCR caps at 1000) in insertion order, so the
+// NEWEST versions are on the LAST page. Reading page one alone reports a stale max —
+// the same unsound answer the 403 produced, by a different route.
+func TestPublishedTags_FollowsPaginationToTheNewest(t *testing.T) {
+	api := &releaseAPI{pages: [][]string{
+		{"v1.786.1", "v1.786.2"},
+		{"v1.786.3", "latest"},
+		{"v1.801.213"}, // the newest tag lives here, and only here
+	}}
+	api.start(t)
+
+	tags, err := publishedTags(context.Background())
+	if err != nil {
+		t.Fatalf("publishedTags: %v", err)
+	}
+	if api.hits != 3 {
+		t.Fatalf("want all 3 pages fetched, got %d", api.hits)
+	}
+	next, err := nextVersion(nil, tags, releaseFloor)
+	if err != nil {
+		t.Fatalf("nextVersion: %v", err)
+	}
+	if next != "1.801.214" {
+		t.Fatalf("want 1.801.214 (last page's max + 1), got %s", next)
+	}
+}
+
+// githubJSON returns the STATUS for a non-2xx instead of trying to decode GitHub's
+// error object into the success shape — the masking that made a 403 read as a decode
+// bug. Every caller's `if code != …` policy depends on reaching this.
+func TestGitHubJSON_NonSuccessReportsStatusNotADecodeError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"message": "Resource not accessible"})
+	}))
+	defer srv.Close()
+	defer swapAPIBase(srv.URL)()
+
+	var out []struct{ Name string }
+	code, err := githubJSON(testService(), context.Background(), http.MethodGet, "/repos/x/y/tags", "tok", nil, &out)
+	if err != nil {
+		t.Fatalf("want the status surfaced with no error, got %v", err)
+	}
+	if code != http.StatusForbidden {
+		t.Fatalf("want 403, got %d", code)
 	}
 }
 
@@ -291,4 +392,10 @@ func swapAPIBase(url string) func() {
 	prev := githubAPIBase
 	githubAPIBase = url
 	return func() { githubAPIBase = prev }
+}
+
+func swapRegistryBase(url string) func() {
+	prev := registryBase
+	registryBase = url
+	return func() { registryBase = prev }
 }
