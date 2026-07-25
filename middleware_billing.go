@@ -21,7 +21,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/clients/metering"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
@@ -199,49 +198,25 @@ func canonicalService(path string) string {
 // both call the SAME rule (hanzoai/account.Payer), not because two copies are kept
 // in step — so cloud and every other product key the SAME ledger entry:
 //
-//   - User is the ACCOUNT that pays, resolved from the credential by the shared
-//     rule: the org's pool for a real tenant, the person's own account for a
-//     member of the shared signup org, or whatever the signed billing_account
-//     claim names. It is NOT "the org, always" — that premise gated a balance
-//     nobody drained (see the resolution below).
-//   - Org is the HOME org whose ledger holds that account.
+//   - User is the ACCOUNT that pays and Org the HOME org whose ledger holds it.
+//     Together they are the money's ADDRESS, resolved ONCE by principal.WalletOf:
+//     home names the ledger (so a masquerading SuperAdmin debits their OWN books,
+//     never the org acted on) and account.Payer names the wallet within it. This
+//     used to be `user := org` — the pool, always — on the premise that prepaid
+//     billing is per-org; that premise is false for a person in the shared signup
+//     org, so the gate checked a pool balance while ai debited the person's. The
+//     address lives in one place now precisely so the two cannot drift again.
+//   - An unvalidated principal resolves to no wallet, and the empty AuthInput
+//     carries no billing org — so an anonymous, forged X-Org-Id can neither probe
+//     nor drain a victim org's ledger.
 //
 // The full "{org}/{sub}" actor identity belongs on the usage audit trail, not
 // the gate — but metering v0.1.0's AuthInput/Usage carry no Actor field, so it
 // is omitted here until the metering module ships the User/Actor split.
 func identityFromCtx(c *zip.Ctx) metering.AuthInput {
-	if !principal.Validated(c) {
-		// No validated principal — never key billing on a restored, client-forged
-		// X-Org-Id. Anonymous requests to priced paths are refused by each
-		// subsystem's own principal gate; here they simply carry no billing org,
-		// so an attacker cannot probe or drain a victim org's ledger.
+	w, ok := principal.WalletOf(c)
+	if !ok {
 		return metering.AuthInput{}
-	}
-	// The billing key is the HOME org (who PAYS), NOT the effective X-Org-Id (whose
-	// DATA is acted on). For a normal caller the two are identical; for a platform
-	// SuperAdmin masquerading into another org the debit + balance check must land on
-	// the admin org's ledger, never the org being acted on. BillingOrg resolves home
-	// (X-User-Owner) with an effective-org fallback, and is Validated-gated (true here,
-	// checked above). Data scope elsewhere keeps reading c.Org() (effective).
-	home, _ := principal.BillingOrg(c)
-	sub := strings.TrimSpace(c.User())
-	// Which ACCOUNT within that home org pays is resolved by the ONE rule every
-	// layer that touches money shares (hanzoai/account.Payer), reading the
-	// gateway-minted `billing_account` claim. This used to be `user := home` — the
-	// org pool, always — on the premise that prepaid billing is per-org. That
-	// premise is false for a person in the shared signup org, who holds their OWN
-	// account: this gate checked the pool's balance while ai debited the person's,
-	// so a funded pool green-lit a request whose usage drained an empty personal
-	// wallet, and an empty pool 402'd a funded person. Resolving through Payer
-	// removes the premise instead of restating it. The home org still names the
-	// LEDGER (masquerade must debit the admin's own), which is exactly Account.Org.
-	user := account.Payer(account.Credential{
-		Owner:   home,
-		Name:    sub,
-		Account: principal.BillingAccount(c),
-	}).Subject()
-	if user == "" {
-		user = sub // org-less fallback: no org names no account, but a sub can still gate
 	}
 	// Scope axes for the per-scope spend cap (issue #70). Service is SERVER-DERIVED
 	// from the route (canonicalService), so it cannot be spoofed. Project is the
@@ -250,8 +225,8 @@ func identityFromCtx(c *zip.Ctx) metering.AuthInput {
 	// so a forgeable project can neither hard-stop nor be evaded.
 	project, projectValidated := principal.ValidatedProject(c)
 	return metering.AuthInput{
-		User:             user,
-		Org:              home, // balance check + debit → the HOME org's ledger (who pays)
+		User:             w.Account,
+		Org:              w.Ledger, // balance check + debit → the HOME org's ledger (who pays)
 		Project:          project,
 		ProjectValidated: projectValidated,
 		Service:          canonicalService(c.Path()),
@@ -270,12 +245,16 @@ func billingEnabled(m *metering.Client) bool { return m != nil && m.Enabled() }
 // DefaultPrice is cloud's per-request price (in cents) for the edge gate.
 //
 // It returns 0 — meaning "do not gate, do not charge" — for:
+//
 //   - health/liveness probes (every /v1/<svc>/health and bare /health),
+//
 //   - /v1/ai/* : the ai subsystem self-meters its own LLM token costs to
 //     commerce; charging again here would DOUBLE-BILL,
+//
 //   - /v1/agents/* : the canonical agents subsystem now gates + meters its OWN
 //     per-run fee to commerce (clients/agents runAgent); the edge must stay 0 or
 //     every agent run is billed twice,
+//
 //   - other subsystems that already self-meter their units (commerce billing
 //     itself, o11y telemetry, mcp tool dispatch),
 //
