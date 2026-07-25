@@ -45,9 +45,33 @@ type state struct {
 // maxQuestion bounds the request body.
 const maxQuestion = 2000
 
-// AskRequest is the POST /v1/ask body.
+// AskRequest is the POST /v1/ask body. The advisor path uses question (figures
+// grounding). The WEB grounding domain is selected by mode (search|news|research|
+// deep) and parameterized by the remaining fields; q is the answer-engine alias for
+// question. All web fields are optional and inert unless mode names a web domain.
 type AskRequest struct {
 	Question string `json:"question"`
+	Q        string `json:"q"` // answer-engine alias for question
+
+	// Web grounding domain (mode-selected). Empty mode ⇒ the figure advisor, unchanged.
+	Mode       string   `json:"mode"`     // search|news|research|deep
+	Sources    []string `json:"sources"`  // @hints appended to the web query: web,news,academic,github,reddit,x
+	Model      string   `json:"model"`    // override the narration/synthesis model
+	Stream     *bool    `json:"stream"`   // force SSE (else Accept: text/event-stream / ?stream=1)
+	Language   string   `json:"language"` // web-search language (BCP-47-ish)
+	MaxSources int      `json:"maxSources"`
+	MaxQueries int      `json:"maxQueries"`
+	FollowUps  *bool    `json:"followUps"` // default true
+	System     string   `json:"system"`    // override the synthesis system prompt
+}
+
+// query is the caller's question, accepting either the advisor field (question) or
+// the answer-engine alias (q). Trimmed by the handler.
+func (r AskRequest) query() string {
+	if q := strings.TrimSpace(r.Q); q != "" {
+		return q
+	}
+	return r.Question
 }
 
 // AskResponse is the /v1/ask contract: a natural-language answer grounded in Figures, the
@@ -74,7 +98,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		model:    strings.TrimSpace(deps.AIDefaultModel),
 	}}
 	app.Post("/v1/ask", cloud.Handle(svc, askHandler))
-	b.Log.Info("ask mounted", "prefix", "/v1/ask", "domains", "books")
+	b.Log.Info("ask mounted", "prefix", "/v1/ask", "domains", "books,web", "web_modes", "search,news,research,deep")
 	return nil
 }
 
@@ -91,12 +115,20 @@ func askHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 	if err := c.Bind(&in); err != nil {
 		return err
 	}
-	q := strings.TrimSpace(in.Question)
+	q := strings.TrimSpace(in.query())
 	if q == "" {
 		return zip.Errorf(http.StatusBadRequest, "question is required")
 	}
 	if len(q) > maxQuestion {
 		q = q[:maxQuestion]
+	}
+
+	// WEB grounding domain — selected explicitly by mode (search|news|research|deep). This is the
+	// agentic search/deep-research path: it grounds on live web sources (not ledger figures),
+	// streams the answer-engine envelope, and meters the caller. It is ADDITIVE — when no web mode
+	// is set the advisor's figure path below runs exactly as before.
+	if isWebMode(in.Mode) {
+		return serveWeb(s, c, in, q)
 	}
 
 	// Classify → the domain that can ground this question. No match ⇒ the honest fallback: the
