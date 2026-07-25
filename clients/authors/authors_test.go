@@ -7,12 +7,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/hanzoai/cloud"
+	sqlitedrv "github.com/hanzoai/sqlite"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
@@ -133,6 +135,18 @@ func (g *fakeGitHub) fetchFile(_ context.Context, _, owner, repo, branch, path s
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.files[owner+"/"+repo+"@"+branch+"/"+path], nil
+}
+
+// TestMain makes this store-backed suite build-tag agnostic, exactly as the root
+// package's main_test.go does: an encryption-capable build refuses to open the data
+// plane without a master key, a pure-Go build refuses a key at all. Supply a throwaway
+// dev key ONLY when the build can encrypt and the environment did not already provide
+// one, so CI's real key is never overridden.
+func TestMain(m *testing.M) {
+	if sqlitedrv.EncryptionAvailable() && os.Getenv("CLOUD_KMS_MASTER_KEY_REF") == "" {
+		_ = os.Setenv("CLOUD_KMS_MASTER_KEY_REF", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=") // 32 zero bytes, dev-only
+	}
+	os.Exit(m.Run())
 }
 
 // mount builds an authors app backed by a fresh store + injected fakes, returning the
@@ -735,7 +749,7 @@ func TestGitLabVerifyAndLedger(t *testing.T) {
 
 	// The append-only ledger has exactly ONE row for this accrual: share 2500 bps,
 	// earning 2500c, compute_proof NULL (attestation is a follow-up, not fabricated).
-	rows, err := s.State.store.ListLedger(ctx, cr.ID, 100)
+	rows, err := s.State.store.ListLedger(ctx, cr.ID, "", 100)
 	if err != nil {
 		t.Fatalf("ListLedger: %v", err)
 	}
@@ -749,7 +763,7 @@ func TestGitLabVerifyAndLedger(t *testing.T) {
 
 	// Idempotent: a re-sweep in the same period appends NO new ledger row.
 	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
-	rows2, _ := s.State.store.ListLedger(ctx, cr.ID, 100)
+	rows2, _ := s.State.store.ListLedger(ctx, cr.ID, "", 100)
 	if len(rows2) != 1 {
 		t.Fatalf("re-sweep appended a ledger row: %d, want 1 (append-only, at-most-once)", len(rows2))
 	}
