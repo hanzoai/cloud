@@ -2,6 +2,7 @@ package platform
 
 import (
 	"context"
+	"github.com/hanzoai/cloud/clients/k8s"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -201,12 +202,12 @@ func TestBuildReconcilerRetriesUntilTenantRBACReady(t *testing.T) {
 	if b, _ := store.GetBuild(ctx, "acme", bldID); b.Status == "failed" {
 		t.Fatal("a transient RBAC-pending must NOT permanently fail the build")
 	}
-	if _, err := k.dyn.Resource(appsGVR).Namespace(ns).Get(ctx, app.Slug, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+	if _, err := k.dyn.Resource(k8s.Apps).Namespace(ns).Get(ctx, app.Slug, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
 		t.Fatalf("no Service CR may be written while RBAC is pending, get err=%v", err)
 	}
 	// …but the namespace WAS created (that create is what triggers the operator to
 	// project cloud-api's RoleBinding), so readiness can ever become true.
-	if _, err := k.dyn.Resource(namespacesGVR).Get(ctx, ns, metav1.GetOptions{}); err != nil {
+	if _, err := k.dyn.Resource(k8s.Namespaces).Get(ctx, ns, metav1.GetOptions{}); err != nil {
 		t.Fatalf("tick 1 must create the tenant namespace (triggers operator RBAC): %v", err)
 	}
 
@@ -222,7 +223,7 @@ func TestBuildReconcilerRetriesUntilTenantRBACReady(t *testing.T) {
 	if b, _ := store.GetBuild(ctx, "acme", bldID); b.Status != "succeeded" {
 		t.Fatalf("build must be 'succeeded' after go-live, got %q", b.Status)
 	}
-	obj, err := k.dyn.Resource(appsGVR).Namespace(ns).Get(ctx, app.Slug, metav1.GetOptions{})
+	obj, err := k.dyn.Resource(k8s.Apps).Namespace(ns).Get(ctx, app.Slug, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Service CR must be written once RBAC is ready: %v", err)
 	}
@@ -291,7 +292,7 @@ func TestBuildReconcilerVersionMonotonic(t *testing.T) {
 		t.Fatalf("v1 image built fine → build 'succeeded', got %s", b.Status)
 	}
 	// The live workload CR still runs v2 — the older image was never applied.
-	obj, err := k.dyn.Resource(appsGVR).Namespace("tenant-maxpower").Get(ctx, "api", metav1.GetOptions{})
+	obj, err := k.dyn.Resource(k8s.Apps).Namespace("tenant-maxpower").Get(ctx, "api", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("service CR missing: %v", err)
 	}

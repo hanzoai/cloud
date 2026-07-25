@@ -1,6 +1,7 @@
 package paas
 
 import (
+	"github.com/hanzoai/cloud/clients/k8s"
 	"reflect"
 	"testing"
 
@@ -289,8 +290,8 @@ func TestImageRepoRE(t *testing.T) {
 // TestDeploymentsGVR pins the Deployment GVR (the running-tag source).
 func TestDeploymentsGVR(t *testing.T) {
 	want := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
-	if deploymentsGVR != want {
-		t.Fatalf("deploymentsGVR = %v, want %v", deploymentsGVR, want)
+	if k8s.Deployments != want {
+		t.Fatalf("k8s.Deployments = %v, want %v", k8s.Deployments, want)
 	}
 }
 
