@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -104,18 +105,18 @@ func (v semver) String() string {
 }
 
 // nextVersion is the monotonic PATCH bump over the union of the git tags and the
-// already-pushed container tags, floored at floor. Pure — the caller injects both
+// already-published image tags, floored at floor. Pure — the caller injects both
 // lists so it is hermetic. It mirrors release.yml's version step exactly:
-// max(floor, git…, container…) + 1 patch, never a major/minor jump. Folding in the
-// container tags means a number that already has a PUSHED image (even one whose run
-// died before tagging, or whose smoke failed after push) is never reused — the
-// phantom-tag prevention.
-func nextVersion(gitTags, containerTags []string, floor string) (string, error) {
+// max(floor, git…, image…) + 1 patch, never a major/minor jump. Folding in the image
+// tags means a number that already has a PUSHED image (even one whose run died before
+// tagging, or whose smoke failed after push) is never reused — the phantom-tag
+// prevention, and the reason computeReleaseVersion refuses to run on a partial list.
+func nextVersion(gitTags, imageTags []string, floor string) (string, error) {
 	max, ok := parseSemver(floor)
 	if !ok {
 		return "", fmt.Errorf("invalid version floor %q", floor)
 	}
-	for _, t := range append(append([]string{}, gitTags...), containerTags...) {
+	for _, t := range append(append([]string{}, gitTags...), imageTags...) {
 		if v, ok := parseSemver(t); ok && max.less(v) {
 			max = v
 		}
@@ -318,22 +319,33 @@ func randKey() (string, error) {
 	return base64.StdEncoding.EncodeToString(b), nil
 }
 
-// ── version-compute seams (GitHub API) ───────────────────────────────────────
+// ── version-compute seams ────────────────────────────────────────────────────
 
 // computeReleaseVersion reads the two tag universes release.yml folds together — the
-// repo's git tags and ghcr.io/hanzoai/cloud's pushed container tags — and returns the
-// monotonic next patch. Container tags are best-effort: if that call fails we still
-// bump over the git tags (never below a pushed number we could read).
+// repo's git tags and releaseImage's PUBLISHED tags — and returns the monotonic next
+// patch.
+//
+// BOTH lists are required. Neither is best-effort, because the maximum of a PARTIAL
+// view is not a maximum: with the published tags missing, the computation happily
+// returns a number that already names a pushed image, and the release then overwrites
+// it. That is not theory — it shipped. The published-tag call was a GitHub
+// packages-API read needing a `read:packages` scope our PAT does not carry; it
+// answered 403, the error was logged as a warning and swallowed, and the version was
+// computed from git tags alone. Git tags had stalled at v1.801.209 while the registry
+// (and production) had reached v1.801.213, so the next "release" computed v1.801.210
+// — four versions BACKWARD, aimed at overwriting a published image. Enumerating both
+// universes is the whole mechanism; if either cannot be read, there is no sound answer
+// and the release must stop rather than guess.
 func computeReleaseVersion(s *cloud.Service[state], ctx context.Context, repo string) (string, error) {
 	git, err := gitTags(s, ctx, repo)
 	if err != nil {
 		return "", fmt.Errorf("list git tags: %w", err)
 	}
-	cont, err := containerTags(s, ctx)
+	published, err := publishedTags(ctx)
 	if err != nil {
-		s.Log.Warn("release: list container tags failed (bumping over git tags only)", "err", err)
+		return "", fmt.Errorf("list published image tags: %w", err)
 	}
-	return nextVersion(git, cont, releaseFloor)
+	return nextVersion(git, published, releaseFloor)
 }
 
 func gitTags(s *cloud.Service[state], ctx context.Context, repo string) ([]string, error) {
@@ -354,26 +366,116 @@ func gitTags(s *cloud.Service[state], ctx context.Context, repo string) ([]strin
 	return names, nil
 }
 
-func containerTags(s *cloud.Service[state], ctx context.Context) ([]string, error) {
-	var out []struct {
-		Metadata struct {
-			Container struct {
-				Tags []string `json:"tags"`
-			} `json:"container"`
-		} `json:"metadata"`
+// ── published-tag enumeration (the registry answers) ─────────────────────────
+
+// registryBase is the OCI registry root for releaseImage. A var (not a const) ONLY so
+// tests can point it at an httptest server; production always uses the real registry.
+var registryBase = "https://ghcr.io"
+
+// registryPageMax bounds Link-header pagination. Reaching it is an ERROR, never a
+// silent truncation — a capped list is a partial view, and a partial view is exactly
+// the unsound maximum this whole seam exists to prevent.
+const registryPageMax = 64
+
+// publishedTags lists every tag currently published for releaseImage.
+//
+// It asks the REGISTRY, not GitHub's package-metadata API. The registry is the
+// authority on the question actually being asked — "which tags exist, and which would
+// an overwrite clobber" — it is what `docker pull` resolves against, and its pull
+// scope is anonymous, so enumeration no longer depends on a PAT carrying a
+// `read:packages` scope ours does not have.
+//
+// Pagination is not optional. The registry caps a page (GHCR: 1000 tags) and returns
+// them in insertion order, so the NEWEST versions are on the LAST page — reading page
+// one alone reports a stale maximum, the same unsound answer by a different route.
+func publishedTags(ctx context.Context) ([]string, error) {
+	host, repo, ok := strings.Cut(releaseImage, "/")
+	if !ok {
+		return nil, fmt.Errorf("release image %q names no repository", releaseImage)
 	}
-	code, err := githubJSON(s, ctx, http.MethodGet, "/orgs/hanzoai/packages/container/cloud/versions?per_page=100", ghToken(), nil, &out)
+	token, err := registryPullToken(ctx, host, repo)
 	if err != nil {
 		return nil, err
 	}
-	if code != http.StatusOK {
-		return nil, fmt.Errorf("container versions: status %d", code)
-	}
 	var tags []string
-	for _, v := range out {
-		tags = append(tags, v.Metadata.Container.Tags...)
+	next := "/v2/" + repo + "/tags/list?n=1000"
+	for page := 0; next != ""; page++ {
+		if page == registryPageMax {
+			return nil, fmt.Errorf("tag list exceeded %d pages: refusing a truncated view", registryPageMax)
+		}
+		var body struct {
+			Tags []string `json:"tags"`
+		}
+		link, err := registryGet(ctx, registryBase+next, token, &body)
+		if err != nil {
+			return nil, err
+		}
+		tags = append(tags, body.Tags...)
+		next = nextLink(link)
 	}
 	return tags, nil
+}
+
+// registryPullToken exchanges nothing for a pull-scoped bearer — the anonymous half of
+// the Docker registry token flow, all a public image's tag list requires.
+func registryPullToken(ctx context.Context, host, repo string) (string, error) {
+	var body struct {
+		Token string `json:"token"`
+	}
+	u := registryBase + "/token?service=" + url.QueryEscape(host) +
+		"&scope=" + url.QueryEscape("repository:"+repo+":pull")
+	if _, err := registryGet(ctx, u, "", &body); err != nil {
+		return "", fmt.Errorf("registry pull token: %w", err)
+	}
+	if body.Token == "" {
+		return "", fmt.Errorf("registry pull token: empty")
+	}
+	return body.Token, nil
+}
+
+// registryGet performs one registry read, decoding into out and returning the Link
+// header that carries the next page. A non-200 is an error here (unlike githubJSON,
+// whose callers each apply their own status policy): every registry read on this path
+// is an enumeration that must be complete or fail.
+func registryGet(ctx context.Context, endpoint, token string, out any) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := releaseHTTP.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GET %s: status %d", endpoint, resp.StatusCode)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return "", fmt.Errorf("decode %s: %w", endpoint, err)
+	}
+	return resp.Header.Get("Link"), nil
+}
+
+// nextLink returns the rel="next" target of an RFC-8288 Link header, or "" when the
+// page is the last — the loop's terminating condition.
+func nextLink(header string) string {
+	for _, field := range strings.Split(header, ",") {
+		parts := strings.Split(strings.TrimSpace(field), ";")
+		target := strings.TrimSpace(parts[0])
+		if !strings.HasPrefix(target, "<") || !strings.HasSuffix(target, ">") {
+			continue
+		}
+		for _, p := range parts[1:] {
+			if strings.EqualFold(strings.TrimSpace(p), `rel="next"`) {
+				return target[1 : len(target)-1]
+			}
+		}
+	}
+	return ""
 }
 
 // resolveCommit pins a ref (branch/tag/full sha) to a full commit SHA via the GitHub
@@ -506,7 +608,14 @@ func githubJSON(s *cloud.Service[state], ctx context.Context, method, path, toke
 		return 0, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if out != nil {
+	// Decode ONLY a success body. GitHub answers a non-2xx with an error object
+	// ({"message":…}), never the success shape, so decoding one into out yields a
+	// bogus unmarshal error that MASKS the status the caller's policy is written
+	// against — that is how a 403 on the packages API read as a decode bug and went
+	// unnoticed through four releases. Draining instead keeps the seam's contract
+	// (return the status, let each caller apply its own success/collision policy)
+	// and makes every `if code != …` below reachable for the first time.
+	if out != nil && resp.StatusCode >= 200 && resp.StatusCode <= 299 {
 		if derr := json.NewDecoder(resp.Body).Decode(out); derr != nil && derr != io.EOF {
 			return resp.StatusCode, fmt.Errorf("decode %s %s: %w", method, path, derr)
 		}
