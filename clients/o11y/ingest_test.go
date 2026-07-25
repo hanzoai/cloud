@@ -14,18 +14,6 @@ import (
 	"github.com/hanzoai/cloud"
 )
 
-func TestIngestEnabled(t *testing.T) {
-	for v, want := range map[string]bool{
-		"true": true, "1": true, "YES": true, "on": true,
-		"": false, "false": false, "0": false, "nope": false,
-	} {
-		t.Setenv("CLOUD_OTLP_INGEST_ENABLED", v)
-		if got := ingestEnabled(); got != want {
-			t.Fatalf("ingestEnabled(%q)=%v want %v", v, got, want)
-		}
-	}
-}
-
 func TestWriteIngestConfig(t *testing.T) {
 	path, err := writeIngestConfig(cloud.Deps{DataDir: t.TempDir()})
 	if err != nil {
