@@ -902,3 +902,165 @@ func TestMount(t *testing.T) {
 		t.Fatalf("mounted GET /v1/authors (no principal) want 403, got %d", resp.StatusCode)
 	}
 }
+
+// TestNormalizeTarget: the ONE parser distinguishes a REPO (host/owner/name) from a
+// whole OWNER/org (host/owner) from junk. An org REQUIRES an explicit forge host — a
+// bare "owner/name" is still a github.com repo, a bare single word is neither.
+func TestNormalizeTarget(t *testing.T) {
+	// Repos → isOrg=false.
+	for in, want := range map[string]string{
+		"https://github.com/acme/widgets":     "github.com/acme/widgets",
+		"acme/widgets":                        "github.com/acme/widgets",
+		"github.com/acme/widgets/tree/main":   "github.com/acme/widgets", // extra segments dropped
+		"https://gitlab.com/acme/Widgets.git": "gitlab.com/acme/widgets",
+		"git@github.com:acme/widgets.git":     "github.com/acme/widgets",
+	} {
+		got, isOrg := normalizeTarget(in)
+		if got != want || isOrg {
+			t.Fatalf("normalizeTarget(%q) = (%q,%v), want (%q,false)", in, got, isOrg, want)
+		}
+	}
+	// Orgs (explicit host) → isOrg=true.
+	for in, want := range map[string]string{
+		"https://github.com/luxfi":     "github.com/luxfi",
+		"github.com/luxfi":             "github.com/luxfi",
+		"http://www.github.com/LuxFi/": "github.com/luxfi",
+		"gitlab.com/acme-group":        "gitlab.com/acme-group",
+	} {
+		got, isOrg := normalizeTarget(in)
+		if got != want || !isOrg {
+			t.Fatalf("normalizeTarget(%q) = (%q,%v), want (%q,true)", in, got, isOrg, want)
+		}
+	}
+	// Neither: empty, a bare word (no host), a non-forge host (owner/name form).
+	for _, in := range []string{"", "  ", "luxfi", "not a repo", "https://bitbucket.org/a/b"} {
+		if got, isOrg := normalizeTarget(in); got != "" || isOrg {
+			t.Fatalf("normalizeTarget(%q) = (%q,%v), want empty", in, got, isOrg)
+		}
+	}
+}
+
+// TestVerifyOrgUrlCoversOwner is the ORG-claim proof: a whole github.com/<owner> url
+// (no repo segment) is ACCEPTED, its ownership proven the SAME OAuth way against the
+// owner's .github control repo, recorded as an owner-wide claim — and then EVERY repo
+// under that owner earns on deploy without a per-repo verify. Ownership is NOT weakened:
+// an owner the caller can't prove is 422, an owner already claimed is 409, and a per-repo
+// verify still works alongside. A bare word / non-forge host is still rejected.
+func TestVerifyOrgUrlCoversOwner(t *testing.T) {
+	app, s, fc, fg := mount(t)
+	ctx := context.Background()
+
+	// orgL connects; its linked token has admin on the owner's control repo luxfi/.github.
+	idL, _ := connectOrg(t, app, s, "orgL", "luxdev")
+	fg.setLinked("orgL", "luxdev", "tok_l")
+	fg.setAdmin("tok_l", "luxfi", orgProofRepo)
+
+	// An ORG url verifies via OAuth and records an owner-wide claim (201 created).
+	st, body := req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgL", false, map[string]any{"repoUrl": "https://github.com/luxfi"})
+	if st != http.StatusCreated {
+		t.Fatalf("org verify want 201, got %d (%s)", st, body)
+	}
+	var ov struct {
+		Org struct {
+			OwnerURL      string `json:"ownerUrl"`
+			Verified      bool   `json:"verified"`
+			Method        string `json:"method"`
+			BadgeMarkdown string `json:"badgeMarkdown"`
+		} `json:"org"`
+		Created bool `json:"created"`
+	}
+	_ = json.Unmarshal(body, &ov)
+	if ov.Org.OwnerURL != "github.com/luxfi" || !ov.Org.Verified || ov.Org.Method != MethodOAuth || !ov.Created {
+		t.Fatalf("org verify wrong: %+v", ov)
+	}
+	// The claim is stored as an owner-wide org record on the author.
+	claims, _ := s.State.store.ListOrgs(ctx, idL, 10)
+	if len(claims) != 1 || claims[0].OwnerURL != "github.com/luxfi" || !claims[0].Verified {
+		t.Fatalf("org claim not recorded: %+v", claims)
+	}
+
+	// A deploy of ANY repo under the verified owner (no per-repo claim) attributes to the
+	// org's author — proven for TWO distinct repos under the same owner.
+	if st, dbody := req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgD", false, map[string]any{"repoUrl": "https://github.com/luxfi/node", "project": "proj-d"}); st != http.StatusCreated || !recorded(t, dbody) {
+		t.Fatalf("org-covered deploy #1 want 201 recorded, got %d (%s)", st, dbody)
+	}
+	if st, dbody := req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgD", false, map[string]any{"repoUrl": "luxfi/cli", "project": "proj-cli"}); st != http.StatusCreated || !recorded(t, dbody) {
+		t.Fatalf("org-covered deploy #2 want 201 recorded, got %d (%s)", st, dbody)
+	}
+
+	// Approve + spend → the org author earns spend × share on the covered deploys.
+	approve(t, app, idL)
+	fc.setSpend("orgD", 10000) // $100 × 20% share → 2000c
+	code, sbody := req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
+	if code != http.StatusOK || sweptAccrued(t, sbody) != 1 {
+		t.Fatalf("org-covered accrual sweep want 1, got %d (%s)", code, sbody)
+	}
+	a, _ := s.State.store.GetByID(ctx, idL)
+	const want = 10000 * defaultShareBps / bpsDenom
+	if a.AccruedCents != want {
+		t.Fatalf("org-covered author accrued = %d, want %d", a.AccruedCents, want)
+	}
+
+	// Ownership is REQUIRED: an owner the caller can't prove is 422 (not weakened).
+	connectOrg(t, app, s, "orgX", "xdev")
+	if st, _ := req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgX", false, map[string]any{"repoUrl": "github.com/luxfi"}); st != http.StatusUnprocessableEntity {
+		t.Fatalf("unproven org claim want 422, got %d", st)
+	}
+	// Even WITH proof, an owner already verified by another author is 409 (first-verify wins).
+	fg.setLinked("orgX", "xdev", "tok_x")
+	fg.setAdmin("tok_x", "luxfi", orgProofRepo)
+	if st, _ := req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgX", false, map[string]any{"repoUrl": "github.com/luxfi"}); st != http.StatusConflict {
+		t.Fatalf("cross-author org claim want 409, got %d", st)
+	}
+
+	// A per-repo claim still works alongside org claims (both arms coexist).
+	fg.setAdmin("tok_x", "acme", "widgets")
+	if st, _ := req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgX", false, map[string]any{"repoUrl": "acme/widgets"}); st != http.StatusCreated {
+		t.Fatalf("per-repo verify alongside org want 201, got %d", st)
+	}
+
+	// A bare word (no host) and a non-forge host are still rejected as malformed (400).
+	for _, bad := range []string{"luxfi", "not a repo", "https://bitbucket.org/a/b"} {
+		if st, _ := req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgX", false, map[string]any{"repoUrl": bad}); st != http.StatusBadRequest {
+			t.Fatalf("malformed %q want 400, got %d", bad, st)
+		}
+	}
+}
+
+// TestVerifyOrgFileMethod proves the SECOND ownership proof works for orgs too: a
+// hanzo.json carrying the verify code on the owner's .github default branch verifies the
+// whole owner (no OAuth token), and a repo under it then earns on deploy.
+func TestVerifyOrgFileMethod(t *testing.T) {
+	app, s, _, fg := mount(t)
+	ctx := context.Background()
+
+	idF, codeF := connectOrg(t, app, s, "orgF", "fdev")
+	// hanzo.json with the author's verify code on acme/.github's default branch.
+	fg.setFile("acme", orgProofRepo, "main", verifyFile, []byte(`{"hanzoAuthorCode":"`+codeF+`"}`))
+
+	st, body := req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgF", false, map[string]any{"repoUrl": "github.com/acme"})
+	if st != http.StatusCreated {
+		t.Fatalf("org file-verify want 201, got %d (%s)", st, body)
+	}
+	var ov struct {
+		Org struct {
+			OwnerURL string `json:"ownerUrl"`
+			Verified bool   `json:"verified"`
+			Method   string `json:"method"`
+		} `json:"org"`
+	}
+	_ = json.Unmarshal(body, &ov)
+	if ov.Org.OwnerURL != "github.com/acme" || !ov.Org.Verified || ov.Org.Method != MethodFile {
+		t.Fatalf("org file-verify wrong: %+v", ov.Org)
+	}
+
+	// A repo under the file-verified owner earns on deploy (org arm of attribution).
+	st, dbody := req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgZ", false, map[string]any{"repoUrl": "github.com/acme/anything", "project": "proj-z"})
+	if st != http.StatusCreated || !recorded(t, dbody) {
+		t.Fatalf("org-covered deploy want 201 recorded, got %d (%s)", st, dbody)
+	}
+	deploys, _ := s.State.store.ListDeploys(ctx, idF, 10)
+	if len(deploys) != 1 || deploys[0].RepoURL != "github.com/acme/anything" {
+		t.Fatalf("org-covered deploy not attributed to owner author: %+v", deploys)
+	}
+}
