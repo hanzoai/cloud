@@ -19,11 +19,26 @@
 # Pinned to ghcr.io so BOTH buildx lanes (release.yml + platform arcbuild) pull
 # it directly; the SAME tags are mirrored to registry.hanzo.ai (S3-backed) for
 # GET-flow consumers (docker/kaniko/crane). Override any pin with
-# --build-arg <NAME>_IMAGE=…  — release.yml resolves CONSOLE_IMAGE to a fresh
-# console-embed digest, exactly as CONSOLE_CACHEBUST re-fetched console before.
-ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:latest
-ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:latest
-ARG FLAGS_IMAGE=ghcr.io/hanzoai/cloud-flags:latest
+# --build-arg <NAME>_IMAGE=… .
+#
+# IMMUTABLE per-commit tags, never `:latest`. These defaults are LOAD-BEARING:
+# the builder that actually runs our releases is the native one (POST /v1/runner
+# → launchDirectBuild → BuildKit), and it passes no --build-arg, so whatever is
+# written here is what gets baked. `release.yml`, which the previous comment said
+# would resolve a fresh digest, is a stub and resolves nothing.
+#
+# With `:latest` the embedded console was therefore decided by WHEN the build ran,
+# not by what we shipped — and it bit: cloud v1.801.215 was built ~12 minutes
+# before console CI finished publishing the console-embed carrying v8.5.26, so a
+# release whose whole purpose was that console change silently baked the previous
+# one and shipped green. Same image, two contents, no diff to show for it.
+#
+# BUMP: when a console/skills/flags change must reach production, move its pin
+# here in the same commit that claims it. That is what makes a cloud release
+# reproducible and makes "what console is in v1.801.N" answerable from git.
+ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:sha-9f7042c-amd64
+ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:sha-b931a11-amd64
+ARG FLAGS_IMAGE=ghcr.io/hanzoai/cloud-flags:sha-e1ca02a-amd64
 
 # ── toolchain base images: the golang + alpine FROMs below pull from our own
 # GHCR mirror (ghcr.io/hanzoai/mirror/*), pinned by digest. WHY: public.ecr.aws
