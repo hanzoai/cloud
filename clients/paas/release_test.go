@@ -33,8 +33,16 @@ func fakeService(objs ...runtime.Object) *cloud.Service[state] {
 	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
 		appsGVR:        "AppList",
 		deploymentsGVR: "DeploymentList",
+		// discoverNamespaces lists namespaces to build the scan set; the fake panics
+		// on an unregistered list kind, so it is registered here. Seeding no Namespace
+		// objects is the honest hermetic default: discovery finds none and the scan
+		// set falls back to the first-party set, which is what these tests assert on.
+		namespacesGVR: "NamespaceList",
 	}, objs...)
-	return &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{dyn: dyn}}
+	return &cloud.Service[state]{
+		Base:  cloud.Base{Log: luxlog.New("test")},
+		State: state{dyn: dyn, scan: &nsCache{}},
+	}
 }
 
 // declaredImage reads spec.image.{repository,tag} off the live App CR in the fake.
