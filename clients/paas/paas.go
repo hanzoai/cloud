@@ -71,17 +71,41 @@ var appsGVR = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Reso
 // platform inventory reads it in inventory.ts). Read-only for this subsystem.
 var deploymentsGVR = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
 
-// nsEnv maps each scanned namespace to the lifecycle env it represents, mirroring
-// the platform inventory's DEFAULT_TARGETS (inventory.ts): the `hanzo` namespace
-// is production (main); the env-split namespaces map to test/dev. Only listed
-// namespaces are scanned — the reader never reaches beyond the platform tier.
-// Cross-cluster federation (lux-k8s/zoo-k8s) is a follow-up phase (a per-cluster
-// client from a KMS-loaded kubeconfig), exactly as the Node inventory federates.
-var nsEnv = map[string]string{
-	"hanzo":         "main",
-	"hanzo-testnet": "test",
-	"hanzo-devnet":  "dev",
+// nsClass is THE namespace classifier: the one place that decides what a platform
+// namespace MEANS. Total — every input yields a decision and an unrecognised
+// namespace is classified OUT (ok=false) rather than guessed at, so the reader can
+// never reach beyond the platform tier.
+//
+// It replaces three separate encodings of this single fact, which had drifted out
+// of agreement: the nsEnv map (3 namespaces), nsOrg's suffix-strip (knew only
+// -devnet/-testnet), and scanOrder's literal list (the same 3). Because a
+// `tenant-<org>` namespace matched none of them, it classified as its own org and
+// was never scanned — every tenant workload was invisible BY CONSTRUCTION. Deriving
+// tenant and env from one function is what makes that class of drift impossible:
+// there is no second place left to disagree with.
+//
+// tenant is the authorization axis (scopedNamespaces confines a non-super OrgAdmin
+// to namespaces whose tenant equals their validated org); env is the lifecycle
+// label. Cross-cluster federation (lux-k8s/zoo-k8s) is a follow-up phase.
+func nsClass(ns string) (tenant, env string, ok bool) {
+	switch ns {
+	case "hanzo", "hanzo-mainnet":
+		return "hanzo", "main", true
+	case "hanzo-testnet":
+		return "hanzo", "test", true
+	case "hanzo-devnet":
+		return "hanzo", "dev", true
+	}
+	// tenant-<org>: a customer's own namespace. The org IS the tenant key, so it
+	// authorizes exactly like a first-party namespace with no special case.
+	if t, found := strings.CutPrefix(ns, "tenant-"); found && t != "" {
+		return t, "main", true
+	}
+	return "", "", false
 }
+
+// envOf is nsClass's env projection ("" when the namespace is not ours).
+func envOf(ns string) string { _, env, _ := nsClass(ns); return env }
 
 // appNameRE constrains the :app path segment to a DNS-1123 label (every Service
 // CR metadata.name satisfies this). Validated at the boundary; it is the
@@ -238,7 +262,7 @@ func targetNamespaces(c *zip.Ctx) []string {
 	}
 	out := make([]string, 0, len(nss))
 	for _, ns := range nss {
-		if nsEnv[ns] == env {
+		if envOf(ns) == env {
 			out = append(out, ns)
 		}
 	}
@@ -248,17 +272,15 @@ func targetNamespaces(c *zip.Ctx) []string {
 // nsOrg returns the platform org that OWNS a scanned namespace: the namespace with
 // its lifecycle-env suffix removed ("hanzo"→hanzo, "hanzo-testnet"→hanzo,
 // "hanzo-devnet"→hanzo). It is the tenant key a namespace belongs to — the axis
-// scopedNamespaces confines a non-super OrgAdmin to. Kept in lockstep with nsEnv.
-func nsOrg(ns string) string {
-	return strings.TrimSuffix(strings.TrimSuffix(ns, "-devnet"), "-testnet")
-}
+// scopedNamespaces confines a non-super OrgAdmin to. Derived from nsClass.
+func nsOrg(ns string) string { tenant, _, _ := nsClass(ns); return tenant }
 
 // nsForEnv maps a lifecycle env to its scanned namespace ("main"→hanzo,
 // "test"→hanzo-testnet, "dev"→hanzo-devnet), "" for an unknown env. The inverse of
-// nsEnv, used to reject an invalid ?env with a clean 400 rather than a confusing 404.
+// envOf over the scanned set, used to reject an invalid ?env with a clean 400.
 func nsForEnv(env string) string {
-	for ns, e := range nsEnv {
-		if e == env {
+	for _, ns := range scanOrder() {
+		if envOf(ns) == env {
 			return ns
 		}
 	}
@@ -362,7 +384,7 @@ func getApp(s *cloud.Service[state], c *zip.Ctx) error {
 			return k8sErr(s, "get", err)
 		}
 		repository, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "repository")
-		return c.JSON(http.StatusOK, observeCR(obj, ns, nsEnv[ns], runningTagOf(s, c.Context(), ns, name, repository)))
+		return c.JSON(http.StatusOK, observeCR(obj, ns, envOf(ns), runningTagOf(s, c.Context(), ns, name, repository)))
 	}
 	return zip.ErrNotFound("app not found in the platform namespaces")
 }
@@ -379,7 +401,7 @@ func observeFleet(s *cloud.Service[state], ctx context.Context, namespaces []str
 		// error leaves runningTag empty (an honest unknown) rather than failing the
 		// whole board, so the declared/health/phase columns still render.
 		running := runningTagsIn(s, ctx, ns)
-		env := nsEnv[ns]
+		env := envOf(ns)
 		list, err := s.State.dyn.Resource(appsGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
@@ -460,7 +482,7 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	s.Log.Info("paas rolling restart", "app", name, "namespace", ns, "restartedAt", restartedAt, "actor", principal.Owner(c))
 	return c.JSON(http.StatusAccepted, map[string]any{
-		"ok": true, "app": name, "namespace": ns, "env": nsEnv[ns], "restartedAt": restartedAt,
+		"ok": true, "app": name, "namespace": ns, "env": envOf(ns), "restartedAt": restartedAt,
 	})
 }
 
@@ -554,7 +576,20 @@ func reqApp(c *zip.Ctx) string { return strings.ToLower(strings.TrimSpace(c.Para
 
 // scanOrder returns the platform namespaces in a stable env order (main first),
 // so a bare app-name read/deploy resolves to production before test/dev.
-func scanOrder() []string { return []string{"hanzo", "hanzo-testnet", "hanzo-devnet"} }
+// Every entry MUST classify under nsClass (asserted in paas_test.go) — nsClass is
+// the one place that decides what a namespace means, and a namespace listed here
+// but unclassified would render rows with an empty tenant, i.e. rows no OrgAdmin
+// could ever be confined to. hanzo-mainnet was missing until 2026-07-25, so its
+// CRs were invisible on the board.
+//
+// First-party only: a `tenant-<org>` namespace classifies correctly (nsClass) but
+// is not yet DISCOVERED, because the scan set is computed without a cluster client.
+// Threading the dynamic client through so the set is listed from the cluster is the
+// follow-up that makes tenant workloads appear; the authorization axis they need
+// already exists.
+func scanOrder() []string {
+	return []string{"hanzo", "hanzo-mainnet", "hanzo-testnet", "hanzo-devnet"}
+}
 
 // orgFromRepository derives the image namespace ("org") from an image repo:
 // `ghcr.io/hanzoai/chat` → `hanzoai`; `docker.io/grafana/grafana` → `grafana`.
