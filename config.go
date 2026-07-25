@@ -286,6 +286,15 @@ type Config struct {
 	CommerceServiceToken string
 	BillingFailOpen      bool
 
+	// PaywallEnforced turns on the subscription paywall (routers.Paywall): when true,
+	// a gated /v1 product route from a validated org with NO active paid plan
+	// (Pro/Plus/Max/Team/Enterprise, active or trialing) is refused with 402
+	// subscription_required. Default FALSE — a DARK SHIP: the gate is a pure
+	// passthrough until an owner sets PAYWALL_ENFORCED=true, so wiring it changes no
+	// behavior. The sell/service surface (sign-in/billing/plans/models/health) is always
+	// exempt so the gate can never block paying.
+	PaywallEnforced bool
+
 	// AI inference gateway. Two DISTINCT endpoints, two DISTINCT credentials by
 	// concern (see build.go pickCompletionsClient / pickEmbedClient):
 	//   - CHAT COMPLETIONS (deps.AI, a WRITE endpoint) — agents/guide/crm/content/
@@ -431,6 +440,7 @@ func LoadConfig() *Config {
 		CommerceHTTPURL:      getenv("CLOUD_COMMERCE_HTTP_URL", ""),
 		CommerceServiceToken: getenv("COMMERCE_SERVICE_TOKEN", ""),
 		BillingFailOpen:      getenvBool("BILLING_FAIL_OPEN"),
+		PaywallEnforced:      getenvBool("PAYWALL_ENFORCED"), // dark ship: default false.
 		// AI inference gateway. CLOUD_AI_API_KEY (KMS-backed) is an optional static
 		// override; absent it, the AI client authenticates via M2M using the
 		// binary's own IAM identity (IAM_CLIENT_ID / IAM_CLIENT_SECRET) — no static

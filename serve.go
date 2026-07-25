@@ -14,6 +14,7 @@ import (
 	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/role"
+	"github.com/hanzoai/cloud/routers"
 	"github.com/hanzoai/cloud/writerpin"
 	"github.com/hanzoai/cloud/zapface"
 	luxlog "github.com/luxfi/log"
@@ -308,6 +309,21 @@ func Serve(specs []MountSpec, enable []string) error {
 	// it is always wired unconditionally. DefaultPrice keeps self-metering
 	// subsystems (notably /v1/ai/*) at 0 to avoid double-billing.
 	app.Use(BillingGate(deps.Metering, DefaultPrice))
+
+	// Subscription paywall (task #36). Runs AFTER IdentityMiddleware (so it keys on the
+	// VALIDATED principal + owner claim, never a client X-Org-Id) and beside BillingGate,
+	// BEFORE MountAll so it precedes every subsystem /v1/<name>/* wildcard. DARK by
+	// default: PAYWALL_ENFORCED=false makes it a pure passthrough (zero behavior change)
+	// until an owner flips it. The plan read is the co-resident commerce client's OPTIONAL
+	// ActivePaidPlan capability, resolved by type-assertion — a commerce build that cannot
+	// answer (nil / split-deploy / disabled stub) makes the gate fail OPEN, never locking
+	// a subscriber out. The sell/service surface (sign-in/billing/plans/models/health) is
+	// always exempt, so the gate can never block the path to payment.
+	var planChecker routers.PlanChecker
+	if pc, ok := deps.Commerce.(routers.PlanChecker); ok {
+		planChecker = pc
+	}
+	app.Use(routers.Paywall(cfg.PaywallEnforced, planChecker))
 
 	// HIP-0106 liveness contract: every enabled subsystem answers
 	// GET /v1/<name>/health uniformly, registered at the compose root before
