@@ -372,13 +372,45 @@ func TestObserveCRUnrolled(t *testing.T) {
 // main).
 func TestScanOrder(t *testing.T) {
 	got := scanOrder()
-	want := []string{"hanzo", "hanzo-testnet", "hanzo-devnet"}
+	want := []string{"hanzo", "hanzo-mainnet", "hanzo-testnet", "hanzo-devnet"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("scanOrder = %v, want %v", got, want)
 	}
+	// The invariant that matters: every scanned namespace MUST classify, and must
+	// classify to a real tenant. A scanned-but-unclassified namespace would render
+	// rows with an empty tenant — rows no OrgAdmin could ever be confined to.
 	for _, ns := range got {
-		if _, ok := nsEnv[ns]; !ok {
-			t.Errorf("scanOrder namespace %q missing from nsEnv map", ns)
+		tenant, env, ok := nsClass(ns)
+		if !ok || tenant == "" || env == "" {
+			t.Errorf("scanOrder namespace %q does not classify: tenant=%q env=%q ok=%v", ns, tenant, env, ok)
+		}
+	}
+}
+
+// TestNsClassIsTotalAndConfining pins the classifier's two load-bearing properties:
+// it is TOTAL (every input decided, never a panic) and it CONFINES (anything it does
+// not recognise is classified out, so the reader can never reach beyond the platform
+// tier, and a tenant namespace authorizes to its own org rather than to "hanzo").
+func TestNsClassIsTotalAndConfining(t *testing.T) {
+	for _, tc := range []struct {
+		ns, tenant, env string
+		ok              bool
+	}{
+		{"hanzo", "hanzo", "main", true},
+		{"hanzo-mainnet", "hanzo", "main", true},
+		{"hanzo-testnet", "hanzo", "test", true},
+		{"hanzo-devnet", "hanzo", "dev", true},
+		{"tenant-maxpower", "maxpower", "main", true}, // authorizes to maxpower, NOT hanzo
+		{"tenant-hanzo", "hanzo", "main", true},
+		{"tenant-", "", "", false},     // empty tenant is not a tenant
+		{"kube-system", "", "", false}, // never ours
+		{"default", "", "", false},
+		{"", "", "", false},
+		{"hanzo-evil", "", "", false}, // a look-alike suffix is not a lifecycle env
+	} {
+		tenant, env, ok := nsClass(tc.ns)
+		if tenant != tc.tenant || env != tc.env || ok != tc.ok {
+			t.Errorf("nsClass(%q) = (%q,%q,%v), want (%q,%q,%v)", tc.ns, tenant, env, ok, tc.tenant, tc.env, tc.ok)
 		}
 	}
 }
