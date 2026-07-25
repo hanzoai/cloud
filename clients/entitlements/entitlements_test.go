@@ -3,17 +3,52 @@ package entitlements
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/types"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
+
+// The cek data plane fail-closes without a master key on encryption-capable
+// builds; tests supply one process-wide (SetMasterKey is once-only). Every
+// openStore caller in this package must take it first, or the store refuses to
+// open the data plane unencrypted and the whole suite fails before it asserts
+// anything. Mirrors clients/flags/flags_test.go.
+var cekOnce sync.Once
+
+func testMasterKey(t *testing.T) {
+	t.Helper()
+	cekOnce.Do(func() {
+		k := make([]byte, 32)
+		if _, err := rand.Read(k); err != nil {
+			t.Fatalf("rng: %v", err)
+		}
+		cek.SetMasterKey(k)
+	})
+}
+
+// openTestStore opens a throwaway entitlements store for one test — the ONE way
+// this package's tests reach the store, so the master key can never be forgotten
+// at a new call site.
+func openTestStore(t *testing.T) *Store {
+	t.Helper()
+	testMasterKey(t)
+	store, err := openStore(t.TempDir() + "/entitlements.db")
+	if err != nil {
+		t.Fatalf("openStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	return store
+}
 
 // ── fakes ──────────────────────────────────────────────────────────────────────
 
@@ -55,12 +90,7 @@ func (f *fakeCommerce) CheckEntitlement(_ context.Context, orgID, productID stri
 
 func mount(t *testing.T, commerce cloud.CommerceClient) (*zip.App, *service) {
 	t.Helper()
-	store, err := openStore(t.TempDir() + "/entitlements.db")
-	if err != nil {
-		t.Fatalf("openStore: %v", err)
-	}
-	t.Cleanup(func() { _ = store.Close() })
-	s := &service{store: store, commerce: commerce, log: luxlog.New("test")}
+	s := &service{store: openTestStore(t), commerce: commerce, log: luxlog.New("test")}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Get("/v1/orgs/:org/entitlements", s.get)
 	app.Post("/v1/orgs/:org/entitlements", s.post)
@@ -124,11 +154,7 @@ func decodeEnabled(t *testing.T, body []byte) []string {
 // ── store: org isolation ────────────────────────────────────────────────────
 
 func TestStoreIsolation(t *testing.T) {
-	store, err := openStore(t.TempDir() + "/entitlements.db")
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	defer func() { _ = store.Close() }()
+	store := openTestStore(t)
 	ctx := context.Background()
 
 	if err := store.Enable(ctx, "acme", "engine", "u_acme", 100); err != nil {
@@ -174,11 +200,7 @@ func TestStoreIsolation(t *testing.T) {
 }
 
 func TestStoreApplyTransaction(t *testing.T) {
-	store, err := openStore(t.TempDir() + "/entitlements.db")
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	defer func() { _ = store.Close() }()
+	store := openTestStore(t)
 	ctx := context.Background()
 
 	_ = store.Enable(ctx, "acme", "engine", "u", 1)
@@ -303,13 +325,9 @@ func TestCommerceUnavailableFailsClosedForMemberAdd(t *testing.T) {
 func TestRemoveNeverGated(t *testing.T) {
 	// Disabling requires NO entitlement check — even with commerce nil, an org
 	// member may turn a product off.
-	store, err := openStore(t.TempDir() + "/entitlements.db")
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
+	store := openTestStore(t)
 	_ = store.Enable(context.Background(), "acme", "engine", "u", 1)
 	s := &service{store: store, commerce: nil, log: luxlog.New("test")}
-	t.Cleanup(func() { _ = store.Close() })
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Post("/v1/orgs/:org/entitlements", s.post)
 
