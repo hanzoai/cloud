@@ -91,6 +91,22 @@ type AuthorRepo struct {
 	VerifiedAt int64  `json:"verifiedAt"`
 }
 
+// AuthorOrg is one whole OWNER/org an author has claimed (e.g. github.com/acme). A
+// verified org claim COVERS every repo under that owner, so any repo the author
+// publishes there earns without a per-repo verify. OwnerURL is the canonical
+// "host/owner" form (UNIQUE across the table — an owner belongs to at most one author,
+// first-verify wins). It sits beside AuthorRepo: a deploy matches a per-repo claim OR
+// an owner-wide org claim (per-repo takes precedence).
+type AuthorOrg struct {
+	ID         string `json:"id"`
+	AuthorID   string `json:"authorId"`
+	OwnerURL   string `json:"ownerUrl"`
+	Verified   bool   `json:"verified"`
+	Method     string `json:"method"`
+	CreatedAt  int64  `json:"createdAt"`
+	VerifiedAt int64  `json:"verifiedAt"`
+}
+
 // DeployEvent is one attribution edge: a deploying org deployed a project sourced
 // from a verified author repo. UNIQUE(repo_url, project, deploying_org) makes the
 // record idempotent (a re-deploy of the same project by the same org is one edge).
@@ -204,6 +220,17 @@ CREATE TABLE IF NOT EXISTS author_repos (
 );
 CREATE INDEX IF NOT EXISTS ix_author_repos_author ON author_repos(author_id, created_at);
 
+CREATE TABLE IF NOT EXISTS author_orgs (
+  id          TEXT PRIMARY KEY,
+  author_id   TEXT NOT NULL,
+  owner_url   TEXT NOT NULL UNIQUE,
+  verified    INTEGER NOT NULL DEFAULT 0,
+  method      TEXT NOT NULL DEFAULT '',
+  created_at  INTEGER NOT NULL,
+  verified_at INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS ix_author_orgs_author ON author_orgs(author_id, created_at);
+
 CREATE TABLE IF NOT EXISTS author_deploy_events (
   id            TEXT PRIMARY KEY,
   author_id     TEXT NOT NULL,
@@ -271,16 +298,21 @@ func (s *Store) Close() error { return s.db.Close() }
 // A bare "owner/name" (no host) defaults to the first (github.com).
 var forgeHosts = []string{"github.com", "gitlab.com"}
 
-// normalizeRepo reduces any GitHub/GitLab repo reference to the canonical
-// "<host>/owner/name" (lowercased, no scheme, no .git, no trailing slash, no
-// query/fragment), host ∈ forgeHosts. BOTH sides of a deploy match go through here —
-// the author's claimed repo and hanzo.app's persisted sourceRepo — so attribution
-// never misses on a cosmetic URL difference. Returns "" for anything that isn't a
-// plausible host/owner/name (or bare owner/name → github.com).
-func normalizeRepo(raw string) string {
+// normalizeTarget reduces any GitHub/GitLab reference to its ONE canonical form and
+// reports whether it names a whole OWNER (an org/group) or a specific REPO:
+//
+//	repo:  "<host>/owner/name"   isOrg=false
+//	org:   "<host>/owner"        isOrg=true   (an explicit forge host is REQUIRED)
+//
+// Lowercased, no scheme, no .git, no trailing slash, no query/fragment, host ∈
+// forgeHosts. A bare "owner/name" (no host) still defaults to github.com as a REPO
+// (unchanged behavior); a bare single word (no host, no slash) is too ambiguous to be
+// an org and returns ("", false). Extra path segments (…/tree/main) collapse to the
+// owner/name repo. Returns ("", false) for anything that is neither.
+func normalizeTarget(raw string) (canonical string, isOrg bool) {
 	s := strings.TrimSpace(strings.ToLower(raw))
 	if s == "" {
-		return ""
+		return "", false
 	}
 	// Strip scheme + git@ ssh forms → host/path.
 	if i := strings.Index(s, "://"); i >= 0 {
@@ -297,7 +329,7 @@ func normalizeRepo(raw string) string {
 	s = strings.TrimPrefix(s, "www.")
 	s = strings.TrimSuffix(s, "/")
 	s = strings.TrimSuffix(s, ".git")
-	// Bare "owner/name" (no host) → assume github.com.
+	// Bare "owner/name" (no host) → assume github.com (always a REPO, never an org).
 	hasHost := false
 	for _, h := range forgeHosts {
 		if strings.Contains(s, h+"/") {
@@ -314,14 +346,38 @@ func normalizeRepo(raw string) string {
 			continue
 		}
 		path := strings.Trim(s[i+len(h)+1:], "/")
-		parts := strings.Split(path, "/")
-		if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
-			return ""
+		if path == "" {
+			return "", false
 		}
-		owner, name := parts[0], strings.TrimSuffix(parts[1], ".git")
-		return h + "/" + owner + "/" + name
+		parts := strings.Split(path, "/")
+		if parts[0] == "" {
+			return "", false
+		}
+		if len(parts) == 1 {
+			// "<host>/owner" — an owner-wide (org/group) target.
+			return h + "/" + parts[0], true
+		}
+		if parts[1] == "" {
+			return "", false
+		}
+		// "<host>/owner/name[/…]" — a repo target (extra segments ignored).
+		name := strings.TrimSuffix(parts[1], ".git")
+		return h + "/" + parts[0] + "/" + name, false
 	}
-	return ""
+	return "", false
+}
+
+// normalizeRepo reduces any GitHub/GitLab REPO reference to the canonical
+// "<host>/owner/name", or "" for anything that isn't one — including an ORG url, since
+// a deploy source is always a concrete repo. BOTH sides of a deploy match go through
+// here — the author's claimed repo and hanzo.app's persisted sourceRepo — so
+// attribution never misses on a cosmetic URL difference.
+func normalizeRepo(raw string) string {
+	canonical, isOrg := normalizeTarget(raw)
+	if isOrg {
+		return ""
+	}
+	return canonical
 }
 
 // splitRepo returns (host, owner, name) for a canonical repo url, or "","","",false.
@@ -339,24 +395,58 @@ func splitRepo(canonical string) (host, owner, name string, ok bool) {
 	return "", "", "", false
 }
 
-// parseRepoInput accepts a user-supplied repo string (URL or owner/name), returning
-// the canonical form or errInvalidRepo. url.Parse guards against absurd inputs.
-func parseRepoInput(raw string) (string, error) {
+// splitOrg returns (host, owner) for a canonical org url "<host>/owner", or "","",false.
+func splitOrg(canonical string) (host, owner string, ok bool) {
+	for _, h := range forgeHosts {
+		if !strings.HasPrefix(canonical, h+"/") {
+			continue
+		}
+		rest := strings.TrimPrefix(canonical, h+"/")
+		if rest == "" || strings.Contains(rest, "/") {
+			return "", "", false
+		}
+		return h, rest, true
+	}
+	return "", "", false
+}
+
+// verifyTarget is a parsed "verify" target: either a specific REPO (host/owner/name)
+// or a whole OWNER/org (host/owner, name==""). One shape or the other, never both.
+type verifyTarget struct {
+	host, owner, name string
+	canonical         string // "host/owner/name" (repo) or "host/owner" (org)
+}
+
+// isOrg reports whether the target is an owner-wide (org) claim rather than one repo.
+func (t verifyTarget) isOrg() bool { return t.name == "" }
+
+// parseTarget accepts a user-supplied string — a repo url/owner-name OR an org url —
+// and returns the canonical target or errInvalidRepo. It is the ONE entry point the
+// verify handler uses; url.Parse guards against absurd inputs.
+func parseTarget(raw string) (verifyTarget, error) {
 	if len(raw) > 512 {
-		return "", errInvalidRepo
+		return verifyTarget{}, errInvalidRepo
 	}
-	canonical := normalizeRepo(raw)
+	canonical, isOrg := normalizeTarget(raw)
 	if canonical == "" {
-		return "", errInvalidRepo
-	}
-	if _, _, _, ok := splitRepo(canonical); !ok {
-		return "", errInvalidRepo
+		return verifyTarget{}, errInvalidRepo
 	}
 	// Final sanity parse of the https form.
 	if _, err := url.Parse("https://" + canonical); err != nil {
-		return "", errInvalidRepo
+		return verifyTarget{}, errInvalidRepo
 	}
-	return canonical, nil
+	if isOrg {
+		host, owner, ok := splitOrg(canonical)
+		if !ok {
+			return verifyTarget{}, errInvalidRepo
+		}
+		return verifyTarget{host: host, owner: owner, canonical: canonical}, nil
+	}
+	host, owner, name, ok := splitRepo(canonical)
+	if !ok {
+		return verifyTarget{}, errInvalidRepo
+	}
+	return verifyTarget{host: host, owner: owner, name: name, canonical: canonical}, nil
 }
 
 // ── author records ─────────────────────────────────────────────────────────────
@@ -604,6 +694,106 @@ func (s *Store) ListRepos(ctx context.Context, authorID string, limit int) ([]Au
 // admin directory's per-row count, no N+1 fan-out).
 func (s *Store) RepoCountsByAuthor(ctx context.Context) (map[string]int, error) {
 	return s.countBy(ctx, `SELECT author_id, COUNT(*) FROM author_repos WHERE verified=1 GROUP BY author_id`)
+}
+
+// ── orgs (owner-wide claims) ─────────────────────────────────────────────────────
+
+const orgCols = `id,author_id,owner_url,verified,method,created_at,verified_at`
+
+func scanOrg(sc interface{ Scan(...any) error }) (AuthorOrg, error) {
+	var o AuthorOrg
+	var verified int
+	err := sc.Scan(&o.ID, &o.AuthorID, &o.OwnerURL, &verified, &o.Method, &o.CreatedAt, &o.VerifiedAt)
+	o.Verified = verified != 0
+	return o, err
+}
+
+func (s *Store) getOrgByURL(ctx context.Context, ownerURL string) (AuthorOrg, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT `+orgCols+` FROM author_orgs WHERE owner_url=?`, ownerURL)
+	o, err := scanOrg(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return AuthorOrg{}, errUnknownRepo
+	}
+	if err != nil {
+		return AuthorOrg{}, fmt.Errorf("get org: %w", err)
+	}
+	return o, nil
+}
+
+// UpsertVerifiedOrg records ownerURL as a VERIFIED owner-wide claim of authorID,
+// idempotently. owner_url is UNIQUE: if it already belongs to THIS author the row is
+// refreshed (method/verified_at updated); if it belongs to ANOTHER author the insert
+// conflicts and ownership is refused via errOrgOwned. Mirrors UpsertVerifiedRepo —
+// first-verify wins. Returns (org, created).
+func (s *Store) UpsertVerifiedOrg(ctx context.Context, id, authorID, ownerURL, method string, now int64) (AuthorOrg, bool, error) {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO author_orgs (id, author_id, owner_url, verified, method, created_at, verified_at)
+		 VALUES (?,?,?,1,?,?,?)`,
+		id, authorID, ownerURL, method, now, now)
+	if err == nil {
+		o, gerr := s.getOrgByURL(ctx, ownerURL)
+		return o, true, gerr
+	}
+	if !isUnique(err) {
+		return AuthorOrg{}, false, fmt.Errorf("upsert org: %w", err)
+	}
+	// Org row exists. Only the OWNING author may (re)verify it.
+	existing, gerr := s.getOrgByURL(ctx, ownerURL)
+	if gerr != nil {
+		return AuthorOrg{}, false, gerr
+	}
+	if existing.AuthorID != authorID {
+		return AuthorOrg{}, false, errOrgOwned
+	}
+	if _, uerr := s.db.ExecContext(ctx,
+		`UPDATE author_orgs SET verified=1, method=?, verified_at=? WHERE owner_url=?`,
+		method, now, ownerURL); uerr != nil {
+		return AuthorOrg{}, false, fmt.Errorf("re-verify org: %w", uerr)
+	}
+	o, gerr := s.getOrgByURL(ctx, ownerURL)
+	return o, false, gerr
+}
+
+// errOrgOwned signals an owner already verified by a DIFFERENT author (409).
+var errOrgOwned = errors.New("authors: org already claimed by another author")
+
+// VerifiedOrgForURL resolves a canonical REPO url to a VERIFIED owner-wide claim that
+// COVERS it: it derives the repo's "host/owner" and looks up an author_orgs row. This
+// is the org arm of deploy attribution — a repo with no per-repo claim still earns when
+// its owner is a verified org. Returns errUnknownRepo (no claim) / errRepoNotVerified
+// (claim exists but unverified), matching VerifiedRepoForURL so the deploy path treats
+// both arms uniformly.
+func (s *Store) VerifiedOrgForURL(ctx context.Context, repoURL string) (AuthorOrg, error) {
+	host, owner, _, ok := splitRepo(repoURL)
+	if !ok {
+		return AuthorOrg{}, errUnknownRepo
+	}
+	o, err := s.getOrgByURL(ctx, host+"/"+owner)
+	if err != nil {
+		return AuthorOrg{}, err
+	}
+	if !o.Verified {
+		return AuthorOrg{}, errRepoNotVerified
+	}
+	return o, nil
+}
+
+// ListOrgs returns an author's claimed owner-wide orgs, newest-first, bounded.
+func (s *Store) ListOrgs(ctx context.Context, authorID string, limit int) ([]AuthorOrg, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+orgCols+` FROM author_orgs WHERE author_id=? ORDER BY created_at DESC LIMIT ?`, authorID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list orgs: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]AuthorOrg, 0, 4)
+	for rows.Next() {
+		o, err := scanOrg(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan org: %w", err)
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
 }
 
 // ── deploy events (attribution edges) ──────────────────────────────────────────
