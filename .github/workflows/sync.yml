@@ -1,0 +1,54 @@
+name: Sync to Hanzo Git
+# Tells git.hanzo.ai a push happened. It runs ZERO CI — the native pipeline
+# (`.hanzo/workflows/deploy.yml`: BuildKit → ghcr.io/hanzoai/cloud:<sha> →
+# operator CR patch) is the ONE build/publish/deploy path for this repo.
+#
+# WHY THIS REPO IS NOT YET SINGLE-FILE. The law is one file here; cloud still
+# carries `cicd.yml` (test gates + the cloud-flags image, via hanzoai/ci) and
+# `containment.yml` (the Stage-1 byzantine-ceremony guard: no release binary may
+# link clients/controlplane or spoof testing.Testing()). They stay until the
+# native side can actually run, and today it cannot — measured against the live
+# forge: hanzoai/cloud is a Gitea PULL MIRROR with Actions DISABLED
+# (`mirror: true`, `has_actions: false`), so `.hanzo/workflows/*` has never
+# executed a single run there. Deleting the GitHub gates now would not move CI;
+# it would delete it, and the containment gate is a security control.
+#
+# The unblock is one act on the forge, not a code change: convert
+# hanzoai/cloud from pull mirror to canonical and enable Actions
+# (hanzoai/.github `scripts/forge-migrate.sh convert --repo hanzoai/cloud`).
+# The moment a native run appears, cicd.yml and containment.yml move to
+# `.hanzo/workflows/` and this becomes the only file in this directory.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+concurrency:
+  group: sync-to-hanzo-git
+  cancel-in-progress: true
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Tell git.hanzo.ai to pull main now
+        env:
+          # Instance token for git.hanzo.ai (repo secret; the value lives in KMS
+          # at hanzo/prod:/git/admin-token). Absent ⇒ the timer tick still syncs.
+          HANZO_GIT_TOKEN: ${{ secrets.HANZO_GIT_TOKEN }}
+        run: |
+          set -uo pipefail
+          if [ -z "${HANZO_GIT_TOKEN:-}" ]; then
+            echo "HANZO_GIT_TOKEN unset — native sync picks this push up on its next tick."
+            exit 0
+          fi
+          # git.hanzo.ai's own software API is /api/v1 (upstream forge surface,
+          # kept verbatim) — our /v1-only law governs Hanzo services, not this host.
+          if curl -fsS --max-time 20 --retry 2 --retry-delay 3 -X POST \
+               -H "Authorization: token ${HANZO_GIT_TOKEN}" \
+               -H "Content-Type: application/json" \
+               "https://git.hanzo.ai/api/v1/repos/hanzoai/cloud/actions/workflows/sync-from-github.yml/dispatches" \
+               -d '{"ref":"main"}'; then
+            echo "native sync dispatched — build/deploy runs on our runners"
+          else
+            echo "dispatch failed (non-fatal) — the 10-minute timer tick converges"
+          fi
