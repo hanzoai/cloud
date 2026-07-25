@@ -31,11 +31,13 @@
 // exporter is ported onto upstream ch-go. See LLM.md.
 //
 // Safety posture (this touches a LIVE, SHARED telemetry store):
-//   - OFF by default. Enabled only when CLOUD_OTLP_INGEST_ENABLED is truthy AND a
-//     datastore DSN is set. Merging/deploying this is inert until the flag flips.
-//   - Fail-soft: any construction error logs and returns nil, leaving the
-//     standalone collector as the ingest path — activating this can never take
-//     cloud down (mirrors embed.go's proxy fallback posture).
+//   - Bound by CAPABILITY, not by a flag: ingest runs exactly when a datastore
+//     DSN is configured, because the DSN is the thing it writes to. There is no
+//     separate on/off env — a boolean that could silently disable the fleet's
+//     only ingest path is how every agent ended up in connection-refused with
+//     its logs discarded (2026-07-25).
+//   - Fail-soft: any construction error logs and returns nil, so a bad telemetry
+//     config can never take cloud down (mirrors embed.go's proxy fallback posture).
 //   - Registered with a ShutdownFunc so the collector flushes on graceful stop.
 package o11y
 
@@ -83,32 +85,17 @@ const defaultEnvironment = "production"
 // reach it, mirroring embed.go's embeddedRuntime. Shutdown() signals Run() to return.
 var embeddedIngest *otelcol.Collector
 
-// ingestEnabled reports whether the operator has opted in. Fail-closed: unset or
-// any non-truthy value keeps the embed off and the standalone collector live.
-func ingestEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("CLOUD_OTLP_INGEST_ENABLED"))) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
-	}
-}
-
-// mountIngest constructs and starts the in-process ingest collector when enabled.
-// Called by mountO11y (o11y.go). It binds only the OTLP receiver sockets (no
-// /v1/o11y/* Fiber route), so it is order-independent. Fail-soft at every branch: a
-// disabled flag, a missing DSN, or a construction error all return nil, leaving the
-// standalone collector as the ingest path.
+// mountIngest constructs and starts the in-process ingest collector. Called by
+// mountO11y (o11y.go). It binds only the OTLP receiver sockets (no /v1/o11y/*
+// Fiber route), so it is order-independent. The datastore DSN is the single
+// precondition — it is where the collector writes, so without it there is
+// nothing to run. Fail-soft: a missing DSN or a construction error returns nil.
 func mountIngest(deps cloud.Deps) error {
 	log := deps.Logger.New("subsystem", "o11y-otlp-ingest")
 
-	if !ingestEnabled() {
-		log.Info("OTLP ingest disabled (set CLOUD_OTLP_INGEST_ENABLED=true to fold otel-collector into cloud)")
-		return nil
-	}
 	dsn := embeddedDSN()
 	if dsn == "" {
-		log.Warn("OTLP ingest enabled but no datastore DSN set; skipping (needs O11Y_TELEMETRYSTORE_DATASTORE_DSN)")
+		log.Warn("OTLP ingest not started: no datastore DSN (needs O11Y_TELEMETRYSTORE_DATASTORE_DSN)")
 		return nil
 	}
 
