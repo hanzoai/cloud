@@ -127,12 +127,9 @@ func (s *session) projectNotifyContexts(space map[string]any, touch int64) {
 			}
 			continue
 		}
-		ctxSpace := "core:space:Workspace"
-		if ps, _ := s.store.get(s.org, s.workspace, "person-space:person-"+user); ps != nil {
-			ctxSpace = str(ps["_id"])
-		}
+		ctxSpace := s.personSpaceOf(user)
 		ctx := map[string]any{
-			"_id": "dnc:" + user + ":" + spaceID, "_class": clDocNotifyContext, "space": ctxSpace,
+			"_id": dncID(user, spaceID), "_class": clDocNotifyContext, "space": ctxSpace,
 			"user": user, "objectId": spaceID, "objectClass": space["_class"], "objectSpace": space["space"],
 			"isPinned": false, "hidden": false, "lastUpdateTimestamp": now,
 			"modifiedBy": acctSystem, "modifiedOn": now, "createdBy": acctSystem, "createdOn": now,
