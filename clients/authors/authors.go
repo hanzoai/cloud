@@ -79,11 +79,11 @@ import (
 // payout lands in the commerce Credit/trial bucket (grant:* → Credit per DepositKind),
 // distinct from grant:referral / grant:affiliate / grant:admin only by its tag.
 const (
-	// defaultShareBps is the royalty a new author earns, in basis points (2000 = 20%
-	// of a deploying org's metered platform spend). The ONE royalty constant — 20%
-	// is the canonical creator share across the OSS marketplace (oss.hanzo.ai, the
-	// platform templates page, and the "Earn 20%" CTA). Was 2500/25%; the flow
-	// comment said 5% — both reconciled to the ONE decided value, 20%.
+	// defaultShareBps is the internal default royalty rate a new author earns, in basis
+	// points (2000 = 20% of a deploying org's metered platform spend), overridable
+	// per-author at approval. It is the ONE royalty constant the accrual math reads;
+	// any public-facing rate is presented by the frontend, not promised here. Was
+	// 2500/25%; a stale flow comment said 5% — both reconciled to this ONE default.
 	defaultShareBps int64 = 2000
 	// bpsDenom converts basis points to a fraction (spend × shareBps / 10000).
 	bpsDenom int64 = 10000
@@ -98,6 +98,12 @@ const (
 	// verifyFile is the repo-root file the file-verification method reads; it must
 	// contain the author's verify code on the repo's default branch.
 	verifyFile = "hanzo.json"
+	// orgProofRepo is the owner-wide control artifact an ORG claim is proven against.
+	// GitHub/GitLab expose a special "<owner>/.github" repository for owner-level
+	// config, so proving ownership of it — the SAME OAuth admin/push check OR a
+	// hanzo.json with the verify code on its default branch — proves control of the
+	// whole owner. No new proof primitive, exactly as strong as a per-repo claim.
+	orgProofRepo = ".github"
 )
 
 // verifyBranches are the default-branch names the file method probes, in order.
@@ -228,6 +234,10 @@ func myAuthors(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list repos: %v", err)
 	}
+	orgs, err := s.State.store.ListOrgs(ctx, a.ID, repoLimit)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "list orgs: %v", err)
+	}
 	deploys, err := s.State.store.ListDeploys(ctx, a.ID, deployLimit)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list deploys: %v", err)
@@ -253,6 +263,7 @@ func myAuthors(s *cloud.Service[state], c *zip.Ctx) error {
 		"shareBps":      a.ShareBps,
 		"badgeBase":     s.State.badgeBase,
 		"repos":         repoViews(repos, s.State.badgeBase),
+		"orgs":          orgViews(orgs, s.State.badgeBase),
 		"deploys":       deployViews(deploys),
 		"accruedCents":  a.AccruedCents,
 		"pendingCents":  a.PendingCents(),
@@ -335,10 +346,13 @@ type verifyRepoRequest struct {
 	RepoURL string `json:"repoUrl"`
 }
 
-// verifyRepo verifies the caller owns a repo and records it as a verified author repo.
-// Ownership is proven by an IAM-linked GitHub token (admin/push permission) OR a
-// hanzo.json on the default branch carrying the author's verify code. The author must
-// have connected first.
+// verifyRepo verifies the caller owns a REPO or a whole OWNER (org) and records the
+// verified claim. A repo url (github.com/owner/name) records a per-repo claim; an org
+// url (github.com/owner, no repo segment) records an owner-wide claim covering every
+// repo under that owner. Ownership is proven the SAME two ways in both cases — an
+// IAM-linked forge token with admin/push permission OR a hanzo.json carrying the
+// author's verify code on the default branch (for an org, of the owner's .github
+// control repo). The author must have connected first.
 func verifyRepo(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
@@ -348,9 +362,9 @@ func verifyRepo(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
-	repoURL, perr := parseRepoInput(body.RepoURL)
+	target, perr := parseTarget(body.RepoURL)
 	if perr != nil {
-		return zip.ErrBadRequest("repoUrl must be a GitHub or GitLab repo (github.com/owner/name or gitlab.com/owner/name)")
+		return zip.ErrBadRequest("repoUrl must be a GitHub or GitLab repo OR owner — github.com/owner or github.com/owner/name (gitlab.com too)")
 	}
 	ctx := c.Context()
 
@@ -362,32 +376,72 @@ func verifyRepo(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "load author: %v", err)
 	}
 
-	host, owner, name, _ := splitRepo(repoURL)
+	if target.isOrg() {
+		return verifyOrg(s, ctx, c, a, org, target)
+	}
+
+	host, owner, name := target.host, target.owner, target.name
 	method, verified := proveOwnership(s, ctx, a, org, strings.TrimSpace(c.User()), host, owner, name)
 	if !verified {
 		return zip.Errorf(http.StatusUnprocessableEntity,
 			"could not verify ownership of %s — grant the Hanzo %s app OR add %s containing your verify code (%s) to the default branch",
-			repoURL, providerForHost(host), verifyFile, a.VerifyCode)
+			target.canonical, providerForHost(host), verifyFile, a.VerifyCode)
 	}
 
 	repoID, err := genID("arp")
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	repo, created, err := s.State.store.UpsertVerifiedRepo(ctx, repoID, a.ID, repoURL, method, time.Now().Unix())
+	repo, created, err := s.State.store.UpsertVerifiedRepo(ctx, repoID, a.ID, target.canonical, method, time.Now().Unix())
 	if err != nil {
 		if err == errRepoOwned {
 			return zip.ErrConflict("that repo is already verified by another author")
 		}
 		return zip.Errorf(http.StatusInternalServerError, "record repo: %v", err)
 	}
-	emitAudit(s, ctx, "author.verify_repo", a, map[string]any{"repoUrl": repoURL, "method": method})
+	emitAudit(s, ctx, "author.verify_repo", a, map[string]any{"repoUrl": target.canonical, "method": method})
 	status := http.StatusOK
 	if created {
 		status = http.StatusCreated
 	}
 	return c.JSON(status, map[string]any{
 		"repo":    repoViewOf(repo, s.State.badgeBase),
+		"created": created,
+	})
+}
+
+// verifyOrg proves an OWNER-WIDE claim and records it. Ownership of the whole owner is
+// proven the SAME two ways as a repo — reusing proveOwnership against the owner's
+// canonical control repo "<owner>/.github" (OAuth admin/push on it, OR a hanzo.json
+// with the verify code on its default branch). The ownership check is NOT weakened: an
+// owner the caller can't prove is 422, exactly like an unprovable repo. A verified org
+// claim covers every repo the author publishes under that owner.
+func verifyOrg(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, a Author, org string, t verifyTarget) error {
+	method, verified := proveOwnership(s, ctx, a, org, strings.TrimSpace(c.User()), t.host, t.owner, orgProofRepo)
+	if !verified {
+		return zip.Errorf(http.StatusUnprocessableEntity,
+			"could not verify ownership of the %s owner %q — grant the Hanzo %s app admin on %s/%s OR add %s carrying your verify code (%s) to its default branch",
+			providerForHost(t.host), t.owner, providerForHost(t.host), t.owner, orgProofRepo, verifyFile, a.VerifyCode)
+	}
+
+	orgID, err := genID("aog")
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+	}
+	claim, created, err := s.State.store.UpsertVerifiedOrg(ctx, orgID, a.ID, t.canonical, method, time.Now().Unix())
+	if err != nil {
+		if err == errOrgOwned {
+			return zip.ErrConflict("that owner is already verified by another author")
+		}
+		return zip.Errorf(http.StatusInternalServerError, "record org: %v", err)
+	}
+	emitAudit(s, ctx, "author.verify_org", a, map[string]any{"ownerUrl": t.canonical, "method": method})
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	return c.JSON(status, map[string]any{
+		"org":     orgViewOf(claim, s.State.badgeBase),
 		"created": created,
 	})
 }
@@ -481,7 +535,11 @@ func recordDeploy(s *cloud.Service[state], c *zip.Ctx) error {
 		ensureMaintainedRepo(s, ctx, repoURL, time.Now().Unix())
 	}
 
-	repo, err := s.State.store.VerifiedRepoForURL(ctx, repoURL)
+	// Attribution resolves in ONE of two arms — per-repo first, then owner-wide: a repo
+	// with its OWN verified claim earns for that author; otherwise a repo whose OWNER is
+	// a verified org claim earns for the org's author (so every repo under a verified
+	// owner earns without a per-repo verify). Neither → an honest recorded:false no-op.
+	authorID, err := resolveDeployAuthor(s, ctx, repoURL)
 	if err == errUnknownRepo || err == errRepoNotVerified {
 		return c.JSON(http.StatusOK, map[string]any{"recorded": false, "reason": "repo is not a verified author repo"})
 	}
@@ -493,11 +551,11 @@ func recordDeploy(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	edge, created, err := s.State.store.RecordDeploy(ctx, id, repo.AuthorID, repoURL, project, deployingOrg, time.Now().Unix())
+	edge, created, err := s.State.store.RecordDeploy(ctx, id, authorID, repoURL, project, deployingOrg, time.Now().Unix())
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "record deploy: %v", err)
 	}
-	author, _ := s.State.store.GetByID(ctx, repo.AuthorID)
+	author, _ := s.State.store.GetByID(ctx, authorID)
 	self := author.Org == deployingOrg
 	status := http.StatusOK
 	if created {
@@ -513,6 +571,27 @@ func recordDeploy(s *cloud.Service[state], c *zip.Ctx) error {
 		"deployId":  edge.ID,
 		"createdAt": edge.CreatedAt,
 	})
+}
+
+// resolveDeployAuthor returns the author a deployed repo earns for, trying the two
+// attribution arms in order: (1) a per-repo verified claim, then (2) an owner-wide
+// verified org claim covering the repo. Per-repo wins, so a specifically-claimed repo
+// always attributes to its own author. Returns errUnknownRepo / errRepoNotVerified when
+// neither arm matches (the deploy is an honest no-op).
+func resolveDeployAuthor(s *cloud.Service[state], ctx context.Context, repoURL string) (string, error) {
+	repo, err := s.State.store.VerifiedRepoForURL(ctx, repoURL)
+	if err == nil {
+		return repo.AuthorID, nil
+	}
+	if err != errUnknownRepo && err != errRepoNotVerified {
+		return "", err
+	}
+	// No per-repo claim — fall back to an owner-wide org claim covering this repo.
+	claim, oerr := s.State.store.VerifiedOrgForURL(ctx, repoURL)
+	if oerr != nil {
+		return "", oerr
+	}
+	return claim.AuthorID, nil
 }
 
 // ── admin surface (SuperAdmin, fail-closed) ────────────────────────────────
@@ -1065,6 +1144,33 @@ func repoViews(rs []AuthorRepo, badgeBase string) []repoView {
 	out := make([]repoView, 0, len(rs))
 	for _, r := range rs {
 		out = append(out, repoViewOf(r, badgeBase))
+	}
+	return out
+}
+
+// orgView is one row of an author's verified OWNER-WIDE claims: the owner url + a
+// ready-to-paste badge deep-linking that owner's Hanzo template import.
+type orgView struct {
+	OwnerURL      string `json:"ownerUrl"`
+	Verified      bool   `json:"verified"`
+	Method        string `json:"method,omitempty"`
+	BadgeMarkdown string `json:"badgeMarkdown"`
+	VerifiedAt    int64  `json:"verifiedAt"`
+	CreatedAt     int64  `json:"createdAt"`
+}
+
+func orgViewOf(o AuthorOrg, badgeBase string) orgView {
+	return orgView{
+		OwnerURL: o.OwnerURL, Verified: o.Verified, Method: o.Method,
+		BadgeMarkdown: badgeMarkdown(badgeBase, o.OwnerURL),
+		VerifiedAt:    o.VerifiedAt, CreatedAt: o.CreatedAt,
+	}
+}
+
+func orgViews(claims []AuthorOrg, badgeBase string) []orgView {
+	out := make([]orgView, 0, len(claims))
+	for _, o := range claims {
+		out = append(out, orgViewOf(o, badgeBase))
 	}
 	return out
 }
