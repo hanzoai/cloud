@@ -1,5 +1,5 @@
 name: Sync from GitHub
-# git.hanzo.ai is canonical and builds (deploy.yml); development also lands on
+# git.hanzo.ai is canonical and builds (cicd.yml); development also lands on
 # github.com/hanzoai/cloud. ONE deterministic direction: an in-cluster PULL. The
 # runner reaches both ends (GitHub outbound, this Gitea via the instance URL
 # actions/checkout already uses), so the sync has no ingress dependency.
@@ -38,13 +38,13 @@ jobs:
             echo "fast-forwarding $LOCAL -> $REMOTE"
             git push origin "$REMOTE:refs/heads/main"
             # A push made with the workflow token does not trigger workflows, so
-            # synced commits would never build. Dispatch the deploy explicitly.
+            # synced commits would never build. Dispatch the pipeline explicitly.
             curl -fsS --max-time 20 -X POST \
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -H "Content-Type: application/json" \
-              "${{ github.server_url }}/api/v1/repos/${{ github.repository }}/actions/workflows/deploy.yml/dispatches" \
+              "${{ github.server_url }}/api/v1/repos/${{ github.repository }}/actions/workflows/cicd.yml/dispatches" \
               -d '{"ref":"main"}' \
-              && echo "deploy dispatched" || echo "deploy dispatch failed (non-fatal — next direct push builds)"
+              && echo "CI/CD dispatched" || echo "CI/CD dispatch failed (non-fatal — next direct push builds)"
           elif git merge-base --is-ancestor "$REMOTE" "$LOCAL"; then
             echo "canonical is AHEAD of GitHub — nothing to pull (never force from here)."
           else
