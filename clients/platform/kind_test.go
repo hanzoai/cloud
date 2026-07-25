@@ -2,6 +2,7 @@ package platform
 
 import (
 	"context"
+	"github.com/hanzoai/cloud/clients/k8s"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,8 +14,8 @@ import (
 // written as.
 func TestAppsGVR(t *testing.T) {
 	want := schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "apps"}
-	if appsGVR != want {
-		t.Fatalf("appsGVR = %v, want %v", appsGVR, want)
+	if k8s.Apps != want {
+		t.Fatalf("k8s.Apps = %v, want %v", k8s.Apps, want)
 	}
 }
 
@@ -51,7 +52,7 @@ func TestRedeployPatchesTheAppInPlace(t *testing.T) {
 	if err := k.applyService(ctx, "maxpower", "proj", Application{Slug: "api", Replicas: 1}, "ghcr.io/hanzoai/nginx:1.27"); err != nil {
 		t.Fatalf("applyService redeploy: %v", err)
 	}
-	obj, err := k.dyn.Resource(appsGVR).Namespace("tenant-maxpower").Get(ctx, "api", metav1.GetOptions{})
+	obj, err := k.dyn.Resource(k8s.Apps).Namespace("tenant-maxpower").Get(ctx, "api", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("App CR: %v", err)
 	}
@@ -76,7 +77,7 @@ func TestDeleteRemovesTheApp(t *testing.T) {
 	if err := k.deleteService(ctx, "maxpower", "api"); err != nil {
 		t.Fatalf("deleteService: %v", err)
 	}
-	if _, err := k.dyn.Resource(appsGVR).Namespace("tenant-maxpower").Get(ctx, "api", metav1.GetOptions{}); err == nil {
+	if _, err := k.dyn.Resource(k8s.Apps).Namespace("tenant-maxpower").Get(ctx, "api", metav1.GetOptions{}); err == nil {
 		t.Error("App CR survived the delete — it would rebuild the app the tenant deleted")
 	}
 }
@@ -104,8 +105,8 @@ func TestResolveCRFindsTheApp(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("resolveCR(new): found=%v err=%v", found, err)
 	}
-	if gvr != appsGVR {
-		t.Errorf("resolveCR(new) = %v, want appsGVR", gvr)
+	if gvr != k8s.Apps {
+		t.Errorf("resolveCR(new) = %v, want k8s.Apps", gvr)
 	}
 	if _, found, err := k.resolveCR(ctx, "tenant-maxpower", "ghost"); found || err != nil {
 		t.Errorf("resolveCR(ghost): found=%v err=%v, want found=false err=nil", found, err)

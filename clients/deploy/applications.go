@@ -7,6 +7,7 @@ package deploy
 
 import (
 	"context"
+	"github.com/hanzoai/cloud/clients/k8s"
 	"net/http"
 	"sort"
 	"strings"
@@ -150,7 +151,7 @@ func syncStatus(declared, running string) string {
 // declared/health/phase.
 func runningVersions(s *cloud.Service[state], ctx context.Context, ns string) map[string]string {
 	out := map[string]string{}
-	list, err := s.State.dyn.Resource(deploymentsGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
+	list, err := s.State.dyn.Resource(k8s.Deployments).Namespace(ns).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		s.Log.Warn("list deployments for running version failed", "namespace", ns, "err", err)
 		return out

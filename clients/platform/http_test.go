@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud/clients/k8s"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -56,9 +57,9 @@ func mountApp(t *testing.T) *zip.App {
 func fakeK8s(objs ...runtime.Object) *k8sClient {
 	scheme := runtime.NewScheme()
 	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
-		appsGVR:           "AppList",
+		k8s.Apps:          "AppList",
 		jobsGVR:           "JobList",
-		namespacesGVR:     "NamespaceList",
+		k8s.Namespaces:    "NamespaceList",
 		resourceQuotasGVR: "ResourceQuotaList",
 		limitRangesGVR:    "LimitRangeList",
 		kmsSecretsGVR:     "KMSSecretList",
@@ -228,7 +229,7 @@ func TestHTTPDeploySucceedsIntoTenantNamespace(t *testing.T) {
 	}
 
 	// The operator Service CR must exist in tenant-maxpower with the app's image.
-	obj, err := k.dyn.Resource(appsGVR).Namespace("tenant-maxpower").Get(context.Background(), "api", metav1.GetOptions{})
+	obj, err := k.dyn.Resource(k8s.Apps).Namespace("tenant-maxpower").Get(context.Background(), "api", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Service CR not created in tenant-maxpower: %v", err)
 	}
