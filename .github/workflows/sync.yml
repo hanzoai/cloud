@@ -27,7 +27,12 @@ concurrency:
   cancel-in-progress: true
 jobs:
   nudge:
-    runs-on: ubuntu-latest
+    # OUR pool, not ubuntu-latest: GitHub-hosted minutes are billing-blocked for
+    # this org ("The job was not started because recent account payments have
+    # failed or your spending limit needs to be increased" — measured on this
+    # repo, 2026-07-25). One bounded curl on the build pool always runs; a
+    # GitHub-hosted one is a coin flip on the invoice.
+    runs-on: hanzo-build-linux-amd64
     timeout-minutes: 5
     steps:
       - name: Tell git.hanzo.ai to pull main now
