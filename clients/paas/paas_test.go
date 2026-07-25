@@ -414,3 +414,34 @@ func TestNsClassIsTotalAndConfining(t *testing.T) {
 		}
 	}
 }
+
+// TestDiscoverNamespacesAddsTenantsAndNeverBlanks pins the two properties that make
+// discovery safe. It only ever ADDS to the first-party set — an empty or failed
+// listing degrades to today's behavior rather than blanking the board (the bug this
+// test was written for) — and a namespace nsClass does not recognise can never enter
+// the scan set, so the reader still cannot reach beyond the platform tier.
+func TestDiscoverNamespacesAddsTenantsAndNeverBlanks(t *testing.T) {
+	ns := func(name string) *unstructured.Unstructured {
+		return &unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "v1", "kind": "Namespace",
+			"metadata": map[string]any{"name": name},
+		}}
+	}
+	// no namespaces visible at all → must still be the full first-party set
+	if got := discoverNamespaces(fakeService(), t.Context()); !reflect.DeepEqual(got, scanOrder()) {
+		t.Errorf("empty discovery = %v, want first-party %v (must never blank)", got, scanOrder())
+	}
+	got := discoverNamespaces(fakeService(
+		ns("tenant-maxpower"), ns("tenant-hanzo"),
+		ns("kube-system"), ns("default"), // never ours
+	), t.Context())
+	want := append(append([]string(nil), scanOrder()...), "tenant-hanzo", "tenant-maxpower")
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("discoverNamespaces = %v, want %v", got, want)
+	}
+	for _, n := range got {
+		if _, _, ok := nsClass(n); !ok {
+			t.Errorf("unclassified namespace %q entered the scan set", n)
+		}
+	}
+}
