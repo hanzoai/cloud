@@ -16,7 +16,11 @@ package admin
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 )
 
@@ -92,5 +96,40 @@ func TestScope_LuxAdminCannotReachDO(t *testing.T) {
 			t.Errorf("Lux WL-tenant admin GET %s: got %d, want 403 — a WL tenant must never reach a fleet DO god-view (body=%s)",
 				path, resp.StatusCode, body)
 		}
+	}
+}
+
+// TestScope_LuxAdminSpendCapWriteHardPinned pins the highest-value cross-tenant vector — a
+// STATE-CHANGING write. A Lux admin who tries to set a spend cap on Zoo (POST
+// /v1/admin/spend-caps?org=zoo) must have the write hard-pinned to owner=lux downstream:
+// the ?org= is ignored for a non-super caller (targetOrg → sc.Orgs[0]). We record the
+// X-Org-Id commerce actually receives and assert it is lux, never zoo. The read-path pins
+// are covered above; this closes the write path.
+func TestScope_LuxAdminSpendCapWriteHardPinned(t *testing.T) {
+	var mu sync.Mutex
+	var wroteOrg string
+	commerce := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/v1/billing/spend-alerts") && r.Method == http.MethodPost {
+			mu.Lock()
+			wroteOrg = r.Header.Get("X-Org-Id") // commerce.Forward pins the target org here
+			mu.Unlock()
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"status":"ok"}`)
+	}))
+	defer commerce.Close()
+
+	do, s, _ := mountService(t, "http://127.0.0.1:0", commerce.URL, "")
+	s.State.WLTenants = map[string]bool{"lux": true}
+
+	resp, body := do("POST", "/v1/admin/spend-caps?org=zoo", luxAdminHdr)
+	if resp.StatusCode == http.StatusForbidden {
+		t.Fatalf("admitted Lux WL admin must reach the scoped spend-caps WRITE, got 403 (%s)", body)
+	}
+	mu.Lock()
+	org := wroteOrg
+	mu.Unlock()
+	if org != "lux" {
+		t.Fatalf("Lux admin spend-cap WRITE targeted org=%q, want lux — cross-brand WRITE into Zoo (?org=zoo honored)!", org)
 	}
 }
