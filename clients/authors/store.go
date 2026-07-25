@@ -958,9 +958,16 @@ func scanLedger(sc interface{ Scan(...any) error }) (LedgerRow, error) {
 	return r, err
 }
 
-// ListLedger returns an author's royalty ledger rows, newest-first, bounded.
-func (s *Store) ListLedger(ctx context.Context, authorID string, limit int) ([]LedgerRow, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+ledgerCols+` FROM author_ledger WHERE author_id=? ORDER BY created_at DESC LIMIT ?`, authorID, limit)
+// ListLedger returns an author's royalty ledger rows, newest-first, bounded. period
+// narrows to ONE accrual bucket (the YYYY-MM periodKey mints); "" is every period.
+func (s *Store) ListLedger(ctx context.Context, authorID, period string, limit int) ([]LedgerRow, error) {
+	q := `SELECT ` + ledgerCols + ` FROM author_ledger WHERE author_id=?`
+	args := []any{authorID}
+	if period != "" {
+		q += ` AND period=?`
+		args = append(args, period)
+	}
+	rows, err := s.db.QueryContext(ctx, q+` ORDER BY created_at DESC LIMIT ?`, append(args, limit)...)
 	if err != nil {
 		return nil, fmt.Errorf("list ledger: %w", err)
 	}
@@ -974,6 +981,18 @@ func (s *Store) ListLedger(ctx context.Context, authorID string, limit int) ([]L
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// LedgerTotals foots the WHOLE ledger — every row, every period. The reconciliation
+// it feeds must never be computed from a paged window, or a truncated read would
+// silently claim the books balance.
+func (s *Store) LedgerTotals(ctx context.Context, authorID string) (rows int, earningCents int64, err error) {
+	if err = s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*), COALESCE(SUM(earning_cents),0) FROM author_ledger WHERE author_id=?`,
+		authorID).Scan(&rows, &earningCents); err != nil {
+		return 0, 0, fmt.Errorf("ledger totals: %w", err)
+	}
+	return rows, earningCents, nil
 }
 
 // AuthorsDeployedBy returns the DISTINCT APPROVED authors whose VERIFIED repo the
