@@ -57,6 +57,12 @@ func serveWeb(s *cloud.Service[*state], c *zip.Ctx, in AskRequest, q string) err
 		return cloud.DenyResource(c, err)
 	}
 
+	// SYNTHESIS MODEL CHAIN — the mode's capable default (research/deep → a strong
+	// model, search/news → a fast one), caller/env-overridable, with fallbacks so a
+	// single model's outage degrades to the next available model, never a weak or
+	// empty answer. models is guaranteed non-empty by synthModels.
+	models := synthModels(in.Model, m, s.State.model)
+
 	// Everything the loop needs, OWNED (cloned): the SendStreamWriter callback
 	// outlives the recycled Ctx, and the async meter retains these past the request.
 	// principal.Org/HomeOrg/Project/ProjectScope already clone; clone the rest.
@@ -64,7 +70,8 @@ func serveWeb(s *cloud.Service[*state], c *zip.Ctx, in AskRequest, q string) err
 		q:            q,
 		webQuery:     buildWebQuery(q, m, in.Sources),
 		mode:         m,
-		model:        pickModel(in.Model, s.State.model),
+		model:        models[0],
+		fallbacks:    models[1:],
 		language:     strings.TrimSpace(in.Language),
 		maxSources:   clampPositive(in.MaxSources, m.maxSources),
 		maxQueries:   clampPositive(in.MaxQueries, m.maxQueries),
@@ -115,7 +122,8 @@ func serveWeb(s *cloud.Service[*state], c *zip.Ctx, in AskRequest, q string) err
 type webParams struct {
 	q, webQuery  string
 	mode         webMode
-	model        string
+	model        string   // primary synthesis model (chain head)
+	fallbacks    []string // synthesis models tried, in order, after model
 	language     string
 	maxSources   int
 	maxQueries   int
@@ -231,7 +239,7 @@ func planQueries(s *cloud.Service[*state], ctx context.Context, p webParams) ([]
 		"Break the user's question into up to %d focused web-search queries that together cover it. "+
 			"Reply ONLY as compact JSON: {\"queries\":[\"...\"]}.\n\nQuestion: %s",
 		p.maxQueries, p.q)
-	resp := chat(s, ctx, p, prompt)
+	resp := chat(s, ctx, p, p.model, prompt)
 	if resp == nil {
 		return nil, nil
 	}
@@ -242,18 +250,24 @@ func planQueries(s *cloud.Service[*state], ctx context.Context, p webParams) ([]
 	return qs, resp
 }
 
-// synthesize produces the grounded answer over the numbered sources. On failure it
-// returns an honest degraded message (never a fabricated answer) and nil usage.
+// synthesize produces the grounded answer over the numbered sources, trying the
+// primary model then each fallback until one returns a real completion. A model
+// outage — a transport error OR an empty completion — advances to the next capable
+// model instead of aborting, so a single model being down never degrades the answer
+// (the whole point of the chain). Only when EVERY model fails does it return an
+// honest note (never a fabricated answer) and NIL usage, so runWeb bills no charge
+// for a non-answer.
 func synthesize(s *cloud.Service[*state], ctx context.Context, p webParams, srcs []webSource) (string, *cloud.ChatResponse) {
 	prompt := p.system +
 		"\nToday is " + time.Now().UTC().Format("2006-01-02") + "." +
 		"\n\nQuestion: " + p.q +
 		"\n\nWeb sources:\n" + webSourcesBlock(srcs)
-	resp := chat(s, ctx, p, prompt)
-	if resp == nil || strings.TrimSpace(resp.Content) == "" {
-		return "I couldn't generate an answer right now — the model is unavailable. Please try again.", resp
+	for _, model := range append([]string{p.model}, p.fallbacks...) {
+		if resp := chat(s, ctx, p, model, prompt); resp != nil && strings.TrimSpace(resp.Content) != "" {
+			return resp.Content, resp
+		}
 	}
-	return resp.Content, resp
+	return "I couldn't generate an answer right now — the model is unavailable. Please try again.", nil
 }
 
 // webFollowUps asks for a few distinct next questions. Best-effort: empty on failure.
@@ -261,7 +275,7 @@ func webFollowUps(s *cloud.Service[*state], ctx context.Context, p webParams, an
 	prompt := "Given a question and its answer, propose 3 concise, distinct follow-up questions a curious user would ask next. " +
 		"Reply ONLY as compact JSON: {\"questions\":[\"...\"]}.\n\nQuestion: " + p.q +
 		"\n\nAnswer:\n" + clip(answer, 4000)
-	resp := chat(s, ctx, p, prompt)
+	resp := chat(s, ctx, p, p.model, prompt)
 	if resp == nil {
 		return nil, nil
 	}
@@ -272,17 +286,18 @@ func webFollowUps(s *cloud.Service[*state], ctx context.Context, p webParams, an
 	return qs, resp
 }
 
-// chat runs one in-process completion carrying the billing/data scope. Org is the
-// effective (data) org, BillingOrg the payer, Project the attribution scope. The
-// transport runs on the binary's M2M identity (balance-exempt); the revenue debit
-// is webMeter(), not this call. A nil ai plane (dev/offline) yields nil, and every
-// step degrades honestly. Empty content or an error also yields nil.
-func chat(s *cloud.Service[*state], ctx context.Context, p webParams, prompt string) *cloud.ChatResponse {
+// chat runs one in-process completion with the given model, carrying the billing/
+// data scope. Org is the effective (data) org, BillingOrg the payer, Project the
+// attribution scope. The transport runs on the binary's M2M identity (balance-
+// exempt); the revenue debit is webMeter(), not this call. A nil ai plane (dev/
+// offline) yields nil, and every step degrades honestly. An error yields nil so the
+// caller (synthesize) can advance to the next model in the chain.
+func chat(s *cloud.Service[*state], ctx context.Context, p webParams, model, prompt string) *cloud.ChatResponse {
 	if s.State.ai == nil {
 		return nil
 	}
 	resp, err := s.State.ai.ChatCompletion(ctx, &cloud.ChatRequest{
-		Model:      p.model,
+		Model:      model,
 		Prompt:     prompt,
 		Org:        p.dataOrg,
 		BillingOrg: p.payer,
