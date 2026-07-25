@@ -205,12 +205,12 @@ func bounce(c *zip.Ctx, waitlistURL string) error {
 	return c.NoContent(http.StatusFound)
 }
 
-// apiKeyPrefixes are the Hanzo API-key prefixes. This MIRRORS cloud
-// auth_identity.go isAPIKey (the ONE authority) — kept local so admission stays
-// self-contained (no cloud-internal import) while agreeing on the exact contract:
-// a token with one of these prefixes is a possession-gated API key, not a session
-// principal. If cloud adds a prefix there, add it here.
-var apiKeyPrefixes = []string{"hk-", "sk-", "pk-", "fw_", "hz_"}
+// apiKeyPrefixes are the Hanzo API-key families: a published key (pk-), a secret
+// key (sk-), and hk- (sk- under an older name, retired once IAM renames it). This MIRRORS cloud auth_identity.go APIKeyPrefixes (the ONE
+// authority) — kept local so admission stays self-contained (no cloud-internal
+// import) while agreeing on the exact contract: a token with one of these
+// prefixes is a possession-gated API key, not a session principal.
+var apiKeyPrefixes = []string{"pk-", "sk-", "hk-"}
 
 // carriesAPIKey reports whether the request authenticates with a Hanzo API key —
 // in the Authorization header (Bearer or Basic-username) or the common api-key /

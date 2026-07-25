@@ -366,14 +366,32 @@ func (c *jwksCache) fetch() (*gojose.JSONWebKeySet, error) {
 // Token extraction — mirrors iamauth's Bearer / Basic / API-key helpers.
 // ----------------------------------------------------------------------------
 
-// isAPIKey reports whether tok is an opaque, backend-validated key (hk-/sk-/…)
-// rather than a JWT, so the sanitizer skips JWT parsing for it.
+// APIKeyPrefixes are the Hanzo API key families. A published key (pk-) is
+// write-only and scoped, so it is safe in a public bundle; a secret key (sk-)
+// authenticates a server. Everything else is OAuth2, which is a JWT and not a key.
+//
+// hk- is sk- under an older name and is on its way out. It stays accepted here
+// because IAM mints it — cloud only validates (see account.go mintKey, which
+// delegates to iam.mintUserKey) — so dropping it here before IAM renames the
+// family would reject every key IAM hands out. Retire it in that order: IAM mints
+// sk-, holders re-key, then delete the entry below.
+//
+// fw_ and hz_ were listed here and never minted by anything: dead entries that
+// widened what counts as a credential for no reason. Gone.
+//
+// This is the ONE authority. Admission mirrors it rather than importing it (it
+// stays free of cloud-internal imports); if this list changes, that copy must too.
+var APIKeyPrefixes = []string{"pk-", "sk-", "hk-"}
+
+// isAPIKey reports whether tok is an opaque, backend-validated key rather than a
+// JWT, so the sanitizer skips JWT parsing for it.
 func isAPIKey(tok string) bool {
-	return strings.HasPrefix(tok, "hk-") ||
-		strings.HasPrefix(tok, "sk-") ||
-		strings.HasPrefix(tok, "pk-") ||
-		strings.HasPrefix(tok, "fw_") ||
-		strings.HasPrefix(tok, "hz_")
+	for _, p := range APIKeyPrefixes {
+		if strings.HasPrefix(tok, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // bearerFromAuth extracts the token from a "Bearer <token>" header value.
