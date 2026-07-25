@@ -352,19 +352,22 @@ func (s *session) tx(id int64, params []json.RawMessage) []byte {
 	return s.result(id, res)
 }
 
-// domainRequest serves operation-domain reads. The communication domain (labels,
-// notifications, collaborators…) has no SQLite backing yet; returning a
-// well-formed empty DomainResult keeps those live queries from crashing on
-// `.value` of null.
+// domainRequest serves operation-domain reads. This is the NEWER
+// @hcengineering/communication operation-domain (findMessagesMeta / findLabels /
+// findNotificationContexts / findCollaborators) — a SEPARATE messaging subsystem
+// with its own wire shape, NOT the classic Inbox. The workbench Inbox
+// (notification-resources) reads DocNotifyContext + ActivityInboxNotification +
+// CommonInboxNotification through findAll, which the SQLite docs store already
+// backs (the contexts via seed.go's projectNotifyContexts, the notifications via
+// notify.go's projectNotifications) — so the activity feed does NOT depend on this
+// path. The communication plane has no SQLite backing; a well-formed empty ARRAY
+// (never an object) keeps its live queries non-fatal (the client reads
+// DomainResult.value and, for notifications, calls .pop() on it).
 func (s *session) domainRequest(id int64, params []json.RawMessage) []byte {
 	var domain string
 	if len(params) > 0 {
 		_ = json.Unmarshal(params[0], &domain)
 	}
-	// The client reads DomainResult.value and, for notifications, calls .pop() on
-	// it — so every communication read returns an empty ARRAY (never an object),
-	// which keeps labels/notifications/contexts queries non-fatal until the
-	// communication plane has its own store.
 	return s.result(id, map[string]any{"domain": domain, "value": []any{}})
 }
 
