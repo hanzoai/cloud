@@ -45,8 +45,8 @@ var frozen = []struct {
 	{"rollingcap", false, false},     // rolling spend-cap gate (after billing); golden drifted — refrozen
 	{"account-bridge", false, false}, // was order 122
 	{"do", false, false},             // was order 123
-	{"platform", true, false},        // was order 124
-	{"projects", false, false},       // was order 125
+	{"platform", true, true},         // was order 124
+	{"projects", false, true},        // was order 125
 	{"dns", false, false},            // new: /v1/dns zone plane (after projects)
 	{"domain", false, false},         // new: Hanzo Domains registrar (/v1/domain), after dns
 	{"prompts", false, false},        // was order 126

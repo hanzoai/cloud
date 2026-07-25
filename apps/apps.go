@@ -256,8 +256,8 @@ func Wire() []cloud.MountSpec {
 		// (121) + the commerce embed (100). Same clients/account package as "account" (48).
 		{Name: "account-bridge", Mount: account.MountBridge},
 		{Name: "do", Mount: do.Mount},
-		{Name: "platform", Mount: platform.Mount, OwnsHealth: true},
-		{Name: "projects", Mount: projects.Mount},
+		{Name: "platform", Mount: platform.Mount, Shutdown: ctxShutdown(platform.Shutdown), OwnsHealth: true},
+		{Name: "projects", Mount: projects.Mount, Shutdown: ctxShutdown(projects.Shutdown)},
 		// The /v1/dns forward head: relays the console DNS dashboard to the DNS
 		// control plane under the caller's own validated bearer (clients/dns).
 		{Name: "dns", Mount: dns.Mount},
