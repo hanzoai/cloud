@@ -42,7 +42,7 @@ jobs:
             curl -fsS --max-time 20 -X POST \
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -H "Content-Type: application/json" \
-              "${{ github.server_url }}/api/v1/repos/${{ github.repository }}/actions/workflows/cicd.yml/dispatches" \
+              "${{ github.server_url }}/v1/repos/${{ github.repository }}/actions/workflows/cicd.yml/dispatches" \
               -d '{"ref":"main"}' \
               && echo "CI/CD dispatched" || echo "CI/CD dispatch failed (non-fatal — next direct push builds)"
           elif git merge-base --is-ancestor "$REMOTE" "$LOCAL"; then
