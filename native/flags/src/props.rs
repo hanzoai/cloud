@@ -46,7 +46,7 @@ pub fn to_semver_representation(value: &Value) -> Option<Version> {
     let version_string = to_string_representation(value);
     let normalized = normalize_version_string(&version_string);
     // TODO: Build metadata (e.g., "1.0.0+build.1") is not currently supported because
-    // our `sortableSemver` method in ClickHouse/InsightsQL doesn't support it yet.
+    // our `sortableSemver` method in Datastore/InsightsQL doesn't support it yet.
     // For semver equality checks, use regular string equality operators instead.
     Version::parse(normalized).ok()
 }
