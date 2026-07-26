@@ -14,16 +14,16 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// Gitea push-webhook ingest. The external Hanzo Git server (a Gitea fork,
-// service hanzo-git.hanzo.svc, host git.hanzo.ai) POSTs here on every push so a
+// Push-webhook ingest. The external Hanzo Git server (service
+// hanzo-git.hanzo.svc, host git.hanzo.ai) POSTs here on every push so a
 // push that lands on it drives the SAME push-to-deploy core the embedded
 // smart-HTTP receive-pack path drives: fireBranchBuild → cloud.OnGitPush (deploy
 // trigger) + EmitLifecycle (mirror-out / Slack). One deploy trigger, one
 // lifecycle stream, regardless of which git server the push landed on — no
 // second code path.
 //
-// Auth is Gitea's HMAC: X-Gitea-Signature is the hex HMAC-SHA256 of the raw
-// request body under a shared secret. The secret is KMS-synced
+// Auth is an HMAC: X-Git-Signature is the hex HMAC-SHA256 of the raw request
+// body under a shared secret. The secret is KMS-synced
 // (hanzo/prod:/git/webhook-secret) into the cloud CR as env GIT_WEBHOOK_SECRET;
 // it is NEVER hardcoded. Fail-closed: an unset secret or a mismatched signature
 // is 401, so a misconfigured deployment refuses webhooks rather than trusting
@@ -31,14 +31,22 @@ import (
 
 const (
 	webhookSecretEnv = "GIT_WEBHOOK_SECRET"
-	giteaEventHeader = "X-Gitea-Event"
-	giteaSigHeader   = "X-Gitea-Signature"
+	eventHeader      = "X-Git-Event"
+	sigHeader        = "X-Git-Signature"
+	// Pre-rename spellings, still what the git image sends today. Read as a
+	// fallback purely so cloud and the git image can roll in EITHER order: cloud
+	// must already accept X-Git-* before the fork starts sending it, or the first
+	// push after a fork roll silently stops triggering deploys. Delete both the
+	// moment the fork ships the new names — this is a rename in flight, not a
+	// compatibility layer to keep.
+	eventHeaderPre = "X-Gitea-Event"
+	sigHeaderPre   = "X-Gitea-Signature"
 	// syncActorEnv names the login the universal sync engine's inbound relay pushes
 	// AS when it lands an upstream push into native git. A native push webhook whose
 	// pusher equals it is the ECHO of our own relay — re-driving the build/mirror
 	// would ping-pong straight back to the upstream it came from. Unset ⇒ no login is
 	// treated as the sync bot (no push is suppressed), so a deployment without the
-	// relay keeps today's behavior; set it to the relay's Gitea login to arm the
+	// relay keeps today's behavior; set it to the relay's git login to arm the
 	// guard. Idempotent SHAs already make the echo a no-op downstream; this skips it
 	// early and explicitly (loop guard, engine-level twin in sync).
 	syncActorEnv = "GIT_SYNC_ACTOR"
@@ -47,10 +55,10 @@ const (
 	zeroSHA = "0000000000000000000000000000000000000000"
 )
 
-// giteaPush is the subset of Gitea's push payload the deploy core needs. Gitea
-// varies the actor field name across versions (login vs username) for both the
-// repo owner and the pusher, so each accepts both; the first non-empty wins.
-type giteaPush struct {
+// pushEvent is the subset of the push payload the deploy core needs. The field
+// name for an actor varies across git-server versions (login vs username) for
+// both the repo owner and the pusher, so each accepts both; first non-empty wins.
+type pushEvent struct {
 	Ref        string `json:"ref"`
 	Before     string `json:"before"`
 	After      string `json:"after"`
@@ -67,23 +75,24 @@ type giteaPush struct {
 	} `json:"pusher"`
 }
 
-// webhook ingests a Gitea push webhook and funnels it through the shared
-// push-to-deploy core (fireBranchBuild). Non-push events and no-op pushes
-// (branch delete, non-branch ref) are acknowledged 204 so Gitea does not retry.
+// webhook ingests a push webhook and funnels it through the shared push-to-deploy
+// core (fireBranchBuild). Non-push events and no-op pushes (branch delete,
+// non-branch ref) are acknowledged 204 so the sender does not retry.
 func webhook(s *cloud.Service[state], c *zip.Ctx) error {
-	// Only push drives a build; every other Gitea event is an acknowledged no-op.
-	if c.Header(giteaEventHeader) != "push" {
+	// Only push drives a build; every other event is an acknowledged no-op.
+	if firstNonEmptyStr(c.Header(eventHeader), c.Header(eventHeaderPre)) != "push" {
 		return c.NoContent(http.StatusNoContent)
 	}
 
 	// Verify BEFORE parse so an unauthenticated body is never decoded. An unset
 	// secret is a 401 (fail-closed), not an open door.
 	body := c.Body()
-	if !validSignature(os.Getenv(webhookSecretEnv), c.Header(giteaSigHeader), body) {
+	sig := firstNonEmptyStr(c.Header(sigHeader), c.Header(sigHeaderPre))
+	if !validSignature(os.Getenv(webhookSecretEnv), sig, body) {
 		return zip.ErrUnauthorized("invalid webhook signature")
 	}
 
-	var ev giteaPush
+	var ev pushEvent
 	if err := json.Unmarshal(body, &ev); err != nil {
 		return zip.ErrBadRequest("invalid push payload")
 	}
@@ -116,7 +125,7 @@ func webhook(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 
 	// The SAME funnel receive-pack drives (fireBranchBuilds → fireBranchBuild):
-	// cloud.OnGitPush deploy trigger + EmitLifecycle. project is "" — Gitea repos
+	// cloud.OnGitPush deploy trigger + EmitLifecycle. project is "" — native repos
 	// are org-level, the scope the smart-HTTP pack handlers resolve for a native
 	// push. Detached from the request (WithoutCancel) so the build outlives the
 	// 204, matching receivePack.
