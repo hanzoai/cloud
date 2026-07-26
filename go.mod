@@ -14,7 +14,7 @@ require (
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.2.0
-	github.com/hanzoai/commerce v1.49.19
+	github.com/hanzoai/commerce v1.49.20-0.20260726065453-1f6a1e10775c
 	github.com/hanzoai/decimal v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
 	github.com/hanzoai/goa v1.0.0
@@ -92,6 +92,9 @@ require (
 	github.com/hanzoai/go-openai-realtime/contrib/ws-gorilla v1.0.0 // indirect
 	github.com/hanzoai/sqlcipher v0.1.0 // indirect
 	github.com/hanzoai/xorm v1.4.4 // indirect
+	github.com/hanzokv/go/extra/rediscmd/v9 v9.21.1 // indirect
+	github.com/hanzokv/go/extra/redisotel/v9 v9.21.1 // indirect
+	github.com/hanzokv/go/v9 v9.21.1 // indirect
 	github.com/hanzos3/go-sdk v1.0.2 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/linode/linodego v1.67.0 // indirect
@@ -189,7 +192,6 @@ require (
 	github.com/prometheus/prometheus v0.311.3 // indirect
 	github.com/prometheus/sigv4 v0.4.1 // indirect
 	github.com/puzpuzpuz/xsync/v4 v4.4.0 // indirect
-	github.com/redis/go-redis/v9 v9.20.0 // indirect
 	github.com/segmentio/fasthash v1.0.3 // indirect
 	github.com/segmentio/ksuid v1.0.4 // indirect
 	github.com/soheilhy/cmux v0.1.5 // indirect
@@ -488,8 +490,7 @@ require (
 	github.com/hanzoai/go-openrouter v1.0.0 // indirect
 	github.com/hanzoai/goauthorizenet v1.0.0 // indirect
 	github.com/hanzoai/gochimp3 v1.0.0 // indirect
-	github.com/hanzoai/kv-go/v9 v9.18.0 // indirect
-	github.com/hanzoai/orm v0.6.7
+	github.com/hanzoai/orm v0.6.8-0.20260726065619-7b3c62da906d
 	github.com/hanzoai/pdf v1.2.0 // indirect
 	github.com/hanzoai/pubsub-go v1.53.0 // indirect
 	github.com/hanzoai/search-go v0.36.0 // indirect
@@ -620,8 +621,6 @@ require (
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
-	github.com/redis/go-redis/extra/rediscmd/v9 v9.15.1 // indirect
-	github.com/redis/go-redis/extra/redisotel/v9 v9.15.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/rs/cors v1.11.1 // indirect
@@ -756,12 +755,12 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v0.1.3
-	github.com/hanzoai/ai v1.831.3
+	github.com/hanzoai/ai v1.831.5-0.20260726065328-5420f6ba9987
 	github.com/hanzoai/authz v1.10.7
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.5
 	github.com/hanzoai/metrics v1.110.2
-	github.com/hanzoai/o11y v1.5.30
+	github.com/hanzoai/o11y v1.5.31-0.20260726065106-1a42effcb7ce
 	github.com/hanzoai/thinking v0.1.1 // indirect
 	github.com/hanzoai/vfs v0.6.6
 	github.com/hanzoai/zen v1.4.2
