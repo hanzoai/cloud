@@ -93,6 +93,7 @@ var frozen = []struct {
 	{"sbom", true, false},            // was order 137
 	{"team", false, true},            // was order 138
 	{"settings", false, true},        // was order 138
+	{"prefs", false, true},           // new: per-user preference plane (after settings); Shutdown closes the store
 	{"notify", true, false},          // was order 139
 	{"channels", false, true},        // new: /v1/channels transport plane (after notify; must mount after integrations so RegisterIngress installs before webhooks emit)
 	{"gateway", false, false},        // was order 139
