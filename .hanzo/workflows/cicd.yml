@@ -62,10 +62,10 @@ jobs:
   #      runtime guard in containment.go trusts that signal, so this is the one
   #      concrete way to spoof it in a non-test binary. This grep is what turns
   #      "someone could type this" into "CI fails the PR that types it".
-  #   3. build         — `go build ./...` (no tag — exactly what the Dockerfile
-  #      and Makefile run) must not link clients/controlplane into any cmd/
-  #      main, and `go build ./clients/controlplane/...` with no tag must match
-  #      zero buildable packages (proves the tag still gates every file in it).
+  #   3. graph         — no cmd/ main may reach clients/controlplane through its
+  #      untagged import graph (`go list -deps`), and
+  #      `go build ./clients/controlplane/...` with no tag must match zero
+  #      buildable packages (proves the tag still gates every file in it).
   #
   # Runtime belt-and-suspenders (defense in depth, not a substitute for the
   # above): clients/controlplane/containment.go fail-closed panics if its stub
@@ -169,8 +169,19 @@ jobs:
         run: |
           set -euo pipefail
 
-          go build ./...
-
+          # Containment is an IMPORT-GRAPH property, so prove it with the import
+          # graph. This step used to lead with `go build ./...`, which compiles
+          # AND LINKS every cmd/ main — and linking needs
+          # native/flags/target/release/libhanzo_flags.a, the Rust staticlib
+          # clients/flags pulls in under cgo (clients/flags/engine.go). Nothing
+          # in THIS job builds it: `make native` runs in the gate job, in that
+          # job's own workspace. It passed on GitHub only because the arc
+          # runners reuse a workspace and target/ is gitignored, so an earlier
+          # gate job's leftover .a was still sitting there; on a container
+          # runner with a fresh volume every cmd/ main died at
+          # `ld: cannot find .../libhanzo_flags.a`. The compile was never the
+          # proof anyway — `go list -deps` reads the same untagged file set
+          # without linking, and the gate job is the ONE place that builds.
           for m in $(go list ./cmd/...); do
             if go list -deps "$m" | grep -qx 'github.com/hanzoai/cloud/clients/controlplane'; then
               echo "::error::$m links clients/controlplane into a real binary — containment breach"
