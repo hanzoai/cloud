@@ -12,9 +12,16 @@ The blocking code work is **done and shipped**:
 - IAM v1.33.6 serves the legacy path aliases the deployed fleet hard-codes
   (`/v1/iam/oauth/access_token`, `/v1/iam/oauth/refresh_token`, `/v1/iam/userinfo`)
   next to the canonical paths — so no hard-coded caller 404s at the flip.
-- `cloud` pins `github.com/hanzoai/iam v1.33.6` (go.mod) and compiles it in; the
-  subsystem is **staged OFF** (`stagedSubsystems={"iam","ingress"}` in `config.go`).
-  Until enabled, `iam_edge.go` forwards `/v1/iam/*` to the standalone Casdoor pod.
+- `cloud` pins `github.com/hanzoai/iam v1.33.8` (go.mod) and compiles it in.
+
+> **`iam` is NOT staged.** `stagedSubsystems` in `config.go` holds only `ingress`, so
+> the empty-`CLOUD_ENABLE` "mount everything" default — **the live posture on
+> `universe/infra/k8s/operator/crs/cloud.yaml`** — mounts the embedded IAM. Step 1 is
+> therefore a **precondition of the next deploy**, not of a later flip: a cloud that
+> boots before the store is migrated opens an EMPTY `iam2.db` and seeds only from
+> `init_data.json`. `iam_edge.go` forwards `/v1/iam/*` to the standalone pod ONLY
+> under a non-empty `--enable` that omits `iam`, which is the one way to hold cloud
+> on the old plane while Step 1 runs.
 
 ## Preconditions (verify before touching anything)
 
@@ -25,7 +32,9 @@ The blocking code work is **done and shipped**:
    store is single-writer/single-open). **`config.go` refuses to boot iam-enabled
    above 1 replica.** Never scale up with iam on.
 3. `CLOUD_DATA_DIR=/var/lib/cloud` on the RWO `cloud-api-data` PVC. The embedded IAM
-   store is **`/var/lib/cloud/iam/iam.db`** (`clients/iam/iam.go` `paths()`).
+   store is **`/var/lib/cloud/iam/iam2.db`** (`clients/iam/iam.go` `paths()`) — the v2
+   store. `iam.db` is a different database; opening it serves the wrong identities
+   without failing.
 4. You have the live Casdoor store to migrate FROM and its KMS master key:
    - encrypted sharded root: `<dir>/iam.db` + `<dir>/orgs/*/iam.db` (+ `.dek` sidecars)
    - `IAM_KMS_MASTER_KEY` = the 64-hex master key (from KMS — never an arg, never logged)
@@ -48,15 +57,18 @@ migrate-v1 \
   --src-datadir /path/to/live/casdoor/store \
   --src-master-key-env IAM_KMS_MASTER_KEY \
   --wal-inclusive \
-  --dest /var/lib/cloud/iam/iam.db \
+  --dest /var/lib/cloud/iam/iam2.db \
   --dry-run
 ```
 
 - `--wal-inclusive` checkpoints each shard's uncheckpointed `-wal` via the C
   sqlcipher binary → COMPLETE extraction. Without it, uncheckpointed WAL rows are a
   hard error (or, with `--ignore-wal`, silently dropped — do NOT use for a real cutover).
-- `--dest` is the **verbatim `.db` path** `…/iam/iam.db`, NOT a data-dir. A data-dir
-  dest writes `<dest>/iam2.db`, which cloud does **not** read (it opens `iam/iam.db`).
+- `--dest` accepts either form and both land on the same file here (`storePath` in
+  `iam/cmd/migrate-v1/main.go`): a `.db` path is taken verbatim, anything else is
+  treated as a data-dir and gets `/iam2.db` appended. So `…/iam/iam2.db` and `…/iam`
+  are equivalent. What matters is that the written file is exactly
+  `/var/lib/cloud/iam/iam2.db` — the path `clients/iam` opens.
 
 **Verify:** dry-run report shows expected counts for users, orgs, applications,
 providers, certs; zero drift; zero errors.
@@ -65,24 +77,19 @@ providers, certs; zero drift; zero errors.
 **1b. Real migration.** Same command **without** `--dry-run`, writing into the
 (empty) embedded datadir on the cloud PVC. Do this while iam is still staged OFF.
 
-**Verify:** re-run `--dry-run` against `--src /var/lib/cloud/iam/iam.db` (or open it
+**Verify:** re-run `--dry-run` against `--src /var/lib/cloud/iam/iam2.db` (or open it
 read-only) and confirm counts equal the source.
-**Rollback:** `rm -f /var/lib/cloud/iam/iam.db*` (only the freshly-written store) and
-re-run. Nothing else consumes it until Step 2.
+**Rollback:** `rm -f /var/lib/cloud/iam/iam2.db*` (only the freshly-written store) and
+re-run. Nothing else consumes it until cloud next boots iam-enabled.
 
-## Step 2 — Enable the embedded IAM subsystem
+## Step 2 — Boot cloud with the embedded IAM subsystem
 
-`iam` is a **staged** subsystem (`config.go`): an empty `--enable` mounts everything
-EXCEPT staged ones. Activate it additively (does not require re-listing every
-subsystem) on `universe/infra/k8s/operator/crs/cloud.yaml` env:
-
-```yaml
-    - name: CLOUD_ENABLE_STAGED
-      value: "iam"
-```
+`iam` is **not** staged, so the live CR's empty `CLOUD_ENABLE` already enables it —
+there is no env var to add. Deploying the image IS this step. Nothing here is
+additive or reversible by a flag: plan Step 1 to complete before the next roll.
 
 Apply the CR; the operator rolls the Recreate Deployment (single pod, brief blip —
-expected). On boot, `clients/iam` opens `/var/lib/cloud/iam/iam.db` (the migrated
+expected). On boot, `clients/iam` opens `/var/lib/cloud/iam/iam2.db` (the migrated
 store), seeds new-only from `init_data.json` (idempotent — real rows already present,
 so seed only adds anything genuinely missing), and mounts the full `/v1/iam/*` surface
 IN-PROCESS. `iam_edge.go` stops mounting (`serve.go`: `if !cfg.Enabled("iam") …`), so
@@ -97,8 +104,12 @@ kubectl -n hanzo logs deploy/cloud | grep 'iam embedded in-process'
 ```
 A boot failure serves fail-closed 503 on `/v1/iam/*` (cloud + every other subsystem
 stay up) — it does NOT crash the binary.
-**Rollback:** remove `CLOUD_ENABLE_STAGED`, re-apply the CR. The edge re-mounts and
-forwards to Casdoor again. hanzo.id is unaffected (still pointed at Casdoor until Step 3).
+**Rollback:** set `CLOUD_ENABLE` to an explicit list that OMITS `iam` and re-apply the
+CR. Deleting an env var does not roll this back — an empty `CLOUD_ENABLE` is
+iam-ENABLED. An explicit list is an allowlist, so it must name every other subsystem
+this deployment serves; take it from the CR's own subsystem set, not from memory.
+With `iam` out of that list the edge re-mounts and forwards to Casdoor again.
+hanzo.id is unaffected (still pointed at Casdoor until Step 3).
 
 ## Step 3 — Repoint the hanzo.id identity backend at the edge
 
@@ -172,7 +183,8 @@ soak until you are certain.
 
 ## Guardrails (do NOT, until this supervised session)
 
-- Do not add `iam` to `CLOUD_ENABLE`/`CLOUD_ENABLE_STAGED` on the live CR outside this flow.
+- Do not roll a cloud image onto the live CR before Step 1 completes — the empty
+  `CLOUD_ENABLE` mounts embedded IAM on boot, so the deploy itself performs Step 2.
 - Do not repoint `iam-hanzo-ai` before Step-2 in-process verification passes.
 - Do not delete or scale down the Casdoor `iam` workload before Step-4 parity holds.
 - Do not run `migrate-v1` against prod without the read-only source + a green `--dry-run`.
