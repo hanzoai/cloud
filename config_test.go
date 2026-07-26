@@ -8,28 +8,27 @@ import (
 
 // TestEnabled_StagedSubsystemsExcludedFromMountAll locks the HIP-0106 staged-
 // rollout contract in code: with an EMPTY Enable list ("mount everything"), a
-// STAGED subsystem (iam, ingress) is NOT enabled — it mounts only when named in
-// CLOUD_ENABLE explicitly, while every non-staged subsystem still mounts.
+// STAGED subsystem is NOT enabled — it mounts only when named in CLOUD_ENABLE
+// explicitly — while every non-staged subsystem does mount.
 //
-// This is the gate that keeps the IAM embed (clients/iam — now the clean zip-native
-// iam-v2, the Casdoor iam-v1/beego fork retired) from taking over hanzo.id under the
-// mount-all default: flipping identity from the standalone pod to the in-process embed
-// is a production cutover the operator makes explicitly, not a side effect of the
-// mount-all default. commerce was un-staged in Phase 2 (task #105): it now mounts under
-// the mount-all default like every other in-process subsystem (the money-path cutover
-// keeps the authoritative stores in place — see stagedSubsystems in config.go).
+// The iam/ingress pair is the load-bearing case, so each is pinned BY NAME rather
+// than left to a list. ingress is staged: its Mount returns errors, and an error
+// there aborts cloud's startup. iam is NOT staged: its Mount fails closed with a
+// 503 and cannot take the process down, so the mount-all default serves identity
+// from the in-process embed (clients/iam). Production runs exactly this default
+// (CLOUD_ENABLE unset), so drift in either direction silently changes which
+// identity plane answers /v1/iam/* and whether ingress can block a boot.
 func TestEnabled_StagedSubsystemsExcludedFromMountAll(t *testing.T) {
 	// Empty Enable = mount-all default.
 	c := &cloud.Config{}
 
-	// Staged subsystems require explicit CLOUD_ENABLE — never on under mount-all.
-	for _, name := range []string{"iam", "ingress"} {
-		if c.Enabled(name) {
-			t.Errorf("staged subsystem %q must NOT be enabled under the empty (mount-all) default — it requires explicit CLOUD_ENABLE", name)
-		}
+	if !c.Enabled("iam") {
+		t.Error("iam is not staged: it must be enabled under the empty (mount-all) default")
 	}
-	// Non-staged subsystems still mount under the empty default (commerce is now
-	// among them after the task #105 cutover).
+	if c.Enabled("ingress") {
+		t.Error("ingress is staged: it must NOT be enabled under the empty (mount-all) default — it requires explicit CLOUD_ENABLE")
+	}
+	// Every non-staged subsystem mounts under the empty default.
 	for _, name := range []string{"commerce", "ai", "kms", "treasury", "admin", "base", "o11y"} {
 		if !c.Enabled(name) {
 			t.Errorf("non-staged subsystem %q must be enabled under the empty (mount-all) default", name)
