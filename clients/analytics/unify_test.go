@@ -216,8 +216,10 @@ func TestEvent_BadPkKeyFailsClosed(t *testing.T) {
 
 // TestIngestAlias_DelegatesToEventHandler proves /v1/ingest is the SAME
 // implementation as /v1/event: a pk- caller is admitted (unchanged), AND — because it
-// delegates to eventHandle — it now ALSO admits an IAM bearer, while no-auth still
-// fails closed. One implementation, reached through two routes.
+// delegates to eventHandle — it ALSO admits an IAM bearer and takes the SAME anonymous
+// lane, under the same public tenant and the same allowlist. One implementation reached
+// through two routes: the alias cannot drift from the canonical door, which is the whole
+// point of it being an alias.
 func TestIngestAlias_DelegatesToEventHandler(t *testing.T) {
 	stubKeyOrg(t, map[string]string{"pk-acme": "acme"})
 	app := mountApp(t)
@@ -232,9 +234,22 @@ func TestIngestAlias_DelegatesToEventHandler(t *testing.T) {
 		`[{"event":"signup_completed","distinctId":"u1"}]`); code != http.StatusServiceUnavailable {
 		t.Fatalf("bearer on /v1/ingest want 503 (admitted via eventHandle), got %d", code)
 	}
-	// No auth — fail closed, exactly like the canonical door.
-	if code, _ := doBody(t, app, http.MethodPost, "/v1/ingest", "", "",
-		`{"batch":[{"type":"pageview"}]}`); code != http.StatusForbidden {
-		t.Fatalf("no-auth /v1/ingest want 403 (fail closed), got %d", code)
+	// No auth at all — the anonymous lane, exactly like the canonical door: a pageview
+	// is admitted (503, datastore down) under the public tenant.
+	if code, body := doBody(t, app, http.MethodPost, "/v1/ingest", "", "",
+		`{"batch":[{"type":"pageview"}]}`); code != http.StatusServiceUnavailable {
+		t.Fatalf("no-auth /v1/ingest want 503 (anonymous lane, admitted), got %d (%s)", code, body)
+	}
+	// A non-allowlisted kind is dropped anonymously here too, not stored.
+	if code, body := doBody(t, app, http.MethodPost, "/v1/ingest", "", "",
+		`{"batch":[{"type":"event","event":"order_completed"}]}`); code != http.StatusOK {
+		t.Fatalf("no-auth /v1/ingest custom kind want 200 all-dropped, got %d (%s)", code, body)
+	}
+	// A presented pk- that does NOT resolve still fails closed — never downgraded into
+	// the anonymous lane, so a misconfigured key surfaces instead of silently filing
+	// its events where its owner cannot read them.
+	if code := postKeyed(t, app, "/v1/ingest", "", `{"batch":[{"type":"pageview"}]}`,
+		map[string]string{"Authorization": "Bearer pk-nosuch"}); code != http.StatusForbidden {
+		t.Fatalf("unresolvable pk- on /v1/ingest want 403 (fail closed), got %d", code)
 	}
 }
