@@ -42,7 +42,14 @@ var consoleFS embed.FS
 // product API (:8000) "/metrics" is a CONSOLE product page (the MetricsModule), so
 // it must fall through to the SPA shell, not 404. One surface per port: :8000 =
 // product API + SPA, :9090 = ops (health + Prometheus /metrics).
-var apiPrefixes = []string{"/v1/", "/zap", "/healthz", "/readyz"}
+// "/api/" is in this list even though NOTHING here serves it, and that is the
+// point: we version at /v1/ and never carry an /api/ prefix. Without it, an
+// /api/… request matched no route, fell through to the SPA, and came back
+// 200 text/html — so a client calling api.hanzo.ai/api/v1/user got a rendered
+// console page instead of an error, and even
+// api.hanzo.ai/api/totally-made-up-nonsense answered 200. A caller on the wrong
+// prefix now gets a real 404 and finds out immediately.
+var apiPrefixes = []string{"/v1/", "/api/", "/zap", "/healthz", "/readyz"}
 
 // consoleTitleRe matches the single <head> <title>…</title> element (any
 // attributes, any inner text, across newlines) so serveIndex can rewrite it to
