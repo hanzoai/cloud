@@ -184,6 +184,33 @@ func tenant(c *zip.Ctx) (string, bool) {
 	return principal.Org(c)
 }
 
+// platformSudo reports a VERIFIED platform superadmin — the ONLY principal the
+// cross-tenant god-view admits. It mirrors clients/storage/s3.go tenant()'s
+// cross-tenant gate EXACTLY (s3.go:236-244): FIRST principal.Validated (refuses the
+// forgeable no-bearer "Phase-1 data" path — SanitizeIdentity leaves X-User-Id empty
+// there, so a direct-to-pod caller forging X-Org-Id/X-User-IsAdmin has no validated
+// principal and is refused), THEN the SuperAdmin signal. s3 uses ctx.IsAdmin(); we
+// use its named twin principal.IsSuperAdmin (== c.IsAdmin(), principal.go:88-91),
+// documented as the ONE "owner == adminOrg" (home org == admin) fact — the immutable
+// validated JWT owner the model mandates. That signal is strictly stronger than a
+// raw Owner=="admin" check: SanitizeIdentity mints X-User-IsAdmin ONLY for
+// owner==adminOrg AND not a KMS-machine principal (middleware_identity.go:238-247),
+// so an admin-org machine token — which Owner=="admin" alone would wrongly admit —
+// is excluded. The header is stripped on ingress and re-minted only from validated
+// claims, so it can never be forged by a client.
+func platformSudo(c *zip.Ctx) bool {
+	return principal.Validated(c) && principal.IsSuperAdmin(c)
+}
+
+// scopeAll reports whether the caller asked for the cross-tenant aggregate
+// (?scope=all). It is ONLY the request signal — never the authority: the overview
+// handler AND-s it with platformSudo, so a non-sudo ?scope=all falls through to the
+// caller's OWN single-org overview (fail-closed; cross-tenant data is never leaked
+// to a non-sudo principal).
+func scopeAll(c *zip.Ctx) bool {
+	return strings.EqualFold(strings.TrimSpace(c.Query("scope")), "all")
+}
+
 // window resolves the [start,end) window + bucket interval from ?range/?start/?end,
 // reusing ai/object.ResolveCloudUsageWindow so analytics and the console Overview
 // share ONE window grammar (24h|7d|30d|custom). A bad range is a 400.

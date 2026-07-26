@@ -101,6 +101,33 @@ func breakdownSQL(keyExpr, org string, start, end time.Time, limit int) (string,
 	return sql, args
 }
 
+// ── Cross-tenant predicate (the platform-sudo god-view) ─────────────────────
+//
+// windowAll is the ONLY builder that omits the org bind: the SAME window bounds
+// bound POSITIONALLY with the org predicate DROPPED, so it aggregates the WHOLE
+// warehouse for the window. Both warehouse tables key time on `timestamp`, so one
+// builder serves the LLM lens, the events lens, and the byOrg breakdown. Because
+// there is NO org arg at all, there is nothing tenant-derived to interpolate — the
+// isolation story is entirely the CALLER gate (analytics.go platformSudo, which
+// mirrors clients/storage/s3.go): this predicate is reachable ONLY by a verified
+// SuperAdmin (home org == admin), never by a tenant.
+func windowAll(start, end time.Time) (string, []any) {
+	return "timestamp >= ? AND timestamp < ?", []any{tsLiteral(start), tsLiteral(end)}
+}
+
+// byOrgQuery builds the god-view per-org breakdown: pageviews + visitors GROUPED
+// BY tenant_id, ranked, over the window — the ONLY query where tenant_id is a
+// GROUP key rather than a bound filter (every tenant is a row; that is the point).
+// It carries NO org predicate, binds the window POSITIONALLY (windowAll), and
+// interpolates nothing user-derived. Reachable ONLY via the platform-sudo gate.
+func byOrgQuery(start, end time.Time) (string, []any) {
+	where, args := windowAll(start, end)
+	sql := "SELECT tenant_id AS org, countIf(event = '$pageview') AS pageviews, " +
+		"uniqExact(distinct_id) AS visitors FROM " + eventsTable + " WHERE " + where +
+		" GROUP BY tenant_id ORDER BY pageviews DESC"
+	return sql, args
+}
+
 // tsLiteral formats a time as a datastore DateTime literal (UTC). Bound as a
 // string arg — identical to ai/object/cloud_usage.go's cloudUsageTS.
 func tsLiteral(t time.Time) string { return t.UTC().Format("2006-01-02 15:04:05") }
@@ -109,6 +136,19 @@ func tsLiteral(t time.Time) string { return t.UTC().Format("2006-01-02 15:04:05"
 
 type Scope struct {
 	Org string `json:"org"`
+	// All marks the platform-sudo god-view: the lenses are aggregated across ALL
+	// tenants (Org is the sentinel "*"). omitempty keeps every single-org response
+	// byte-identical — the field is absent unless a verified SuperAdmin asked for
+	// the cross-tenant aggregate.
+	All bool `json:"all,omitempty"`
+}
+
+// OrgRow is one tenant's line in the god-view byOrg breakdown (byOrgQuery). It is
+// present ONLY on the platform-sudo cross-tenant overview.
+type OrgRow struct {
+	Org       string `json:"org"`
+	Pageviews int64  `json:"pageviews"`
+	Visitors  int64  `json:"visitors"`
 }
 
 // LLMOverview is the flagship lens: real per-org KPIs from hanzo.cloud_usage.
@@ -157,6 +197,10 @@ type Overview struct {
 	LLM      LLMOverview      `json:"llm"`
 	Web      WebOverview      `json:"web"`
 	Commerce CommerceOverview `json:"commerce"`
+	// ByOrg is the ranked per-tenant breakdown of the god-view. omitempty keeps
+	// single-org responses byte-identical — it is present ONLY on the platform-sudo
+	// cross-tenant overview (scope=all).
+	ByOrg []OrgRow `json:"byOrg,omitempty"`
 }
 
 type SeriesPoint struct {
@@ -405,6 +449,25 @@ func buildBreakdown(rows []map[string]any, ok bool) Breakdown {
 		items[i].Pct = pctOf(items[i].Pageviews, total)
 	}
 	return Breakdown{Available: true, Items: items, Source: eventsTable}
+}
+
+// buildByOrg assembles the god-view per-org breakdown from byOrgQuery rows. ok=false
+// (events table absent/errored) → honest-empty with a non-nil empty slice, exactly
+// like buildBreakdown. Rows arrive ranked by the query; the assembler is pure — the
+// tests drive it with mock rows.
+func buildByOrg(rows []map[string]any, ok bool) []OrgRow {
+	out := make([]OrgRow, 0, len(rows))
+	if !ok {
+		return out
+	}
+	for _, r := range rows {
+		out = append(out, OrgRow{
+			Org:       aString(r["org"]),
+			Pageviews: aInt64(r["pageviews"]),
+			Visitors:  aInt64(r["visitors"]),
+		})
+	}
+	return out
 }
 
 // ── Value coercion ──────────────────────────────────────────────────────────
