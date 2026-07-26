@@ -4,7 +4,7 @@
 // WHY GOA-DESIGN-BUT-ZIP-RUNTIME (the deliberate architecture choice):
 //
 // The user's directive was "compile for goa backend so it runs in go process."
-// The cloud binary's ONE HTTP router is github.com/hanzoai/zip (a Fiber-style
+// The cloud binary's ONE HTTP router is github.com/zap-proto/zip (a Fiber-style
 // app); every subsystem (functions, prompts, projects, paas, s3, provisioning)
 // mounts native zip handlers behind the SanitizeIdentity trust-boundary
 // middleware that VALIDATES the caller's org/admin claims (HIP-0026/0111).
