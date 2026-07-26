@@ -325,7 +325,14 @@ func Serve(specs []MountSpec, enable []string) error {
 	}
 	// cfg.PaywallEnforced is a BOOT-time value: flipping the paywall needs a redeploy.
 	// See routers/paywall.go for why the cockpit switch cannot reach this middleware.
-	app.Use(routers.Paywall(func() bool { return cfg.PaywallEnforced }, planChecker))
+	// Enforcement is read PER REQUEST from the platform switch an owner flips at
+	// admin.hanzo.ai, so turning the paywall on or off applies within one flag-cache
+	// TTL — no redeploy, no CR edit. Before the flag engine mounts (and when it is
+	// absent) Switch reports false, so PAYWALL_ENFORCED remains the floor and a
+	// deployment that already sets it keeps enforcing exactly as it did.
+	app.Use(routers.Paywall(func() bool {
+		return cfg.PaywallEnforced || Switch(SwitchPaywallEnforced)
+	}, planChecker))
 
 	// HIP-0106 liveness contract: every enabled subsystem answers
 	// GET /v1/<name>/health uniformly, registered at the compose root before
