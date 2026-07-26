@@ -108,6 +108,10 @@ func mirror(s *cloud.Service[state], c *zip.Ctx) error {
 	// Meter the mirrored bytes the same way a push is metered (the ONE storage
 	// bound). Best-effort — a metering miss must not fail a landed mirror.
 	r.SizeBytes = recordUsage(s, context.WithoutCancel(c.Context()), org, project, name)
+	// Index-on-import: emit push.landed for the mirrored default branch so /v1/code
+	// covers this repo now, exactly as a push would (the same reactor). Origin =
+	// source host, so the outbound mirror suppresses the echo. Detached + best-effort.
+	emitImportPush(s, context.WithoutCancel(c.Context()), org, project, name, src)
 	branches, head := refState(s, org, project, name)
 	return c.JSON(http.StatusOK, toView(s, r, branches, head))
 }
