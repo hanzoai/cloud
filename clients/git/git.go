@@ -318,6 +318,15 @@ func registerLifecycleReactors() {
 				indexOnPush(s, ctx, ev)
 			}
 		})
+		// Native CI/CD orchestrator (build_on_push.go): a push on native git →
+		// build+deploy on our executor, NO GitHub Actions. Ships DORMANT (no-op
+		// unless CLOUD_NATIVE_CICD_ENABLED + the enqueue token are set), so linking
+		// it here is inert until the operator arms it on the git App CR.
+		cloud.RegisterLifecycleSubscriber(func(ctx context.Context, ev cloud.LifecycleEvent) {
+			if s := mounted.Load(); s != nil {
+				buildOnPush(s, ctx, ev)
+			}
+		})
 	})
 }
 
