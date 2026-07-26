@@ -27,7 +27,7 @@ import (
 // LIVE COVERAGE, STATED PLAINLY: no datastore is reachable from this suite, so the
 // DDL and the SQL are proven by CONTRACT (the exact statements, and the exact bound
 // args, that the warehouse would receive) and not by execution. The dedup itself —
-// that ClickHouse's ReplacingMergeTree collapses these keys and that argMax reads
+// that Datastore's ReplacingMergeTree collapses these keys and that argMax reads
 // them back — is UNPROVEN LIVE and needs a warehouse smoke before the plane is
 // trusted for anything that bills.
 //
@@ -285,7 +285,7 @@ func TestRollupIsDedupPreserving(t *testing.T) {
 	}
 }
 
-// TestReservedWordIsQuoted: `window` is a ClickHouse keyword; every statement that
+// TestReservedWordIsQuoted: `window` is a Datastore keyword; every statement that
 // names the column must quote it or the DDL and the reads fail at parse.
 func TestReservedWordIsQuoted(t *testing.T) {
 	for i, stmt := range accountUsageDDL {
