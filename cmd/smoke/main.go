@@ -93,7 +93,7 @@ var probes = []probe{
 	{"team", http.MethodGet, "/v1/team/bots", classAuthed},
 	{"storage-buckets", http.MethodGet, "/v1/s3/buckets", classAuthed},
 	{"analytics", http.MethodGet, "/v1/analytics/overview", classAuthed},
-	{"knowledge", http.MethodGet, "/v1/knowledge/connectors/catalog", classAuthed},
+	{"knowledge", http.MethodGet, "/v1/kb/connectors/catalog", classAuthed},
 	{"automations", http.MethodGet, "/v1/automations/connectors", classAuthed},
 
 	// ── tolerant (preview / SuperAdmin / cross-org / staged-optional) ──
