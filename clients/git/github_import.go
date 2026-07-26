@@ -88,6 +88,12 @@ func (githubImporter) ImportRepo(ctx context.Context, req cloud.GitImportReq) er
 		}
 	}
 	recordUsage(s, context.WithoutCancel(ctx), req.Org, project, name)
+	// Index-on-import: emit the SAME push.landed the push/inbound paths emit so the
+	// code index (index_on_push) covers this repo NOW, not only after its next push
+	// (the one-way /v1/code-over-all-of-/v1/git guarantee). Origin = source host, so
+	// the outbound mirror suppresses the echo back to where we just imported from.
+	// Best-effort + detached (EmitLifecycle fans out on a cancel-immune ctx).
+	emitImportPush(s, context.WithoutCancel(ctx), req.Org, project, name, src)
 	return nil
 }
 
