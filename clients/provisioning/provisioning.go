@@ -9,7 +9,7 @@
 // is naturally tenant-scoped; the assembled DSN is injected as <KIND>_URL into
 // the app instance's addons Secret, switching it off Base onto the backend:
 //
-//	kv        -> Hanzo KV        Datastore type=valkey       redis://…:6379
+//	kv        -> Hanzo KV        Datastore type=valkey       kv://…:6379
 //	sql       -> Hanzo SQL       Datastore type=postgresql   postgres://…:5432
 //	docdb     -> Hanzo DocDB     Datastore type=docdb        mongodb://…:27017
 //	datastore -> Hanzo Datastore Datastore type=datastore    datastore://…:8123
