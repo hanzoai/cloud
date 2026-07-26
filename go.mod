@@ -92,9 +92,9 @@ require (
 	github.com/hanzoai/go-openai-realtime/contrib/ws-gorilla v1.0.0 // indirect
 	github.com/hanzoai/sqlcipher v0.1.0 // indirect
 	github.com/hanzoai/xorm v1.4.4 // indirect
-	github.com/hanzokv/go/extra/rediscmd/v9 v9.21.1 // indirect
-	github.com/hanzokv/go/extra/redisotel/v9 v9.21.1 // indirect
-	github.com/hanzokv/go/v9 v9.21.1 // indirect
+	github.com/hanzokv/go/extra/kvcmd/v9 v9.22.0 // indirect
+	github.com/hanzokv/go/extra/kvotel/v9 v9.22.0 // indirect
+	github.com/hanzokv/go/v9 v9.22.0 // indirect
 	github.com/hanzos3/go-sdk v1.0.2 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/linode/linodego v1.67.0 // indirect
@@ -760,7 +760,7 @@ require (
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.5
 	github.com/hanzoai/metrics v1.110.2
-	github.com/hanzoai/o11y v1.5.31-0.20260726065106-1a42effcb7ce
+	github.com/hanzoai/o11y v1.5.31-0.20260726155004-2b66f3201d03
 	github.com/hanzoai/thinking v0.1.1 // indirect
 	github.com/hanzoai/vfs v0.6.6
 	github.com/hanzoai/zen v1.4.2
