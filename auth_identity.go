@@ -41,21 +41,21 @@ import (
 type idClaims struct {
 	jwt.Claims
 
-	Owner             string       `json:"owner"`              // org slug (the org)
-	Project           string       `json:"project"`            // org SUB-SCOPE within owner (empty ⟹ default project)
-	BillingAccount    string       `json:"billing_account"`    // WHO PAYS, stated by IAM (empty ⟹ pre-claim token)
-	Name              string       `json:"name"`               // display name (id fallback)
-	PreferredUsername string       `json:"preferred_username"` // id fallback
-	Email             string       `json:"email"`
-	IsAdmin           bool         `json:"isAdmin"`
+	Owner             string `json:"owner"`              // org slug (the org)
+	Project           string `json:"project"`            // org SUB-SCOPE within owner (empty ⟹ default project)
+	BillingAccount    string `json:"billing_account"`    // WHO PAYS, stated by IAM (empty ⟹ pre-claim token)
+	Name              string `json:"name"`               // display name (id fallback)
+	PreferredUsername string `json:"preferred_username"` // id fallback
+	Email             string `json:"email"`
+	IsAdmin           bool   `json:"isAdmin"`
 	// Type is IAM's account kind: "application" for a client_credentials MACHINE
 	// identity (object/token_oauth.go stamps Type:"application"), else a human kind
 	// ("normal-user", …). It is the discriminator that keeps a machine token — of ANY
 	// app, not only the KMS-sync one — from ever being granted SuperAdmin. Empty on a
 	// token that predates the claim ⟹ treated as non-machine (fail toward the KMS-aud
 	// check below, never toward granting admin).
-	Type              string       `json:"type"`
-	Orgs              []model.OrgRef `json:"orgs"` // membership SET (home first); empty on legacy tokens
+	Type string         `json:"type"`
+	Orgs []model.OrgRef `json:"orgs"` // membership SET (home first); empty on legacy tokens
 }
 
 // mintedProject returns the project id to stamp into X-Project-Id, or "" when the
@@ -404,6 +404,26 @@ func (c *jwksCache) fetch() (*gojose.JSONWebKeySet, error) {
 // This is the ONE authority. Admission mirrors it rather than importing it (it
 // stays free of cloud-internal imports); if this list changes, that copy must too.
 var APIKeyPrefixes = []string{"pk-", "sk-", "hk-"}
+
+// PublishablePrefix is the ONE publishable spelling: pk- is the key you may ship
+// in a browser bundle, sk- is the one you may not. Stripe's split, same reason.
+const PublishablePrefix = "pk-"
+
+// IsPublishableKey reports whether tok is a publishable key.
+//
+// A publishable key is NOT a credential: it identifies a tenant so a public
+// surface can WRITE (ingest events), and it must never mint a principal that can
+// READ. Cloud resolved any isAPIKey token — pk- included — into "the same
+// principal a JWT yields", which made a key documented as "safe to show" into a
+// full bearer for the org that owns it. IdentityFromRequest now refuses it, so
+// publishable means publishable.
+//
+// It stays in APIKeyPrefixes on purpose: OrgForKey must still resolve a pk- to
+// its owning org, because that is exactly how the ingest door learns which tenant
+// a browser beacon belongs to. Resolvable, not authenticating.
+func IsPublishableKey(tok string) bool {
+	return strings.HasPrefix(strings.TrimSpace(tok), PublishablePrefix)
+}
 
 // isAPIKey reports whether tok is an opaque, backend-validated key rather than a
 // JWT, so the sanitizer skips JWT parsing for it.
