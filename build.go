@@ -2,6 +2,7 @@ package cloud
 
 import (
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -10,6 +11,8 @@ import (
 
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud/cek"
+	sqlitedrv "github.com/hanzoai/sqlite"
+	"github.com/hanzoai/ha"
 	"github.com/hanzoai/cloud/clients/commerceinproc"
 	"github.com/hanzoai/cloud/clients/metering"
 	"github.com/hanzoai/cloud/internal/org"
@@ -108,7 +111,7 @@ func BuildDeps(cfg *Config) Deps {
 	deps.O11y = pick(cfg, logger, "o11y", "O11y", cfg.O11yZAPAddr, clients.O11yRPCAt, clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
 	deps.MQ = pick(cfg, logger, "mq", "MQ", cfg.MQZAPAddr, clients.MQRPCAt, clients.DisabledMQ)
-	deps.Durable = buildDurability(cfg, logger)
+	deps.Durable, deps.LiveMembers = buildDurability(cfg, logger)
 
 	// Payments and Vault never co-resident. Disabled stub when no
 	// endpoint, otherwise RPC.
@@ -737,6 +740,11 @@ func pickVFSClient(cfg *Config, log luxlog.Logger) VFSClient {
 //     already relies on (see shardrouter.go).
 const durableBucket = "org-db"
 
+// durableProbePrefix namespaces the boot CAS-atomicity probe's throwaway objects
+// (org.ProbeCAS writes one per boot) away from the orgs/ tree. A bucket lifecycle rule
+// may reap ".probe/*"; the objects are tiny and never read after the probe.
+const durableProbePrefix = ".probe/cas-"
+
 // buildDurability constructs the deployment's HA-durability factory, or nil when the
 // deployment has no object store to be durable against (dev/single-node — every
 // OrgStore then stays local-only). It composes the SeaweedFS S3 If-Match
@@ -746,33 +754,31 @@ const durableBucket = "org-db"
 // master. Any construction failure fails SAFE to nil (local-only) rather than crash
 // the boot; an encryption-capable build with no usable cipher is REFUSED — a build
 // that promises encryption never ships plaintext snapshots to the object store.
-func buildDurability(cfg *Config, log luxlog.Logger) *Durability {
+// It returns the durable factory AND the live-members reader for the shard router (the
+// SAME election snapshot), non-nil together only when the plane is active; both nil when
+// local-only (the router then stays on the static ordinal set).
+func buildDurability(cfg *Config, log luxlog.Logger) (*Durability, func() []ha.Member) {
 	// A multi-replica deployment REQUIRES the durable plane: with >1 writer, a per-org
 	// store that is not hydrate-on-open + fenced is the outage this exists to fix.
 	// disabledDurability logs at the severity the replica count warrants, so a
 	// misconfigured prod deployment is never SILENTLY non-durable (Red L2).
 	multiReplica := len(parsePeers(cfg.ShardPeers)) > 1
 
-	// Explicit opt-in: the object-store fence rests on the deployed SeaweedFS enforcing
-	// conditional-PUT (If-Match) atomically, which must be validated against the deployed
-	// version before it fences real tenant data (the takeover-fence staging gate). Until
-	// CLOUD_RESEARCH_DURABLE is set the store runs local-only — the shard router still
-	// pins each org to one writer, so this is not the rolling-deploy outage; only the
-	// cross-restart object-store snapshot waits for the opt-in.
-	if !cfg.ResearchDurable {
-		disabledDurability(log, multiReplica, "CLOUD_RESEARCH_DURABLE not set — HA object-store durability is opt-in pending the SeaweedFS conditional-PUT atomicity gate")
-		return nil
-	}
-
+	// Durability is THE path — there is no operator toggle. It self-detects capability
+	// at boot: no object store reachable (dev / native-Go / no S3 creds) → local-only,
+	// same code path, graceful; a reachable store → PROVE its conditional-PUT atomicity
+	// (org.ProbeCAS) before fencing a single byte of tenant data. A store that cannot be
+	// proven atomic fails SAFE to local-only with a loud alert — never a silent-wrong
+	// fence on a store that could split-brain.
 	admin := s3admin.New()
 	if !admin.Configured() {
 		disabledDurability(log, multiReplica, "no S3 admin creds (S3_ADMIN_* unset)")
-		return nil
+		return nil, nil
 	}
 	client, err := admin.Client()
 	if err != nil {
 		disabledDurability(log, multiReplica, fmt.Sprintf("S3 client construction failed: %v", err))
-		return nil
+		return nil, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	if err := ensureDurableBucket(ctx, admin, client); err != nil {
@@ -781,16 +787,42 @@ func buildDurability(cfg *Config, log luxlog.Logger) *Durability {
 	}
 	cancel()
 
-	// Membership: CLOUD_PEERS (the shard router's set). A single-pod deployment with
-	// no peers is its own sole writer — still hydrate-on-open + fenced ship across a
-	// rolling restart.
+	// Prove the store enforces conditional-PUT atomically BEFORE fencing any tenant data
+	// (the auto-H2 self-check that replaces the old opt-in flag). A store that cannot be
+	// proven atomic fails SAFE to local-only + a loud alert — never a silent fence on a
+	// store that could admit two writers for one round (split-brain). The result is
+	// cached for the process life (deps.Durable is set once), so this probe runs once.
+	// cond is the linearizable register the fence stands on, constructed HERE (not
+	// hard-wired inside the fence) so a cache tier slots in as a decorator: a
+	// read-through/write-through KV-in-front-of-S3 store (github.com/hanzoai/kv-go) can
+	// wrap this one line to serve low-latency hydrate reads while the authoritative CAS
+	// still lands on S3 — the fence reads and CASes through whatever ConditionalStore it
+	// is handed. (Safety note for that tier: a stale cached lease read only costs a claim
+	// retry, never safety — the S3 CAS is authoritative — so a write-through cache is
+	// sound over the SAME cond that backs both the lease and the data ships.)
+	cond := org.NewS3ConditionalStore(client, durableBucket)
+	probeCtx, probeCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	err = org.ProbeCAS(probeCtx, cond, durableProbePrefix)
+	probeCancel()
+	if err != nil {
+		disabledDurability(log, multiReplica, fmt.Sprintf("object-store conditional-PUT atomicity NOT confirmed — %v", err))
+		return nil, nil
+	}
+
+	// Membership: LIVE when in-cluster + CLOUD_PEER_SELECTOR is set (a rolling upgrade's
+	// changing pod set is tracked, a draining/dead pod is never elected an org's owner),
+	// else the STATIC CLOUD_PEERS/self set — capability-detected, no flag (see
+	// membership_k8s.go). A single-pod deployment with no peers is its own sole writer.
+	// The 2s refresh keeps a drained pod out of every peer's election within a bound the
+	// terminationGracePeriod covers, so a rolling handoff loses no request.
 	self := firstNonEmptyStr(strings.TrimSpace(cfg.ShardSelf), hostnameOr("cloud-0"))
 	peers := parsePeers(cfg.ShardPeers)
 	if len(peers) == 0 {
 		peers = []org.Member{{ID: self, Addr: self}}
 	}
-	members := org.NewMembership(self, org.StaticSource(peers...), 5*time.Second)
-	_ = members.Start(context.Background()) // static source: the initial refresh populates Members()
+	src := membershipSource(peers, cfg.PeerSelector, httpPortOf(cfg.ListenAddr), log)
+	members := org.NewMembership(self, src, 2*time.Second)
+	_ = members.Start(context.Background()) // initial refresh populates Members() before first request
 
 	cipher := durableCipher(cfg, log)
 	if cipher == nil && cek.Encrypting() {
@@ -798,11 +830,60 @@ func buildDurability(cfg *Config, log luxlog.Logger) *Durability {
 		// misconfig, not a dev path: never ship plaintext snapshots AND never silently
 		// drop durability — fail closed and log LOUDLY for the replica count.
 		disabledDurability(log, multiReplica, "encryption-capable build but no durable cipher (would ship plaintext snapshots)")
-		return nil
+		return nil, nil
 	}
 
-	log.Info("durability enabled", "bucket", durableBucket, "self", self, "peers", len(peers), "encrypted", cipher != nil)
-	return org.NewDurability(org.NewS3ConditionalStore(client, durableBucket), members, cipher)
+	log.Info("durability enabled", "bucket", durableBucket, "self", self, "peers", len(peers), "atomic_cas", true, "encrypted", cipher != nil)
+	// members.Members is the live election snapshot; hand it to the shard router so it
+	// routes on the SAME set the fencer elects over — the store-layer owner and the routed
+	// owner never disagree. WithCheckpoint WIRES the ship checkpoint (durableCheckpoint) so
+	// ship-before-ack folds the WAL into the real path before reading it — the crypto
+	// envelope's re-encrypt integration point (P5).
+	return org.NewDurability(cond, members, cipher, org.WithCheckpoint(durableCheckpoint)), members.Members
+}
+
+// durableCheckpoint makes the real on-disk file reflect every committed write before a
+// durable ship reads it — the checkpoint the codec runs before snapshotting (WithCheckpoint).
+// Two steps, correct on every backend:
+//
+//  1. A TRUNCATE checkpoint with the busy fail-closed guard: busy!=0 means a reader held the
+//     WAL so the main file is missing committed frames, and shipping it would silently lose an
+//     acked write. This folds the WAL and — on the WRITE-time-encrypting backends (cgo
+//     libsqlcipher page-level, and plaintext) — leaves the real path already fresh.
+//  2. sqlitedrv.Checkpoint re-encrypts the pure-Go ENVELOPE backend's real path. The envelope
+//     defers encryption to Checkpoint/Close, so after step 1 the real path is STALE ciphertext
+//     until re-encrypted; without this the ship reads stale bytes and loses acked writes on
+//     takeover (the envelope backend landed in hanzoai/sqlite v0.4.0 — every pure-Go and
+//     mislinked-cgo keyed open routes through it). It is a successful no-op on the write-time
+//     backends, so it runs unconditionally.
+//
+// Step 1's connection is released before step 2 so the envelope re-encrypt sees a clean handle.
+func durableCheckpoint(ctx context.Context, db *sql.DB) error {
+	if err := walCheckpointTruncate(ctx, db); err != nil {
+		return err
+	}
+	if err := sqlitedrv.Checkpoint(db); err != nil {
+		return fmt.Errorf("durable checkpoint re-encrypt: %w", err)
+	}
+	return nil
+}
+
+// walCheckpointTruncate folds the WAL into the main file with the busy fail-closed guard,
+// on its own connection (released on return, before the envelope re-encrypt).
+func walCheckpointTruncate(ctx context.Context, db *sql.DB) error {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("durable checkpoint conn: %w", err)
+	}
+	defer conn.Close()
+	var busy, logFrames, checkpointed int
+	if err := conn.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &logFrames, &checkpointed); err != nil {
+		return fmt.Errorf("durable checkpoint: %w", err)
+	}
+	if busy != 0 {
+		return fmt.Errorf("durable checkpoint did not complete (busy=%d, log=%d, checkpointed=%d) — refusing to ship a snapshot missing committed WAL frames", busy, logFrames, checkpointed)
+	}
+	return nil
 }
 
 // disabledDurability records that the durable plane is OFF, at ERROR when the
