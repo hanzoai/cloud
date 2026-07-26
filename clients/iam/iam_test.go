@@ -55,8 +55,8 @@ func TestMountFailClosed503(t *testing.T) {
 // and init_data.json resolves the standalone-iam default unless `initDataFile` overrides.
 func TestPaths(t *testing.T) {
 	dbPath, initData := paths(cloud.Deps{DataDir: "/var/data"})
-	if dbPath != "/var/data/iam/iam.db" {
-		t.Errorf("dbPath = %q, want /var/data/iam/iam.db", dbPath)
+	if dbPath != "/var/data/iam/iam2.db" {
+		t.Errorf("dbPath = %q, want /var/data/iam/iam2.db", dbPath)
 	}
 	if initData != "init_data.json" {
 		t.Errorf("initData = %q, want the CWD-relative default", initData)
