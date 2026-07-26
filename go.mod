@@ -552,7 +552,7 @@ require (
 	github.com/luxfi/fhe v1.8.2 // indirect
 	github.com/luxfi/geth v1.20.1
 	github.com/luxfi/ids v1.3.2
-	github.com/luxfi/kms v1.11.8
+	github.com/luxfi/kms v1.12.9
 	github.com/luxfi/lattice/v7 v7.1.4 // indirect
 	github.com/luxfi/lens v0.2.1 // indirect
 	github.com/luxfi/magnetar v1.2.3 // indirect
