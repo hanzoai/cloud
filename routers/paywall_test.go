@@ -252,3 +252,78 @@ func TestPaywall_NonV1PathPasses(t *testing.T) {
 		}
 	}
 }
+
+// A gate whose bypass is a shift key is not a gate: before canonical(), gated()
+// tested strings.HasPrefix(path, "/v1/") against the raw path, so any casing of
+// the version segment skipped the paywall and reached the handler unpaid.
+func TestGated_CaseFoldedSoCasingCannotBypass(t *testing.T) {
+	for _, path := range []string{
+		"/v1/chat/completions",
+		"/V1/chat/completions",
+		"/V1/CHAT/COMPLETIONS",
+		"/v1/analytics/events",
+		"/V1/analytics/events",
+	} {
+		if !gated(path) {
+			t.Errorf("gated(%q) = false, want true — this path skips the paywall", path)
+		}
+	}
+}
+
+// The mirror of the same bug, in the direction that locks a paying user OUT: an
+// allow-listed route in other casing missed the allow list and would have been
+// refused 402 — on the OAuth callback, of all routes.
+func TestGated_CaseFoldedSoAllowlistStillMatches(t *testing.T) {
+	for _, path := range []string{
+		"/v1/iam/callback",
+		"/V1/iam/callback",
+		"/v1/IAM/callback",
+		"/V1/BILLING/subscribe",
+		"/V1/signin",
+	} {
+		if gated(path) {
+			t.Errorf("gated(%q) = true, want false — 402 on the sell/service surface", path)
+		}
+	}
+}
+
+// A trailing slash means the same route. It used to match neither the exact-match
+// list nor any allow prefix, so /v1/signin/ was paywalled: a 402 in front of sign-in.
+func TestGated_TrailingSlashDoesNotLockOut(t *testing.T) {
+	for _, path := range []string{
+		"/v1/signin/",
+		"/v1/signout/",
+		"/v1/get-account/",
+		"/v1/entitlements/",
+		"/v1/plans/",
+		"/v1/models/",
+		"/v1/health/",
+		"/v1/billing/subscribe/",
+	} {
+		if gated(path) {
+			t.Errorf("gated(%q) = true, want false — trailing slash must not gate a sell/service route", path)
+		}
+	}
+}
+
+// Folding must not open a hole: a gated product route stays gated with a trailing
+// slash, and the bare version root is left exactly as the router had it.
+func TestGated_TrailingSlashDoesNotOpenAHole(t *testing.T) {
+	for _, path := range []string{
+		"/v1/chat/completions/",
+		"/V1/chat/completions/",
+		"/v1/analytics/events/",
+	} {
+		if !gated(path) {
+			t.Errorf("gated(%q) = false, want true — trailing slash must not bypass", path)
+		}
+	}
+	if got := canonical("/v1/"); got != "/v1/" {
+		t.Errorf("canonical(%q) = %q, want it untouched", "/v1/", got)
+	}
+	for _, path := range []string{"/healthz", "/readyz", "/zap", "/", "/assets/app.js"} {
+		if gated(path) {
+			t.Errorf("gated(%q) = true, want false — non-/v1 surface", path)
+		}
+	}
+}
