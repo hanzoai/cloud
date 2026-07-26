@@ -801,6 +801,15 @@ func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 		)
 	}
 	cmd = append(cmd, "--secret", "id=GIT_AUTH_TOKEN,env=GIT_AUTH_TOKEN")
+	// Hand the image's own tag to the build as VERSION, so a binary can stamp the
+	// version it was published under (cloud's Dockerfile links it into
+	// cloud.Version, the X-Api-Version header) instead of shipping the "dev"
+	// default. The tag is already the authority here — deriving it means the
+	// version can never drift from the ref that was pushed. A Dockerfile with no
+	// `ARG VERSION` simply ignores it.
+	if _, tag := splitImageRef(image); tag != "" && tag != "latest" {
+		cmd = append(cmd, "--opt", "build-arg:VERSION="+tag)
+	}
 	return append(cmd, "--output", "type=image,name="+image+",push=true")
 }
 
