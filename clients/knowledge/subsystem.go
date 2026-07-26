@@ -1,6 +1,6 @@
 // subsystem.go mounts the KB retrieval + ingestion control-plane at /v1/kb/*. It is
 // the thin surface on top of the framework DocType store (CRUD lives at
-// /v1/framework/kb-*) and the vector index (index.go):
+// /v1/kb) and the vector index (index.go):
 //
 //   - POST /v1/kb/search — the RAG entry point. An agent/chat resolves the org from
 //     its validated principal and asks "what does this org know about X"; the org's
@@ -54,12 +54,10 @@ func build(b cloud.Base) (state, error) {
 	return state{}, nil
 }
 
-// routes registers the retrieval + connector surface under both the canonical
-// /v1/knowledge prefix and the pre-rename /v1/kb back-compat alias (kb→knowledge):
-// the SAME handlers under both prefixes, so clients pinned to /v1/kb keep working
-// while /v1/knowledge is the canonical surface.
+// routes registers the retrieval + connector surface at /v1/kb. One prefix: the
+// same handler reachable at two paths is two answers to "where is this".
 func routes(app *zip.App, s *cloud.Service[state]) {
-	for _, p := range []string{"/v1/knowledge", "/v1/kb"} {
+	for _, p := range []string{"/v1/kb"} {
 		app.Post(p+"/search", cloud.Handle(s, search))                 // RAG entry point
 		app.Get(p+"/graph", cloud.Handle(s, graph))                    // force-directed knowledge graph
 		app.Post(p+"/import", cloud.Handle(s, importVault))            // Obsidian/Notion/Roam/Evernote import
