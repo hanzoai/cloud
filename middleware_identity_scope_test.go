@@ -152,7 +152,7 @@ func TestSanitizeIdentity_SubScopes(t *testing.T) {
 		t.Fatalf("genkey: %v", err)
 	}
 	jwks := jwksServer(t, &key.PublicKey)
-	v := newIdentityValidator(testIssuer, jwks.URL, []string{"hanzo-console"}, 0)
+	v := newIdentityValidator(testIssuer, jwks.URL, 0)
 	future := time.Now().Add(time.Hour)
 
 	// acme owns "site-a"; beta owns "secret".

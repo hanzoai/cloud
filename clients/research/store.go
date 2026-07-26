@@ -2,7 +2,7 @@ package research
 
 // store.go is the durable WRITE PLANE of Hanzo Research (HIP-0512 §"Two planes,
 // named"): one per-org (per HIP-0302, physical-file-isolated) SQLite holding the
-// research evidence records. This is the local source of truth; the ClickHouse
+// research evidence records. This is the local source of truth; the Datastore
 // projection (datastore.go) is a best-effort roll-up over it.
 //
 // RECORDS, NOT COLUMNS. Every record is a typed Go value stored as JSON in
@@ -1165,7 +1165,7 @@ func sortedKeys(m map[string]bool) []string {
 
 // jsonObj normalizes a JSON field to a compact object string; an absent or invalid
 // value becomes "{}", so meta / lib_versions are always valid JSON a downstream
-// query (SQLite json_extract, ClickHouse JSONExtract) can read. Shared with the
+// query (SQLite json_extract, Datastore JSONExtract) can read. Shared with the
 // warehouse roll-up (datastore.go).
 func jsonObj(raw json.RawMessage) string {
 	if len(raw) == 0 || !json.Valid(raw) {

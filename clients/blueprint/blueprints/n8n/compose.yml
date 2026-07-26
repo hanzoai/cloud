@@ -1,0 +1,27 @@
+# Hanzo blueprint: n8n — the workflow-automation engine backed by Postgres.
+# The n8n service scales to 2 replicas, so the estimator doubles its footprint.
+services:
+  n8n:
+    image: n8nio/n8n:1.60.1
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: db
+      DB_POSTGRESDB_PASSWORD: ${DB_PASSWORD:-n8n}
+    depends_on:
+      - db
+    deploy:
+      replicas: 2
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: n8n
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-n8n}
+      POSTGRES_DB: n8n
+    volumes:
+      - n8ndb:/var/lib/postgresql/data
+volumes:
+  n8ndb:

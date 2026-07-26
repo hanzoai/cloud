@@ -5,23 +5,38 @@ import (
 	"testing"
 )
 
-// TestDefaultCurriculumValid proves the embedded default parses and satisfies every
-// schema invariant — the same check package init enforces, made explicit.
-func TestDefaultCurriculumValid(t *testing.T) {
-	c := defaultCurriculum
-	if len(c.Steps) < 5 || len(c.Steps) > 12 {
-		t.Fatalf("default should have 5-12 steps, got %d", len(c.Steps))
+// TestDefaultBlueprintValid proves the embedded base blueprint (the historic Guide™
+// playbook seed) parses and satisfies every invariant — the same check package init
+// enforces, made explicit — and that its enabled projection is the engine journey.
+func TestDefaultBlueprintValid(t *testing.T) {
+	b := defaultBlueprint
+	if b.Version != "1" {
+		t.Fatalf("base blueprint version want 1, got %q", b.Version)
 	}
-	if err := Validate(c); err != nil {
-		t.Fatalf("default invalid: %v", err)
+	// The full Zen of Hanzo genome: the 64-principle spine · 12 sections · 67 steps · the
+	// 1002-strategy corpus (888 modern + 114 heritage) · 6 templates.
+	if len(b.Principles) != 64 || len(b.Sections) != 12 || len(b.Steps) != 67 || len(b.Strategies) != 1002 || len(b.Templates) != 6 {
+		t.Fatalf("base counts want 64/12/67/1002/6, got %d/%d/%d/%d/%d",
+			len(b.Principles), len(b.Sections), len(b.Steps), len(b.Strategies), len(b.Templates))
 	}
-	// The launch capstone must depend on the funnel steps.
-	launch, ok := c.stepByID("launch")
+	if err := b.Validate(); err != nil {
+		t.Fatalf("base blueprint invalid: %v", err)
+	}
+	// The engine runs the ENABLED projection — every item ships enabled, so it is the
+	// whole journey, and its single root is `incorporate` (no dependencies).
+	c := b.Curriculum()
+	if len(c.Steps) != 67 {
+		t.Fatalf("all-enabled projection must keep every step, got %d", len(c.Steps))
+	}
+	root, ok := c.stepByID("incorporate")
 	if !ok {
-		t.Fatal("default missing launch step")
+		t.Fatal("base journey missing the incorporate root")
 	}
-	if len(launch.Dependencies) == 0 {
-		t.Fatal("launch must depend on earlier steps")
+	if len(root.Dependencies) != 0 {
+		t.Fatalf("incorporate is the single root and must have no dependencies, got %v", root.Dependencies)
+	}
+	if got := c.Next(map[string]State{}); got != "incorporate" {
+		t.Fatalf("a fresh journey's next is the root incorporate, got %q", got)
 	}
 }
 
@@ -34,10 +49,12 @@ func TestValidateRejectsBadCurricula(t *testing.T) {
 		{"no steps", `version: v1`, "no steps"},
 		{"empty id", "version: v1\nsteps:\n- title: X", "empty id"},
 		{"dup id", "version: v1\nsteps:\n- {id: a, title: A}\n- {id: a, title: A2}", "duplicate step id"},
-		{"unknown dep", "version: v1\nsteps:\n- {id: a, title: A, dependencies: [ghost]}", "unknown step"},
-		{"self dep", "version: v1\nsteps:\n- {id: a, title: A, dependencies: [a]}", "depends on itself"},
-		{"cycle", "version: v1\nsteps:\n- {id: a, title: A, dependencies: [b]}\n- {id: b, title: B, dependencies: [a]}", "cycle"},
+		{"unknown dep", "version: v1\nsteps:\n- {id: a, title: A, deps: [ghost]}", "unknown step"},
+		{"self dep", "version: v1\nsteps:\n- {id: a, title: A, deps: [a]}", "depends on itself"},
+		{"cycle", "version: v1\nsteps:\n- {id: a, title: A, deps: [b]}\n- {id: b, title: B, deps: [a]}", "cycle"},
 		{"empty title", "version: v1\nsteps:\n- {id: a}", "empty title"},
+		{"unknown section", "version: v1\nsteps:\n- {id: a, title: A, section: ghost}", "unknown section"},
+		{"dup strategy id", "version: v1\nsteps:\n- {id: a, title: A}\nstrategies:\n- {id: s, category: c, action: x}\n- {id: s, category: c, action: y}", "duplicate strategy id"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -50,14 +67,19 @@ func TestValidateRejectsBadCurricula(t *testing.T) {
 }
 
 // TestParseAcceptsJSON proves the ONE contract: a JSON body parses identically to
-// YAML (sigs.k8s.io/yaml through the json tags).
+// YAML (sigs.k8s.io/yaml through the json tags), the new arrays included.
 func TestParseAcceptsJSON(t *testing.T) {
-	c, err := Parse([]byte(`{"version":"v1","steps":[{"id":"a","title":"A"},{"id":"b","title":"B","dependencies":["a"]}]}`))
+	b, err := Parse([]byte(`{"version":"v1","steps":[{"id":"a","title":"A"},{"id":"b","title":"B","deps":["a"]}],` +
+		`"strategies":[{"id":"s","category":"lead-generation","workload":"low","action":"do it","tags":["stage:launched"]}],` +
+		`"templates":[{"id":"t","title":"T","body":"hi {name}"}]}`))
 	if err != nil {
 		t.Fatalf("parse json: %v", err)
 	}
-	if len(c.Steps) != 2 || c.Steps[1].Dependencies[0] != "a" {
-		t.Fatalf("json not parsed into the same shape: %+v", c)
+	if len(b.Steps) != 2 || b.Steps[1].Dependencies[0] != "a" {
+		t.Fatalf("json steps not parsed into the same shape: %+v", b)
+	}
+	if len(b.Strategies) != 1 || b.Strategies[0].Category != "lead-generation" || len(b.Templates) != 1 {
+		t.Fatalf("json strategies/templates not parsed: %+v", b)
 	}
 }
 

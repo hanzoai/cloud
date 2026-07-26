@@ -2,6 +2,7 @@ package paas
 
 import (
 	"context"
+	"github.com/hanzoai/cloud/clients/k8s"
 	"strings"
 	"testing"
 
@@ -31,16 +32,24 @@ func appCRObj(name, ns, repo, tag string) *unstructured.Unstructured {
 func fakeService(objs ...runtime.Object) *cloud.Service[state] {
 	scheme := runtime.NewScheme()
 	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
-		appsGVR:        "AppList",
-		deploymentsGVR: "DeploymentList",
+		k8s.Apps:        "AppList",
+		k8s.Deployments: "DeploymentList",
+		// discoverNamespaces lists namespaces to build the scan set; the fake panics
+		// on an unregistered list kind, so it is registered here. Seeding no Namespace
+		// objects is the honest hermetic default: discovery finds none and the scan
+		// set falls back to the first-party set, which is what these tests assert on.
+		k8s.Namespaces: "NamespaceList",
 	}, objs...)
-	return &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{dyn: dyn}}
+	return &cloud.Service[state]{
+		Base:  cloud.Base{Log: luxlog.New("test")},
+		State: state{dyn: dyn, scan: &nsCache{}},
+	}
 }
 
 // declaredImage reads spec.image.{repository,tag} off the live App CR in the fake.
 func declaredImage(t *testing.T, s *cloud.Service[state], ns, name string) (repo, tag, pull string) {
 	t.Helper()
-	obj, err := s.State.dyn.Resource(appsGVR).Namespace(ns).Get(context.Background(), name, metav1.GetOptions{})
+	obj, err := s.State.dyn.Resource(k8s.Apps).Namespace(ns).Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("get CR %s/%s: %v", ns, name, err)
 	}

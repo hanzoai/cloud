@@ -23,18 +23,28 @@
 //     record): deploying_org↔repo↔project, idempotent per (repo, project, org).
 //     hanzo.app persists sourceRepo on the published project so the deploy is
 //     attributable.
-//  4. The ACCRUAL SWEEP (POST /v1/admin/authors/sweep, the cron path; also lazy on
-//     the author's own dashboard read) folds over each approved author's DISTINCT
-//     deploying orgs (excluding the author's own): royalty = that org's metered spend
-//     THIS PERIOD × the author's share (default 5%), accrued at-most-once per
-//     (author, deploying_org, period).
-//  5. Staff PAY OUT accrued royalty (POST /v1/admin/authors/:id/payout): "credits"
-//     issues a commerce grant into the author's wallet; cash methods are record-only.
-//     A payout can never exceed pending (accrued − paid), guarded atomically.
+//  4. The ACCRUAL SWEEP (the scheduler's automatic loop; POST /v1/admin/authors/sweep
+//     as an operator override; also lazy on the author's own dashboard read) folds
+//     over each approved author's DISTINCT deploying orgs (excluding the author's own):
+//     royalty = that org's metered spend THIS PERIOD × the author's share (20%),
+//     accrued at-most-once per (author, deploying_org, period).
+//  5. The AUTO-PAYOUT (same scheduler pass, right after accrual; POST
+//     /v1/admin/authors/:id/payout as an operator override) settles each author's
+//     pending royalty with NO human in the loop: "credits" issues a commerce grant into
+//     an external author's wallet; a Hanzo-MAINTAINED template's royalty is realized
+//     into the Hanzo treasury reserve instead ("pay ourselves"). A payout can never
+//     exceed pending (accrued − paid), guarded atomically — idempotent, never
+//     double-pays.
+//
+// HANZO FORKS. A repo whose owner is a brand org (owner ∈ {hanzoai, hanzo-*}) is
+// auto-attributed on first deploy to the treasury SYSTEM author (org = the brand slug),
+// so Hanzo earns 20% on its OWN templates when other orgs deploy them, credited to the
+// treasury reserve via the shared treasury client — no external wallet, no new ledger.
 //
 // Surface:
 //
 //	GET  /v1/authors                       (org)          my status, login, verified, repos, deploys, accrued/pending/paid, payouts
+//	GET  /v1/authors/basis                 (org)          why my number is my number: share, cost model, immutable rows, reconciliation
 //	POST /v1/authors/connect               (org)          link GitHub (IAM-linked account or supplied login) + mint verify code
 //	POST /v1/authors/repos/verify          (org)          verify repo ownership (oauth admin-check OR hanzo.json file)
 //	POST /v1/authors/deploys/record        (org=deployer) record a deploy of a verified author repo (provenance → royalty)
@@ -43,6 +53,7 @@
 //	POST /v1/admin/authors/:id/approve      (SuperAdmin) admit to earning (+ optional share override)
 //	POST /v1/admin/authors/:id/suspend      (SuperAdmin) suspend
 //	POST /v1/admin/authors/:id/payout       (SuperAdmin) record a payout (credits → grant; cash → record-only)
+//	GET  /v1/admin/authors/:id/basis        (SuperAdmin) the SAME basis payload the author reads (support mirror)
 //
 // serve.go auto-registers GET /v1/authors/health.
 package authors
@@ -70,9 +81,12 @@ import (
 // payout lands in the commerce Credit/trial bucket (grant:* → Credit per DepositKind),
 // distinct from grant:referral / grant:affiliate / grant:admin only by its tag.
 const (
-	// defaultShareBps is the royalty a new author earns, in basis points (2500 = 25%
-	// of a deploying org's metered platform spend). The ONE royalty constant.
-	defaultShareBps int64 = 2500
+	// defaultShareBps is the internal default royalty rate a new author earns, in basis
+	// points (2000 = 20% of a deploying org's metered platform spend), overridable
+	// per-author at approval. It is the ONE royalty constant the accrual math reads;
+	// any public-facing rate is presented by the frontend, not promised here. Was
+	// 2500/25%; a stale flow comment said 5% — both reconciled to this ONE default.
+	defaultShareBps int64 = 2000
 	// bpsDenom converts basis points to a fraction (spend × shareBps / 10000).
 	bpsDenom int64 = 10000
 	// grantCurrency is the ledger currency for a credits payout.
@@ -86,6 +100,12 @@ const (
 	// verifyFile is the repo-root file the file-verification method reads; it must
 	// contain the author's verify code on the repo's default branch.
 	verifyFile = "hanzo.json"
+	// orgProofRepo is the owner-wide control artifact an ORG claim is proven against.
+	// GitHub/GitLab expose a special "<owner>/.github" repository for owner-level
+	// config, so proving ownership of it — the SAME OAuth admin/push check OR a
+	// hanzo.json with the verify code on its default branch — proves control of the
+	// whole owner. No new proof primitive, exactly as strong as a per-repo claim.
+	orgProofRepo = ".github"
 )
 
 // verifyBranches are the default-branch names the file method probes, in order.
@@ -106,14 +126,19 @@ const (
 
 // state is authors' own data; shared deps live in the embedded cloud.Base.
 type state struct {
-	store      *Store
-	commerce   commerce
-	forge      forge
-	badgeBase  string          // https://hanzo.app — the Deploy-on-Hanzo badge/link host
-	auditStore *audit.Recorder // best-effort payout/accrual audit; nil disables it
+	store         *Store
+	commerce      commerce
+	forge         forge
+	badgeBase     string          // https://hanzo.app — the Deploy-on-Hanzo badge/link host
+	maintainerOrg string          // the first-party org (hanzo/lux/zoo) whose maintained templates earn INTO the treasury ("pay ourselves")
+	auditStore    *audit.Recorder // best-effort payout/accrual audit; nil disables it
 }
 
 var mounted *cloud.Service[state]
+
+// stopScheduler stops the background accrual+auto-payout loop. Set by Mount, called
+// by Shutdown; the default no-op keeps an unmounted/partial deploy safe.
+var stopScheduler = func() {}
 
 // Mount wires the authors surface onto app per HIP-0106.
 func Mount(app *zip.App, deps cloud.Deps) error {
@@ -135,24 +160,32 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	b := cloud.NewBase(deps, "authors")
 	s := &cloud.Service[state]{Base: b, State: state{
-		store:      store,
-		commerce:   newCommerceClient(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
-		forge:      newGitHubClient(os.Getenv("CLOUD_IAM_HTTP_URL"), os.Getenv("IAM_SERVICE_TOKEN")),
-		badgeBase:  badgeBase(deps),
-		auditStore: deps.Audit,
+		store:         store,
+		commerce:      newCommerceClient(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
+		forge:         newGitHubClient(os.Getenv("CLOUD_IAM_HTTP_URL"), os.Getenv("IAM_SERVICE_TOKEN")),
+		badgeBase:     badgeBase(deps),
+		maintainerOrg: maintainerOrgFor(deps),
+		auditStore:    deps.Audit,
 	}}
 	mounted = s
 
 	routes(app, s)
 
+	// Drive the DEFAULT automatic money loop: a periodic goroutine that accrues every
+	// approved author's royalty AND auto-pays their pending balance, no human in the
+	// loop (the manual sweep/payout admin endpoints remain as overrides). Single-writer:
+	// authors mounts only on the writer pod, so exactly one scheduler runs.
+	stopScheduler = startScheduler(s)
+
 	b.Log.Info("authors mounted", "brand", deps.Brand, "badgeBase", s.State.badgeBase,
-		"commerce", s.State.commerce.configured())
+		"maintainerOrg", s.State.maintainerOrg, "commerce", s.State.commerce.configured())
 	return nil
 }
 
 // routes registers the authors surface.
 func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/authors", cloud.Handle(s, myAuthors))
+	app.Get("/v1/authors/basis", cloud.Handle(s, basis))
 	app.Post("/v1/authors/connect", cloud.Handle(s, connect))
 	app.Post("/v1/authors/repos/verify", cloud.Handle(s, verifyRepo))
 	app.Post("/v1/authors/deploys/record", cloud.Handle(s, recordDeploy))
@@ -161,6 +194,7 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/admin/authors/:id/approve", cloud.Handle(s, adminApprove))
 	app.Post("/v1/admin/authors/:id/suspend", cloud.Handle(s, adminSuspend))
 	app.Post("/v1/admin/authors/:id/payout", cloud.Handle(s, adminPayout))
+	app.Get("/v1/admin/authors/:id/basis", cloud.Handle(s, adminBasis))
 }
 
 // ── customer surface ─────────────────────────────────────────────────────────
@@ -204,6 +238,10 @@ func myAuthors(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list repos: %v", err)
 	}
+	orgs, err := s.State.store.ListOrgs(ctx, a.ID, repoLimit)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "list orgs: %v", err)
+	}
 	deploys, err := s.State.store.ListDeploys(ctx, a.ID, deployLimit)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list deploys: %v", err)
@@ -212,7 +250,7 @@ func myAuthors(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list payouts: %v", err)
 	}
-	ledger, err := s.State.store.ListLedger(ctx, a.ID, ledgerLimit)
+	ledger, err := s.State.store.ListLedger(ctx, a.ID, "", ledgerLimit)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list ledger: %v", err)
 	}
@@ -229,6 +267,7 @@ func myAuthors(s *cloud.Service[state], c *zip.Ctx) error {
 		"shareBps":      a.ShareBps,
 		"badgeBase":     s.State.badgeBase,
 		"repos":         repoViews(repos, s.State.badgeBase),
+		"orgs":          orgViews(orgs, s.State.badgeBase),
 		"deploys":       deployViews(deploys),
 		"accruedCents":  a.AccruedCents,
 		"pendingCents":  a.PendingCents(),
@@ -311,10 +350,13 @@ type verifyRepoRequest struct {
 	RepoURL string `json:"repoUrl"`
 }
 
-// verifyRepo verifies the caller owns a repo and records it as a verified author repo.
-// Ownership is proven by an IAM-linked GitHub token (admin/push permission) OR a
-// hanzo.json on the default branch carrying the author's verify code. The author must
-// have connected first.
+// verifyRepo verifies the caller owns a REPO or a whole OWNER (org) and records the
+// verified claim. A repo url (github.com/owner/name) records a per-repo claim; an org
+// url (github.com/owner, no repo segment) records an owner-wide claim covering every
+// repo under that owner. Ownership is proven the SAME two ways in both cases — an
+// IAM-linked forge token with admin/push permission OR a hanzo.json carrying the
+// author's verify code on the default branch (for an org, of the owner's .github
+// control repo). The author must have connected first.
 func verifyRepo(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
@@ -324,9 +366,9 @@ func verifyRepo(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
-	repoURL, perr := parseRepoInput(body.RepoURL)
+	target, perr := parseTarget(body.RepoURL)
 	if perr != nil {
-		return zip.ErrBadRequest("repoUrl must be a GitHub or GitLab repo (github.com/owner/name or gitlab.com/owner/name)")
+		return zip.ErrBadRequest("repoUrl must be a GitHub or GitLab repo OR owner — github.com/owner or github.com/owner/name (gitlab.com too)")
 	}
 	ctx := c.Context()
 
@@ -338,32 +380,72 @@ func verifyRepo(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "load author: %v", err)
 	}
 
-	host, owner, name, _ := splitRepo(repoURL)
+	if target.isOrg() {
+		return verifyOrg(s, ctx, c, a, org, target)
+	}
+
+	host, owner, name := target.host, target.owner, target.name
 	method, verified := proveOwnership(s, ctx, a, org, strings.TrimSpace(c.User()), host, owner, name)
 	if !verified {
 		return zip.Errorf(http.StatusUnprocessableEntity,
 			"could not verify ownership of %s — grant the Hanzo %s app OR add %s containing your verify code (%s) to the default branch",
-			repoURL, providerForHost(host), verifyFile, a.VerifyCode)
+			target.canonical, providerForHost(host), verifyFile, a.VerifyCode)
 	}
 
 	repoID, err := genID("arp")
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	repo, created, err := s.State.store.UpsertVerifiedRepo(ctx, repoID, a.ID, repoURL, method, time.Now().Unix())
+	repo, created, err := s.State.store.UpsertVerifiedRepo(ctx, repoID, a.ID, target.canonical, method, time.Now().Unix())
 	if err != nil {
 		if err == errRepoOwned {
 			return zip.ErrConflict("that repo is already verified by another author")
 		}
 		return zip.Errorf(http.StatusInternalServerError, "record repo: %v", err)
 	}
-	emitAudit(s, ctx, "author.verify_repo", a, map[string]any{"repoUrl": repoURL, "method": method})
+	emitAudit(s, ctx, "author.verify_repo", a, map[string]any{"repoUrl": target.canonical, "method": method})
 	status := http.StatusOK
 	if created {
 		status = http.StatusCreated
 	}
 	return c.JSON(status, map[string]any{
 		"repo":    repoViewOf(repo, s.State.badgeBase),
+		"created": created,
+	})
+}
+
+// verifyOrg proves an OWNER-WIDE claim and records it. Ownership of the whole owner is
+// proven the SAME two ways as a repo — reusing proveOwnership against the owner's
+// canonical control repo "<owner>/.github" (OAuth admin/push on it, OR a hanzo.json
+// with the verify code on its default branch). The ownership check is NOT weakened: an
+// owner the caller can't prove is 422, exactly like an unprovable repo. A verified org
+// claim covers every repo the author publishes under that owner.
+func verifyOrg(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, a Author, org string, t verifyTarget) error {
+	method, verified := proveOwnership(s, ctx, a, org, strings.TrimSpace(c.User()), t.host, t.owner, orgProofRepo)
+	if !verified {
+		return zip.Errorf(http.StatusUnprocessableEntity,
+			"could not verify ownership of the %s owner %q — grant the Hanzo %s app admin on %s/%s OR add %s carrying your verify code (%s) to its default branch",
+			providerForHost(t.host), t.owner, providerForHost(t.host), t.owner, orgProofRepo, verifyFile, a.VerifyCode)
+	}
+
+	orgID, err := genID("aog")
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+	}
+	claim, created, err := s.State.store.UpsertVerifiedOrg(ctx, orgID, a.ID, t.canonical, method, time.Now().Unix())
+	if err != nil {
+		if err == errOrgOwned {
+			return zip.ErrConflict("that owner is already verified by another author")
+		}
+		return zip.Errorf(http.StatusInternalServerError, "record org: %v", err)
+	}
+	emitAudit(s, ctx, "author.verify_org", a, map[string]any{"ownerUrl": t.canonical, "method": method})
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	return c.JSON(status, map[string]any{
+		"org":     orgViewOf(claim, s.State.badgeBase),
 		"created": created,
 	})
 }
@@ -447,7 +529,21 @@ func recordDeploy(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	ctx := c.Context()
 
-	repo, err := s.State.store.VerifiedRepoForURL(ctx, repoURL)
+	// Hanzo-maintained template (owner ∈ this brand's GitHub orgs, e.g. hanzoai /
+	// hanzo-*)? Attribute it to the treasury SYSTEM author so its creator royalty
+	// accrues to the Hanzo treasury ("pay ourselves") — idempotent, no human verify
+	// step. A repo a real external author already verified is left theirs (first-verify
+	// wins, enforced inside ensureMaintainedRepo). This makes Hanzo earn 20% on its own
+	// templates when other orgs deploy them.
+	if isMaintainedRepo(repoURL, s.State.maintainerOrg) {
+		ensureMaintainedRepo(s, ctx, repoURL, time.Now().Unix())
+	}
+
+	// Attribution resolves in ONE of two arms — per-repo first, then owner-wide: a repo
+	// with its OWN verified claim earns for that author; otherwise a repo whose OWNER is
+	// a verified org claim earns for the org's author (so every repo under a verified
+	// owner earns without a per-repo verify). Neither → an honest recorded:false no-op.
+	authorID, err := resolveDeployAuthor(s, ctx, repoURL)
 	if err == errUnknownRepo || err == errRepoNotVerified {
 		return c.JSON(http.StatusOK, map[string]any{"recorded": false, "reason": "repo is not a verified author repo"})
 	}
@@ -459,11 +555,11 @@ func recordDeploy(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	edge, created, err := s.State.store.RecordDeploy(ctx, id, repo.AuthorID, repoURL, project, deployingOrg, time.Now().Unix())
+	edge, created, err := s.State.store.RecordDeploy(ctx, id, authorID, repoURL, project, deployingOrg, time.Now().Unix())
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "record deploy: %v", err)
 	}
-	author, _ := s.State.store.GetByID(ctx, repo.AuthorID)
+	author, _ := s.State.store.GetByID(ctx, authorID)
 	self := author.Org == deployingOrg
 	status := http.StatusOK
 	if created {
@@ -479,6 +575,27 @@ func recordDeploy(s *cloud.Service[state], c *zip.Ctx) error {
 		"deployId":  edge.ID,
 		"createdAt": edge.CreatedAt,
 	})
+}
+
+// resolveDeployAuthor returns the author a deployed repo earns for, trying the two
+// attribution arms in order: (1) a per-repo verified claim, then (2) an owner-wide
+// verified org claim covering the repo. Per-repo wins, so a specifically-claimed repo
+// always attributes to its own author. Returns errUnknownRepo / errRepoNotVerified when
+// neither arm matches (the deploy is an honest no-op).
+func resolveDeployAuthor(s *cloud.Service[state], ctx context.Context, repoURL string) (string, error) {
+	repo, err := s.State.store.VerifiedRepoForURL(ctx, repoURL)
+	if err == nil {
+		return repo.AuthorID, nil
+	}
+	if err != errUnknownRepo && err != errRepoNotVerified {
+		return "", err
+	}
+	// No per-repo claim — fall back to an owner-wide org claim covering this repo.
+	claim, oerr := s.State.store.VerifiedOrgForURL(ctx, repoURL)
+	if oerr != nil {
+		return "", oerr
+	}
+	return claim.AuthorID, nil
 }
 
 // ── admin surface (SuperAdmin, fail-closed) ────────────────────────────────
@@ -592,12 +709,7 @@ func adminPayout(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "load author: %v", err)
 	}
 
-	payoutID, err := genID("apo")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	// Reserve against pending FIRST (atomic guard) — a payout can never exceed owed.
-	payout, err := s.State.store.RecordPayout(ctx, payoutID, a.ID, body.AmountCents, method, strings.TrimSpace(body.Reference), time.Now().Unix())
+	payout, err := issuePayout(s, ctx, a, body.AmountCents, method, strings.TrimSpace(body.Reference))
 	if err != nil {
 		switch err {
 		case errNotFound:
@@ -605,35 +717,88 @@ func adminPayout(s *cloud.Service[state], c *zip.Ctx) error {
 		case errInsufficientPending:
 			return zip.ErrBadRequest(fmt.Sprintf("amount exceeds pending royalty (%d cents available)", a.PendingCents()))
 		default:
-			return zip.Errorf(http.StatusInternalServerError, "record payout: %v", err)
+			return err // issuePayout returns a ready zip error (reserve/PaymentRequired/rng)
 		}
 	}
 
-	// BACK the payout against the platform reserve fund (double-entry
-	// fund→payout:author, idempotent by payout id). This is the SECOND guard: a payout
-	// must not exceed EITHER the author's pending royalty (above) OR the funded reserve
-	// (here). Not backed → VOID the pending reservation (restore it) and refuse
-	// honestly — the platform has not reserved capital for this payout.
+	after, _ := s.State.store.GetByID(ctx, a.ID)
+	emitAudit(s, ctx, "author.payout", after, map[string]any{
+		"payoutId": payout.ID, "amountCents": payout.AmountCents, "method": payout.Method,
+		"reference": payout.Reference, "txn": payout.Txn,
+	})
+	return adminOK(c, map[string]any{"payout": payoutViewOf(payout), "author": adminViewOf(after, 0, 0)})
+}
+
+// issuePayout is the ONE payout path — the manual admin endpoint AND the automatic
+// scheduler share it, so a payout settles identically however it is triggered. It
+// RESERVES amountCents against the author's pending royalty ATOMICALLY (RecordPayout's
+// WHERE guard makes it impossible to exceed accrued−paid, even concurrently), then
+// settles:
+//
+//   - a TREASURY (system) author → CREDIT the platform reserve fund ("pay ourselves",
+//     treasury.Credit, idempotent by payout id); NO external wallet, NO reserve-backing.
+//   - an external author, method=credits → BACK the payout against the reserve
+//     (treasury.Reserve; unbacked → void the reservation + PaymentRequired) then issue
+//     the commerce grant into the author's wallet.
+//   - an external author, cash method (wire/paypal/…) → record-only after backing.
+//
+// The reservation(s) are the money authority (at-most-pending AND, for external, at-
+// most-reserve). A settlement error AFTER a successful reservation is logged LOUD, not
+// retried — an operator reconciles from the payout row + audit; this never double-pays
+// and never leaks reserve. Errors are the raw store sentinels (errNotFound /
+// errInsufficientPending) or a ready zip error; the caller maps them.
+func issuePayout(s *cloud.Service[state], ctx context.Context, a Author, amountCents int64, method, reference string) (Payout, error) {
+	payoutID, err := genID("apo")
+	if err != nil {
+		return Payout{}, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+	}
+	// Reserve against pending FIRST (atomic guard) — a payout can never exceed owed.
+	payout, err := s.State.store.RecordPayout(ctx, payoutID, a.ID, amountCents, method, reference, time.Now().Unix())
+	if err != nil {
+		return Payout{}, err // errNotFound | errInsufficientPending | internal
+	}
+
+	// Pay ourselves: a Hanzo-maintained template's royalty is realized INTO the treasury
+	// reserve fund, not paid to an external wallet. Idempotent by payout id; a failure is
+	// logged loud (the pending reservation stands, reconciled from audit) — symmetric
+	// with the external credits path. No reserve-backing debit: we are crediting.
+	if isTreasuryAuthor(s, a) {
+		credited, entryID, cerr := treasury.Credit(ctx, treasury.ProgramAuthor, "payout:"+payoutID,
+			fmt.Sprintf("OSS author royalty → treasury (%s)", a.GithubLogin), amountCents)
+		if cerr != nil || !credited {
+			s.Log.Error("authors: treasury credit failed (reserved against pending; not retried)",
+				"author", a.ID, "payout", payoutID, "err", cerr)
+		} else if entryID != "" {
+			if serr := s.State.store.SetPayoutTxn(ctx, payoutID, entryID); serr != nil {
+				s.Log.Error("authors: record treasury payout txn failed", "payout", payoutID, "err", serr)
+			}
+			payout.Txn = entryID
+		}
+		return payout, nil
+	}
+
+	// External author: BACK the payout against the platform reserve fund (double-entry
+	// fund→payout:author, idempotent by payout id). SECOND guard: a payout must not
+	// exceed EITHER the author's pending royalty (above) OR the funded reserve (here).
+	// Not backed → VOID the pending reservation (restore it) and refuse honestly.
 	backed, _, berr := treasury.Reserve(ctx, treasury.ProgramAuthor, "payout:"+payoutID,
-		fmt.Sprintf("OSS author royalty payout (%s)", a.GithubLogin), body.AmountCents)
+		fmt.Sprintf("OSS author royalty payout (%s)", a.GithubLogin), amountCents)
 	if berr != nil || !backed {
-		if verr := s.State.store.VoidPayout(ctx, payoutID, a.ID, body.AmountCents); verr != nil {
+		if verr := s.State.store.VoidPayout(ctx, payoutID, a.ID, amountCents); verr != nil {
 			s.Log.Error("authors: void after unbacked payout failed", "payout", payoutID, "err", verr)
 		}
 		if berr != nil {
-			return zip.Errorf(http.StatusInternalServerError, "reserve payout: %v", berr)
+			return Payout{}, zip.Errorf(http.StatusInternalServerError, "reserve payout: %v", berr)
 		}
 		reserve, _ := treasury.ReserveCents(ctx)
-		return zip.Errorf(http.StatusPaymentRequired,
+		return Payout{}, zip.Errorf(http.StatusPaymentRequired,
 			"treasury reserve insufficient to back this payout (%d cents available); replenish via /v1/admin/treasury/sweep or seed", reserve)
 	}
 
-	// A credits payout issues the actual grant AFTER both reservations. The
-	// reservations are the safety authority (at-most-pending AND at-most-reserve); a
-	// grant failure is logged loud (never silent) so an operator reconciles from the
-	// payout row + audit.
+	// A credits payout issues the actual grant AFTER both reservations. A grant failure
+	// is logged loud (never silent) so an operator reconciles from the payout row + audit.
 	if method == methodCredits {
-		txn, gerr := s.State.commerce.deposit(ctx, a.Org, orgSubject(a.Org), body.AmountCents, grantCurrency,
+		txn, gerr := s.State.commerce.deposit(ctx, a.Org, orgSubject(a.Org), amountCents, grantCurrency,
 			fmt.Sprintf("OSS author royalty payout (%s)", a.GithubLogin), grantTag)
 		if gerr != nil {
 			s.Log.Error("authors: credits payout grant failed (reserved against pending; not retried)",
@@ -643,13 +808,14 @@ func adminPayout(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		payout.Txn = txn
 	}
+	return payout, nil
+}
 
-	after, _ := s.State.store.GetByID(ctx, a.ID)
-	emitAudit(s, ctx, "author.payout", after, map[string]any{
-		"payoutId": payout.ID, "amountCents": payout.AmountCents, "method": payout.Method,
-		"reference": payout.Reference, "txn": payout.Txn,
-	})
-	return adminOK(c, map[string]any{"payout": payoutViewOf(payout), "author": adminViewOf(after, 0, 0)})
+// isTreasuryAuthor reports whether a is the treasury SYSTEM author — the "pay
+// ourselves" identity whose org is this deployment's maintainer org. Its royalty
+// credits the reserve fund instead of an external wallet.
+func isTreasuryAuthor(s *cloud.Service[state], a Author) bool {
+	return s.State.maintainerOrg != "" && a.Org == s.State.maintainerOrg
 }
 
 // adminSweep answers POST /v1/admin/authors/sweep — the periodic accrual path. It
@@ -761,6 +927,150 @@ func AccrueForOrg(ctx context.Context, deployingOrg string, spend int64, period 
 	return created
 }
 
+// ── automatic money loop (accrue + auto-payout, no human) ──────────────────────
+
+// sweepAndPayout is the automatic creator-payout loop the scheduler drives: for every
+// approved author it ACCRUES this period's royalty, then AUTO-PAYS the author's full
+// pending balance. Both halves are idempotent — accrual latches at-most-once per
+// (author, deploying_org, period); payout reserves against pending atomically and
+// never exceeds accrued−paid — so running it on a schedule (or twice) never
+// double-accrues or double-pays. This closes the loop: accrual AND payout run with no
+// human. Returns (authors swept, accruals created, payouts issued).
+func sweepAndPayout(s *cloud.Service[state]) (swept, accrued, paid int) {
+	ctx := context.Background()
+	approved, err := s.State.store.ListApproved(ctx, sweepLimit)
+	if err != nil {
+		s.Log.Error("authors: auto loop list approved failed", "err", err)
+		return 0, 0, 0
+	}
+	for _, a := range approved {
+		checked, credited, serr := sweepAuthor(s, ctx, a)
+		swept += checked
+		accrued += credited
+		if serr != nil {
+			s.Log.Warn("authors: auto sweep author failed", "author", a.ID, "err", serr)
+		}
+		if autoPayoutAuthor(s, ctx, a.ID) {
+			paid++
+		}
+	}
+	if accrued > 0 || paid > 0 {
+		s.Log.Info("authors: auto accrual+payout", "swept", swept, "accrued", accrued, "paid", paid)
+	}
+	return swept, accrued, paid
+}
+
+// autoPayoutAuthor issues a credits payout of an author's FULL pending royalty
+// (external → their wallet; the treasury system author → the reserve fund),
+// idempotently. It re-reads the author for the freshest pending (the sweep just
+// latched); RecordPayout's atomic pending guard makes a zero-pending call a no-op
+// (errInsufficientPending → skip), so a repeat tick after the balance is drained pays
+// NOTHING. Returns true when a payout was issued this call.
+func autoPayoutAuthor(s *cloud.Service[state], ctx context.Context, id string) bool {
+	a, err := s.State.store.GetByID(ctx, id)
+	if err != nil {
+		return false
+	}
+	pending := a.PendingCents()
+	if pending <= 0 {
+		return false
+	}
+	payout, err := issuePayout(s, ctx, a, pending, methodCredits, "auto:"+periodKey(time.Now()))
+	if err != nil {
+		if err != errInsufficientPending { // a drained-in-race author is not worth a loud log
+			s.Log.Warn("authors: auto payout failed", "author", id, "pending", pending, "err", err)
+		}
+		return false
+	}
+	after, _ := s.State.store.GetByID(ctx, id)
+	emitAudit(s, ctx, "author.payout", after, map[string]any{
+		"payoutId": payout.ID, "amountCents": payout.AmountCents, "method": payout.Method,
+		"reference": payout.Reference, "txn": payout.Txn, "auto": true,
+	})
+	return true
+}
+
+// ── Hanzo-fork attribution → treasury ("pay ourselves") ────────────────────────
+
+// maintainerOrgFor resolves the first-party org whose maintained OSS templates earn
+// INTO the treasury (the "pay ourselves" author). AUTHOR_MAINTAINER_ORG overrides;
+// else the brand slug (hanzo/lux/zoo). White-label by brand so a Lux/Zoo deployment
+// pays ITS OWN treasury, never Hanzo's.
+func maintainerOrgFor(deps cloud.Deps) string {
+	if v := strings.TrimSpace(os.Getenv("AUTHOR_MAINTAINER_ORG")); v != "" {
+		return strings.ToLower(v)
+	}
+	switch strings.ToLower(strings.TrimSpace(deps.Brand)) {
+	case "lux":
+		return "lux"
+	case "zoo":
+		return "zoo"
+	default:
+		return "hanzo"
+	}
+}
+
+// canonicalForgeOrg maps a brand slug to its canonical GitHub org (hanzo → hanzoai,
+// lux → luxfi, zoo → zooai) — the owner under which the brand publishes its OSS.
+func canonicalForgeOrg(maintainerOrg string) string {
+	switch maintainerOrg {
+	case "hanzo":
+		return "hanzoai"
+	case "lux":
+		return "luxfi"
+	case "zoo":
+		return "zooai"
+	default:
+		return maintainerOrg
+	}
+}
+
+// isMaintainedRepo reports whether a canonical repo url (host/owner/name) is owned by
+// this deployment's first-party org — owner == the canonical forge org (hanzoai),
+// owner == the brand slug (hanzo), or owner has the "<brand>-" prefix (hanzo-*). Those
+// repos are Hanzo's OWN forks/blueprints, so their creator share is Hanzo's.
+func isMaintainedRepo(repoURL, maintainerOrg string) bool {
+	if maintainerOrg == "" {
+		return false
+	}
+	_, owner, _, ok := splitRepo(repoURL)
+	if !ok {
+		return false
+	}
+	owner = strings.ToLower(owner)
+	return owner == canonicalForgeOrg(maintainerOrg) ||
+		owner == maintainerOrg ||
+		strings.HasPrefix(owner, maintainerOrg+"-")
+}
+
+// ensureMaintainedRepo attributes a Hanzo-maintained repo to the treasury SYSTEM
+// author, idempotently: it seeds the system author (approved, share=defaultShareBps)
+// and auto-verifies the repo under it (method=maintainer — ownership is intrinsic to
+// the namespace, no OAuth/file proof). A repo a REAL external author already verified
+// is left theirs (first-verify wins → errRepoOwned, respected). Best-effort: a failure
+// logs and the deploy simply records no attribution this time.
+func ensureMaintainedRepo(s *cloud.Service[state], ctx context.Context, repoURL string, now int64) {
+	sysID, err := genID("aut")
+	if err != nil {
+		return
+	}
+	sys, err := s.State.store.EnsureSystemAuthor(ctx, sysID, s.State.maintainerOrg, s.State.maintainerOrg+"-maintainers", defaultShareBps, now)
+	if err != nil {
+		s.Log.Warn("authors: ensure maintainer author failed", "org", s.State.maintainerOrg, "err", err)
+		return
+	}
+	repoID, err := genID("arp")
+	if err != nil {
+		return
+	}
+	if _, _, verr := s.State.store.UpsertVerifiedRepo(ctx, repoID, sys.ID, repoURL, MethodMaintainer, now); verr != nil {
+		if verr == errRepoOwned {
+			return // a real author already verified it — respect first-verify-wins
+		}
+		s.Log.Warn("authors: auto-verify maintained repo failed", "repo", repoURL, "err", verr)
+	}
+}
+
 // ── audit ─────────────────────────────────────────────────────────────────────
 
 // emitAudit records an author money/lifecycle action in cloud's tamper-evident
@@ -838,6 +1148,33 @@ func repoViews(rs []AuthorRepo, badgeBase string) []repoView {
 	out := make([]repoView, 0, len(rs))
 	for _, r := range rs {
 		out = append(out, repoViewOf(r, badgeBase))
+	}
+	return out
+}
+
+// orgView is one row of an author's verified OWNER-WIDE claims: the owner url + a
+// ready-to-paste badge deep-linking that owner's Hanzo template import.
+type orgView struct {
+	OwnerURL      string `json:"ownerUrl"`
+	Verified      bool   `json:"verified"`
+	Method        string `json:"method,omitempty"`
+	BadgeMarkdown string `json:"badgeMarkdown"`
+	VerifiedAt    int64  `json:"verifiedAt"`
+	CreatedAt     int64  `json:"createdAt"`
+}
+
+func orgViewOf(o AuthorOrg, badgeBase string) orgView {
+	return orgView{
+		OwnerURL: o.OwnerURL, Verified: o.Verified, Method: o.Method,
+		BadgeMarkdown: badgeMarkdown(badgeBase, o.OwnerURL),
+		VerifiedAt:    o.VerifiedAt, CreatedAt: o.CreatedAt,
+	}
+}
+
+func orgViews(claims []AuthorOrg, badgeBase string) []orgView {
+	out := make([]orgView, 0, len(claims))
+	for _, o := range claims {
+		out = append(out, orgViewOf(o, badgeBase))
 	}
 	return out
 }
@@ -995,8 +1332,12 @@ func badgeBase(deps cloud.Deps) string {
 	}
 }
 
-// Shutdown closes the authors store. Idempotent.
+// Shutdown stops the accrual+auto-payout scheduler (draining any in-flight sweep) and
+// closes the authors store, in that order — so the store is never closed out from
+// under a running payout. Idempotent.
 func Shutdown() error {
+	stopScheduler()
+	stopScheduler = func() {}
 	if mounted == nil || mounted.State.store == nil {
 		return nil
 	}

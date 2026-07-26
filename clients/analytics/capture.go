@@ -365,6 +365,44 @@ func buildEventsInsert(rows []eventRow) (string, []any) {
 
 var emailRe = regexp.MustCompile(`(?i)[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}`)
 
+// secretRe redacts credential shapes that leak in free-text — chiefly error
+// stacks/messages (which bypass the key-based denylist): bearer tokens, the key
+// families (pk-/sk-/hk-), and ?token=/api_key=/access_token=/password=/secret=
+// query params. Applied to every scrubbed string so a token in a URL property or
+// an exception frame is redacted before storage AND before the destinations
+// fan-out.
+//
+// A published key is not a secret — it ships in public bundles by design — but it
+// is redacted anyway: a key in an error frame is noise, and telling the two apart
+// here would be a second place that has to know the families.
+var secretRe = regexp.MustCompile(`(?i)(bearer\s+[a-z0-9._~+/\-]{8,}={0,2}|(?:pk|sk|hk)-[a-z0-9._\-]{8,}|[?&](?:access_token|refresh_token|id_token|api[_-]?key|token|password|secret|auth)=[^&\s"']+)`)
+
+// scrubText redacts email- and credential-shaped substrings from a free-text
+// string. This is the ONE string scrubber; scrubValue and scrubException both
+// route through it so the redaction policy lives in one place.
+func scrubText(s string) string {
+	if s == "" {
+		return s
+	}
+	s = emailRe.ReplaceAllString(s, "[redacted]")
+	s = secretRe.ReplaceAllString(s, "[redacted]")
+	return s
+}
+
+// scrubException returns a COPY of e with its free-text fields (Message, Stack)
+// redacted; never mutates the caller's struct. nil-safe. This is what makes a
+// type:'error' event safe to both store and fan out to third parties — the raw
+// stack/message can carry tokens, API URLs with query secrets, or PII.
+func scrubException(e *Exception) *Exception {
+	if e == nil {
+		return nil
+	}
+	c := *e
+	c.Message = scrubText(c.Message)
+	c.Stack = scrubText(c.Stack)
+	return &c
+}
+
 // denySubstr: any property key CONTAINING one of these (case-insensitive) is
 // dropped — the credential/secret family.
 var denySubstr = []string{
@@ -413,7 +451,9 @@ func scrubMap(p map[string]any) map[string]any {
 func scrubValue(v any) any {
 	switch t := v.(type) {
 	case string:
-		return emailRe.ReplaceAllString(t, "[redacted]")
+		return scrubText(t)
+	case *Exception:
+		return scrubException(t)
 	case map[string]any:
 		return scrubMap(t)
 	case []any:

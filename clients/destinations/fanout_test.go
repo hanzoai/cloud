@@ -140,6 +140,17 @@ func TestResolveSecret(t *testing.T) {
 	}
 }
 
+// TestResolveSecretCredentialLess verifies a Secret-less, Fallback-less destination
+// (Umami's public /api/send) resolves to an EMPTY secret with no error, so the fan-out
+// forwards it — the credential is the non-secret website id in Config, not a KMS secret.
+func TestResolveSecretCredentialLess(t *testing.T) {
+	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}}
+	got, err := resolveSecret(s, "acme", umami{}, Config{})
+	if err != nil || got != "" {
+		t.Fatalf("credential-less resolve = %q, %v; want \"\", nil", got, err)
+	}
+}
+
 // TestSeamConnect verifies the guide-facing in-process Connect seam provisions
 // non-secret config, requires the platform's required fields, and reports live=false
 // without a credential.

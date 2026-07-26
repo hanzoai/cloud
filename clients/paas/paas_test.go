@@ -1,6 +1,7 @@
 package paas
 
 import (
+	"github.com/hanzoai/cloud/clients/k8s"
 	"reflect"
 	"testing"
 
@@ -289,8 +290,8 @@ func TestImageRepoRE(t *testing.T) {
 // TestDeploymentsGVR pins the Deployment GVR (the running-tag source).
 func TestDeploymentsGVR(t *testing.T) {
 	want := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
-	if deploymentsGVR != want {
-		t.Fatalf("deploymentsGVR = %v, want %v", deploymentsGVR, want)
+	if k8s.Deployments != want {
+		t.Fatalf("k8s.Deployments = %v, want %v", k8s.Deployments, want)
 	}
 }
 
@@ -372,13 +373,76 @@ func TestObserveCRUnrolled(t *testing.T) {
 // main).
 func TestScanOrder(t *testing.T) {
 	got := scanOrder()
-	want := []string{"hanzo", "hanzo-testnet", "hanzo-devnet"}
+	want := []string{"hanzo", "hanzo-mainnet", "hanzo-testnet", "hanzo-devnet"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("scanOrder = %v, want %v", got, want)
 	}
+	// The invariant that matters: every scanned namespace MUST classify, and must
+	// classify to a real tenant. A scanned-but-unclassified namespace would render
+	// rows with an empty tenant — rows no OrgAdmin could ever be confined to.
 	for _, ns := range got {
-		if _, ok := nsEnv[ns]; !ok {
-			t.Errorf("scanOrder namespace %q missing from nsEnv map", ns)
+		tenant, env, ok := nsClass(ns)
+		if !ok || tenant == "" || env == "" {
+			t.Errorf("scanOrder namespace %q does not classify: tenant=%q env=%q ok=%v", ns, tenant, env, ok)
+		}
+	}
+}
+
+// TestNsClassIsTotalAndConfining pins the classifier's two load-bearing properties:
+// it is TOTAL (every input decided, never a panic) and it CONFINES (anything it does
+// not recognise is classified out, so the reader can never reach beyond the platform
+// tier, and a tenant namespace authorizes to its own org rather than to "hanzo").
+func TestNsClassIsTotalAndConfining(t *testing.T) {
+	for _, tc := range []struct {
+		ns, tenant, env string
+		ok              bool
+	}{
+		{"hanzo", "hanzo", "main", true},
+		{"hanzo-mainnet", "hanzo", "main", true},
+		{"hanzo-testnet", "hanzo", "test", true},
+		{"hanzo-devnet", "hanzo", "dev", true},
+		{"tenant-maxpower", "maxpower", "main", true}, // authorizes to maxpower, NOT hanzo
+		{"tenant-hanzo", "hanzo", "main", true},
+		{"tenant-", "", "", false},     // empty tenant is not a tenant
+		{"kube-system", "", "", false}, // never ours
+		{"default", "", "", false},
+		{"", "", "", false},
+		{"hanzo-evil", "", "", false}, // a look-alike suffix is not a lifecycle env
+	} {
+		tenant, env, ok := nsClass(tc.ns)
+		if tenant != tc.tenant || env != tc.env || ok != tc.ok {
+			t.Errorf("nsClass(%q) = (%q,%q,%v), want (%q,%q,%v)", tc.ns, tenant, env, ok, tc.tenant, tc.env, tc.ok)
+		}
+	}
+}
+
+// TestDiscoverNamespacesAddsTenantsAndNeverBlanks pins the two properties that make
+// discovery safe. It only ever ADDS to the first-party set — an empty or failed
+// listing degrades to today's behavior rather than blanking the board (the bug this
+// test was written for) — and a namespace nsClass does not recognise can never enter
+// the scan set, so the reader still cannot reach beyond the platform tier.
+func TestDiscoverNamespacesAddsTenantsAndNeverBlanks(t *testing.T) {
+	ns := func(name string) *unstructured.Unstructured {
+		return &unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "v1", "kind": "Namespace",
+			"metadata": map[string]any{"name": name},
+		}}
+	}
+	// no namespaces visible at all → must still be the full first-party set
+	if got := discoverNamespaces(fakeService(), t.Context()); !reflect.DeepEqual(got, scanOrder()) {
+		t.Errorf("empty discovery = %v, want first-party %v (must never blank)", got, scanOrder())
+	}
+	got := discoverNamespaces(fakeService(
+		ns("tenant-maxpower"), ns("tenant-hanzo"),
+		ns("kube-system"), ns("default"), // never ours
+	), t.Context())
+	want := append(append([]string(nil), scanOrder()...), "tenant-hanzo", "tenant-maxpower")
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("discoverNamespaces = %v, want %v", got, want)
+	}
+	for _, n := range got {
+		if _, _, ok := nsClass(n); !ok {
+			t.Errorf("unclassified namespace %q entered the scan set", n)
 		}
 	}
 }

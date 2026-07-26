@@ -1,6 +1,6 @@
 # clients/o11y — embedded o11y (scoped reads + query + ingest)
 
-cloud embeds the o11y subsystem in-process against the shared ClickHouse
+cloud embeds the o11y subsystem in-process against the shared Datastore
 `datastore` (cluster `insights`). Three planes, one datastore.
 
 ## ONE registration, one public concept (decomplected)
@@ -89,7 +89,7 @@ Three planes, one datastore:
   - **status**: a live in-cluster health probe (allowlisted host — SSRF boundary)
     fused with VM `up{service}` inventory.
   - **Tenant isolation**: org is `principal.Tenant(c)`, bound as a positional
-    ClickHouse parameter (never interpolated); the product is shape-validated
+    Datastore parameter (never interpolated); the product is shape-validated
     (DNS-1123) then alias-mapped (console slug → workload) then allowlisted
     (`knownServices`) — a malformed slug is a 400, an unbacked one is honest-empty.
     Reuses the shared `aiobject.DatastoreQuery` (ONE datastore client).
@@ -99,12 +99,12 @@ Three planes, one datastore:
   this binary (dashboards, alerts, querier) via the upstream wildcard (order 70) +
   `o11y.SetHandler` (installed by `mountRuntime` inside the one order-69 mount).
   Falls back to reverse-proxying a standalone o11y Deployment when disabled/failed.
-  READS ClickHouse via clickhouse-go **v2.44.0** (upstream). `/v1/settings/:product`
+  READS Datastore via the branded `github.com/hanzo-ds/go` **v1.0.1**. `/v1/settings/:product`
   is NOT here — it is console product config, split out to `clients/settings`.
 
 - **Ingest / write plane** — `ingest.go`. An in-process OpenTelemetry Collector
   that folds the standalone `otel-collector` Deployment into cloud. Accepts OTLP
-  (gRPC :4317, HTTP :4318) and writes spans+logs into the same ClickHouse the
+  (gRPC :4317, HTTP :4318) and writes spans+logs into the same Datastore the
   query plane reads (`o11y_traces` / `o11y_logs`). Trimmed pipeline:
   `otlp -> memory_limiter, resource(namespace=hanzo, env), batch -> {clickhousetraces, clickhouselogsexporter}`.
   - **OFF by default.** Enable with `CLOUD_OTLP_INGEST_ENABLED=true` (+ a
@@ -116,10 +116,10 @@ Three planes, one datastore:
 
 ## Metrics ingest is DEFERRED (driver-fork conflict — do not "fix" naively)
 
-The metrics write path (the datastore ClickHouse metrics exporter + the `o11yspanmetrics`
+The metrics write path (the datastore metrics exporter + the `o11yspanmetrics`
 connector) is intentionally NOT embedded. That exporter references the upstream
 **dd-sketch fork** of ch-go (`chproto.DD/Store/IndexMapping`), which does NOT
-compile against cloud's upstream ch-go v0.71.0 / clickhouse-go v2.44.0 (verified:
+compile against cloud's `hanzo-ds/native` v0.72.0 / `hanzo-ds/go` v1.0.1 (verified:
 `undefined: chproto.DD` etc.). The two driver lines cannot coexist in one binary
 because the o11y QUERY plane pins upstream. Traces + logs exporters DO compile
 against upstream and are embedded.
@@ -139,7 +139,7 @@ to LOOP BACK to this in-process ingest at `localhost:4318` once cutover happens.
 ## cloud's own spans → in-process trace sink (`tracesink.go`)
 
 The dogfood: cloud's OWN spans (service + ai GenAI/LLM-obs) reach the embedded
-ClickHouse trace store WITHOUT a socket, via the ZAP locality-adaptive **Router**
+Datastore trace store WITHOUT a socket, via the ZAP locality-adaptive **Router**
 (`github.com/luxfi/zap` v1.2.1: `Router`/`InProcessInterface`/`Destination`/
 `Payload`). One Send API, Cost-table routing — not a caller branch.
 

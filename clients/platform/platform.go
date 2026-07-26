@@ -122,6 +122,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		State: state{store: store, projects: iamProjects{}, k8s: k, kmsIdentity: newKMSOrgIdentity(deps.KMS),
 			sitesHost: getenv("CLOUD_PLATFORM_SITES_HOST", "hanzo.app")}}
 	mounted = s
+	// UNIFIED PAYWALL (server-side enforcement). To gate the /v1/platform surface
+	// behind the caller's plan, wrap it with entitlements.RequireProduct(deps.Commerce,
+	// "platform") — note routes() registers FLAT app.Get paths (not a group), so
+	// enabling means converting them to app.Group("/v1/platform", mw) or wrapping each.
+	// DEFERRED — DO NOT ENABLE YET: the "platform" product is ABSENT from @hanzo/plans
+	// licensing.product_ids (v1.4.4), so enforcing now would 402 every org. Flip on
+	// once the catalog licenses "platform" to a tier. See clients/entitlements.
 	routes(app, s)
 
 	// The cloud's own embedded-git apex is a trusted build source (clients/git
@@ -142,6 +149,11 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		ctx, cancel := context.WithCancel(context.Background())
 		s.State.cancel = cancel
 		go runBuildReconciler(s, ctx)
+		// Meter running deployments' compute onto their org's ledger every interval —
+		// the last wire in the OSS compute-royalty loop (computemeter.go). Same cancel
+		// context as the reconciler, so Shutdown stops both; single-writer by the same
+		// topology the build meter relies on.
+		go runComputeMeter(s, ctx)
 	}
 
 	log.Info("platform control plane mounted",

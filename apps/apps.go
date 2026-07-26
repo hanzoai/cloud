@@ -57,12 +57,15 @@ import (
 	"github.com/hanzoai/cloud/clients/agents"
 	"github.com/hanzoai/cloud/clients/agentskills"
 	"github.com/hanzoai/cloud/clients/analytics"
+	"github.com/hanzoai/cloud/clients/ask"
 	"github.com/hanzoai/cloud/clients/auditlog"
 	"github.com/hanzoai/cloud/clients/authors"
 	"github.com/hanzoai/cloud/clients/automations"
 	"github.com/hanzoai/cloud/clients/base"
 	"github.com/hanzoai/cloud/clients/benchmark"
 	"github.com/hanzoai/cloud/clients/billing"
+	"github.com/hanzoai/cloud/clients/blueprint"
+	"github.com/hanzoai/cloud/clients/books"
 	"github.com/hanzoai/cloud/clients/bots"
 	"github.com/hanzoai/cloud/clients/campaign"
 	"github.com/hanzoai/cloud/clients/captable"
@@ -110,6 +113,7 @@ import (
 	"github.com/hanzoai/cloud/clients/plan"
 	"github.com/hanzoai/cloud/clients/platform"
 	"github.com/hanzoai/cloud/clients/plugin"
+	"github.com/hanzoai/cloud/clients/prefs"
 	"github.com/hanzoai/cloud/clients/pricing"
 	"github.com/hanzoai/cloud/clients/product"
 	"github.com/hanzoai/cloud/clients/projects"
@@ -123,6 +127,7 @@ import (
 	"github.com/hanzoai/cloud/clients/sbom"
 	"github.com/hanzoai/cloud/clients/security"
 	"github.com/hanzoai/cloud/clients/settings"
+	"github.com/hanzoai/cloud/clients/share"
 	"github.com/hanzoai/cloud/clients/sign"
 	"github.com/hanzoai/cloud/clients/social"
 	"github.com/hanzoai/cloud/clients/storage"
@@ -138,6 +143,7 @@ import (
 	"github.com/hanzoai/cloud/clients/venue"
 	"github.com/hanzoai/cloud/clients/visor"
 	"github.com/hanzoai/cloud/clients/wallets"
+	"github.com/hanzoai/cloud/clients/webhooks"
 	"github.com/hanzoai/cloud/clients/websearch"
 	"github.com/hanzoai/cloud/clients/world"
 	"github.com/hanzoai/cloud/clients/x402"
@@ -251,8 +257,8 @@ func Wire() []cloud.MountSpec {
 		// (121) + the commerce embed (100). Same clients/account package as "account" (48).
 		{Name: "account-bridge", Mount: account.MountBridge},
 		{Name: "do", Mount: do.Mount},
-		{Name: "platform", Mount: platform.Mount, OwnsHealth: true},
-		{Name: "projects", Mount: projects.Mount},
+		{Name: "platform", Mount: platform.Mount, Shutdown: ctxShutdown(platform.Shutdown), OwnsHealth: true},
+		{Name: "projects", Mount: projects.Mount, Shutdown: ctxShutdown(projects.Shutdown)},
 		// The /v1/dns forward head: relays the console DNS dashboard to the DNS
 		// control plane under the caller's own validated bearer (clients/dns).
 		{Name: "dns", Mount: dns.Mount},
@@ -277,6 +283,15 @@ func Wire() []cloud.MountSpec {
 		{Name: "functions", Mount: functions.Mount},
 		{Name: "tracker", Mount: tracker.Mount},
 		{Name: "templates", Mount: templates.Mount},
+		// OSS-template compute-cost basis /v1/blueprint/* — parses a blueprint's
+		// docker-compose into its SBOM (bill of container images) and prices the
+		// stack's CPU/memory footprint through a documented rate card. The per-hour
+		// rate the deploy path meters an org on, and the "~$X/mo to run" the console
+		// shows; it is the compute cost the 20% author royalty (clients/authors) is
+		// taken from. OwnsHealth: serves its own /v1/blueprint/health. Reference
+		// content (embedded blueprints), no store → no Shutdown. After templates, its
+		// sibling catalog concern; before the AI /v1/* catch-all.
+		{Name: "blueprint", Mount: blueprint.Mount, OwnsHealth: true},
 		{Name: "framework", Mount: framework.Mount, Shutdown: ctxShutdown(framework.Shutdown)},
 		{Name: "knowledge", Mount: knowledge.Mount},
 		// Hanzo Support PUBLIC plane /v1/help/* (help center KB read + customer ticket
@@ -297,6 +312,13 @@ func Wire() []cloud.MountSpec {
 		// After content (whose EnsureCatalogAsset it drives). Inert until CLOUD_COMMERCE_NATS_URL
 		// names the NATS carrying commerce catalog events — the reverse of the forward edge.
 		{Name: "catalogsync", Mount: catalogsync.Mount, Shutdown: catalogsync.Shutdown},
+		// The platform-global webhook layer: /v1/webhooks registry (per-org SQLite) +
+		// ONE durable JetStream consumer that delivers ANY bus event to org-registered
+		// HTTP subscribers. A bus consumer like catalogsync — placed adjacent to it and
+		// after the commerce embed whose COMMERCE stream it reads. Fail-soft: the
+		// registry serves even with the bus down; the consumer retries in the background.
+		// Owns per-org store handles + a worker pool → Shutdown drains both.
+		{Name: "webhooks", Mount: webhooks.Mount, Shutdown: webhooks.Shutdown},
 		{Name: "ml", Mount: ml.Mount, OwnsHealth: true},
 		{Name: "usage", Mount: usage.Mount},
 		// Gamified usage analytics: /v1/usage/leaderboard + /v1/usage/activity + the
@@ -347,6 +369,10 @@ func Wire() []cloud.MountSpec {
 		{Name: "captable", Mount: captable.Mount, Shutdown: captable.Shutdown},
 		{Name: "code", Mount: code.Mount, Shutdown: code.Shutdown},
 		{Name: "zero-trust", Mount: zt.Mount},
+		// ngrok-native public sharing: /v1/share/* provisions a per-org zrok
+		// account so `hanzo share <port>` publishes a local service to a public
+		// https://<token>.share.hanzo.ai URL. Fail-closed until ZROK_ADMIN_TOKEN.
+		{Name: "share", Mount: share.Mount},
 		// Data rooms via goja + per-tenant Base. STAGED behind CLOUD_ENABLE. OwnsHealth.
 		{Name: "dataroom", Mount: dataroom.Mount, Shutdown: dataroom.Shutdown, OwnsHealth: true},
 		{Name: "graph", Mount: graph.Mount},
@@ -368,6 +394,7 @@ func Wire() []cloud.MountSpec {
 		{Name: "sbom", Mount: sbom.Mount, OwnsHealth: true},
 		{Name: "team", Mount: team.Mount, Shutdown: ctxShutdown(team.Shutdown)},
 		{Name: "settings", Mount: settings.Mount, Shutdown: settings.Shutdown},
+		{Name: "prefs", Mount: prefs.Mount, Shutdown: prefs.Shutdown},
 		{Name: "notify", Mount: notify.Mount, OwnsHealth: true},
 		{Name: "channels", Mount: channels.Mount, Shutdown: channels.Shutdown},
 		{Name: "gateway", Mount: gateway.Mount},
@@ -397,6 +424,10 @@ func Wire() []cloud.MountSpec {
 		// research — so it mounts AFTER all three. It owns only the experiment registry
 		// store → Shutdown. clients/campaign composes it (experiments.Assign/Analyze).
 		{Name: "experiments", Mount: experiments.Mount, Shutdown: ctxShutdown(experiments.Shutdown)},
+		// The revenue BOOKS spine (/v1/books): a native double-entry general ledger that
+		// reads commerce transactions (the sole posting source) and books the accounting twin —
+		// plus bank import (PDF/OFX/CSV/Plaid/Teller), reconciliation, and the AI Ask brain.
+		{Name: "books", Mount: books.Mount, Shutdown: ctxShutdown(books.Shutdown)},
 		{Name: "treasury", Mount: treasury.Mount, Shutdown: ctxShutdown(treasury.Shutdown)},
 		{Name: "admin", Mount: admin.Mount},
 		// Launch-control gate (per-service waitlist): the COMPLETE feature — host→service
@@ -453,6 +484,16 @@ func Wire() []cloud.MountSpec {
 		// beego /v1/chat alias behind its /v1/* glob is thereby shadowed, while ai
 		// keeps /v1/chat/completions + /v1/completions.
 		{Name: "agent", Mount: agent.Mount},
+		// The UNIFIED GROUNDED ADVISOR — POST /v1/ask. DISTINCT from /v1/chat/completions
+		// (ai's RAW model) and /v1/agent (tool-calling): it routes a plain-language question
+		// to the domain(s) that can GROUND it, reads the REAL figures from each domain's own
+		// endpoint IN-PROCESS under the caller's own creds (agent.go's replay pattern, so
+		// per-tenant isolation is inherited), hands the model the EXACT figures, and returns
+		// the grounded answer + figures + the domain reads that backed them. The model NEVER
+		// invents a figure. Contributors plug in via a registry (books today; o11y/billing
+		// next) WITHOUT a router edit. Mounts BEFORE the ai /v1/* catch-all so /v1/ask wins
+		// Fiber's first-match; after books/agent so the domains it composes are wired.
+		{Name: "ask", Mount: ask.Mount},
 		// The bare /v1/* AI catch-all — the LAST route position. Every owning subsystem above
 		// wins its own namespace (Fiber first-match); AI is the fallback for the rest of /v1/*.
 		// zen mounts as a /v1-scoped Claim middleware BEFORE ai: it routes zen* models

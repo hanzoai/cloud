@@ -66,7 +66,7 @@ func TestMountUsesBrandDefault(t *testing.T) {
 	}
 
 	base := mountBrand("") // no brand → base default
-	if base.Version != "builtin-2" || base.Progress.Next != "company" {
+	if base.Version != "1" || base.Progress.Next != "incorporate" {
 		t.Fatalf("empty brand must serve the base journey (version=%q next=%q)", base.Version, base.Progress.Next)
 	}
 }

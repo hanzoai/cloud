@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 	"encoding/json"
+	"github.com/hanzoai/cloud/clients/k8s"
 	"net/http"
 	"strings"
 	"testing"
@@ -131,7 +132,7 @@ func TestHTTPReplicasClamped(t *testing.T) {
 	}
 	// Deploy and confirm the rendered CR replica count is bounded too.
 	do(t, app, http.MethodPost, "/v1/platform/projects/web/apps/api/deploy", "maxpower", map[string]any{"tag": "1"})
-	obj, err := k.dyn.Resource(appsGVR).Namespace("tenant-maxpower").Get(context.Background(), "api", metav1.GetOptions{})
+	obj, err := k.dyn.Resource(k8s.Apps).Namespace("tenant-maxpower").Get(context.Background(), "api", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("CR: %v", err)
 	}

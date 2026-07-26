@@ -110,9 +110,16 @@ type Entry struct {
 	Postings  []Posting    `json:"postings,omitempty"`
 }
 
+// DefaultRevenueShareBps is the canonical revenue-share when a treasury has no
+// explicit policy row yet: 20% (2000 bps) — the ONE creator/revenue share across
+// the platform (the OSS author royalty, the marketplace "Earn 20%" CTA, and this
+// reserve-fund sweep are the SAME 20%). A store reads this for an unset policy; a
+// SuperAdmin can still set any value in [0,10000], including 0.
+const DefaultRevenueShareBps int64 = 2000
+
 // Policy is the revenue-share configuration: the fraction of net platform revenue,
 // in basis points, that a sweep accrues into the reserve fund. One value, one
-// place; SuperAdmin adjusts it.
+// place; SuperAdmin adjusts it. An unset policy defaults to DefaultRevenueShareBps.
 type Policy struct {
 	RevenueShareBps int64 `json:"revenueShareBps"`
 	UpdatedAt       int64 `json:"updatedAt"`

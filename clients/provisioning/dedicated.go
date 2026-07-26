@@ -30,6 +30,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/hanzoai/cloud/clients/k8s"
 	"math"
 	"net/http"
 	"os"
@@ -771,7 +772,6 @@ var (
 	datastoresGVR = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "datastores"}
 	secretsGVR    = schema.GroupVersionResource{Version: "v1", Resource: "secrets"}
 	pvcsGVR       = schema.GroupVersionResource{Version: "v1", Resource: "persistentvolumeclaims"}
-	nsGVR         = schema.GroupVersionResource{Version: "v1", Resource: "namespaces"}
 	ssarGVR       = schema.GroupVersionResource{Group: "authorization.k8s.io", Version: "v1", Resource: "selfsubjectaccessreviews"}
 )
 
@@ -824,7 +824,7 @@ func (o *k8sOrchestrator) EnsureTenant(ctx context.Context, ns, org string) erro
 	if err := o.Ready(); err != nil {
 		return err
 	}
-	_, err := o.dyn.Resource(nsGVR).Get(ctx, ns, metav1.GetOptions{})
+	_, err := o.dyn.Resource(k8s.Namespaces).Get(ctx, ns, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		obj := &unstructured.Unstructured{Object: map[string]any{
 			"apiVersion": "v1", "kind": "Namespace",
@@ -833,7 +833,7 @@ func (o *k8sOrchestrator) EnsureTenant(ctx context.Context, ns, org string) erro
 				"hanzo.ai/managed-by": "platform", // the label the operator's tenant-RBAC controller watches
 			}},
 		}}
-		if _, cErr := o.dyn.Resource(nsGVR).Create(ctx, obj, metav1.CreateOptions{}); cErr != nil && !apierrors.IsAlreadyExists(cErr) {
+		if _, cErr := o.dyn.Resource(k8s.Namespaces).Create(ctx, obj, metav1.CreateOptions{}); cErr != nil && !apierrors.IsAlreadyExists(cErr) {
 			return cErr
 		}
 	} else if err != nil {

@@ -19,11 +19,26 @@
 # Pinned to ghcr.io so BOTH buildx lanes (release.yml + platform arcbuild) pull
 # it directly; the SAME tags are mirrored to registry.hanzo.ai (S3-backed) for
 # GET-flow consumers (docker/kaniko/crane). Override any pin with
-# --build-arg <NAME>_IMAGE=…  — release.yml resolves CONSOLE_IMAGE to a fresh
-# console-embed digest, exactly as CONSOLE_CACHEBUST re-fetched console before.
-ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:latest
-ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:latest
-ARG FLAGS_IMAGE=ghcr.io/hanzoai/cloud-flags:latest
+# --build-arg <NAME>_IMAGE=… .
+#
+# IMMUTABLE per-commit tags, never `:latest`. These defaults are LOAD-BEARING:
+# the builder that actually runs our releases is the native one (POST /v1/runner
+# → launchDirectBuild → BuildKit), and it passes no --build-arg, so whatever is
+# written here is what gets baked. `release.yml`, which the previous comment said
+# would resolve a fresh digest, is a stub and resolves nothing.
+#
+# With `:latest` the embedded console was therefore decided by WHEN the build ran,
+# not by what we shipped — and it bit: cloud v1.801.215 was built ~12 minutes
+# before console CI finished publishing the console-embed carrying v8.5.26, so a
+# release whose whole purpose was that console change silently baked the previous
+# one and shipped green. Same image, two contents, no diff to show for it.
+#
+# BUMP: when a console/skills/flags change must reach production, move its pin
+# here in the same commit that claims it. That is what makes a cloud release
+# reproducible and makes "what console is in v1.801.N" answerable from git.
+ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:sha-9f7042c-amd64
+ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:sha-b931a11-amd64
+ARG FLAGS_IMAGE=ghcr.io/hanzoai/cloud-flags:sha-e1ca02a-amd64
 
 # ── toolchain base images: the golang + alpine FROMs below pull from our own
 # GHCR mirror (ghcr.io/hanzoai/mirror/*), pinned by digest. WHY: public.ecr.aws
@@ -163,10 +178,21 @@ LABEL org.opencontainers.image.revision="${REVISION}" \
 # libgcc: the hanzo-flags Rust staticlib (clients/featureflags FFI) references the
 # _Unwind_* unwinder symbols; musl needs libgcc_s at load time or the binary fails
 # relocation ("Error relocating /cloud: _Unwind_GetIP: symbol not found").
-RUN apk add --no-cache ca-certificates tzdata sqlcipher-libs git libgcc \
+# tini: /cloud runs as PID 1, and PID 1 inherits every orphaned descendant in the
+# container. git is not a single process — fetch/clone fan out to git-upload-pack,
+# git-index-pack, git-rev-list and git-pack-objects. When cloud Kill()s a wedged
+# direct child (gitPackStream.Close does exactly that, correctly), those
+# grandchildren orphan and reparent to PID 1. A Go program never reaps adopted
+# orphans, so each one becomes a permanent zombie holding a PID slot.
+# Measured 2026-07-26 on worker-xl-37bw71: 18,553 zombie `git` out of 18,741
+# processes, all parented to /cloud, which drove the node to PID pressure and
+# got cloud ITSELF evicted. A zombie costs no CPU and no memory, so nothing but
+# an eviction ever surfaces it. tini reaps them.
+RUN apk add --no-cache ca-certificates tzdata sqlcipher-libs git libgcc tini \
     && SC="$(find /usr/lib /lib -name 'libsqlcipher.so*' 2>/dev/null | sort | head -1)" \
     && test -n "$SC" \
-    && ln -sf "$SC" /usr/lib/libsqlite3.so.0
+    && ln -sf "$SC" /usr/lib/libsqlite3.so.0 \
+    && test -x /sbin/tini
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=build /etc/passwd /etc/passwd
@@ -175,4 +201,7 @@ COPY --from=build /cloud /cloud
 COPY --from=build /smoke /smoke
 EXPOSE 8080 9090 9653
 USER 65532:65532
-ENTRYPOINT ["/cloud"]
+# tini as PID 1 forwards signals to /cloud unchanged (so SIGTERM still drains
+# normally) and reaps the orphans described above. `--` keeps cloud's own args
+# untouched; the CR passes none today, but that stays true if it ever does.
+ENTRYPOINT ["/sbin/tini", "--", "/cloud"]

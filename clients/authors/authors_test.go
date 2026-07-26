@@ -7,12 +7,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/hanzoai/cloud"
+	sqlitedrv "github.com/hanzoai/sqlite"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
@@ -135,6 +137,18 @@ func (g *fakeGitHub) fetchFile(_ context.Context, _, owner, repo, branch, path s
 	return g.files[owner+"/"+repo+"@"+branch+"/"+path], nil
 }
 
+// TestMain makes this store-backed suite build-tag agnostic, exactly as the root
+// package's main_test.go does: an encryption-capable build refuses to open the data
+// plane without a master key, a pure-Go build refuses a key at all. Supply a throwaway
+// dev key ONLY when the build can encrypt and the environment did not already provide
+// one, so CI's real key is never overridden.
+func TestMain(m *testing.M) {
+	if sqlitedrv.EncryptionAvailable() && os.Getenv("CLOUD_KMS_MASTER_KEY_REF") == "" {
+		_ = os.Setenv("CLOUD_KMS_MASTER_KEY_REF", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=") // 32 zero bytes, dev-only
+	}
+	os.Exit(m.Run())
+}
+
 // mount builds an authors app backed by a fresh store + injected fakes, returning the
 // app, the service, and the fakes for assertions.
 func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce, *fakeGitHub) {
@@ -149,10 +163,11 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce, *fakeG
 	s := &cloud.Service[state]{
 		Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "authors"),
 		State: state{
-			store:     store,
-			commerce:  fc,
-			forge:     fg,
-			badgeBase: "https://hanzo.app",
+			store:         store,
+			commerce:      fc,
+			forge:         fg,
+			badgeBase:     "https://hanzo.app",
+			maintainerOrg: "hanzo",
 		},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
@@ -482,7 +497,7 @@ func TestSweepAccruesSpendTimesShareIdempotent(t *testing.T) {
 		t.Fatalf("accrual sweep want 1, got %d (%s)", code, body)
 	}
 	a, _ := s.State.store.GetByID(ctx, idA)
-	const want = 10000 * defaultShareBps / bpsDenom // 2500
+	const want = 10000 * defaultShareBps / bpsDenom // 2000 (20% share)
 	if a.AccruedCents != want || a.PendingCents() != want {
 		t.Fatalf("accrued=%d pending=%d, want %d (orgB spend×share, self excluded)", a.AccruedCents, a.PendingCents(), want)
 	}
@@ -509,7 +524,7 @@ func TestLazyAccrualOnAuthorRead(t *testing.T) {
 	req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgA", false, map[string]any{"repoUrl": "acme/widgets"})
 	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false, map[string]any{"repoUrl": "acme/widgets", "project": "proj-b"})
 	approve(t, app, idA)
-	fc.setSpend("orgB", 5000) // $50 × 25% share → royalty 1250c ($12.50)
+	fc.setSpend("orgB", 5000) // $50 × 20% share → royalty 1000c ($10.00)
 
 	code, body := req(t, app, http.MethodGet, "/v1/authors", "orgA", false, nil)
 	if code != http.StatusOK {
@@ -535,7 +550,7 @@ func TestLazyAccrualOnAuthorRead(t *testing.T) {
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
-	const want = 5000 * defaultShareBps / bpsDenom // 1250
+	const want = 5000 * defaultShareBps / bpsDenom // 1000
 	if !v.IsAuthor || v.Status != StatusApproved || v.GithubLogin != "acmedev" || !v.Verified {
 		t.Fatalf("dashboard head wrong: %+v", v)
 	}
@@ -563,29 +578,35 @@ func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
 	req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgA", false, map[string]any{"repoUrl": "acme/widgets"})
 	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false, map[string]any{"repoUrl": "acme/widgets", "project": "proj-b"})
 	approve(t, app, idA)
-	fc.setSpend("orgB", 10000) // spend $100 × 25% share → accrue 2500c pending
+	fc.setSpend("orgB", 10000) // spend $100 × 20% share → accrue 2000c pending
 	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
+
+	// Amounts are SHARE-DERIVED so this proof never drifts when the share changes:
+	// accrued = spend × 20%; a credits payout takes 3/5, cash takes the rest.
+	const accrued = 10000 * defaultShareBps / bpsDenom // 2000c @ 20%
+	const firstPay = accrued * 3 / 5                   // 1200c credits
+	const restPay = accrued - firstPay                 // 800c cash
 
 	// Non-admin is refused on payout.
 	if st, _ := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "orgA", false, map[string]any{"amountCents": 100, "method": "credits"}); st != http.StatusForbidden {
 		t.Fatalf("non-admin payout want 403, got %d", st)
 	}
-	// Over-pending → 400 (2500 available, ask 3000).
-	if st, _ := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 3000, "method": "credits"}); st != http.StatusBadRequest {
+	// Over-pending → 400 (accrued available, ask accrued+500).
+	if st, _ := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": accrued + 500, "method": "credits"}); st != http.StatusBadRequest {
 		t.Fatalf("over-pending payout want 400, got %d", st)
 	}
 
-	// Credits payout of 1500c → ONE grant into orgA's wallet, paid moves.
-	st, body := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 1500, "method": "credits", "reference": "ledger-1"})
+	// Credits payout of firstPay → ONE grant into orgA's wallet, paid moves.
+	st, body := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": firstPay, "method": "credits", "reference": "ledger-1"})
 	if st != http.StatusOK {
 		t.Fatalf("credits payout want 200, got %d (%s)", st, body)
 	}
-	if fc.bal("orgA") != 1500 || fc.depositCount() != 1 {
-		t.Fatalf("credits payout wallet=%d deposits=%d, want 1500/1", fc.bal("orgA"), fc.depositCount())
+	if fc.bal("orgA") != firstPay || fc.depositCount() != 1 {
+		t.Fatalf("credits payout wallet=%d deposits=%d, want %d/1", fc.bal("orgA"), fc.depositCount(), firstPay)
 	}
 	a, _ := s.State.store.GetByID(ctx, idA)
-	if a.PaidCents != 1500 || a.PendingCents() != 1000 {
-		t.Fatalf("after credits payout: paid=%d pending=%d (want 1500/1000)", a.PaidCents, a.PendingCents())
+	if a.PaidCents != firstPay || a.PendingCents() != restPay {
+		t.Fatalf("after credits payout: paid=%d pending=%d (want %d/%d)", a.PaidCents, a.PendingCents(), firstPay, restPay)
 	}
 	pd := envData(t, body)
 	var payout struct {
@@ -594,21 +615,21 @@ func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
 		Txn         string `json:"txn"`
 	}
 	_ = json.Unmarshal(pd["payout"], &payout)
-	if payout.AmountCents != 1500 || payout.Method != "credits" || payout.Txn == "" {
+	if payout.AmountCents != firstPay || payout.Method != "credits" || payout.Txn == "" {
 		t.Fatalf("payout view wrong: %+v", payout)
 	}
 
-	// Cash payout of the remaining 1000c via wire → RECORD-ONLY (no new grant).
-	st, _ = req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 1000, "method": "wire", "reference": "wire-xyz"})
+	// Cash payout of the rest via wire → RECORD-ONLY (no new grant).
+	st, _ = req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": restPay, "method": "wire", "reference": "wire-xyz"})
 	if st != http.StatusOK {
 		t.Fatalf("cash payout want 200, got %d", st)
 	}
-	if fc.depositCount() != 1 || fc.bal("orgA") != 1500 {
+	if fc.depositCount() != 1 || fc.bal("orgA") != firstPay {
 		t.Fatalf("cash payout moved money: deposits=%d bal=%d", fc.depositCount(), fc.bal("orgA"))
 	}
 	a, _ = s.State.store.GetByID(ctx, idA)
-	if a.PaidCents != 2500 || a.PendingCents() != 0 {
-		t.Fatalf("after cash payout: paid=%d pending=%d (want 2500/0)", a.PaidCents, a.PendingCents())
+	if a.PaidCents != accrued || a.PendingCents() != 0 {
+		t.Fatalf("after cash payout: paid=%d pending=%d (want %d/0)", a.PaidCents, a.PendingCents(), accrued)
 	}
 	// Drained → any further payout is 400.
 	if st, _ := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 1, "method": "credits"}); st != http.StatusBadRequest {
@@ -681,7 +702,7 @@ func TestAdminGateAndDirectory(t *testing.T) {
 }
 
 // TestGitLabVerifyAndLedger proves the GitLab forge works end to end (canonicalize →
-// file-verify a gitlab.com repo → deploy → accrue @25% share) AND that each accrual
+// file-verify a gitlab.com repo → deploy → accrue @20% share) AND that each accrual
 // appends an immutable ledger row whose compute_proof is NULL (the hanzod attestation
 // is a follow-up, never fabricated).
 func TestGitLabVerifyAndLedger(t *testing.T) {
@@ -714,21 +735,21 @@ func TestGitLabVerifyAndLedger(t *testing.T) {
 		t.Fatalf("gitlab verify wrong: %+v", vr.Repo)
 	}
 
-	// orgH deploys it, orgG is approved, orgH spends $100 → royalty @25% = 2500c.
+	// orgH deploys it, orgG is approved, orgH spends $100 → royalty @20% = 2000c.
 	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgH", false, map[string]any{"repoUrl": "gitlab.com/glorg/gltool", "project": "proj-h"})
 	approve(t, app, cr.ID)
 	fc.setSpend("orgH", 10000)
 	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
 
 	a, _ := s.State.store.GetByID(ctx, cr.ID)
-	const want = 10000 * defaultShareBps / bpsDenom // 2500 @ 25%
+	const want = 10000 * defaultShareBps / bpsDenom // 2000 @ 20%
 	if a.AccruedCents != want {
 		t.Fatalf("gitlab author accrued = %d, want %d", a.AccruedCents, want)
 	}
 
 	// The append-only ledger has exactly ONE row for this accrual: share 2500 bps,
 	// earning 2500c, compute_proof NULL (attestation is a follow-up, not fabricated).
-	rows, err := s.State.store.ListLedger(ctx, cr.ID, 100)
+	rows, err := s.State.store.ListLedger(ctx, cr.ID, "", 100)
 	if err != nil {
 		t.Fatalf("ListLedger: %v", err)
 	}
@@ -742,9 +763,116 @@ func TestGitLabVerifyAndLedger(t *testing.T) {
 
 	// Idempotent: a re-sweep in the same period appends NO new ledger row.
 	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
-	rows2, _ := s.State.store.ListLedger(ctx, cr.ID, 100)
+	rows2, _ := s.State.store.ListLedger(ctx, cr.ID, "", 100)
 	if len(rows2) != 1 {
 		t.Fatalf("re-sweep appended a ledger row: %d, want 1 (append-only, at-most-once)", len(rows2))
+	}
+}
+
+// TestAutoPayoutDrainsPendingIdempotent is the AUTOMATION proof: the scheduler's
+// sweepAndPayout accrues AND pays an approved author's pending royalty in one pass
+// (no human sweep/payout call), and a second pass in the same period pays NOTHING more
+// — the pending guard makes auto-payout at-most-once, never a double-pay.
+func TestAutoPayoutDrainsPendingIdempotent(t *testing.T) {
+	app, s, fc, fg := mount(t)
+	ctx := context.Background()
+	idA, _ := connectOrg(t, app, s, "orgA", "acmedev")
+	fg.setLinked("orgA", "acmedev", "tok_a")
+	fg.setAdmin("tok_a", "acme", "widgets")
+	req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgA", false, map[string]any{"repoUrl": "acme/widgets"})
+	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false, map[string]any{"repoUrl": "acme/widgets", "project": "proj-b"})
+	approve(t, app, idA)
+	fc.setSpend("orgB", 10000) // $100 × 20% → 2000c
+
+	// The automatic loop accrues AND pays in one pass — the closed money loop.
+	sweepAndPayout(s)
+	const want = 10000 * defaultShareBps / bpsDenom // 2000
+	a, _ := s.State.store.GetByID(ctx, idA)
+	if a.AccruedCents != want || a.PaidCents != want || a.PendingCents() != 0 {
+		t.Fatalf("auto loop: accrued=%d paid=%d pending=%d, want %d/%d/0", a.AccruedCents, a.PaidCents, a.PendingCents(), want, want)
+	}
+	// External author → the payout is a credits grant into their wallet, exactly once.
+	if fc.bal("orgA") != want || fc.depositCount() != 1 {
+		t.Fatalf("auto payout wallet=%d deposits=%d, want %d/1", fc.bal("orgA"), fc.depositCount(), want)
+	}
+	// IDEMPOTENT: a second automatic pass (same period) accrues nothing more and pays
+	// nothing more — pending is 0, so RecordPayout's guard refuses. No double-pay.
+	sweepAndPayout(s)
+	a, _ = s.State.store.GetByID(ctx, idA)
+	if a.PaidCents != want || a.AccruedCents != want || fc.depositCount() != 1 {
+		t.Fatalf("double auto-pay! accrued=%d paid=%d deposits=%d, want %d/%d/1", a.AccruedCents, a.PaidCents, fc.depositCount(), want, want)
+	}
+}
+
+// TestHanzoForkRoutesToTreasury is the ATTRIBUTION proof: an EXTERNAL org deploying a
+// Hanzo-maintained template (owner ∈ hanzoai) auto-attributes to the treasury SYSTEM
+// author (org=hanzo) with NO human verify step, accrues 20%, and the automatic payout
+// routes that royalty to the Hanzo treasury ("pay ourselves") — it NEVER lands in an
+// external commerce wallet. A self-deploy by the Hanzo org itself earns nothing.
+func TestHanzoForkRoutesToTreasury(t *testing.T) {
+	app, s, fc, _ := mount(t) // maintainerOrg = "hanzo"
+	ctx := context.Background()
+
+	// An external org deploys hanzoai/chat-starter — recordDeploy auto-attributes it.
+	st, body := req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false,
+		map[string]any{"repoUrl": "https://github.com/hanzoai/chat-starter", "project": "proj-b"})
+	if st != http.StatusCreated || !recorded(t, body) {
+		t.Fatalf("hanzo-fork deploy want 201 recorded, got %d (%s)", st, body)
+	}
+	// The treasury system author now exists (org=hanzo), approved, 20%, owning the repo.
+	sys, err := s.State.store.GetByOrg(ctx, "hanzo")
+	if err != nil {
+		t.Fatalf("treasury system author missing: %v", err)
+	}
+	if sys.Status != StatusApproved || sys.ShareBps != defaultShareBps {
+		t.Fatalf("system author wrong: %+v", sys)
+	}
+	repos, _ := s.State.store.ListRepos(ctx, sys.ID, 10)
+	if len(repos) != 1 || repos[0].RepoURL != "github.com/hanzoai/chat-starter" || repos[0].Method != MethodMaintainer {
+		t.Fatalf("maintained repo attribution wrong: %+v", repos)
+	}
+
+	// orgB spends $100 → Hanzo earns 20% = 2000c, auto-paid INTO the treasury.
+	fc.setSpend("orgB", 10000)
+	sweepAndPayout(s)
+	const want = 10000 * defaultShareBps / bpsDenom // 2000
+	sys, _ = s.State.store.GetByID(ctx, sys.ID)
+	if sys.AccruedCents != want || sys.PaidCents != want || sys.PendingCents() != 0 {
+		t.Fatalf("treasury author accrued=%d paid=%d pending=%d, want %d/%d/0", sys.AccruedCents, sys.PaidCents, sys.PendingCents(), want, want)
+	}
+	// The royalty went to the treasury reserve, NOT a customer wallet: zero deposits.
+	if fc.depositCount() != 0 {
+		t.Fatalf("hanzo-fork royalty hit an external commerce wallet (%d deposits) — must credit the treasury", fc.depositCount())
+	}
+
+	// A self-deploy by the Hanzo org itself never earns (self excluded from accrual).
+	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "hanzo", false,
+		map[string]any{"repoUrl": "hanzoai/chat-starter", "project": "proj-self"})
+	fc.setSpend("hanzo", 50000)
+	sweepAndPayout(s)
+	sys, _ = s.State.store.GetByID(ctx, sys.ID)
+	if sys.AccruedCents != want {
+		t.Fatalf("self-deploy accrued to treasury: %d, want %d (self excluded)", sys.AccruedCents, want)
+	}
+}
+
+// TestIsMaintainedRepo proves the Hanzo-fork detector: brand-owned repos (hanzoai/*,
+// hanzo/*, hanzo-*) route to the treasury; everything else does not; white-label by
+// brand (a lux deployment claims luxfi/*, never hanzoai/*).
+func TestIsMaintainedRepo(t *testing.T) {
+	for _, r := range []string{"github.com/hanzoai/chat", "github.com/hanzo/site", "github.com/hanzo-labs/x", "gitlab.com/hanzoai/y"} {
+		if !isMaintainedRepo(r, "hanzo") {
+			t.Fatalf("isMaintainedRepo(%q, hanzo) = false, want true", r)
+		}
+	}
+	for _, r := range []string{"github.com/acme/widgets", "github.com/hanzoworld/x", "github.com/luxfi/node", ""} {
+		if isMaintainedRepo(r, "hanzo") {
+			t.Fatalf("isMaintainedRepo(%q, hanzo) = true, want false", r)
+		}
+	}
+	// White-label: a lux deployment claims luxfi/*, not hanzoai/*.
+	if !isMaintainedRepo("github.com/luxfi/node", "lux") || isMaintainedRepo("github.com/hanzoai/chat", "lux") {
+		t.Fatal("white-label maintainer detection wrong for brand=lux")
 	}
 }
 
@@ -786,5 +914,167 @@ func TestMount(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("mounted GET /v1/authors (no principal) want 403, got %d", resp.StatusCode)
+	}
+}
+
+// TestNormalizeTarget: the ONE parser distinguishes a REPO (host/owner/name) from a
+// whole OWNER/org (host/owner) from junk. An org REQUIRES an explicit forge host — a
+// bare "owner/name" is still a github.com repo, a bare single word is neither.
+func TestNormalizeTarget(t *testing.T) {
+	// Repos → isOrg=false.
+	for in, want := range map[string]string{
+		"https://github.com/acme/widgets":     "github.com/acme/widgets",
+		"acme/widgets":                        "github.com/acme/widgets",
+		"github.com/acme/widgets/tree/main":   "github.com/acme/widgets", // extra segments dropped
+		"https://gitlab.com/acme/Widgets.git": "gitlab.com/acme/widgets",
+		"git@github.com:acme/widgets.git":     "github.com/acme/widgets",
+	} {
+		got, isOrg := normalizeTarget(in)
+		if got != want || isOrg {
+			t.Fatalf("normalizeTarget(%q) = (%q,%v), want (%q,false)", in, got, isOrg, want)
+		}
+	}
+	// Orgs (explicit host) → isOrg=true.
+	for in, want := range map[string]string{
+		"https://github.com/luxfi":     "github.com/luxfi",
+		"github.com/luxfi":             "github.com/luxfi",
+		"http://www.github.com/LuxFi/": "github.com/luxfi",
+		"gitlab.com/acme-group":        "gitlab.com/acme-group",
+	} {
+		got, isOrg := normalizeTarget(in)
+		if got != want || !isOrg {
+			t.Fatalf("normalizeTarget(%q) = (%q,%v), want (%q,true)", in, got, isOrg, want)
+		}
+	}
+	// Neither: empty, a bare word (no host), a non-forge host (owner/name form).
+	for _, in := range []string{"", "  ", "luxfi", "not a repo", "https://bitbucket.org/a/b"} {
+		if got, isOrg := normalizeTarget(in); got != "" || isOrg {
+			t.Fatalf("normalizeTarget(%q) = (%q,%v), want empty", in, got, isOrg)
+		}
+	}
+}
+
+// TestVerifyOrgUrlCoversOwner is the ORG-claim proof: a whole github.com/<owner> url
+// (no repo segment) is ACCEPTED, its ownership proven the SAME OAuth way against the
+// owner's .github control repo, recorded as an owner-wide claim — and then EVERY repo
+// under that owner earns on deploy without a per-repo verify. Ownership is NOT weakened:
+// an owner the caller can't prove is 422, an owner already claimed is 409, and a per-repo
+// verify still works alongside. A bare word / non-forge host is still rejected.
+func TestVerifyOrgUrlCoversOwner(t *testing.T) {
+	app, s, fc, fg := mount(t)
+	ctx := context.Background()
+
+	// orgL connects; its linked token has admin on the owner's control repo luxfi/.github.
+	idL, _ := connectOrg(t, app, s, "orgL", "luxdev")
+	fg.setLinked("orgL", "luxdev", "tok_l")
+	fg.setAdmin("tok_l", "luxfi", orgProofRepo)
+
+	// An ORG url verifies via OAuth and records an owner-wide claim (201 created).
+	st, body := req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgL", false, map[string]any{"repoUrl": "https://github.com/luxfi"})
+	if st != http.StatusCreated {
+		t.Fatalf("org verify want 201, got %d (%s)", st, body)
+	}
+	var ov struct {
+		Org struct {
+			OwnerURL      string `json:"ownerUrl"`
+			Verified      bool   `json:"verified"`
+			Method        string `json:"method"`
+			BadgeMarkdown string `json:"badgeMarkdown"`
+		} `json:"org"`
+		Created bool `json:"created"`
+	}
+	_ = json.Unmarshal(body, &ov)
+	if ov.Org.OwnerURL != "github.com/luxfi" || !ov.Org.Verified || ov.Org.Method != MethodOAuth || !ov.Created {
+		t.Fatalf("org verify wrong: %+v", ov)
+	}
+	// The claim is stored as an owner-wide org record on the author.
+	claims, _ := s.State.store.ListOrgs(ctx, idL, 10)
+	if len(claims) != 1 || claims[0].OwnerURL != "github.com/luxfi" || !claims[0].Verified {
+		t.Fatalf("org claim not recorded: %+v", claims)
+	}
+
+	// A deploy of ANY repo under the verified owner (no per-repo claim) attributes to the
+	// org's author — proven for TWO distinct repos under the same owner.
+	if st, dbody := req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgD", false, map[string]any{"repoUrl": "https://github.com/luxfi/node", "project": "proj-d"}); st != http.StatusCreated || !recorded(t, dbody) {
+		t.Fatalf("org-covered deploy #1 want 201 recorded, got %d (%s)", st, dbody)
+	}
+	if st, dbody := req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgD", false, map[string]any{"repoUrl": "luxfi/cli", "project": "proj-cli"}); st != http.StatusCreated || !recorded(t, dbody) {
+		t.Fatalf("org-covered deploy #2 want 201 recorded, got %d (%s)", st, dbody)
+	}
+
+	// Approve + spend → the org author earns spend × share on the covered deploys.
+	approve(t, app, idL)
+	fc.setSpend("orgD", 10000) // $100 × 20% share → 2000c
+	code, sbody := req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
+	if code != http.StatusOK || sweptAccrued(t, sbody) != 1 {
+		t.Fatalf("org-covered accrual sweep want 1, got %d (%s)", code, sbody)
+	}
+	a, _ := s.State.store.GetByID(ctx, idL)
+	const want = 10000 * defaultShareBps / bpsDenom
+	if a.AccruedCents != want {
+		t.Fatalf("org-covered author accrued = %d, want %d", a.AccruedCents, want)
+	}
+
+	// Ownership is REQUIRED: an owner the caller can't prove is 422 (not weakened).
+	connectOrg(t, app, s, "orgX", "xdev")
+	if st, _ := req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgX", false, map[string]any{"repoUrl": "github.com/luxfi"}); st != http.StatusUnprocessableEntity {
+		t.Fatalf("unproven org claim want 422, got %d", st)
+	}
+	// Even WITH proof, an owner already verified by another author is 409 (first-verify wins).
+	fg.setLinked("orgX", "xdev", "tok_x")
+	fg.setAdmin("tok_x", "luxfi", orgProofRepo)
+	if st, _ := req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgX", false, map[string]any{"repoUrl": "github.com/luxfi"}); st != http.StatusConflict {
+		t.Fatalf("cross-author org claim want 409, got %d", st)
+	}
+
+	// A per-repo claim still works alongside org claims (both arms coexist).
+	fg.setAdmin("tok_x", "acme", "widgets")
+	if st, _ := req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgX", false, map[string]any{"repoUrl": "acme/widgets"}); st != http.StatusCreated {
+		t.Fatalf("per-repo verify alongside org want 201, got %d", st)
+	}
+
+	// A bare word (no host) and a non-forge host are still rejected as malformed (400).
+	for _, bad := range []string{"luxfi", "not a repo", "https://bitbucket.org/a/b"} {
+		if st, _ := req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgX", false, map[string]any{"repoUrl": bad}); st != http.StatusBadRequest {
+			t.Fatalf("malformed %q want 400, got %d", bad, st)
+		}
+	}
+}
+
+// TestVerifyOrgFileMethod proves the SECOND ownership proof works for orgs too: a
+// hanzo.json carrying the verify code on the owner's .github default branch verifies the
+// whole owner (no OAuth token), and a repo under it then earns on deploy.
+func TestVerifyOrgFileMethod(t *testing.T) {
+	app, s, _, fg := mount(t)
+	ctx := context.Background()
+
+	idF, codeF := connectOrg(t, app, s, "orgF", "fdev")
+	// hanzo.json with the author's verify code on acme/.github's default branch.
+	fg.setFile("acme", orgProofRepo, "main", verifyFile, []byte(`{"hanzoAuthorCode":"`+codeF+`"}`))
+
+	st, body := req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgF", false, map[string]any{"repoUrl": "github.com/acme"})
+	if st != http.StatusCreated {
+		t.Fatalf("org file-verify want 201, got %d (%s)", st, body)
+	}
+	var ov struct {
+		Org struct {
+			OwnerURL string `json:"ownerUrl"`
+			Verified bool   `json:"verified"`
+			Method   string `json:"method"`
+		} `json:"org"`
+	}
+	_ = json.Unmarshal(body, &ov)
+	if ov.Org.OwnerURL != "github.com/acme" || !ov.Org.Verified || ov.Org.Method != MethodFile {
+		t.Fatalf("org file-verify wrong: %+v", ov.Org)
+	}
+
+	// A repo under the file-verified owner earns on deploy (org arm of attribution).
+	st, dbody := req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgZ", false, map[string]any{"repoUrl": "github.com/acme/anything", "project": "proj-z"})
+	if st != http.StatusCreated || !recorded(t, dbody) {
+		t.Fatalf("org-covered deploy want 201 recorded, got %d (%s)", st, dbody)
+	}
+	deploys, _ := s.State.store.ListDeploys(ctx, idF, 10)
+	if len(deploys) != 1 || deploys[0].RepoURL != "github.com/acme/anything" {
+		t.Fatalf("org-covered deploy not attributed to owner author: %+v", deploys)
 	}
 }

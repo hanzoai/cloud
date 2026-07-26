@@ -35,7 +35,7 @@
 //     secret. The server stamps tenant_id from the VERIFIED org, never from the
 //     request body — the same tenant invariant the rest of the plane enforces.
 //   - LOWEST LATENCY. Verification is one HMAC compute — no IAM call, no keys
-//     table, no DB read. This is the no-Kafka, no-bridge, direct-to-ClickHouse
+//     table, no DB read. This is the no-Kafka, no-bridge, direct-to-Datastore
 //     path; it funnels through the SAME write core (ingestEvents) into the SAME
 //     hanzo.events table as every other adapter. One write path, many front doors.
 //
@@ -198,7 +198,11 @@ func foldException(e CaptureEvent) CaptureEvent {
 	for k, v := range e.Properties {
 		props[k] = v
 	}
-	props["$exception"] = e.Error
+	// Redact the exception's free-text (message/stack) at the fold point so the
+	// stored row AND the raw destinations fan-out (forward.go, which sees events
+	// BEFORE the warehouse scrub) both carry a clean $exception — never a token,
+	// query secret, or PII lifted from a stack frame.
+	props["$exception"] = scrubException(e.Error)
 	e.Properties = props
 	e.Error = nil
 	return e

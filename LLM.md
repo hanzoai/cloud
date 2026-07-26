@@ -1,10 +1,40 @@
 # LLM.md — hanzoai/cloud
 
-Guidance for AI agents working in this repo. `hanzoai/cloud` (HIP-0106) is ONE Go
-binary + CLI that mounts every Hanzo subsystem into a single process; the same
-artifact serves `api.hanzo.ai`, `api.lux.cloud`, `api.zoo.cloud`, `api.osage.cloud`
-and every white-label reseller. Brand, enabled subsystems, and org scope are
-deployment configuration.
+**Canonical repo.** `hanzoai/cloud` (HIP-0106) is the Open AI Cloud as ONE Go
+binary + `hanzo` CLI: every Hanzo subsystem (iam, base, kms, ai, gateway,
+commerce, o11y, tasks, …) mounted into a single multi-org process. The same
+artifact serves `api.hanzo.ai`, `api.lux.cloud`, `api.zoo.cloud`,
+`api.osage.cloud`, and every white-label reseller — brand, enabled subsystems,
+and org scope are deployment configuration. This is the impl home for the cloud
+control plane; the OpenAPI it emits at `GET /v1/openapi.json` is the single
+source for the generated per-language SDKs.
+
+## Role in the SDK model
+- Full Cloud SDK is GENERATED from THIS binary's OpenAPI; SDK impl lives in
+  `hanzo-<lang>/sdk`, docs/wrappers in `hanzoai/<lang>-sdk`, meta in `hanzoai/sdk`.
+- AI/agents flagship lib is separate: Python `hanzo` (`hanzoai/python-sdk`),
+  Node `@hanzo/ai` (`hanzo-js/ai`). Completeness: Python > Rust > C++ > Go.
+- DRY: one impl, one place; discovery repos link OUT, never duplicate impl.
+- Full spec: `~/work/hanzo/SDK-ARCHITECTURE.md`.
+
+## Brand rules (hard)
+- Hanzo is a full AI cloud, NOT a proxy — never "LLM gateway", never position vs
+  LiteLLM. Zen models are our OWN family; never name upstream models.
+- `/v1/` only, never `/api/`. Voice: "Hanzo — the Open AI Cloud."
+
+## Install / run
+- `docker run -p 8080:8080 ghcr.io/hanzoai/cloud:vX.Y.Z` (pin a released tag) ·
+  `go install github.com/hanzoai/cloud/cmd/hanzo@latest` · `brew install hanzoai/tap/hanzo`
+- Build in MODULE mode only: `make build` / `GOWORK=off go build ./...` — never
+  workspace mode (see "Build & module graph" below).
+
+## Key entry points
+- `cmd/cloud` — server binary · `cmd/hanzo` (`cli/`) — control CLI · `webui.go` — embedded console
+- `apps/apps.go:Wire()` — composition root (the one ordered subsystem slice)
+- `deps.go` / `cloud.Deps` — process-wide handles · `clients/<name>/` — every subsystem
+- `openapi/` — live spec derived from the router (no checked-in spec file)
+
+---
 
 ## Open Cloud planes
 
@@ -23,6 +53,7 @@ reverse).
 | `/v1/tasks` | Durable engine | `clients/tasks` | Shipped |
 | `/v1/gpus` + fleet | BYO GPU presence | `clients/fleet` + `clients/visor` | Shipped |
 | `/v1/cloud` | Cloud accounts: link DO/AWS/GCP/Azure, discover native k8s clusters, fold into the fleet | `clients/venue` (new) | In flight (branch `feat/cloud-account-connectors`; blue-held for red) |
+| `/v1/blueprint` | Cost: OSS-template SBOM (compose→images) + compute-cost estimate | `clients/blueprint` (new) | Shipped |
 | IAM | Identity: users, orgs, roles | IAM | Shipped |
 | KMS | Secret custody: sealed secrets | `clients/kms` | Shipped |
 
@@ -294,6 +325,22 @@ embedded underneath.
   creative A/B by composing `experiments.Assign`/`experiments.Analyze` — it never
   reinvents assignment or evidence. Add a new variant KIND by putting a payload on
   the variant; the primitive does not care what it is.
+- **The OSS-template compute cost is DERIVED from the compose, not a fourth ledger
+  (`clients/blueprint`, `/v1/blueprint`).** A blueprint's `docker-compose.yml` is
+  parsed to its SBOM (the bill of container images) and its services' CPU/memory
+  footprint priced through ONE documented rate card (microdollars per vCPU-/GB-hour,
+  DigitalOcean-droplet-derived + platform margin; tunable via
+  `CLOUD_BLUEPRINT_UCPU_HR`/`_UGB_HR`). Sizing is the declared
+  `deploy.resources.reservations`/`limits` (or legacy `cpus`/`mem_*`) else a default
+  footprint per inferred class (db/cache/web/worker/other). `blueprint.EstimateTemplate(id)`
+  returns `{sbom, vcpuHr, gbHr, microUsdPerHour, estCentsPerMonth}`: `estCentsPerMonth`
+  is the "~$X/mo to run" the console shows; `microUsdPerHour` is the exact rate the
+  deploy path meters the deploying org on via the SAME commerce spine `resource_billing`
+  uses. The author royalty (`clients/authors`, `defaultShareBps=2000`) already accrues
+  20% of a deploying org's metered spend — this plane only DEFINES the compute component
+  of that spend from a real rate card; it never touches the ledger or the accrual sweep.
+  Distinct from `clients/sbom` (CycloneDX packages INSIDE one image, keyed by digest);
+  this is the bill of IMAGES a stack runs, keyed by template.
 
 ## Identity vocabulary is IAM-native
 

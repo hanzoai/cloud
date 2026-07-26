@@ -13,6 +13,7 @@ package deploy
 
 import (
 	"context"
+	"github.com/hanzoai/cloud/clients/k8s"
 	"net/http"
 
 	"github.com/hanzoai/cloud"
@@ -73,7 +74,7 @@ func appTree(s *cloud.Service[state], c *zip.Ctx) error {
 
 // depth1GVRs are the operator-owned kinds scanned directly under the Service CR.
 var depth1GVRs = []schema.GroupVersionResource{
-	deploymentsGVR, coreSvcGVR, ingressGVR, hpaGVR, pdbGVR, configMapsGVR,
+	k8s.Deployments, coreSvcGVR, ingressGVR, hpaGVR, pdbGVR, configMapsGVR,
 }
 
 // buildTree walks the owned-resource hierarchy for the CR and returns a flat node
@@ -103,7 +104,7 @@ func buildTree(s *cloud.Service[state], ctx context.Context, ns, app string, cr 
 			n := toNode(obj, ns)
 			n.ParentRefs = []ResourceRef{root.ResourceRef}
 			nodes = append(nodes, n)
-			if gvr == deploymentsGVR {
+			if gvr == k8s.Deployments {
 				deployUIDs = append(deployUIDs, string(obj.GetUID()))
 				if sel, ok, _ := unstructured.NestedStringMap(obj.Object, "spec", "selector", "matchLabels"); ok {
 					deploySelectors[obj.GetName()] = sel
