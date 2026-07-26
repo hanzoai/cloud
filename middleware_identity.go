@@ -27,12 +27,10 @@ package cloud
 // matching the gateway's admin-guard. An org admin gets NO admin authority.
 
 import (
-	"context"
 	"net/url"
 	"strings"
 	"unicode"
 
-	"github.com/hanzoai/beego/v2/server/web"
 	"github.com/zap-proto/zip"
 )
 
@@ -370,33 +368,21 @@ func validatedPrincipal(c *zip.Ctx, v *identityValidator) *idClaims {
 	return claims
 }
 
-// sessionAccessToken returns the IAM access-token JWT the in-process IAM stored
-// server-side for the caller's first-party session, or "" when there is no
-// session manager, no session cookie, no session, or no stored token. The token
-// is NOT trusted here — validatedPrincipal feeds it back through v.validate — so
-// this only maps an opaque, httpOnly session id to the server-minted JWT bound to
-// it. The session cookie name and store are the SAME ones clients/iam wired
-// into Beego's global session manager (web.BConfig.WebConfig.Session).
-func sessionAccessToken(c *zip.Ctx) string {
-	mgr := web.GlobalSessions
-	if mgr == nil {
-		return ""
-	}
-	name := web.BConfig.WebConfig.Session.SessionName
-	if name == "" {
-		return ""
-	}
-	sid := c.Fiber().Cookies(name)
-	if sid == "" {
-		return ""
-	}
-	store, err := mgr.GetSessionStore(sid)
-	if err != nil || store == nil {
-		return ""
-	}
-	tok, _ := store.Get(context.Background(), "accessToken").(string)
-	return tok
-}
+// sessionAccessToken used to map a first-party session cookie to the JWT the
+// in-process IAM had stored server-side, by reading Beego's global session
+// manager (web.GlobalSessions) that the Casdoor iam-v1 embed wired up.
+//
+// That embed is retired. IAM v2 (github.com/hanzoai/iam) is zip-native on
+// hanzoai/orm + hanzoai/sqlite and registers its surface directly on cloud's
+// app, so nothing in this binary ever populates web.GlobalSessions — the
+// function could only ever return "". It was dead code holding a whole beego
+// module in the graph, along with the process-global config it drags in.
+//
+// Removed rather than kept "just in case": a session bridge to a manager that
+// is never initialised is not a fallback, it is a lie about where sessions come
+// from. If a first-party session ever needs to resolve to a token again, it
+// resolves through IAM v2, not through a global in a retired framework.
+func sessionAccessToken(*zip.Ctx) string { return "" }
 
 // sessionBridgeSameOrigin reports whether the request may use the ambient-cookie
 // session bridge (RED H3). A legitimate embed request is same-origin (the SPA calls
