@@ -249,7 +249,14 @@ func (s *state) syncDurable(org string, sandbox bool, posted int) {
 	if sandbox {
 		store = s.sandbox
 	}
-	if _, err := store.Sync(org, ""); err != nil {
+	// acked==false = the fence refused the ship (this pod was deposed): the imported
+	// postings live only in a local file the next hydrate overwrites. Unlike syncLedger's
+	// commerce ingest, an OFX/CSV import is NOT re-derivable server-side, so losing it
+	// loses user-supplied data — never let that pass silently.
+	if acked, err := store.Sync(org, ""); err != nil {
 		s.log.Warn("books bank durable sync degraded", "org", org, "sandbox", sandbox, "err", err)
+	} else if !acked {
+		s.log.Error("books bank postings NOT durably shipped — this pod is not the org's elected writer; the postings will be dropped on the next hydrate, re-import to recover",
+			"org", org, "sandbox", sandbox, "posted", posted)
 	}
 }
