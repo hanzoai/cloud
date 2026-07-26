@@ -130,6 +130,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}}
 	mounted = s
 	routes(app, s)
+	// Register the external-issue mirror sink (cloud.UpsertIssue) now that the store
+	// cache is live — the GitHub App webhook + backfill (clients/integrations) reach
+	// the tracker through it without importing this package (tracker_seam inversion).
+	registerIssueSink()
 	s.Log.Info("tracker mounted", "brand", s.Brand)
 	return nil
 }
