@@ -160,6 +160,10 @@ CREATE INDEX IF NOT EXISTS ix_issues_org_project_status ON issues(org, project_i
 	const spineIdx = `
 CREATE INDEX IF NOT EXISTS ix_issues_org_repo ON issues(org, repo);
 CREATE INDEX IF NOT EXISTS ix_issues_org_kind ON issues(org, kind);
+-- ExtRef lookup: the external-mirror upsert (GitHub issue → tracker) finds the
+-- existing row for an anchor by (org, project, ext_ref) so a webhook redelivery or
+-- a backfill re-run updates in place instead of duplicating.
+CREATE INDEX IF NOT EXISTS ix_issues_extref ON issues(org, project_id, ext_ref);
 `
 	if _, err := s.db.Exec(spineIdx); err != nil {
 		return fmt.Errorf("migrate spine index: %w", err)
@@ -327,6 +331,24 @@ func (s *Store) GetIssue(ctx context.Context, org, projectID string, number int)
 	}
 	if err != nil {
 		return Issue{}, fmt.Errorf("get issue: %w", err)
+	}
+	return i, nil
+}
+
+// GetIssueByExtRef returns the issue anchored to extRef within (org, project) or
+// errNotFound — the idempotency lookup for the external-mirror upsert. ExtRef is not
+// globally unique (it is unique per external system), so it is always scoped to the
+// project the mirror files into.
+func (s *Store) GetIssueByExtRef(ctx context.Context, org, projectID, extRef string) (Issue, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+issueCols+` FROM issues WHERE org=? AND project_id=? AND ext_ref=? ORDER BY number ASC LIMIT 1`,
+		org, projectID, extRef)
+	i, err := scanIssue(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Issue{}, errNotFound
+	}
+	if err != nil {
+		return Issue{}, fmt.Errorf("get issue by extref: %w", err)
 	}
 	return i, nil
 }
