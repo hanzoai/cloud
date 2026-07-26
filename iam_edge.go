@@ -6,9 +6,16 @@ package cloud
 //
 // WHY. The embedded console reads org members + projects at a clean /v1/iam/*.
 // When IAM is folded in-process (Enabled("iam")) that subsystem answers those
-// directly; until then (the staged default) this edge forwards them to the
-// standalone IAM, so the one-binary console is never left without IAM. Either way
-// the request enters at ONE path — /v1/iam/* — and the client stays identical.
+// directly; otherwise this edge forwards them to the standalone IAM, so the
+// one-binary console is never left without IAM. Either way the request enters at
+// ONE path — /v1/iam/* — and the client stays identical.
+//
+// WHEN THIS MOUNTS. iam is not staged, so the empty-CLOUD_ENABLE "mount
+// everything" default folds it in-process and this edge stays off. The edge
+// serves the remaining case: an EXPLICIT enable list that omits "iam" (an
+// allowlist is exact), with IAM_URL/IAM_INTERNAL_URL pointing at the standalone
+// pod. That is the supported way to run cloud against an external identity plane
+// — and the rollback path in IAM_CUTOVER.md.
 //
 // WHY THE PIN IS LOAD-BEARING. IAM's own authz is permissive on org-keyed routes
 // (a lister with no `organization` returns every tenant's rows), so the org pin
