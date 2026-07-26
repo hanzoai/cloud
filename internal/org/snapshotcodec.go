@@ -76,9 +76,23 @@ type wholeFile struct {
 func (wf wholeFile) produce(ctx context.Context, db *sql.DB, dbPath string) ([]byte, error) {
 	if wf.checkpoint != nil {
 		// Envelope backend: its Checkpoint folds the WAL AND re-encrypts the real path.
+		// It takes db's SOLE connection itself, so it must run BEFORE we hold that
+		// connection (holding it first would deadlock at MaxOpenConns(1)).
 		if err := wf.checkpoint(ctx, db); err != nil {
 			return nil, fmt.Errorf("org: snapshot checkpoint %s: %w", dbPath, err)
 		}
+		// Then hold the SOLE connection across the file read, exactly as the default path
+		// does: os.ReadFile is a raw read that takes no SQLite lock, so a concurrent
+		// writer's commit — and the WAL auto-checkpoint it can trigger, which writes pages
+		// straight into the real path — would tear the image mid-read and ship a CORRUPT
+		// snapshot that the fence then acks at the lease round. A write that lands in the
+		// gap between the checkpoint and this acquire is simply not in the snapshot, which
+		// is safe: it has not been acked, so no acknowledged write is lost.
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("org: snapshot conn %s: %w", dbPath, err)
+		}
+		defer conn.Close()
 		return readFramed(dbPath)
 	}
 	// Default backend (write-time encryption): hold db's SOLE connection (MaxOpenConns(1))

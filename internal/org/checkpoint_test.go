@@ -19,9 +19,60 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/vfs/replica"
 )
+
+// TestProduceHoldsSoleConnAcrossReadWithCheckpoint pins the torn-snapshot guard on the
+// PRODUCTION ship path. os.ReadFile takes no SQLite lock, so if produce reads the file
+// without holding the store's sole connection, a concurrent commit — and the WAL
+// auto-checkpoint it can trigger, which writes pages straight into the real path — tears
+// the image mid-read; the fence then ACKS that corrupt snapshot at the lease round and a
+// successor restores it. The default (nil-checkpoint) path holds the connection across
+// the read; the injected-checkpoint path, which is the one buildDurability wires for
+// production, must do the same.
+//
+// Deterministic: the sole connection (MaxOpenConns(1)) is held by the test, so a produce
+// that acquires a connection for its read CANNOT get one and fails on the ctx deadline.
+// Without the guard produce would happily read the file and return a payload.
+func TestProduceHoldsSoleConnAcrossReadWithCheckpoint(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "research.db")
+	db, err := sql.Open("sqlite", testDSN(path))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	ensureKV(t, db)
+	putKV(t, db, "k1", "v1")
+
+	// Occupy the SOLE connection, standing in for a concurrent in-flight writer.
+	held, err := db.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("take sole conn: %v", err)
+	}
+	defer held.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	// A no-op checkpoint: this asserts the guard around the READ, independently of what
+	// the injected checkpoint itself does (production's also takes, and releases, a conn).
+	codec := wholeFile{checkpoint: func(context.Context, *sql.DB) error { return nil }}
+	if _, err := codec.produce(ctx, db, path); err == nil {
+		t.Fatal("produce read the database file WITHOUT holding the sole connection — a concurrent writer can tear the snapshot mid-read and the fence would ack the corrupt image")
+	}
+
+	// Control: with the connection free, the same produce succeeds and carries the write.
+	held.Close()
+	payload, err := codec.produce(context.Background(), db, path)
+	if err != nil {
+		t.Fatalf("produce with a free connection must succeed: %v", err)
+	}
+	if len(payload) == 0 {
+		t.Fatal("produce returned an empty payload")
+	}
+}
 
 // TestSyncCheckpointsBeforeShip: with an injected checkpoint (standing in for the
 // envelope's re-encrypting Checkpoint), Sync must invoke it before reading the file, and

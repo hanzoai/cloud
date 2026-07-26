@@ -24,6 +24,7 @@ import (
 	"context"
 	"os"
 	"strings"
+	"sync/atomic"
 
 	"github.com/hanzoai/cloud/internal/org"
 	luxlog "github.com/luxfi/log"
@@ -57,13 +58,26 @@ func membershipSource(staticPeers []org.Member, selector, port string, log luxlo
 	if log != nil {
 		log.Info("live K8s membership enabled", "namespace", ns, "selector", selector)
 	}
+	var listFailures atomic.Int64
 	return func(ctx context.Context) ([]org.Member, error) {
 		list, err := client.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{LabelSelector: selector})
 		if err != nil {
 			// Fail closed: org.Membership keeps the last-good set, never flapping to
 			// empty (an empty set would strand every org with no owner).
+			//
+			// REPORT it, rate-limited. org.Membership's refresh loop DISCARDS this error,
+			// so without a log here a persistent failure (pods:list RBAC missing, API
+			// unreachable) is completely invisible: membership freezes at its last-good
+			// set — empty if the very first refresh failed — and every per-org write then
+			// fails closed with no clue why. Logged on the 1st failure and every 30th
+			// after (~1/min at the 2s refresh) so a blip stays quiet but an outage does not.
+			if n := listFailures.Add(1); log != nil && (n == 1 || n%30 == 0) {
+				log.Error("live writer-membership pod LIST failed — the writer set is FROZEN at its last-good value; while it is empty every per-org write fails closed",
+					"selector", selector, "namespace", ns, "consecutive_or_total_failures", n, "err", err)
+			}
 			return nil, err
 		}
+		listFailures.Store(0)
 		return readyMembers(list.Items, port), nil
 	}
 }
