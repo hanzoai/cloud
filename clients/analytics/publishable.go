@@ -35,7 +35,7 @@
 //     secret. The server stamps tenant_id from the VERIFIED org, never from the
 //     request body — the same tenant invariant the rest of the plane enforces.
 //   - LOWEST LATENCY. Verification is one HMAC compute — no IAM call, no keys
-//     table, no DB read. This is the no-Kafka, no-bridge, direct-to-ClickHouse
+//     table, no DB read. This is the no-Kafka, no-bridge, direct-to-Datastore
 //     path; it funnels through the SAME write core (ingestEvents) into the SAME
 //     hanzo.events table as every other adapter. One write path, many front doors.
 //
