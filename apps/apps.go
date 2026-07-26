@@ -113,6 +113,7 @@ import (
 	"github.com/hanzoai/cloud/clients/plan"
 	"github.com/hanzoai/cloud/clients/platform"
 	"github.com/hanzoai/cloud/clients/plugin"
+	"github.com/hanzoai/cloud/clients/prefs"
 	"github.com/hanzoai/cloud/clients/pricing"
 	"github.com/hanzoai/cloud/clients/product"
 	"github.com/hanzoai/cloud/clients/projects"
@@ -393,6 +394,7 @@ func Wire() []cloud.MountSpec {
 		{Name: "sbom", Mount: sbom.Mount, OwnsHealth: true},
 		{Name: "team", Mount: team.Mount, Shutdown: ctxShutdown(team.Shutdown)},
 		{Name: "settings", Mount: settings.Mount, Shutdown: settings.Shutdown},
+		{Name: "prefs", Mount: prefs.Mount, Shutdown: prefs.Shutdown},
 		{Name: "notify", Mount: notify.Mount, OwnsHealth: true},
 		{Name: "channels", Mount: channels.Mount, Shutdown: channels.Shutdown},
 		{Name: "gateway", Mount: gateway.Mount},
