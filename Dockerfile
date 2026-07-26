@@ -178,10 +178,21 @@ LABEL org.opencontainers.image.revision="${REVISION}" \
 # libgcc: the hanzo-flags Rust staticlib (clients/featureflags FFI) references the
 # _Unwind_* unwinder symbols; musl needs libgcc_s at load time or the binary fails
 # relocation ("Error relocating /cloud: _Unwind_GetIP: symbol not found").
-RUN apk add --no-cache ca-certificates tzdata sqlcipher-libs git libgcc \
+# tini: /cloud runs as PID 1, and PID 1 inherits every orphaned descendant in the
+# container. git is not a single process — fetch/clone fan out to git-upload-pack,
+# git-index-pack, git-rev-list and git-pack-objects. When cloud Kill()s a wedged
+# direct child (gitPackStream.Close does exactly that, correctly), those
+# grandchildren orphan and reparent to PID 1. A Go program never reaps adopted
+# orphans, so each one becomes a permanent zombie holding a PID slot.
+# Measured 2026-07-26 on worker-xl-37bw71: 18,553 zombie `git` out of 18,741
+# processes, all parented to /cloud, which drove the node to PID pressure and
+# got cloud ITSELF evicted. A zombie costs no CPU and no memory, so nothing but
+# an eviction ever surfaces it. tini reaps them.
+RUN apk add --no-cache ca-certificates tzdata sqlcipher-libs git libgcc tini \
     && SC="$(find /usr/lib /lib -name 'libsqlcipher.so*' 2>/dev/null | sort | head -1)" \
     && test -n "$SC" \
-    && ln -sf "$SC" /usr/lib/libsqlite3.so.0
+    && ln -sf "$SC" /usr/lib/libsqlite3.so.0 \
+    && test -x /sbin/tini
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=build /etc/passwd /etc/passwd
@@ -190,4 +201,7 @@ COPY --from=build /cloud /cloud
 COPY --from=build /smoke /smoke
 EXPOSE 8080 9090 9653
 USER 65532:65532
-ENTRYPOINT ["/cloud"]
+# tini as PID 1 forwards signals to /cloud unchanged (so SIGTERM still drains
+# normally) and reaps the orphans described above. `--` keeps cloud's own args
+# untouched; the CR passes none today, but that stays true if it ever does.
+ENTRYPOINT ["/sbin/tini", "--", "/cloud"]
