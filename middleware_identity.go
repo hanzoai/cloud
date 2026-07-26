@@ -356,6 +356,15 @@ func validatedPrincipal(c *zip.Ctx, v *identityValidator) *idClaims {
 	// so key auth and session auth mint one identity. An unresolved key stays
 	// anonymous (nil) — a bad key never grants trust.
 	if isAPIKey(tok) {
+		// A PUBLISHABLE key never becomes a principal. pk- ships in browser
+		// bundles by design ("stored verbatim, safe to show"), so resolving it
+		// here would hand every visitor a reading credential for the org that
+		// owns it. It stays resolvable through OrgForKey — that is how the ingest
+		// door attributes a beacon to a tenant — but resolvable is not
+		// authenticated.
+		if IsPublishableKey(tok) {
+			return nil
+		}
 		if v.keys == nil {
 			return nil
 		}

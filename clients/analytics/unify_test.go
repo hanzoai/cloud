@@ -8,6 +8,7 @@
 package analytics
 
 import (
+	"context"
 	"net/http"
 	"reflect"
 	"testing"
@@ -27,7 +28,7 @@ import (
 //     server-resolved org. This is exactly the row buildEventsInsert binds.
 //   - AUTH dimension (HTTP layer): each auth context is ADMITTED (503, never 403),
 //     proving the canonical door resolved a tenant for it. Each pure resolver
-//     (verifyPublishableKey→org, resolveKeyOrg→org, the host-forced Site.Org) is
+//     (resolveKeyOrg→org, the host-forced Site.Org) is
 //     unit-proven elsewhere (publishable_test, capture_keyorg_test, hostcarve_test),
 //     so admission + those proofs compose into "lands in the SAME tenant".
 
@@ -160,68 +161,71 @@ func assertRowArgsEqualExceptID(t *testing.T, name string, want, got []any) {
 	}
 }
 
-// ── pluggable auth on the ONE door: pk_ folded into /v1/event ─────────────────
+// ── pluggable auth on the ONE door: IAM's pk- folded into /v1/event ──────────
 
-// TestEvent_PkKeyAdmitted proves the write-only publishable key (pk_…) is a
-// first-class auth mode ON the canonical door: a pk_ bearer for org acme is ADMITTED
-// (503, datastore down), so a pk_ caller uses /v1/event directly — no separate
-// /v1/ingest door required.
-func TestEvent_PkKeyAdmitted(t *testing.T) {
-	t.Setenv(ingestKeySecretEnv, testSecret)
-	app := mountApp(t)
-	key, ok := mintPublishableKey(testSecret, "acme")
-	if !ok {
-		t.Fatal("mint pk_ failed")
+// stubKeyOrg points the ONE IAM key seam at a table for the test's duration.
+// resolveKeyOrg is a var precisely so the seam can be swapped without a network;
+// these exercise the DOOR, not IAM's resolution.
+func stubKeyOrg(t *testing.T, table map[string]string) {
+	t.Helper()
+	prev := resolveKeyOrg
+	resolveKeyOrg = func(_ context.Context, key string) (string, bool) {
+		org, ok := table[key]
+		return org, ok
 	}
+	t.Cleanup(func() { resolveKeyOrg = prev })
+}
+
+// A pk- is a first-class auth mode ON the canonical door: admitted (503,
+// datastore down), so a pk- caller uses /v1/event directly.
+func TestEvent_PkKeyAdmitted(t *testing.T) {
+	stubKeyOrg(t, map[string]string{"pk-acme": "acme"})
+	app := mountApp(t)
 	code := postKeyed(t, app, "/v1/event", "", `{"batch":[{"type":"event","event":"signup_completed"}]}`,
-		map[string]string{"Authorization": "Bearer " + key})
+		map[string]string{"Authorization": "Bearer pk-acme"})
 	if code != http.StatusServiceUnavailable {
-		t.Fatalf("pk_ on /v1/event want 503 (admitted, datastore down), got %d", code)
+		t.Fatalf("pk- on /v1/event want 503 (admitted, datastore down), got %d", code)
 	}
 }
 
-// TestEvent_PkKeyForgedOrgIgnored: the tenant a pk_ writes into is the SIGNED org,
-// never the body/header claim — a pk_ for acme with a forged X-Org-Id + body org is
-// still admitted (as acme), proving the key's org wins.
+// The tenant a pk- writes into is the org IAM resolves it to, never a body or
+// header claim — the key's org wins over a forged one.
 func TestEvent_PkKeyForgedOrgIgnored(t *testing.T) {
-	t.Setenv(ingestKeySecretEnv, testSecret)
+	stubKeyOrg(t, map[string]string{"pk-acme": "acme"})
 	app := mountApp(t)
-	key, _ := mintPublishableKey(testSecret, "acme")
 	code := postKeyed(t, app, "/v1/event", "hanzo.ai",
 		`{"batch":[{"type":"pageview"}],"org":"attacker"}`,
-		map[string]string{"Authorization": "Bearer " + key, "X-Org-Id": "attacker"})
+		map[string]string{"Authorization": "Bearer pk-acme", "X-Org-Id": "attacker"})
 	if code != http.StatusServiceUnavailable {
-		t.Fatalf("pk_ door with forged org want 503 (ingested as key org), got %d", code)
+		t.Fatalf("pk- door with forged org want 503 (ingested as key org), got %d", code)
 	}
 }
 
-// TestEvent_BadPkKeyFailsClosed: a malformed/forged pk_ that does not verify, with no
-// other auth, is refused 403 — the canonical door fails closed (no brand-host escape).
+// A pk- IAM does not resolve, with no other auth, is refused 403 — fail closed.
 func TestEvent_BadPkKeyFailsClosed(t *testing.T) {
-	t.Setenv(ingestKeySecretEnv, testSecret)
+	stubKeyOrg(t, map[string]string{})
 	app := mountApp(t)
 	code := postKeyed(t, app, "/v1/event", "hanzo.ai", `{"batch":[{"type":"pageview"}]}`,
-		map[string]string{"Authorization": "Bearer pk_deadbeef.deadbeef"})
+		map[string]string{"Authorization": "Bearer pk-deadbeef"})
 	if code != http.StatusForbidden {
-		t.Fatalf("unverifiable pk_ on /v1/event want 403 (fail closed), got %d", code)
+		t.Fatalf("unresolvable pk- on /v1/event want 403 (fail closed), got %d", code)
 	}
 }
 
 // ── /v1/ingest is now a THIN ALIAS of the ONE handler ─────────────────────────
 
 // TestIngestAlias_DelegatesToEventHandler proves /v1/ingest is the SAME
-// implementation as /v1/event: a pk_ caller is admitted (unchanged), AND — because it
+// implementation as /v1/event: a pk- caller is admitted (unchanged), AND — because it
 // delegates to eventHandle — it now ALSO admits an IAM bearer, while no-auth still
 // fails closed. One implementation, reached through two routes.
 func TestIngestAlias_DelegatesToEventHandler(t *testing.T) {
-	t.Setenv(ingestKeySecretEnv, testSecret)
+	stubKeyOrg(t, map[string]string{"pk-acme": "acme"})
 	app := mountApp(t)
-	key, _ := mintPublishableKey(testSecret, "acme")
 
-	// pk_ — the historical /v1/ingest auth — still works.
+	// pk- — the historical /v1/ingest auth — still works.
 	if code := postKeyed(t, app, "/v1/ingest", "", `{"batch":[{"type":"pageview"}]}`,
-		map[string]string{"Authorization": "Bearer " + key}); code != http.StatusServiceUnavailable {
-		t.Fatalf("pk_ on /v1/ingest want 503 (admitted), got %d", code)
+		map[string]string{"Authorization": "Bearer pk-acme"}); code != http.StatusServiceUnavailable {
+		t.Fatalf("pk- on /v1/ingest want 503 (admitted), got %d", code)
 	}
 	// IAM bearer — admitted too, because the alias IS eventHandle now.
 	if code, _ := doBody(t, app, http.MethodPost, "/v1/ingest", "user-dave", "acme",
