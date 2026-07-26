@@ -94,6 +94,11 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 		return c.JSON(http.StatusOK, map[string]any{"ok": true})
 	case "push":
 		// handled below
+	case "issues", "issue_comment":
+		// Issue lifecycle → native tracker mirror (github_issues.go). Same signed
+		// installation → org resolution as push; the tracker sink is idempotent by
+		// ExtRef, so opened/edited/closed/reopened + comment all re-sync one row.
+		return handleGitHubIssueEvent(c, body)
 	default:
 		return c.JSON(http.StatusOK, map[string]any{"ignored": "event"})
 	}
