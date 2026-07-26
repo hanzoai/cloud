@@ -73,11 +73,6 @@ type Config struct {
 	// (HIP-0111); override with CLOUD_JWKS_URL.
 	JWKSURL string
 
-	// JWTAudiences is the audience allowlist the sanitizer accepts (OR semantics).
-	// Defaults to the known Hanzo IAM client_ids; override with CLOUD_JWT_AUDIENCES
-	// (comma-separated) or GATEWAY_ALLOWED_AUDIENCES.
-	JWTAudiences []string
-
 	// KMSMasterKeyRef is the base64-encoded 32-byte KMS master key (KEK) the
 	// embedded luxfi/kms store seals every secret's DEK under. The operator
 	// injects it from a K8s Secret as CLOUD_KMS_MASTER_KEY_REF; cloud reads it
@@ -291,6 +286,15 @@ type Config struct {
 	CommerceServiceToken string
 	BillingFailOpen      bool
 
+	// PaywallEnforced turns on the subscription paywall (routers.Paywall): when true,
+	// a gated /v1 product route from a validated org with NO active paid plan
+	// (Pro/Plus/Max/Team/Enterprise, active or trialing) is refused with 402
+	// subscription_required. Default FALSE — a DARK SHIP: the gate is a pure
+	// passthrough until an owner sets PAYWALL_ENFORCED=true, so wiring it changes no
+	// behavior. The sell/service surface (sign-in/billing/plans/models/health) is always
+	// exempt so the gate can never block paying.
+	PaywallEnforced bool
+
 	// AI inference gateway. Two DISTINCT endpoints, two DISTINCT credentials by
 	// concern (see build.go pickCompletionsClient / pickEmbedClient):
 	//   - CHAT COMPLETIONS (deps.AI, a WRITE endpoint) — agents/guide/crm/content/
@@ -436,6 +440,7 @@ func LoadConfig() *Config {
 		CommerceHTTPURL:      getenv("CLOUD_COMMERCE_HTTP_URL", ""),
 		CommerceServiceToken: getenv("COMMERCE_SERVICE_TOKEN", ""),
 		BillingFailOpen:      getenvBool("BILLING_FAIL_OPEN"),
+		PaywallEnforced:      getenvBool("PAYWALL_ENFORCED"), // dark ship: default false.
 		// AI inference gateway. CLOUD_AI_API_KEY (KMS-backed) is an optional static
 		// override; absent it, the AI client authenticates via M2M using the
 		// binary's own IAM identity (IAM_CLIENT_ID / IAM_CLIENT_SECRET) — no static
@@ -513,7 +518,6 @@ func LoadConfig() *Config {
 	if cfg.JWKSURL == "" {
 		cfg.JWKSURL = jwksURLFor(cfg.IAMIssuer)
 	}
-	cfg.JWTAudiences = jwtAudiencesFromEnv()
 
 	// Browser ZAP-over-WS Origin allowlist. Default to the console SPA hosts so
 	// the console can connect cross-origin; override with CLOUD_ZAP_WEB_ORIGINS.
@@ -642,65 +646,6 @@ func getenv(key, dflt string) string {
 		return v
 	}
 	return dflt
-}
-
-// defaultJWTAudiences mirrors github.com/hanzoai/gateway/v2/iamauth.DefaultAudiences
-// (the known Hanzo IAM client_ids — each app's `aud` is its client_id) plus
-// hanzo-cloud, cloud's own session client. Forwards-only: append new client_ids,
-// never remove. Non-hanzo brands set CLOUD_JWT_AUDIENCES to their own client_ids.
-var defaultJWTAudiences = []string{
-	"hanzo-app",
-	"hanzo-console",
-	"hanzo-chat",
-	"hanzo-id",
-	"hanzo-admin-guard",
-	"admin-console",
-	"hanzo-cloud",
-	"hanzo-world",
-	"hanzo-team",
-	"cowork",
-	"https://api.hanzo.ai",
-}
-
-// jwtAudiencesFromEnv resolves the JWT audience allowlist for the identity
-// sanitizer. CLOUD_JWT_AUDIENCES wins; GATEWAY_ALLOWED_AUDIENCES (the gateway's
-// own override, shared so both agree) is honored next; otherwise the baked
-// default. The white-label brand cloud audiences (BrandAudiences: <brand>-cloud)
-// are ALWAYS unioned in — baked like BrandIssuers so ONE binary accepts a
-// lux/zoo/pars token (aud=<brand>-cloud) even when the env override predates the
-// brands (fail-secure: only ADDS known-good brand client_ids, never an arbitrary
-// aud). Never empty, so the audience check is always enforced.
-func jwtAudiencesFromEnv() []string {
-	base := append([]string(nil), defaultJWTAudiences...)
-	for _, key := range []string{"CLOUD_JWT_AUDIENCES", "GATEWAY_ALLOWED_AUDIENCES"} {
-		if list := splitTrim(os.Getenv(key)); len(list) > 0 {
-			base = list
-			break
-		}
-	}
-	return unionStrings(base, BrandAudiences())
-}
-
-// unionStrings appends every value of add not already present in base, preserving
-// order and dropping empties. Used to fold the always-trusted brand audiences into
-// the resolved allowlist without duplicating an env-supplied entry.
-func unionStrings(base, add []string) []string {
-	out := append([]string(nil), base...)
-	seen := make(map[string]struct{}, len(out)+len(add))
-	for _, s := range out {
-		seen[s] = struct{}{}
-	}
-	for _, s := range add {
-		if s == "" {
-			continue
-		}
-		if _, ok := seen[s]; ok {
-			continue
-		}
-		seen[s] = struct{}{}
-		out = append(out, s)
-	}
-	return out
 }
 
 // splitTrim splits a comma-separated list, trimming and dropping empties.

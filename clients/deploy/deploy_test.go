@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/k8s"
 	luxlog "github.com/luxfi/log"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -19,18 +20,19 @@ import (
 func fakeService(objs ...runtime.Object) *cloud.Service[state] {
 	scheme := runtime.NewScheme()
 	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
-		appsCRGVR:        "AppList",
-		deploymentsGVR:   "DeploymentList",
-		replicaSetsGVR:   "ReplicaSetList",
-		podsGVR:          "PodList",
-		coreSvcGVR:       "ServiceList",
-		ingressGVR:       "IngressList",
-		hpaGVR:           "HorizontalPodAutoscalerList",
-		pdbGVR:           "PodDisruptionBudgetList",
-		configMapsGVR:    "ConfigMapList",
-		appProjectGVR:    "AppProjectList",
-		middlewaresGVR:   "MiddlewareList",
-		ingressRoutesGVR: "IngressRouteList",
+		k8s.Apps:           "AppList",
+		k8s.Deployments:    "DeploymentList",
+		replicaSetsGVR:     "ReplicaSetList",
+		podsGVR:            "PodList",
+		coreSvcGVR:         "ServiceList",
+		ingressGVR:         "IngressList",
+		hpaGVR:             "HorizontalPodAutoscalerList",
+		pdbGVR:             "PodDisruptionBudgetList",
+		configMapsGVR:      "ConfigMapList",
+		appProjectGVR:      "AppProjectList",
+		middlewaresGVR:     "MiddlewareList",
+		ingressRoutesGVR:   "IngressRouteList",
+		k8s.CDApplications: "ApplicationList",
 	}, objs...)
 	return &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{dyn: dyn}}
 }
@@ -170,11 +172,11 @@ func TestSyncStatus(t *testing.T) {
 
 func TestParseRef(t *testing.T) {
 	// The App CR resolves; the core/v1 Service (a child object) resolves distinctly.
-	if _, gvr, err := parseRef("hanzo.ai:App:hanzo:iam"); err != nil || gvr != appsCRGVR {
-		t.Errorf("App ref → (%v, %v), want appsCRGVR", gvr, err)
+	if _, gvr, err := parseRef("hanzo.ai:App:hanzo:iam"); err != nil || gvr != k8s.Apps {
+		t.Errorf("App ref → (%v, %v), want k8s.Apps", gvr, err)
 	}
-	if _, gvr, err := parseRef("apps:Deployment:hanzo:iam"); err != nil || gvr != deploymentsGVR {
-		t.Errorf("Deployment ref → (%v, %v), want deploymentsGVR", gvr, err)
+	if _, gvr, err := parseRef("apps:Deployment:hanzo:iam"); err != nil || gvr != k8s.Deployments {
+		t.Errorf("Deployment ref → (%v, %v), want k8s.Deployments", gvr, err)
 	}
 	if _, _, err := parseRef(":Service:hanzo:iam"); err != nil {
 		t.Errorf("core Service ref err = %v, want nil", err)
@@ -262,8 +264,8 @@ func TestGetAppCR(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getAppCR: %v", err)
 	}
-	if gvr != appsCRGVR {
-		t.Fatalf("gvr = %v, want appsCRGVR", gvr)
+	if gvr != k8s.Apps {
+		t.Fatalf("gvr = %v, want k8s.Apps", gvr)
 	}
 	if tag, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "tag"); tag != "v2.0.0" {
 		t.Fatalf("resolved tag = %q, want v2.0.0", tag)

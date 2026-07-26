@@ -83,6 +83,11 @@ func registerDashboardRoutes(app *zip.App, s *cloud.Service[state]) {
 	app.Get(dashPrefix+"/clusters", cloud.Handle(s, dashClusters))
 	app.Get(dashPrefix+"/projects", cloud.Handle(s, dashProjects))
 
+	// The CD plane's own state (gitops.go) — the git source it polls, the commit it
+	// last applied, and its deploy history. Fleet infrastructure with no tenant
+	// dimension, so SuperAdmin-only rather than scope-resolved.
+	app.Get(dashPrefix+"/gitops", guard(s, cloud.Handle(s, gitOps)))
+
 	// Actions → App-CR reconcile ops. STILL SuperAdmin-only (guard): write-back to the
 	// fleet is a follow-on; this plane's tenant surface is read-only reflection for now.
 	app.Post(dashPrefix+"/applications/:name/sync", guard(s, cloud.Handle(s, dashSync)))

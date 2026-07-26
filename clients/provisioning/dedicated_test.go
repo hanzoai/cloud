@@ -16,27 +16,27 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/metering"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // fakeOrch is an in-memory orchestrator: it records the CRs/Secrets applied and
 // deleted, and returns a controllable instance phase.
 type fakeOrch struct {
-	ready      error
-	ensureErr  error
-	phase      string
+	ready              error
+	ensureErr          error
+	phase              string
 	patchErr           error // injected failure for PatchAddonSecret
 	patchErrAfterWrite bool  // when set with patchErr, the write LANDS then the call reports failure (models a committed-but-errored PATCH)
 	datastores         map[string]*unstructured.Unstructured
-	secrets    map[string]*unstructured.Unstructured
-	addons     map[string]map[string]string // ns/name -> key -> value (the <instance>-addons Secret data)
-	ensured    []string
-	deletedDS  []string
-	deletedSec []string
-	deletedPVC []string
-	ops        []string // ordered trace of injection/teardown ops (drop-order assertions)
+	secrets            map[string]*unstructured.Unstructured
+	addons             map[string]map[string]string // ns/name -> key -> value (the <instance>-addons Secret data)
+	ensured            []string
+	deletedDS          []string
+	deletedSec         []string
+	deletedPVC         []string
+	ops                []string // ordered trace of injection/teardown ops (drop-order assertions)
 }
 
 func newFakeOrch() *fakeOrch {
@@ -92,7 +92,9 @@ func (f *fakeOrch) ApplyDatastore(_ context.Context, ns, name string, obj *unstr
 	f.datastores[ns+"/"+name] = obj
 	return nil
 }
-func (f *fakeOrch) DatastorePhase(context.Context, string, string) (string, error) { return f.phase, nil }
+func (f *fakeOrch) DatastorePhase(context.Context, string, string) (string, error) {
+	return f.phase, nil
+}
 func (f *fakeOrch) DeleteDatastore(_ context.Context, ns, name string) error {
 	f.deletedDS = append(f.deletedDS, ns+"/"+name)
 	f.ops = append(f.ops, "teardown:"+ns+"/"+name)

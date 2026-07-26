@@ -45,8 +45,8 @@ var frozen = []struct {
 	{"rollingcap", false, false},     // rolling spend-cap gate (after billing); golden drifted — refrozen
 	{"account-bridge", false, false}, // was order 122
 	{"do", false, false},             // was order 123
-	{"platform", true, false},        // was order 124
-	{"projects", false, false},       // was order 125
+	{"platform", true, true},         // was order 124
+	{"projects", false, true},        // was order 125
 	{"dns", false, false},            // new: /v1/dns zone plane (after projects)
 	{"domain", false, false},         // new: Hanzo Domains registrar (/v1/domain), after dns
 	{"prompts", false, false},        // was order 126
@@ -59,11 +59,13 @@ var frozen = []struct {
 	{"functions", false, false},      // was order 128
 	{"tracker", false, false},        // was order 129
 	{"templates", false, false},      // was order 129
+	{"blueprint", true, false},       // new: OSS-template compute-cost basis /v1/blueprint (after templates); owns health, embedded content → no Shutdown
 	{"framework", false, true},       // was order 129
 	{"knowledge", false, false},      // was order 130
 	{"help", false, false},           // new: Hanzo Support public plane /v1/help (after knowledge; framework lane with a companion subsystem, no store → no Shutdown)
 	{"content", false, true},         // new: marketing content loop (after knowledge)
 	{"catalogsync", false, true},     // new: reverse loop (product.created → render) after content
+	{"webhooks", false, true},        // new: platform-global /v1/webhooks registry + bus-driven dispatcher (after catalogsync); owns per-org stores + worker pool → Shutdown
 	{"ml", true, false},              // was order 130
 	{"usage", false, false},          // was order 131
 	{"leaderboard", false, true},     // new: gamified usage analytics (after usage), owns opt-in SQLite (Shutdown)
@@ -81,6 +83,7 @@ var frozen = []struct {
 	{"captable", false, true},        // was order 133
 	{"code", false, true},            // was order 134
 	{"zero-trust", false, false},     // was order 134
+	{"share", false, false},          // ngrok-native public sharing (/v1/share/*)
 	{"dataroom", true, true},         // was order 134
 	{"graph", false, false},          // was order 135
 	{"security", true, true},         // was order 136
@@ -90,6 +93,7 @@ var frozen = []struct {
 	{"sbom", true, false},            // was order 137
 	{"team", false, true},            // was order 138
 	{"settings", false, true},        // was order 138
+	{"prefs", false, true},           // new: per-user preference plane (after settings); Shutdown closes the store
 	{"notify", true, false},          // was order 139
 	{"channels", false, true},        // new: /v1/channels transport plane (after notify; must mount after integrations so RegisterIngress installs before webhooks emit)
 	{"gateway", false, false},        // was order 139
@@ -108,6 +112,7 @@ var frozen = []struct {
 	{"benchmark", false, false},      // benchmark plane (after evals, before treasury)
 	{"research", false, true},        // R&D evidence plane + /research board (HIP-0512), arena sibling after benchmark; Shutdown closes per-org stores
 	{"experiments", false, true},     // unified A/B EXPERIMENT primitive: composes flags(assign)+analytics(measure)+research(evidence); Shutdown closes the registry stores
+	{"books", false, true},           // AI bookkeeper (/v1/books, per-org SQLite); Shutdown closes org stores
 	{"treasury", false, true},        // was order 146
 	{"admin", false, false},          // was order 146
 	{"admission", false, true},       // launch-control gate: composes flags (registry+seed+mode route+Enforce); Shutdown closes the registry store
@@ -121,6 +126,7 @@ var frozen = []struct {
 	{"compliance", true, true},       // new: Hanzo Compliance — KYC/KYB + accreditation + audit posture (after company)
 	{"legal", true, true},            // new: Hanzo Legal — template + generation engine + e-sign/filing (after compliance)
 	{"agent", false, false},          // new: /v1/agent tool-calling round (before zen/ai catch-all)
+	{"ask", false, false},            // new: unified grounded advisor /v1/ask (before zen/ai catch-all)
 	{"zen", false, false},            // zen* claim middleware before ai's catch-all (hip-00NN)
 	{"ai", false, false},             // was order 150
 	{"plugins", false, false},        // was order 900

@@ -44,7 +44,10 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/hanzoai/cloud/clients/k8s"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
@@ -53,34 +56,127 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// appsGVR is the operator App CR — the one workload kind the fleet runs on. The
+// k8s.Apps is the operator App CR — the one workload kind the fleet runs on. The
 // drift board reads it across the platform namespaces. Asserted in the tests; a
 // typo here silently breaks the whole board.
-var appsGVR = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "apps"}
 
-// deploymentsGVR is the live Deployment behind each Service — the source of the
+// k8s.Deployments is the live Deployment behind each Service — the source of the
 // RUNNING tag (the operator Service CR status does not surface the running image,
 // so the running tag is observed from the Deployment's container, exactly as the
 // platform inventory reads it in inventory.ts). Read-only for this subsystem.
-var deploymentsGVR = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
 
-// nsEnv maps each scanned namespace to the lifecycle env it represents, mirroring
-// the platform inventory's DEFAULT_TARGETS (inventory.ts): the `hanzo` namespace
-// is production (main); the env-split namespaces map to test/dev. Only listed
-// namespaces are scanned — the reader never reaches beyond the platform tier.
-// Cross-cluster federation (lux-k8s/zoo-k8s) is a follow-up phase (a per-cluster
-// client from a KMS-loaded kubeconfig), exactly as the Node inventory federates.
-var nsEnv = map[string]string{
-	"hanzo":         "main",
-	"hanzo-testnet": "test",
-	"hanzo-devnet":  "dev",
+// nsClass is THE namespace classifier: the one place that decides what a platform
+// namespace MEANS. Total — every input yields a decision and an unrecognised
+// namespace is classified OUT (ok=false) rather than guessed at, so the reader can
+// never reach beyond the platform tier.
+//
+// It replaces three separate encodings of this single fact, which had drifted out
+// of agreement: the nsEnv map (3 namespaces), nsOrg's suffix-strip (knew only
+// -devnet/-testnet), and scanOrder's literal list (the same 3). Because a
+// `tenant-<org>` namespace matched none of them, it classified as its own org and
+// was never scanned — every tenant workload was invisible BY CONSTRUCTION. Deriving
+// tenant and env from one function is what makes that class of drift impossible:
+// there is no second place left to disagree with.
+//
+// tenant is the authorization axis (scopedNamespaces confines a non-super OrgAdmin
+// to namespaces whose tenant equals their validated org); env is the lifecycle
+// label. Cross-cluster federation (lux-k8s/zoo-k8s) is a follow-up phase.
+func nsClass(ns string) (tenant, env string, ok bool) {
+	switch ns {
+	case "hanzo", "hanzo-mainnet":
+		return "hanzo", "main", true
+	case "hanzo-testnet":
+		return "hanzo", "test", true
+	case "hanzo-devnet":
+		return "hanzo", "dev", true
+	}
+	// tenant-<org>: a customer's own namespace. The org IS the tenant key, so it
+	// authorizes exactly like a first-party namespace with no special case.
+	if t, found := strings.CutPrefix(ns, "tenant-"); found && t != "" {
+		return t, "main", true
+	}
+	return "", "", false
+}
+
+// envOf is nsClass's env projection ("" when the namespace is not ours).
+func envOf(ns string) string { _, env, _ := nsClass(ns); return env }
+
+// k8s.Namespaces backs discovery. Listing NAMESPACES is the honest question — "which
+// namespaces are ours?" — and asks it of the one authority that knows. Deriving the
+// set from a cluster-wide CR list would answer a different question ("where are
+// there CRs?") and pull every tenant's objects through this process to do it.
+
+// nsScanTTL bounds how stale a discovered scan set may be. A new tenant namespace
+// appears on the board within this window without a redeploy.
+const nsScanTTL = 60 * time.Second
+
+// discoverNamespaces returns every namespace in the cluster that nsClass recognises,
+// first-party ones first (main before test/dev, so a bare app name still resolves to
+// production) then tenants in stable order.
+//
+// This is what finally makes tenant-<org> workloads visible: they were classified
+// correctly but never SCANNED, because the scan set was a literal list. Discovery
+// asks the cluster instead of hardcoding an answer that goes stale the moment a
+// tenant is onboarded.
+//
+// Fail-SAFE, never fail-open: if the list fails we fall back to the first-party set,
+// which is narrower than the truth — a tenant admin can lose visibility of its own
+// namespace, never gain visibility of someone else's. nsClass still filters, so a
+// namespace that is not ours can never enter the set however discovery goes.
+func discoverNamespaces(s *cloud.Service[state], ctx context.Context) []string {
+	cache := s.State.scan
+	if cache != nil {
+		cache.mu.Lock()
+		if cache.ns != nil && time.Since(cache.at) < nsScanTTL {
+			cached := append([]string(nil), cache.ns...)
+			cache.mu.Unlock()
+			return cached
+		}
+		cache.mu.Unlock()
+	}
+
+	if s.State.dyn == nil {
+		return scanOrder()
+	}
+	list, err := s.State.dyn.Resource(k8s.Namespaces).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return scanOrder()
+	}
+	// The first-party set is ALWAYS present: it is known-good by definition, and a
+	// namespace that does not exist simply yields no CRs (observeFleet tolerates
+	// NotFound). Discovery only ever ADDS tenants — so an empty or partial listing
+	// degrades to today's behavior instead of blanking the board.
+	firstParty := scanOrder()
+	known := make(map[string]bool, len(list.Items))
+	for i := range list.Items {
+		if _, _, ok := nsClass(list.Items[i].GetName()); ok {
+			known[list.Items[i].GetName()] = true
+		}
+	}
+	out := make([]string, 0, len(known)+len(firstParty))
+	for _, ns := range firstParty { // stable, main-first
+		out = append(out, ns)
+		delete(known, ns)
+	}
+	rest := make([]string, 0, len(known))
+	for ns := range known {
+		rest = append(rest, ns)
+	}
+	sort.Strings(rest)
+	out = append(out, rest...)
+
+	if cache != nil {
+		cache.mu.Lock()
+		cache.ns, cache.at = out, time.Now()
+		cache.mu.Unlock()
+	}
+	return append([]string(nil), out...)
 }
 
 // appNameRE constrains the :app path segment to a DNS-1123 label (every Service
@@ -100,6 +196,20 @@ const userAgent = "hanzo-cloud-paas"
 type state struct {
 	dyn     dynamic.Interface // nil when no kubeconfig resolved (fail-closed)
 	initErr string            // why dyn is nil, surfaced by health + ready()
+
+	// the discovered scan set (discoverNamespaces), rebuilt every nsScanTTL so a
+	// newly-onboarded tenant namespace appears without a redeploy. A POINTER:
+	// cloud.Service stores State by value, so a mutex living directly in `state`
+	// would be copied (go vet: "assignment copies lock value") and each copy would
+	// guard nothing. One cache, shared by every copy of the struct.
+	scan *nsCache
+}
+
+// nsCache is the discovered scan set behind its own lock.
+type nsCache struct {
+	mu sync.Mutex
+	ns []string
+	at time.Time
 }
 
 // Mount wires the /v1/paas/* surface onto app. Every handler is behind the IAM
@@ -112,7 +222,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // build resolves the in-process k8s dynamic client (fail-closed: when no kubeconfig
 // resolves the subsystem still mounts and every endpoint 503s honestly).
 func build(b cloud.Base) (state, error) {
-	var st state
+	st := state{scan: &nsCache{}}
 	if dyn, err := newDynamic(); err != nil {
 		st.initErr = err.Error()
 		b.Log.Warn("kubernetes client unavailable; /v1/paas endpoints will fail closed", "err", err)
@@ -146,6 +256,11 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	// its Service CR here — the direct-CR replacement for the image-update.yml
 	// GitOps hop (release.go).
 	registerReleaser(s)
+
+	// In-process fleet seam: publish THIS board's observer so the admin god-view
+	// (/v1/admin/products + the overview drift KPIs) reuses the SAME App-CR + drift
+	// observation instead of forking a second k8s client (fleet.go).
+	PublishFleet(fleetObserver{s: s})
 }
 
 // guard authorizes the PaaS fleet board off ONE IAM identity, exactly like the
@@ -202,8 +317,8 @@ func operatorGuard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 // from the validated principal — never a client header — so it cannot be widened by
 // a forged X-Org-Id. An OrgAdmin whose org owns no scanned namespace gets an empty
 // set (an empty board / a clean 404), never another org's data.
-func scopedNamespaces(c *zip.Ctx) []string {
-	all := scanOrder()
+func scopedNamespaces(s *cloud.Service[state], ctx context.Context, c *zip.Ctx) []string {
+	all := discoverNamespaces(s, ctx)
 	if principal.IsSuperAdmin(c) {
 		return all
 	}
@@ -225,15 +340,15 @@ func scopedNamespaces(c *zip.Ctx) []string {
 // in prod-first scan order. It composes the AUTH confinement (scopedNamespaces) with
 // the optional env SELECTION — orthogonal: env can only narrow WITHIN the caller's
 // own authorized set, never reach outside it.
-func targetNamespaces(c *zip.Ctx) []string {
-	nss := scopedNamespaces(c)
+func targetNamespaces(s *cloud.Service[state], ctx context.Context, c *zip.Ctx) []string {
+	nss := scopedNamespaces(s, ctx, c)
 	env := strings.TrimSpace(c.Query("env"))
 	if env == "" {
 		return nss
 	}
 	out := make([]string, 0, len(nss))
 	for _, ns := range nss {
-		if nsEnv[ns] == env {
+		if envOf(ns) == env {
 			out = append(out, ns)
 		}
 	}
@@ -243,17 +358,15 @@ func targetNamespaces(c *zip.Ctx) []string {
 // nsOrg returns the platform org that OWNS a scanned namespace: the namespace with
 // its lifecycle-env suffix removed ("hanzo"→hanzo, "hanzo-testnet"→hanzo,
 // "hanzo-devnet"→hanzo). It is the tenant key a namespace belongs to — the axis
-// scopedNamespaces confines a non-super OrgAdmin to. Kept in lockstep with nsEnv.
-func nsOrg(ns string) string {
-	return strings.TrimSuffix(strings.TrimSuffix(ns, "-devnet"), "-testnet")
-}
+// scopedNamespaces confines a non-super OrgAdmin to. Derived from nsClass.
+func nsOrg(ns string) string { tenant, _, _ := nsClass(ns); return tenant }
 
 // nsForEnv maps a lifecycle env to its scanned namespace ("main"→hanzo,
 // "test"→hanzo-testnet, "dev"→hanzo-devnet), "" for an unknown env. The inverse of
-// nsEnv, used to reject an invalid ?env with a clean 400 rather than a confusing 404.
+// envOf over the scanned set, used to reject an invalid ?env with a clean 400.
 func nsForEnv(env string) string {
-	for ns, e := range nsEnv {
-		if e == env {
+	for _, ns := range scanOrder() {
+		if envOf(ns) == env {
 			return ns
 		}
 	}
@@ -272,6 +385,7 @@ type AppView struct {
 	Env         string   `json:"env"`  // main|test|dev
 	Repo        string   `json:"repo"` // owner/repo, e.g. hanzoai/iam
 	Registry    string   `json:"registry"`
+	Role        string   `json:"role"` // operator spec.role (sql|kv|generic|ingress|…) or "" — the one declared class field
 	DeclaredTag string   `json:"declaredTag"`
 	RunningTag  string   `json:"runningTag"`
 	LatestTag   string   `json:"latestTag"`
@@ -294,7 +408,7 @@ func listApps(s *cloud.Service[state], c *zip.Ctx) error {
 	// a SuperAdmin, the caller's own org namespaces for an OrgAdmin (empty board for
 	// an org that owns none). The tenant boundary is applied at the scan, before any
 	// CR is read, so a non-super caller never even lists another org's apps.
-	views, err := observeFleet(s, c.Context(), scopedNamespaces(c))
+	views, err := observeFleet(s, c.Context(), scopedNamespaces(s, c.Context(), c))
 	if err != nil {
 		return err
 	}
@@ -347,8 +461,8 @@ func getApp(s *cloud.Service[state], c *zip.Ctx) error {
 	if !appNameRE.MatchString(name) {
 		return zip.ErrBadRequest("app must be a DNS-1123 label")
 	}
-	for _, ns := range targetNamespaces(c) {
-		obj, err := s.State.dyn.Resource(appsGVR).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{})
+	for _, ns := range targetNamespaces(s, c.Context(), c) {
+		obj, err := s.State.dyn.Resource(k8s.Apps).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				continue
@@ -356,7 +470,7 @@ func getApp(s *cloud.Service[state], c *zip.Ctx) error {
 			return k8sErr(s, "get", err)
 		}
 		repository, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "repository")
-		return c.JSON(http.StatusOK, observeCR(obj, ns, nsEnv[ns], runningTagOf(s, c.Context(), ns, name, repository)))
+		return c.JSON(http.StatusOK, observeCR(obj, ns, envOf(ns), runningTagOf(s, c.Context(), ns, name, repository)))
 	}
 	return zip.ErrNotFound("app not found in the platform namespaces")
 }
@@ -373,8 +487,8 @@ func observeFleet(s *cloud.Service[state], ctx context.Context, namespaces []str
 		// error leaves runningTag empty (an honest unknown) rather than failing the
 		// whole board, so the declared/health/phase columns still render.
 		running := runningTagsIn(s, ctx, ns)
-		env := nsEnv[ns]
-		list, err := s.State.dyn.Resource(appsGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
+		env := envOf(ns)
+		list, err := s.State.dyn.Resource(k8s.Apps).Namespace(ns).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				continue
@@ -439,13 +553,13 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	if nsForEnv(env) == "" {
 		return zip.ErrBadRequest("env must be one of main|test|dev")
 	}
-	ns, err := resolveTargetIn(s, c.Context(), name, targetNamespaces(c))
+	ns, err := resolveTargetIn(s, c.Context(), name, targetNamespaces(s, c.Context(), c))
 	if err != nil {
 		return err
 	}
 	restartedAt := time.Now().UTC().Format(time.RFC3339)
 	patch := fmt.Sprintf(`{"spec":{"template":{"metadata":{"annotations":{%q:%q}}}}}`, restartedAtAnnotation, restartedAt)
-	if _, err := s.State.dyn.Resource(deploymentsGVR).Namespace(ns).Patch(
+	if _, err := s.State.dyn.Resource(k8s.Deployments).Namespace(ns).Patch(
 		c.Context(), name, k8stypes.MergePatchType, []byte(patch), metav1.PatchOptions{}); err != nil {
 		if apierrors.IsNotFound(err) {
 			return zip.ErrNotFound("app " + name + " has no Deployment to restart in " + ns)
@@ -454,7 +568,7 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	s.Log.Info("paas rolling restart", "app", name, "namespace", ns, "restartedAt", restartedAt, "actor", principal.Owner(c))
 	return c.JSON(http.StatusAccepted, map[string]any{
-		"ok": true, "app": name, "namespace": ns, "env": nsEnv[ns], "restartedAt": restartedAt,
+		"ok": true, "app": name, "namespace": ns, "env": envOf(ns), "restartedAt": restartedAt,
 	})
 }
 
@@ -473,7 +587,7 @@ func resolveTarget(s *cloud.Service[state], ctx context.Context, name string) (s
 // (an OrgAdmin owning no scanned namespace) resolves to a clean 404, never a leak.
 func resolveTargetIn(s *cloud.Service[state], ctx context.Context, name string, namespaces []string) (string, error) {
 	for _, ns := range namespaces {
-		if _, err := s.State.dyn.Resource(appsGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err == nil {
+		if _, err := s.State.dyn.Resource(k8s.Apps).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err == nil {
 			return ns, nil
 		} else if !apierrors.IsNotFound(err) {
 			return "", k8sErr(s, "get", err)
@@ -495,7 +609,7 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 		res["status"], res["k8s"], res["error"] = "degraded", false, s.State.initErr
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
-	if _, err := s.State.dyn.Resource(appsGVR).Namespace("hanzo").List(c.Context(), metav1.ListOptions{Limit: 1}); err != nil {
+	if _, err := s.State.dyn.Resource(k8s.Apps).Namespace("hanzo").List(c.Context(), metav1.ListOptions{Limit: 1}); err != nil {
 		res["status"], res["k8s"], res["crd"], res["error"] = "degraded", true, false, err.Error()
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
@@ -516,7 +630,7 @@ func ready(s *cloud.Service[state]) error {
 // the missing access so the operator knows exactly what to grant the cloud service
 // account (get/list on apps.hanzo.ai). Mirrors ml.k8sErr.
 func k8sErr(s *cloud.Service[state], op string, err error) error {
-	s.Log.Error("k8s op failed", "op", op, "resource", appsGVR.Resource, "err", err)
+	s.Log.Error("k8s op failed", "op", op, "resource", k8s.Apps.Resource, "err", err)
 	if apierrors.IsForbidden(err) {
 		return zip.Errorf(http.StatusBadGateway,
 			"%s apps: kubernetes RBAC denied (cloud service account needs %s on apps.hanzo.ai): %v",
@@ -548,7 +662,20 @@ func reqApp(c *zip.Ctx) string { return strings.ToLower(strings.TrimSpace(c.Para
 
 // scanOrder returns the platform namespaces in a stable env order (main first),
 // so a bare app-name read/deploy resolves to production before test/dev.
-func scanOrder() []string { return []string{"hanzo", "hanzo-testnet", "hanzo-devnet"} }
+// Every entry MUST classify under nsClass (asserted in paas_test.go) — nsClass is
+// the one place that decides what a namespace means, and a namespace listed here
+// but unclassified would render rows with an empty tenant, i.e. rows no OrgAdmin
+// could ever be confined to. hanzo-mainnet was missing until 2026-07-25, so its
+// CRs were invisible on the board.
+//
+// First-party only: a `tenant-<org>` namespace classifies correctly (nsClass) but
+// is not yet DISCOVERED, because the scan set is computed without a cluster client.
+// Threading the dynamic client through so the set is listed from the cluster is the
+// follow-up that makes tenant workloads appear; the authorization axis they need
+// already exists.
+func scanOrder() []string {
+	return []string{"hanzo", "hanzo-mainnet", "hanzo-testnet", "hanzo-devnet"}
+}
 
 // orgFromRepository derives the image namespace ("org") from an image repo:
 // `ghcr.io/hanzoai/chat` → `hanzoai`; `docker.io/grafana/grafana` → `grafana`.
@@ -627,6 +754,7 @@ func observeCR(obj *unstructured.Unstructured, namespace, env, runningTag string
 	name := obj.GetName()
 	repository, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "repository")
 	declaredTag, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "tag")
+	role, _, _ := unstructured.NestedString(obj.Object, "spec", "role")
 
 	status, _, _ := unstructured.NestedMap(obj.Object, "status")
 	phase, _, _ := unstructured.NestedString(obj.Object, "status", "phase")
@@ -640,6 +768,7 @@ func observeCR(obj *unstructured.Unstructured, namespace, env, runningTag string
 		Env:         env,
 		Repo:        repoFromRepository(repository),
 		Registry:    repository,
+		Role:        role,
 		DeclaredTag: declaredTag,
 		RunningTag:  runningTag,
 		LatestTag:   "", // GH-release reader is a follow-up phase (release-reader.ts)
@@ -659,7 +788,7 @@ func observeCR(obj *unstructured.Unstructured, namespace, env, runningTag string
 // error yields an empty map so the board still renders declared/health/phase.
 func runningTagsIn(s *cloud.Service[state], ctx context.Context, namespace string) map[string]string {
 	out := map[string]string{}
-	list, err := s.State.dyn.Resource(deploymentsGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	list, err := s.State.dyn.Resource(k8s.Deployments).Namespace(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		s.Log.Warn("list deployments for running tag failed; running tag will be empty",
 			"namespace", namespace, "err", err)
@@ -677,7 +806,7 @@ func runningTagsIn(s *cloud.Service[state], ctx context.Context, namespace strin
 // is never mistaken for the app), falling back to the first container. Mirrors
 // inventory.ts runningTagFromDeployment. Best-effort: any error → "".
 func runningTagOf(s *cloud.Service[state], ctx context.Context, namespace, name, declaredRepository string) string {
-	d, err := s.State.dyn.Resource(deploymentsGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	d, err := s.State.dyn.Resource(k8s.Deployments).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return ""
 	}

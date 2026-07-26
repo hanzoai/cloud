@@ -178,7 +178,8 @@ CREATE TABLE IF NOT EXISTS platform_apps (
   namespace      TEXT NOT NULL DEFAULT '',
   current_deploy TEXT NOT NULL DEFAULT '',
   created_at     INTEGER NOT NULL,
-  updated_at     INTEGER NOT NULL
+  updated_at     INTEGER NOT NULL,
+  compute_metered_at INTEGER NOT NULL DEFAULT 0
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_pf_apps_org_project_slug ON platform_apps(org, project_id, slug);
 CREATE INDEX IF NOT EXISTS ix_pf_apps_org_project ON platform_apps(org, project_id);
@@ -236,6 +237,11 @@ CREATE INDEX IF NOT EXISTS ix_pf_domains_app ON platform_domains(org, app_id);
 	for _, alter := range []string{
 		`ALTER TABLE platform_apps ADD COLUMN min_scale INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE platform_apps ADD COLUMN max_scale INTEGER NOT NULL DEFAULT 0`,
+		// compute_metered_at is the running-deployment compute meter's watermark:
+		// the unix second through which the app's live compute has been billed
+		// (computemeter.go). 0 = never metered → first-sight starts the clock with no
+		// back-charge. Forward-only, idempotent (duplicate column = already present).
+		`ALTER TABLE platform_apps ADD COLUMN compute_metered_at INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := s.db.Exec(alter); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return fmt.Errorf("migrate scale: %w", err)
@@ -400,6 +406,83 @@ func listAppsTx(ctx context.Context, tx *sql.Tx, org, projectID string) ([]Appli
 	return out, rows.Err()
 }
 
+// ── compute meter (running-deployment SBOM compute → org spend) ──────────────
+
+// RunningApp is a live application paired with its compute watermark — the input
+// to the periodic compute meter (computemeter.go). MeteredAt is the unix second
+// through which this app's live compute has already been billed.
+type RunningApp struct {
+	App       Application
+	MeteredAt int64
+}
+
+// scanRunningApp scans appCols + compute_metered_at into a RunningApp. It mirrors
+// scanApp's field order (the app config) and appends the one meter-state column, so
+// the watermark stays orthogonal to the app config every other query reads.
+func scanRunningApp(sc interface{ Scan(...any) error }) (RunningApp, error) {
+	var ra RunningApp
+	a := &ra.App
+	err := sc.Scan(&a.ID, &a.Org, &a.ProjectID, &a.Slug, &a.Name, &a.Description, &a.Environment,
+		&a.Source, &a.RepoURL, &a.RepoBranch, &a.RepoProvider, &a.ImageRepo, &a.ImageTag,
+		&a.BuildType, &a.Dockerfile, &a.Port, &a.Replicas, &a.EnvJSON, &a.DomainsJSON,
+		&a.Status, &a.Namespace, &a.CurrentDeploy, &a.CreatedAt, &a.UpdatedAt, &a.MinScale, &a.MaxScale,
+		&ra.MeteredAt)
+	return ra, err
+}
+
+// RunningApps returns every app currently `live` across ALL orgs, paired with its
+// compute watermark — the single-writer compute meter's sweep set. It is the
+// running-deployment analogue of the build reconciler's ListBuildingDeployments:
+// unscoped by org on purpose (the meter runs cluster-wide on the writer pod, then
+// meters each app to its OWN org). Only `live` apps run in-cluster and consume
+// billable compute — a `stopped`/`building`/`draft` app has no running footprint.
+func (s *Store) RunningApps(ctx context.Context) ([]RunningApp, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+appCols+`, compute_metered_at FROM platform_apps WHERE status='live' ORDER BY id ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("list running apps: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []RunningApp
+	for rows.Next() {
+		ra, err := scanRunningApp(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan running app: %w", err)
+		}
+		out = append(out, ra)
+	}
+	return out, rows.Err()
+}
+
+// AdvanceComputeMeter moves an app's compute watermark from prev to now, but ONLY
+// if it still equals prev (compare-and-set). Returns true when THIS call advanced
+// it — the caller then, and only then, meters the (now−prev) span. The CAS makes a
+// double-tick idempotent: a second tick sees the already-advanced watermark, the
+// UPDATE matches 0 rows, and no second debit is emitted. Single-writer already
+// serializes ticks; the CAS makes the never-double-charge property hold regardless.
+func (s *Store) AdvanceComputeMeter(ctx context.Context, id string, prev, now int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE platform_apps SET compute_metered_at=? WHERE id=? AND compute_metered_at=?`, now, id, prev)
+	if err != nil {
+		return false, fmt.Errorf("advance compute meter: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// StampComputeMeter unconditionally sets an app's compute watermark to now, scoped
+// to org. It is called on a resume (stop→start): the meter then charges only the
+// new live span, never the stopped gap the app just came back from. FinalizeLive
+// stamps the same watermark for the deploy→live path; together they guarantee the
+// meter never bills time an app was not `live`.
+func (s *Store) StampComputeMeter(ctx context.Context, org, id string, now int64) error {
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE platform_apps SET compute_metered_at=? WHERE org=? AND id=?`, now, org, id); err != nil {
+		return fmt.Errorf("stamp compute meter: %w", err)
+	}
+	return nil
+}
+
 // UpdateApplication overwrites the mutable fields of an app; org+project+slug+id
 // are immutable and form the tenancy/identity key.
 func (s *Store) UpdateApplication(ctx context.Context, a Application) error {
@@ -429,16 +512,19 @@ func (s *Store) UpdateApplication(ctx context.Context, a Application) error {
 // version is already live, i.e. this deployment was superseded, or the app row is
 // gone). Every predicate is org-scoped.
 func (s *Store) FinalizeLive(ctx context.Context, d Deployment, imageTag, namespace string, now int64) (bool, error) {
+	// compute_metered_at is reset to now: the compute meter charges only THIS live
+	// span, never the build/deploy gap the app just crossed to reach live (which the
+	// build meter already priced). Every transition INTO live re-stamps the watermark.
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE platform_apps
-		    SET status='live', current_deploy=?, image_tag=?, namespace=?, updated_at=?
+		    SET status='live', current_deploy=?, image_tag=?, namespace=?, updated_at=?, compute_metered_at=?
 		  WHERE org=? AND id=?
 		    AND NOT EXISTS (
 		          SELECT 1 FROM platform_deployments cur
 		           WHERE cur.id = platform_apps.current_deploy
 		             AND cur.application_id = platform_apps.id
 		             AND cur.version > ?)`,
-		d.ID, imageTag, namespace, now, d.Org, d.ApplicationID, d.Version)
+		d.ID, imageTag, namespace, now, now, d.Org, d.ApplicationID, d.Version)
 	if err != nil {
 		return false, fmt.Errorf("finalize live: %w", err)
 	}

@@ -447,6 +447,11 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		ttl:        ttlFromEnv(),
 	}
 	mounted = c
+	// Install this engine as the process-wide switch reader so the EDGE can read a
+	// platform switch. serve.go's middleware cannot import this package (flags
+	// imports the root package, root imports routers), so the root package holds the
+	// seam and this is the one call that fills it.
+	cloud.SetSwitchReader(Bool)
 	b := cloud.NewBase(deps, "flags")
 	svc := &cloud.Service[state]{Base: b, State: state{client: c}}
 	routes(app, svc)

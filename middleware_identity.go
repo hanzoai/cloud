@@ -235,15 +235,15 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			// project; a project owned by neither is refused).
 			var effOrg string
 			switch {
-			case owner != "" && owner == adminOrg && !isKMSMachinePrincipal(claims):
-				// SuperAdmin ⟺ the principal's org IS the reserved admin org. ONE fact,
-				// the SAME equality IAM's canonical User.IsSuperAdmin() uses
-				// (user.Owner == conf.AdminOrg) — cloud does not add a second signal.
-				// Honored org-switch. A KMS-sync MACHINE principal (audience
-				// <owner>-platform-kms) is EXCLUDED: V6 accepts the machine audience for
-				// data scope, but the machine path must never grant SuperAdmin, or an
-				// admin-org machine token could read every org. It falls through to the
-				// owner-scoped case below (org-scoped, not super).
+			case owner != "" && owner == adminOrg && !isMachinePrincipal(claims):
+				// SuperAdmin ⟺ the principal's org IS the reserved admin org AND the
+				// principal is HUMAN. The org equality is the SAME one IAM's canonical
+				// User.IsSuperAdmin() uses (user.Owner == conf.AdminOrg); the human gate
+				// (!isMachinePrincipal) is the necessary companion once the audience is no
+				// longer a gate — otherwise ANY admin-org client_credentials app (type ==
+				// "application"), not just the KMS-sync one, would inherit platform-admin and
+				// read every org. A machine principal falls through to the owner-scoped case
+				// below (org-scoped, not super). Honored org-switch for the human admin.
 				req.Header.Set("X-User-IsAdmin", "true")
 				if cliOrg != "" {
 					effOrg = cliOrg
@@ -263,12 +263,12 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			// requires it, so a validated but NON-admin member of an org is refused from
 			// the org-scoped admin panels (the same denial an unvalidated caller gets),
 			// closing the same-tenant over-visibility gap. It stays owner-scoped and safe:
-			// a KMS-sync MACHINE principal (audience <owner>-platform-kms) is EXCLUDED —
-			// mirroring the SuperAdmin guard above — so the machine path grants NEITHER
-			// global NOR org admin, and V6's audience widening can never be leveraged into
-			// an admin surface. Like every authorityHeader it is stripped on ingress and
-			// re-injected ONLY here from validated claims, so a client can never forge it.
-			if claims.IsAdmin && !isKMSMachinePrincipal(claims) {
+			// a MACHINE principal (type == "application", or the owner-bound KMS-sync
+			// audience) is EXCLUDED — mirroring the SuperAdmin guard above — so the machine
+			// path grants NEITHER global NOR org admin, and the audience widening can never
+			// be leveraged into an admin surface. Like every authorityHeader it is stripped
+			// on ingress and re-injected ONLY here from validated claims, unforgeable.
+			if claims.IsAdmin && !isMachinePrincipal(claims) {
 				req.Header.Set("X-User-IsOrgAdmin", "true")
 			}
 			sanitizeSubScopes(c, effOrg, claims.mintedProject(), cliApp, claims.mintedBillingAccount())
@@ -292,7 +292,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 // for the boundary, so Serve and integration tests wire it identically — no second
 // copy of the validator-construction glue to drift.
 func IdentityMiddleware(cfg *Config) zip.Handler {
-	return SanitizeIdentity(newIdentityValidator(cfg.IAMIssuer, cfg.JWKSURL, cfg.JWTAudiences, 0), cfg.AdminOrg)
+	return SanitizeIdentity(newIdentityValidator(cfg.IAMIssuer, cfg.JWKSURL, 0), cfg.AdminOrg)
 }
 
 // sanitizeSubScopes re-injects the org SUB-SCOPES (X-Project-Id, X-App-Id) for a

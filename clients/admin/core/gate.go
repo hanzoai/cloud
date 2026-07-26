@@ -25,27 +25,33 @@ func Guard(s *cloud.Service[State], h Handler) zip.Handler {
 }
 
 // GuardScoped is the gate for the ORG-SCOPED panels (me/overview/orgs/users/usage/
-// analytics/bases). It admits a SuperAdmin (principal.IsSuperAdmin) OR an ORG admin
-// (an admin of their OWN org — principal.IsOrgAdmin) pinned to a validated org, and the
-// handler then scopes every read to ResolveScope(c) — so a non-super caller passes the
-// gate but the DATA layer hard-limits them to their own org subtree. Cross-tenant reads
-// are impossible for a non-super caller regardless of input.
+// analytics/bases + spend-caps). It admits a SuperAdmin (principal.IsSuperAdmin) OR an
+// admin of an ENABLED WHITE-LABEL TENANT org (principal.IsOrgAdmin pinned to its
+// validated org AND that org ∈ State.WLTenants), and the handler then scopes every read
+// to ResolveScope(c) — so a non-super caller passes the gate but the DATA layer
+// hard-limits them to their own org subtree. Cross-tenant reads are impossible for a
+// non-super caller regardless of input.
 //
-// The non-super admission requires BOTH the sanitizer-minted X-User-IsOrgAdmin
-// (principal.IsOrgAdmin — the "admin of my own org" bit, unforgeable because the boundary
-// strips it on ingress) AND a validated principal pinned to its own org (principal.Org,
-// the ONE org accessor: validated X-User-Id + non-empty in-bounds X-Org-Id). So a
-// validated but NON-admin MEMBER of an org is
-// REFUSED here — the same denial an anonymous caller who forged X-Org-Id gets — closing
-// the same-tenant over-visibility gap where any org member could read their org's admin
-// panels. A validated non-super principal's X-Org-Id is PINNED by the boundary to their
-// own owner, never client-chosen.
+// THREE admission facts, ALL required for the non-super tier — the escalation line:
+//   - X-User-IsOrgAdmin (principal.IsOrgAdmin — "admin of my own org", unforgeable
+//     because SanitizeIdentity strips it on ingress and re-mints only from a validated
+//     isAdmin claim), AND
+//   - a validated principal pinned to its own org (principal.Org: validated X-User-Id +
+//     non-empty in-bounds X-Org-Id — the boundary PINS a non-super caller's X-Org-Id to
+//     their own owner, never client-chosen), AND
+//   - that org is an ENABLED WL tenant (State.IsWhiteLabelTenant — the fail-closed
+//     allowlist). This is the tier the old gate was MISSING: it admitted ANY org-admin,
+//     so any customer's own-org admin could open the cockpit. Now an org-admin whose org
+//     is not an enabled WL tenant is REFUSED — the SAME 403 a non-admin member or a
+//     forged-X-Org-Id anonymous caller gets. A SuperAdmin never consults the allowlist.
+//
+// Fail-closed everywhere: nil/empty WLTenants ⇒ ONLY SuperAdmins reach these panels.
 func GuardScoped(s *cloud.Service[State], h Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
 		if principal.IsSuperAdmin(c) {
 			return h(s, c) // SuperAdmin: cross-tenant, admitted regardless of org pin.
 		}
-		if _, ok := principal.Org(c); ok && principal.IsOrgAdmin(c) {
+		if org, ok := principal.Org(c); ok && principal.IsOrgAdmin(c) && s.State.IsWhiteLabelTenant(org) {
 			return h(s, c)
 		}
 		return zip.ErrForbidden("admin required")
