@@ -46,7 +46,9 @@ var appProducts = []string{"studio", "bot", "world", "platform", "team"}
 // ships dark, is flipped on under observation from the /v1/admin/flags cockpit, and
 // can be killed INSTANTLY from that same cockpit if it misfires — no redeploy, hot
 // within one eval TTL.
-const enforceKey = "paywall_enforced"
+// enforceKey is the shared platform-switch key: the root package owns the string so
+// the registry entry here, the evaluator, and the edge in serve.go cannot drift.
+const enforceKey = cloud.SwitchPaywallEnforced
 
 // strictKey is the posture on an UNRESOLVABLE standing (see the fail-posture note
 // on RequireProduct). OFF = availability: an authority we cannot reach never
