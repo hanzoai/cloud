@@ -762,7 +762,13 @@ func buildDurability(cfg *Config, log luxlog.Logger) (*Durability, func() []ha.M
 	// store that is not hydrate-on-open + fenced is the outage this exists to fix.
 	// disabledDurability logs at the severity the replica count warrants, so a
 	// misconfigured prod deployment is never SILENTLY non-durable (Red L2).
-	multiReplica := len(parsePeers(cfg.ShardPeers)) > 1
+	//
+	// CLOUD_REPLICAS is the FIRST source, not CLOUD_PEERS: under live K8s membership a
+	// Deployment has no static peer list (pod names are not stable, so the chart sets only
+	// CLOUD_PEER_SELECTOR), and keying the severity on CLOUD_PEERS alone would report a
+	// 3-replica deployment whose durable plane failed to construct as "single-replica/dev"
+	// — precisely the silent non-durable state this alert exists to prevent.
+	multiReplica := cfg.Replicas > 1 || len(parsePeers(cfg.ShardPeers)) > 1
 
 	// Durability is THE path — there is no operator toggle. It self-detects capability
 	// at boot: no object store reachable (dev / native-Go / no S3 creds) → local-only,
@@ -822,7 +828,15 @@ func buildDurability(cfg *Config, log luxlog.Logger) (*Durability, func() []ha.M
 	}
 	src := membershipSource(peers, cfg.PeerSelector, httpPortOf(cfg.ListenAddr), log)
 	members := org.NewMembership(self, src, 2*time.Second)
-	_ = members.Start(context.Background()) // initial refresh populates Members() before first request
+	// Start's initial refresh populates Members() before the first request. REPORT its
+	// error: an empty membership is not benign here — the fencer then names no safe owner
+	// (ErrNoMembership), so every per-org store opens read-only and every write fails
+	// closed. Silently discarding this turns a missing pods:list RBAC or a selector typo
+	// into a fleet-wide write outage with no diagnostic at all.
+	if err := members.Start(context.Background()); err != nil {
+		log.Error("initial writer-membership refresh FAILED — until it succeeds no org has a safe owner and every per-org write fails closed",
+			"selector", cfg.PeerSelector, "self", self, "err", err)
+	}
 
 	cipher := durableCipher(cfg, log)
 	if cipher == nil && cek.Encrypting() {

@@ -155,8 +155,16 @@ func (s *state) syncLedger(ctx context.Context, org string, sandbox bool) (int, 
 		if sandbox {
 			store = s.sandbox
 		}
-		if _, serr := store.Sync(org, ""); serr != nil {
+		// acked==false means this pod was deposed mid-request and the fence REFUSED the
+		// ship: the postings are committed only to a local file a successor's hydrate will
+		// overwrite. Report it — this ingest is idempotent, so a re-run recovers, but it
+		// must never look like a clean success. (Since the durable plane became the default
+		// this is a live path, not a no-op.)
+		if acked, serr := store.Sync(org, ""); serr != nil {
 			s.log.Warn("books durable sync degraded", "org", org, "sandbox", sandbox, "err", serr)
+		} else if !acked {
+			s.log.Error("books postings NOT durably shipped — this pod is not the org's elected writer; the postings will be dropped on the next hydrate, re-run the sync",
+				"org", org, "sandbox", sandbox, "posted", posted)
 		}
 	}
 	return posted, nil
