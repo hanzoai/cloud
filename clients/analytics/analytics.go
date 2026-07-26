@@ -139,9 +139,9 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 
 	// Capture (WRITE) side — the ingest that fills hanzo.events. POST /v1/event
 	// (event.go) is the ONE canonical front door serving EVERY auth context (IAM
-	// bearer | pk_ publishable key | site-host-forced) and EVERY wire shape
-	// (Event | [Event] | {batch}) into the ONE write core (ingestEvents). Every
-	// other route below is a thin alias/shim delegating to it.
+	// bearer | pk_ publishable key | site-host-forced | ANONYMOUS, public.go) and
+	// EVERY wire shape (Event | [Event] | {batch}) into the ONE write core
+	// (ingestEvents). Every other route below is a thin alias/shim delegating to it.
 	app.Post("/v1/event", cloud.Handle(s, eventIngest))
 
 	// /v1/ingest — a THIN DEPRECATED ALIAS of /v1/event (delegates to the exact

@@ -66,15 +66,16 @@ func TestMount_HostCarve_EventEmptyBatchOK(t *testing.T) {
 	}
 }
 
-// TestMount_HostCarve_EventDirectNoHostStillFailsClosed pins that the forced-org
-// carve is HOST-scoped: the SAME anonymous /v1/event body on a NON-site host runs the
-// normal canonical gate (eventTenant, no brand fallback) and is refused 403 — the
-// carve did not fire, so the strict door invariant is unweakened.
-func TestMount_HostCarve_EventDirectNoHostStillFailsClosed(t *testing.T) {
+// TestMount_HostCarve_EventDirectNoHostGetsNoOrg pins that the forced-org carve is
+// HOST-scoped: the SAME body on a NON-site host does not get a site org. The carve did
+// not fire, so the request runs the normal canonical gate — no principal and no key, so
+// it takes the ANONYMOUS lane, where the forged X-Org-Id and the custom event kind both
+// buy nothing: 200 with an all-dropped receipt, no row under `attacker`.
+func TestMount_HostCarve_EventDirectNoHostGetsNoOrg(t *testing.T) {
 	app := carveApp(t, "hanzo")
 	code := postHost(t, app, "evil.example.com", "/v1/event",
 		`{"event":"signup_completed","distinctId":"d"}`, map[string]string{"X-Org-Id": "attacker"})
-	if code != http.StatusForbidden {
-		t.Fatalf("anonymous /v1/event on a non-site host want 403 (no carve, no brand fallback), got %d", code)
+	if code != http.StatusOK {
+		t.Fatalf("anonymous /v1/event on a non-site host want 200 (anonymous lane, kind dropped), got %d", code)
 	}
 }

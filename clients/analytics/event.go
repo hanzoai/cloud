@@ -33,9 +33,16 @@
 //  3. an out-of-band IAM access key (hk-/sk-…) — resolved through the ONE key seam
 //     (cloud.OrgForKey).
 //
-// None of the above ⇒ 403. There is NO brand-host fallback on the canonical door
-// (that path stays only on the deprecated aliases), so /v1/event never writes an
-// event into a tenant IAM did not vouch for. The org is NEVER read from the body.
+// A caller that PRESENTED one of those credentials and did not resolve ⇒ 403 (a
+// misconfigured key is refused, not downgraded). A caller that presented NOTHING falls
+// through to the ANONYMOUS lane (public.go): logged-out marketing traffic is admitted
+// and attributed to the reserved public tenant, under a restricted kind/field allowlist
+// and its own size + rate bounds. It rejoins this pipeline at ingestDecoded, so decode,
+// write core, and receipt are shared — only admission differs.
+//
+// There is NO brand-host fallback on the canonical door (that path stays only on the
+// deprecated aliases), so /v1/event never writes an event into a REAL tenant IAM did
+// not vouch for. The org is NEVER read from the body — on either lane.
 //
 // The site-host carve (eventWithOrg) is the ONE exception to in-handler auth: on a
 // published site host the tenant is FORCED from the resolved Site BEFORE the handler
@@ -89,9 +96,10 @@ func (e Event) toCapture() CaptureEvent {
 //  3. else a presented out-of-band IAM access key (hk-/sk-…) is resolved to its org
 //     through the ONE key seam (resolveKeyOrg → cloud.OrgForKey).
 //
-// None matches ⇒ ("", false) → 403. There is NO brand-host fallback (that path
-// stays only on the deprecated aliases), so the canonical door is strictly authed —
-// IAM or a signed/resolvable key, never the request Host.
+// None matches ⇒ ("", false), which eventHandle answers by refusing a presented-but-
+// unresolvable credential and otherwise taking the anonymous lane. There is NO
+// brand-host fallback (that path stays only on the deprecated aliases), so a REAL
+// tenant here is only ever IAM or a signed/resolvable key, never the request Host.
 func eventTenant(c *zip.Ctx) (string, bool) {
 	if org, ok := tenant(c); ok {
 		return org, true
@@ -215,6 +223,16 @@ func ingestBody(c *zip.Ctx, org, source string) error {
 	if err != nil {
 		return zip.ErrBadRequest("malformed event payload")
 	}
+	return ingestDecoded(c, org, source, evs, 0)
+}
+
+// ingestDecoded is the TAIL of the ingest pipeline, and the ONE place it lives: fold
+// type:'error' events (foldException) → the ONE write core (ingestEvents) → the honest
+// receipt. Every lane ends here, so "what happens to an admitted event" is written
+// once. org is the SERVER-resolved tenant; dropped is what admission already refused
+// upstream (0 on the vouched-for lane, so its behavior is unchanged), added to the
+// receipt so {accepted,dropped} always totals what the caller sent.
+func ingestDecoded(c *zip.Ctx, org, source string, evs []CaptureEvent, dropped int) error {
 	for i := range evs {
 		evs[i] = foldException(evs[i])
 	}
@@ -222,19 +240,32 @@ func ingestBody(c *zip.Ctx, org, source string) error {
 	if err != nil {
 		return err
 	}
+	res.Dropped += dropped
 	return c.JSON(http.StatusOK, res)
 }
 
-// eventHandle is the canonical-door handler core: pluggable in-handler auth
-// (eventTenant, fail-closed) → the ONE ingest core. source tags the door so the
-// canonical /v1/event and the /v1/ingest deprecated alias share ONE implementation,
-// differing only in origin tag (and the alias's deprecation log).
+// eventHandle is the canonical-door handler core: resolve WHO is calling (eventTenant),
+// then run the pipeline. source tags the door so the canonical /v1/event and the
+// /v1/ingest deprecated alias share ONE implementation, differing only in origin tag
+// (and the alias's deprecation log).
+//
+// A resolved tenant goes straight to ingestBody with full capability, exactly as
+// before. A caller with NOTHING to resolve takes the anonymous lane (publicIngest,
+// public.go), which resolves the tenant to the reserved public bucket and applies an
+// admission policy — then rejoins THIS pipeline at ingestDecoded. Decode, write core,
+// and receipt are shared; only admission differs.
 func eventHandle(c *zip.Ctx, source string) error {
-	org, ok := eventTenant(c)
-	if !ok {
+	if org, ok := eventTenant(c); ok {
+		return ingestBody(c, org, source)
+	}
+	// A caller that PRESENTED an ingest credential which did not resolve is refused,
+	// never downgraded: filing its events under the public tenant would hide a
+	// misconfigured key in a partition its owner cannot read — a silent failure worse
+	// than the 403. The anonymous lane is for a caller that presented nothing.
+	if ingestKey(c) != "" || projectKey(c) != "" {
 		return zip.ErrForbidden("valid bearer or a resolvable ingest key required")
 	}
-	return ingestBody(c, org, source)
+	return publicIngest(c, source)
 }
 
 // eventIngest answers POST /v1/event — the ONE canonical ingestion front door.
