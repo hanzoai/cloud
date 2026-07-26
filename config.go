@@ -582,39 +582,18 @@ func registrableDomain(host string) string {
 	return parts[len(parts)-2] + "." + parts[len(parts)-1]
 }
 
-// stagedSubsystems require EXPLICIT enablement: they are deliberately NOT part of
-// the empty-Enable "mount everything" default and mount ONLY when named in
-// CLOUD_ENABLE. This is the HIP-0106 staged-rollout contract, enforced in code.
+// stagedSubsystems require EXPLICIT enablement: they are NOT part of the
+// empty-Enable "mount everything" default and mount ONLY when named — in
+// CLOUD_ENABLE, or additively in EnableStaged. This is the HIP-0106
+// staged-rollout contract, enforced in code.
 //
-// "iam" is staged as a cutover gate. iam.Mount now embeds the CLEAN iam-v2
-// (clients/iam — zip-native + hanzoai/orm, the retired Casdoor iam-v1/beego fork is
-// GONE, so the old shared-Beego-global corruption of the `ai` subsystem is gone too),
-// but flipping hanzo.id from the standalone iam pod to the in-process embed is a
-// production identity cutover. Until the fold is verified (login/authorize/token/jwks
-// + the operator SSO chain) AND the v2 config (init_data + KMS signing keys) is present
-// in the cloud runtime, the operator activates IAM by ADDING "iam" to CLOUD_ENABLE
-// explicitly; until then hanzo.id is served by the standalone iam pod and cloud runs
-// iam-less exactly as it does in production today (pickIAMClient falls back to the
-// remote/disabled IAM client — see build.go). ONE activation mechanism (the
-// enable-list), ONE place.
-//
-// PHASE 2 (tasks #96, #105): commerce, captable, sign, dataroom are folded
-// in-process (clients/commerce, clients/captable, clients/sign, clients/dataroom)
-// and validated on the cloud-unified-canary (all four "mounted in-process",
-// /v1/{commerce,captable,sign,dataroom}/health 200). commerce was flipped LAST
-// (task #105) because it owns the money path: the cutover keeps the authoritative
-// stores in place (balances/deposits/credits live in the shared Hanzo SQL via
-// SQL_URL, analytics in DATASTORE_URL, blobs in S3) and migrates only the per-org
-// merchant SQLite + org base into the cloud data dir, so the in-process app
-// reads the SAME stores as the standalone pod did — no money is copied or split.
-// The cloud pod carries commerce's backend seam (SQL_URL/DATASTORE_URL/KV_URL/
-// S3_*/SQUARE_*/HUSD_*/IAM_*/COMMERCE_EDGE_AUTH) exactly as the standalone CR did;
-// a missing SQL_URL still fails loud (commerce.go) rather than reading $0 balances.
-// All four are dropped from staging so the mount-all default serves them from the
-// one binary — retiring their standalone pods. iam and ingress STAY staged: iam is a
-// production identity cutover gated on the fold being verified (see above), served by
-// the standalone pod until the operator flips it on.
-var stagedSubsystems = map[string]bool{"iam": true, "ingress": true}
+// Membership rule: a subsystem is staged while its Mount can ABORT STARTUP. An
+// error returned from Mount stops cloud from booting, so a deployment that never
+// asked for that subsystem must not carry the risk of it. clients/ingress returns
+// errors (nil app, empty DataDir, store open), so it is staged. A subsystem whose
+// Mount fails closed instead — logging and serving 503 while cloud stays up, as
+// clients/iam does — cannot take the process down and is not staged.
+var stagedSubsystems = map[string]bool{"ingress": true}
 
 // Enabled reports whether subsystem `name` is enabled in this config.
 // Empty Enable list = all subsystems enabled, EXCEPT staged subsystems
@@ -731,12 +710,13 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("data-dir is required")
 	}
 	// Embedded IAM (clients/iam) keeps its identity store as a per-pod embedded
-	// SQLite file ({DataDir}/iam/iam.db), so a horizontally scaled app tier would give
+	// SQLite file ({DataDir}/iam/iam2.db), so a horizontally scaled app tier would give
 	// each replica its OWN divergent identity store — a user/session written on one
 	// replica is absent on the next. Refuse to boot an iam-enabled cloud above a single
 	// replica. CLOUD_REPLICAS=0 (unset) is the unmanaged/dev case and is allowed — the
-	// helm chart pins replicas=1 whenever "iam" is in --enable, so a managed deployment
-	// always sets it. Point IAM at a shared external store to lift this.
+	// helm chart pins replicas=1 whenever Enabled("iam") holds, which includes the
+	// empty (mount-all) enable list, so a managed deployment always sets it. Point IAM
+	// at a shared external store to lift this.
 	if c.Enabled("iam") && c.Replicas > 1 {
 		return fmt.Errorf("iam is enabled but CLOUD_REPLICAS=%d > 1: embedded IAM uses a per-pod SQLite store and requires replicas=1 (pin the Deployment to 1 replica or point IAM at a shared store)", c.Replicas)
 	}
