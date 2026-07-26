@@ -12,36 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// publishable.go — the FASTEST capture path: a write-only PUBLISHABLE KEY (pk_…)
-// that authenticates a direct-to-datastore ingest with ZERO network hop.
+// publishable.go — the write-only PUBLISHABLE-KEY ingest path (a key meant to ship
+// in a browser bundle), plus the interim HMAC key's fast direct-verify.
 //
-//	POST /v1/ingest        body: {batch:[WireEvent]}   auth: pk_…   -> {accepted,dropped}
-//	POST /v1/ingest/keys   mint a pk_ for the caller's org (validated principal)
+//	POST /v1/ingest        body: {batch:[WireEvent]}   auth: pk_ | pk-  -> {accepted,dropped}
+//	POST /v1/ingest/keys   DEPRECATED (410) — issuance moved to IAM (see mintKey)
 //	GET  /v1/errors        recent type:'error' events for the org (read lens)
 //
-// WHY a distinct key from the IAM hk-/sk-/pk- family: those resolve through IAM
-// (get-user?accessKey — a network round-trip) and mint a FULL principal that can
-// READ. A publishable key is meant to ship in a browser bundle, so it must be
-// write-only and cheap to verify. This key is:
+// TWO publishable-key generations coexist during migration; BOTH are write-only and
+// browser-shippable, and both resolve to an org for INGEST only — never a principal:
 //
-//   - INGEST-ONLY BY CONSTRUCTION. The `pk_` (underscore) prefix is deliberately
-//     NOT in isAPIKey's set (hk-/sk-/pk-/fw_/hz_, all dash/`fw_`/`hz_`), so the
-//     identity boundary (SanitizeIdentity) and OrgForKey both REFUSE it — it can
-//     never become a bearer principal, so it can never read. Its only door is the
-//     ingest verifier below. Write-only is a property of WHICH resolver accepts
-//     the value, not a flag on a row.
-//   - ORG-SCOPED, SIGNED, NON-FORGEABLE. The org is carried in the key but sealed
-//     under HMAC-SHA256(secret, org): a client cannot flip the org without the
-//     secret. The server stamps tenant_id from the VERIFIED org, never from the
-//     request body — the same tenant invariant the rest of the plane enforces.
-//   - LOWEST LATENCY. Verification is one HMAC compute — no IAM call, no keys
-//     table, no DB read. This is the no-Kafka, no-bridge, direct-to-ClickHouse
-//     path; it funnels through the SAME write core (ingestEvents) into the SAME
-//     hanzo.events table as every other adapter. One write path, many front doors.
+//   - pk- (IAM-issued, the TARGET). IAM — the ONE key authority — mints, scopes
+//     (scope=="publish"), lists, and revokes it. cloud resolves it through the ONE key
+//     seam (cloud.OrgForKey → IAM resolve-key). It IS in the isAPIKey family, yet its
+//     read-incapability is guaranteed at the identity boundary: validatedPrincipal
+//     REFUSES a pk- a principal, so it can never mint X-User-Id and can never read.
+//   - pk_ (interim HMAC, being DEPRECATED). The org is sealed under
+//     HMAC-SHA256(CLOUD_INGEST_KEY_SECRET, org); verification is one HMAC compute —
+//     no IAM call, no DB read. The `pk_` (underscore) prefix is deliberately NOT in
+//     isAPIKey's set, so the identity boundary and OrgForKey both refuse it — its ONLY
+//     door is the verifier below. Write-only is a property of WHICH resolver accepts
+//     the value. Its self-mint is retired (issuance moved to IAM); VERIFY stays live
+//     so already-issued keys keep working until every site migrates.
 //
-// SECRET: the HMAC secret is CLOUD_INGEST_KEY_SECRET (KMS-injected by the
-// operator). Absent ⇒ mint and verify BOTH fail closed (503 / 403) — a deployment
-// without the secret never mints a forgeable key nor admits an unverifiable one.
+// For BOTH: the server stamps tenant_id from the RESOLVED/VERIFIED org, never from the
+// request body — the same tenant invariant the rest of the plane enforces — and every
+// row funnels through the SAME write core (ingestEvents) into the SAME hanzo.events
+// table. One write path, many front doors.
+//
+// SECRET: the interim HMAC secret is CLOUD_INGEST_KEY_SECRET (KMS-injected). Absent ⇒
+// verify fails closed (403); a deployment without it never admits an unverifiable pk_.
 package analytics
 
 import (
@@ -64,10 +64,28 @@ import (
 // key's org. Absent ⇒ the publishable-key path is disabled (fails closed).
 const ingestKeySecretEnv = "CLOUD_INGEST_KEY_SECRET"
 
-// publishablePrefix marks a write-only ingest key. Underscore (not the dash of
-// the isAPIKey family) is load-bearing: it keeps pk_ OUT of the bearer/principal
-// path, so a publishable key is structurally read-incapable.
+// publishablePrefix marks the INTERIM write-only ingest key (pk_, HMAC-sealed).
+// Underscore (not the dash of the isAPIKey family) is load-bearing: it keeps pk_ OUT
+// of the bearer/principal path, so this key is structurally read-incapable. It is
+// being deprecated in favor of the IAM-issued pk- (iamPublishablePrefix); verify
+// stays live for already-issued keys (see verifyPublishableKey).
 const publishablePrefix = "pk_"
+
+// iamPublishablePrefix marks the IAM-issued write-only PUBLISHABLE key (pk-, dash).
+// IAM — the ONE key authority — mints, scopes (scope=="publish"), lists, and revokes
+// it; cloud resolves it to an org through the ONE key seam (cloud.OrgForKey → IAM
+// resolve-key) for INGEST only. Read-incapability is enforced at the identity
+// boundary (validatedPrincipal refuses a pk- a principal), NOT by the prefix alone —
+// so unlike the interim pk_, this key IS in the isAPIKey family yet still cannot read.
+const iamPublishablePrefix = "pk-"
+
+// isPublishable reports whether k is a write-only publishable key presented for
+// ingest — the interim HMAC key (pk_) OR the IAM-issued write-only key (pk-). Both
+// are browser-shippable and resolve to an org for INGEST only, never a principal.
+// (hk-/sk- are read-capable and travel the projectKey path instead.)
+func isPublishable(k string) bool {
+	return strings.HasPrefix(k, publishablePrefix) || strings.HasPrefix(k, iamPublishablePrefix)
+}
 
 // sourceIngest tags rows that arrived via the publishable-key direct ingest, so
 // the ONE hanzo.events table stays honest about origin (queryable as
@@ -97,6 +115,13 @@ func keySig(secret, org string) []byte {
 // '.' is the delimiter because it is OUTSIDE the base64url alphabet (which uses
 // '-' and '_'), so the two segments split unambiguously. Returns ("",false) when
 // the secret is unconfigured (fail closed) or org is empty.
+//
+// Deprecated: cloud is NOT a key authority — publishable-key ISSUANCE has moved to
+// IAM (a write-only pk- minted by the console key manager / IAM POST /v1/iam/key,
+// scope=publish). This self-mint is retired: POST /v1/ingest/keys (mintKey) no
+// longer calls it and returns 410 pointing at IAM. It is retained ONLY to exercise
+// the pk_ verify-compat path (verifyPublishableKey) that keeps already-issued keys
+// working until every site migrates; it will be removed post-migration.
 func mintPublishableKey(secret, org string) (string, bool) {
 	org = strings.TrimSpace(org)
 	if secret == "" || org == "" {
@@ -146,25 +171,26 @@ const maxIngestOrgLen = 128
 
 // ── request key extraction ───────────────────────────────────────────────────
 
-// ingestKey pulls the presented publishable key, in priority order: the
-// Authorization: Bearer header (the common browser-fetch shape), the
-// x-hanzo-ingest-key header, then the ?ingest_key= query (navigator.sendBeacon
-// cannot set headers). Only a pk_-prefixed value is returned — an unrelated
-// bearer (a real JWT/IAM key) is ignored here so this door never shadows the
+// ingestKey pulls the presented publishable key (interim pk_ OR IAM pk-), in
+// priority order: the Authorization: Bearer header (the common browser-fetch shape,
+// the SAME slot @hanzo/event uses for either key generation), the x-hanzo-ingest-key
+// header, then the ?ingest_key= query (navigator.sendBeacon cannot set headers). Only
+// a publishable-shaped value (pk_/pk-) is returned — an unrelated bearer (a real JWT,
+// or a read-capable hk-/sk- key) is ignored here so this door never shadows the
 // identity path. "" when none is present.
 func ingestKey(c *zip.Ctx) string {
 	if auth := strings.TrimSpace(c.Header("authorization")); auth != "" {
 		parts := strings.SplitN(auth, " ", 2)
 		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
-			if k := strings.TrimSpace(parts[1]); strings.HasPrefix(k, publishablePrefix) {
+			if k := strings.TrimSpace(parts[1]); isPublishable(k) {
 				return k
 			}
 		}
 	}
-	if k := strings.TrimSpace(c.Header("x-hanzo-ingest-key")); strings.HasPrefix(k, publishablePrefix) {
+	if k := strings.TrimSpace(c.Header("x-hanzo-ingest-key")); isPublishable(k) {
 		return k
 	}
-	if k := strings.TrimSpace(c.Query("ingest_key")); strings.HasPrefix(k, publishablePrefix) {
+	if k := strings.TrimSpace(c.Query("ingest_key")); isPublishable(k) {
 		return k
 	}
 	return ""
@@ -218,31 +244,36 @@ func ingest(s *cloud.Service[state], c *zip.Ctx) error {
 	return eventHandle(c, sourceIngest)
 }
 
-// mintKey answers POST /v1/ingest/keys — an org owner (VALIDATED principal) mints
-// a publishable key for its OWN org. The key is org-scoped to the caller's tenant
-// (never a body-supplied org), so a caller can only ever mint a key that writes
-// into its own partition. Fails closed (503) when the secret is unconfigured.
+// iamKeyIssuance is the successor pointer stamped on the deprecated mint endpoint —
+// where publishable-key issuance now lives (IAM, the ONE key authority).
+const iamKeyIssuance = "IAM key issuance (console key manager / POST /v1/iam/key, scope=publish)"
+
+// mintKey answers POST /v1/ingest/keys — DEPRECATED. cloud is NOT a key authority:
+// publishable-key ISSUANCE has moved to IAM, which mints a write-only pk- that is
+// org-scoped, listable, and revocable there. So cloud's self-mint (the
+// CLOUD_INGEST_KEY_SECRET HMAC pk_) is retired — this returns 410 Gone with a pointer
+// to the successor and mints NOTHING new. Already-issued pk_ keep working unchanged:
+// the verify path (eventTenant → verifyPublishableKey) is untouched, so no live site
+// breaks; only NEW issuance moves to IAM. A validated principal is still required so
+// the deprecation notice never leaks to an anonymous caller.
 func mintKey(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
+	if _, ok := tenant(c); !ok {
 		return zip.ErrForbidden("valid bearer required")
 	}
-	secret := ingestSecret()
-	if secret == "" {
-		return zip.Errorf(http.StatusServiceUnavailable, "publishable keys unavailable: ingest key secret not configured")
-	}
-	key, ok := mintPublishableKey(secret, org)
-	if !ok {
-		return zip.Errorf(http.StatusServiceUnavailable, "could not mint publishable key")
-	}
-	return c.JSON(http.StatusOK, map[string]any{"key": key, "org": org, "scope": "ingest"})
+	deprecated(s, c, iamKeyIssuance)
+	c.SetHeader("Deprecation", "true")
+	c.SetHeader("Link", "<"+iamKeyIssuance+">; rel=\"successor-version\"")
+	return zip.Errorf(http.StatusGone,
+		"cloud no longer mints publishable keys — issue a write-only pk- via %s", iamKeyIssuance)
 }
 
 // errorsLens answers GET /v1/errors — the error-tracking read view: recent
 // type:'error' events for the org, newest first. Tenant-scoped server-side and
-// gated on a VALIDATED principal (tenant()), NOT the publishable key — reads
-// require real auth, reinforcing that pk_ is write-only. The captured exception
-// is surfaced straight from properties.$exception. limit defaults 50, caps 200.
+// gated on a VALIDATED principal (tenant()), NEVER a publishable key — reads require
+// real auth, reinforcing that a publishable key (pk_ / pk-) is write-only: neither
+// can satisfy tenant() (the identity boundary refuses both a principal), so a browser
+// key can never read this lens. The captured exception is surfaced straight from
+// properties.$exception. limit defaults 50, caps 200.
 func errorsLens(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {

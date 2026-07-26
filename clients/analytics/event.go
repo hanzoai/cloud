@@ -27,11 +27,12 @@
 // SERVER-SIDE and FAIL-CLOSED, in strict trust order:
 //
 //  1. a validated IAM bearer principal — its owner org;
-//  2. a write-only publishable key (pk_…) — HMAC-verified org, no IAM/DB hop (the
-//     SAME key publishable.go mints; folded in here so a pk_ caller uses /v1/event
-//     directly);
+//  2. a write-only publishable key (browser-shippable) — resolved to an org for
+//     INGEST only, never a principal: pk- (IAM-issued) through the ONE key seam
+//     (cloud.OrgForKey → IAM resolve-key, scope=="publish"), or the interim pk_
+//     HMAC-verified with no IAM/DB hop (compat, self-mint deprecated → IAM);
 //  3. an out-of-band IAM access key (hk-/sk-…) — resolved through the ONE key seam
-//     (cloud.OrgForKey).
+//     (cloud.OrgForKey → get-user).
 //
 // None of the above ⇒ 403. There is NO brand-host fallback on the canonical door
 // (that path stays only on the deprecated aliases), so /v1/event never writes an
@@ -49,6 +50,7 @@ package analytics
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
@@ -83,21 +85,32 @@ func (e Event) toCapture() CaptureEvent {
 // FAIL-CLOSED, in strict trust order:
 //
 //  1. a validated IAM bearer principal wins (its owner org);
-//  2. else a presented write-only publishable key (pk_…) is HMAC-verified to its
-//     org with no IAM/DB hop (the SAME verifier publishable.go's /v1/ingest used —
-//     folded in here so a pk_ caller uses /v1/event directly);
+//  2. else a presented write-only PUBLISHABLE key (browser-shippable) is resolved to
+//     its org — never a principal:
+//     - pk- (IAM-issued): through the ONE key seam (resolveKeyOrg → cloud.OrgForKey
+//     → IAM resolve-key, scope=="publish" enforced) — the TARGET path;
+//     - pk_ (interim HMAC): verified with no IAM/DB hop (the deprecated self-mint's
+//     verifier, kept for already-issued keys) — compat;
 //  3. else a presented out-of-band IAM access key (hk-/sk-…) is resolved to its org
-//     through the ONE key seam (resolveKeyOrg → cloud.OrgForKey).
+//     through the ONE key seam (resolveKeyOrg → cloud.OrgForKey → get-user).
 //
 // None matches ⇒ ("", false) → 403. There is NO brand-host fallback (that path
 // stays only on the deprecated aliases), so the canonical door is strictly authed —
-// IAM or a signed/resolvable key, never the request Host.
+// IAM or a signed/resolvable key, never the request Host. A publishable key resolves
+// to an org for WRITE only; it can never mint a principal, so it can never read.
 func eventTenant(c *zip.Ctx) (string, bool) {
 	if org, ok := tenant(c); ok {
 		return org, true
 	}
 	if key := ingestKey(c); key != "" {
-		if org, ok := verifyPublishableKey(ingestSecret(), key); ok {
+		// pk_ (interim) verifies via HMAC with no network hop; pk- (IAM write-only)
+		// resolves through the ONE key seam (→ IAM resolve-key, scope=="publish"
+		// enforced). Both yield an ORG for INGEST only — never a principal.
+		if strings.HasPrefix(key, publishablePrefix) {
+			if org, ok := verifyPublishableKey(ingestSecret(), key); ok {
+				return org, true
+			}
+		} else if org, ok := resolveKeyOrg(c.Context(), key); ok {
 			return org, true
 		}
 	}

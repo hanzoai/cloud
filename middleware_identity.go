@@ -354,6 +354,18 @@ func validatedPrincipal(c *zip.Ctx, v *identityValidator) *idClaims {
 	if tok == "" {
 		return nil
 	}
+	// THE READ-GATE. A write-only PUBLISHABLE key (pk-) is NEVER a principal. It is
+	// designed to ship in client JS, so it must be read-incapable: refuse it HERE,
+	// before the key resolver, so it can never mint an identity header (X-User-Id /
+	// X-Org-Id) and therefore can never satisfy ANY read gate anywhere in the binary
+	// (every read gates on a validated principal — clients/principal.Validated). Its
+	// ONLY power is attributing an INGEST to its org (eventTenant → OrgForKey → IAM
+	// resolve-key). This short-circuit is load-bearing and structural: even if the key
+	// resolver would resolve a pk- to a full principal, the boundary refuses it first,
+	// so a public browser key can never read — on the direct path or any other.
+	if publishableKey(tok) {
+		return nil
+	}
 	// An opaque API key is not a JWT: resolve it to the same principal a JWT yields,
 	// so key auth and session auth mint one identity. An unresolved key stays
 	// anonymous (nil) — a bad key never grants trust.

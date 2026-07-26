@@ -139,16 +139,16 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 
 	// Capture (WRITE) side — the ingest that fills hanzo.events. POST /v1/event
 	// (event.go) is the ONE canonical front door serving EVERY auth context (IAM
-	// bearer | pk_ publishable key | site-host-forced) and EVERY wire shape
-	// (Event | [Event] | {batch}) into the ONE write core (ingestEvents). Every
+	// bearer | write-only publishable key pk-/pk_ | site-host-forced) and EVERY wire
+	// shape (Event | [Event] | {batch}) into the ONE write core (ingestEvents). Every
 	// other route below is a thin alias/shim delegating to it.
 	app.Post("/v1/event", cloud.Handle(s, eventIngest))
 
 	// /v1/ingest — a THIN DEPRECATED ALIAS of /v1/event (delegates to the exact
-	// eventHandle logic: pk_ auth now lives on the canonical door). /v1/ingest/keys
-	// mints a pk_ for the caller's org (minting is a distinct concern, not ingest);
-	// /v1/errors is the type:'error' read lens (validated principal — reads never
-	// accept the write-only key).
+	// eventHandle logic: publishable-key auth now lives on the canonical door).
+	// /v1/ingest/keys is DEPRECATED (410): publishable-key ISSUANCE moved to IAM (the
+	// ONE key authority) — cloud no longer self-mints. /v1/errors is the type:'error'
+	// read lens (validated principal — reads never accept a write-only publishable key).
 	app.Post("/v1/ingest", cloud.Handle(s, ingest))
 	app.Post("/v1/ingest/keys", cloud.Handle(s, mintKey))
 	app.Get("/v1/errors", cloud.Handle(s, errorsLens))
