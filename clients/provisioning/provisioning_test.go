@@ -61,7 +61,7 @@ func newTestService(t *testing.T, kinds ...string) (*cloud.Service[state], *mock
 	t.Setenv("CLOUD_KMS_NODES", "")
 	t.Setenv("CLOUD_KMS_PASSPHRASE", "")
 	log := luxlog.New("module", "provtest")
-	mp := &mockProv{cs: "redis://u:pw@kv.hanzo.svc:6379/0", host: "kv.hanzo.svc", port: 6379, db: "prefix:"}
+	mp := &mockProv{cs: "kv://u:pw@kv.hanzo.svc:6379/0", host: "kv.hanzo.svc", port: 6379, db: "prefix:"}
 	reg := map[string]Provisioner{}
 	for _, k := range kinds {
 		reg[k] = mp

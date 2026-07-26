@@ -21,13 +21,12 @@ func TestValidateIAMSingleReplica(t *testing.T) {
 		{"iam enabled, 1 replica -> ok", []string{"iam"}, 1, false},
 		{"iam enabled, replicas unset -> ok", []string{"iam"}, 0, false},
 		{"iam disabled, 5 replicas -> ok", []string{"kms", "o11y"}, 5, false},
-		// IAM is a STAGED subsystem (stagedSubsystems["iam"]): the empty-Enable
-		// "mount everything" default deliberately does NOT mount it (flipping hanzo.id
-		// to the in-process embed is a production identity cutover the operator makes
-		// explicitly — see config.go). So an empty list is iam-DISABLED, and >1 replica
-		// is allowed. The guard only fires when iam is EXPLICITLY enabled (the cases
-		// above), which is the sole way IAM ever runs.
-		{"empty list is iam-staged/disabled, 4 replicas -> ok", nil, 4, false},
+		// iam is NOT staged, so the empty-Enable "mount everything" default mounts it
+		// (see stagedSubsystems in config.go). An empty list is therefore iam-ENABLED
+		// and the single-replica guard applies to it exactly as to an explicit list —
+		// which matters because the empty list is the production posture (CLOUD_ENABLE
+		// unset). Disabling iam takes a non-empty list that omits it, the case above.
+		{"empty list is iam-enabled, 4 replicas -> refuse", nil, 4, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

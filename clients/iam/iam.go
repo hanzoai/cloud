@@ -145,7 +145,9 @@ func paths(deps cloud.Deps) (dbPath, initDataPath string) {
 	if root == "" {
 		root = "."
 	}
-	dbPath = filepath.Join(root, "iam", "iam.db")
+	// iam2.db is the v2 store. iam.db is a different database entirely, and
+	// opening it serves the wrong identities without failing.
+	dbPath = filepath.Join(root, "iam", "iam2.db")
 
 	initDataPath = os.Getenv("initDataFile")
 	if initDataPath == "" {
