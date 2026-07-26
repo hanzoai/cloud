@@ -1,4 +1,4 @@
-// dashboard.go — the ArgoCD-UI-compatible projection API at /v1/deploy/api/*,
+// dashboard.go — the ArgoCD-UI-compatible projection API at /v1/deploy/*,
 // fed the App-CR projection (projection.go). NO argocd api-server, NO
 // repo-server, NO redis, NO stored Application/AppProject CRD — every response
 // is synthesized from our operator App CRs. The FRONTEND is NOT here: the
