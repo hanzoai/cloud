@@ -24,7 +24,7 @@ package admin
 //     dashboard already uses). DO exposes capacity + attachment but NOT fill %, so a
 //     volume's used/pct stay ABSENT (the console renders an honest "—", never a
 //     fabricated number).
-//   - The analytics DATASTORE's own fill from ClickHouse `system.disks` (the 200Gi PVC
+//   - The analytics DATASTORE's own fill from Datastore `system.disks` (the 200Gi PVC
 //     the datastore fork mounts) — total/free space over the SAME shared client
 //     (aiobject.DatastoreQuery) the analytics + compute lenses read, no second
 //     connection. This is THE number the operator scales on.
@@ -156,7 +156,7 @@ func alertLevel(pct float64) string {
 	}
 }
 
-// datastoreFill reads the analytics datastore's own volume usage from ClickHouse
+// datastoreFill reads the analytics datastore's own volume usage from Datastore
 // `system.disks` (the largest disk by capacity is the data volume — the 200Gi PVC).
 // Returns nil when the datastore isn't connected or the query fails (honest — the
 // console shows no datastore card, never a fabricated fill).

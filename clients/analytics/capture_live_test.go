@@ -8,7 +8,7 @@
 //go:build datastore_live
 
 // Live end-to-end proof of the capture plane against a REAL datastore
-// (ClickHouse). It drives the ACTUAL POST /v1/analytics handler (bind → normalize
+// (Datastore). It drives the ACTUAL POST /v1/analytics handler (bind → normalize
 // → EnsureEventsTable → DatastoreExec) and then reads the rows back through the
 // EXACT SQL the /v1/analytics/overview + /top handlers run — so a green run proves
 // "emit → hanzo.events row lands → analytics read lens sees it".
@@ -52,7 +52,7 @@ func TestLiveCaptureRoundTrip(t *testing.T) {
 		time.Sleep(300 * time.Millisecond)
 	}
 	if !aiobject.DatastoreEnabled() {
-		t.Fatal("datastore did not connect (set DATASTORE_ADDR=127.0.0.1:9000 with a live ClickHouse)")
+		t.Fatal("datastore did not connect (set DATASTORE_ADDR=127.0.0.1:9000 with a live Datastore)")
 	}
 	ctx := context.Background()
 
@@ -94,7 +94,7 @@ func TestLiveCaptureRoundTrip(t *testing.T) {
 		t.Fatalf("accepted = %d, want 10", res.Accepted)
 	}
 
-	// ClickHouse MergeTree inserts are visible immediately to a direct SELECT.
+	// Datastore MergeTree inserts are visible immediately to a direct SELECT.
 	// 1) Raw landing proof: per-event counts for THIS org.
 	rows, err := aiobject.DatastoreQuery(ctx,
 		"SELECT event, count() AS n FROM hanzo.events WHERE tenant_id = ? GROUP BY event ORDER BY event", org)
