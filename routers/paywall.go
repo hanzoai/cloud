@@ -109,10 +109,37 @@ func Paywall(enforced bool, plans PlanChecker) zip.Handler {
 // sell/service surface — is admitted so the gate can NEVER block loading the app or
 // paying for it.
 func gated(path string) bool {
-	if !strings.HasPrefix(path, "/v1/") {
+	p := canonical(path)
+	if !strings.HasPrefix(p, "/v1/") {
 		return false // not a /v1 product API route (SPA, static, /healthz, /readyz, /zap).
 	}
-	return !allowlisted(path)
+	return !allowlisted(p)
+}
+
+// canonical folds the two ways a request path can differ from the form written in
+// the lists below while meaning the same route: ASCII case, and a trailing slash.
+// Both predicates read the folded value, so the gate decides once and cannot
+// disagree with itself.
+//
+// Case matters in BOTH directions, which is why folding — not a second list — is
+// the fix:
+//
+//   - `/V1/chat/completions` used to miss the `/v1/` prefix, so gated() returned
+//     false and the request skipped the paywall entirely. A gate whose bypass is
+//     a shift key is not a gate.
+//   - `/v1/IAM/callback` used to miss the `/v1/iam/` allow prefix, so an OAuth
+//     callback would have been refused 402 — locking a user out of signing in.
+//
+// The trailing slash is the same shape of bug against the exact-match list:
+// `/v1/signin/` matched no case in allowlisted() and no allow prefix, so it
+// gated. `/v1/` itself is left alone (nothing is trimmed below the prefix), so a
+// bare version root keeps whatever the router already did with it.
+func canonical(path string) string {
+	p := strings.ToLower(path)
+	if len(p) > len("/v1/") {
+		p = strings.TrimRight(p, "/")
+	}
+	return p
 }
 
 // allowlisted reports whether a /v1 path is EXEMPT from the paywall — every route the
@@ -127,6 +154,9 @@ func gated(path string) bool {
 // gpu/spend-alerts/payment-config). Auth is /v1/signin, /v1/signout, /v1/get-account and
 // the /v1/iam/* login/OAuth/OIDC callbacks; /v1/models is the model catalog the shell
 // reads; /v1/entitlements is the product projection the shell renders the upgrade UI from.
+// Its argument is already canonical() — gated() is the only caller, so every entry
+// below is written in lower case with no trailing slash and compared against a
+// value in that same form.
 func allowlisted(path string) bool {
 	// Liveness/health — never gated (mirrors DefaultPrice's probe carve-out).
 	if path == "/v1/health" || strings.HasSuffix(path, "/health") {
