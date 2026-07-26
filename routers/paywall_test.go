@@ -36,7 +36,8 @@ func (f *fakePlans) ActivePaidPlan(_ context.Context, _ string) (string, bool, e
 // handler ran and answers 200 — so a 402/deny is observable as "handler did not run".
 func newApp(enforced bool, plans PlanChecker, ran *atomic.Bool) *zip.App {
 	app := zip.New(zip.Config{})
-	app.Use(Paywall(enforced, plans))
+	// The middleware reads enforcement per request; the tests pin it to a constant.
+	app.Use(Paywall(func() bool { return enforced }, plans))
 	app.Get("/*", func(c *zip.Ctx) error {
 		ran.Store(true)
 		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
@@ -325,5 +326,66 @@ func TestGated_TrailingSlashDoesNotOpenAHole(t *testing.T) {
 		if gated(path) {
 			t.Errorf("gated(%q) = true, want false — non-/v1 surface", path)
 		}
+	}
+}
+
+// Enforcement is read per request, so flipping the cockpit switch takes effect on the
+// NEXT request against an already-mounted app. Before this, `enforced` was evaluated
+// once at mount and the only way to change it was to restart the binary — which is why
+// the switch registered in the cockpit governed nothing.
+func TestPaywall_EnforcementIsReadPerRequest(t *testing.T) {
+	var enforced atomic.Bool // starts false: dark
+	var ran atomic.Bool
+	app := zip.New(zip.Config{})
+	app.Use(Paywall(enforced.Load, &fakePlans{paid: false}))
+	app.Get("/*", func(c *zip.Ctx) error {
+		ran.Store(true)
+		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
+	})
+
+	ran.Store(false)
+	if resp := do(t, app, "/v1/chat/completions", validated); resp.StatusCode != http.StatusOK {
+		t.Fatalf("dark: status = %d, want 200", resp.StatusCode)
+	}
+	if !ran.Load() {
+		t.Fatal("dark: handler did not run")
+	}
+
+	enforced.Store(true) // the owner flips it in admin.hanzo.ai
+
+	ran.Store(false)
+	resp := do(t, app, "/v1/chat/completions", validated)
+	if resp.StatusCode != http.StatusPaymentRequired {
+		t.Fatalf("after flip: status = %d, want 402 — the switch did not hot-apply", resp.StatusCode)
+	}
+	if ran.Load() {
+		t.Fatal("after flip: handler ran despite 402")
+	}
+
+	enforced.Store(false) // and flips it back — the kill switch must restore access
+
+	ran.Store(false)
+	if resp := do(t, app, "/v1/chat/completions", validated); resp.StatusCode != http.StatusOK {
+		t.Fatalf("after revert: status = %d, want 200", resp.StatusCode)
+	}
+	if !ran.Load() {
+		t.Fatal("after revert: handler did not run")
+	}
+}
+
+// A nil reader is the dark default and must never gate.
+func TestPaywall_NilReaderPassesEverything(t *testing.T) {
+	var ran atomic.Bool
+	app := zip.New(zip.Config{})
+	app.Use(Paywall(nil, &fakePlans{paid: false}))
+	app.Get("/*", func(c *zip.Ctx) error {
+		ran.Store(true)
+		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
+	})
+	if resp := do(t, app, "/v1/chat/completions", validated); resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if !ran.Load() {
+		t.Fatal("handler did not run")
 	}
 }

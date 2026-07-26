@@ -36,8 +36,25 @@ type PlanChecker interface {
 
 // Paywall returns the subscription-gate middleware.
 //
-// enforced is PAYWALL_ENFORCED (default FALSE — dark ship). When false the gate is a
-// pure passthrough: ZERO behavior change until an owner flips the flag.
+// enforced is READ PER REQUEST, not once at mount. That is the whole point: the value
+// comes from the cockpit switch an owner flips at admin.hanzo.ai, so enforcement turns
+// on and off within one flag-cache TTL with no redeploy and no CR edit. Evaluating it
+// at mount time — as this did — meant the only way to flip the gate was to restart the
+// binary, and it also meant the switch already registered in the cockpit governed
+// nothing. A nil func is the dark default: a pure passthrough, ZERO behavior change.
+//
+// This package deliberately does NOT import the flag engine. It takes a func and stays
+// a pure request filter, so the caller decides where the answer comes from.
+//
+// NOT YET WIRED to the cockpit, and the reason is structural: clients/flags imports the
+// ROOT package (cloud.Deps/Handle/OrgStore/...), and the root package imports this one
+// to mount the middleware — so root can never import flags, and no edge filter mounted
+// from serve.go can read a switch. That is why the `paywall_enforced` switch registered
+// in the cockpit governs clients/entitlements.RequireProduct (a leaf, which may import
+// flags) and NOT this middleware, even though this one is what serve.go actually mounts.
+// Closing that gap means either inverting flags off the root package, or moving
+// enforcement onto RequireProduct at the gated route groups. Until then serve.go passes
+// the PAYWALL_ENFORCED config value and a flip still needs a redeploy.
 //
 // plans is the commerce plan read; nil ⇒ fail open (commerce cannot answer, so the gate
 // never blocks). It is resolved from deps.Commerce by the caller (serve.go) via a
@@ -57,13 +74,16 @@ type PlanChecker interface {
 //  6. org unresolved / plans nil / plans error   admit (fail open — never lock out).
 //  7. org HAS a live paid plan ................. admit.
 //  8. otherwise ................................ 402 subscription_required.
-func Paywall(enforced bool, plans PlanChecker) zip.Handler {
-	if !enforced {
-		// Dark ship: a pure passthrough, byte-identical to no middleware at all. This
-		// is the default until an owner sets PAYWALL_ENFORCED=true.
+func Paywall(enforced func() bool, plans PlanChecker) zip.Handler {
+	if enforced == nil {
+		// No reader wired: a pure passthrough, byte-identical to no middleware at all.
 		return func(c *zip.Ctx) error { return c.Next() }
 	}
 	return func(c *zip.Ctx) error {
+		if !enforced() {
+			// Dark: one flag read off a hot in-memory snapshot, no authority consulted.
+			return c.Next()
+		}
 		path := c.Path()
 		if !gated(path) {
 			return c.Next() // non-/v1 surface, or an allow-listed sell/service route.
