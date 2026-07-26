@@ -58,6 +58,10 @@ const strictKey = "paywall_strict"
 func init() {
 	flags.Register(flags.Def{
 		Key: enforceKey, Category: "Launch", Type: flags.TypeBool, Default: "false",
+		// PAYWALL_ENFORCED remains the fallback, so a deployment with no cockpit
+		// write behaves exactly as it did before this switch governed anything.
+		// The first write in admin.hanzo.ai takes over and hot-applies.
+		Env:   "PAYWALL_ENFORCED",
 		Label: "Paywall enforced",
 		Desc: "Refuse gated product routes for a caller with neither an active subscription nor prepaid credit. " +
 			"OFF = dark: the gate admits everything and consults no billing authority. This is the kill switch — " +
@@ -71,6 +75,12 @@ func init() {
 			"locking a paying customer out; turn ON only while deliberately holding the line on revenue.",
 	})
 }
+
+// Enforced reports whether the paywall is on, read live from the cockpit switch
+// (store -> PAYWALL_ENFORCED -> false). It is the ONE reader of enforceKey outside
+// this file's own gate: serve.go hands it to routers.Paywall so the middleware and
+// RequireProduct can never disagree about whether enforcement is on.
+func Enforced() bool { return flags.Bool(enforceKey) }
 
 // ── the gate ────────────────────────────────────────────────────────────────────
 

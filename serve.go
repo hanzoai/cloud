@@ -323,7 +323,9 @@ func Serve(specs []MountSpec, enable []string) error {
 	if pc, ok := deps.Commerce.(routers.PlanChecker); ok {
 		planChecker = pc
 	}
-	app.Use(routers.Paywall(cfg.PaywallEnforced, planChecker))
+	// cfg.PaywallEnforced is a BOOT-time value: flipping the paywall needs a redeploy.
+	// See routers/paywall.go for why the cockpit switch cannot reach this middleware.
+	app.Use(routers.Paywall(func() bool { return cfg.PaywallEnforced }, planChecker))
 
 	// HIP-0106 liveness contract: every enabled subsystem answers
 	// GET /v1/<name>/health uniformly, registered at the compose root before
