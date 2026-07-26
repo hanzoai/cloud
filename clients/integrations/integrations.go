@@ -440,6 +440,9 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/connector/github/webhook", cloud.Terminal(cloud.Handle(s, githubWebhook)))
 	app.Get("/v1/integrations/github/repos", cloud.Handle(s, githubRepos))
 	app.Post("/v1/integrations/github/repos/import", cloud.Handle(s, githubImport))
+	// Seed the native tracker with the org's EXISTING GitHub issues (the webhook
+	// keeps them live thereafter). Org-authed via the principal; bounded + idempotent.
+	app.Post("/v1/integrations/github/issues/backfill", cloud.Handle(s, githubIssuesBackfill))
 	// GitHub Pages management (github_pages.go), one repo as a resource. Registered
 	// AFTER the literal /repos/import so registration-order matching keeps the literal
 	// unshadowed; the :repo routes all carry a /pages suffix, so /repos/import (no
