@@ -217,7 +217,10 @@ var dedicatedEngines = map[string]engine{
 			return map[string]string{"kv.conf": "requirepass " + pw + "\n"}
 		},
 		dsn: func(user, pw, host string, port int, _ string) string {
-			return fmt.Sprintf("redis://%s:%s@%s:%d", user, pw, host, port)
+			// kv:// is the scheme our client parses. The Datastore spec.type stays
+			// "valkey" — that one is the operator's contract (Engine::Valkey), not
+			// ours to rename.
+			return fmt.Sprintf("kv://%s:%s@%s:%d", user, pw, host, port)
 		},
 	},
 	// datastore ("datastore"): ghcr.io/hanzoai/datastore provisions
