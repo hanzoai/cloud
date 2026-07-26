@@ -3,10 +3,10 @@ package deploy
 import (
 	"context"
 	"encoding/json"
-	"github.com/hanzoai/cloud/clients/k8s"
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/k8s"
 	luxlog "github.com/luxfi/log"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -20,18 +20,19 @@ import (
 func fakeService(objs ...runtime.Object) *cloud.Service[state] {
 	scheme := runtime.NewScheme()
 	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
-		k8s.Apps:         "AppList",
-		k8s.Deployments:  "DeploymentList",
-		replicaSetsGVR:   "ReplicaSetList",
-		podsGVR:          "PodList",
-		coreSvcGVR:       "ServiceList",
-		ingressGVR:       "IngressList",
-		hpaGVR:           "HorizontalPodAutoscalerList",
-		pdbGVR:           "PodDisruptionBudgetList",
-		configMapsGVR:    "ConfigMapList",
-		appProjectGVR:    "AppProjectList",
-		middlewaresGVR:   "MiddlewareList",
-		ingressRoutesGVR: "IngressRouteList",
+		k8s.Apps:           "AppList",
+		k8s.Deployments:    "DeploymentList",
+		replicaSetsGVR:     "ReplicaSetList",
+		podsGVR:            "PodList",
+		coreSvcGVR:         "ServiceList",
+		ingressGVR:         "IngressList",
+		hpaGVR:             "HorizontalPodAutoscalerList",
+		pdbGVR:             "PodDisruptionBudgetList",
+		configMapsGVR:      "ConfigMapList",
+		appProjectGVR:      "AppProjectList",
+		middlewaresGVR:     "MiddlewareList",
+		ingressRoutesGVR:   "IngressRouteList",
+		k8s.CDApplications: "ApplicationList",
 	}, objs...)
 	return &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{dyn: dyn}}
 }

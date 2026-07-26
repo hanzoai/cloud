@@ -28,3 +28,11 @@ var Deployments = schema.GroupVersionResource{Group: "apps", Version: "v1", Reso
 // Namespaces backs scan-set discovery: asking which namespaces exist is how the
 // fleet is found, rather than hardcoding a list that goes stale on the next tenant.
 var Namespaces = schema.GroupVersionResource{Version: "v1", Resource: "namespaces"}
+
+// CDApplications is Hanzo CD's Application CR (apps.hanzo.ai/v1alpha1) — the
+// GitOps plane's own record of a tracked git source: the revision it last applied,
+// its sync verdict, and its deploy history. A different fact from Apps: an App is
+// ONE workload's desired state, a CD Application is the git→cluster pipeline that
+// WRITES those Apps, so "the App CR declares vX" and "CD has applied commit abc"
+// answer different questions and neither implies the other.
+var CDApplications = schema.GroupVersionResource{Group: "apps.hanzo.ai", Version: "v1alpha1", Resource: "applications"}
