@@ -150,7 +150,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	// /v1/errors is the type:'error' read lens (validated principal — reads never
 	// accept the write-only key).
 	app.Post("/v1/ingest", cloud.Handle(s, ingest))
-	app.Post("/v1/ingest/keys", cloud.Handle(s, mintKey))
 	app.Get("/v1/errors", cloud.Handle(s, errorsLens))
 
 	// DEPRECATED foreign-protocol ingest shims — external-SDK compat ONLY; no Hanzo

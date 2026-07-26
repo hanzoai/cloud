@@ -7,100 +7,27 @@ package analytics
 
 import (
 	"encoding/json"
+	"github.com/hanzoai/cloud"
 	"testing"
 	"time"
 )
 
-const testSecret = "test-ingest-secret-0123456789"
-
-// mint→verify is a round trip: a key minted for an org verifies back to exactly
-// that org under the same secret.
-func TestPublishableKeyRoundTrip(t *testing.T) {
-	for _, org := range []string{"acme", "hanzo", "maxpower", "org-with-dashes", "MixedCase"} {
-		key, ok := mintPublishableKey(testSecret, org)
-		if !ok {
-			t.Fatalf("mint failed for %q", org)
-		}
-		got, ok := verifyPublishableKey(testSecret, key)
-		if !ok {
-			t.Fatalf("verify failed for freshly minted key %q", key)
-		}
-		if got != org {
-			t.Fatalf("round trip org = %q, want %q", got, org)
-		}
+// The ONE publishable spelling is IAM's pk-, and cloud only validates it. Cloud
+// used to mint and verify its OWN pk_ under an HMAC of CLOUD_INGEST_KEY_SECRET —
+// a second publishable-key family with its own prefix, secret and mint endpoint,
+// beside the one IAM already owned.
+//
+// The prefix is asserted against the ONE authority rather than a literal, and the
+// safety property it depends on is asserted with it: a pk- must resolve (so the
+// ingest door can attribute a beacon) and must NOT authenticate (so a key shipped
+// in a browser bundle is not a reading credential).
+func TestPublishablePrefixIsTheIAMFamily(t *testing.T) {
+	if publishablePrefix != cloud.PublishablePrefix {
+		t.Fatalf("publishable prefix = %q, want %q", publishablePrefix, cloud.PublishablePrefix)
 	}
-}
-
-// The key is write-only by construction: pk_ is NOT accepted by the isAPIKey
-// family, so it can never be minted into a bearer principal. (Guards the prefix
-// choice — an accidental switch to a dash prefix would silently make the key
-// readable.) We assert the prefix here; isAPIKey lives in the parent package.
-func TestPublishablePrefixIsUnderscore(t *testing.T) {
-	key, _ := mintPublishableKey(testSecret, "acme")
-	if key[:3] != "pk_" {
-		t.Fatalf("publishable key must start with pk_ (write-only lane), got %q", key[:3])
+	if !cloud.IsPublishableKey(publishablePrefix + "abc") {
+		t.Fatal("a pk- must be recognised as publishable")
 	}
-}
-
-// verify FAILS CLOSED on every malformed / forged / unconfigured case.
-func TestVerifyFailsClosed(t *testing.T) {
-	good, _ := mintPublishableKey(testSecret, "acme")
-	cases := []struct {
-		name, secret, key string
-	}{
-		{"no secret", "", good},
-		{"wrong prefix", testSecret, "sk-abcdef"},
-		{"empty", testSecret, ""},
-		{"no delimiter", testSecret, "pk_YWNtZQ"},
-		{"trailing delimiter", testSecret, "pk_YWNtZQ."},
-		{"leading delimiter", testSecret, "pk_.YWNtZQ"},
-		{"bad base64 org", testSecret, "pk_!!!.YWNtZQ"},
-		{"bad base64 sig", testSecret, "pk_YWNtZQ.!!!"},
-		{"wrong secret", "other-secret", good},
-		{"tampered org keeps old sig", testSecret, forgeOrg(good, "evil")},
-	}
-	for _, tc := range cases {
-		if org, ok := verifyPublishableKey(tc.secret, tc.key); ok {
-			t.Errorf("%s: verify admitted a bad key → org %q (want fail closed)", tc.name, org)
-		}
-	}
-}
-
-// forgeOrg swaps the org segment of a real key while keeping its signature — the
-// canonical forgery attempt the HMAC must reject.
-func forgeOrg(key, newOrg string) string {
-	// pk_<b64org>.<b64sig> — replace the b64org segment.
-	dot := -1
-	for i := 3; i < len(key); i++ {
-		if key[i] == '.' {
-			dot = i
-			break
-		}
-	}
-	if dot < 0 {
-		return key
-	}
-	enc := base64Raw(newOrg)
-	return "pk_" + enc + key[dot:]
-}
-
-func base64Raw(s string) string {
-	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
-	src := []byte(s)
-	var out []byte
-	for i := 0; i < len(src); i += 3 {
-		var b [3]byte
-		n := copy(b[:], src[i:])
-		out = append(out, alphabet[b[0]>>2])
-		out = append(out, alphabet[(b[0]&0x03)<<4|b[1]>>4])
-		if n > 1 {
-			out = append(out, alphabet[(b[1]&0x0f)<<2|b[2]>>6])
-		}
-		if n > 2 {
-			out = append(out, alphabet[b[2]&0x3f])
-		}
-	}
-	return string(out)
 }
 
 // foldException lifts a type:'error' event's exception into properties.$exception
