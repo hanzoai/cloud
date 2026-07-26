@@ -37,10 +37,11 @@ type keyResolver interface {
 // A brief cache keeps the hot auth path off the network; it caches misses too, so a
 // bad key cannot hammer IAM.
 type iamKeys struct {
-	base  string
-	auth  string // client_secret_basic, or "" when unconfigured
-	http  *http.Client
-	cache cache[string, *idClaims]
+	base     string
+	auth     string // client_secret_basic, or "" when unconfigured
+	http     *http.Client
+	cache    cache[string, *idClaims] // hk-/sk-/fw_/hz_ → principal (get-user)
+	pubCache cache[string, pubOrg]    // pk-            → write-only org (resolve-key)
 }
 
 // newIAMKeys reads the same IAM env clients/account does. With no confidential
@@ -48,10 +49,11 @@ type iamKeys struct {
 // never a fabricated principal), so a deployment lacking the credential is safe.
 func newIAMKeys() *iamKeys {
 	return &iamKeys{
-		base:  iamHost(),
-		auth:  iamCred(),
-		http:  &http.Client{Timeout: 5 * time.Second},
-		cache: newCache[string, *idClaims](60 * time.Second),
+		base:     iamHost(),
+		auth:     iamCred(),
+		http:     &http.Client{Timeout: 5 * time.Second},
+		cache:    newCache[string, *idClaims](60 * time.Second),
+		pubCache: newCache[string, pubOrg](60 * time.Second),
 	}
 }
 
@@ -76,19 +78,33 @@ func sharedKeys() *iamKeys {
 // is refused rather than stored.
 const maxKeyOrgLen = 128
 
-// OrgForKey resolves an opaque Hanzo API key (hk-/sk-/pk-/fw_/hz_) to the org it
-// belongs to — the SAME owner org SanitizeIdentity mints when that key arrives as a
-// bearer — through the ONE IAM key seam (get-user?accessKey). It is the exported
-// door a keyed, bearer-less SDK path uses to attribute a project key to a tenant.
+// OrgForKey resolves an opaque Hanzo API key to the org it may write into — the
+// exported door a keyed, bearer-less SDK/ingest path uses to attribute a request to a
+// tenant. It returns an ORG only, NEVER a principal, so it is inherently write-safe;
+// it is called ONLY on write/ingest paths (there are zero read call sites).
+//
+// It routes by key kind, because a write-only publishable key and a read-capable key
+// resolve through DIFFERENT IAM doors:
+//
+//   - pk- (write-only PUBLISHABLE, browser-shippable) → IAM resolve-key, which
+//     returns just {org, scope} and only when the key is scope=="publish". This is
+//     the write-only sibling of the principal path: a pk- can attribute an INGEST to
+//     its org and NOTHING else (the identity boundary already refuses it a principal,
+//     so it can never read).
+//   - hk-/sk-/fw_/hz_ (read-capable) → get-user?accessKey, the SAME owner org
+//     SanitizeIdentity mints when that key arrives as a bearer.
 //
 // FAILS CLOSED: ("", false) for a non-key-shaped string, an unknown/unresolvable
-// key, an unconfigured resolver, or an out-of-bounds org — never a fabricated or
-// default tenant, so a bad key can never be written into another org's partition.
-// The isAPIKey prefix gate keeps garbage strings off the IAM network path.
+// key, a non-publish pk-, an unconfigured resolver, or an out-of-bounds org — never a
+// fabricated or default tenant, so a bad key can never be written into another org's
+// partition. The isAPIKey prefix gate keeps garbage strings off the IAM network path.
 func OrgForKey(ctx context.Context, key string) (string, bool) {
 	key = strings.TrimSpace(key)
 	if !isAPIKey(key) {
 		return "", false
+	}
+	if publishableKey(key) {
+		return sharedKeys().orgForPublishable(ctx, key)
 	}
 	claims := sharedKeys().resolve(ctx, key)
 	if claims == nil {
@@ -99,6 +115,85 @@ func OrgForKey(ctx context.Context, key string) (string, bool) {
 		return "", false
 	}
 	return owner, true
+}
+
+// scopePublish is the IAM key scope that certifies a write-only publishable key. The
+// resolve-key door accepts a pk- ONLY when IAM states this scope, so a key that is
+// NOT write-only (a secret / read-capable key that somehow reached this door) can
+// never resolve to a writable tenant — the write-only property is enforced on BOTH
+// sides (IAM refuses to resolve a non-publish key; cloud refuses to accept one).
+const scopePublish = "publish"
+
+// pubOrg is a cached resolve-key answer: the org a write-only pk- may write into, and
+// whether it resolved. A cached miss (ok=false) is a valid answer — a bad pk- cannot
+// hammer IAM — exactly like the principal path's cached nil.
+type pubOrg struct {
+	org string
+	ok  bool
+}
+
+// orgForPublishable resolves an IAM write-only publishable key (pk-) to its org via
+// IAM's resolve-key endpoint. The endpoint returns ONLY {org, scope} — never a user,
+// name, email, isAdmin, or any principal material — and cloud accepts the org ONLY
+// when scope=="publish", so the value can attribute an INGEST and can never be read
+// back as identity. Caches hits and misses (60s), like resolve(). Fails closed on an
+// unconfigured resolver, an unreachable IAM, a non-publish/unknown key, or an
+// out-of-bounds org.
+func (k *iamKeys) orgForPublishable(ctx context.Context, key string) (string, bool) {
+	if k.auth == "" || k.base == "" || key == "" {
+		return "", false
+	}
+	if c, ok := k.pubCache.get(key); ok {
+		return c.org, c.ok
+	}
+	org, ok := k.lookupPublishable(ctx, key)
+	if ok {
+		org = strings.TrimSpace(org)
+		if org == "" || len(org) > maxKeyOrgLen {
+			org, ok = "", false
+		}
+	}
+	k.pubCache.put(key, pubOrg{org: org, ok: ok})
+	return org, ok
+}
+
+// lookupPublishable performs the authenticated resolve-key?accessKey call and returns
+// the org ONLY when IAM vouches scope=="publish". Any failure (unreachable, denied,
+// unknown key, non-publish scope, malformed body) yields ("", false). The response
+// carries no principal fields, so nothing readable can leak through this door even on
+// a misbehaving IAM.
+func (k *iamKeys) lookupPublishable(ctx context.Context, key string) (string, bool) {
+	u := k.base + "/v1/iam/resolve-key?" + url.Values{"accessKey": {key}}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return "", false
+	}
+	req.Header.Set("Authorization", k.auth)
+	req.Header.Set("Accept", "application/json")
+	resp, err := k.http.Do(req)
+	if err != nil {
+		return "", false
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "", false
+	}
+	var env struct {
+		Status string `json:"status"`
+		Data   *struct {
+			Org   string `json:"org"`
+			Scope string `json:"scope"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(raw, &env) != nil || env.Status != "ok" || env.Data == nil {
+		return "", false
+	}
+	// WRITE-ONLY ENFORCEMENT: accept the org ONLY for a key IAM certifies write-only.
+	if env.Data.Scope != scopePublish {
+		return "", false
+	}
+	return strings.TrimSpace(env.Data.Org), true
 }
 
 // iamHost is the standalone IAM origin cloud talks to; iamCred is the service

@@ -592,14 +592,23 @@ func RegisterCommerceClientFactory(f func(cfg *Config, log luxlog.Logger) Commer
 	commerceClientFactory = f
 }
 
-// publishableKey reports whether apiKey is a read-only PUBLISHABLE key (pk-). The
-// Hanzo gateway 403s a publishable key on any WRITE endpoint — "Publishable keys
-// can only access read-only endpoints … use a secret key (sk-)". So the COMPLETIONS
-// resolver must refuse it (it would only 403 chat), while the EMBED resolver accepts
-// it (embeddings ARE read-only). pk- is the IAM key family's read-only member
-// (hk-/sk-/pk-/fw_/hz_; clients/admission). This ONE predicate is the split's crux:
-// it kept the intermittent-403 bug — a pk- embed key riding the shared completions
-// client — from ever recurring, wherever the key comes from.
+// publishableKey reports whether apiKey is a PUBLISHABLE key (pk-) — the IAM key
+// family's browser-shippable member (hk-/sk-/pk-/fw_/hz_; clients/admission). A
+// publishable key is deliberately restricted; the restriction differs by PLANE, but
+// the predicate — "does it start with pk-" — is ONE fact, read wherever a pk- must be
+// held to its policy (never duplicated):
+//
+//   - INFERENCE: pk- is READ-ONLY. The Hanzo gateway 403s it on any WRITE endpoint
+//     ("Publishable keys can only access read-only endpoints … use a secret key
+//     sk-"), so pickCompletionsClient must REFUSE it (it would only 403 chat) while
+//     pickEmbedClient ACCEPTS it (embeddings ARE read-only). This kept the
+//     intermittent-403 bug — a pk- embed key riding the shared completions client —
+//     from recurring, wherever the key came from.
+//   - DATA (analytics ingest): pk- is WRITE-ONLY. The identity boundary
+//     (validatedPrincipal) REFUSES it a principal, so it can never mint X-User-Id and
+//     therefore can never READ on any path; it resolves to an org for INGEST only
+//     (OrgForKey → IAM resolve-key, scope=="publish"). A key shipped in client JS can
+//     attribute a write and nothing else.
 func publishableKey(apiKey string) bool {
 	return strings.HasPrefix(strings.TrimSpace(apiKey), "pk-")
 }
