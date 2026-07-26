@@ -19,6 +19,7 @@ require (
 	github.com/hanzoai/go-openai v1.41.0
 	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/iam v1.33.8
+	github.com/hanzoai/kafka v1.2.1
 	github.com/hanzoai/money v0.2.1
 	github.com/hanzoai/notify v1.6.18
 	github.com/hanzoai/otel-collector v1.2.0
@@ -28,7 +29,6 @@ require (
 	github.com/hanzoai/s3-go v1.0.0
 	github.com/hanzoai/sign v1.0.0
 	github.com/hanzoai/sqlite v0.3.2
-	github.com/hanzoai/stream v1.2.0
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.5.0
 	github.com/luxfi/node v1.36.15
