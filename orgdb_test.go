@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/hanzoai/cloud/cek"
 )
 
 // createT + insert/count helpers exercise a resolved *sql.DB as a real org
@@ -105,14 +107,16 @@ func TestTenantDBOrgIsolation(t *testing.T) {
 		t.Fatalf("orgA cannot see its own row: count=%d", n)
 	}
 
-	// Two physically distinct files exist (orga/, orgb/ are DNS-label identities).
+	// Two physically distinct stores exist (orga/, orgb/ are DNS-label identities).
+	// Asked through cek.Exists — the same predicate Each uses — because a store that
+	// is still OPEN has not materialized its database file on the pure-Go codec.
 	fa := filepath.Join(dir, "orgs", "orga", "widget.db")
 	fb := filepath.Join(dir, "orgs", "orgb", "widget.db")
-	if _, err := os.Stat(fa); err != nil {
-		t.Fatalf("orgA file missing at %s: %v", fa, err)
+	if !cek.Exists(fa) {
+		t.Fatalf("orgA store missing at %s", fa)
 	}
-	if _, err := os.Stat(fb); err != nil {
-		t.Fatalf("orgB file missing at %s: %v", fb, err)
+	if !cek.Exists(fb) {
+		t.Fatalf("orgB store missing at %s", fb)
 	}
 	if fa == fb {
 		t.Fatal("orgA and orgB resolved to the SAME file")
@@ -146,8 +150,8 @@ func TestTenantDBProjectIsolation(t *testing.T) {
 	fAlpha := filepath.Join(dir, "orgs", "acme", "projects", "alpha", "tracker.db")
 	fBeta := filepath.Join(dir, "orgs", "acme", "projects", "beta", "tracker.db")
 	for _, f := range []string{fAlpha, fBeta} {
-		if _, err := os.Stat(f); err != nil {
-			t.Fatalf("expected nested project file at %s: %v", f, err)
+		if !cek.Exists(f) {
+			t.Fatalf("expected a nested project store at %s", f)
 		}
 	}
 	if fAlpha == fBeta {

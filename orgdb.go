@@ -425,7 +425,7 @@ func (c *OrgStore[T]) Sync(orgID, project string) (acked bool, err error) {
 	return d.Sync(ctx)
 }
 
-// Each folds fn over every org that has a {subsystem}.db on disk under
+// Each folds fn over every org that has a {subsystem} store on disk under
 // {dataDir}/orgs, handing it the org's SLUG (the on-disk directory name) and the
 // SAME cached store handle For returns (opened through forPath, keyed by path — no
 // second open). It is the cross-org sweep primitive a reconciler folds over: the
@@ -450,7 +450,7 @@ func (c *OrgStore[T]) Each(fn func(slug string, st T, err error)) error {
 			continue
 		}
 		path := filepath.Join(root, e.Name(), c.subsystem+".db")
-		if _, statErr := os.Stat(path); statErr != nil {
+		if !cek.Exists(path) {
 			continue // this org has no store for this subsystem
 		}
 		// e.Name() IS the on-disk org slug — the same value durKey folds to and the
