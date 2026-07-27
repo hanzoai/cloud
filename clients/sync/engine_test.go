@@ -81,7 +81,7 @@ func TestEngineReconcileAndCursorIdempotency(t *testing.T) {
 		Target: Endpoint{Provider: "tgt", Locator: "t1"},
 	})
 
-	ev := cloud.SyncEvent{Kind: "fake", Provider: "src", Org: "acme", Locator: "s1", Branch: "main", After: "aaa", Actor: "human"}
+	ev := cloud.SyncEvent{Kind: "fake", Provider: "src", Org: "acme", Locator: "s1", Ref: "refs/heads/main", After: "aaa", Actor: "human"}
 	if r, _ := cloud.Sync(context.Background(), ev); r.Ran != 1 {
 		t.Fatalf("first event want Ran=1, got %+v", r)
 	}
@@ -111,7 +111,7 @@ func TestEngineLoopGuardAndDirection(t *testing.T) {
 	})
 
 	// An event by the sync's OWN actor is the echo → skipped.
-	loop := cloud.SyncEvent{Kind: "fake", Provider: "src", Org: "acme", Branch: "main", After: "aaa", Actor: "bot"}
+	loop := cloud.SyncEvent{Kind: "fake", Provider: "src", Org: "acme", Ref: "refs/heads/main", After: "aaa", Actor: "bot"}
 	if r, _ := cloud.Sync(context.Background(), loop); r.Skipped != 1 || r.Ran != 0 {
 		t.Fatalf("loop event want Skipped=1, got %+v", r)
 	}
@@ -131,7 +131,7 @@ func TestEngineLoopGuardAndDirection(t *testing.T) {
 		Source: Endpoint{Provider: "src2", Locator: "s2"},
 		Target: Endpoint{Provider: "tgt", Locator: "t2"},
 	})
-	off := cloud.SyncEvent{Kind: "fake", Provider: "src2", Org: "acme", Branch: "main", After: "zzz", Actor: "human"}
+	off := cloud.SyncEvent{Kind: "fake", Provider: "src2", Org: "acme", Ref: "refs/heads/main", After: "zzz", Actor: "human"}
 	if r, _ := cloud.Sync(context.Background(), off); r.Ran != 0 {
 		t.Fatalf("direction off want Ran=0, got %+v", r)
 	}
@@ -154,7 +154,7 @@ func TestEngineChainPropagation(t *testing.T) {
 		Target: Endpoint{Provider: "dst", Locator: "d1"},
 	})
 
-	ev := cloud.SyncEvent{Kind: "fake", Provider: "head", Org: "acme", Locator: "s1", Repo: "r", Branch: "main", After: "aaa", Actor: "human"}
+	ev := cloud.SyncEvent{Kind: "fake", Provider: "head", Org: "acme", Locator: "s1", Repo: "r", Ref: "refs/heads/main", After: "aaa", Actor: "human"}
 	if r, _ := cloud.Sync(context.Background(), ev); r.Ran != 1 {
 		t.Fatalf("A want Ran=1 (B reconciles via chain, not the top count), got %+v", r)
 	}
@@ -185,7 +185,7 @@ func TestEngineHopLimitTerminatesChain(t *testing.T) {
 		})
 	}
 
-	ev := cloud.SyncEvent{Kind: "fake", Provider: "head", Org: "acme", Locator: "s", Repo: "r", Branch: "main", After: "aaa", Actor: "human"}
+	ev := cloud.SyncEvent{Kind: "fake", Provider: "head", Org: "acme", Locator: "s", Repo: "r", Ref: "refs/heads/main", After: "aaa", Actor: "human"}
 	cloud.Sync(context.Background(), ev)
 	if got := fp.count(); got != maxHops+1 {
 		t.Fatalf("chain must terminate at maxHops+1=%d reconciles, got %d", maxHops+1, got)

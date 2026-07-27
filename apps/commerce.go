@@ -165,6 +165,10 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 	})
 	if err != nil {
 		lg.Error("commerce embed failed — serving fail-closed 503 (cloud stays up)", "err", err)
+		// State, not just a log line: /v1/health reports this and the release smoke
+		// refuses an image whose planes are dead. Without it a fail-closed commerce
+		// is indistinguishable from a commerce that was never enabled.
+		cloud.Degraded("commerce", err)
 		mountCommerceFailClosed(app)
 		return nil
 	}
