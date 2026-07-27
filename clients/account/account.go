@@ -18,7 +18,7 @@
 // gateway-minted, IAM-verified X-User-Id; a client-forged X-Org-Id on the bearer-less
 // path is refused):
 //
-//	GET    /v1/iam/keys              — whether the caller has an `hk-` key (+ prefix/mtime); no secret.
+//	GET    /v1/iam/keys              — whether the caller has a Cloud API key (+ prefix/mtime); no secret.
 //	POST   /v1/iam/keys              — mint/rotate the key; returns { accessKey } ONCE.
 //	DELETE /v1/iam/keys              — revoke the key.
 //	POST   /v1/iam/onboard           — create the caller's org (+ move them in on first run).
@@ -138,7 +138,7 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) {
 	// GET /v1/csrf issues the anti-CSRF token the embedded SPA echoes as X-CSRF-Token on
 	// every money write (csrf.go). Safe (read-only), same-origin.
 	app.Get("/v1/csrf", cloud.Handle(s, issueCSRFToken))
-	// The caller's own `hk-` Cloud API key — IAM self-service. These SPECIFIC routes MUST
+	// The caller's own Cloud API key — IAM self-service. These SPECIFIC routes MUST
 	// register before clients/iam's /v1/iam/* wildcard (order 50 > 48) so Fiber's
 	// first-match scan hits the native handler, not the wildcard (TestIAMKeysBeatsWildcard).
 	// Reads are open; every state-changing WRITE is wrapped: requireCSRF blocks a
@@ -249,7 +249,7 @@ func resolveCaller(c *zip.Ctx, requireOwner bool) (caller, bool) {
 	return caller{id: id, owner: owner, name: name, username: username}, true
 }
 
-// ── keys (the per-user `hk-` Cloud API key) ──────────────────────────────────
+// ── keys (the per-user Cloud API key) ────────────────────────────────────────
 
 type keyStatus struct {
 	HasKey    bool   `json:"hasKey"`
@@ -257,7 +257,7 @@ type keyStatus struct {
 	CreatedAt string `json:"createdAt,omitempty"`
 }
 
-// getKey reports whether the caller has an `hk-` key, its public prefix, and when
+// getKey reports whether the caller has a Cloud API key, its public prefix, and when
 // the key row last changed — NO secret material. Reads IAM authoritatively (not the
 // session claim, which lags a fresh key). Mirrors GET app/keys/route.ts.
 func getKey(s *cloud.Service[state], c *zip.Ctx) error {
@@ -286,7 +286,7 @@ func getKey(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, keyStatus{HasKey: true, KeyPrefix: prefix, CreatedAt: uk.UpdatedTime})
 }
 
-// mintKey (re)generates the caller's `hk-` key and returns it ONCE (show-once). A
+// mintKey (re)generates the caller's Cloud API key and returns it ONCE (show-once). A
 // real IAM failure surfaces as 502 (never a fabricated key). Mirrors POST app/keys.
 func mintKey(s *cloud.Service[state], c *zip.Ctx) error {
 	cr, ok := resolveCaller(c, true)
@@ -303,7 +303,7 @@ func mintKey(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]string{"accessKey": key})
 }
 
-// revokeKey clears the caller's `hk-` key. Mirrors DELETE app/keys.
+// revokeKey clears the caller's Cloud API key. Mirrors DELETE app/keys.
 func revokeKey(s *cloud.Service[state], c *zip.Ctx) error {
 	cr, ok := resolveCaller(c, true)
 	if !ok {
