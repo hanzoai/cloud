@@ -26,7 +26,7 @@ package admin
 //   - Traces     → o11y_traces.distributed_o11y_index_v3 : request count, latency p50/p95/p99,
 //                                                              error rate, top services
 //   - Logs       → o11y_logs.distributed_logs_v2 : fleet log volume + volume-over-time
-//   - LLM gens   → langfuse.observations      : generations + cost (fleet-wide; honest-empty today)
+//   - LLM gens   → o11y_ai.observations      : generations + cost (fleet-wide; honest-empty today)
 //
 // SUPERADMIN ONLY (the s.guard wrap in admin.go): the gateway strips a client
 // X-Org-Id and re-mints from the JWT owner, and this handler applies NO org filter,
@@ -52,12 +52,12 @@ import (
 )
 
 // Fully-qualified datastore tables. admin only READS these — the ZAP collector
-// (o11y_*), the ai ledger (hanzo.cloud_usage), and Langfuse own their writes.
+// (o11y_*), the ai ledger (hanzo.cloud_usage), and O11yAI own their writes.
 const (
 	o11yUsageTable   = "hanzo.cloud_usage"
 	o11yTraceTable   = "o11y_traces.distributed_o11y_index_v3"
 	o11yLogTable     = "o11y_logs.distributed_logs_v2"
-	o11yLangfuseObs  = "langfuse.observations"
+	o11yAIObs  = "o11y_ai.observations"
 	o11yTopN         = 10
 	o11yServiceLimit = 12
 )
@@ -138,7 +138,7 @@ type o11ySvcStat struct {
 	LatencyP95Ms float64 `json:"latencyP95Ms"`
 }
 
-// o11yLLM is the fleet-wide Langfuse generation rollup (near-empty today → honest).
+// o11yLLM is the fleet-wide O11yAI generation rollup (near-empty today → honest).
 type o11yLLM struct {
 	Generations int64   `json:"generations"`
 	CostUsd     float64 `json:"costUsd"`
@@ -205,7 +205,7 @@ func o11y(s *cloud.Service[core.State], c *zip.Ctx) error {
 	if rows, err := datastore.Query(ctx, o11yTopServicesSQL(), sinceTS); err == nil {
 		payload.TopServices = topServicesFromRows(rows)
 	}
-	// Fleet LLM generations (Langfuse) — best-effort; near-empty today.
+	// Fleet LLM generations (O11yAI) — best-effort; near-empty today.
 	if rows, err := datastore.Query(ctx, o11yLLMSQL(), sinceTS); err == nil {
 		r := firstRowOr(rows)
 		payload.LLM = o11yLLM{Generations: chInt64(r["gens"]), CostUsd: chFloat64(r["cost"])}
@@ -271,7 +271,7 @@ func o11yTopServicesSQL() string {
 }
 
 func o11yLLMSQL() string {
-	return "SELECT count() AS gens, toFloat64(sum(total_cost)) AS cost FROM " + o11yLangfuseObs +
+	return "SELECT count() AS gens, toFloat64(sum(total_cost)) AS cost FROM " + o11yAIObs +
 		" WHERE type = 'GENERATION' AND start_time >= ?"
 }
 
