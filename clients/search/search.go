@@ -136,12 +136,18 @@ func Shutdown() error {
 
 // routes registers the Meilisearch dialect under /v1/search.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	g := app.Group("/v1/search")
-
+	// health and version are registered as ABSOLUTE paths on app, the same idiom
+	// every other OwnsHealth subsystem uses (clients/esign, clients/kms). Declared
+	// on the group instead they do not survive the real mount composition — they
+	// answered on a bare app in tests and 404'd in production, while every deeper
+	// route on the same group worked.
+	//
 	// This subsystem sets OwnsHealth, so it serves its own health: Meilisearch's
 	// {"status":"available"} body, failing closed when the store is unreadable.
-	g.Get("/health", cloud.Handle(s, health))
-	g.Get("/version", cloud.Handle(s, version))
+	app.Get("/v1/search/health", cloud.Handle(s, health))
+	app.Get("/v1/search/version", cloud.Handle(s, version))
+
+	g := app.Group("/v1/search")
 
 	g.Post("/indexes", cloud.Handle(s, createIndex))
 	g.Get("/indexes/:uid", cloud.Handle(s, getIndex))
