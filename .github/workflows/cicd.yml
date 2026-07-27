@@ -1,11 +1,31 @@
 # ~7-line canonical caller — all real config lives in /hanzo.yml.
-# Test gate on OUR arc pool; release.yml owns the image + v* tags.
+# Test gate on OUR arc pool; clients/platform/release.go owns the image + v* tags.
 name: CI/CD
 on:
   workflow_dispatch:
   push:
     branches: [main]
   pull_request:
+# One live gate per ref. This is the only workflow GitHub still runs for this
+# repo, and every run holds a hanzo-build-linux-amd64 runner for its whole
+# length (13-26 min observed, 2026-07-27). Nothing kept the copies apart, so
+# six pushes between 06:40 and 06:51 that morning had six of them in flight at
+# once; the nodes starved, runners died mid-build with "the self-hosted runner
+# lost communication with the server", and the pool stayed jammed after the
+# runs themselves had finished.
+#
+# Cancelling is safe HERE because nothing downstream depends on a run of THIS
+# workflow completing. It never fires on a tag ref (triggers above are main,
+# PRs and dispatch), so it can never kill a release: the cloud image and its
+# v* tags belong to clients/platform/release.go. The one image hanzo.yml does
+# declare, cloud-flags, is consumed through an explicitly pinned FLAGS_IMAGE
+# ARG in the Dockerfile — never "whatever this run just published" — so a
+# cancelled publish costs nothing but the next push republishes it anyway.
+# release paths that DO pair an image with a tag must keep
+# cancel-in-progress: false; a guard must not.
+concurrency:
+  group: cicd-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   cicd:
     uses: hanzoai/ci/.github/workflows/build.yml@v1
