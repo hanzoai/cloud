@@ -41,17 +41,18 @@ import (
 
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
-// Datastore seams. In production these are the shared ai/object datastore facade;
+// Datastore seams. In production these are cloud's one warehouse connection;
 // tests substitute fakes to exercise the full read+assemble path (and to assert the
 // exact org-bound SQL the handlers build) without a live warehouse.
 var (
-	queryDatastore   = aiobject.DatastoreQuery
-	execDatastore    = aiobject.DatastoreExec
-	datastoreEnabled = aiobject.DatastoreEnabled
+	queryDatastore   = datastore.Query
+	execDatastore    = datastore.Exec
+	datastoreEnabled = datastore.Ready
 	ensureUsageTable = aiobject.EnsureCloudUsageTable
 	nowFn            = time.Now
 )
