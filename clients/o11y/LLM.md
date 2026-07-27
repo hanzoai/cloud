@@ -130,39 +130,68 @@ metrics without the fork. Full rip requires porting the metrics exporter onto
 upstream ch-go (or aligning drivers). Until then the standalone collector stays
 for metrics; cloud takes traces+logs.
 
-## cloud's own telemetry transport
+## cloud's own telemetry — split host / sink
 
-`cmd/cloud/telemetry.go` prefers ZAP (canonical cross-service wire). When no ZAP
-endpoint is set but an OTLP endpoint is, it ships spans over OTLP-HTTP — the path
-to LOOP BACK to this in-process ingest at `localhost:4318` once cutover happens.
+The **host** owns the tracer + meter providers (`cloud/telemetry.go`,
+`cloud.InstallTelemetry`, called by `cloud.Serve` before `MountAll` and by
+`cmd/o11y` for its own process). This package owns the SINK.
+
+That split is not cosmetic. The provider used to be BUILT here and handed to the
+host through `cloud.RegisterTelemetryInstaller` from this package's `init()`.
+That only worked while o11y was LINKED INTO the host. When o11y became a plugin
+(`cloud.PluginSpec` → `zip.Load`, its own binary) the `init()` ran in the CHILD,
+the host's installer stayed nil, `installTelemetry` became a genuine no-op, and
+tracing went dark fleet-wide — including the `gen_ai` spans it adopted into the
+ai module. The provider is a host concern (every request the host serves needs a
+span) and now lives there; only the collector, the datastore exporter and the
+SDK→pdata conversion (`spanconv.go`) stayed, because only those are coupled to
+the `o11y_index_v3` schema. Host root graph cost of the move: **+6 packages**
+(644 → 650 — the OTel trace SDK + `luxfi/trace`); `go.opentelemetry.io/collector`
+and `hanzoai/ai/object` stay at 0 in the host.
+
+The ai adoption (`aiobject.AdoptHostTracerProvider`) moved to
+`cloud/apps/install.go`, beside the other `aiobject.Set*` calls, gated on
+`cloud.TracerProviderInstalled()` — `apps/` already links ai; the host must not
+(`hanzoai/ai/object` is 1270 packages).
 
 ## cloud's own spans → in-process trace sink (`tracesink.go`)
 
 The dogfood: cloud's OWN spans (service + ai GenAI/LLM-obs) reach the embedded
 Datastore trace store WITHOUT a socket, via the ZAP locality-adaptive **Router**
-(`github.com/luxfi/zap` v1.2.1: `Router`/`InProcessInterface`/`Destination`/
-`Payload`). One Send API, Cost-table routing — not a caller branch.
+(`github.com/luxfi/zap`: `Router`/`InProcessInterface`/`Destination`/`Payload`).
+One Send API, Cost-table routing — not a caller branch. **The router lives in the
+host now** (`cloud/telemetry.go`); this package registers a handler on it.
 
-- `Router` (this pkg, exported) carries a Cost-0 `InProcessInterface`. cmd/cloud's
-  tracer provider installs an exporter (`NewTraceExporter`) whose `otlptrace.Client`
-  `Send`s every batch to `TraceDest` ("hanzo.o11y.traces"). When this sink is
-  mounted the Router delivers the LIVE `[]*tracepb.ResourceSpans` by value (zero
-  ZAP-wire serialize, zero socket, no second collector hop); else `ErrNoRoute` and
-  the producer falls back to the ZAP wire client.
-- The handler bridges SDK-exporter proto spans → collector pdata (one in-memory
-  OTLP round-trip — the pdata proto pkg differs but the OTLP wire is identical) and
-  writes via the REAL `chtraces` exporter (`ConsumeTraces`), the one writer that
-  produces the `o11y_index_v3` schema the query plane reads. The pdata→SpanV3
-  conversion is unexported, so the sink reuses the exporter as a `consumer.Traces`
-  rather than duplicating ~90 lines of schema-coupled conversion.
+- Seam: `cloud.RegisterTraceSink(cloud.TraceSink)` where
+  `TraceSink = func(ctx, []sdktrace.ReadOnlySpan) error`. `mountTraceSink`
+  registers `traceSink(exp)`; `shutdownTraceSink` registers nil. The payload is
+  SDK spans, not pdata, so the conversion — and therefore the collector import —
+  stays on this side.
+- **Same code, both deployments.** Registration is process-local. Linked in, the
+  host's `Send` to `traceDest` ("hanzo.o11y.traces") finds this handler and hands
+  over the LIVE batch by value (zero serialize, zero socket, no second collector
+  hop). As a plugin, the handler is registered in the CHILD, the host's router
+  returns `ErrNoRoute`, and the identical `Send` falls through to the ZAP wire
+  (`luxfi/trace` → this package's `zapreceiver` on :4317). Neither producer nor
+  exporter branches on where o11y lives.
+- The handler converts SDK spans → collector pdata **in place** (`spanconv.go`;
+  no proto, no marshal, no OTLP) and writes via the REAL `dstraces` exporter
+  (`ConsumeTraces`), the one writer that produces the `o11y_index_v3` schema the
+  query plane reads. The pdata→SpanV3 conversion is unexported there, so the sink
+  reuses the exporter as a `consumer.Traces` rather than duplicating ~90 lines of
+  schema-coupled conversion.
 - **OPT-IN + fail-soft.** Mounts (via `mountTraceSink` in the one order-69 mount)
-  only when `O11Y_TRACES_ZAP_INPROCESS`
-  is truthy AND a datastore DSN is set (`TraceInprocEnabled()` is the ONE gate both
-  the sink and the producer read). Any construction error leaves cloud's spans on
-  the wire — activating it can never take cloud down. Shutdown deregisters the
-  handler then flushes the exporter's sending queue.
-- Boot window: the provider installs early (initTelemetry) but the sink registers
-  at mount (order 73); spans in between take the wire fallback, else surface
-  ErrNoRoute (visible, never a silent plaintext downgrade). Steady state is
-  in-process. A P2 ZAP `NodeInterface` for traces slots behind the same Send call
-  site with no producer change.
+  only when `O11Y_TRACES_ZAP_INPROCESS` is truthy AND a datastore DSN is set.
+  `cloud.TraceInprocEnabled()` is the ONE gate, read by both the sink (whether to
+  mount) and the host producer (whether to install a provider with no wire
+  endpoint). Any construction error leaves cloud's spans on the wire — activating
+  it can never take cloud down. Shutdown deregisters the handler then flushes the
+  exporter's sending queue.
+- Boot window: the provider installs before `MountAll` but the sink registers at
+  mount (order 69); spans in between take the wire fallback, else surface
+  `ErrNoRoute` (visible, never a silent drop). Steady state is in-process. A ZAP
+  `NodeInterface` for traces slots behind the same Send call site with no producer
+  change.
+- Covered by `TestTracing_EndToEnd_WithO11yLinkedIn` (this pkg — real provider,
+  real `RegisterTraceSink`, real `traceSink`, asserts the converted pdata and its
+  resource) and the routing/Cost-table tests in `cloud/telemetry_test.go`.
