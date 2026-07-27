@@ -316,7 +316,7 @@ func narrateAsk(s *cloud.Service[*state], c *zip.Ctx, org, question string, resp
 		Model:      s.State.model,
 		Prompt:     prompt,
 		Org:        org,
-		BillingOrg: principal.HomeOrg(c),
+		BillingOrg: principal.Ledger(c),
 	})
 	if err != nil || res == nil {
 		return ""
