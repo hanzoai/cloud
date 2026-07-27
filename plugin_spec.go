@@ -37,7 +37,7 @@ func PluginSpec(name, prefix string, p zip.Plugin) MountSpec {
 			if !ok {
 				return fmt.Errorf("pluginspec %q: needs the root app, got %T — Global must stay set", name, router)
 			}
-			return zip.Load(prefix, p)(app)
+			return zip.Load(p, prefix)(app)
 		},
 	}
 }
