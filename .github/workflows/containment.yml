@@ -45,9 +45,28 @@ on:
 permissions:
   contents: read
 
+# One live check per ref. Check #3 is a full `go build ./...`, which takes tens of
+# minutes cold, and this runs on EVERY push to main — so a busy hour started eight
+# of these at once, each holding a hanzo-build runner for the whole build while the
+# commits they were checking had already been superseded.
+#
+# Cancelling is safe HERE specifically because this is a guard, not a publisher: it
+# answers "does the tree at this ref violate containment", and the only tree that
+# can still violate anything is the newest one, which the surviving run checks.
+# That is the opposite of release.yml, which sets cancel-in-progress: false because
+# killing it between pushing an image and writing its tag would lose work.
+concurrency:
+  group: containment-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   controlplane-containment:
     runs-on: [hanzo-build-linux-amd64]
+    # Bounded so a wedged run frees its runner. Without this the job inherits
+    # GitHub's 6-hour default, and an ephemeral runner reclaimed mid-build (exit
+    # 130, "runner has received a shutdown signal") is the failure that actually
+    # showed up. Generous against a cold module cache: observed runs are 26-42min.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
 
