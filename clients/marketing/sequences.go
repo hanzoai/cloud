@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -579,8 +580,63 @@ func listStepsHandler(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"data": rows})
 }
 
-// enroll adds a contact to a sequence and schedules its first step. An enrollment
-// is only accepted for an ACTIVE sequence (a draft sends nothing).
+// EnrollInput names WHO to enroll: exactly one of a single address or an
+// AUDIENCE — the org's own IAM customers, optionally narrowed to an event cohort.
+// One endpoint, one enrollment path: "announce to every model user" is an
+// audience fanned into a one-step sequence, NOT a second blast engine, so every
+// message it produces still walks the drip engine and the ONE send gate.
+type EnrollInput struct {
+	Address    string `json:"address"`
+	AudienceID string `json:"audienceId"`
+	Channel    string `json:"channel"`
+}
+
+// EnrollResult reports the fan-out. EnrollmentID is set only when a single
+// address was named, so the one-recipient caller can still address its walk
+// (cancel). AlreadyEnrolled counts addresses this sequence had already taken —
+// the idempotence that makes re-POSTing a partially-applied announcement safe:
+// it resumes rather than double-drips anyone.
+type EnrollResult struct {
+	Resolved        int    `json:"resolved"`
+	Enrolled        int    `json:"enrolled"`
+	AlreadyEnrolled int    `json:"alreadyEnrolled"`
+	EnrollmentID    string `json:"enrollmentId,omitempty"`
+}
+
+// recipients resolves an enroll request's WHO into addresses: the one address it
+// named, or every customer its audience resolves to. The audience is loaded
+// org-scoped, so a caller can only ever fan out over its OWN org's audience, and
+// resolution reads its OWN org's roster.
+func recipients(ctx context.Context, s *cloud.Service[state], org, channel string, in EnrollInput) ([]string, error) {
+	addr := normAddr(in.Address)
+	audienceID := strings.TrimSpace(in.AudienceID)
+	if (addr == "") == (audienceID == "") {
+		return nil, zip.ErrBadRequest("exactly one of address or audienceId is required")
+	}
+	if addr != "" {
+		return []string{addr}, nil
+	}
+	// An audience resolves mailboxes; sending them down a non-email channel would
+	// deliver an email address as if it were a phone number.
+	if channel != "email" {
+		return nil, zip.ErrBadRequest("an audience resolves email addresses; channel must be email")
+	}
+	a, err := s.State.store.GetAudience(ctx, org, audienceID)
+	if err != nil {
+		return nil, mapErr(err, "audience not found")
+	}
+	r, err := resolveAudience(ctx, org, a)
+	if err != nil {
+		return nil, mapErr(err, "")
+	}
+	return r.addresses, nil
+}
+
+// enroll adds one contact or a whole audience to a sequence and schedules the
+// first step for each. An enrollment is only accepted for an ACTIVE sequence (a
+// draft sends nothing). Enrolling is all this does: the message itself is sent
+// later by the drip engine, through the suppression gate, so an opted-out
+// customer can be enrolled here and still never be mailed.
 func enroll(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
@@ -594,17 +650,17 @@ func enroll(s *cloud.Service[state], c *zip.Ctx) error {
 	if seq.Status != "active" {
 		return zip.ErrBadRequest("sequence must be active to enroll")
 	}
-	var body Enrollment
+	var body EnrollInput
 	if err := c.Bind(&body); err != nil {
 		return err
-	}
-	addr := normAddr(body.Address)
-	if addr == "" {
-		return zip.ErrBadRequest("address is required")
 	}
 	channel, okCh := normChannel(body.Channel)
 	if !okCh {
 		return zip.ErrBadRequest("unknown channel")
+	}
+	addrs, err := recipients(c.Context(), s, org, channel, body)
+	if err != nil {
+		return err
 	}
 	first, hasFirst, err := s.State.store.GetStep(c.Context(), org, seqID, 0)
 	if err != nil {
@@ -617,21 +673,31 @@ func enroll(s *cloud.Service[state], c *zip.Ctx) error {
 	} else {
 		status = enrollCompleted // nothing to send
 	}
-	id, err := genID("enr")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	e, err := s.State.store.Enroll(c.Context(), Enrollment{
-		ID: id, Org: org, SequenceID: seqID, Address: addr, Channel: channel,
-		CurrentStep: 0, Status: status, NextRunAt: nextRun, EnrolledAt: now, UpdatedAt: now,
-	})
-	if err != nil {
-		if errors.Is(err, errConflict) {
-			return zip.ErrConflict("address already enrolled in this sequence")
+
+	out := EnrollResult{Resolved: len(addrs)}
+	for _, addr := range addrs {
+		id, err := genID("enr")
+		if err != nil {
+			return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 		}
-		return zip.Errorf(http.StatusInternalServerError, "enroll: %v", err)
+		e, err := s.State.store.Enroll(c.Context(), Enrollment{
+			ID: id, Org: org, SequenceID: seqID, Address: addr, Channel: channel,
+			CurrentStep: 0, Status: status, NextRunAt: nextRun, EnrolledAt: now, UpdatedAt: now,
+		})
+		switch {
+		case errors.Is(err, errConflict):
+			out.AlreadyEnrolled++
+		case err != nil:
+			return zip.Errorf(http.StatusInternalServerError, "enroll: %v", err)
+		default:
+			out.Enrolled++
+			out.EnrollmentID = e.ID
+		}
 	}
-	return c.JSON(http.StatusCreated, e)
+	if len(addrs) != 1 {
+		out.EnrollmentID = ""
+	}
+	return c.JSON(http.StatusCreated, out)
 }
 
 func listEnrollments(s *cloud.Service[state], c *zip.Ctx) error {
