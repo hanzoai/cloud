@@ -101,6 +101,7 @@ var frozen = []struct {
 	{"entitlements", false, true, false},    // was order 139
 	{"exec", false, false, false},           // was order 140
 	{"websearch", false, false, false},      // was order 141
+	{"crawl", false, false, false},          // new: /v1/crawl, in-process fetch+extract (also backs websearch's /scrape)
 	{"index", true, true, false},            // new: in-binary full-text index (Meilisearch dialect), after websearch
 	{"world", false, true, false},           // was order 142
 	{"runtime", false, false, false},        // was order 143; was "bot" until the transport was named for what it is
