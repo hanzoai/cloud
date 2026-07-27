@@ -1043,6 +1043,8 @@ github.com/hanzoai/captable v1.0.0 h1:utXPsOaPL+QV0rJaoNDFHvWFv7etf2kfm1bsFh6JRD
 github.com/hanzoai/captable v1.0.0/go.mod h1:czdMnzEvb8FWNKCzmh+z8PmwYeQp4MGyTPgo+Q5O+mk=
 github.com/hanzoai/commerce v1.49.24 h1:JtS6we7E6amB7C4elqZ/OXUcXGBo0S1uzN9X8J/rDJs=
 github.com/hanzoai/commerce v1.49.24/go.mod h1:0E+PK5bnwGF5y+HD+ZzqUWSpYIFvmoCdCibBIy0uWQA=
+github.com/hanzoai/commerce v1.49.25 h1:iPD33VF//7pMscTW3u1W0sL2ssNJSOuEGq514zjgtm8=
+github.com/hanzoai/commerce v1.49.25/go.mod h1:Bf3GqSiOwReC3vzK9Auqn4W5FfLQcwuAnb67Iv0mu4M=
 github.com/hanzoai/csqlite v0.1.0 h1:suwC3dh0INlfP/U0Es6cDf6JNQ+2+GVLLATPWCUux6k=
 github.com/hanzoai/csqlite v0.1.0/go.mod h1:H31a/O6VXuklR9UBkgY++bmAK5uzVfXPqU0F6P9Wsos=
 github.com/hanzoai/dashscopego v0.6.0 h1:sLUepwcnVajaDgzlgfuJWkZblBg9UIalkpFUjXHx0Fg=
@@ -1409,6 +1411,8 @@ github.com/luxfi/concurrent v0.1.1 h1:LkAmNXybOsAm97nFILqMDBp/YLgleuLmyGomFT7YNx
 github.com/luxfi/concurrent v0.1.1/go.mod h1:GlkfiJtPBpatNxvROf7hkPi4gsnmdHGmqhDnVWFrkZE=
 github.com/luxfi/consensus v1.36.9 h1:un4iRecrXQqePGEtVNJO4uc76n4GhxOeq+YAaoQB0TE=
 github.com/luxfi/consensus v1.36.9/go.mod h1:iwlx11D7BRdEaUqyUvueAe2Fit1K1k26avBK2eLYdnc=
+github.com/luxfi/consensus v1.36.11 h1:cc+O6TnvDNzCljR1E73SZ9I2ETQU3nE5UK8xzAoQdUE=
+github.com/luxfi/consensus v1.36.11/go.mod h1:mCtA6k31FVW/H6rsYQ7V8VvS198WsFS8oFo/z3IMI+A=
 github.com/luxfi/constants v1.6.2 h1:pXHdKIFbfE9qX4xOjq2LxYvagNhhNvspUVEbPcIEKfA=
 github.com/luxfi/constants v1.6.2/go.mod h1:r0oH8C/+r/XFYBq1AJxt6zWRKKRKgDzrEMop/CCs9rI=
 github.com/luxfi/container v0.2.1 h1:MTnfKXzS5+oxV5jKZerdOxSA6iMPaQI9/FWGufizzaw=
