@@ -1281,7 +1281,7 @@ func normalizeLogin(login string) string { return strings.ToLower(strings.TrimSp
 // clients/admin's ok() and clients/affiliates' adminOK. The customer /v1/authors
 // surface stays bare JSON (read via the /cloud proxy + restGet).
 func adminOK(c *zip.Ctx, data any) error {
-	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "msg": "", "data": data})
+	return cloud.OK(c, data)
 }
 
 // orgSubject is the billing subject commerce keys an org's wallet on — the bare org
