@@ -23,9 +23,9 @@ package admin
 // (datastore.Query), no second connection.
 //
 // Signals, each from its canonical table in the one datastore:
-//   - LLM generations → langfuse.observations : generations, cost (USD), latency
+//   - LLM generations → o11y_ai.observations : generations, cost (USD), latency
 //                                                (fleet-wide; honest-empty until the
-//                                                Langfuse ingest lands rows)
+//                                                O11yAI ingest lands rows)
 //   - Per-model usage → hanzo.cloud_usage      : requests, tokens, cost per model
 //                                                (the live usage ledger the ai gateway
 //                                                writes — populated today)
@@ -52,7 +52,7 @@ package admin
 // INDEPENDENTLY — a table that is absent or a column that differs contributes its
 // zero-value (the enclosing `if err == nil`), never a failure, so the board always
 // renders what the datastore actually holds. admin READS only; it owns and creates
-// NO table. Money from cloud_usage is USD cents, from langfuse is USD; latency is
+// NO table. Money from cloud_usage is USD cents, from o11y_ai is USD; latency is
 // milliseconds; time bounds are POSITIONAL parameters (never interpolated), and the
 // bucket interval is a server-side constant — injection-safe.
 
@@ -67,11 +67,11 @@ import (
 )
 
 // Fully-qualified datastore tables. admin only READS these — the ai gateway owns
-// hanzo.cloud_usage, Langfuse owns langfuse.observations, and the eval telemetry
+// hanzo.cloud_usage, O11yAI owns o11y_ai.observations, and the eval telemetry
 // store (clients/eval) owns hanzo.eval_traces / hanzo.eval_scores.
 const (
 	aimUsageTable  = "hanzo.cloud_usage"
-	aimLangfuseObs = "langfuse.observations"
+	aimO11yAIObs = "o11y_ai.observations"
 	aimEvalTraces  = "hanzo.eval_traces"
 	aimEvalScores  = "hanzo.eval_scores"
 	aimTopN        = 12
@@ -82,19 +82,19 @@ type aiMetrics struct {
 	Range          string           `json:"range"`
 	Start          string           `json:"start"`
 	End            string           `json:"end"`
-	Langfuse       aimLangfuse      `json:"langfuse"`
+	O11yAI       aimO11yAI      `json:"o11yAi"`
 	Usage          aimUsage         `json:"usage"`
 	Evals          aimEvals         `json:"evals"`
 	TopModels      []aimModelStat   `json:"topModels"`      // cloud_usage per-model (populated today)
-	LangfuseModels []aimLfModelStat `json:"langfuseModels"` // langfuse per-model (honest-empty today)
+	O11yAIModels []aimLfModelStat `json:"o11yAiModels"` // o11y_ai per-model (honest-empty today)
 	ScoreNames     []aimScoreStat   `json:"scoreNames"`     // eval_scores per score-name
 	EvalRuns       []aimRunStat     `json:"evalRuns"`       // recent eval runs (progress)
 	ScoreSeries    []aimScorePoint  `json:"scoreSeries"`    // avg eval score over time (progress trend)
 }
 
-// aimLangfuse is the fleet-wide Langfuse generation rollup (honest-empty today).
-// Cost is USD (Langfuse's native unit); latency is milliseconds (end_time-start_time).
-type aimLangfuse struct {
+// aimO11yAI is the fleet-wide O11yAI generation rollup (honest-empty today).
+// Cost is USD (O11yAI's native unit); latency is milliseconds (end_time-start_time).
+type aimO11yAI struct {
 	Generations  int64   `json:"generations"`
 	CostUsd      float64 `json:"costUsd"`
 	LatencyMsAvg float64 `json:"latencyMsAvg"`
@@ -132,7 +132,7 @@ type aimModelStat struct {
 	CostCents int64  `json:"costCents"`
 }
 
-// aimLfModelStat is one row of the per-model Langfuse leaderboard (honest-empty today).
+// aimLfModelStat is one row of the per-model O11yAI leaderboard (honest-empty today).
 type aimLfModelStat struct {
 	Model       string  `json:"model"`
 	Generations int64   `json:"generations"`
@@ -178,7 +178,7 @@ func aimetrics(s *cloud.Service[core.State], c *zip.Ctx) error {
 		Start:          since.Format(time.RFC3339),
 		End:            time.Now().UTC().Format(time.RFC3339),
 		TopModels:      []aimModelStat{},
-		LangfuseModels: []aimLfModelStat{},
+		O11yAIModels: []aimLfModelStat{},
 		ScoreNames:     []aimScoreStat{},
 		EvalRuns:       []aimRunStat{},
 		ScoreSeries:    []aimScorePoint{},
@@ -190,25 +190,25 @@ func aimetrics(s *cloud.Service[core.State], c *zip.Ctx) error {
 		return core.OK(c, payload)
 	}
 
-	sinceTS := chTS(since) // DateTime literal — cloud_usage.timestamp, langfuse.start_time, eval_*.ts
+	sinceTS := chTS(since) // DateTime literal — cloud_usage.timestamp, o11y_ai.start_time, eval_*.ts
 	interval := o11yBucket(rangeLabel)
 
-	// ── Langfuse generations (fleet) — honest-empty until ingest lands rows ──
-	if rows, err := datastore.Query(ctx, aimLangfuseTotalsSQL(), sinceTS); err == nil {
+	// ── O11yAI generations (fleet) — honest-empty until ingest lands rows ──
+	if rows, err := datastore.Query(ctx, aimO11yAITotalsSQL(), sinceTS); err == nil {
 		r := firstRowOr(rows)
-		payload.Langfuse.Generations = chInt64(r["gens"])
-		payload.Langfuse.CostUsd = chFloat64(r["cost"])
+		payload.O11yAI.Generations = chInt64(r["gens"])
+		payload.O11yAI.CostUsd = chFloat64(r["cost"])
 	}
-	// Langfuse latency (separate query so a Nullable end_time / column mismatch never
+	// O11yAI latency (separate query so a Nullable end_time / column mismatch never
 	// zeroes the proven generations+cost number above).
-	if rows, err := datastore.Query(ctx, aimLangfuseLatencySQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, aimO11yAILatencySQL(), sinceTS); err == nil {
 		r := firstRowOr(rows)
-		payload.Langfuse.LatencyMsAvg = chFloat64(r["lat_avg"])
-		payload.Langfuse.LatencyMsP95 = chFloat64(r["lat_p95"])
+		payload.O11yAI.LatencyMsAvg = chFloat64(r["lat_avg"])
+		payload.O11yAI.LatencyMsP95 = chFloat64(r["lat_p95"])
 	}
-	// Langfuse per-model.
-	if rows, err := datastore.Query(ctx, aimLangfuseModelsSQL(), sinceTS); err == nil {
-		payload.LangfuseModels = lfModelsFromRows(rows)
+	// O11yAI per-model.
+	if rows, err := datastore.Query(ctx, aimO11yAIModelsSQL(), sinceTS); err == nil {
+		payload.O11yAIModels = lfModelsFromRows(rows)
 	}
 
 	// ── Per-model usage (fleet) from the live cloud_usage ledger ──
@@ -241,20 +241,20 @@ func aimetrics(s *cloud.Service[core.State], c *zip.Ctx) error {
 
 // ── pure SQL builders (static SQL + one positional time bound; unit-tested) ──
 
-func aimLangfuseTotalsSQL() string {
-	return "SELECT count() AS gens, toFloat64(sum(total_cost)) AS cost FROM " + aimLangfuseObs +
+func aimO11yAITotalsSQL() string {
+	return "SELECT count() AS gens, toFloat64(sum(total_cost)) AS cost FROM " + aimO11yAIObs +
 		" WHERE type = 'GENERATION' AND start_time >= ?"
 }
 
-func aimLangfuseLatencySQL() string {
+func aimO11yAILatencySQL() string {
 	lat := "(toUnixTimestamp64Milli(end_time) - toUnixTimestamp64Milli(start_time))"
 	return "SELECT round(avg(" + lat + "), 2) AS lat_avg, round(quantile(0.95)(" + lat + "), 2) AS lat_p95 " +
-		"FROM " + aimLangfuseObs + " WHERE type = 'GENERATION' AND start_time >= ? AND end_time > start_time"
+		"FROM " + aimO11yAIObs + " WHERE type = 'GENERATION' AND start_time >= ? AND end_time > start_time"
 }
 
-func aimLangfuseModelsSQL() string {
+func aimO11yAIModelsSQL() string {
 	return "SELECT provided_model_name AS model, count() AS gens, toFloat64(sum(total_cost)) AS cost " +
-		"FROM " + aimLangfuseObs + " WHERE type = 'GENERATION' AND start_time >= ? AND provided_model_name != '' " +
+		"FROM " + aimO11yAIObs + " WHERE type = 'GENERATION' AND start_time >= ? AND provided_model_name != '' " +
 		"GROUP BY model ORDER BY gens DESC LIMIT " + strconv.Itoa(aimTopN)
 }
 
