@@ -209,7 +209,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return searchKeyed(c)
 	})
 
-	scrape := zip.AdaptNetHTTPFunc(scrapeHandler)
+	scrape := zip.AdaptNetHTTP(http.HandlerFunc(scrapeHandler))
 	// Firecrawl builds {apiUrl}/{version}/scrape; pin firecrawlVersion:v1 so the
 	// client POSTs /v1/websearch/v1/scrape. Also accept the bare /scrape.
 	g.Post("/v1/scrape", scrape)

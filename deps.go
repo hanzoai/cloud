@@ -44,6 +44,13 @@ type Deps struct {
 	// bypasses billing (every env bills against its own commerce ledger).
 	Env string
 
+	// Self is THIS process's stable id — the StatefulSet ordinal (CLOUD_POD_NAME /
+	// POD_NAME) or the OS hostname. It is the SAME id the durability membership
+	// elects on (selfID), so a status a subsystem reports names the replica the ring
+	// already knows by that name. Any read that is one replica's answer rather than
+	// the fleet's must say WHICH replica, or "restarts: 3" is unactionable.
+	Self string
+
 	// Domain is the deployment's primary domain (e.g. "api.hanzo.ai",
 	// "api.osage.cloud"). Subsystems use this to scope URLs in responses.
 	Domain string
