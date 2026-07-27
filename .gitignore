@@ -44,3 +44,7 @@ Thumbs.db
 .claude/
 .worktrees/
 native/flags/target
+
+# Artifacts from treating an in-memory DSN as a filename (see cek.inMemory).
+:memory:
+:memory:.*
