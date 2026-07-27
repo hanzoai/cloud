@@ -129,6 +129,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// The front's workspace switcher polls this statistics endpoint on the
 	// transactor base (LoginEndpoint ws→http + /api/v1/statistics). Static route —
 	// never captured by the :token segment below.
+	//
+	// Canon is the api.* host + /v1/ with no nested /api/vN. The clean path is the
+	// canonical one new callers use; the /api/v1/ path stays as a forward-compatible
+	// alias for the current transactor front until it repoints (no outage, no rename
+	// in place). Both resolve to the SAME handler.
+	tg.Get("/transactor/statistics", guard(trans.statistics))
 	tg.Get("/transactor/api/v1/statistics", guard(trans.statistics))
 
 	// The transactor data-plane WebSocket. The :token segment is a JWT (a single
