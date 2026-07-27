@@ -144,7 +144,7 @@ func TestDedicated_SQLEngineAssemblesDSN(t *testing.T) {
 // TestDedicated_KVEngineAssemblesDSN proves the kv add-on materializes a valkey
 // Datastore CR that loads a per-instance requirepass from a MOUNTED config
 // Secret (the kv-server binary reads no password from env) and returns a
-// redis://default:… DSN — never an "admin" user that would fail AUTH.
+// kv://default:… DSN — never an "admin" user that would fail AUTH.
 func TestDedicated_KVEngineAssemblesDSN(t *testing.T) {
 	orch := newFakeOrch()
 	s := newDedicatedService(t, orch)
@@ -162,7 +162,7 @@ func TestDedicated_KVEngineAssemblesDSN(t *testing.T) {
 	if cr.Port != 6379 || cr.Username != "default" {
 		t.Fatalf("kv endpoint port=%d user=%q, want 6379/default", cr.Port, cr.Username)
 	}
-	if cr.ConnectionString != "redis://default:"+cr.Password+"@"+host+":6379" {
+	if cr.ConnectionString != "kv://default:"+cr.Password+"@"+host+":6379" {
 		t.Fatalf("dsn %q not the expected redis default-user DSN", cr.ConnectionString)
 	}
 

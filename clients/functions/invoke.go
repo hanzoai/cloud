@@ -181,7 +181,7 @@ func invoke(s *cloud.Service[state], c *zip.Ctx) error {
 	// the post-success debit; fee==0 or unconfigured billing makes this a no-op.
 	fee := cloud.ResourceFeeCents(invokeFeeEnvPrefix, "invoke")
 	project, projectValidated := principal.ValidatedProject(c)
-	if err := s.Bill.Gate(c.Context(), principal.HomeOrg(c), project, projectValidated, "invoke", fee); err != nil {
+	if err := s.Bill.Gate(c.Context(), principal.Ledger(c), project, projectValidated, "invoke", fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 
@@ -232,9 +232,9 @@ func invoke(s *cloud.Service[state], c *zip.Ctx) error {
 	// Either is independently free (fee 0 → no-op), so an operator can bill by
 	// request alone, compute alone, or both.
 	if runErr == nil {
-		s.Bill.Meter(principal.HomeOrg(c), project, "invoke", fee, c.RequestID(), cloud.ClientIP(c))
+		s.Bill.Meter(principal.Ledger(c), project, "invoke", fee, c.RequestID(), cloud.ClientIP(c))
 		gbSecCents := gbSecondsCents(dur, memLimitMB(f.MemoryLimit), cloud.ResourceFeeCents(gbSecFeeEnvPrefix, "gbsec"))
-		s.Bill.MeterUsage(principal.HomeOrg(c), "gbsec", metering.Usage{
+		s.Bill.MeterUsage(principal.Ledger(c), "gbsec", metering.Usage{
 			Model:       "gbsec", // the billed unit: GB-seconds of compute.
 			AmountCents: gbSecCents,
 			Project:     project,

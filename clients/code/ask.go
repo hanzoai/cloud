@@ -26,7 +26,7 @@ type aiSynth struct {
 
 func newSynth(ai cloud.AIClient, model string) *aiSynth {
 	if model == "" {
-		model = "deepseek-v4-flash"
+		model = cloud.DefaultModel
 	}
 	return &aiSynth{ai: ai, model: model}
 }
