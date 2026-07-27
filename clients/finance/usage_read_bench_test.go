@@ -10,7 +10,7 @@ import (
 )
 
 // BenchmarkListUsage measures the co-resident usage read that replaced the
-// commerceinproc self-dispatch (BUG 2): a single per-org SQLite query over the
+// commerce-transport self-dispatch (BUG 2): a single per-org SQLite query over the
 // finance ledger. Seeds N usage debits, then reads them back — the exact path
 // GET /v1/billing/usage now takes co-resident.
 func BenchmarkListUsage(b *testing.B) {
