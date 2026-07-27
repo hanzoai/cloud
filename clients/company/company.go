@@ -106,6 +106,11 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/company", cloud.Handle(s, begin))
 	app.Get("/v1/company", cloud.Handle(s, get))
 	g := app.Group("/v1/company")
+	// The platform's own book — SuperAdmin operations, cross-tenant, read-only.
+	// Registered before the tenant edges so the static paths are unambiguous.
+	g.Get("/register", cloud.Handle(s, registerList))
+	g.Get("/register/summary", cloud.Handle(s, registerSummary))
+	g.Get("/review", cloud.Handle(s, registerReview))
 	g.Put("/structure", cloud.Handle(s, setStructure))
 	g.Post("/founders", cloud.Handle(s, setFounders))
 	g.Post("/kyc", cloud.Handle(s, startKYC))
