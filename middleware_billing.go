@@ -307,4 +307,5 @@ var selfMeteredPrefixes = []string{
 	"/v1/mcp/",       // tool dispatch meters per-tool downstream.
 	"/v1/functions/", // serverless invoke self-meters (product "functions").
 	"/v1/s3/",        // object-storage data plane self-meters per-op (product "s3").
+	"/v1/translate",  // HIP-0516: quality bills through the model plane's token meter, bulk through its own per-character ResourceMeter.
 }
