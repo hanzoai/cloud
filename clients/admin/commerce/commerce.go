@@ -33,7 +33,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/clients/admin/money"
-	"github.com/hanzoai/cloud/clients/commerceinproc"
+	"github.com/hanzoai/cloud/clients/commerce/transport"
 )
 
 // errUnconfigured marks a write (Deposit) attempted against an unwired commerce.
@@ -47,7 +47,7 @@ type Client struct {
 }
 
 // New builds a commerce client for base + admin S2S token. The HTTP client uses the
-// commerceinproc self-routing transport: when commerce is CO-RESIDENT (base is the
+// commerce transport self-routing dispatch: when commerce is CO-RESIDENT (base is the
 // commerce.inproc placeholder) it dispatches in-process — a plain http.Client would
 // instead DNS-resolve "commerce.inproc" and fail "no such host", silently breaking the
 // admin cost/finance god-view. For a split-deploy (a real commerce URL) it falls
@@ -56,7 +56,7 @@ func New(base, token string) *Client {
 	return &Client{
 		base:  strings.TrimRight(strings.TrimSpace(base), "/"),
 		token: strings.TrimSpace(token),
-		http:  commerceinproc.Client(15 * time.Second),
+		http:  transport.Client(15 * time.Second),
 	}
 }
 

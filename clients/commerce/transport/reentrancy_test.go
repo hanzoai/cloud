@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package commerceinproc
+package transport
 
 import (
 	"io"
