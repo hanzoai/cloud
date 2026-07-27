@@ -250,9 +250,27 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 				}
 				req.Header.Set("X-Org-Id", effOrg)
 			case owner != "":
-				// Any other principal: pinned to their own org, never SuperAdmin.
+				// Any other principal acts in the org it SELECTED, provided the
+				// validated token says it is a member of that org — the `orgs` claim
+				// (IAM's signed membership set, home first). The org switcher is the
+				// product: a person belongs to several orgs, picks one, and THAT org
+				// is the payer of record (principal.BillingOrg reads this header). So
+				// the selection has to survive the trust boundary, and membership is
+				// the only thing that makes surviving safe.
+				//
+				// It is not a widening: the set is signed by IAM, so a caller can only
+				// ever land on an org it already belongs to, and a claim-less token (a
+				// legacy JWT, an hk-/sk- key, a client_credentials machine — IAM never
+				// mints `orgs` for one) has an EMPTY set and stays pinned to home. A
+				// selection outside the set is DISCARDED, not honored and not refused:
+				// the request continues in the caller's own org, so a stale localStorage
+				// selection after a membership is revoked reads the caller's own data
+				// and bills the caller's own ledger — never someone else's.
 				effOrg = owner
-				req.Header.Set("X-Org-Id", owner)
+				if isMember(claims.Orgs, cliOrg) {
+					effOrg = cliOrg
+				}
+				req.Header.Set("X-Org-Id", effOrg)
 			}
 			// X-User-IsOrgAdmin marks a validated principal that is an admin OF ITS OWN
 			// ORG — the IAM `isAdmin` bit (claims.IsAdmin). It is minted on the SAME

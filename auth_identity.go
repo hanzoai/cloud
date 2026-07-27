@@ -217,6 +217,29 @@ func isMachinePrincipal(claims *idClaims) bool {
 	return claims.Type == "application" || isKMSMachinePrincipal(claims)
 }
 
+// isMember reports whether org is in the token's signed membership set — the
+// `orgs` claim IAM mints for a USER token, home org first. It is the ONE test that
+// turns a client's org SELECTION into an effective org (SanitizeIdentity), and
+// therefore into the ledger that pays (principal.BillingOrg).
+//
+// The comparison is VERBATIM, no folding, for the same reason the owner claim is
+// taken verbatim: "acme" and "ACME" are DISTINCT orgs in IAM, and a fold would let
+// a member of one select the other. An empty org is never a member, so an absent
+// selection leaves the caller in their home org. An empty set (a legacy token, an
+// opaque key, a machine principal — IAM never mints `orgs` for a client_credentials
+// token) admits nothing, which is exactly the pre-claim behavior.
+func isMember(orgs []model.OrgRef, org string) bool {
+	if org == "" {
+		return false
+	}
+	for _, o := range orgs {
+		if o.Org == org {
+			return true
+		}
+	}
+	return false
+}
+
 // validate parses raw, verifies its signature against the JWKS, and enforces
 // issuer/audience/expiry. Returns the claims on success, an error otherwise.
 func (v *identityValidator) validate(raw string) (*idClaims, error) {
