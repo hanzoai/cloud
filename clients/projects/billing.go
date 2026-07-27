@@ -33,7 +33,7 @@ const (
 // A fee of 0 (operator-configured free tier) is un-gated: Gate returns nil. The
 // caller renders a non-nil error via cloud.DenyResource.
 //
-// The gate keys on principal.HomeOrg(c) (the resolved CALLER org, hardened against a
+// The gate keys on principal.Ledger(c) (the resolved CALLER org, hardened against a
 // masquerading admin) and threads the caller's validated project sub-scope
 // (principal.ValidatedProject) so a forged X-Project-Id can neither hard-stop nor
 // evade a project-scoped hosting cap — the SAME anti-spoof gate the functions/s3
@@ -41,7 +41,7 @@ const (
 func gateHosting(s *cloud.Service[state], c *zip.Ctx) (fee int64, err error) {
 	fee = cloud.ResourceFeeCents(deployFeeEnvPrefix, deployKind)
 	project, projectValidated := principal.ValidatedProject(c)
-	return fee, s.State.bill.Gate(c.Context(), principal.HomeOrg(c), project, projectValidated, deployKind, fee)
+	return fee, s.State.bill.Gate(c.Context(), principal.Ledger(c), project, projectValidated, deployKind, fee)
 }
 
 // meterDeploy debits the caller's org ledger ONCE for a successful deploy. It is
@@ -50,5 +50,5 @@ func gateHosting(s *cloud.Service[state], c *zip.Ctx) (fee int64, err error) {
 // flipped the site live — never on a failed deploy. It attributes spend to the
 // caller's validated project sub-scope so a per-project cap sums correctly.
 func meterDeploy(s *cloud.Service[state], c *zip.Ctx, fee int64) {
-	s.State.bill.Meter(principal.HomeOrg(c), principal.Project(c), deployKind, fee, c.RequestID(), cloud.ClientIP(c))
+	s.State.bill.Meter(principal.Ledger(c), principal.Project(c), deployKind, fee, c.RequestID(), cloud.ClientIP(c))
 }

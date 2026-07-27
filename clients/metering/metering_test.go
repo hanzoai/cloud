@@ -82,7 +82,7 @@ func TestAuthorize_Allows_WhenAvailablePositive(t *testing.T) {
 	defer srv.Close()
 
 	c := newClient(t, srv, metering.Config{})
-	if err := c.Authorize(context.Background(), metering.AuthInput{User: "hanzo/alice"}); err != nil {
+	if err := c.Authorize(context.Background(), metering.AuthInput{User: "hanzo/alice", Org: "hanzo"}); err != nil {
 		t.Fatalf("Authorize allowed should be nil, got %v", err)
 	}
 
@@ -113,7 +113,7 @@ func TestAuthorize_Denies_WhenAvailableZero(t *testing.T) {
 	defer srv.Close()
 
 	c := newClient(t, srv, metering.Config{})
-	err := c.Authorize(context.Background(), metering.AuthInput{User: "hanzo/alice"})
+	err := c.Authorize(context.Background(), metering.AuthInput{User: "hanzo/alice", Org: "hanzo"})
 	if err != metering.ErrInsufficientBalance {
 		t.Fatalf("want ErrInsufficientBalance, got %v", err)
 	}
@@ -125,7 +125,7 @@ func TestAuthorize_FailClosed_OnCommerceError(t *testing.T) {
 	defer srv.Close()
 
 	c := newClient(t, srv, metering.Config{})
-	err := c.Authorize(context.Background(), metering.AuthInput{User: "hanzo/alice"})
+	err := c.Authorize(context.Background(), metering.AuthInput{User: "hanzo/alice", Org: "hanzo"})
 	if err == nil {
 		t.Fatal("fail-closed: commerce 500 must deny, got nil")
 	}
@@ -140,7 +140,7 @@ func TestAuthorize_FailOpen_OnCommerceError(t *testing.T) {
 	defer srv.Close()
 
 	c := newClient(t, srv, metering.Config{FailOpen: true})
-	if err := c.Authorize(context.Background(), metering.AuthInput{User: "hanzo/alice"}); err != nil {
+	if err := c.Authorize(context.Background(), metering.AuthInput{User: "hanzo/alice", Org: "hanzo"}); err != nil {
 		t.Fatalf("fail-open: commerce down must allow, got %v", err)
 	}
 }
@@ -153,7 +153,7 @@ func TestAuthorize_NotConfigured_Allows(t *testing.T) {
 	if c.Enabled() {
 		t.Fatal("client with no BaseURL should report Enabled()=false")
 	}
-	if err := c.Authorize(context.Background(), metering.AuthInput{User: "hanzo/alice"}); err != nil {
+	if err := c.Authorize(context.Background(), metering.AuthInput{User: "hanzo/alice", Org: "hanzo"}); err != nil {
 		t.Fatalf("not-configured Authorize must allow, got %v", err)
 	}
 }
@@ -165,7 +165,7 @@ func TestAuthorize_TierAware_UsesEffectiveAvailable(t *testing.T) {
 	defer srv.Close()
 
 	c := newClient(t, srv, metering.Config{TierAware: true})
-	if err := c.Authorize(context.Background(), metering.AuthInput{User: "hanzo/alice"}); err != nil {
+	if err := c.Authorize(context.Background(), metering.AuthInput{User: "hanzo/alice", Org: "hanzo"}); err != nil {
 		t.Fatalf("tier-aware allow (included allotment) should be nil, got %v", err)
 	}
 	if fc.path != "/v1/billing/tier" {
@@ -182,7 +182,7 @@ func TestAuthorize_TierAware_DeniesWhenEffectiveZero(t *testing.T) {
 	defer srv.Close()
 
 	c := newClient(t, srv, metering.Config{TierAware: true})
-	if err := c.Authorize(context.Background(), metering.AuthInput{User: "hanzo/alice"}); err != metering.ErrInsufficientBalance {
+	if err := c.Authorize(context.Background(), metering.AuthInput{User: "hanzo/alice", Org: "hanzo"}); err != metering.ErrInsufficientBalance {
 		t.Fatalf("tier-aware exhausted must deny with ErrInsufficientBalance, got %v", err)
 	}
 }
@@ -193,7 +193,7 @@ func TestTestMode_SendsTestHeader(t *testing.T) {
 	defer srv.Close()
 
 	c := newClient(t, srv, metering.Config{Test: true})
-	if err := c.Authorize(context.Background(), metering.AuthInput{User: "meter-sandbox"}); err != nil {
+	if err := c.Authorize(context.Background(), metering.AuthInput{User: "meter-sandbox", Org: "hanzo"}); err != nil {
 		t.Fatalf("Authorize: %v", err)
 	}
 	if fc.testHdr != "true" {
@@ -207,7 +207,7 @@ func TestLiveMode_OmitsTestHeader(t *testing.T) {
 	defer srv.Close()
 
 	c := newClient(t, srv, metering.Config{}) // Test=false (production default)
-	if err := c.Authorize(context.Background(), metering.AuthInput{User: "hanzo/alice"}); err != nil {
+	if err := c.Authorize(context.Background(), metering.AuthInput{User: "hanzo/alice", Org: "hanzo"}); err != nil {
 		t.Fatalf("Authorize: %v", err)
 	}
 	if fc.testHdr != "" {
@@ -235,6 +235,7 @@ func TestRecord_PostsCanonicalPayload(t *testing.T) {
 	c := newClient(t, srv, metering.Config{})
 	res, err := c.Record(context.Background(), metering.Usage{
 		User:        "hanzo/alice",
+		Org:         "hanzo",
 		AmountCents: 250,
 		Provider:    "search",
 		RequestID:   "req-9",
@@ -297,7 +298,7 @@ func TestRecord_ZeroAmount_IsNoOp(t *testing.T) {
 	defer srv.Close()
 
 	c := newClient(t, srv, metering.Config{})
-	res, err := c.Record(context.Background(), metering.Usage{User: "hanzo/alice", AmountCents: 0})
+	res, err := c.Record(context.Background(), metering.Usage{User: "hanzo/alice", Org: "hanzo", AmountCents: 0})
 	if err != nil || res != nil {
 		t.Fatalf("zero-amount Record should be (nil,nil), got (%v,%v)", res, err)
 	}
@@ -308,7 +309,7 @@ func TestRecord_ZeroAmount_IsNoOp(t *testing.T) {
 
 func TestRecord_NotConfigured_IsNoOp(t *testing.T) {
 	c, _ := metering.New(metering.Config{})
-	res, err := c.Record(context.Background(), metering.Usage{User: "hanzo/alice", AmountCents: 100})
+	res, err := c.Record(context.Background(), metering.Usage{User: "hanzo/alice", Org: "hanzo", AmountCents: 100})
 	if err != nil || res != nil {
 		t.Fatalf("not-configured Record should be (nil,nil), got (%v,%v)", res, err)
 	}
@@ -373,7 +374,7 @@ func TestContractMatchesGateway(t *testing.T) {
 	defer srv.Close()
 
 	c := newClient(t, srv, metering.Config{})
-	_ = c.Authorize(context.Background(), metering.AuthInput{User: "hanzo/alice"})
+	_ = c.Authorize(context.Background(), metering.AuthInput{User: "hanzo/alice", Org: "hanzo"})
 
 	// Gateway: GET {base}/v1/billing/balance?user=hanzo%2Falice&currency=usd
 	if !strings.HasPrefix(gotURL, "/v1/billing/balance?") {
