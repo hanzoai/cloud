@@ -1,6 +1,6 @@
 module github.com/hanzoai/cloud
 
-go 1.26.4
+go 1.26.5
 
 // Dependencies will be added as subsystems are mounted per HIP-0106.
 
@@ -43,7 +43,7 @@ require (
 	github.com/zap-proto/fiber/v3 v3.2.1
 	github.com/zap-proto/go v1.3.0
 	github.com/zap-proto/md v0.1.0
-	github.com/zap-proto/zip v1.10.0
+	github.com/zap-proto/zip v1.16.0
 	go.opentelemetry.io/collector/component v1.54.0
 	go.opentelemetry.io/collector/confmap v1.54.0
 	go.opentelemetry.io/collector/confmap/provider/envprovider v1.50.0
@@ -104,7 +104,7 @@ require (
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
 	github.com/vultr/govultr/v3 v3.30.0 // indirect
-	github.com/zap-proto/http v0.3.0 // indirect
+	github.com/zap-proto/http v0.3.1 // indirect
 	github.com/zap-proto/zap2pb v0.2.0 // indirect
 	go.mongodb.org/mongo-driver v1.17.9 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0 // indirect
@@ -733,7 +733,7 @@ require (
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.5
 	github.com/hanzoai/metrics v1.110.2
-	github.com/hanzoai/o11y v1.5.32
+	github.com/hanzoai/o11y v1.5.33
 	github.com/hanzoai/thinking v0.1.1 // indirect
 	github.com/hanzoai/vfs v0.6.6
 	github.com/hanzoai/zen v1.4.4
