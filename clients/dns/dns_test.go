@@ -295,3 +295,58 @@ func TestDegenerateURLFailsClosed(t *testing.T) {
 		t.Fatalf("upstream reached %d time(s), want 0", up.hits)
 	}
 }
+
+// An API KEY caller is refused BY CLOUD, and the DNS plane is never touched.
+//
+// CallerBearer returns "" for pk-/sk-/hk- (middleware_identity: an API key is not a
+// JWT, and the OIDC-gated DNS plane cannot validate one). The relay used to set the
+// Authorization header only when that was non-empty, so an API-key request was
+// forwarded with NO credential at all and the caller received the DNS plane's own
+// {"code":"unauthorized","message":"missing Authorization header"} — an upstream
+// error that reads like the plane is down, when the real answer is that this
+// credential type cannot reach it. Verified against the live plane before fixing.
+//
+// Two properties matter here, and the upstream-hit assertion is the load-bearing
+// one: cloud must refuse a request it cannot authenticate rather than let an
+// upstream do it, because X-Org-Id is stamped from the validated org and a
+// headerless forward would arrive carrying a tenant claim with no proof of identity.
+func TestAPIKeyCallerIsRefusedAndNeverReachesUpstream(t *testing.T) {
+	for _, key := range []string{"hk-live-abc123", "sk-live-abc123", "pk-live-abc123"} {
+		t.Run(key[:3], func(t *testing.T) {
+			up := newStubDNS()
+			defer up.Close()
+			app := dnsApp(t, up.URL)
+
+			req := as(httptest.NewRequest(http.MethodGet, "/v1/dns/zones", nil), "orgA", "orgA/dave", key)
+			res, body := do(t, app, req)
+
+			if res.StatusCode != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want 401 — cloud must refuse a credential it cannot relay", res.StatusCode)
+			}
+			if up.hits != 0 {
+				t.Fatalf("upstream hits = %d, want 0 — an unauthenticatable request must not leave cloud", up.hits)
+			}
+			if !strings.Contains(body, "session bearer") {
+				t.Fatalf("body = %q, want an explanation naming the credential problem, not an opaque upstream 401", body)
+			}
+		})
+	}
+}
+
+// A session bearer still relays unchanged — the refusal above must not have closed
+// the door on the console, which is what this head exists to serve.
+func TestSessionBearerStillRelays(t *testing.T) {
+	up := newStubDNS()
+	defer up.Close()
+	app := dnsApp(t, up.URL)
+
+	req := as(httptest.NewRequest(http.MethodGet, "/v1/dns/zones", nil), "orgA", "orgA/dave", "eyJhbGciOiJSUzI1NiJ9.session")
+	res, _ := do(t, app, req)
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 — a real session bearer must still reach the plane", res.StatusCode)
+	}
+	if up.auth != "Bearer eyJhbGciOiJSUzI1NiJ9.session" {
+		t.Fatalf("upstream Authorization = %q, want the session bearer relayed unchanged", up.auth)
+	}
+}
