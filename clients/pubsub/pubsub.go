@@ -28,7 +28,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	psembed "github.com/hanzoai/pubsub/embed"
-	"github.com/zap-proto/zip"
 )
 
 // order 5: an infrastructure data plane that must bind before clients/kafka
@@ -41,7 +40,7 @@ var srv *psembed.Server
 
 // Mount starts the embedded PubSub server when CLOUD_PUBSUB_ENABLED is set,
 // binding NATS + JetStream in-process. Disabled by default (no-op).
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("pubsub.Mount: nil deps.Logger")
 	}

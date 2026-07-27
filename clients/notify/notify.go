@@ -89,9 +89,9 @@ type service struct {
 }
 
 // Mount registers the native /v1/notify/* send surface on app.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("notify.Mount: nil zip.App")
+		return fmt.Errorf("notify.Mount: nil app")
 	}
 	log := deps.Logger
 	if log != nil {

@@ -129,7 +129,7 @@ type state struct {
 // goroutine: it reads the per-org token in-process per request and proxies to
 // Cloudflare. The build closure captures deps to construct the "ai"-provider meter
 // (Base.Bill is provider "cloudflare"; Workers AI must bill under "ai").
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "cloudflare",
 		func(cloud.Base) (state, error) {
 			return state{aiBill: cloud.NewResourceMeter(deps, cloud.AIMeterProvider)}, nil
@@ -141,7 +141,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // authClient (validated-org gate + fail-closed per-org token) FIRST — reads require
 // a validated org, mutations additionally require org admin (authWrite) — so no
 // route is a softer target than another.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/cloudflare")
 
 	// Zones + Analytics (read) — enumerate the org's zones and read a zone's traffic

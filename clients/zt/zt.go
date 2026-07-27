@@ -49,7 +49,7 @@ type state struct {
 
 // Mount wires the networking surface onto app per HIP-0106 — one line over the
 // generic subsystem entrypoint.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "zero-trust", build, routes)
 }
 
@@ -70,7 +70,7 @@ func build(b cloud.Base) (state, error) {
 
 // routes is the ONE place the surface is wired. Static paths register before their
 // :param siblings so an id can never shadow a literal.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/networks", cloud.Handle(s, listNetworks))
 	app.Get("/v1/networks/:id", cloud.Handle(s, getNetwork))
 	app.Get("/v1/mesh/services", cloud.Handle(s, listMeshServices))

@@ -83,7 +83,7 @@ ORDER BY (image_digest, component_name, component_version, purl)`
 type state struct{}
 
 // Mount wires the SBOM surface onto app and bootstraps the global table.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "sbom", build, routes)
 }
 
@@ -109,7 +109,7 @@ func build(b cloud.Base) (state, error) {
 // routes registers the SBOM surface. Health is a static route registered BEFORE the
 // greedy resolve wildcard so it is never captured by it. Health is not JWT-gated
 // (liveness must be probe-able).
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/sbom")
 	g.Get("/health", cloud.Handle(s, health))
 	// Root route stays flat: Group("/v1/sbom").Post("") would register "/v1/sbom/".

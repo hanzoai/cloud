@@ -73,9 +73,9 @@ type prefsView struct {
 }
 
 // Mount registers the prefs surface on app per HIP-0106.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("prefs.Mount: nil zip.App")
+		return fmt.Errorf("prefs.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("prefs.Mount: nil deps.Logger")

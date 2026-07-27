@@ -32,12 +32,12 @@ import (
 // Benchmark is one canonical, versioned public test. `Native` marks harness support
 // today; the rest are adapter-pending on the same registry + provenance.
 type Benchmark struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	Axis    string `json:"axis"`
-	Items   int    `json:"items,omitempty"`
-	Native  bool   `json:"native"`
-	Source  string `json:"source"`
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Axis   string `json:"axis"`
+	Items  int    `json:"items,omitempty"`
+	Native bool   `json:"native"`
+	Source string `json:"source"`
 }
 
 // catalog is the top-14: the set every major provider reports, run under one
@@ -101,7 +101,7 @@ type state struct {
 }
 
 // Mount is the subsystem entrypoint (registered in apps.go).
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "benchmark", build, routes)
 }
 
@@ -140,9 +140,9 @@ func loadAttempts(dir string) []attempt {
 	return out
 }
 
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/benchmark")
-	g.Get("/catalog", cloud.Handle(s, getCatalog))       // the top-14 canonical set
+	g.Get("/catalog", cloud.Handle(s, getCatalog))         // the top-14 canonical set
 	g.Get("/leaderboard", cloud.Handle(s, getLeaderboard)) // per-model measured ∥ published
 	g.Get("/compare", cloud.Handle(s, getCompare))         // paired common-set (rescue/damage/McNemar)
 	g.Post("/runs", cloud.Handle(s, postRun))              // run a benchmark against a model/endpoint
@@ -157,9 +157,9 @@ func getCatalog(s *cloud.Service[state], c *zip.Ctx) error {
 type LeaderRow struct {
 	Model     string   `json:"model"`
 	Measured  *float64 `json:"measured"`  // hanzo-measured accuracy % (nil if unrun)
-	N         int      `json:"n"`          // coverage — NEVER compare across different n
-	Published *float64 `json:"published"`  // provider-claimed % (nil if none)
-	Gap       *float64 `json:"gap"`        // published − measured (the arena signal)
+	N         int      `json:"n"`         // coverage — NEVER compare across different n
+	Published *float64 `json:"published"` // provider-claimed % (nil if none)
+	Gap       *float64 `json:"gap"`       // published − measured (the arena signal)
 	Protocol  string   `json:"protocol,omitempty"`
 }
 

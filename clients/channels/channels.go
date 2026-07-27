@@ -16,7 +16,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/integrations"
-	"github.com/zap-proto/zip"
 )
 
 // state is the subsystem's mounted state: the ONE channels store.
@@ -30,9 +29,9 @@ type state struct {
 var mounted atomic.Pointer[cloud.Service[state]]
 
 // Mount wires /v1/channels/* onto app and registers the ingress consumer.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("channels.Mount: nil zip.App")
+		return fmt.Errorf("channels.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("channels.Mount: nil deps.Logger")

@@ -41,9 +41,9 @@ type service struct {
 }
 
 // Mount registers the /v1/bot/* surface on app per HIP-0106.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("runtime.Mount: nil zip.App")
+		return fmt.Errorf("runtime.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("runtime.Mount: nil deps.Logger")

@@ -168,9 +168,9 @@ func httpTrigger(f Function) triggerView {
 // Mount wires the functions surface onto app per HIP-0106. Complex flavour: it
 // holds a package-global (mounted) so Shutdown can close every per-org store, so
 // it constructs the Service value directly rather than via cloud.Mount.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("functions.Mount: nil zip.App")
+		return fmt.Errorf("functions.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("functions.Mount: nil deps.Logger")
@@ -193,7 +193,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // routes registers the functions surface. Static sub-routes before the :name
 // param route so a real function can never shadow
 // /metrics|/triggers|/deployments|/secrets.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Collection root stays flat: Group("/v1/functions").Get("") would register
 	// "/v1/functions/", not the bare collection path.
 	app.Get("/v1/functions", cloud.Handle(s, list))

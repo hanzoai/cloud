@@ -276,7 +276,7 @@ func waitlistModeRoute(c *zip.Ctx) error {
 // at /v1/flags/waitlist. Fail-safe: a registry error (e.g. cek master key not yet
 // injected) degrades to the in-memory seed switches — WaitlistModeForHost then
 // fail-opens. Mounts AFTER flags so the engine's platform-switch plane is installed first.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("admission.Mount: nil deps.Logger")
 	}

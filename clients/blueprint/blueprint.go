@@ -74,7 +74,7 @@ const composeName = "compose.yml"
 type state struct{}
 
 // Mount wires the blueprint surface and validates every embedded blueprint at boot.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	rates = rateCardFromEnv() // overlay operator rate-card knobs once, at mount
 	return cloud.Mount(app, deps, "blueprint", build, routes)
 }
@@ -106,7 +106,7 @@ func build(b cloud.Base) (state, error) {
 
 // routes registers the read surface. Health is registered before nothing greedy
 // (the paths are exact), and is not JWT-gated (liveness must be probe-able).
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/blueprint")
 	g.Get("/health", cloud.Handle(s, health))
 	g.Get("/sbom", cloud.Handle(s, sbomRead))

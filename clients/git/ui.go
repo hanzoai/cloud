@@ -47,7 +47,7 @@ import (
 // so a bare /:org/:repo can never shadow it there. They register AFTER the root
 // smart-HTTP routes (git.go), whose paths carry a distinct /info/refs |
 // /git-*-pack tail, so a 2-segment UI route and a clone route never collide.
-func uiRoutes(app *zip.App, s *cloud.Service[state]) {
+func uiRoutes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/git", cloud.Handle(s, uiHome))
 	app.Get("/git/explore", cloud.Handle(s, uiExplore))
 	app.Get("/git/:org/:repo", cloud.Handle(s, uiRepo))

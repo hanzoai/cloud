@@ -136,7 +136,7 @@ type state struct {
 }
 
 // Mount wires /v1/deploy/* onto app. Every handler gates on c.IsAdmin() first.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "deploy",
 		func(b cloud.Base) (state, error) { return build(b, newOAuth(deps)) }, routes)
 }
@@ -159,7 +159,7 @@ func build(b cloud.Base, o oauth) (state, error) {
 
 // routes registers the /v1/deploy/* surface. Every observing/mutating route is
 // SuperAdmin-gated; the health probe is public (real k8s reachability).
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Liveness — public (probe-able without a JWT).
 	app.Get("/v1/deploy/health", cloud.Handle(s, health))
 	// Sign-in — necessarily public: these three routes ARE how a browser gets an

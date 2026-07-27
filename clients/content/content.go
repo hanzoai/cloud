@@ -58,9 +58,9 @@ var mounted *cloud.Service[state]
 // Mount wires the content control-plane onto app. It is a "complex" mount (a package
 // global for the exported ops the connector calls), so it builds the Service value
 // directly per the cloud.Service convention.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("content.Mount: nil zip.App")
+		return fmt.Errorf("content.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("content.Mount: nil deps.Logger")
@@ -92,7 +92,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // routes registers the /v1/content/* surface. Static segments (lifecycle/board/
 // channels/generate/publish) never collide with the parameterised transition route
 // (which is three segments deep), so registration order is not load-bearing here.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/content")
 	g.Get("/lifecycle", cloud.Handle(s, getLifecycle))
 	g.Get("/board", cloud.Handle(s, getBoard))

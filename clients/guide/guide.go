@@ -46,9 +46,9 @@ var mounted *cloud.Service[state]
 
 // Mount wires /v1/guide/* onto app. Complex flavour (a package global for Shutdown
 // + a per-org OrgStore), so it constructs the Service value directly.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("guide.Mount: nil zip.App")
+		return fmt.Errorf("guide.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("guide.Mount: nil deps.Logger")
@@ -131,7 +131,7 @@ func seedBlueprints(ctx context.Context, store *BlueprintStore) (int, error) {
 	return count, nil
 }
 
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Overview stays flat: Group("/v1/guide").Get("") would register "/v1/guide/",
 	// not the bare surface path.
 	app.Get("/v1/guide", cloud.Handle(s, overview))

@@ -53,7 +53,7 @@ import (
 
 // mountFinance registers the six commerce-projected /v1/finance/* reads on app. Called
 // from Mount, so the finance surface ships with the billing surface (same commerceProxy).
-func mountFinance(s *cloud.Service[state], app *zip.App) {
+func mountFinance(s *cloud.Service[state], app cloud.Router) {
 	app.Get("/v1/finance/balance", cloud.Handle(s, financeBalance))                // prepaid available + holds + due
 	app.Get("/v1/finance/credits", cloud.Handle(s, financeCredits))                // credit grants (deposits)
 	app.Get("/v1/finance/usage", cloud.Handle(s, financeUsage))                    // metered spend over ?range=

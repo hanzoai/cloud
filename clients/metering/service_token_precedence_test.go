@@ -83,7 +83,7 @@ func TestInProcMeteringDispatch_ServiceTokenAuthPath(t *testing.T) {
 		}
 		return c.JSON(http.StatusOK, map[string]any{"user": c.Query("user"), "currency": "usd", "available": avail})
 	})
-	transport.SetApp(eng)
+	transport.SetApp(eng.Fiber())
 	t.Cleanup(func() { transport.SetHandler(nil) })
 
 	m, err := metering.New(metering.Config{

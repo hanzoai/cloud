@@ -111,9 +111,9 @@ var mounted *cloud.Service[state]
 // Mount wires /v1/automations/* onto app per HIP-0106. Complex flavour: it keeps a
 // package global (mounted) for Shutdown and the engine's run hooks, so it constructs
 // the Service value directly.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("automations.Mount: nil zip.App")
+		return fmt.Errorf("automations.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("automations.Mount: nil deps.Logger")
@@ -167,7 +167,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 // routes registers the automations surface: the connector catalog, flow CRUD +
 // versioning + lifecycle, run history, and the MCP endpoint.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/automations")
 	g.Get("/connectors", cloud.Handle(s, connectors))
 	// Back-compat alias: the pre-rename /pieces path stays valid (same handler, same

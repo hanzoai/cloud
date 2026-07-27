@@ -136,9 +136,9 @@ func nonNil(xs []string) []string {
 // Mount wires the prompts surface onto app per HIP-0106. Complex flavour: it
 // holds a package-global (mounted) so Shutdown can release the store, so it
 // constructs the Service value directly rather than via cloud.Mount.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("prompts.Mount: nil zip.App")
+		return fmt.Errorf("prompts.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("prompts.Mount: nil deps.Logger")
@@ -163,7 +163,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // routes registers the prompts surface. Static sub-routes are registered before
 // the :name param route so a real prompt can never shadow /metrics (and
 // "metrics"/"new" are reserved names).
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/prompts")
 	// Root routes stay flat: Group("/v1/prompts").<M>("") would register "/v1/prompts/".
 	app.Get("/v1/prompts", cloud.Handle(s, list))

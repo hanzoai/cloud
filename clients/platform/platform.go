@@ -88,9 +88,9 @@ type state struct {
 var mounted *cloud.Service[state]
 
 // Mount wires the /v1/platform surface onto app per HIP-0106.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("platform.Mount: nil zip.App")
+		return fmt.Errorf("platform.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("platform.Mount: nil deps.Logger")
@@ -164,7 +164,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // routes registers the /v1/platform surface on app. Extracted from Mount so
 // tests can mount the same routes over a Service with an injected (fake/nil) k8s
 // client — hermetic, never touching a real cluster.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	// projects
 	app.Get("/v1/platform/projects", cloud.Handle(s, listProjects))
 	app.Post("/v1/platform/projects", cloud.Handle(s, createProject))

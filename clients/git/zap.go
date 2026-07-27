@@ -49,7 +49,7 @@ import (
 // mountZAP registers git's ZAP procedure adapters. Called from routes(). The
 // procedures are ordinary /v1 routes; the shared /zap plane turns them into ZAP
 // procedures for the browser/service ZAP client.
-func mountZAP(app *zip.App, s *cloud.Service[state]) {
+func mountZAP(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/git")
 	g.Post("/zap/createRepo", cloud.Handle(s, zapCreate))
 	g.Post("/zap/listRepos", cloud.Handle(s, zapList))

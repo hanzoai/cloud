@@ -115,9 +115,9 @@ type stopView struct {
 }
 
 // Mount wires the bots surface onto app per HIP-0106.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("bots.Mount: nil zip.App")
+		return fmt.Errorf("bots.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("bots.Mount: nil deps.Logger")
@@ -133,7 +133,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 // routes registers the bots surface. The static /run literal and the :runId param
 // are resolved by specificity, so /v1/bots/run can never bind as a run id.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	// UNIFIED PAYWALL (server-side enforcement). To gate this group behind the
 	// caller's plan, prepend the middleware to the group:
 	//   g := app.Group("/v1/bots", entitlements.RequireProduct(deps.Commerce, "bot"))
