@@ -18,6 +18,7 @@ import (
 
 	gojose "github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
+	model "github.com/hanzoai/iam/pkg/model"
 	"github.com/zap-proto/zip"
 )
 
@@ -57,7 +58,21 @@ func signWith(t *testing.T, key *rsa.PrivateKey, c idClaims) string {
 	return raw
 }
 
-// tokenClaims builds an IAM-shaped claim set.
+// tokenClaims builds an IAM-shaped claim set for the ORDINARY case: the minting
+// app's org and the user's own org AGREE, so `owner` and orgs[0] carry the same
+// value.
+//
+// The `orgs` seed is not decoration — it is what makes this fixture resemble a real
+// token. IAM has minted the claim since v1.33.0, and cloud reads the USER's org from
+// it (idClaims.homeOrg), never from `owner`, which carries the APPLICATION's org.
+// Every fixture here previously set `owner` alone, so the whole suite exercised a
+// token shape production no longer emits — and, because the two values were always
+// equal in the fixtures, no assertion could distinguish them. That is exactly how a
+// caller-selectable tenant and a caller-selectable SuperAdmin gate survived.
+//
+// Tests that need the two to DISAGREE (the cross-app cases in
+// middleware_identity_homeorg_test.go) override Orgs explicitly, as does any test
+// modelling a pre-claim legacy token by clearing it.
 func tokenClaims(aud, owner, email string, isAdmin bool, exp time.Time) idClaims {
 	return idClaims{
 		Claims: jwt.Claims{
@@ -70,6 +85,7 @@ func tokenClaims(aud, owner, email string, isAdmin bool, exp time.Time) idClaims
 		Owner:   owner,
 		Email:   email,
 		IsAdmin: isAdmin,
+		Orgs:    []model.OrgRef{{Org: owner, Role: "member"}},
 	}
 }
 
@@ -605,6 +621,7 @@ func TestIdentityValidator(t *testing.T) {
 //     one org can never reach the global (all-orgs) admin surface — only the
 //     operator org's admins do. This is what keeps SuperAdmin the operator's, and
 //     what "isAdmin required" keeps from being every operator-org user.
+//
 // TestSuperAdminGate_IsAdminOrgMembership locks THE ONE predicate:
 // SuperAdmin ⟺ the principal's org IS the reserved admin org (owner == adminOrg).
 // The same equality IAM's canonical User.IsSuperAdmin() uses — cloud adds no second
