@@ -21,11 +21,13 @@
 //     cloud o11y path already writes (requests, tokens, spend, models, errors).
 //   - Web/commerce lens (honest-empty until the collector emits): hanzo.events.
 //
-// ONE datastore client. This package does NOT open a second connection: it rides
-// the SAME datastore-go/v2 client the ai subsystem's o11y ledger opens in the
-// shared Bootstrap (ai/object.InitDatastore → object.DatastoreQuery). DRY: one
-// transport, one pool, one set of KMS-injected DATASTORE_* creds — never
-// hard-coded, never a second design.
+// ONE datastore client. This package does NOT open its own connection: it reads
+// through clients/datastore, the leaf that holds the warehouse connection for the
+// whole binary and opens it from the environment on first use. DRY: one transport,
+// one pool, one set of KMS-injected DATASTORE_* creds — never hard-coded, never a
+// second design. (It used to reach the connection through ai/object's Bootstrap;
+// that path cost 1,933 packages to call four functions, which is why the connection
+// moved to a leaf importing only orm/datastore.)
 //
 // TENANT ISOLATION is the security bar and is enforced SERVER-SIDE on every
 // request. The org is c.Org() — the value SanitizeIdentity minted from the
