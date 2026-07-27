@@ -308,6 +308,18 @@ func Serve(specs []MountSpec, enable []string) error {
 	// BOTH sources are absent.
 	app.Use(ScopeRateLimit(deps.Metering, deps.GatewayPolicy))
 
+	// Starter credit — the funding path the two gates below are sequenced behind.
+	// Runs AFTER IdentityMiddleware (it needs the VALIDATED principal to resolve a
+	// wallet; an unvalidated caller is skipped) and BEFORE both gates, so a brand-new
+	// account is funded before anything on this same request asks whether it can pay.
+	// Mounted here rather than at the org-creating handler because that handler is not
+	// on every path: /v1/iam/* is routed to the IAM service at the edge, and cloud's
+	// own onboard treats a signup-org caller as already-having-an-org. This position
+	// depends on neither. Hot-path cost in the steady state is one map load
+	// (middleware_starter.go); only a wallet's first request in this process reads the
+	// ledger. It never rejects — funding is not an authorization decision.
+	app.Use(StarterGrant())
+
 	// Billing gate. Sits at the (future) Auth position — after identity is
 	// established by Recover/RequestID/Logger and before any subsystem mounts —
 	// so every priced route is balance-gated once, at the edge, fail-closed.
