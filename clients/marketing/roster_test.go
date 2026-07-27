@@ -151,19 +151,26 @@ func TestMatchCohort(t *testing.T) {
 	}
 }
 
-// TestResolveFailsClosedWithoutIAM: with no co-mounted IAM the resolution
-// REFUSES. An announcement that silently reaches nobody is the failure this
-// prevents.
+// TestResolveFailsClosedWithoutIAM: when the identity store cannot answer, the
+// resolution REFUSES and the preview says so. An announcement that silently
+// reaches nobody — reported as a success — is the failure this prevents.
+// (That iamRoster itself refuses an unmounted IAM is asserted in
+// TestRosterReadsTheRealEmbeddedIAM, before it mounts one.)
 func TestResolveFailsClosedWithoutIAM(t *testing.T) {
-	// rosterFn is the production reader here; clients/iam.DB() is nil in a test
-	// binary, which is exactly the "iam not co-mounted" deployment.
+	prev := rosterFn
+	rosterFn = func(string) ([]*model.User, error) { return nil, errIAMUnavailable }
+	defer func() { rosterFn = prev }()
+
 	if _, err := resolveAudience(context.Background(), "hanzo", Audience{}); err != errIAMUnavailable {
 		t.Fatalf("want errIAMUnavailable, got %v", err)
 	}
-	// And the preview says so honestly instead of reporting an empty audience.
 	p := evalAudience(context.Background(), "hanzo", Audience{})
 	if p.Available || p.Deliverable != 0 || p.Reason == "" {
 		t.Fatalf("preview must be honest-unavailable, got %+v", p)
+	}
+	// The handler surfaces it as a 503, not a 200 with an empty send.
+	if err := mapErr(errIAMUnavailable, ""); err == nil || !strings.Contains(err.Error(), "identity store unavailable") {
+		t.Fatalf("want a 503-shaped refusal, got %v", err)
 	}
 }
 
