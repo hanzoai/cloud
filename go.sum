@@ -2055,6 +2055,8 @@ github.com/volcengine/volc-sdk-golang v1.0.241 h1:KwyA1+wVtsCUr7UWboKt+jkg25BSJy
 github.com/volcengine/volc-sdk-golang v1.0.241/go.mod h1:zHJlaqiMbIB+0mcrsZPTwOb3FB7S/0MCfqlnO8R7hlM=
 github.com/volcengine/volcengine-go-sdk v1.0.141 h1:Bl5k1BR04YKPUVCuhqMPmTd2Ws317+YNF6QIXxdgO5k=
 github.com/volcengine/volcengine-go-sdk v1.0.141/go.mod h1:oht5AKDJsk0fY6tV2ViqaVlOO14KSRmXZlI8ikK60Tg=
+github.com/vulcand/oxy/v2 v2.2.0 h1:+H3on8BpcG9v712w2EO1LAQv+scHiPn1nSg3F6szxz0=
+github.com/vulcand/oxy/v2 v2.2.0/go.mod h1:MSvNdC6DkalmCKy9t0jFra5t92H2a2hRhLl9MuH1K1M=
 github.com/vultr/govultr/v3 v3.30.0 h1:kTeDJ+5or6g4CQJmD6Kmz4R63B18poNZ8RP87r9LZdg=
 github.com/vultr/govultr/v3 v3.30.0/go.mod h1:2zyUw9yADQaGwKnwDesmIOlBNLrm7edsCfWHFJpWKf8=
 github.com/wangbin/jiebago v0.3.2 h1:reQKp0xTXWFK7eQ19L6Ofq5xODSR2hcam55qcdCCNpw=
