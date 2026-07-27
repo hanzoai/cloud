@@ -1,4 +1,4 @@
-// Package commerceinproc is the ONE seam that lets every cloud subsystem that
+// Package transport is the ONE seam that lets every cloud subsystem that
 // speaks the commerce billing S2S surface (clients/{billing,account,admin,
 // referrals,authors,affiliates,usage} + the request-edge metering gate in build.go)
 // reach the co-resident, in-process commerce handler with a DIRECT Go call instead
@@ -6,6 +6,14 @@
 // commerce.hanzo.svc:8001). This is what lets the standalone be RETIRED (task #111):
 // once commerce is folded in-process (#114), every /v1/billing read/write + the
 // metering debit routes to the same in-tree gin engine that /v1/commerce already does.
+//
+// It is a SIBLING of clients/commerce, never a part of it: this package owns the
+// BYTE STREAM (an http.RoundTripper), clients/commerce owns the DOMAIN reads
+// (entitlement, active plan, balance) as typed Go calls on the embedded datastore.
+// Two concerns, two packages — and the split is load-bearing, not cosmetic: the
+// domain client resolves plan tiers through clients/plan, which imports the root
+// cloud package, while build.go (in that same root package) needs this transport.
+// One package would close that loop into an import cycle.
 //
 // HOW. commerce.Mount registers the embedded commerce http.Handler here via
 // SetHandler once, at boot. A subsystem builds its S2S HTTP request EXACTLY as
@@ -21,7 +29,7 @@
 // DE-COMPLECTED: subsystems keep their own request-building + subject-pinning
 // (the tenant-isolation security boundary stays where it is); this package owns ONLY
 // "where does the byte stream go", nothing about auth or scope.
-package commerceinproc
+package transport
 
 import (
 	"fmt"
@@ -149,7 +157,7 @@ func (rt roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 			depth = v.(int)
 		}
 		if depth >= maxDepth {
-			return nil, fmt.Errorf("commerceinproc: in-process dispatch depth %d exceeded (re-entrant commerce read refused: %s %s)", maxDepth, req.Method, req.URL.Path)
+			return nil, fmt.Errorf("commerce transport: in-process dispatch depth %d exceeded (re-entrant commerce read refused: %s %s)", maxDepth, req.Method, req.URL.Path)
 		}
 		depthByGoroutine.Store(id, depth+1)
 		defer func() {

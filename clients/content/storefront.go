@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/clients/commerceinproc"
+	"github.com/hanzoai/cloud/clients/commerce/transport"
 	"github.com/hanzoai/cloud/clients/framework"
 )
 
@@ -129,9 +129,9 @@ type commerceStorefront struct {
 // a deployment sources from KMS) on every call, so it is never held in a manifest.
 func newStorefront() Storefront {
 	return commerceStorefront{
-		base:  commerceinproc.BaseURL(strings.TrimSpace(os.Getenv(commerceURLEnv))),
+		base:  transport.BaseURL(strings.TrimSpace(os.Getenv(commerceURLEnv))),
 		token: func() string { return strings.TrimSpace(os.Getenv(commerceTokenEnv)) },
-		http:  commerceinproc.Client(storefrontTimeout),
+		http:  transport.Client(storefrontTimeout),
 	}
 }
 
