@@ -311,7 +311,7 @@ func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
 // clients/admin's ok(). The customer /v1/referrals surface stays bare JSON (read
 // via the /cloud proxy + restGet), matching clients/crm.
 func adminOK(c *zip.Ctx, data any) error {
-	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "msg": "", "data": data})
+	return cloud.OK(c, data)
 }
 
 // ── qualify → grant core (the ONE credit path, shared by sweep + lazy read) ───

@@ -56,11 +56,36 @@ const (
 	TargetDraining = "draining"
 )
 
+// LiveWindow bounds heartbeat freshness. A target that has heartbeated before but
+// not within this window is reported offline no matter what its row says. Matched
+// to the agent beat (30s) with slack so one missed beat does not flap a machine.
+const LiveWindow = 90 * time.Second
+
 const (
 	maxTargetLabel    = 128
 	maxTargetCapacity = 256
 	maxTargetID       = 128
 )
+
+// EffectiveStatus is the ONE liveness answer every reader uses — the views here,
+// the fleet board's agent fold, and the dispatch gate. The stored status records
+// operator INTENT ("I am draining this box"); liveness is a FACT the heartbeat
+// decides, and the fact wins. Without this a worker that died — or whose host was
+// simply powered off — stays "online" forever, because nothing ever writes the row
+// again to say otherwise. That is how the fleet board came to show two GPUs online
+// that had last beaten five and nine days earlier.
+//
+// A target that has never heartbeated (MetricsAt == 0) keeps its stored status: it
+// is a hand-registered destination, not a beating agent, and has no fact to check.
+func (t Target) EffectiveStatus(now time.Time) string {
+	if t.Status != TargetOnline || t.MetricsAt == 0 {
+		return t.Status // offline/draining are intent; never-beaten has no fact
+	}
+	if now.Sub(time.Unix(t.MetricsAt, 0)) > LiveWindow {
+		return TargetOffline
+	}
+	return TargetOnline
+}
 
 func validTargetKind(k string) bool {
 	switch k {
@@ -485,7 +510,7 @@ type targetView struct {
 
 func toTargetView(t Target, load TargetLoad) targetView {
 	v := targetView{
-		ID: t.ID, Label: t.Label, Kind: t.Kind, Status: t.Status,
+		ID: t.ID, Label: t.Label, Kind: t.Kind, Status: t.EffectiveStatus(time.Now()),
 		Capacity: t.Capacity, Host: t.Host,
 		Sessions: load.Sessions, Running: load.Running,
 		CreatedAt: rfc3339(t.CreatedAt), UpdatedAt: rfc3339(t.UpdatedAt),
