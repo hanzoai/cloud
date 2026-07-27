@@ -72,7 +72,7 @@ func newLinkCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 	f.BoolVar(&opts.serveEngine, "serve-engine", false, "also advertise a hanzo-engine model server (OpenAI + Anthropic) running on this node")
 	f.StringVar(&opts.engineURL, "engine-url", defaultEngineURL, "local URL where hanzo-engine is probed (GET /v1/models)")
 	f.StringVar(&opts.engineEndpoint, "engine-endpoint", "", "public URL to advertise for gateway routing (defaults to --engine-url; a node behind NAT needs a reachable URL/tunnel)")
-	f.BoolVar(&opts.registerProvider, "register-provider", false, "auto-register the engine endpoint as an org model provider (POST /v1/add-provider)")
+	f.BoolVar(&opts.registerProvider, "register-provider", false, "auto-register the engine endpoint as an org model provider (POST /v1/ai/providers)")
 	f.StringVar(&opts.studioDir, "studio-dir", os.Getenv("HANZO_STUDIO_DIR"), "local Hanzo Studio checkout; when set, link launches and supervises the render backend on 127.0.0.1:8188")
 	f.StringVar(&opts.studioURL, "studio-url", firstNonEmpty(os.Getenv("HANZO_STUDIO_UPLOAD_URL"), defaultStudioUploadURL), "studio base URL the render mirror uploads finished images to (POST /v1/library/upload)")
 	f.BoolVar(&opts.mirror, "mirror", true, "sweep local renders into the org studio library; --mirror=false serves jobs only")
