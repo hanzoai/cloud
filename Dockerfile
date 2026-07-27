@@ -36,7 +36,7 @@
 # BUMP: when a console/skills/flags change must reach production, move its pin
 # here in the same commit that claims it. That is what makes a cloud release
 # reproducible and makes "what console is in v1.801.N" answerable from git.
-ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:sha-9f7042c-amd64
+ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:sha-147ecd3-amd64
 ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:sha-b931a11-amd64
 ARG FLAGS_IMAGE=ghcr.io/hanzoai/cloud-flags:sha-e1ca02a-amd64
 
