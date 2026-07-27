@@ -7,13 +7,13 @@ import (
 	"strings"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud/clients/datastore"
 )
 
 // The scoped logs read serves GET /v1/o11y/logs — a live, org-scoped log stream for
 // a product. Application/infra logs live in the o11y datastore on the SAME
 // datastore datastore server the shared ai/object client already owns, so this
-// reuses aiobject.DatastoreQuery (ONE datastore client, ONE KMS-injected cred
+// reuses datastore.Query (ONE datastore client, ONE KMS-injected cred
 // namespace) rather than opening a second connection.
 //
 // TWO honest tenant views over ONE store:
@@ -66,7 +66,7 @@ type logsResponse struct {
 // (not a fabricated line).
 func queryLogs(ctx context.Context, svc service, org string, admin bool, sinceNs int64, windowSec, limit int) (logsResponse, error) {
 	resp := logsResponse{Product: svc.ID, View: viewFor(admin), Lines: []logLine{}}
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		// Honest: the log warehouse is not connected on this deployment.
 		return resp, nil
 	}
@@ -116,7 +116,7 @@ func infraLogs(ctx context.Context, app string, sinceNs int64, windowSec, limit 
 	q += " ORDER BY timestamp DESC LIMIT ?"
 	args = append(args, uint64(limit))
 
-	rows, err := aiobject.DatastoreQuery(ctx, q, args...)
+	rows, err := datastore.Query(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query infra logs: %w", err)
 	}
@@ -157,7 +157,7 @@ func requestLogs(ctx context.Context, org string, svc service, sinceNs int64, wi
 	q += " ORDER BY timestamp DESC LIMIT ?"
 	args = append(args, uint64(limit))
 
-	rows, err := aiobject.DatastoreQuery(ctx, q, args...)
+	rows, err := datastore.Query(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query request logs: %w", err)
 	}

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud/clients/datastore"
 )
 
 // live_test.go proves the plane against a REAL datastore: the DDL actually parses
@@ -40,17 +40,13 @@ func liveDatastore(t *testing.T) {
 	if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
 		t.Fatalf("refusing to run a WRITING test against non-loopback %q", addr)
 	}
-	if aiobject.DatastoreEnabled() {
-		return
+	// Dials in the background and self-provisions the `hanzo` database; Wait
+	// blocks until the connection latches.
+	ready, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := datastore.Wait(ready); err != nil {
+		t.Fatalf("datastore at %s never became ready: %v", addr, err)
 	}
-	aiobject.InitDatastore() // async dial + self-provisions the `hanzo` database
-	for i := 0; i < 100; i++ {
-		if aiobject.DatastoreEnabled() {
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	t.Fatalf("datastore at %s never became ready", addr)
 }
 
 // TestLivePlaneRoundTrip is the whole contract against a real engine: the schema
@@ -207,7 +203,7 @@ func TestLiveRollupIsFedAndOrgScoped(t *testing.T) {
 		}
 	}
 
-	rows, err := aiobject.DatastoreQuery(ctx,
+	rows, err := datastore.Query(ctx,
 		`SELECT unit, maxMerge(gpu_util_max) AS mx, avgMerge(gpu_util_avg) AS av
 		   FROM hanzo.compute_samples_hourly WHERE org = ? GROUP BY unit`, org)
 	if err != nil {
@@ -224,7 +220,7 @@ func TestLiveRollupIsFedAndOrgScoped(t *testing.T) {
 	}
 
 	// Another tenant's rollup read finds nothing of this org's.
-	other, err := aiobject.DatastoreQuery(ctx,
+	other, err := datastore.Query(ctx,
 		`SELECT count() AS n FROM hanzo.compute_samples_hourly WHERE org = ?`, org+"-other")
 	if err != nil {
 		t.Fatalf("rollup read: %v", err)
@@ -288,7 +284,7 @@ func TestLiveSchemaIsIdempotent(t *testing.T) {
 	ctx := context.Background()
 	for i := 0; i < 3; i++ {
 		for _, ddl := range schema {
-			if err := aiobject.DatastoreExec(ctx, ddl); err != nil {
+			if err := datastore.Exec(ctx, ddl); err != nil {
 				t.Fatalf("pass %d: DDL is not idempotent: %v", i, err)
 			}
 		}

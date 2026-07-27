@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud/clients/datastore"
 )
 
 // metricsread.go serves GET /v1/o11y/metrics — REAL per-org RED (rate / errors /
@@ -124,7 +124,7 @@ func redSeries(ctx context.Context, q metricsQuery, resp *metricsResponse) error
 	}
 	sql += " GROUP BY bucket ORDER BY bucket ASC"
 
-	rows, err := aiobject.DatastoreQuery(ctx, sql, args...)
+	rows, err := datastore.Query(ctx, sql, args...)
 	if err != nil {
 		return fmt.Errorf("query RED: %w", err)
 	}
@@ -167,7 +167,7 @@ func usageSeries(ctx context.Context, org string, rangeSec, stepSec int, resp *m
 		"FROM hanzo.cloud_usage WHERE organization = ? " +
 		"AND timestamp > now() - toIntervalSecond(?) " +
 		"GROUP BY bucket ORDER BY bucket ASC"
-	rows, err := aiobject.DatastoreQuery(ctx, sql, stepSec, org, rangeSec)
+	rows, err := datastore.Query(ctx, sql, stepSec, org, rangeSec)
 	if err != nil {
 		return fmt.Errorf("query usage: %w", err)
 	}

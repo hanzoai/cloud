@@ -56,8 +56,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/zap-proto/zip"
 )
 
@@ -139,7 +139,7 @@ func EnsureEventsTable(ctx context.Context) error {
 	if eventsTableReady.Load() {
 		return nil
 	}
-	if err := aiobject.DatastoreExec(ctx, eventsTableDDL); err != nil {
+	if err := datastore.Exec(ctx, eventsTableDDL); err != nil {
 		return err
 	}
 	eventsTableReady.Store(true)
@@ -718,7 +718,7 @@ func ingestEvents(ctx context.Context, org, source string, evs []CaptureEvent) (
 		return CaptureResult{Dropped: dropped}, nil
 	}
 	stmt, args := buildEventsInsert(rows)
-	if err := aiobject.DatastoreExec(ctx, stmt, args...); err != nil {
+	if err := datastore.Exec(ctx, stmt, args...); err != nil {
 		return CaptureResult{}, warehouseErr("capture", err)
 	}
 	// Fan the accepted batch out to the downstream sink (destinations), detached and

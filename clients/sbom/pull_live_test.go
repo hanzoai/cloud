@@ -8,6 +8,7 @@
 package sbom
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -20,7 +21,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/static"
 	"github.com/google/go-containerregistry/pkg/v1/types"
-	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud/clients/datastore"
 )
 
 // TestPullOnMissLiveEndToEnd is the FULL consumer-pull proof against real infra:
@@ -81,14 +82,11 @@ func TestPullOnMissLiveEndToEnd(t *testing.T) {
 	}
 	t.Logf("pushed subject %s @ %s + SBOM attachment %s (%d real components)", subjectRef, dig, sbomTag, len(want))
 
-	// Connect the real datastore and wait for the async datastore to latch ready.
-	aiobject.InitDatastore()
-	deadline := time.Now().Add(20 * time.Second)
-	for !aiobject.DatastoreEnabled() {
-		if time.Now().After(deadline) {
-			t.Fatal("datastore did not become ready (is datastore at DATASTORE_ADDR up?)")
-		}
-		time.Sleep(300 * time.Millisecond)
+	// Connect the real datastore and wait for the async dial to latch ready.
+	ready, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := datastore.Wait(ready); err != nil {
+		t.Fatalf("datastore did not become ready (is datastore at DATASTORE_ADDR up?): %v", err)
 	}
 
 	app := mountApp(t)
