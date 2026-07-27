@@ -33,14 +33,6 @@ const (
 	webhookSecretEnv = "GIT_WEBHOOK_SECRET"
 	eventHeader      = "X-Git-Event"
 	sigHeader        = "X-Git-Signature"
-	// Pre-rename spellings, still what the git image sends today. Read as a
-	// fallback purely so cloud and the git image can roll in EITHER order: cloud
-	// must already accept X-Git-* before the fork starts sending it, or the first
-	// push after a fork roll silently stops triggering deploys. Delete both the
-	// moment the fork ships the new names — this is a rename in flight, not a
-	// compatibility layer to keep.
-	eventHeaderPre = "X-Gitea-Event"
-	sigHeaderPre   = "X-Gitea-Signature"
 	// syncActorEnv names the login the universal sync engine's inbound relay pushes
 	// AS when it lands an upstream push into native git. A native push webhook whose
 	// pusher equals it is the ECHO of our own relay — re-driving the build/mirror
@@ -80,14 +72,14 @@ type pushEvent struct {
 // non-branch ref) are acknowledged 204 so the sender does not retry.
 func webhook(s *cloud.Service[state], c *zip.Ctx) error {
 	// Only push drives a build; every other event is an acknowledged no-op.
-	if firstNonEmptyStr(c.Header(eventHeader), c.Header(eventHeaderPre)) != "push" {
+	if c.Header(eventHeader) != "push" {
 		return c.NoContent(http.StatusNoContent)
 	}
 
 	// Verify BEFORE parse so an unauthenticated body is never decoded. An unset
 	// secret is a 401 (fail-closed), not an open door.
 	body := c.Body()
-	sig := firstNonEmptyStr(c.Header(sigHeader), c.Header(sigHeaderPre))
+	sig := c.Header(sigHeader)
 	if !validSignature(os.Getenv(webhookSecretEnv), sig, body) {
 		return zip.ErrUnauthorized("invalid webhook signature")
 	}
