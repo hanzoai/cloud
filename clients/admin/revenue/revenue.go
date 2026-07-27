@@ -52,13 +52,22 @@ type RevenueData struct {
 
 // Revenue answers GET /v1/admin/revenue.
 func Revenue(s *cloud.Service[core.State], c *zip.Ctx) error {
-	ctx := c.Context()
-	cr := core.CallerCreds(c)
+	data, err := Compute(s, c.Context(), core.CallerCreds(c))
+	if err != nil {
+		return core.Fail(c, err.Error())
+	}
+	return core.OK(c, data)
+}
+
+// Compute builds the fleet revenue aggregate. It is split out of the handler so the
+// consolidated money board (/v1/admin/money) folds the SAME numbers this endpoint
+// serves: one aggregation, two views, no second implementation to drift.
+func Compute(s *cloud.Service[core.State], ctx context.Context, cr iam.Creds) (RevenueData, error) {
 	now := time.Now().UTC()
 
 	orgs, err := core.ListOrgs(s, ctx, cr)
 	if err != nil {
-		return core.Fail(c, err.Error())
+		return RevenueData{}, err
 	}
 
 	// Per-org money, fanned out concurrently (balance + spend + plan/MRR).
@@ -119,7 +128,7 @@ func Revenue(s *cloud.Service[core.State], c *zip.Ctx) error {
 		sources = append(sources, core.SrcOf("commerce-ledger", core.ErrPartialRevenue, 0, nowStr))
 	}
 
-	return core.OK(c, RevenueData{
+	return RevenueData{
 		TotalBalancesCents: totalBal,
 		TotalSpendCents:    totalSpend,
 		MRRCents:           mrr,
@@ -130,7 +139,7 @@ func Revenue(s *cloud.Service[core.State], c *zip.Ctx) error {
 		SpendTrend:         trend,
 		GeneratedAt:        nowStr,
 		Sources:            sources,
-	})
+	}, nil
 }
 
 // revenueOf reads one org's money view (balance + spend + plan/MRR). Returns (row, ok):
