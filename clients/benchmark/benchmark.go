@@ -1,7 +1,8 @@
 // Package benchmark mounts the Hanzo Cloud /v1/benchmark/* surface: the native
 // benchmark ARENA — run the top-N canonical public benchmarks against any model or
-// endpoint, under ONE standardized harness, and replicate-or-disprove any provider's
-// published claim. Sibling to /v1/eval (eval = YOUR data + YOUR judge; benchmark =
+// endpoint, under ONE standardized harness, measure Hanzo's own models (enso, zen),
+// and reconcile any external provider-reported claim against that measurement.
+// Sibling to /v1/eval (eval = YOUR data + YOUR judge; benchmark =
 // the canonical public tests, comparable + provenance-first + leaderboard).
 //
 // Provenance-first, never blended: a `published_claim` (what a vendor reports) and a
@@ -70,6 +71,11 @@ type publishedClaim struct {
 	Source    string  `json:"source"`
 }
 
+// published holds external provider-reported claims as attributed DATA, each row
+// carrying the source it was read from, reconciled against hanzo-measured attempts
+// under one harness and never blended into them. Provider and model are data fields:
+// they name the system a claim belongs to, which is what lets a reader check the
+// citation and what joins a claim to the attempts measured for that same model.
 var published = []publishedClaim{
 	{"gpqa_diamond", "sakana", "fugu-ultra", 95.5, "agentic-orchestration", "Sakana Fugu Technical Report 2026"},
 	{"swe_bench_pro", "sakana", "fugu-ultra", 73.7, "agentic", "Sakana Fugu Technical Report 2026"},
