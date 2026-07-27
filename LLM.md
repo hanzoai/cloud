@@ -420,12 +420,22 @@ image to a prior semver and `/{name}/sync` requests a reconcile. SUPERADMIN-only
 `gitops-engine` (`hanzoai/deploy/gitops-engine` v0.7.2, no replace) in-process for the
 reconcile half behind `DEPLOY_ENGINE_ENABLED` (default off), with a prune-safety fuse.
 
-## Full-text search (`clients/search`, `/v1/search`)
+## The index (`clients/index`, `/v1/index`)
 
 The in-binary index, speaking the Meilisearch REST dialect so a Meilisearch client
 repoints by changing one host. It replaced the standalone Meilisearch containers
-(`chat-meilisearch`, `search-fts5`); `search.hanzo.ai` still runs our own Meilisearch
-build for the docs corpus. Tenancy is the point: a standalone Meilisearch has ONE
+(`chat-meilisearch`, `search-fts5`).
+
+**Four different things, four names — do not merge them.** `hanzoai/search` is the
+SEARCH PRODUCT (our own Meilisearch build, serving `search.hanzo.ai` and the docs
+corpus). `clients/websearch` queries the OUTSIDE world. `hanzoai/crawl` fetches it.
+`clients/index` is the storage primitive an application writes documents into and
+queries back. It is NOT at `/v1/search`: that path belongs to the `hanzoai/ai` RAG
+plane, whose `/v1/search/{name}` pattern silently swallowed this subsystem's
+single-segment routes (`/health`, `/version` answered 404 in production while every
+deeper route worked). `GET /v1/openapi.json` is what shows two owners of one path.
+
+Tenancy is the point: a standalone Meilisearch has ONE
 global keyspace behind a master key, so every consumer sharing an instance shares its
 indexes — here the tenant is `principal.Org` and every query filters `WHERE org=?`,
 so two orgs may both hold an index named `messages`. The credential is the org's
@@ -436,14 +446,15 @@ compile-time module and this binary links the SYSTEM SQLite so the SQLCipher cod
 real; that library ships `ENABLE_FTS3` + `HAS_CODEC` with no fts5, and the
 `sqlite_fts5` build tag only affects the VENDORED amalgamation, so it is inert here.
 An index built on FTS5 opens on a pure-Go build, passes its tests, and then cannot
-create a single table in the shipped image. `search_terms` is keyed
+create a single table in the shipped image. `terms` is keyed
 `(org, uid, term, pk)` so a prefix query is an index range scan; it behaves the same
 in every build lane. Verify any SQLite module against the production lane
 (`-tags "libsqlite3 sqlite_fts5"` + `-lsqlcipher`) before designing on it.
 
-Health and version are registered as ABSOLUTE paths on `app`, like every other
-`OwnsHealth` subsystem — declared on the subsystem's group they answer on a bare app
-in tests and 404 in production.
+The store is `{DataDir}/index.db`, and a rename must carry the WHOLE family: cek
+keeps the wrapped data key beside it as `<path>.dek`, so moving the `.db` alone
+strands the key and every document becomes undecryptable — data loss that presents
+as an empty index.
 
 ## Releases are cut by a merge to main
 
@@ -534,3 +545,78 @@ reinvent it: a creative A/B is an experiment whose variant = a creative (tagged
 `utm_content`) and whose metric = the analytics read. The `AssignFunc`/`EvidenceFunc`
 seams are wired at the root to the flags-assignment + evidence primitive; nil-safe
 until it lands (single-creative honest default).
+
+## GitHub → forge sync: every ref, one App, nothing per-repo
+
+git.hanzo.ai is canonical and GitHub is its mirror, so an inbound push is an
+*import*: it carries work the mirror received back to the canonical copy. The whole
+configuration surface is below, because the shape people expect (a per-repo sync
+setting) does not exist and should not be added.
+
+**There is no per-repo and no per-ref configuration.** A repo is not enrolled, and a
+ref is not filtered. `clients/integrations/github_webhook.go` accepts any ref under
+`refs/`, and `Ref` stays a FULL ref (`refs/heads/x`, `refs/tags/v1.2.3`) the length of
+the chain — webhook → `SyncEvent` → `sync.Event` → `GitInboundReq` → `inboundFastForward`
+→ `GitPushEvent`. Tags matter here: a version is published by tag, so a filter on
+`refs/heads/` left every release existing only on the mirror.
+
+**Carrying tags needs no force, and that is what makes "everything" safe.** The
+inbound advance uses a non-forcing refspec, so re-pointing a tag that already exists
+is not a fast-forward and git refuses it — the canonical copy keeps the tag it
+published. A branch delete is likewise never propagated (`ignored: branch delete not
+propagated`): the mirror does not get to delete canonical history.
+
+**A consumer that wants a branch cuts the prefix itself.** `strings.CutPrefix(ev.Ref,
+"refs/heads/")` answers "is this a branch" and "what is its name" in one total step,
+so a tag can never rebuild an app that tracks a branch (`clients/platform/push.go`),
+and `refs/tags/main` is not `refs/heads/main` for the release check.
+
+**Tenancy comes only from the installation id** in the HMAC-verified body — never a
+header, never a client-controlled field. That is the whole tenant resolution:
+`OrgForExternalID("github", installation.ID)`.
+
+### Exactly one GitHub App — two is not redundancy
+
+`Store.Get(ctx, org, provider)` keys a connection on `(org, "github")`: **one row per
+org**, holding one installation id. The App's own identity is a single set of process
+values, `GITHUB_APP_ID` + `GITHUB_APP_PRIVATE_KEY` + `GITHUB_APP_WEBHOOK_SECRET`
+(KMS-synced, `clients/integrations/github.go`), used to mint short-lived installation
+tokens.
+
+So pointing a second App at the same webhook with the same secret does not double
+coverage — it makes the two Apps contend for one row. The HMAC passes for both
+(shared secret), but only the most recent install's id is stored, and a delivery from
+the other App resolves to no org and is acknowledged `200 {"ignored": "unknown
+installation"}` so GitHub does not retry-storm. The failure is therefore SILENT at
+both ends: GitHub shows a green delivery, and nothing arrives. If the stored id and
+the configured key belong to different Apps, token minting fails for every event
+instead. Run one App; install it on every org whose repos should sync.
+
+**Reading the live configuration is already a route — do not add a second one.**
+`GET /v1/integrations` (`providerViewFor`) reports, for the `github` provider,
+`available` (the App's creds are present in this process) and, when the org has a
+connection, `connection.externalId` — **the stored installation id**. That id is the
+one value that decides whether a delivery resolves, so comparing it against the
+`installation.id` GitHub shows on a delivery is the whole diagnosis: equal ⇒ the event
+lands; different ⇒ it is the silent `unknown installation` ack, and a second App is
+usually why.
+
+### The knobs that do exist
+
+Process values, all with working defaults — none of them selects *what* syncs:
+
+- `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET`, `GITHUB_APP_SLUG`
+  — the single App identity; absent ⇒ the plane reports itself unconfigured.
+- `GITHUB_API_URL` — API base, for GitHub Enterprise.
+- `GITHUB_IMPORT_CONCURRENCY` — parallel repo imports on first connect.
+- `GIT_MIRROR_OUT_CONCURRENCY`, `GIT_MIRROR_OUT_TIMEOUT` — the outbound leg.
+- `GIT_SSH_HOST`, `GIT_SSH_ADDR`, `GIT_SSH_HOST_KEY` — SSH front door; the host key is
+  KMS-sourced and MUST be set when replicas > 1, or each replica presents its own.
+- `GIT_SYNC_ACTOR` — the actor recorded for a sync-initiated write.
+
+**What genuinely is per-repo is a different plane**, and naming it keeps the two from
+being confused: `/v1/git/repos/:name/*` (`clients/git/subscriptions.go`) holds a
+repo→Slack-channel subscription and a repo→downstream mirror target. Those are
+reactor config, org-scoped like every repo route. The code index is also per-repo and
+indexes the default branch only — a feature-branch push is skipped so it cannot
+clobber the canonical index. None of these decide whether a ref syncs.
