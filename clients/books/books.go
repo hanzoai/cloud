@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/commerceinproc"
+	"github.com/hanzoai/cloud/clients/commerce/transport"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -70,7 +70,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return fmt.Errorf("books.Mount: empty deps.DataDir")
 	}
 	b := cloud.NewBase(deps, "books")
-	src := newCommerceReader(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN"))
+	src := newCommerceReader(transport.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN"))
 	mounted = &state{
 		live:    cloud.NewOrgStore[*store](deps.DataDir, "books", openStore, cloud.WithDurable(b.Durable), cloud.WithStoreLogger(b.Log)),
 		sandbox: cloud.NewOrgStore[*store](deps.DataDir, "books-sandbox", openStore, cloud.WithDurable(b.Durable), cloud.WithStoreLogger(b.Log)),
@@ -179,7 +179,7 @@ func newCommerceReader(base, token string) *commerceReader {
 	return &commerceReader{
 		base:  strings.TrimRight(strings.TrimSpace(base), "/"),
 		token: strings.TrimSpace(token),
-		http:  commerceinproc.Client(15 * time.Second),
+		http:  transport.Client(15 * time.Second),
 	}
 }
 

@@ -15,7 +15,7 @@
 // type-assertion, mirroring types.ModelLister. A commerce build that cannot answer
 // (split-deploy ZAP client, disabled stub) simply does not implement it, and the
 // paywall fails OPEN — an outage never locks out a subscriber.
-package commerceclient
+package commerce
 
 import (
 	"context"
