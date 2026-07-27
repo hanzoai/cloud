@@ -32,9 +32,13 @@ func Routes(app cloud.Router, s *cloud.Service[core.State]) {
 	g.Get("/finance", core.Guard(s, Finance))
 	// One-time commerce→finance balance cutover (SuperAdmin only). Idempotent per org.
 	g.Post("/finance/backfill", core.Guard(s, Backfill))
-	// Fund an ARBITRARY subject's native wallet — an org pool or a human ("hanzo/z").
-	// SuperAdmin only; additive (grants stack).
-	g.Post("/finance/deposit", core.Guard(s, Deposit))
+	// There is no second credit-write here. POST /finance/deposit used to fund an
+	// arbitrary subject verbatim, because the credit grant could only reach the org
+	// pool; the grant now resolves its address through account.Payer and can name a
+	// member, so the raw route's only reason to exist is gone. It was also the unsafe
+	// one — no cap, no audit row, and no idempotency ref, so a double-clicked deposit
+	// credited twice. ONE credit-write path: core.ApplyGrant.
+
 	// Per-provider upstream credit ledger + usage funding split (multi-provider
 	// credit-management). Same SuperAdmin guard, same cloud_usage warehouse.
 	g.Get("/providers/credit", core.Guard(s, ProvidersCredit))
