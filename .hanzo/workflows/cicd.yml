@@ -197,3 +197,24 @@ jobs:
 
           echo "OK: containment holds — clients/controlplane has zero buildable files by default and is linked into no cmd/ binary"
 
+      - name: positive proof — package cloud does not link the inference module
+        # Package cloud is imported by nearly every clients/* package, so one import
+        # edge out of it is an edge out of all of them: importing
+        # github.com/hanzoai/ai/object here pulls that module's whole closure —
+        # k8s client-go, the AWS/Azure/Volcengine SDKs, go-git, docker, ~1.5k
+        # packages — into every one, to hand the module four callbacks over plain
+        # data. The callbacks now go the other way: cloud exposes
+        # RegisterBillingInstaller and the composition root (apps/ai.go), which is
+        # linked only by cmd/, installs them.
+        #
+        # A re-added `aiobject.SetX(...)` in build.go compiles and passes every test
+        # — the cost is invisible until someone measures a link again. Same graph
+        # assertion as the containment step above, for the same reason.
+        run: |
+          set -euo pipefail
+          if go list -deps github.com/hanzoai/cloud | grep -qx 'github.com/hanzoai/ai/object'; then
+            echo "::error::package cloud reaches github.com/hanzoai/ai/object — that edge re-links ~1480 packages into every package that imports cloud. Install the module's hooks from apps (cloud.RegisterBillingInstaller), not from the root."
+            exit 1
+          fi
+          echo "OK: package cloud does not reach github.com/hanzoai/ai/object"
+

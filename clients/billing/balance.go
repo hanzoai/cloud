@@ -24,7 +24,7 @@ import (
 // no principal, which answers "sign in to view billing". The proxy was calling itself.
 //
 // WHERE THE MONEY IS. Co-resident, the prepaid wallet lives in cloud's OWN finance ledger
-// (clients/finance, per-org double-entry SQLite): wireFinance (build.go) points the ai
+// (clients/finance, per-org double-entry SQLite): installBilling (apps/ai.go) points the ai
 // prepaid gate's balance read at it, the edge meter debits it, and an admin grant credits
 // it (clients/admin/core.grantDeposit prefers finance.Current() for exactly this reason).
 // So the customer's balance is read from that ledger DIRECTLY — no HTTP hop, nothing to

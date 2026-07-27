@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/clients/commerce/transport"
 	"github.com/hanzoai/cloud/clients/metering"
@@ -20,9 +19,7 @@ import (
 	"github.com/hanzoai/cloud/clients"
 	"github.com/hanzoai/cloud/clients/finance"
 	"github.com/hanzoai/cloud/clients/gateway/edge"
-	"github.com/hanzoai/cloud/clients/money"
 	"github.com/hanzoai/cloud/clients/s3admin"
-	"github.com/hanzoai/cloud/types"
 )
 
 // BuildDeps constructs the Deps used by every subsystem's Mount(app, deps).
@@ -96,7 +93,6 @@ func BuildDeps(cfg *Config) Deps {
 	// commerce URL yields a !Enabled() client, so the wrap is a transparent
 	// pass-through and a dev deployment is never blocked.
 	deps.Metering = buildMeteringClient(cfg, logger)
-	wireTierReader(deps.Metering, logger)
 	// AI (completions, WRITE) and Embed (embeddings, READ-ONLY) are DISTINCT
 	// credentials by concern: completions never ride the read-only publishable
 	// (pk-) key — the gateway 403s a pk- key on any write endpoint — so deps.AI
@@ -104,7 +100,7 @@ func BuildDeps(cfg *Config) Deps {
 	// least-privilege for a read-only call). Both meter through the ONE commerce path.
 	deps.AI = meteredAIClient(pickCompletionsClient(cfg, logger), deps)
 	deps.Embed = meteredAIClient(pickEmbedClient(cfg, logger), deps)
-	wireFinance(cfg, logger)
+	publishLedger(cfg, logger)
 	deps.O11y = pick(cfg, logger, "o11y", "O11y", cfg.O11yZAPAddr, clients.O11yRPCAt, clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
 	deps.MQ = pick(cfg, logger, "mq", "MQ", cfg.MQZAPAddr, clients.MQRPCAt, clients.DisabledMQ)
@@ -127,8 +123,36 @@ func BuildDeps(cfg *Config) Deps {
 	}
 	deps.GatewayPolicy = gp
 
+	// Last: hand the composition root the built deps so it can bind the co-resident
+	// inference module's prepaid gate to the money plane above (metering client +
+	// published ledger). MountAll has not run yet, so the gate is bound before any
+	// subsystem — and long before any request — can read it.
+	if billingInstaller != nil {
+		billingInstaller(deps)
+	}
+
 	return deps
 }
+
+// billingInstaller is the registered bootstrap that binds cloud's money plane — the
+// caller's commerce plan tier, their prepaid wallet balance, and the usage debit —
+// into the co-resident inference module (hanzoai/ai). The composition root registers
+// it; BuildDeps invokes it once, after the metering client and the finance ledger
+// exist and before MountAll.
+//
+// The inversion is what keeps the inference module OUT of this package's import
+// graph. Calling the module's setters from here made every package that imports
+// cloud — most of clients/* — link the module's entire closure, ~1.5k packages, to
+// hand over four functions over plain data. Same pattern as telemetryInstaller and
+// kmsClientFactory. Exactly one registration.
+var billingInstaller func(Deps)
+
+// RegisterBillingInstaller installs that bootstrap. apps (the composition root, the
+// ONE package that imports both cloud and the inference module) calls this from
+// Wire(), before Serve. It is the ONE inversion point for the module's money seam;
+// unregistered — a binary without the module linked — leaves the module's own HTTP
+// billing path in place, unchanged.
+func RegisterBillingInstaller(f func(Deps)) { billingInstaller = f }
 
 // staticEdgePolicy projects the static env/flag edge config into the boot-default
 // policy the edge.Store layers runtime overrides on top of. A disabled
@@ -209,80 +233,22 @@ func boolStr(b bool, t, f string) string {
 	return f
 }
 
-// wireTierReader installs the embedded ai module's per-tier SKU gate reader so it
-// resolves the caller's commerce subscription tier through the SAME co-resident
-// commerce client the metering gate bills over — in-process (the commerce transport) when
-// commerce is folded in, S2S HTTP with the service token otherwise — NEVER an authed
-// self-call to the cloud edge. That self-call is the toothless-gate bug: the edge
-// 401/403s a service call to /v1/billing/*, so the ai module's own HTTP lookup always
-// returned "" in-cluster and every tier-gated SKU failed OPEN. This mirrors
-// wireFinance's SetBalanceReader: cloud owns the co-resident read, ai stays
-// transport-agnostic. Fail-safe is preserved — Client.Tier folds a commerce error or
-// an unknown plan to "", which the gate treats as ALLOW, so a commerce blip never
-// locks out a paying caller. No-op when commerce is unreachable (metering !Enabled),
-// leaving ai's standalone HTTP fallback in place.
-func wireTierReader(m *metering.Client, log luxlog.Logger) {
-	if m == nil || !m.Enabled() {
+// publishLedger constructs the ONE in-process finance ledger (per-org SQLite
+// double-entry prepaid wallet) and publishes it for every money consumer to resolve
+// by the narrow finance.Client: the edge meter, the admin credit grant, the
+// entitlements standing read, and the inference module's prepaid gate (bound in the
+// composition root — see RegisterBillingInstaller). Publishing before MountAll is
+// what lets those consumers resolve it lazily, per request.
+//
+// No-op when the money layer is not co-resident (split-deploy): finance.Current()
+// then stays nil and each consumer takes its own documented path — fail closed for
+// the credit/standing reads, the module's own HTTP billing for the prepaid gate.
+func publishLedger(cfg *Config, log luxlog.Logger) {
+	if !cfg.Enabled("commerce") {
 		return
 	}
-	aiobject.SetTierReader(func(ctx context.Context, subject, namespace string) (string, error) {
-		return m.Tier(ctx, subject, namespace)
-	})
-	log.Info("ai per-tier SKU gate wired to co-resident commerce (in-process tier read, fail-safe)")
-}
-
-// wireFinance constructs the ONE in-process finance ledger (per-org SQLite
-// double-entry prepaid wallet), publishes it for every money consumer to resolve by
-// the narrow finance.Client, and installs the embedded ai router's balance-read +
-// usage-debit hooks so the PREPAID gate dispatches DIRECTLY to it — a typed in-proc
-// call, no HTTP, no socket. There is NO exempt path (hanzoai/ai >= v1.805.8): every
-// principal is gated on a positive prepaid balance, fail-closed. MUST run before
-// ai.Mount (the ai gate reads the hook per request; the hook must be installed first)
-// — which BuildDeps guarantees (deps are built before MountAll).
-func wireFinance(cfg *Config, log luxlog.Logger) {
-	if !cfg.Enabled("commerce") {
-		return // money layer not co-resident (split-deploy); ai falls back to HTTP.
-	}
-	fin := finance.New(cfg.DataDir)
-	finance.Publish(fin)
-	// Money is billed to the SUBJECT's wallet, inside the org's ledger.
-	//
-	// org  = which ledger (the tenant's books)
-	// subject = which wallet in it (ai resolves it: a person => "org/name", an
-	//           org-owned application/service key => the org's own account)
-	//
-	// So a personal account has a PERSONAL balance and a personal plan, and an org
-	// pays for what its applications and service keys spend — which is the product:
-	// sign up as yourself, then stand up an org whose users are your customers.
-	//
-	// Keying both hooks on the org collapsed every member onto the tenant's pool
-	// wallet: every new signup lives in "hanzo", so a brand-new $0 account read
-	// HANZO's balance and sailed through the gate — we enforced our own wallet.
-	//
-	// The invariant that must never break: the gate READ and the usage DEBIT key on
-	// the SAME wallet, or spend can outrun the balance that admitted it. Both use
-	// subject; keep them together. The gate reads a coarse cents balance (a >0
-	// threshold only); the DEBIT is 18-decimal-exact.
-	aiobject.SetBalanceReader(func(ctx context.Context, subject, namespace, currency string) (int64, error) {
-		bal, err := fin.Balance(ctx, namespace, subject, currency, false)
-		if err != nil {
-			return 0, err
-		}
-		return bal.Cents(), nil
-	})
-	// The DEBIT is exact: the ai module emits the cost as a decimal-USD string, parsed
-	// here to 18-decimal USD (1e-18) so a sub-cent call bills precisely and is never floored.
-	aiobject.SetUsageRecorder(func(ctx context.Context, u aiobject.UsageEvent) error {
-		amt, err := money.ParseUSD(u.USD)
-		if err != nil {
-			return err
-		}
-		return fin.RecordUsage(ctx, types.UsageInput{
-			Org: u.Namespace, Subject: u.Subject, Amount: amt,
-			Currency: u.Currency, Model: u.Model, Provider: u.Provider, RequestID: u.RequestID,
-		})
-	})
-	log.Info("finance ledger wired (per-subject wallet in the org ledger, 18-decimal-exact, fail-closed)", "dataDir", cfg.DataDir)
+	finance.Publish(finance.New(cfg.DataDir))
+	log.Info("finance ledger published (per-subject wallet in the org ledger, 18-decimal-exact)", "dataDir", cfg.DataDir)
 }
 
 // pick resolves one inter-subsystem client under the HIP-0106 wiring rule shared

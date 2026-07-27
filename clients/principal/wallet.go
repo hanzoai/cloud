@@ -13,7 +13,7 @@ package principal
 // times the same way — a gate keyed on the ORG POOL while the debit spent a
 // PERSON's wallet:
 //
-//   - build.go wireFinance: "Keying both hooks on the org collapsed every member
+//   - apps/ai.go installBilling: "Keying both hooks on the org collapsed every member
 //     onto the tenant's pool wallet: every new signup lives in 'hanzo', so a
 //     brand-new $0 account read HANZO's balance and sailed through the gate."
 //   - middleware_billing.go identityFromCtx: "this gate checked the pool's balance
