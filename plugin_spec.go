@@ -8,36 +8,44 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// PluginSpec returns a MountSpec that serves prefix from a SEPARATE binary
+// PluginSpec returns a AppSpec that serves prefix from a SEPARATE binary
 // instead of code linked into this one.
 //
 // It exists so that where a subsystem runs stops being a property of the source.
 // zip.Load returns a zip.Service — the same type a linked-in service is — so the
-// only difference between "compiled in" and "its own process" is which MountSpec
+// only difference between "compiled in" and "its own process" is which AppSpec
 // Wire() lists. Moving one out is a one-line edit at the composition root, and
 // nothing downstream (routing, health, shutdown ordering) can tell the difference.
 //
+// Pass EVERY prefix the subsystem owns. o11y owns both /v1/o11y and /v1/sentry,
+// and a prefix left out is not an error — it is a silent 404 on that subtree,
+// which is the worst way for this to fail.
+//
 // The plugin names exactly one of Addr (already listening), Bin (the binary,
-// normally go:embed'd) or Path. For Bin and Path, zip starts it as a child on a
+// normally go:embed'd), Path, or URL+Sum (a release artifact, fetched and
+// verified by digest). For Bin and Path, zip starts it as a child on a
 // private unix socket and mounts the routes onto it; the child is stopped when
 // Shutdown runs, so a plugin subsystem tears down with the rest.
 //
 // Global is set because zip.Load registers under the prefix it was given. Handing
 // it a scoped Router would nest that prefix under the subsystem name and the
 // routes would answer somewhere nobody is asking.
-func PluginSpec(name, prefix string, p zip.Plugin) MountSpec {
+func PluginSpec(name string, p zip.Plugin, prefixes ...string) AppSpec {
 	if p.Name == "" {
 		p.Name = name
 	}
-	return MountSpec{
+	return AppSpec{
 		Name:   name,
 		Global: true,
+		// Deps are irrelevant to a plugin — it runs in its own process and
+		// receives nothing from this one — so this is zip.Load's Service with the
+		// router narrowed to the app it needs.
 		Mount: func(router Router, _ Deps) error {
 			app, ok := router.(*zip.App)
 			if !ok {
 				return fmt.Errorf("pluginspec %q: needs the root app, got %T — Global must stay set", name, router)
 			}
-			return zip.Load(prefix, p)(app)
+			return zip.Load(p, prefixes...)(app)
 		},
 	}
 }

@@ -22,7 +22,7 @@ var frozen = []struct {
 	name        string
 	ownsHealth  bool
 	hasShutdown bool
-	global      bool // receives the bare *zip.App — see MountSpec.Global
+	global      bool // receives the bare *zip.App — see AppSpec.Global
 }{
 	{"pubsub", false, true, false},          // was order 5
 	{"kafka", false, true, false},           // was order 6

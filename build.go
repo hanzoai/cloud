@@ -963,7 +963,7 @@ func pickVaultClient(cfg *Config, log luxlog.Logger) VaultClient {
 // signature, so Wire references each one directly and the compiler checks it.
 //
 // app is a Router, not the concrete *zip.App, and that is the whole safety
-// property: middleware a subsystem installs lands on the subtrees its MountSpec
+// property: middleware a subsystem installs lands on the subtrees its AppSpec
 // declares, never over the binary. Routes register exactly as before — absolute
 // paths, same precedence. See scope.go. A subsystem that genuinely gates
 // everything says so with Global: true and gets the bare app.
@@ -975,11 +975,11 @@ type MountFunc func(app Router, deps Deps) error
 // deadline so a slow teardown is cut off rather than hanging SIGTERM.
 type ShutdownFunc func(ctx context.Context) error
 
-// MountSpec describes one subsystem to mount. There is NO Order field: the slice
+// AppSpec describes one subsystem to mount. There is NO Order field: the slice
 // position in apps.Wire() IS the mount order — the composition root lists
 // subsystems in the exact sequence they mount (and, reversed, tear down), so order
 // is data read top-to-bottom in one file, not ints scattered across the tree.
-type MountSpec struct {
+type AppSpec struct {
 	Name     string
 	Mount    MountFunc
 	Shutdown ShutdownFunc // optional; nil means the subsystem has nothing to tear down.
@@ -1020,7 +1020,7 @@ type MountSpec struct {
 // its dependents is torn down after them) with no subsystem torn down while a
 // request still uses it. Only ENABLED specs mount, so only they register a hook;
 // teardown needs no separate enablement gate.
-func MountAll(app *zip.App, specs []MountSpec, cfg *Config, deps Deps) error {
+func MountAll(app *zip.App, specs []AppSpec, cfg *Config, deps Deps) error {
 	logger := deps.Logger
 	for _, spec := range specs {
 		if !cfg.Enabled(spec.Name) {

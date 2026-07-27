@@ -1,7 +1,7 @@
 package storage_test
 
 // Integration tests for the /v1/s3 file-manager subsystem, driven through the
-// REAL orchestrator path (BuildDeps → the init()-registered MountSpec → the
+// REAL orchestrator path (BuildDeps → the init()-registered AppSpec → the
 // zip/Fiber stack), exactly like clients/kms/kms_test.go. Requests run in-process
 // via app.Fiber().Test — no listener, no live SeaweedFS.
 //
@@ -67,7 +67,7 @@ func newApp(t *testing.T, creds bool) *zip.App {
 	deps := cloud.BuildDeps(cfg)
 	app := zip.New(zip.Config{Logger: deps.Logger})
 	app.Use(middleware.Recover())
-	specs := []cloud.MountSpec{
+	specs := []cloud.AppSpec{
 		{Name: "storage", Mount: storage.Mount, OwnsHealth: true},
 		{Name: "provisioning", Mount: provisioning.Mount},
 	}
