@@ -55,9 +55,9 @@ type state struct {
 // Mount wires /v1/kms/* onto app. The concrete-client cast (deps.KMS → *Client),
 // deps.IAMIssuer and the conditional (health-only) route set make this a direct
 // construction (cloud.NewBase), not cloud.Mount.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("kms.Mount: nil zip.App")
+		return fmt.Errorf("kms.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("kms.Mount: nil deps.Logger")

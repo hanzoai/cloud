@@ -30,7 +30,6 @@ import (
 	"github.com/hanzoai/commerce/events"
 	"github.com/hanzoai/commerce/infra"
 	luxlog "github.com/luxfi/log"
-	"github.com/zap-proto/zip"
 )
 
 const (
@@ -63,7 +62,7 @@ var (
 // no-op (the loop stays off until an operator wires NATS). It never blocks: the connect +
 // consume loop runs in the background, and a connect failure degrades to inert (a warning,
 // never a crash) — the same fail-soft contract as the forward storefront edge.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("catalogsync.Mount: nil deps.Logger")
 	}

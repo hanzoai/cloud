@@ -62,9 +62,9 @@ type state struct {
 var mounted *cloud.Service[state]
 
 // Mount wires the validators surface onto app per HIP-0106.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("validators.Mount: nil zip.App")
+		return fmt.Errorf("validators.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("validators.Mount: nil deps.Logger")
@@ -124,7 +124,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	// The collection root (/v1/validators) stays FLAT: Group("/v1/validators").
 	// Get("")/Post("") would register "/v1/validators/" (trailing slash), which
 	// the portal's bare /v1/validators calls would miss. Same gotcha the

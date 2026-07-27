@@ -962,13 +962,12 @@ func pickVaultClient(cfg *Config, log luxlog.Logger) VaultClient {
 // deps for everything shared. Every subsystem in the fleet exports exactly this
 // signature, so Wire references each one directly and the compiler checks it.
 //
-// app was once `any`, on the stated grounds that an external module (licensing)
-// exposed func(any, Deps) error and narrowing would break it — while licensing
-// said it used `any` to avoid an import cycle in pkg/cloud. Each cited the other,
-// and the cycle could not exist: this package already imports zip, and zip does
-// not import cloud. The `any` bought nothing and cost every subsystem a Typed()
-// wrapper plus a runtime type assertion whose failure branch was unreachable.
-type MountFunc func(app *zip.App, deps Deps) error
+// app is a Router, not the concrete *zip.App, and that is the whole safety
+// property: middleware a subsystem installs lands on the subtrees its MountSpec
+// declares, never over the binary. Routes register exactly as before — absolute
+// paths, same precedence. See scope.go. A subsystem that genuinely gates
+// everything says so with Global: true and gets the bare app.
+type MountFunc func(app Router, deps Deps) error
 
 // ShutdownFunc releases a subsystem's process-lifetime resources (background
 // goroutines, open DB handles) on graceful shutdown. It must be idempotent and
@@ -989,11 +988,30 @@ type MountSpec struct {
 	// (a real, fail-closed probe). Serve's generic liveness loop skips these so
 	// its always-ok route never shadows the subsystem's real probe.
 	OwnsHealth bool
+
+	// Prefixes are the route subtrees whose middleware this subsystem may install.
+	// Empty means the convention it already follows — /v1/<Name>, the same subtree
+	// Serve's generic liveness route assumes — so only a subsystem that gates
+	// something else has to name it. It bounds MIDDLEWARE, not route registration:
+	// routes still register at absolute paths anywhere, as they always have.
+	Prefixes []string
+
+	// Global says this subsystem gates the whole binary and receives the bare
+	// *zip.App. It is the one way to reach app-wide middleware, so every grant is a
+	// decision someone made in writing, and apps.TestWireFrozen fails on a new one.
+	// Today it is held only by linked modules whose own Mount still takes *zip.App
+	// (see cloud.Global) — none of which installs middleware.
+	Global bool
 }
 
 // MountAll mounts every ENABLED subsystem in specs, in slice order — the order is
-// the composition root's (apps.Wire()); MountAll does NOT sort. app is the
-// concrete *zip.App from Serve, handed to each MountFunc as itself.
+// the composition root's (apps.Wire()); MountAll does NOT sort.
+//
+// app is the concrete *zip.App from Serve. A Global spec receives it. Everyone else
+// receives a scope bound to their declared Prefixes, so a subsystem's middleware
+// reaches its own subtrees and nothing else, whatever its slice position. A
+// subsystem that installs middleware outside them fails the mount — the binary
+// refuses to boot half-gated rather than serving with a stranger's gate on.
 //
 // Teardown is wired HERE, at mount time: right after a subsystem mounts, its
 // ShutdownFunc (if any) is registered via app.OnShutdown. zip drains those hooks
@@ -1009,8 +1027,19 @@ func MountAll(app *zip.App, specs []MountSpec, cfg *Config, deps Deps) error {
 			logger.Debug("subsystem disabled", "name", spec.Name)
 			continue
 		}
-		if err := spec.Mount(app, deps); err != nil {
+		var router Router = app
+		var sc *scope
+		if !spec.Global {
+			sc = newScope(app, spec.Name, spec.Prefixes)
+			router = sc
+		}
+		if err := spec.Mount(router, deps); err != nil {
 			return fmt.Errorf("mount %s: %w", spec.Name, err)
+		}
+		if sc != nil {
+			if err := sc.err(); err != nil {
+				return fmt.Errorf("mount %s: %w", spec.Name, err)
+			}
 		}
 		// Register teardown as a zip shutdown hook. zip runs hooks LIFO after the
 		// drain (zip.App.Shutdown), so this reproduces the reverse-mount order the

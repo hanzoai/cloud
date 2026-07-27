@@ -49,9 +49,9 @@ var mounted *cloud.Service[state]
 
 // Mount wires /v1/marketplace/* and installs the marketplace Pricer on the tool
 // plane so a published listing's price is enforced at dispatch.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("marketplace.Mount: nil zip.App")
+		return fmt.Errorf("marketplace.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("marketplace.Mount: nil deps.Logger")

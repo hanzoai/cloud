@@ -69,7 +69,7 @@ var mountedStore *optinStore
 
 // Mount wires the leaderboard surface onto app per HIP-0106 — one line over the
 // generic subsystem entrypoint.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "leaderboard", build, routes)
 }
 
@@ -99,7 +99,7 @@ func Shutdown(_ context.Context) error {
 }
 
 // routes registers the surface.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/usage/leaderboard", cloud.Handle(s, leaderboardHandler))
 	app.Get("/v1/usage/activity", cloud.Handle(s, activityHandler))
 	app.Get("/v1/usage/leaderboard/optin", cloud.Handle(s, getOptin))

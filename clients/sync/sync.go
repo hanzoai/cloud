@@ -20,7 +20,6 @@ import (
 	"sync/atomic"
 
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
 )
 
 // state is the subsystem's mounted state: the per-org syncs store cache.
@@ -47,9 +46,9 @@ func storeFor(s *cloud.Service[state], org string) (*store, error) {
 
 // Mount wires /v1/sync, registers the git provider, and installs the reconcile func
 // as the cloud.SyncFunc so triggers (cloud.Sync) reach it.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("sync.Mount: nil zip.App")
+		return fmt.Errorf("sync.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("sync.Mount: nil deps.Logger")
@@ -97,7 +96,7 @@ func Shutdown() error {
 // whose /v1 ErrorHandlerJSON filter flattens any PROPAGATED handler error to HTTP
 // 500. Terminal writes the reject status (401 no-principal, 400 bad body, 404
 // not-found) in-band, so the filter has nothing to flatten and the real 4xx stands.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Collection endpoints sit AT the group root (/v1/sync). Group(p).Method("")
 	// yields "p/", so these stay flat on app to preserve the exact path.
 	app.Post("/v1/sync", cloud.Terminal(cloud.Handle(s, createSync)))

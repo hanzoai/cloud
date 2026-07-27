@@ -3,13 +3,12 @@ package customer
 import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
-	"github.com/zap-proto/zip"
 )
 
 // Routes registers the customer-management surface (SuperAdmin only). List (static)
 // precedes the :org param route; the write actions are POST (distinct method), so none
 // collide. The grants ledger + the org-in-body issue-grant share the ONE credit path.
-func Routes(app *zip.App, s *cloud.Service[core.State]) {
+func Routes(app cloud.Router, s *cloud.Service[core.State]) {
 	g := app.Group("/v1/admin")
 	g.Get("/customers", core.Guard(s, Customers))
 	g.Get("/customers/:org", core.Guard(s, CustomerDetail))

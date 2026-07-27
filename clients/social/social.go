@@ -122,9 +122,9 @@ var stopScheduler = func() {}
 // Mount wires the social surface onto app per HIP-0106. It keeps a package global
 // (mounted) for Shutdown, so it constructs the Service value directly — the same
 // "complex flavour" clients/crm uses.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("social.Mount: nil zip.App")
+		return fmt.Errorf("social.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("social.Mount: nil deps.Logger")
@@ -159,7 +159,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 // routes registers the social surface: the account + post CRUD + the summary roll-up.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/social")
 	g.Get("/summary", cloud.Handle(s, summary))
 	g.Get("/providers", cloud.Handle(s, listProviders))

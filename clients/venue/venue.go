@@ -179,7 +179,7 @@ type state struct {
 }
 
 // Mount wires /v1/cloud/* onto app.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "venue", build, routes)
 }
 
@@ -200,7 +200,7 @@ func build(b cloud.Base) (state, error) {
 	}, nil
 }
 
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Static /v1/cloud/accounts registers before the /:provider wildcards.
 	app.Get("/v1/cloud", cloud.Handle(s, listProviders))
 	app.Get("/v1/cloud/accounts", cloud.Handle(s, listAccountsH))

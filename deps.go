@@ -2,7 +2,7 @@
 //
 // One Go binary mounts every Hanzo-native subsystem (iam, base, kms,
 // commerce, ai, gateway, o11y, vfs, mq, dns, amqp, mcp, ...) via the
-// canonical Mount(app *zip.App, deps cloud.Deps) error contract. Brand,
+// canonical Mount(app cloud.Router, deps cloud.Deps) error contract. Brand,
 // enabled subsystems, and org scope are deployment configuration; the
 // binary is the same artifact across every white-label deployment.
 //

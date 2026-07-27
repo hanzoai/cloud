@@ -10,8 +10,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/hanzoai/cloud"
 	fiber "github.com/zap-proto/fiber/v3"
-	"github.com/zap-proto/zip"
 )
 
 // full-cloud-control (task 3). Every cloud /v1 route becomes a Tool, so a per-user
@@ -31,10 +31,10 @@ import (
 // the app so it enumerates routes lazily (at request time), after every subsystem
 // has mounted its routes.
 type builtinProvider struct {
-	app *zip.App
+	app cloud.Router
 }
 
-func newBuiltinProvider(app *zip.App) *builtinProvider { return &builtinProvider{app: app} }
+func newBuiltinProvider(app cloud.Router) *builtinProvider { return &builtinProvider{app: app} }
 
 func (p *builtinProvider) Source() Source { return SourceBuiltin }
 

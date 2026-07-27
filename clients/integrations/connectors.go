@@ -42,7 +42,7 @@ import (
 // connectorRoutes registers the user-plane surface. Called last from routes();
 // the literal /providers registers before the wildcard GETs (static-before-
 // wildcard discipline, same as routes()).
-func connectorRoutes(app *zip.App, s *cloud.Service[state]) {
+func connectorRoutes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/connectors", cloud.Handle(s, connectors))
 	app.Get("/v1/connectors/providers", cloud.Handle(s, connectorProviders))
 	app.Get("/v1/connectors/:id/token", cloud.Handle(s, tokenConn))

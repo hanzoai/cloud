@@ -16,7 +16,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/flags")
 	g.Get("/health", cloud.Handle(s, health))
 	app.Post("/v1/flags", cloud.Handle(s, evaluateFlags))

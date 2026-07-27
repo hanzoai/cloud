@@ -46,13 +46,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hanzoai/cloud/clients/k8s"
 	"io"
 	"net/http"
 	"os"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/clients/k8s"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/fleet"
@@ -155,9 +156,9 @@ type state struct {
 // Mount wires the /v1/ml/* and /v1/train/* surfaces onto app per HIP-0106. The
 // "compute"-product meter, the k8s client bring-up and the shared fleet registry
 // make this a direct construction (cloud.NewBase), not cloud.Mount.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("ml.Mount: nil zip.App")
+		return fmt.Errorf("ml.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("ml.Mount: nil deps.Logger")

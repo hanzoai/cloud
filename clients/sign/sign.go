@@ -61,9 +61,9 @@ var mounted *cloud.Service[state]
 // Mount wires the /v1/sign/* surface onto app per HIP-0106. Constructs the value
 // directly (cloud.NewBase) — this subsystem keeps a package global for the Shutdown
 // hook and opens a per-tenant goja host + PKI signer from deps.DataDir.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("sign.Mount: nil zip.App")
+		return fmt.Errorf("sign.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("sign.Mount: nil deps.Logger")
@@ -121,7 +121,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 // routes wires the /v1/sign/* owner + recipient-token surface. The native
 // /v1/sign/health route stays inline in Mount (registered before the host build).
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/sign")
 	// Owner routes — tenant = validated principal org. GET reads carry no body.
 	g.Post("/documents", owner(s, "documents.create", nil, true))

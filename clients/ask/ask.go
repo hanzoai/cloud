@@ -90,7 +90,7 @@ type AskResponse struct {
 // SAME app so a contributor's Gather replays a domain's grounded read in-process. The narration
 // model comes from deps.AI. Mount is a distinct route, so it wins Fiber's first-match over the
 // ai /v1/* catch-all.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	b := cloud.NewBase(deps, "ask")
 	svc := &cloud.Service[*state]{Base: b, State: &state{
 		registry: NewRegistry(newBooksContributor(app)),

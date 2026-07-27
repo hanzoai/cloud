@@ -88,9 +88,9 @@ var mounted *cloud.Service[state]
 // Mount wires the marketing surface onto app per HIP-0106. It keeps a package
 // global (mounted) for Shutdown, so it constructs the Service value directly —
 // the same "complex flavour" clients/crm uses.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("marketing.Mount: nil zip.App")
+		return fmt.Errorf("marketing.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("marketing.Mount: nil deps.Logger")
@@ -123,7 +123,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // routes registers the whole GTM surface (all org-scoped, /v1 only). Route
 // registration order is publish order; zip is first-match, and each path here has
 // a distinct shape (segment count), so none shadows another.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/marketing")
 	g.Get("/summary", cloud.Handle(s, summary))
 

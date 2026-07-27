@@ -42,8 +42,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/fiber/v3/middleware/adaptor"
-	"github.com/zap-proto/zip"
 )
 
 // PlaceholderBase is the sentinel commerce base URL used when commerce is
@@ -56,17 +56,20 @@ const PlaceholderBase = "http://commerce.inproc"
 // RoundTrip (every request) race-free without a mutex on the hot path.
 var handler atomic.Pointer[http.Handler]
 
-// SetApp publishes the co-resident zip app commerce's routes live on (the
-// SharedApp contract). The S2S dispatch enters the app's fasthttp pipeline
-// directly; the http.Handler shape survives only inside this seam for the
-// bridge-building subsystems that still speak *http.Request. Passing nil
-// un-publishes.
-func SetApp(app *zip.App) {
+// SetApp publishes the co-resident app commerce's routes live on (the SharedApp
+// contract). The S2S dispatch enters the app's fasthttp pipeline directly; the
+// http.Handler shape survives only inside this seam for the bridge-building
+// subsystems that still speak *http.Request. Passing nil un-publishes.
+//
+// It takes the *fiber.App — cloud.Router.Fiber() — rather than the *zip.App: this
+// package is imported by cloud itself, so it cannot name cloud.Router, and the
+// engine is all the dispatch ever needed.
+func SetApp(app *fiber.App) {
 	if app == nil {
 		SetHandler(nil)
 		return
 	}
-	SetHandler(adaptor.FiberApp(app.Fiber()))
+	SetHandler(adaptor.FiberApp(app))
 }
 
 // SetHandler publishes the in-process commerce handler. SetApp is the

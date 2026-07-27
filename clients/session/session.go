@@ -65,9 +65,9 @@ type state struct {
 var mounted *cloud.Service[state]
 
 // Mount wires /v1/code/sessions/* onto app.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return errors.New("session.Mount: nil zip.App")
+		return errors.New("session.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return errors.New("session.Mount: nil deps.Logger")
@@ -96,7 +96,7 @@ func Shutdown() error {
 
 // routes registers the surface. Collection endpoints register before their
 // :id siblings so the first-match scan resolves them first.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/code")
 	g.Post("/sessions", cloud.Handle(s, createSession))
 	g.Get("/sessions", cloud.Handle(s, listSessions))

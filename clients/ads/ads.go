@@ -78,9 +78,9 @@ var mounted *cloud.Service[state]
 // Mount wires the ads surface onto app per HIP-0106. It keeps a package global
 // (mounted) for Shutdown, so it constructs the Service value directly — the same
 // "complex flavour" clients/crm uses.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("ads.Mount: nil zip.App")
+		return fmt.Errorf("ads.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("ads.Mount: nil deps.Logger")
@@ -106,7 +106,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 // routes registers the ads surface: the campaign CRUD + the summary roll-up.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/ads")
 	g.Get("/summary", cloud.Handle(s, summary))
 
