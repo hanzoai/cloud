@@ -19,10 +19,9 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/hanzoai/cloud/zaptrace"
 	"github.com/zap-proto/zip"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	luxtrace "github.com/luxfi/trace"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
@@ -52,7 +51,10 @@ func TestTracingMiddleware_LiveZAP(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	exp, err := otlptrace.New(ctx, zaptrace.New(ep))
+	exp, err := luxtrace.NewZAPExporter(
+		luxtrace.ExporterConfig{Type: luxtrace.ZAP, Endpoint: ep},
+		"hanzo-cloud", "",
+	)
 	if err != nil {
 		t.Fatalf("zap trace exporter: %v", err)
 	}
