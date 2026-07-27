@@ -8,6 +8,7 @@ import (
 	"time"
 
 	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud/clients/datastore"
 )
 
 // datastore.go is the WAREHOUSE projection of account usage: the hanzo.account_usage
@@ -181,7 +182,7 @@ GROUP BY org, subject, provider, account, day, lane, ` + "`window`" + `, window_
 // only on success, so a datastore that is still connecting at boot is retried on
 // the next call rather than permanently poisoned.
 func (w *warehouse) ensureAccountUsage(ctx context.Context) error {
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return fmt.Errorf("account usage: datastore not connected")
 	}
 	w.dsMu.Lock()
@@ -190,7 +191,7 @@ func (w *warehouse) ensureAccountUsage(ctx context.Context) error {
 		return nil
 	}
 	for _, stmt := range accountUsageDDL {
-		if err := aiobject.DatastoreExec(ctx, stmt); err != nil {
+		if err := datastore.Exec(ctx, stmt); err != nil {
 			return fmt.Errorf("account usage ddl: %w", err)
 		}
 	}
@@ -227,7 +228,7 @@ func (w *warehouse) WriteSamples(ctx context.Context, org, subject string, sampl
 	}
 	ts := now.UTC()
 	for _, x := range samples {
-		if err := aiobject.DatastoreExec(ctx, accountUsageInsert,
+		if err := datastore.Exec(ctx, accountUsageInsert,
 			org, subject, x.Provider, x.Account, x.Plan, x.Kind, x.Lane, x.Window,
 			uint32(x.WindowMinutes), dsInstant(x.WindowStart), dsInstant(x.ResetsAt), x.UsedPct,
 			uint64(x.Requests), uint64(x.InputTokens), uint64(x.OutputTokens),
@@ -404,7 +405,7 @@ func (w *warehouse) Series(ctx context.Context, org, subject, provider, account,
 		return nil, false
 	}
 	q, args := seriesQuery(org, subject, provider, account, window, from, to)
-	rows, err := aiobject.DatastoreQuery(ctx, q, args...)
+	rows, err := datastore.Query(ctx, q, args...)
 	if err != nil {
 		return nil, false
 	}
@@ -466,7 +467,7 @@ func (w *warehouse) AccountTotals(ctx context.Context, org, subject string, from
 		return nil, false
 	}
 	q, args := summaryQuery(org, subject, from, to)
-	rows, err := aiobject.DatastoreQuery(ctx, q, args...)
+	rows, err := datastore.Query(ctx, q, args...)
 	if err != nil {
 		return nil, false
 	}
@@ -502,14 +503,14 @@ func (w *warehouse) HanzoTotals(ctx context.Context, org string, from, to time.T
 	if org == "" {
 		return nil, false
 	}
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return nil, false
 	}
 	if err := aiobject.EnsureCloudUsageTable(ctx); err != nil {
 		return nil, false
 	}
 	q, args := hanzoQuery(org, from, to)
-	rows, err := aiobject.DatastoreQuery(ctx, q, args...)
+	rows, err := datastore.Query(ctx, q, args...)
 	if err != nil {
 		return nil, false
 	}

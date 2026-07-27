@@ -63,6 +63,7 @@ import (
 
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/zap-proto/zip"
@@ -201,7 +202,7 @@ func window(c *zip.Ctx) (time.Time, time.Time, string, string, error) {
 // requireDatastore returns the honest 503 when the datastore ledger is not
 // connected, rather than fabricating zeros. Mirrors ai/object's read gate.
 func requireDatastore() error {
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: datastore (datastore) not connected")
 	}
 	return nil
@@ -288,7 +289,7 @@ func overview(s *cloud.Service[state], c *zip.Ctx) error {
 		"sum(prompt_tokens) AS prompt_tokens, sum(completion_tokens) AS completion_tokens, " +
 		"sum(cost_cents) AS cost_cents, uniqExact(model) AS models, uniqExact(provider) AS providers, " +
 		"countIf(status = 'error') AS errors FROM " + llmTable + " WHERE " + where
-	llmRows, err := aiobject.DatastoreQuery(ctx, llmSQL, args...)
+	llmRows, err := datastore.Query(ctx, llmSQL, args...)
 	if err != nil {
 		return warehouseErr("llm", err)
 	}
@@ -300,7 +301,7 @@ func overview(s *cloud.Service[state], c *zip.Ctx) error {
 	eventsSQL := "SELECT countIf(event = '$pageview') AS pageviews, uniqExact(distinct_id) AS visitors, " +
 		"uniqExact(session_id) AS sessions, countIf(event = 'order_completed') AS orders, " +
 		"toFloat64(sum(revenue)) AS revenue FROM " + eventsTable + " WHERE " + ewhere
-	eventsRows, eerr := aiobject.DatastoreQuery(ctx, eventsSQL, eargs...)
+	eventsRows, eerr := datastore.Query(ctx, eventsSQL, eargs...)
 	eventsOK := eerr == nil
 	if eerr != nil {
 		s.Log.Debug("events lens unavailable (honest-empty)", "err", eerr)
@@ -348,7 +349,7 @@ func timeseries(s *cloud.Service[state], c *zip.Ctx) error {
 	seriesSQL := fmt.Sprintf("SELECT toStartOf%s(timestamp, 'UTC') AS bucket, count() AS requests, "+
 		"sum(total_tokens) AS tokens, sum(cost_cents) AS cost_cents FROM %s WHERE %s GROUP BY bucket ORDER BY bucket",
 		bucketFn, llmTable, where)
-	rows, err := aiobject.DatastoreQuery(ctx, seriesSQL, args...)
+	rows, err := datastore.Query(ctx, seriesSQL, args...)
 	if err != nil {
 		return warehouseErr("timeseries", err)
 	}
@@ -390,7 +391,7 @@ func top(s *cloud.Service[state], c *zip.Ctx) error {
 	modelSQL := fmt.Sprintf("SELECT model, any(provider) AS provider, count() AS requests, "+
 		"sum(total_tokens) AS tokens, sum(cost_cents) AS cost_cents FROM %s WHERE %s "+
 		"GROUP BY model ORDER BY cost_cents DESC, requests DESC LIMIT %d", llmTable, where, limit)
-	modelRows, err := aiobject.DatastoreQuery(ctx, modelSQL, args...)
+	modelRows, err := datastore.Query(ctx, modelSQL, args...)
 	if err != nil {
 		return warehouseErr("top-models", err)
 	}
@@ -400,7 +401,7 @@ func top(s *cloud.Service[state], c *zip.Ctx) error {
 	prodSQL := fmt.Sprintf("SELECT product_id AS productId, countIf(event = 'order_completed') AS orders, "+
 		"toFloat64(sum(revenue)) AS revenue, sum(quantity) AS units FROM %s WHERE %s AND product_id != '' "+
 		"GROUP BY product_id ORDER BY revenue DESC LIMIT %d", eventsTable, ewhere, limit)
-	prodRows, perr := aiobject.DatastoreQuery(ctx, prodSQL, eargs...)
+	prodRows, perr := datastore.Query(ctx, prodSQL, eargs...)
 
 	// Behavior lenses over hanzo.events — WHERE people go / WHAT they look at
 	// (topPages) and where they come FROM (topReferrers organic/referral,
@@ -408,17 +409,17 @@ func top(s *cloud.Service[state], c *zip.Ctx) error {
 	// honest-empty if the events table is absent or the query errors — never a 500
 	// (mirrors the overview web lens exactly).
 	pageSQL, pageArgs := breakdownSQL(pageKeyExpr, org, start, end, limit)
-	pageRows, pageErr := aiobject.DatastoreQuery(ctx, pageSQL, pageArgs...)
+	pageRows, pageErr := datastore.Query(ctx, pageSQL, pageArgs...)
 	if pageErr != nil {
 		s.Log.Debug("topPages lens unavailable (honest-empty)", "err", pageErr)
 	}
 	refSQL, refArgs := breakdownSQL(referrerKeyExpr, org, start, end, limit)
-	refRows, refErr := aiobject.DatastoreQuery(ctx, refSQL, refArgs...)
+	refRows, refErr := datastore.Query(ctx, refSQL, refArgs...)
 	if refErr != nil {
 		s.Log.Debug("topReferrers lens unavailable (honest-empty)", "err", refErr)
 	}
 	srcSQL, srcArgs := breakdownSQL(sourceKeyExpr, org, start, end, limit)
-	srcRows, srcErr := aiobject.DatastoreQuery(ctx, srcSQL, srcArgs...)
+	srcRows, srcErr := datastore.Query(ctx, srcSQL, srcArgs...)
 	if srcErr != nil {
 		s.Log.Debug("topSources lens unavailable (honest-empty)", "err", srcErr)
 	}
@@ -445,7 +446,7 @@ func top(s *cloud.Service[state], c *zip.Ctx) error {
 // can gate; 200 otherwise even if the events lens is not yet provisioned (that is
 // honest-empty, not a failure).
 func health(s *cloud.Service[state], c *zip.Ctx) error {
-	connected := aiobject.DatastoreEnabled()
+	connected := datastore.Ready()
 	res := map[string]any{
 		"service":   "analytics",
 		"status":    "ok",
@@ -470,7 +471,7 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 // constant (never user input), so `EXISTS TABLE` is safe. Any error → false
 // (honest "not available") rather than surfacing.
 func tableExists(ctx context.Context, qualified string) bool {
-	rows, err := aiobject.DatastoreQuery(ctx, "EXISTS TABLE "+qualified)
+	rows, err := datastore.Query(ctx, "EXISTS TABLE "+qualified)
 	if err != nil || len(rows) == 0 {
 		return false
 	}

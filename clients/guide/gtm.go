@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud/clients/datastore"
 )
 
 // gtm.go is the Business AI Guide's ANALYTICS LENS: it reads the org's real funnel
@@ -49,7 +49,7 @@ func analyticsFunnel(ctx context.Context, org string) Funnel {
 		toFloat64(sum(revenue)) AS revenue
 	FROM ` + eventsTable + `
 	WHERE tenant_id = ? AND timestamp >= now() - INTERVAL 30 DAY`
-	rows, err := aiobject.DatastoreQuery(ctx, q, org)
+	rows, err := datastore.Query(ctx, q, org)
 	if err != nil || len(rows) == 0 {
 		return f
 	}
