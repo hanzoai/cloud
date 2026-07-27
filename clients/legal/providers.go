@@ -20,7 +20,7 @@ type Signer struct {
 
 // Esign is the e-signature seam. Request opens a signature request over a document for
 // the given signers and returns a provider reference; Status reports completion. A
-// real provider (DocuSign, Dropbox Sign, or the in-house clients/sign bundle)
+// real provider (DocuSign, Dropbox Sign, or the in-house clients/esign bundle)
 // implements this; stubEsign is the honest default.
 type Esign interface {
 	Name() string
