@@ -293,7 +293,7 @@ func TestReauthRetryOn401(t *testing.T) {
 	}
 }
 
-func TestUnconfiguredFailsClosed503(t *testing.T) {
+func TestUnconfiguredFailsClosedExceptEmptyProjections(t *testing.T) {
 	t.Setenv("ZT_CONTROLLER_URL", "https://zt-controller.invalid")
 	t.Setenv("ZT_CLIENT_ID", "")
 	t.Setenv("ZT_CLIENT_SECRET", "")
@@ -301,7 +301,24 @@ func TestUnconfiguredFailsClosed503(t *testing.T) {
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
-	for _, path := range []string{"/v1/networks", "/v1/mesh/services", "/v1/edge/nodes"} {
+	// COLLECTION reads degrade to an honest-empty 200: an unconfigured deployment
+	// genuinely has no networks, and 503-ing every list turns a clean "nothing here
+	// yet" console into an error on every page load. Nothing is disclosed by an
+	// empty list, so this is presentation, not a relaxed gate.
+	for _, path := range []string{"/v1/networks", "/v1/edge/nodes"} {
+		code, body := do(t, app, http.MethodGet, path, "acme")
+		if code != http.StatusOK {
+			t.Fatalf("unconfigured GET %s: want 200 empty, got %d", path, code)
+		}
+		if strings.Contains(string(body), `"id"`) {
+			t.Fatalf("unconfigured GET %s must disclose nothing, got %s", path, body)
+		}
+	}
+	// Everything else still fails closed through gate(). Mesh services are a real
+	// inventory rather than a per-org projection, and a specific network lookup
+	// cannot be answered honestly as "empty" — so neither degrades. If either ever
+	// returns 200 here, the gate has gone, not just the list presentation.
+	for _, path := range []string{"/v1/mesh/services", "/v1/networks/zt-acme"} {
 		if code, _ := do(t, app, http.MethodGet, path, "acme"); code != http.StatusServiceUnavailable {
 			t.Fatalf("unconfigured GET %s: want 503, got %d", path, code)
 		}
