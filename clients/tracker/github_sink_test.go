@@ -2,6 +2,7 @@ package tracker
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -109,5 +110,52 @@ func TestCleanLabels(t *testing.T) {
 	// comma folded to space, empties dropped.
 	if len(got) != 3 || got[0] != "bug" || got[1] != "a b" || got[2] != "keep" {
 		t.Fatalf("cleanLabels: %#v", got)
+	}
+}
+
+// TestGetIssueByExtRefRejectsAnEmptyAnchor pins the mirror lookup's fail-closed edge.
+// Every NATIVE issue carries an empty ext_ref, so a blank anchor must miss rather than
+// select one of them — otherwise the upsert's "found ⇒ update in place" branch would
+// overwrite a real team issue with mirrored external content.
+func TestGetIssueByExtRefRejectsAnEmptyAnchor(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	p := mkProject("hanzo", "ENG", "Engineering")
+	if err := s.CreateProject(ctx, p); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	// A native team issue: no external anchor.
+	native, err := s.CreateIssue(ctx, Issue{
+		ID: "iss_native", ProjectID: p.ID, Org: "hanzo",
+		Title: "Native work item", Status: "todo", Priority: "none",
+		CreatedAt: 100, UpdatedAt: 100,
+	})
+	if err != nil {
+		t.Fatalf("create native issue: %v", err)
+	}
+	if native.ExtRef != "" {
+		t.Fatalf("a native issue should carry no anchor, got %q", native.ExtRef)
+	}
+
+	for _, anchor := range []string{"", "   ", "\t"} {
+		got, err := s.GetIssueByExtRef(ctx, "hanzo", p.ID, anchor)
+		if !errors.Is(err, errNotFound) {
+			t.Fatalf("anchor %q: want errNotFound, got issue %+v err=%v", anchor, got, err)
+		}
+	}
+
+	// A real anchor still resolves — the guard rejects blanks, not lookups.
+	mirrored, err := s.CreateIssue(ctx, Issue{
+		ID: "iss_mirror", ProjectID: p.ID, Org: "hanzo", Source: "git",
+		ExtRef: "github:hanzoai/cloud#7", Title: "Mirrored", Status: "todo",
+		Priority: "none", CreatedAt: 101, UpdatedAt: 101,
+	})
+	if err != nil {
+		t.Fatalf("create mirrored issue: %v", err)
+	}
+	found, err := s.GetIssueByExtRef(ctx, "hanzo", p.ID, "github:hanzoai/cloud#7")
+	if err != nil || found.Number != mirrored.Number {
+		t.Fatalf("real anchor should resolve to #%d, got %+v err=%v", mirrored.Number, found, err)
 	}
 }

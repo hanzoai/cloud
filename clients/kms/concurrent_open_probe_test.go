@@ -35,6 +35,8 @@ import (
 )
 
 func TestConcurrentOpen_PerOrgSQLiteHasNoExclusiveLock(t *testing.T) {
+	requireSharedStore(t)
+
 	dir := t.TempDir()
 	log := luxlog.NewNoOpLogger()
 	key := b64key(t, 0x5A)
