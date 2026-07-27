@@ -473,11 +473,11 @@ require (
 	github.com/gtank/merlin v0.1.1 // indirect
 	github.com/gtank/ristretto255 v0.2.0 // indirect
 	github.com/hanzoai/dashscopego v0.6.0 // indirect
-	github.com/hanzoai/dbx v1.17.1 // indirect
+	github.com/hanzoai/dbx v1.17.2 // indirect
 	github.com/hanzoai/go-openrouter v1.0.0 // indirect
 	github.com/hanzoai/goauthorizenet v1.0.0 // indirect
 	github.com/hanzoai/gochimp3 v1.0.0 // indirect
-	github.com/hanzoai/orm v0.6.10
+	github.com/hanzoai/orm v0.6.12
 	github.com/hanzoai/pdf v1.2.0 // indirect
 	github.com/hanzoai/pubsub-go v1.53.0 // indirect
 	github.com/hanzoai/search-go v0.36.0 // indirect

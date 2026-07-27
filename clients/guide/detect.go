@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud/clients/datastore"
 )
 
 // Detector reports whether a step's done-criterion is satisfied by the org's real
@@ -132,7 +132,7 @@ const eventsTable = "hanzo.events"
 // datastore not initialised in this deployment) is returned so the reconcile loop
 // leaves the step untouched — auto-detect is best-effort and never a false done.
 func detectAnalyticsEmitting(ctx context.Context, org string, _ Step) (bool, error) {
-	rows, err := aiobject.DatastoreQuery(ctx, "SELECT count() AS n FROM "+eventsTable+" WHERE tenant_id = ?", org)
+	rows, err := datastore.Query(ctx, "SELECT count() AS n FROM "+eventsTable+" WHERE tenant_id = ?", org)
 	if err != nil {
 		return false, err
 	}
