@@ -18,7 +18,7 @@ package core
 // (metrics/invoices/subscriptions) compose. They read commerce.events — the
 // single warehouse table the commerce analytics collector lands every
 // customer-activity event in (subscription/invoice/usage lifecycle) — over the
-// SAME shared client (aiobject.DatastoreQuery) the o11y/compute/analytics lenses
+// SAME shared client (datastore.Query) the o11y/compute/analytics lenses
 // already use, no second connection. This mirrors compute.go's row-coercers and
 // EXISTS-TABLE probe, hoisted here so the three sibling domains share ONE copy
 // instead of each re-deriving it (DRY; the admin-package o11y/compute keep their
@@ -37,7 +37,7 @@ import (
 	"strings"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud/clients/datastore"
 )
 
 // BillingEventsTable is the collector-owned warehouse table the commerce
@@ -69,21 +69,21 @@ var (
 
 // WarehouseReady reports whether the shared datastore ledger is connected, the
 // gate every fleet read checks first (honest-empty when false).
-func WarehouseReady() bool { return aiobject.DatastoreEnabled() }
+func WarehouseReady() bool { return datastore.Ready() }
 
 // BillingEventsReady reports whether the warehouse is connected AND the
 // collector's commerce.events table is provisioned — the two-part gate every
 // billing fleet view opens with, so an unwired collector degrades to an honest
 // empty aggregate rather than an error.
 func BillingEventsReady(ctx context.Context) bool {
-	return aiobject.DatastoreEnabled() && CHTableExists(ctx, BillingEventsTable)
+	return datastore.Ready() && CHTableExists(ctx, BillingEventsTable)
 }
 
 // CHTableExists probes the datastore for a table's presence. The name is a
 // package constant (never user input), so EXISTS TABLE is safe. Any error →
 // false (honest "not available yet"), mirroring compute.computeTableExists.
 func CHTableExists(ctx context.Context, qualified string) bool {
-	rows, err := aiobject.DatastoreQuery(ctx, "EXISTS TABLE "+qualified)
+	rows, err := datastore.Query(ctx, "EXISTS TABLE "+qualified)
 	if err != nil || len(rows) == 0 {
 		return false
 	}

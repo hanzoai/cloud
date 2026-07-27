@@ -24,6 +24,7 @@ import (
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
+	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/zap-proto/zip"
 )
 
@@ -120,13 +121,13 @@ func computeProviderCredits(ctx context.Context, s *cloud.Service[core.State]) [
 // customer's usage). Honest-empty ({}) on any datastore blip — never 5xxs.
 func providerBurnCents(ctx context.Context) map[string]int64 {
 	burn := map[string]int64{}
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return burn
 	}
 	if err := aiobject.EnsureCloudUsageTable(ctx); err != nil {
 		return burn
 	}
-	rows, err := aiobject.DatastoreQuery(ctx,
+	rows, err := datastore.Query(ctx,
 		"SELECT provider, sum(cost_cents) AS burn FROM "+usageTable+" GROUP BY provider")
 	if err != nil {
 		return burn
@@ -186,9 +187,9 @@ func UsageFunding(s *cloud.Service[core.State], c *zip.Ctx) error {
 	}
 
 	out := []UsageFundingRow{}
-	if aiobject.DatastoreEnabled() {
+	if datastore.Ready() {
 		if err := aiobject.EnsureCloudUsageTable(ctx); err == nil {
-			rows, qerr := aiobject.DatastoreQuery(ctx,
+			rows, qerr := datastore.Query(ctx,
 				"SELECT provider, model, count() AS requests, sum(total_tokens) AS tokens, "+
 					"sum(cost_cents) AS cost_cents FROM "+usageTable+
 					" WHERE timestamp >= ? AND timestamp < ? GROUP BY provider, model ORDER BY cost_cents DESC",

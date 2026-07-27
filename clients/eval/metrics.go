@@ -8,6 +8,7 @@ import (
 	"time"
 
 	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
@@ -263,7 +264,7 @@ func (t *dsTelemetry) Metrics(ctx context.Context, f MetricsFilter) (Board, erro
 	if f.Org == "" {
 		return Board{}, fmt.Errorf("evals telemetry: metrics read missing org")
 	}
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return Board{}, fmt.Errorf("evals telemetry: datastore not connected")
 	}
 	if err := aiobject.EnsureCloudUsageTable(ctx); err != nil {
@@ -280,7 +281,7 @@ func (t *dsTelemetry) Metrics(ctx context.Context, f MetricsFilter) (Board, erro
 		"countIf(status != '' AND status != 'success') AS errors, " +
 		"uniqExact(model) AS models, uniqExact(user_id) AS users " +
 		"FROM " + t.table("cloud_usage") + " WHERE " + where
-	totalsRows, err := aiobject.DatastoreQuery(ctx, totalsSQL, args...)
+	totalsRows, err := datastore.Query(ctx, totalsSQL, args...)
 	if err != nil {
 		return Board{}, fmt.Errorf("evals metrics: totals: %w", err)
 	}
@@ -292,7 +293,7 @@ func (t *dsTelemetry) Metrics(ctx context.Context, f MetricsFilter) (Board, erro
 		"sum(total_tokens) AS total_tokens, " +
 		"countIf(status != '' AND status != 'success') AS errors " +
 		"FROM " + t.table("cloud_usage") + " WHERE " + where + " GROUP BY bucket ORDER BY bucket"
-	seriesRows, err := aiobject.DatastoreQuery(ctx, seriesSQL, append([]any{stepSec}, args...)...)
+	seriesRows, err := datastore.Query(ctx, seriesSQL, append([]any{stepSec}, args...)...)
 	if err != nil {
 		return Board{}, fmt.Errorf("evals metrics: series: %w", err)
 	}
@@ -304,7 +305,7 @@ func (t *dsTelemetry) Metrics(ctx context.Context, f MetricsFilter) (Board, erro
 		"countIf(status != '' AND status != 'success') AS errors " +
 		"FROM " + t.table("cloud_usage") + " WHERE " + where +
 		" GROUP BY model ORDER BY cost_cents DESC LIMIT 100"
-	modelRows, err := aiobject.DatastoreQuery(ctx, modelSQL, args...)
+	modelRows, err := datastore.Query(ctx, modelSQL, args...)
 	if err != nil {
 		return Board{}, fmt.Errorf("evals metrics: by-model: %w", err)
 	}
@@ -350,7 +351,7 @@ func (t *dsTelemetry) latency(ctx context.Context, f MetricsFilter) (map[string]
 		"quantile(0.5)(duration_nano) AS p50, quantile(0.95)(duration_nano) AS p95, " +
 		"quantile(0.99)(duration_nano) AS p99, count() AS n " +
 		"FROM " + spanTable + " WHERE " + where + " GROUP BY model"
-	if rows, err := aiobject.DatastoreQuery(ctx, modelSQL, args...); err == nil {
+	if rows, err := datastore.Query(ctx, modelSQL, args...); err == nil {
 		for _, r := range rows {
 			model := asString(r["model"])
 			if model == "" || asInt64(r["n"]) == 0 {
@@ -368,7 +369,7 @@ func (t *dsTelemetry) latency(ctx context.Context, f MetricsFilter) (map[string]
 	overallSQL := "SELECT quantile(0.5)(duration_nano) AS p50, quantile(0.95)(duration_nano) AS p95, " +
 		"quantile(0.99)(duration_nano) AS p99, count() AS n " +
 		"FROM " + spanTable + " WHERE " + where
-	if rows, err := aiobject.DatastoreQuery(ctx, overallSQL, args...); err == nil {
+	if rows, err := datastore.Query(ctx, overallSQL, args...); err == nil {
 		if r := firstRow(rows); asInt64(r["n"]) > 0 {
 			overall = LatencyStat{
 				Available: true,
