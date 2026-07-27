@@ -43,11 +43,11 @@ OPENAPI_DIR    ?= ../openapi
 # cek falls back to the pure-Go envelope, whose properties differ — a store is
 # single-writer and durable at close rather than in-place and per-commit. The tests
 # that pin the shipped storage posture (clients/kms concurrent-open, audit
-# shareability) therefore skip in both targets. Closing that needs a third target
-# built with -tags "libsqlite3 sqlite_fts5" against a real libsqlcipher.
+# shareability) therefore skip in both targets. `make test-codec` below is the one
+# that runs them, and needs a real libsqlcipher to do it.
 CGO_ENABLED     ?= 0
 
-.PHONY: help native webui deploy-ui agentskills build build-standalone run smoke test test-cgo vet tidy docker docker-push clean
+.PHONY: help native webui deploy-ui agentskills build build-standalone run smoke test test-cgo test-codec vet tidy docker docker-push clean
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -121,6 +121,22 @@ test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ship
 
 test-cgo: ## Prove the cgo build works too — forces the fork's pure-Go backend via -tags sqlite_purego so the embedded modernc importers don't double-register "sqlite".
 	$(TEST_ENV) CGO_ENABLED=1 $(GO) test -tags "sqlite_purego $(TEST_TAGS)" ./...
+
+# The only target that builds what the image builds (Dockerfile: CGO_ENABLED=1,
+# -tags "libsqlite3 sqlite_fts5"). The other two link no codec, so cek falls back to
+# the pure-Go envelope and the tests pinning the shipped storage posture — a store
+# shareable by a second opener, durable per-commit rather than at close — skip
+# instead of running.
+#
+# The tag alone is not enough: it selects the C engine, but the codec is a RUNTIME
+# probe of the libsqlcipher that engine links. A csqlite built against plain SQLite
+# compiles and passes the one-engine guard while CodecLinked() stays false, so the
+# storage tests would still quietly skip. SQLITE_REQUIRE_CODEC=1 — the same
+# assertion the Dockerfile makes before it builds /cloud — turns that into a
+# failure, so this target either exercises the shipped engine or says it cannot.
+# It therefore FAILS on a machine without SQLCipher, which is the honest result.
+test-codec: ## Run the suite against the engine the image ships (cgo + a real libsqlcipher).
+	SQLITE_REQUIRE_CODEC=1 $(TEST_ENV) CGO_ENABLED=1 $(GO) test -tags "libsqlite3 $(TEST_TAGS)" ./...
 
 vet: ## go vet across the module.
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) vet ./...
