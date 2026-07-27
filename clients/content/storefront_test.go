@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/hanzoai/cloud/clients/commerceinproc"
+	"github.com/hanzoai/cloud/clients/commerce/transport"
 )
 
 // storefront_test.go proves the ONE catalog seam: a PUBLISHED product Asset surfaces
@@ -191,7 +191,7 @@ func TestTransitionSkipsNonCatalogAsset(t *testing.T) {
 // published catalog asset records an honest "not_configured" storefront status and the
 // status change still succeeds — never a 5xx, never a rollback.
 func TestTransitionStorefrontFailClosed(t *testing.T) {
-	commerceinproc.SetHandler(nil) // ensure no co-resident commerce
+	transport.SetHandler(nil) // ensure no co-resident commerce
 	t.Setenv(commerceTokenEnv, "")
 	t.Setenv(commerceURLEnv, "")
 
@@ -243,7 +243,7 @@ func TestCommerceStorefrontWire(t *testing.T) {
 		gotListingPath, gotListingOrg string
 		gotBody                       map[string]any
 	)
-	commerceinproc.SetHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	transport.SetHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/store/current":
@@ -262,7 +262,7 @@ func TestCommerceStorefrontWire(t *testing.T) {
 			_, _ = io.WriteString(w, `{"error":"unexpected"}`)
 		}
 	}))
-	t.Cleanup(func() { commerceinproc.SetHandler(nil) })
+	t.Cleanup(func() { transport.SetHandler(nil) })
 
 	const org = "karma"
 	const imgURL = "https://s3.hanzo.ai/hanzo-studio/orgs/karma/output/valentina/product_front.png"
@@ -303,11 +303,11 @@ func TestCommerceStorefrontWire(t *testing.T) {
 func TestCommerceStorefrontNoStore(t *testing.T) {
 	t.Setenv(commerceTokenEnv, "svc-admin-token")
 	t.Setenv(commerceURLEnv, "")
-	commerceinproc.SetHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	transport.SetHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"store":{"id":"default","name":"Default Store"}}`)
 	}))
-	t.Cleanup(func() { commerceinproc.SetHandler(nil) })
+	t.Cleanup(func() { transport.SetHandler(nil) })
 
 	_, err := newStorefront().Publish(context.Background(), "karma", StorefrontRequest{
 		Design: "valentina", Kind: "product", ImageURL: "https://s3.hanzo.ai/hanzo-studio/orgs/karma/output/x.png",
