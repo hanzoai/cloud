@@ -344,46 +344,32 @@ func TestTagRelease_RefPath(t *testing.T) {
 	}
 }
 
-// The universe contract: image-update dispatch with {service,image,sha,env} — the
-// SAME payload release.yml's notify-universe fires.
-func TestNotifyUniverse_Payload(t *testing.T) {
-	t.Setenv("UNIVERSE_DISPATCH_TOKEN", "disp-token")
-	var got map[string]any
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/repos/hanzoai/universe/dispatches" {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		_ = json.NewDecoder(r.Body).Decode(&got)
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer srv.Close()
-	defer swapAPIBase(srv.URL)()
-
-	img := "ghcr.io/hanzoai/cloud:v1.786.44"
-	if err := notifyUniverse(testService(), context.Background(), img, "deadbeef"); err != nil {
-		t.Fatalf("notifyUniverse: %v", err)
-	}
-	if got["event_type"] != "image-update" {
-		t.Fatalf("event_type: %v", got["event_type"])
-	}
-	cp, _ := got["client_payload"].(map[string]any)
-	if cp["service"] != "cloud" || cp["image"] != img || cp["env"] != "all" || cp["sha"] != "deadbeef" {
-		t.Fatalf("client_payload wrong: %v", cp)
-	}
-}
-
-// Fail-closed: the tag + notify seams refuse when their KMS-provisioned token is
-// unset — no half-published release against an anonymous request.
+// Fail-closed: the tag seam refuses when its KMS-provisioned token is unset — no
+// half-published release against an anonymous request.
 func TestReleaseSeams_FailClosedWithoutTokens(t *testing.T) {
 	t.Setenv("GH_PAT", "")
-	t.Setenv("UNIVERSE_DISPATCH_TOKEN", "")
 	s := testService()
 	if err := tagRelease(s, context.Background(), releaseRepoSlug, "sha", "v1.0.0"); err == nil {
 		t.Fatal("tagRelease with no GH_PAT: want fail-closed error")
 	}
-	if err := notifyUniverse(s, context.Background(), "img", "sha"); err == nil {
-		t.Fatal("notifyUniverse with no token: want fail-closed error")
+}
+
+// A rollout with nowhere to write must FAIL, not report success.
+//
+// This is the property the deleted GitOps mirror destroyed: the old composition
+// passed the step if either writer landed, so an unrollable release still looked
+// released. With one writer there is one answer, and "the image is tagged but not
+// live" is an error — the state a release must never silently claim to have left.
+func TestRolloutFailsWhenThereIsNowhereToWrite(t *testing.T) {
+	if cloud.ServiceReleaserRegistered() {
+		t.Skip("a releaser is registered in this process; the no-writer path is unreachable")
+	}
+	err := rolloutRelease(testService(), context.Background(), "ghcr.io/hanzoai/cloud:v1.0.0", "sha")
+	if err == nil {
+		t.Fatal("rolloutRelease with no registered releaser: want an error, got nil")
+	}
+	if !strings.Contains(err.Error(), "NOT live") {
+		t.Errorf("error should say the image is not live, got: %v", err)
 	}
 }
 
