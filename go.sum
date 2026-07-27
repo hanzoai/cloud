@@ -1093,6 +1093,8 @@ github.com/hanzoai/o11y v1.5.31 h1:cq0oay92IbqCaRzazxoG7fMifhhVXF4zP1QfGR2wRpM=
 github.com/hanzoai/o11y v1.5.31/go.mod h1:npZ7y0k6+uP6CnKHGtiL+dgIuqI6e3WCV/+6IYNImw4=
 github.com/hanzoai/o11y v1.5.32 h1:XI9LEjNuzAsg27s5zNCTx71Rhw1pCv8gRy/ILvPiY0s=
 github.com/hanzoai/o11y v1.5.32/go.mod h1:tsrIwTJJEEy+AnOGXLM4RSrkhUyM1ja+bkstzFkc0Hw=
+github.com/hanzoai/o11y v1.5.33 h1:99NO2O/MB5czh1dsqGPaCbk1Lyf+QeFy1VJ1cc+PppI=
+github.com/hanzoai/o11y v1.5.33/go.mod h1:bdqSdqagTAQfEliZttOujk5VjR41OwUBn1yrCWx06wE=
 github.com/hanzoai/orm v0.6.16 h1:w3UXH65huahNJ8RgC88ffUeicAbHoUpQW8oLuDCojK8=
 github.com/hanzoai/orm v0.6.16/go.mod h1:KpbP5UwQ8BBNGVM3tku9rgs7PADB+UG8fqh8Nol0X/s=
 github.com/hanzoai/otel-collector v1.2.0 h1:lBDL5lKotq89JaqchcM+/oxEnjrjazEI2JJfDhotudc=
@@ -2109,6 +2111,8 @@ github.com/zap-proto/zap2pb v0.2.0 h1:sos6HnayhGMGLRO54px1InzimDzTZ2o5TSMEatYBjz
 github.com/zap-proto/zap2pb v0.2.0/go.mod h1:wD97Z2VTPabDq/4AMNL++PWnQ0YwEtajiuNkLGg3/18=
 github.com/zap-proto/zip v1.10.0 h1:0Swzr+SNr+4VeO8pUw+Umdkh3z/lnD0hJ4N1kObdP60=
 github.com/zap-proto/zip v1.10.0/go.mod h1:9R3FOq2ItZa7G+9QilsB/punEpVSHtdXiQji0P84LSE=
+github.com/zap-proto/zip v1.12.0 h1:6naF1jZQIno9rx7AvTdX94x6qmS0Sg8SFDJ48BiXdyE=
+github.com/zap-proto/zip v1.12.0/go.mod h1:9R3FOq2ItZa7G+9QilsB/punEpVSHtdXiQji0P84LSE=
 github.com/zeebo/assert v1.3.1 h1:vukIABvugfNMZMQO1ABsyQDJDTVQbn+LWSMy1ol1h6A=
 github.com/zeebo/assert v1.3.1/go.mod h1:Pq9JiuJQpG8JLJdtkwrJESF0Foym2/D9XMU5ciN/wJ0=
 github.com/zeebo/blake3 v0.2.4 h1:KYQPkhpRtcqh0ssGYcKLG1JYvddkEA8QwCM/yBqhaZI=
