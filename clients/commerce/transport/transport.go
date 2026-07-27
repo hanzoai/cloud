@@ -35,6 +35,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"runtime"
 	"strconv"
 	"strings"
@@ -51,6 +52,17 @@ import (
 // state). The self-routing Transport ignores the host and dispatches by PATH, so
 // the value only has to be a parseable absolute URL; it is never dialed.
 const PlaceholderBase = "http://commerce.inproc"
+
+// placeholderHost is PlaceholderBase's host, derived once so the refusal below
+// and the base above can never drift apart. It is the ONE name that must never
+// reach a dialer.
+var placeholderHost = func() string {
+	u, err := url.Parse(PlaceholderBase)
+	if err != nil {
+		return "commerce.inproc"
+	}
+	return u.Host
+}()
 
 // handler holds the embedded commerce http.Handler. atomic so SetHandler (boot) and
 // RoundTrip (every request) race-free without a mutex on the hot path.
@@ -182,6 +194,23 @@ func (rt roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		resp := rec.Result()
 		resp.Request = req
 		return resp, nil
+	}
+	// NO HANDLER PUBLISHED. Falling through to the network is right for a REAL
+	// commerce host and is never right for the placeholder: PlaceholderBase names
+	// no host, by construction, so dialing it can only ever fail — and it fails as
+	// `dial tcp: lookup commerce.inproc: no such host`, three layers away from the
+	// actual cause, which is that commerce never published its handler.
+	//
+	// That is exactly what happened on 2026-07-27. commerce.Embed refused to boot
+	// (COMMERCE_KMS_MASTER_KEY unset on a libsqlcipher build — a correct refusal),
+	// so Mount never reached SetApp. Metering had already pinned PlaceholderBase
+	// because Enabled("commerce") was true, and every balance read then DNS-failed.
+	// Every wallet read 0, every paid call 402'd against funded accounts, and the
+	// error blamed DNS. Enabled("commerce") is a CONFIG INTENT; a published handler
+	// is a RUNTIME FACT. They can disagree, and when they do the honest answer is
+	// to say so here rather than to guess at the network.
+	if req.URL != nil && req.URL.Host == placeholderHost {
+		return nil, fmt.Errorf("commerce transport: no in-process handler published; %s %s cannot be served (commerce is enabled but did not mount — check commerce.Embed for a bootstrap failure)", req.Method, req.URL.Path)
 	}
 	fb := rt.fallback
 	if fb == nil {

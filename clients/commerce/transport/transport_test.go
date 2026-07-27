@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -105,5 +106,62 @@ func TestBaseURL(t *testing.T) {
 	}
 	if got := BaseURL("http://real:8001"); got != "http://real:8001" {
 		t.Errorf("env base wins even when co-resident = %q", got)
+	}
+}
+
+// TestRoundTripRefusesPlaceholderWithoutHandler pins that an unpublished handler
+// fails HONESTLY instead of dialing. PlaceholderBase names no host by
+// construction, so falling through to http.DefaultTransport can only produce
+// `lookup commerce.inproc: no such host` — an error three layers from its cause.
+//
+// That is not hypothetical: on 2026-07-27 commerce.Embed refused to boot
+// (COMMERCE_KMS_MASTER_KEY unset on a libsqlcipher build), Mount never reached
+// SetApp, and every balance read DNS-failed. Every wallet read 0 and every paid
+// call 402'd against funded accounts, blaming DNS.
+func TestRoundTripRefusesPlaceholderWithoutHandler(t *testing.T) {
+	SetHandler(nil) // no co-resident commerce
+	t.Cleanup(func() { SetHandler(nil) })
+
+	req, err := http.NewRequest(http.MethodGet, PlaceholderBase+"/v1/billing/balance", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := Transport().RoundTrip(req)
+	if err == nil {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		t.Fatal("dialing the placeholder must be refused, not attempted")
+	}
+	for _, want := range []string{"no in-process handler", "/v1/billing/balance"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q must name %q so the cause is findable", err, want)
+		}
+	}
+	// The refusal must NOT mention DNS — that was the misleading symptom.
+	if strings.Contains(strings.ToLower(err.Error()), "no such host") {
+		t.Fatalf("refusal must not surface as a DNS failure: %v", err)
+	}
+}
+
+// TestRoundTripStillFallsBackForRealHosts pins that the refusal is scoped to the
+// placeholder: a split-deploy pointing at a REAL commerce URL must still dial.
+func TestRoundTripStillFallsBackForRealHosts(t *testing.T) {
+	SetHandler(nil)
+	t.Cleanup(func() { SetHandler(nil) })
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	defer srv.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/billing/balance", nil)
+	resp, err := Transport().RoundTrip(req)
+	if err != nil {
+		t.Fatalf("a real host must still be dialed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusTeapot {
+		t.Fatalf("status = %d; want %d (fallback path must be unchanged)", resp.StatusCode, http.StatusTeapot)
 	}
 }
