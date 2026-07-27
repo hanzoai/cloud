@@ -171,7 +171,7 @@ func canonical(path string) string {
 // → src/lib/api/plans.ts): PlansApi.plans() reads GET /v1/billing/plans through the
 // per-tenant billing proxy, and checkout drives the /v1/billing/* money surface
 // (subscribe/subscriptions/balance/payment-methods/usage/invoices/credit/deposit/topup/
-// gpu/spend-alerts/payment-config). Auth is /v1/signin, /v1/signout, /v1/get-account and
+// gpu/spend-alerts/payment-config). Auth is /v1/auth/{signin,signout,account} and
 // the /v1/iam/* login/OAuth/OIDC callbacks; /v1/models is the model catalog the shell
 // reads; /v1/entitlements is the product projection the shell renders the upgrade UI from.
 // Its argument is already canonical() — gated() is the only caller, so every entry
@@ -183,10 +183,17 @@ func allowlisted(path string) bool {
 		return true
 	}
 	// Exact single-route exemptions.
+	//
+	// The three auth routes moved when the /v1 surface was namespaced
+	// (/v1/signin → /v1/auth/signin, /v1/get-account → /v1/auth/account). This
+	// list is matched by STRING, so it does not move with them — leaving the old
+	// spellings here would put a 402 in front of sign-in, which is the same
+	// outage the trailing-slash bug caused above and is pinned by
+	// TestAuthRoutesAreNeverPaywalled.
 	switch path {
-	case "/v1/signin", // auth: session bootstrap (console posts the OAuth code here).
-		"/v1/signout",
-		"/v1/get-account",  // auth: the account read AuthGate loads before anything else.
+	case "/v1/auth/signin", // auth: session bootstrap (console posts the OAuth code here).
+		"/v1/auth/signout",
+		"/v1/auth/account", // auth: the account read AuthGate loads before anything else.
 		"/v1/plans",        // plans catalog root (@hanzo/plans subsystem).
 		"/v1/models",       // OpenAI-compatible model catalog (discovery).
 		"/v1/entitlements": // the shell's product projection — renders the upgrade UI.

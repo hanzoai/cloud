@@ -18,7 +18,7 @@ package cli
 // --serve-engine adds the `engine.serve` capability: the worker probes a local
 // hanzo-engine (the OpenAI + Anthropic model server on :1234), advertises its model
 // endpoint in the presence record, and prints (or with --register-provider, POSTs)
-// the /v1/add-provider call that routes api.hanzo.ai model traffic to this GPU. One
+// the POST /v1/ai/providers call that routes api.hanzo.ai model traffic to this GPU. One
 // fleet, two job types: engine.serve (model serving) alongside studio.render.
 
 import (
@@ -935,7 +935,7 @@ type connectOpts struct {
 	serveEngine      bool
 	engineURL        string // local URL to probe hanzo-engine
 	engineEndpoint   string // public URL to advertise (defaults to engineURL)
-	registerProvider bool   // auto POST /v1/add-provider for the engine
+	registerProvider bool   // auto POST /v1/ai/providers for the engine
 	studioDir        string // local Studio checkout to launch + supervise on :8188
 	studioURL        string // studio base the render mirror uploads finished images to
 	mirror           bool   // sweep local renders into the org studio library (default on)
@@ -2228,7 +2228,7 @@ func describeEngine(adv *engineAdvertisement) string {
 	return fmt.Sprintf("ready · %d models", n)
 }
 
-// providerBody is the POST /v1/add-provider payload registering this node's engine
+// providerBody is the POST /v1/ai/providers payload registering this node's engine
 // as an org model provider. hanzo-engine is OpenAI-compatible, so Type=Local: the
 // gateway speaks the OpenAI wire format to it and auto-appends /v1 to providerUrl.
 func (w *worker) providerBody() map[string]any {
@@ -2260,23 +2260,23 @@ func (w *worker) printEngineHint(out io.Writer) {
 	fmt.Fprintf(out, "serving hanzo-engine (OpenAI + Anthropic) at %s — %s\n", adv.URL, describeEngine(adv))
 	body, _ := json.Marshal(w.providerBody())
 	fmt.Fprintln(out, "  route api.hanzo.ai model calls to this GPU by registering it as an org provider:")
-	fmt.Fprintf(out, "    curl -sS %s/v1/add-provider -H \"Authorization: Bearer $HANZO_TOKEN\" \\\n", w.baseURL)
+	fmt.Fprintf(out, "    curl -sS %s/v1/ai/providers -H \"Authorization: Bearer $HANZO_TOKEN\" \\\n", w.baseURL)
 	fmt.Fprintf(out, "      -H 'Content-Type: application/json' -d '%s'\n", body)
 	fmt.Fprintln(out, "  (or pass --register-provider. The endpoint must be reachable from api.hanzo.ai —")
-	fmt.Fprintln(out, "   a cloud GPU is in-cluster; a BYO node needs a public URL/tunnel. add-provider needs a platform-admin token today.)")
+	fmt.Fprintln(out, "   a cloud GPU is in-cluster; a BYO node needs a public URL/tunnel. registering a provider needs a platform-admin token today.)")
 }
 
-// registerProvider POSTs /v1/add-provider so the gateway routes model calls to this
+// registerProvider POSTs /v1/ai/providers so the gateway routes model calls to this
 // node's engine. Requires the engine to be reachable and (today) a platform-admin
 // token; both failures are reported clearly rather than swallowed.
 func (w *worker) registerProvider(ctx context.Context, adv *engineAdvertisement) error {
 	if adv == nil || adv.Status != "ready" {
 		return fmt.Errorf("engine not ready at %s — start hanzo-engine, then retry", w.engineURL)
 	}
-	code, err := w.call(ctx, http.MethodPost, "/v1/add-provider", w.providerBody(), nil)
+	code, err := w.call(ctx, http.MethodPost, "/v1/ai/providers", w.providerBody(), nil)
 	if err != nil {
 		if code == http.StatusForbidden {
-			return fmt.Errorf("add-provider is gated to a platform-admin token today; register from the console or with an admin token: %w", err)
+			return fmt.Errorf("registering a provider is gated to a platform-admin token today; register from the console or with an admin token: %w", err)
 		}
 		return err
 	}

@@ -105,8 +105,8 @@ type Config struct {
 	PlatformURL string `json:"platform_url,omitempty"`
 	CloudURL    string `json:"cloud_url,omitempty"`
 	ClientID    string `json:"client_id,omitempty"`
-	APIKey      string `json:"apiKey,omitempty"`   // hk-… key; what `hanzo code` hands the agents
-	CodeTool    string `json:"code_tool,omitempty"` // default agent for bare `hanzo` / `hanzo code`: dev|claude|codex
+	APIKey      string `json:"apiKey,omitempty"`     // hk-… key; what `hanzo code` hands the agents
+	CodeTool    string `json:"code_tool,omitempty"`  // default agent for bare `hanzo` / `hanzo code`: dev|claude|codex
 	CodeModel   string `json:"code_model,omitempty"` // default model for `hanzo code` (else defaultCodeModel)
 }
 

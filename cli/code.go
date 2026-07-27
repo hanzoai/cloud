@@ -144,19 +144,19 @@ func openaiWire(base, token, _ string) map[string]string {
 }
 
 type codeAgent struct {
-	bin          string                     // executable to exec
-	wire         wire                       // how it finds the cloud
-	fullAuto     []string                   // flags that bypass approval prompts
-	continueArgs []string                   // harness-native form of Hanzo -c/--continue
-	modelArg     []string                   // how the model is passed on argv (empty: via env)
-	carrier      func(model string) string  // maps the resolved model to a client-recognized id (claude: zen→carrier); nil = pass through
+	bin          string                            // executable to exec
+	wire         wire                              // how it finds the cloud
+	fullAuto     []string                          // flags that bypass approval prompts
+	continueArgs []string                          // harness-native form of Hanzo -c/--continue
+	modelArg     []string                          // how the model is passed on argv (empty: via env)
+	carrier      func(model string) string         // maps the resolved model to a client-recognized id (claude: zen→carrier); nil = pass through
 	provider     func(base, model string) []string // agents that need the endpoint declared, not just env'd
-	clear        []string                   // env that would shadow the wire (a stale key in the shell)
-	configHome   string                     // env var that relocates the agent's config dir to ~/.hanzo ("" = share the user's own install)
-	seed         func(dir string) error     // one-time defaults for the isolated config dir
-	appendSystem []string                   // --append-system-prompt + text; ALWAYS applied (identity, not a permission bypass — present in --safe too)
-	mcp          bool                       // auto-wire the Hanzo MCP server (code/vector/web/vision tools) as an stdio server scoped to the cwd
-	install      string                     // hint when the binary is missing
+	clear        []string                          // env that would shadow the wire (a stale key in the shell)
+	configHome   string                            // env var that relocates the agent's config dir to ~/.hanzo ("" = share the user's own install)
+	seed         func(dir string) error            // one-time defaults for the isolated config dir
+	appendSystem []string                          // --append-system-prompt + text; ALWAYS applied (identity, not a permission bypass — present in --safe too)
+	mcp          bool                              // auto-wire the Hanzo MCP server (code/vector/web/vision tools) as an stdio server scoped to the cwd
+	install      string                            // hint when the binary is missing
 }
 
 // codeContextWindow is the input context (tokens) the served coding model
