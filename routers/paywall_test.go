@@ -122,7 +122,7 @@ func TestPaywall_NoPlan402(t *testing.T) {
 // pay button can never happen.
 func TestPaywall_AllowlistedPassWithNoPlan(t *testing.T) {
 	paths := []string{
-		"/v1/signin", "/v1/signout", "/v1/get-account",
+		"/v1/auth/signin", "/v1/auth/signout", "/v1/auth/account",
 		"/v1/billing/plans", "/v1/billing/subscriptions", "/v1/billing/balance",
 		"/v1/billing/payment-methods", "/v1/billing/usage",
 		"/v1/plans", "/v1/plans/resolve/pro",
@@ -280,7 +280,7 @@ func TestGated_CaseFoldedSoAllowlistStillMatches(t *testing.T) {
 		"/V1/iam/callback",
 		"/v1/IAM/callback",
 		"/V1/BILLING/subscribe",
-		"/V1/signin",
+		"/V1/auth/signin",
 	} {
 		if gated(path) {
 			t.Errorf("gated(%q) = true, want false — 402 on the sell/service surface", path)
@@ -292,9 +292,9 @@ func TestGated_CaseFoldedSoAllowlistStillMatches(t *testing.T) {
 // list nor any allow prefix, so /v1/signin/ was paywalled: a 402 in front of sign-in.
 func TestGated_TrailingSlashDoesNotLockOut(t *testing.T) {
 	for _, path := range []string{
-		"/v1/signin/",
-		"/v1/signout/",
-		"/v1/get-account/",
+		"/v1/auth/signin/",
+		"/v1/auth/signout/",
+		"/v1/auth/account/",
 		"/v1/entitlements/",
 		"/v1/plans/",
 		"/v1/models/",
@@ -387,5 +387,45 @@ func TestPaywall_NilReaderPassesEverything(t *testing.T) {
 	}
 	if !ran.Load() {
 		t.Fatal("handler did not run")
+	}
+}
+
+// TestAuthRoutesAreNeverPaywalled pins the one failure this gate must never have:
+// a 402 in front of signing in.
+//
+// The allow-list matches by STRING, so it does NOT move when a route moves. When
+// the /v1 surface was namespaced (/v1/signin → /v1/auth/signin, /v1/get-account →
+// /v1/auth/account) the paths changed underneath this list, and a list left
+// un-updated would have gated the entire sell/service entry path — the same shape
+// of outage the trailing-slash and case-folding bugs already caused here twice.
+//
+// The names below are the paths the console and every client actually request. If
+// a route moves again, this test fails rather than production.
+func TestAuthRoutesAreNeverPaywalled(t *testing.T) {
+	for _, p := range []string{
+		"/v1/auth/signin",
+		"/v1/auth/signout",
+		"/v1/auth/account",
+	} {
+		if gated(p) {
+			t.Errorf("gated(%q) = true — a 402 in front of sign-in", p)
+		}
+		// The same route must survive the two shapes canonical() folds, or the
+		// gate disagrees with itself for a caller that sent a trailing slash or
+		// different case.
+		for _, variant := range []string{p + "/", strings.ToUpper(p)} {
+			if gated(variant) {
+				t.Errorf("gated(%q) = true — the folded form must be exempt too", variant)
+			}
+		}
+	}
+
+	// And the old spellings must NOT be silently exempt: they name routes that no
+	// longer exist, so leaving them on the list would be dead weight that reads
+	// like coverage.
+	for _, dead := range []string{"/v1/signin", "/v1/signout", "/v1/get-account"} {
+		if !gated(dead) {
+			t.Errorf("%q is still allow-listed — it names a route that no longer exists", dead)
+		}
 	}
 }
