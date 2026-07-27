@@ -112,7 +112,7 @@ func mirror(s *cloud.Service[state], c *zip.Ctx) error {
 	// covers this repo now, exactly as a push would (the same reactor). Origin =
 	// source host, so the outbound mirror suppresses the echo. Detached + best-effort.
 	emitImportPush(s, context.WithoutCancel(c.Context()), org, project, name, src)
-	branches, head := refState(s, org, project, name)
+	branches, head := refState(c.Context(), s, org, project, name)
 	return c.JSON(http.StatusOK, toView(s, r, branches, head))
 }
 

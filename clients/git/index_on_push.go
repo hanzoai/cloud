@@ -6,11 +6,6 @@ import (
 	"sync"
 	"time"
 
-	gogit "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/plumbing/storer"
-
 	"github.com/hanzoai/cloud"
 	tasksclient "github.com/hanzoai/tasks/pkg/sdk/client"
 	"github.com/hanzoai/tasks/pkg/sdk/temporal"
@@ -94,12 +89,12 @@ func indexOnPush(s *cloud.Service[state], ctx context.Context, ev cloud.Lifecycl
 	if indexer == nil || ev.Kind != cloud.LifecyclePushLanded || ev.Org == "" || ev.Repo == "" || ev.Branch == "" {
 		return
 	}
-	repo, err := openRepoForIndex(s, ev.Org, ev.Project, ev.Repo)
+	repo, err := openRepository(s, Repo{Org: ev.Org, Project: ev.Project, Name: ev.Repo})
 	if err != nil {
 		s.Log.Warn("code-index: open failed", "org", ev.Org, "repo", ev.Repo, "err", err)
 		return
 	}
-	if !isDefaultBranch(repo, ev.Branch) {
+	if !isDefaultBranch(ctx, repo, ev.Branch) {
 		return // a feature-branch push never rewrites the canonical index
 	}
 	in := indexInput{Org: ev.Org, Project: ev.Project, Repo: ev.Repo, Commit: ev.After}
@@ -209,11 +204,11 @@ func readAndIndex(ctx context.Context, s *cloud.Service[state], in indexInput) e
 	if fn == nil || s == nil {
 		return nil
 	}
-	repo, err := openRepoForIndex(s, in.Org, in.Project, in.Repo)
+	repo, err := openRepository(s, Repo{Org: in.Org, Project: in.Project, Name: in.Repo})
 	if err != nil {
 		return err
 	}
-	files, err := treeTextFiles(repo, in.Commit)
+	files, err := treeTextFiles(ctx, repo, in.Commit)
 	if err != nil {
 		return err
 	}
@@ -224,78 +219,38 @@ func readAndIndex(ctx context.Context, s *cloud.Service[state], in indexInput) e
 	return fn(ctx, in.Org, in.Org, in.Project, in.Repo, files)
 }
 
-// openRepoForIndex opens the repo's go-git handle over its S3-backed storer — the same
-// read path the browse UI uses (refState / openGit).
-func openRepoForIndex(s *cloud.Service[state], org, project, repo string) (*gogit.Repository, error) {
-	st, err := s.State.storage.storer(org, project, repo)
-	if err != nil {
-		return nil, err
-	}
-	return gogit.Open(st, nil)
-}
-
 // isDefaultBranch reports whether branch is the repo's default (its symbolic HEAD
 // target). initBare points HEAD at the default branch, so this holds for a bare repo
 // with no checkout.
-func isDefaultBranch(repo *gogit.Repository, branch string) bool {
-	ref, err := repo.Reference(plumbing.HEAD, false) // false: keep the symbolic ref
+func isDefaultBranch(ctx context.Context, repo Repository, branch string) bool {
+	def, err := repo.DefaultBranch(ctx)
 	if err != nil {
 		return false
 	}
-	return ref.Target().Short() == branch
+	return def == branch
 }
 
-// treeTextFiles resolves the commit to index (the pushed tip, else HEAD) and returns
-// its text files, skipping binaries and oversize blobs, bounded by the read caps.
-func treeTextFiles(repo *gogit.Repository, after string) ([]IndexedFile, error) {
-	commit, err := resolveIndexCommit(repo, after)
+// treeTextFiles resolves the commit to index (the pushed tip, else the default)
+// and returns its text files, skipping binaries and oversize blobs, bounded by
+// the read caps. The per-file cap is handed to the model so an oversize blob is
+// skipped without ever being read.
+func treeTextFiles(ctx context.Context, repo Repository, after string) ([]IndexedFile, error) {
+	rev, _, err := repo.Resolve(ctx, after)
 	if err != nil {
 		return nil, err
 	}
-	tree, err := commit.Tree()
-	if err != nil {
-		return nil, err
-	}
-	iter := tree.Files()
-	defer iter.Close()
-
 	var out []IndexedFile
 	var total int
-	err = iter.ForEach(func(f *object.File) error {
+	err = repo.WalkText(ctx, rev, maxIndexFileBytes, func(path, content string) error {
 		if len(out) >= maxIndexTreeFiles || total >= maxIndexTotalBytes {
-			return storer.ErrStop
+			return StopWalk
 		}
-		if f.Size > maxIndexFileBytes {
-			return nil
-		}
-		if bin, _ := f.IsBinary(); bin {
-			return nil
-		}
-		txt, err := f.Contents()
-		if err != nil {
-			return nil // skip an unreadable blob, keep walking
-		}
-		total += len(txt)
-		out = append(out, IndexedFile{Path: f.Name, Content: txt})
+		total += len(content)
+		out = append(out, IndexedFile{Path: path, Content: content})
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
-}
-
-// resolveIndexCommit returns the pushed tip (ev.After) when it resolves, else the
-// repo's HEAD commit.
-func resolveIndexCommit(repo *gogit.Repository, after string) (*object.Commit, error) {
-	if after != "" {
-		if c, err := repo.CommitObject(plumbing.NewHash(after)); err == nil {
-			return c, nil
-		}
-	}
-	h, err := repo.Head()
-	if err != nil {
-		return nil, err
-	}
-	return repo.CommitObject(h.Hash())
 }
