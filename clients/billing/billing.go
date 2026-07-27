@@ -310,7 +310,13 @@ func balance(s *cloud.Service[state], c *zip.Ctx) error {
 		// true "not signed in" (401), matching usage/gpuCharge.
 		return zip.ErrUnauthorized("sign in to view billing")
 	}
-	cents, coResident, err := availableCents(c.Context(), org, subjectFor(c, org))
+	// ONE resolution, used twice: the wallet to READ, and the account to REPORT. Calling
+	// subjectFor once and echoing that exact value is what makes the reported account
+	// honest — resolving it a second time for display could drift from the one the
+	// balance came from, which is the same class of split that once showed a funded org
+	// while the gate refused the member.
+	subject := subjectFor(c, org)
+	cents, coResident, err := availableCents(c.Context(), org, subject)
 	if err != nil {
 		// A balance that cannot be READ is unknown — surface it as an upstream failure.
 		// It must never render as a zero balance: unknown is not "broke".
@@ -323,7 +329,12 @@ func balance(s *cloud.Service[state], c *zip.Ctx) error {
 	c.SetHeader("Content-Type", "application/json")
 	// Per-tenant money must never be cached by the browser or an intermediary.
 	c.SetHeader("Cache-Control", "no-store")
-	return c.JSON(http.StatusOK, commerceBalance{Balance: cents, Holds: 0, Available: cents})
+	return c.JSON(http.StatusOK, commerceBalance{
+		Balance:   cents,
+		Holds:     0,
+		Available: cents,
+		Account:   subject,
+	})
 }
 
 // gpuEligibility → commerce GET /v1/billing/gpu-eligibility: the read-only launch gate
