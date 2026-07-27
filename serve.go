@@ -95,13 +95,16 @@ func Serve(specs []MountSpec, enable []string) error {
 
 	deps := BuildDeps(cfg)
 
-	// Surface the resolved role and the writer-pin backing it. The pin is
-	// SingleWriter today (k8s StatefulSet replicas:1 guarantees one writer);
-	// consensus (Quasar) election is stubbed (writerpin.ConsensusPin) and NOT yet
-	// gating store opens — logged here so operators see the real posture.
+	// Surface the resolved role and the writer-pin backing it, WITH the reason the
+	// pin was chosen. SingleWriter is correct at replicas:1 (Kubernetes is the
+	// elector); a real coordination.k8s.io Lease election is opt-in via
+	// CLOUD_WRITER_LEASE + the downward API, and every incomplete configuration
+	// falls back and says so here rather than pretending to elect.
+	pin, pinReason := writerpin.ResolveWithReason()
 	deps.Logger.Info("HA role resolved",
 		"role", cfg.Role.String(),
-		"writer_pin", writerpin.Resolve().Kind(),
+		"writer_pin", pin.Kind(),
+		"writer_pin_reason", pinReason,
 		"kms_read_only", cfg.Role.IsReader())
 
 	// Horizontal-scale shard router. When CLOUD_PEERS names >1 pod, each org is
