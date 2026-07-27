@@ -107,12 +107,13 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := json.Unmarshal(body, &ev); err != nil {
 		return zip.ErrBadRequest("invalid push payload")
 	}
-	// Only branch pushes drive the mutable canonical sync. Tags/others → ack no-op.
-	if !strings.HasPrefix(ev.Ref, "refs/heads/") {
-		return c.JSON(http.StatusOK, map[string]any{"ignored": "non-branch ref"})
+	// EVERY ref syncs — branches and tags alike. Releases are cut by tag, so a
+	// filter here silently stops publishing with nothing failing to say so.
+	if !strings.HasPrefix(ev.Ref, "refs/") {
+		return c.JSON(http.StatusOK, map[string]any{"ignored": "not a ref"})
 	}
-	// A branch delete on GitHub is NEVER propagated to native (native is canonical;
-	// we never delete a native ref from an inbound event).
+	// A delete on GitHub is NEVER propagated to native (native is canonical; we
+	// never delete a native ref from an inbound event).
 	if ev.Deleted {
 		return c.JSON(http.StatusOK, map[string]any{"ignored": "branch delete not propagated"})
 	}
@@ -126,7 +127,6 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return c.JSON(http.StatusOK, map[string]any{"ignored": "unknown installation"})
 	}
-	branch := strings.TrimPrefix(ev.Ref, "refs/heads/")
 
 	clone := strings.TrimSpace(ev.Repository.CloneURL)
 	if clone == "" && ev.Repository.FullName != "" {
@@ -143,11 +143,11 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	// never rebuild itself.
 	if !isBotActor(actorOf(ev)) {
 		if err := cloud.OnGitPush(c.Context(), cloud.GitPushEvent{
-			Org: org, Repo: ev.Repository.Name, Branch: branch,
+			Org: org, Repo: ev.Repository.Name, Ref: ev.Ref,
 			Commit: ev.After, CloneURL: clone,
 		}); err != nil {
 			s.Log.Warn("github push: build trigger failed",
-				"org", org, "repo", ev.Repository.Name, "branch", branch, "err", err)
+				"org", org, "repo", ev.Repository.Name, "ref", ev.Ref, "err", err)
 		}
 	}
 
@@ -163,7 +163,7 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	// guard + cursor). Fail-closed when the engine is unmounted — never a fake OK.
 	res, err := cloud.Sync(c.Context(), cloud.SyncEvent{
 		Kind: "git", Provider: "github", Org: org,
-		Locator: clone, Repo: ev.Repository.Name, Branch: branch,
+		Locator: clone, Repo: ev.Repository.Name, Ref: ev.Ref,
 		Before: ev.Before, After: ev.After, Actor: actorOf(ev), Token: tok,
 	})
 	if err != nil {
@@ -181,7 +181,7 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	// loops. A human push always fires. (The sync plane has its own cursor loop-guard.)
 	if !isBotActor(actorOf(ev)) {
 		fireTrigger(c.Context(), org, "github", "push", ev.After, 0, map[string]any{
-			"repo": ev.Repository.Name, "ref": ev.Ref, "branch": branch,
+			"repo": ev.Repository.Name, "ref": ev.Ref, "branch": refShort(ev.Ref),
 			"before": ev.Before, "after": ev.After, "pusher": actorOf(ev),
 		})
 	}
@@ -203,4 +203,16 @@ func actorOf(ev githubPushEvent) string {
 		return ev.Sender.Login
 	}
 	return ev.Pusher.Name
+}
+
+// refShort is the ref without its namespace: refs/heads/main -> main,
+// refs/tags/v1.2.3 -> v1.2.3. Only for display and for flow payloads that
+// predate full refs; the sync itself always carries the whole ref.
+func refShort(ref string) string {
+	for _, p := range []string{"refs/heads/", "refs/tags/"} {
+		if strings.HasPrefix(ref, p) {
+			return strings.TrimPrefix(ref, p)
+		}
+	}
+	return ref
 }

@@ -1,4 +1,4 @@
-package search
+package index
 
 import (
 	"encoding/json"
@@ -23,23 +23,23 @@ func TestMountedRoutesAreReachable(t *testing.T) {
 	t.Cleanup(func() { _ = Shutdown() })
 
 	for _, tc := range []struct{ method, path string }{
-		{http.MethodGet, "/v1/search/health"},
-		{http.MethodGet, "/v1/search/version"},
-		{http.MethodGet, "/v1/search/stats"},
-		{http.MethodGet, "/v1/search/indexes"},
-		{http.MethodPost, "/v1/search/indexes"},
-		{http.MethodDelete, "/v1/search/indexes/x"},
-		{http.MethodGet, "/v1/search/indexes/x"},
-		{http.MethodGet, "/v1/search/indexes/x/settings"},
-		{http.MethodPatch, "/v1/search/indexes/x/settings"},
-		{http.MethodPost, "/v1/search/indexes/x/search"},
-		{http.MethodPost, "/v1/search/indexes/x/documents"},
-		{http.MethodPut, "/v1/search/indexes/x/documents"},
-		{http.MethodGet, "/v1/search/indexes/x/documents"},
-		{http.MethodPost, "/v1/search/indexes/x/documents/delete-batch"},
-		{http.MethodGet, "/v1/search/indexes/x/documents/1"},
-		{http.MethodDelete, "/v1/search/indexes/x/documents/1"},
-		{http.MethodGet, "/v1/search/tasks/1"},
+		{http.MethodGet, "/v1/index/health"},
+		{http.MethodGet, "/v1/index/version"},
+		{http.MethodGet, "/v1/index/stats"},
+		{http.MethodGet, "/v1/index/indexes"},
+		{http.MethodPost, "/v1/index/indexes"},
+		{http.MethodDelete, "/v1/index/indexes/x"},
+		{http.MethodGet, "/v1/index/indexes/x"},
+		{http.MethodGet, "/v1/index/indexes/x/settings"},
+		{http.MethodPatch, "/v1/index/indexes/x/settings"},
+		{http.MethodPost, "/v1/index/indexes/x/search"},
+		{http.MethodPost, "/v1/index/indexes/x/documents"},
+		{http.MethodPut, "/v1/index/indexes/x/documents"},
+		{http.MethodGet, "/v1/index/indexes/x/documents"},
+		{http.MethodPost, "/v1/index/indexes/x/documents/delete-batch"},
+		{http.MethodGet, "/v1/index/indexes/x/documents/1"},
+		{http.MethodDelete, "/v1/index/indexes/x/documents/1"},
+		{http.MethodGet, "/v1/index/tasks/1"},
 	} {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
 			req, _ := http.NewRequest(tc.method, "http://x"+tc.path, nil)

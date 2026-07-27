@@ -20,7 +20,7 @@ type Event struct {
 	Org      string
 	Locator  string // source repo locator (clone URL or "<org>/<repo>")
 	Repo     string // short repo name (git)
-	Branch   string // cursor position key
+	Ref      string // FULL ref: refs/heads/<branch> or refs/tags/<tag>
 	Before   string
 	After    string // cursor position value (git: the tip SHA)
 	Actor    string // who made the upstream change (loop guard compares to Sync.Actor)

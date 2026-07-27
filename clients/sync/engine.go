@@ -116,7 +116,7 @@ func runOne(ctx context.Context, st *store, sy Sync, ev Event) bool {
 	// Cursor idempotency: an event at a position the cursor already holds is the
 	// identical-fingerprint echo (generalized). Manual runs reconcile regardless.
 	cur := parseCursor(sy.Cursor)
-	if !ev.Manual && ev.Branch != "" && ev.After != "" && cur[ev.Branch] == ev.After {
+	if !ev.Manual && ev.Ref != "" && ev.After != "" && cur[ev.Ref] == ev.After {
 		return false
 	}
 	changed, err := prov.Reconcile(ctx, sy, ev)
@@ -128,13 +128,13 @@ func runOne(ctx context.Context, st *store, sy Sync, ev Event) bool {
 		return false
 	}
 	now := time.Now().Unix()
-	if ev.Branch != "" && ev.After != "" {
-		cur[ev.Branch] = ev.After
+	if ev.Ref != "" && ev.After != "" {
+		cur[ev.Ref] = ev.After
 	}
 	if err := st.SetCursor(ctx, sy.Org, sy.ID, serializeCursor(cur), now); err != nil {
 		s.Log.Warn("sync: set cursor", "sync", sy.ID, "err", err)
 	}
-	s.Log.Info("sync reconciled", "sync", sy.ID, "kind", sy.Kind, "branch", ev.Branch)
+	s.Log.Info("sync reconciled", "sync", sy.ID, "kind", sy.Kind, "ref", ev.Ref)
 	propagate(ctx, st, sy, ev)
 	return true
 }
@@ -160,7 +160,7 @@ func propagate(ctx context.Context, st *store, sy Sync, ev Event) {
 		}
 		runOne(ctx, st, downstream, Event{
 			Provider: sy.Target.Provider, Org: sy.Org, Locator: sy.Target.Locator,
-			Repo: ev.Repo, Branch: ev.Branch, After: ev.After, Actor: sy.Actor, Hop: ev.Hop + 1,
+			Repo: ev.Repo, Ref: ev.Ref, After: ev.After, Actor: sy.Actor, Hop: ev.Hop + 1,
 		})
 	}
 }
@@ -169,7 +169,7 @@ func propagate(ctx context.Context, st *store, sy Sync, ev Event) {
 func eventFromSeam(se cloud.SyncEvent) Event {
 	return Event{
 		Provider: se.Provider, Org: se.Org, Locator: se.Locator, Repo: se.Repo,
-		Branch: se.Branch, Before: se.Before, After: se.After, Actor: se.Actor,
+		Ref: se.Ref, Before: se.Before, After: se.After, Actor: se.Actor,
 		Token: se.Token, Manual: se.Manual, Hop: se.Hop,
 	}
 }

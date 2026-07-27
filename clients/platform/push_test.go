@@ -113,6 +113,29 @@ func TestBuildFromPush_IgnoresImageApp(t *testing.T) {
 	}
 }
 
+// mkPushEvent takes a short branch and qualifies it, because the event carries a
+// full ref — the same shape a tag push arrives in.
+// A tag push reaches this consumer like any other ref, and must not rebuild an
+// app that tracks a branch — not even when the tag shares the branch's name.
+func TestBuildFromPush_TagDoesNotRebuildBranchApp(t *testing.T) {
+	ctx := context.Background()
+	s := pushService(t)
+	a := seedGitApp(t, s, "acme", "site", "https://git.hanzo.ai/v1/git/acme/site", "main")
+
+	ev := mkPushEvent("acme", "site", "main", "abc123", "https://git.hanzo.ai/v1/git/acme/site.git")
+	ev.Ref = "refs/tags/main"
+	if err := buildFromPush(s, ctx, ev); err != nil {
+		t.Fatalf("buildFromPush (tag): %v", err)
+	}
+	deps, err := s.State.store.ListDeployments(ctx, "acme", a.ID)
+	if err != nil {
+		t.Fatalf("list deployments: %v", err)
+	}
+	if len(deps) != 0 {
+		t.Fatalf("a tag push must not rebuild a branch-tracking app, got %+v", deps)
+	}
+}
+
 func mkPushEvent(org, repo, branch, commit, cloneURL string) cloud.GitPushEvent {
-	return cloud.GitPushEvent{Org: org, Project: "default", Repo: repo, Branch: branch, Commit: commit, CloneURL: cloneURL}
+	return cloud.GitPushEvent{Org: org, Project: "default", Repo: repo, Ref: "refs/heads/" + branch, Commit: commit, CloneURL: cloneURL}
 }

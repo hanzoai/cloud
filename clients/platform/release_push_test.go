@@ -17,28 +17,30 @@ func TestIsReleasePush(t *testing.T) {
 		want bool
 	}{
 		{"merge to cloud main", cloud.GitPushEvent{
-			Branch: "main", Commit: sha, CloneURL: "https://github.com/hanzoai/cloud"}, true},
+			Ref: "refs/heads/main", Commit: sha, CloneURL: "https://github.com/hanzoai/cloud"}, true},
 		{"clone url with .git suffix", cloud.GitPushEvent{
-			Branch: "main", Commit: sha, CloneURL: "https://github.com/hanzoai/cloud.git"}, true},
+			Ref: "refs/heads/main", Commit: sha, CloneURL: "https://github.com/hanzoai/cloud.git"}, true},
 		{"clone url cased differently", cloud.GitPushEvent{
-			Branch: "main", Commit: sha, CloneURL: "https://github.com/HanzoAI/Cloud.git"}, true},
+			Ref: "refs/heads/main", Commit: sha, CloneURL: "https://github.com/HanzoAI/Cloud.git"}, true},
 
 		{"feature branch never releases", cloud.GitPushEvent{
-			Branch: "rename/sign-to-esign", Commit: sha, CloneURL: "https://github.com/hanzoai/cloud"}, false},
+			Ref: "refs/heads/rename/sign-to-esign", Commit: sha, CloneURL: "https://github.com/hanzoai/cloud"}, false},
 		{"another repo's main never releases", cloud.GitPushEvent{
-			Branch: "main", Commit: sha, CloneURL: "https://github.com/hanzoai/universe"}, false},
+			Ref: "refs/heads/main", Commit: sha, CloneURL: "https://github.com/hanzoai/universe"}, false},
 		{"a repo whose name merely contains cloud", cloud.GitPushEvent{
-			Branch: "main", Commit: sha, CloneURL: "https://github.com/hanzoai/cloud-docs"}, false},
+			Ref: "refs/heads/main", Commit: sha, CloneURL: "https://github.com/hanzoai/cloud-docs"}, false},
 		{"an impostor host", cloud.GitPushEvent{
-			Branch: "main", Commit: sha, CloneURL: "https://evil.example.com/hanzoai/cloud"}, false},
+			Ref: "refs/heads/main", Commit: sha, CloneURL: "https://evil.example.com/hanzoai/cloud"}, false},
 		{"no commit pinned", cloud.GitPushEvent{
-			Branch: "main", Commit: "", CloneURL: "https://github.com/hanzoai/cloud"}, false},
+			Ref: "refs/heads/main", Commit: "", CloneURL: "https://github.com/hanzoai/cloud"}, false},
+		{"a tag is never a release push, even one named main", cloud.GitPushEvent{
+			Ref: "refs/tags/main", Commit: sha, CloneURL: "https://github.com/hanzoai/cloud"}, false},
 		{"empty event", cloud.GitPushEvent{}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := isReleasePush(tc.ev); got != tc.want {
-				t.Errorf("isReleasePush(branch=%q repo=%q) = %v, want %v",
-					tc.ev.Branch, tc.ev.CloneURL, got, tc.want)
+				t.Errorf("isReleasePush(ref=%q repo=%q) = %v, want %v",
+					tc.ev.Ref, tc.ev.CloneURL, got, tc.want)
 			}
 		})
 	}
