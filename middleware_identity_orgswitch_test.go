@@ -222,3 +222,167 @@ func TestUnresolvableOrgRefuses_NoBrandSubstitute(t *testing.T) {
 		t.Errorf("commerce saw %d usage posts for an org-less debit, want 0", n)
 	}
 }
+
+// ── The anonymous floor ───────────────────────────────────────────────────────
+//
+// Everything above proves the SELECTION behaves. These prove the org-switch
+// machinery is INVISIBLE to a request that carries no credential at all.
+//
+// SanitizeIdentity runs in front of EVERYTHING, so a mistake there is not scoped
+// to org-switching — it takes out unauthenticated routes too, and /health is what
+// the kubelet probes. The switch arm lives inside the `claims != nil` block, so an
+// anonymous request must never reach it; these pin that structurally instead of by
+// reading the code.
+//
+// SCOPE, stated honestly: this proves the identity BOUNDARY does not gate. It does
+// NOT prove the assembled binary serves /health — the boundary is one middleware in
+// a chain, and a 401 from a LATER middleware (or from a subsystem that booted with
+// auth disabled) would not be caught here. Only curling the built image proves that.
+
+// TestAnonymousRoutesAreUntouched: no credential ⇒ no gate, on a public route.
+func TestAnonymousRoutesAreUntouched(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("genkey: %v", err)
+	}
+	jwks := jwksServer(t, &key.PublicKey)
+	v := newIdentityValidator(testIssuer, jwks.URL, 0)
+
+	app := zip.New(zip.Config{})
+	app.Use(SanitizeIdentity(v, "admin"))
+	app.Get("/health", func(c *zip.Ctx) error {
+		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+	})
+
+	cases := []struct {
+		name   string
+		mutate func(*http.Request)
+	}{
+		{name: "bare anonymous request", mutate: nil},
+		{
+			name:   "anonymous with a forged X-Org-Id",
+			mutate: func(r *http.Request) { r.Header.Set("X-Org-Id", "victim") },
+		},
+		{
+			name:   "unparseable bearer",
+			mutate: func(r *http.Request) { r.Header.Set("Authorization", "Bearer not-a-jwt") },
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/health", nil)
+			if tc.mutate != nil {
+				tc.mutate(req)
+			}
+			resp, err := app.Fiber().Test(req)
+			if err != nil {
+				t.Fatalf("Test request: %v", err)
+			}
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("anonymous /health = %d, want 200 (the identity boundary must never gate a public route)", resp.StatusCode)
+			}
+		})
+	}
+}
+
+// TestAnonymousGrantsNoPrincipal is the security half of the test above: letting an
+// anonymous request THROUGH must not also make it someone. A forged X-Org-Id
+// survives for the documented Phase-1 data path, but it carries no validated user,
+// so principal.Org refuses it and nothing org-scoped is served.
+func TestAnonymousGrantsNoPrincipal(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("genkey: %v", err)
+	}
+	jwks := jwksServer(t, &key.PublicKey)
+	v := newIdentityValidator(testIssuer, jwks.URL, 0)
+
+	var gotUser string
+	var gotAdmin bool
+	app := zip.New(zip.Config{})
+	app.Use(SanitizeIdentity(v, "admin"))
+	app.Get("/probe", func(c *zip.Ctx) error {
+		gotUser, gotAdmin = c.User(), c.IsAdmin()
+		return c.JSON(http.StatusOK, map[string]string{"ok": "1"})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	req.Header.Set("X-Org-Id", "victim")
+	req.Header.Set("X-User-Id", "u-forged")
+	req.Header.Set("X-User-IsAdmin", "true")
+	if _, err := app.Fiber().Test(req); err != nil {
+		t.Fatalf("Test request: %v", err)
+	}
+	if gotUser != "" {
+		t.Fatalf("anonymous request minted a user %q — a forged principal", gotUser)
+	}
+	if gotAdmin {
+		t.Fatalf("anonymous request minted admin authority")
+	}
+}
+
+// TestMembershipMatchIsByteExact pins isMember's comparison. Folding would let a
+// member of one org select a DISTINCT org that differs only by case or an invisible
+// rune — the cross-org fold the injective org boundary exists to prevent.
+//
+// Deliberately NOT asserted: a TRAILING-space variant ("acme "). That value cannot
+// exist at this layer — fasthttp OWS-trims it on the wire, so the boundary receives
+// exactly "acme" and honors it, which is correct (the caller really is a member).
+// The whitespace fold risk lives on the CLAIM side, where JSON preserves it, and is
+// covered by the trailWSOwner cases in middleware_identity_test.go.
+func TestMembershipMatchIsByteExact(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("genkey: %v", err)
+	}
+	jwks := jwksServer(t, &key.PublicKey)
+	v := newIdentityValidator(testIssuer, jwks.URL, 0)
+	tok := signWith(t, key, memberClaims("hanzo", "hanzo", "acme"))
+
+	for _, sel := range []string{"ACME", "Acme", "ac me", "acme​"} {
+		t.Run(sel, func(t *testing.T) {
+			app, got := newIdentityApp(t, v)
+			probe(t, app, func(r *http.Request) {
+				r.Header.Set("Authorization", "Bearer "+tok)
+				r.Header.Set("X-Org-Id", sel)
+			})
+			if got.org != "hanzo" {
+				t.Fatalf("selection %q resolved to %q, want home %q — a fold across distinct orgs", sel, got.org, "hanzo")
+			}
+		})
+	}
+}
+
+// TestHomeOrgHeaderSurvivesSwitch: the boundary must keep reporting home and
+// effective as DISTINCT facts. BillingOrg decides who pays from both together, so
+// collapsing them would silently remove the masquerade carve-out.
+func TestHomeOrgHeaderSurvivesSwitch(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("genkey: %v", err)
+	}
+	jwks := jwksServer(t, &key.PublicKey)
+	v := newIdentityValidator(testIssuer, jwks.URL, 0)
+	tok := signWith(t, key, memberClaims("hanzo", "hanzo", "acme"))
+
+	var gotOwner, gotOrg string
+	app := zip.New(zip.Config{})
+	app.Use(SanitizeIdentity(v, "admin"))
+	app.Get("/anchor", func(c *zip.Ctx) error {
+		gotOwner, gotOrg = c.Header("X-User-Owner"), c.Org()
+		return c.JSON(http.StatusOK, map[string]string{"ok": "1"})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/anchor", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	req.Header.Set("X-Org-Id", "acme")
+	if _, err := app.Fiber().Test(req); err != nil {
+		t.Fatalf("Test request: %v", err)
+	}
+	if gotOwner != "hanzo" {
+		t.Fatalf("X-User-Owner = %q, want %q (home must survive a switch)", gotOwner, "hanzo")
+	}
+	if gotOrg != "acme" {
+		t.Fatalf("X-Org-Id = %q, want %q (effective must follow the switch)", gotOrg, "acme")
+	}
+}
