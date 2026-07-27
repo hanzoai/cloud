@@ -3,9 +3,10 @@ package git
 import (
 	"encoding/json"
 	"net/http"
-	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/hanzoai/cloud/cek"
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
@@ -62,8 +63,10 @@ func TestPerOrgStoreFileIsolation(t *testing.T) {
 	fa := filepath.Join(dir, "orgs", "orga", "git.db")
 	fb := filepath.Join(dir, "orgs", "orgb", "git.db")
 	for _, p := range []string{fa, fb} {
-		if _, err := os.Stat(p); err != nil {
-			t.Fatalf("expected per-org git.db at %s: %v", p, err)
+		// cek.Exists, not os.Stat: a store still OPEN has not materialized its
+		// database file on the pure-Go codec — only its sidecar is on disk.
+		if !cek.Exists(p) {
+			t.Fatalf("expected per-org git store at %s", p)
 		}
 	}
 }

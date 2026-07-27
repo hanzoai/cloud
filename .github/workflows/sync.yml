@@ -38,16 +38,32 @@ jobs:
       - name: Push main and release tags to git.hanzo.ai
         env:
           # Instance token for git.hanzo.ai. The value lives in KMS at
-          # hanzo/prod:/git/admin-token and must be an ORGANIZATION secret —
-          # as a single-repo secret it silently covers only that one repo.
+          # hanzo/prod:/git/admin-token and must be a REPOSITORY secret here.
+          #
+          # It reads like an organization secret belongs here, and that is what
+          # this file used to say. It does not work: hanzoai is on the GitHub
+          # FREE plan, where organization secrets reach PUBLIC repositories only.
+          # This repo is private, so an org secret arrives as the empty string —
+          # no error, no warning, and the REST API still reports the secret as
+          # visible to this repo. The empty value simply trips the guard below.
+          # Set it per-repo until the org is on Team, or the plan will keep
+          # eating the credential silently:
+          #   gh secret set HANZO_GIT_TOKEN -R hanzoai/cloud --body "$V"
           HANZO_GIT_TOKEN: ${{ secrets.HANZO_GIT_TOKEN }}
         run: |
           set -euo pipefail
           if [ -z "${HANZO_GIT_TOKEN:-}" ]; then
-            echo "::error::HANZO_GIT_TOKEN is not available here, so main was not handed to git.hanzo.ai and no build ran. Add it as an organization secret (value in KMS at hanzo/prod:/git/admin-token)."
+            echo "::error::HANZO_GIT_TOKEN is empty, so main was not handed to git.hanzo.ai and no build ran. Set it as a REPOSITORY secret on hanzoai/cloud (value in KMS at hanzo/prod:/git/admin-token) — on the Free plan an organization secret resolves to empty in a private repo."
             exit 1
           fi
-          git push --follow-tags \
+          # A rejection here is not a credential problem. It means git.hanzo.ai
+          # holds commits this ref does not contain — the forge is canonical and
+          # runs ahead — and the reconciliation is a MERGE made on the forge
+          # ("Merge github/main into canonical"), never a force-push from here.
+          if ! git push --follow-tags \
             "https://x-access-token:${HANZO_GIT_TOKEN}@git.hanzo.ai/hanzoai/cloud.git" \
-            "${GITHUB_SHA}:refs/heads/main"
+            "${GITHUB_SHA}:refs/heads/main"; then
+            echo "::error::git.hanzo.ai refused ${GITHUB_SHA}. If this is non-fast-forward, canonical main has commits GitHub does not; merge github/main into canonical ON THE FORGE and push that merge. Do not force-push — it would drop canonical-only history."
+            exit 1
+          fi
           echo "handed ${GITHUB_SHA} to git.hanzo.ai — build, publish and deploy run there"
