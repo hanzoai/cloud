@@ -63,7 +63,7 @@ import (
 
 // Prefixes are the canonical absolute prefixes the IAM identity surface owns —
 // the ONE list. It registers the real routes (safeMount), serves the fail-closed 503
-// when IAM cannot boot, and is the MountSpec.Prefixes apps.Wire() hands MountAll, so
+// when IAM cannot boot, and is the AppSpec.Prefixes apps.Wire() hands MountAll, so
 // IAM's middleware can only ever land on identity's own subtrees. Everything outside
 // them belongs to cloud, so the console catch-all keeps serving the SPA.
 //

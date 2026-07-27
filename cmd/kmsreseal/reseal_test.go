@@ -59,7 +59,7 @@ func newCloudApp(t *testing.T) (*zip.App, string, cloud.Deps) {
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
 	app.Use(middleware.Logger(deps.Logger))
-	if err := cloud.MountAll(app, []cloud.MountSpec{{Name: "kms", Mount: kms.Mount, OwnsHealth: true}}, cfg, deps); err != nil {
+	if err := cloud.MountAll(app, []cloud.AppSpec{{Name: "kms", Mount: kms.Mount, OwnsHealth: true}}, cfg, deps); err != nil {
 		t.Fatalf("MountAll: %v", err)
 	}
 	return app, dir, deps

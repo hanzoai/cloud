@@ -70,7 +70,7 @@ func TestMountAll_ShutdownHooksLIFOAfterDrain(t *testing.T) {
 	}
 
 	// Mount order a, b, c ⇒ LIFO teardown must be c, b, a.
-	specs := []cloud.MountSpec{
+	specs := []cloud.AppSpec{
 		{Name: "a", Mount: noopMount, Shutdown: record("a")},
 		{Name: "b", Mount: noopMount, Shutdown: record("b")},
 		{Name: "c", Mount: noopMount, Shutdown: record("c")},
@@ -183,7 +183,7 @@ func TestMountAll_ShutdownRegistration_EnablementAndNil(t *testing.T) {
 		}
 	}
 
-	specs := []cloud.MountSpec{
+	specs := []cloud.AppSpec{
 		{Name: "enabled", Mount: noopMount, Shutdown: record("enabled")},
 		{Name: "disabled", Mount: noopMount, Shutdown: record("disabled")},
 		{Name: "nilsd", Mount: noopMount}, // enabled, but no Shutdown

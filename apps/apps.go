@@ -1,7 +1,7 @@
 // Package apps is the composition root: the single, explicit list of which
 // Hanzo cloud subsystems are linked into the binary AND the order they mount in.
 //
-// Wire() returns []cloud.MountSpec in mount order (slice position == order). There
+// Wire() returns []cloud.AppSpec in mount order (slice position == order). There
 // is no init()-registry and no order-int: adding, removing, or reordering a
 // subsystem is a one-line edit to Wire(), read top-to-bottom. cmd/cloud and
 // cmd/hanzo both call Wire() and thread the slice into cloud.Serve — the set is
@@ -196,13 +196,13 @@ func init() {
 	})
 }
 
-// Wire returns every linked subsystem as a cloud.MountSpec, in mount order. The
+// Wire returns every linked subsystem as a cloud.AppSpec, in mount order. The
 // slice position IS the order: cloud.MountAll iterates it as-given, registering each
 // subsystem's teardown as a zip shutdown hook so teardown runs in reverse (LIFO).
 // Enablement is a separate axis: cloud.Serve mounts only the specs cfg.Enabled(name)
 // admits, so a STAGED subsystem is linked but inert until named.
-func Wire() []cloud.MountSpec {
-	return []cloud.MountSpec{
+func Wire() []cloud.AppSpec {
+	return []cloud.AppSpec{
 		// embedded NATS :4222 + JetStream.
 		{Name: "pubsub", Mount: pubsub.Mount, Shutdown: pubsub.Shutdown},
 		// embedded Kafka adaptor :9092.
@@ -254,11 +254,11 @@ func Wire() []cloud.MountSpec {
 		// otel-collector, prometheus and gonum are here and nowhere else — and it is
 		// imported by NOTHING but this line, so unlinking it is a pure subtraction.
 		//
-		// KNOWN GAP, see the branch report: o11y also owns /v1/sentry/* (mountSentry),
-		// which is a SECOND public prefix. zip.Load takes one, so /v1/sentry/* is not
-		// mounted on the host by this line and 404s until zip.Plugin can name more than
-		// one prefix. Do not merge this to main before that is closed.
-		cloud.PluginSpec("o11y", "/v1/o11y", o11yPlugin()),
+		// o11y owns TWO public prefixes — /v1/o11y and /v1/sentry/* (mountSentry,
+		// the Sentry-protocol ingest). Both are named here: a prefix left out
+		// would 404 silently rather than fail, which for Sentry ingest means
+		// quietly dropping every error event in the fleet.
+		cloud.PluginSpec("o11y", o11yPlugin(), "/v1/o11y", "/v1/sentry"),
 		{Name: "authz", Mount: cloud.Global(authz.Mount), Global: true},
 		// Embedded commerce plane /v1/commerce/*, /_/commerce/* — the hanzoai/commerce
 		// MODULE via the adapter in commerce.go (un-forked; the in-process

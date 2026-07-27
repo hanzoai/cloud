@@ -12,7 +12,7 @@
 // the fused cloud control plane.
 //
 // Design — one mechanism, not many. The subsystem set is the explicit list
-// apps.Wire() returns — []cloud.MountSpec in mount order (kms first-tier,
+// apps.Wire() returns — []cloud.AppSpec in mount order (kms first-tier,
 // iam 50, commerce 100, …, ai last), no init()-registry. A subcommand is just a
 // *selection* over that slice:
 //
@@ -142,7 +142,7 @@ func main() {
 // isServeTarget reports whether sub names something this binary serves in-process —
 // the full fused surface (cloud), standalone IAM, the datastore doc target, or any
 // registered subsystem. Everything else is delegated to the Rust CLI (passthrough).
-func isServeTarget(sub string, specs []cloud.MountSpec) bool {
+func isServeTarget(sub string, specs []cloud.AppSpec) bool {
 	if _, ok := nonRegistrySubcommands[sub]; ok {
 		return true
 	}
@@ -150,7 +150,7 @@ func isServeTarget(sub string, specs []cloud.MountSpec) bool {
 }
 
 // dispatch routes a subcommand to its serve entrypoint.
-func dispatch(sub string, specs []cloud.MountSpec) error {
+func dispatch(sub string, specs []cloud.AppSpec) error {
 	switch sub {
 	case "cloud":
 		// Full fused surface: --enable governs the set (empty = all).
@@ -193,7 +193,7 @@ func dispatch(sub string, specs []cloud.MountSpec) error {
 }
 
 // registryHas reports whether name is a registered subsystem.
-func registryHas(specs []cloud.MountSpec, name string) bool {
+func registryHas(specs []cloud.AppSpec, name string) bool {
 	for _, spec := range specs {
 		if spec.Name == name {
 			return true
@@ -204,7 +204,7 @@ func registryHas(specs []cloud.MountSpec, name string) bool {
 
 // usage prints the subcommand list: the non-registry targets (cloud, iam,
 // datastore) plus every subsystem in the composition root (Wire()), sorted.
-func usage(w *os.File, specs []cloud.MountSpec) {
+func usage(w *os.File, specs []cloud.AppSpec) {
 	fmt.Fprintf(w, "hanzo %s — the unified Hanzo Go binary\n\n", version)
 	fmt.Fprintf(w, "Usage:\n  hanzo <command> [flags]\n\n")
 

@@ -39,7 +39,7 @@ import (
 // every enabled subsystem) before MountAll, runs the canonical middleware
 // pipeline (Recover → RequestID → Logger), and shuts down gracefully on
 // SIGINT/SIGTERM.
-func Serve(specs []MountSpec, enable []string) error {
+func Serve(specs []AppSpec, enable []string) error {
 	cfg := LoadConfig()
 	if enable != nil {
 		cfg.Enable = enable

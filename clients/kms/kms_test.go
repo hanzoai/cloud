@@ -1,7 +1,7 @@
 package kms_test
 
 // Integration tests for the embedded KMS subsystem, exercised through the REAL
-// orchestrator path (BuildDeps → the init()-registered MountSpec → the zip/Fiber
+// orchestrator path (BuildDeps → the init()-registered AppSpec → the zip/Fiber
 // stack), mirroring cmd/cloud/main_test.go. Requests run in-process via
 // app.Fiber().Test — no listener, no external KMS, no PostgreSQL.
 //
@@ -49,8 +49,8 @@ func masterKeyB64(t *testing.T) string {
 // mountSpecs is the kms subsystem's composition-root entry, built locally so these
 // tests mount exactly kms (the same spec apps.Wire() carries) without linking
 // the whole bundle. cfg.Enable still gates it, exactly as in production.
-func mountSpecs() []cloud.MountSpec {
-	return []cloud.MountSpec{{Name: "kms", Mount: kms.Mount, OwnsHealth: true}}
+func mountSpecs() []cloud.AppSpec {
+	return []cloud.AppSpec{{Name: "kms", Mount: kms.Mount, OwnsHealth: true}}
 }
 
 // newApp wires BuildDeps + the canonical middleware + MountAll for the kms

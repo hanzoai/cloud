@@ -75,7 +75,7 @@ func main() {
 }
 
 // wireNames parses apps.go and returns the {Name: "..."} string literals from
-// Wire()'s returned []MountSpec composite literal — the app names, in mount
+// Wire()'s returned []AppSpec composite literal — the app names, in mount
 // order. It is a light parse (no type-check), so it stays fast and depends only
 // on the literal shape, which TestWireOrderMatchesFrozen already pins.
 func wireNames(path string) []string {

@@ -128,7 +128,7 @@ func (s *scope) err() error {
 		return nil
 	}
 	return fmt.Errorf(
-		"%s installed middleware at %s, outside the prefixes it owns (%s) — declare those prefixes in its MountSpec, or Global: true if it really gates the whole binary",
+		"%s installed middleware at %s, outside the prefixes it owns (%s) — declare those prefixes in its AppSpec, or Global: true if it really gates the whole binary",
 		s.name, strings.Join(*s.escaped, ", "), strings.Join(s.prefixes, ", "))
 }
 
@@ -141,7 +141,7 @@ func Global(fn func(*zip.App, Deps) error) MountFunc {
 	return func(r Router, deps Deps) error {
 		app, ok := r.(*zip.App)
 		if !ok {
-			return fmt.Errorf("this subsystem takes the bare *zip.App; its MountSpec needs Global: true")
+			return fmt.Errorf("this subsystem takes the bare *zip.App; its AppSpec needs Global: true")
 		}
 		return fn(app, deps)
 	}

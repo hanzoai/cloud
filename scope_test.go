@@ -36,7 +36,7 @@ func get(t *testing.T, app *zip.App, path string) int {
 	return resp.StatusCode
 }
 
-func mountAll(t *testing.T, app *zip.App, specs []cloud.MountSpec) error {
+func mountAll(t *testing.T, app *zip.App, specs []cloud.AppSpec) error {
 	t.Helper()
 	enable := make([]string, 0, len(specs))
 	for _, s := range specs {
@@ -59,7 +59,7 @@ func newApp() *zip.App {
 // the /v1/<name> convention every subsystem already follows.
 func TestScopeConfinesUseToTheSubsystem(t *testing.T) {
 	app := newApp()
-	err := mountAll(t, app, []cloud.MountSpec{
+	err := mountAll(t, app, []cloud.AppSpec{
 		{Name: "guard", Mount: func(r cloud.Router, _ cloud.Deps) error {
 			r.Use(deny)
 			r.Get("/v1/guard/whoami", pong)
@@ -87,7 +87,7 @@ func TestScopeConfinesUseToTheSubsystem(t *testing.T) {
 // it owns two subtrees and neither of them is /v1/iam alone.
 func TestScopeHonoursDeclaredPrefixes(t *testing.T) {
 	app := newApp()
-	err := mountAll(t, app, []cloud.MountSpec{
+	err := mountAll(t, app, []cloud.AppSpec{
 		{Name: "identity", Prefixes: []string{"/v1/identity", "/login/oauth"},
 			Mount: func(r cloud.Router, _ cloud.Deps) error {
 				r.Use(deny)
@@ -120,7 +120,7 @@ func TestScopeHonoursDeclaredPrefixes(t *testing.T) {
 // even in the failed attempt.
 func TestScopeRefusesMiddlewareOutsideItsPrefixes(t *testing.T) {
 	app := newApp()
-	err := mountAll(t, app, []cloud.MountSpec{
+	err := mountAll(t, app, []cloud.AppSpec{
 		{Name: "neighbour", Mount: func(r cloud.Router, _ cloud.Deps) error {
 			r.Get("/v1/neighbour/ping", pong)
 			return nil
@@ -142,7 +142,7 @@ func TestScopeRefusesMiddlewareOutsideItsPrefixes(t *testing.T) {
 // rate-limiting a leaf of its OWN subtree is the normal case and must pass.
 func TestScopeAllowsGroupInsideItsPrefixes(t *testing.T) {
 	app := newApp()
-	err := mountAll(t, app, []cloud.MountSpec{
+	err := mountAll(t, app, []cloud.AppSpec{
 		{Name: "vault", Mount: func(r cloud.Router, _ cloud.Deps) error {
 			r.Group("/v1/vault/auth", deny)
 			r.Get("/v1/vault/auth/login", pong)
@@ -166,7 +166,7 @@ func TestScopeAllowsGroupInsideItsPrefixes(t *testing.T) {
 // it has always meant. That is the capability, and it is spelled out in Wire().
 func TestGlobalIsTheOnlyAppWideDoor(t *testing.T) {
 	app := newApp()
-	err := mountAll(t, app, []cloud.MountSpec{
+	err := mountAll(t, app, []cloud.AppSpec{
 		{Name: "edge", Global: true, Mount: cloud.Global(func(a *zip.App, _ cloud.Deps) error {
 			a.Use(deny)
 			return nil
@@ -189,7 +189,7 @@ func TestGlobalIsTheOnlyAppWideDoor(t *testing.T) {
 // fails the mount instead of silently receiving a scope it cannot use.
 func TestGlobalMountNeedsTheGlobalFlag(t *testing.T) {
 	app := newApp()
-	err := mountAll(t, app, []cloud.MountSpec{
+	err := mountAll(t, app, []cloud.AppSpec{
 		{Name: "edge", Mount: cloud.Global(func(*zip.App, cloud.Deps) error { return nil })},
 	})
 	if err == nil {

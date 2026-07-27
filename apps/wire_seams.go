@@ -17,7 +17,7 @@ import (
 	"github.com/hanzoai/cloud/clients/principal"
 )
 
-// wire_seams.go wires cross-subsystem in-process seams that cannot be a MountSpec
+// wire_seams.go wires cross-subsystem in-process seams that cannot be a AppSpec
 // because they compose functions ACROSS packages that must not import each other.
 //
 // The coding orchestrator (clients/coding) needs git's CloneURL + VerifyRef, but
