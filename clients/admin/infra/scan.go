@@ -108,6 +108,18 @@ func scanOne(ctx context.Context, do *digitalocean.Client, clusterID string) Clu
 		s.Pods = append(s.Pods, podRefOf(p))
 	}
 
+	svcs, err := cs.CoreV1().Services(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		s.Err = fmt.Errorf("list services: %w", err)
+		return s
+	}
+	for _, sv := range svcs.Items {
+		if sv.Spec.Type != corev1.ServiceTypeLoadBalancer {
+			continue
+		}
+		s.Services = append(s.Services, serviceRefOf(sv))
+	}
+
 	nodes, err := cs.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		s.Err = fmt.Errorf("list nodes: %w", err)
@@ -137,6 +149,30 @@ func volumeHandle(pv corev1.PersistentVolume) string {
 		}
 	}
 	return ""
+}
+
+// doLBIDAnnotation is the annotation the DOKS cloud-controller stamps on a Service once
+// it has provisioned a load balancer for it. It is the strongest link between the two.
+const doLBIDAnnotation = "kubernetes.digitalocean.com/load-balancer-id"
+
+// serviceRefOf reduces a type=LoadBalancer Service to every identity by which it can be
+// matched to a DO load balancer. Both the DOKS annotation and the addresses are read,
+// and either matching is enough: a broad match means MORE load balancers are treated as
+// in use, which is the safe direction — the same stance volumeHandle takes.
+func serviceRefOf(sv corev1.Service) ServiceRef {
+	r := ServiceRef{
+		Namespace: sv.Namespace, Name: sv.Name,
+		LBID: strings.TrimSpace(sv.Annotations[doLBIDAnnotation]),
+	}
+	if ip := strings.TrimSpace(sv.Spec.LoadBalancerIP); ip != "" {
+		r.IPs = append(r.IPs, ip)
+	}
+	for _, in := range sv.Status.LoadBalancer.Ingress {
+		if ip := strings.TrimSpace(in.IP); ip != "" {
+			r.IPs = append(r.IPs, ip)
+		}
+	}
+	return r
 }
 
 func claimNS(pv corev1.PersistentVolume) string {
