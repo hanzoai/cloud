@@ -59,6 +59,7 @@ import (
 	"github.com/hanzoai/cloud/clients/commerce/transport"
 	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/types"
 	"github.com/zap-proto/zip"
 )
 
@@ -129,14 +130,11 @@ func summary(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrUnauthorized("sign in to view usage")
 	}
-	rangeLabel := strings.TrimSpace(c.Query("range"))
-	start, end, interval, err := aiobject.ResolveCloudUsageWindow(rangeLabel, c.Query("start"), c.Query("end"), time.Now())
+	w, err := types.ParseWindow(c.Query("range"), c.Query("start"), c.Query("end"), time.Now())
 	if err != nil {
 		return zip.ErrBadRequest(err.Error())
 	}
-	if rangeLabel == "" {
-		rangeLabel = "24h"
-	}
+	rangeLabel, start, end, interval := w.Label, w.Start, w.End, string(w.Interval)
 	ctx := c.Context()
 
 	// ── Spend (commerce) ── best-effort; unconfigured/unreachable → honest zeros.
@@ -217,15 +215,12 @@ func analytics(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusPaymentRequired, "analytics datastore is a paid feature — upgrade at console.hanzo.ai")
 	}
 
-	rangeLabel := strings.TrimSpace(c.Query("range"))
 	now := time.Now()
-	start, end, _, werr := aiobject.ResolveCloudUsageWindow(rangeLabel, c.Query("start"), c.Query("end"), now)
+	w, werr := types.ParseWindow(c.Query("range"), c.Query("start"), c.Query("end"), now)
 	if werr != nil {
 		return zip.ErrBadRequest(werr.Error())
 	}
-	if rangeLabel == "" {
-		rangeLabel = "24h"
-	}
+	rangeLabel, start, end := w.Label, w.Start, w.End
 	// Clamp the window to the plan's retention entitlement: a tenant may never read
 	// older than access.RetentionDays, even with a custom ?start.
 	if floor := now.Add(-time.Duration(access.RetentionDays) * 24 * time.Hour); start.Before(floor) {
@@ -332,10 +327,14 @@ func buildAnalyticsBlock(s *cloud.Service[state], ctx context.Context, org strin
 func buildAccountsBlock(s *cloud.Service[state], ctx context.Context, org, user string, start, end time.Time) Accounts {
 	a := Accounts{
 		Rows: []TotalView{},
-		Account: SourceState{Scope: ScopeUser, Source: accountUsageTable,
-			Note: "your own linked accounts, metered from each provider's own login; plan consumption, not a Hanzo charge"},
-		Hanzo: SourceState{Scope: ScopeOrg, Source: llmTable,
-			Note: "your org's Hanzo-routed inference; cost of record"},
+		Account: SourceState{
+			Scope: ScopeUser, Source: accountUsageTable,
+			Note: "your own linked accounts, metered from each provider's own login; plan consumption, not a Hanzo charge",
+		},
+		Hanzo: SourceState{
+			Scope: ScopeOrg, Source: llmTable,
+			Note: "your org's Hanzo-routed inference; cost of record",
+		},
 	}
 	if rows, ok := s.State.warehouse.AccountTotals(ctx, org, user, start, end); ok {
 		a.Account.Available = true
