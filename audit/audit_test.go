@@ -8,13 +8,14 @@ package audit
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/cloud/cek"
 )
 
 // openTemp opens a Recorder backed by a fresh on-disk SQLite file (not :memory:,
@@ -119,6 +120,7 @@ func TestVerify_PassesOnUntamperedChain(t *testing.T) {
 // reports the exact seq where the chain breaks. THIS is the tamper-evidence
 // property — an audit trail that can be silently forged is worse than none.
 func TestVerify_DetectsFieldTamper(t *testing.T) {
+	requireSharedStore(t) // tampers through a second handle while the Recorder holds the store open
 	rec, path := openTemp(t)
 	ctx := context.Background()
 	for i := 0; i < 10; i++ {
@@ -154,6 +156,7 @@ func TestVerify_DetectsFieldTamper(t *testing.T) {
 // the chain: the record after the hole has a PrevHash that no longer matches the
 // now-preceding record, and the seq sequence gaps. Either way Verify flags it.
 func TestVerify_DetectsDeletion(t *testing.T) {
+	requireSharedStore(t) // tampers through a second handle while the Recorder holds the store open
 	rec, path := openTemp(t)
 	ctx := context.Background()
 	for i := 0; i < 10; i++ {
@@ -182,6 +185,7 @@ func TestVerify_DetectsDeletion(t *testing.T) {
 // TestVerify_DetectsReorder proves swapping two records' positions (an attacker
 // trying to reorder events) breaks the prev-hash linkage.
 func TestVerify_DetectsReorder(t *testing.T) {
+	requireSharedStore(t) // tampers through a second handle while the Recorder holds the store open
 	rec, path := openTemp(t)
 	ctx := context.Background()
 	for i := 0; i < 6; i++ {
@@ -612,7 +616,11 @@ func TestCheckpoint_CountMonotonicDetectsTruncation(t *testing.T) {
 // unaffected; Verify then re-reads and must catch the damage.
 func tamperOutOfBand(t *testing.T, path, stmt string) {
 	t.Helper()
-	db, err := sql.Open("sqlite", path)
+	// Opened through cek, like the Recorder itself: the store is encrypted at rest,
+	// so a bare sql.Open cannot read it. The modelled adversary is one with database
+	// access AND the key (an insider, or a compromised process) — file access alone
+	// no longer suffices, which is the point of encrypting it.
+	db, err := cek.Open(path)
 	if err != nil {
 		t.Fatalf("tamper open: %v", err)
 	}
