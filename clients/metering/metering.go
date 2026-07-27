@@ -320,8 +320,23 @@ func (c *Client) AuthorizeVerdict(ctx context.Context, in AuthInput) (Verdict, e
 		}
 		return Verdict{}, fmt.Errorf("metering: empty user")
 	}
+	// No LEDGER -> cannot bill either, and the client default is NOT a substitute.
+	// orgFor falls back to c.org (the deployment's BRAND org, "hanzo"), which is the
+	// right default for a CONFIG read — spend-alert rules, plan tier, cap rows are
+	// scoped by the X-Org-Id header and the brand owns the platform's own. It is the
+	// WRONG default for money: an org-less principal gated against the brand's balance
+	// reads a wallet it has no claim on, and every unattributable request in the fleet
+	// would be authorized by whatever Hanzo happens to be holding. An unresolvable org
+	// refuses; it never charges — or clears — someone else.
+	org := strings.TrimSpace(in.Org)
+	if org == "" {
+		if c.failOpen {
+			return Verdict{Allow: true}, nil
+		}
+		return Verdict{}, fmt.Errorf("metering: empty org")
+	}
 
-	available, err := c.fetchAvailable(ctx, user, c.orgFor(in.Org), currencyOr(in.Currency))
+	available, err := c.fetchAvailable(ctx, user, org, currencyOr(in.Currency))
 	if err != nil {
 		if c.failOpen {
 			return Verdict{Allow: true}, nil
@@ -611,6 +626,14 @@ func (c *Client) Record(ctx context.Context, u Usage) (*RecordResult, error) {
 	if strings.TrimSpace(u.User) == "" {
 		return nil, fmt.Errorf("metering: Record requires a user")
 	}
+	// The DEBIT names its ledger or it does not happen. Same rule as the gate above,
+	// and the same reason: c.org would silently make the brand org pay for work it
+	// never asked for. The native path already refuses an empty org inside finance,
+	// but the HTTP path would post it to commerce under the brand header — so state it
+	// once, here, where both paths pass.
+	if strings.TrimSpace(u.Org) == "" {
+		return nil, fmt.Errorf("metering: Record requires an org")
+	}
 	if u.Currency == "" {
 		u.Currency = "usd"
 	}
@@ -644,7 +667,7 @@ func (c *Client) Record(ctx context.Context, u Usage) (*RecordResult, error) {
 		return nil, fmt.Errorf("metering: encode usage: %w", err)
 	}
 
-	body, err := c.post(ctx, pathUsage, payload, c.orgFor(u.Org))
+	body, err := c.post(ctx, pathUsage, payload, u.Org)
 	if err != nil {
 		return nil, err
 	}
@@ -710,6 +733,11 @@ func (c *Client) do(req *http.Request, org string) ([]byte, error) {
 	return body, nil
 }
 
+// orgFor picks the X-Org-Id a CONFIG read is scoped by: the per-call org, else the
+// deployment's own (brand) org. It is for reads whose absence of an org means "the
+// platform's own settings" — spend-alert rules, cap rows, plan tier — and it is
+// deliberately NOT reachable from the gate or the debit. Money has no default payer:
+// AuthorizeVerdict and Record refuse an empty org before they ever get here.
 func (c *Client) orgFor(perCall string) string {
 	if perCall = strings.TrimSpace(perCall); perCall != "" {
 		return perCall
