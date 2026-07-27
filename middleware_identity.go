@@ -27,6 +27,7 @@ package cloud
 // matching the gateway's admin-guard. An org admin gets NO admin authority.
 
 import (
+	"log/slog"
 	"net/url"
 	"strings"
 	"unicode"
@@ -131,9 +132,14 @@ var subScopeHeaders = []string{"X-Project-Id", "X-App-Id", "X-Billing-Account-Id
 //   - ALWAYS delete every header in authorityHeaders (a client copy never
 //     survives — this alone kills X-User-IsAdmin forgery).
 //   - Validate a Bearer / Basic / session-cookie JWT, if present:
-//     SuperAdmin (claims.isAdmin && owner == adminOrg)
+//     SuperAdmin (homeOrg == adminOrg, human) — membership of the reserved admin
+//     org IS the predicate; the isAdmin bit is deliberately not a second term.
+//     This line previously read "claims.isAdmin && owner == adminOrg", which was
+//     wrong twice over: the code has never consulted isAdmin here (see
+//     TestSuperAdminGate_IsAdminOrgMembership), and `owner` named the APP's org,
+//     not the user's.
 //     → X-User-IsAdmin=true; X-Org-Id = the requested org when present
-//     (admin org-switch), else owner.
+//     (admin org-switch), else the home org.
 //     any other principal (incl. org admins, normal users)
 //     → X-Org-Id pinned to owner; NO admin. A client org cannot widen
 //     scope.
@@ -193,9 +199,31 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			// collapse "acme " onto "acme"), so it grants NO org-scoping — the request
 			// resolves org-less and every org() gate fails closed with 403,
 			// rather than folding two IAM orgs onto one namespace.
-			owner := claims.Owner
+			// The USER's org, from the signed membership set — NOT the `owner` claim,
+			// which carries the APPLICATION's org and is therefore chosen by whichever
+			// app the caller authenticated through (see idClaims.homeOrg). Everything
+			// below — the billing anchor, the SuperAdmin predicate, the effective org —
+			// reads this ONE value, so both defects close together.
+			owner := claims.homeOrg()
 			if OrgHasUnsafeRune(owner) {
 				owner = ""
+			}
+			// FAIL CLOSED on a token that names no home org (no `orgs` claim: minted
+			// before IAM v1.33.0, or a machine token). Falling back to claims.Owner
+			// would reinstate the app-selected tenant this fix removes, so an
+			// unresolvable home org grants NO scoping at all: the request continues
+			// org-less and every org() gate refuses it. Logged, not silent — a real
+			// legacy principal must be visible to us, not merely denied. Bounded by
+			// token TTL: a re-auth mints the claim.
+			// WARN, not Debug: the expected rate is ~zero (IAM has minted `orgs` since
+			// v1.33.0 and live is far past it), so if this ever becomes noisy the noise
+			// IS the alarm — it means legacy principals are real and being denied, which
+			// we must learn immediately rather than infer from support tickets. Carries
+			// the AUDIENCE so the offending CLIENT is named, not just the user: IAM sets
+			// aud to the minting app's clientId (oidc/jwt.go audienceFor).
+			if owner == "" {
+				slog.Warn("identity: token names no home org (orgs claim absent or unsafe) — refusing org scope",
+					"sub", claims.Subject, "aud", claims.Audience)
 			}
 			if id := claims.userID(); id != "" {
 				req.Header.Set("X-User-Id", id)
@@ -234,9 +262,28 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			var effOrg string
 			switch {
 			case owner != "" && owner == adminOrg && !isMachinePrincipal(claims):
-				// SuperAdmin ⟺ the principal's org IS the reserved admin org AND the
-				// principal is HUMAN. The org equality is the SAME one IAM's canonical
-				// User.IsSuperAdmin() uses (user.Owner == conf.AdminOrg); the human gate
+				// SuperAdmin ⟺ the principal's HOME org IS the reserved admin org AND the
+				// principal is HUMAN.
+				//
+				// `owner` here is the USER's org (claims.homeOrg, from the signed `orgs`
+				// set) — NOT the `owner` claim. This predicate USED to read that claim,
+				// which IAM stamps with the APPLICATION's org, so any human token minted
+				// by an app belonging to the reserved admin org conferred platform admin
+				// regardless of who the user was. Only now, reading the user's own org, is
+				// this genuinely the equality IAM's User.IsSuperAdmin() uses (user.Owner ==
+				// conf.AdminOrg); the comment previously claimed that parity while
+				// comparing a different value, and a confidently wrong comment on a
+				// security predicate is how it survived unnoticed.
+				//
+				// Membership ALONE decides, deliberately — the isAdmin bit is NOT a second
+				// term. The admin org holds only SuperAdmins (provisioned in, never
+				// promoted), so admin-org membership IS the fact; adding isAdmin would deny
+				// every operator whose user row lacks the bit, which is a lockout, not a
+				// hardening. That contract is pinned by
+				// TestSuperAdminGate_IsAdminOrgMembership ("ONE predicate, no second
+				// signal") and relied on by TestMasqueradeSpendsOwnBooks, whose SuperAdmin
+				// carries isAdmin=false. Reading the USER's org is what closes the
+				// escalation; a second signal is not needed and is not free. The human gate
 				// (!isMachinePrincipal) is the necessary companion once the audience is no
 				// longer a gate — otherwise ANY admin-org client_credentials app (type ==
 				// "application"), not just the KMS-sync one, would inherit platform-admin and
