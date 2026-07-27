@@ -221,3 +221,60 @@ func TestBalance_ScopedToCallerOrg(t *testing.T) {
 		t.Fatalf("attacker read the victim's balance: %s", body)
 	}
 }
+
+// TestBalance_ReportsTheAccountItRead is the honesty guard on the `account` field. A
+// checkout has to tell the customer WHICH account it is about to fund, and the only
+// trustworthy answer is the subject the server actually resolved — the same one the
+// wallet was read from and the same one the ai gate debits. A browser decoding its own
+// token is a guess, and a guess that disagrees is how money lands in an account the gate
+// never reads. So the reported account must equal the subject handed to the ledger, for
+// every identity shape a validated principal can arrive in.
+func TestBalance_ReportsTheAccountItRead(t *testing.T) {
+	t.Setenv("PERSONAL_BILLING_ORGS", "")
+	t.Setenv("ORG_BILLING_ORGS", "hanzo")
+
+	want := account.Payer(account.Credential{Owner: "hanzo", Name: "z"}).Subject()
+
+	for _, tc := range []struct{ name, userName, userID string }{
+		{"gateway mints X-User-Name", "z", "8f14e45f-ea1b-4c2a-9f3d-000000000001"},
+		{"in-binary direct bearer", "z", "hanzo/z"},
+		{"owner/name id, no X-User-Name", "", "hanzo/z"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fin := &fakeFinance{wallets: map[string]int64{want: 6875}}
+			publishFinance(t, fin)
+			app := mountApp(t, "", "")
+
+			req := httptest.NewRequest(http.MethodGet, "/v1/billing/balance", nil)
+			req.Header.Set("X-User-Id", tc.userID)
+			req.Header.Set("X-Org-Id", "hanzo")
+			if tc.userName != "" {
+				req.Header.Set("X-User-Name", tc.userName)
+			}
+			resp, err := app.Fiber().Test(req)
+			if err != nil {
+				t.Fatalf("Test: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			var got struct {
+				Available int64  `json:"available"`
+				Account   string `json:"account"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if got.Account == "" {
+				t.Fatal("no account reported — a checkout cannot name the payer it is about to charge")
+			}
+			if got.Account != want {
+				t.Fatalf("reported account %q, want %q (the gate's subject)", got.Account, want)
+			}
+			// The reported account must be the one the LEDGER was read with, not a
+			// second, independently-resolved value that could drift from it.
+			if got.Account != fin.gotSubj {
+				t.Fatalf("reported account %q but read wallet %q — display and read disagree", got.Account, fin.gotSubj)
+			}
+		})
+	}
+}
