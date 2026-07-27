@@ -54,7 +54,7 @@ func TestO11ySQL_ReadsCanonicalTables(t *testing.T) {
 		{"topOrgs", o11yTopOrgsSQL(), "hanzo.cloud_usage", 1},
 		{"topModels", o11yTopModelsSQL(), "hanzo.cloud_usage", 1},
 		{"topServices", o11yTopServicesSQL(), "o11y_traces.distributed_o11y_index_v3", 1},
-		{"llm", o11yLLMSQL(), "langfuse.observations", 1},
+		{"llm", o11yLLMSQL(), "o11y_ai.observations", 1},
 	}
 	for _, c := range cases {
 		if !strings.Contains(c.sql, "FROM "+c.table) {
