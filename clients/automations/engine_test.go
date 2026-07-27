@@ -3,7 +3,6 @@ package automations
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,7 +12,6 @@ import (
 
 	tasksclient "github.com/hanzoai/tasks/pkg/sdk/client"
 	tasksworker "github.com/hanzoai/tasks/pkg/sdk/worker"
-	tasksengine "github.com/hanzoai/tasks/pkg/tasks"
 )
 
 // probe is a TEST-ONLY connector (registered only in _test builds) whose record
@@ -59,17 +57,7 @@ func TestDurableFlowRunSucceeds(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	port := l.Addr().(*net.TCPAddr).Port
-	_ = l.Close()
-
-	srv, err := tasksengine.Embed(ctx, tasksengine.EmbedConfig{ZAPPort: port, Namespace: "acme", DataDir: t.TempDir()})
-	if err != nil {
-		t.Fatalf("embed: %v", err)
-	}
+	srv, port := embedEngine(ctx, t, "acme")
 	defer func() { _ = srv.Stop(context.Background()) }()
 
 	cli, err := tasksclient.Dial(tasksclient.Options{
