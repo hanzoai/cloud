@@ -150,7 +150,7 @@ func (s *Store) TargetDispatchable(ctx context.Context, org, targetID string) er
 	if err != nil {
 		return err // errTargetNotFound or a real DB error
 	}
-	if t.Status != TargetOnline {
+	if t.EffectiveStatus(time.Now()) != TargetOnline {
 		return errTargetNotReady
 	}
 	_, servingAt, err := s.ClaimKeyHash(ctx, org, targetID)
