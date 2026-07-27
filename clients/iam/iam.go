@@ -61,11 +61,15 @@ import (
 	"github.com/hanzoai/cloud"
 )
 
-// iamPrefixes are the canonical absolute prefixes the IAM identity surface owns,
-// used ONLY for the fail-closed 503 — on success iamserver.Route registers the real
-// routes itself. The bare /healthz is deliberately excluded — it is a shared-liveness
-// path, not an auth surface, so 503-ing it would mask the binary's own health rather
-// than an identity outage.
+// iamPrefixes are the canonical absolute prefixes the IAM identity surface owns —
+// the ONE list, used both to register the real routes (safeMount) and to serve the
+// fail-closed 503 when IAM cannot boot. Everything outside them belongs to cloud, so
+// the console catch-all keeps serving the SPA.
+//
+// The bare /healthz is deliberately excluded — it is a shared-liveness path, not an
+// auth surface, so 503-ing it would mask the binary's own health rather than an
+// identity outage. It is also why iam2 must not be co-mingled: iam2 serves its OWN
+// /healthz, which silently took over the shared binary's.
 var iamPrefixes = []string{
 	"/v1/iam",      // OIDC/OAuth2 + entity CRUD + the Casdoor verb-alias compat layer
 	"/login/oauth", // browser authorize surface (the /v1/iam/oauth/authorize 302 target)
@@ -156,17 +160,36 @@ func paths(deps cloud.Deps) (dbPath, initDataPath string) {
 	return dbPath, initDataPath
 }
 
-// safeMount runs iamserver.Route under a recover so its only panic path — a registered
-// enterprise feature failing to mount — becomes an error the caller fail-closes on,
-// never a crash of the shared cloud binary. With zero features registered today it
-// always returns nil.
+// safeMount registers the IAM v2 surface behind WILDCARDS at the prefixes it owns,
+// under a recover so its only panic path — a registered enterprise feature failing to
+// mount — becomes an error the caller fail-closes on, never a crash of the shared
+// cloud binary. With zero features registered today it always returns nil.
+//
+// It uses iamserver.Handler (a standalone iam2 app adapted to net/http), NOT
+// iamserver.Route. Route CO-MINGLES iam2's routes onto the host app at absolute
+// paths, and iam2 is a whole server: it owns a root catch-all and its own /healthz.
+// Co-mingled into cloud, those SHADOW the console — the shared binary answered
+// `/healthz` with {"binary":"iam2"} and 401'd `/` and `/signin`, so a logged-out
+// person could not reach the login page at all. Handler is the shape the library
+// documents for exactly this host ("registered at the /v1/iam/* and root
+// /.well-known/* wildcards"), and it confines iam2 to the prefixes below, so cloud's
+// console catch-all keeps serving everything else.
 func safeMount(app *zip.App, db orm.DB) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("iam mount panicked: %v", r)
 		}
 	}()
-	iamserver.Route(app, db)
+	h := zip.AdaptNetHTTP(iamserver.Handler(db))
+	for _, prefix := range iamPrefixes {
+		app.All(prefix, h)
+		app.All(prefix+"/*", h)
+	}
+	// OIDC discovery + JWKS live at the ROOT by spec (RFC 8414 / OIDC Discovery
+	// 1.0): a relying party reads /.well-known/openid-configuration off the issuer
+	// host, so this one root wildcard is part of the identity contract, not a
+	// catch-all. Narrow by construction — it cannot shadow the console.
+	app.All("/.well-known/*", h)
 	return nil
 }
 
