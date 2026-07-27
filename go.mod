@@ -78,7 +78,6 @@ require (
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fatih/camelcase v1.0.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
-	github.com/go-test/deep v1.1.1 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
@@ -104,9 +103,6 @@ require (
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
-	github.com/redis/go-redis/extra/rediscmd/v9 v9.15.1 // indirect
-	github.com/redis/go-redis/extra/redisotel/v9 v9.15.1 // indirect
-	github.com/redis/go-redis/v9 v9.20.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
@@ -137,7 +133,6 @@ require (
 	github.com/casbin/govaluate v1.3.0 // indirect
 	github.com/coreos/go-oidc/v3 v3.17.0 // indirect
 	github.com/dennwc/varint v1.0.0 // indirect
-	github.com/djherbis/times v1.6.0 // indirect
 	github.com/edsrzf/mmap-go v1.2.0 // indirect
 	github.com/elastic/lunes v0.2.0 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
@@ -294,7 +289,6 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.12.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute v1.0.0 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.7.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.31.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.55.0 // indirect
@@ -334,7 +328,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.6 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.22 // indirect
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.8.0 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.296.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.13 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.21 // indirect
@@ -358,7 +351,6 @@ require (
 	github.com/btcsuite/btcd/btcutil v1.1.6 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 // indirect
 	github.com/btcsuite/btclog v1.0.0 // indirect
-	github.com/buger/goterm v1.0.4 // indirect
 	github.com/bytedance/gopkg v0.1.4 // indirect
 	github.com/bytedance/sonic v1.15.2 // indirect
 	github.com/bytedance/sonic/loader v0.5.1 // indirect
@@ -375,8 +367,6 @@ require (
 	github.com/coder/quartz v0.3.0 // indirect
 	github.com/cohere-ai/cohere-go/v2 v2.5.2 // indirect
 	github.com/consensys/gnark-crypto v0.20.1 // indirect
-	github.com/containerd/errdefs v1.0.0 // indirect
-	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.7.0 // indirect
 	github.com/corpix/uarand v0.2.0 // indirect
 	github.com/crate-crypto/go-eth-kzg v1.5.0 // indirect
@@ -389,14 +379,10 @@ require (
 	github.com/dgraph-io/ristretto/v2 v2.4.0 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
-	github.com/digitalocean/go-libvirt v0.0.0-20260217163227-273eaa321819 // indirect
 	github.com/disintegration/imaging v1.6.2 // indirect
-	github.com/diskfs/go-diskfs v1.9.1 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
-	github.com/docker/docker v28.5.2+incompatible // indirect
-	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/domodwyer/mailyak/v3 v3.6.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -521,7 +507,6 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/jessevdk/go-flags v1.6.1 // indirect
-	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
@@ -538,7 +523,6 @@ require (
 	github.com/leverly/ChatGLM v1.2.0 // indirect
 	github.com/lithammer/shortuuid v3.0.0+incompatible // indirect
 	github.com/lufia/plan9stats v0.0.0-20260216142805-b3301c5f2a88 // indirect
-	github.com/luthermonson/go-proxmox v0.4.0 // indirect
 	github.com/luxfi/accel v1.2.4 // indirect
 	github.com/luxfi/age v1.6.0 // indirect
 	github.com/luxfi/cache v1.3.1 // indirect
@@ -581,7 +565,6 @@ require (
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.1-0.20231216201459-8508981c8b6c // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
-	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect
@@ -662,7 +645,6 @@ require (
 	github.com/swaggest/usecase v1.3.1 // indirect
 	github.com/tealeg/xlsx v1.0.5 // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.3.77 // indirect
-	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/cvm v1.0.1116 // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/hunyuan v1.3.48 // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/tbaas v1.1.13 // indirect
 	github.com/tetratelabs/wazero v1.12.0 // indirect
