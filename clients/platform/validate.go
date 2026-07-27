@@ -39,7 +39,7 @@ import (
 // allowlist — not a denylist — is the safe default: an unknown host is refused,
 // never fetched. An exact apex OR a subdomain of one is accepted (so
 // codeload.github.com under github.com is allowed).
-var defaultGitProviderHosts = []string{"github.com", "gitlab.com", "bitbucket.org", "gitea.com", "codeberg.org"}
+var defaultGitProviderHosts = []string{"github.com", "gitlab.com", "bitbucket.org", "codeberg.org"}
 
 // gitProviderHosts is the effective allowlist, resolved ONCE at package init:
 // the operator may REPLACE it via CLOUD_PLATFORM_GIT_HOSTS (comma-separated
