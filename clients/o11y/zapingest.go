@@ -34,9 +34,11 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	"go.opentelemetry.io/collector/receiver"
 
+	zaplogreceiver "github.com/hanzoai/o11y/pkg/zaplogreceiver"
 	zapreceiver "github.com/hanzoai/o11y/pkg/zapreceiver"
 )
 
@@ -51,6 +53,7 @@ func newZapReceiverFactory() receiver.Factory {
 		component.MustNewType("zap"),
 		func() component.Config { return &zapReceiverConfig{Endpoint: "0.0.0.0:4317"} },
 		receiver.WithTraces(createZapTracesReceiver, component.StabilityLevelBeta),
+		receiver.WithLogs(createZapLogsReceiver, component.StabilityLevelBeta),
 	)
 }
 
@@ -203,4 +206,90 @@ func putAnyAttrs(dst pcommon.Map, attrs map[string]any) {
 			dst.PutStr(k, fmt.Sprint(t))
 		}
 	}
+}
+
+func createZapLogsReceiver(
+	_ context.Context,
+	set receiver.Settings,
+	cfg component.Config,
+	next consumer.Logs,
+) (receiver.Logs, error) {
+	c, ok := cfg.(*zapReceiverConfig)
+	if !ok {
+		return nil, fmt.Errorf("zap receiver: unexpected config type %T", cfg)
+	}
+	return &zapLogsReceiver{cfg: c, next: next, set: set}, nil
+}
+
+type zapLogsReceiver struct {
+	cfg  *zapReceiverConfig
+	next consumer.Logs
+	set  receiver.Settings
+	rcv  *zaplogreceiver.Receiver
+}
+
+func (r *zapLogsReceiver) Start(_ context.Context, _ component.Host) error {
+	rcv, err := zaplogreceiver.New(zaplogreceiver.Config{
+		Listen: r.cfg.Endpoint,
+		NodeID: "cloud-zap-log-ingest",
+		OnBatch: func(ctx context.Context, b *zaplogreceiver.LogBatch) error {
+			return r.next.ConsumeLogs(ctx, logBatchToLogs(b))
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("zap log receiver: start on %s: %w", r.cfg.Endpoint, err)
+	}
+	r.rcv = rcv
+	return nil
+}
+
+func (r *zapLogsReceiver) Shutdown(context.Context) error {
+	if r.rcv != nil {
+		r.rcv.Stop()
+	}
+	return nil
+}
+
+// logBatchToLogs converts the wire shape into pdata.
+//
+// Severity arrives as the OTel numeric level. The text is carried separately
+// because an emitter may use its own vocabulary ("WARN" vs "Warning"), and
+// re-deriving it from the number would silently rewrite what the service said.
+func logBatchToLogs(b *zaplogreceiver.LogBatch) plog.Logs {
+	ld := plog.NewLogs()
+	if b == nil || len(b.Records) == 0 {
+		return ld
+	}
+	rl := ld.ResourceLogs().AppendEmpty()
+	attrs := rl.Resource().Attributes()
+	if b.AppName != "" {
+		attrs.PutStr("service.name", b.AppName)
+	}
+	if b.Version != "" {
+		attrs.PutStr("service.version", b.Version)
+	}
+	for k, v := range b.Resource {
+		attrs.PutStr(k, v)
+	}
+
+	sl := rl.ScopeLogs().AppendEmpty()
+	for _, r := range b.Records {
+		dst := sl.LogRecords().AppendEmpty()
+		dst.SetTimestamp(pcommon.NewTimestampFromTime(time.Unix(0, r.TimeUnixNs)))
+		if r.ObservedTimeUnixNs != 0 {
+			dst.SetObservedTimestamp(pcommon.NewTimestampFromTime(time.Unix(0, r.ObservedTimeUnixNs)))
+		}
+		dst.SetSeverityNumber(plog.SeverityNumber(r.Severity))
+		dst.SetSeverityText(r.SeverityText)
+		dst.Body().SetStr(r.Body)
+		dst.SetEventName(r.EventName)
+		if id, err := hex.DecodeString(r.TraceID); err == nil && len(id) == 16 {
+			dst.SetTraceID(pcommon.TraceID(id))
+		}
+		if id, err := hex.DecodeString(r.SpanID); err == nil && len(id) == 8 {
+			dst.SetSpanID(pcommon.SpanID(id))
+		}
+		putAnyAttrs(dst.Attributes(), r.Attributes)
+	}
+	return ld
 }

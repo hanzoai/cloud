@@ -1,11 +1,13 @@
-package search
+package index
 
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // newStore opens a throwaway store on a temp file. It exercises the real
@@ -13,7 +15,7 @@ import (
 // migration that only works on :memory: cannot pass here.
 func newStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := openStore(filepath.Join(t.TempDir(), "search.db"))
+	s, err := openStore(filepath.Join(t.TempDir(), "index.db"))
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}
@@ -79,7 +81,7 @@ func TestTenantIsolation(t *testing.T) {
 	// A query that matches BOTH orgs' documents returns only the caller's.
 	hits, err := s.Search(ctx, "acme", "messages", "secret roadmap", nil, 10, 0)
 	if err != nil {
-		t.Fatalf("search: %v", err)
+		t.Fatalf("index: %v", err)
 	}
 	got := titles(t, hits)
 	if len(got) != 1 || got[0] != "acme secret roadmap" {
@@ -129,7 +131,7 @@ func TestIndexIsolation(t *testing.T) {
 
 	hits, err := s.Search(ctx, "acme", "convos", "planning", nil, 10, 0)
 	if err != nil {
-		t.Fatalf("search: %v", err)
+		t.Fatalf("index: %v", err)
 	}
 	if len(hits) != 1 {
 		t.Errorf("index bleed: convos search returned %d hits, want 1", len(hits))
@@ -151,7 +153,7 @@ func TestSearchAndUserFilter(t *testing.T) {
 	// Prefix matching: "kube" finds both Kubernetes documents.
 	hits, err := s.Search(ctx, "acme", "convos", "kube", nil, 10, 0)
 	if err != nil {
-		t.Fatalf("search: %v", err)
+		t.Fatalf("index: %v", err)
 	}
 	if len(hits) != 2 {
 		t.Errorf("prefix search %q returned %d hits, want 2: %v", "kube", len(hits), titles(t, hits))
@@ -160,7 +162,7 @@ func TestSearchAndUserFilter(t *testing.T) {
 	// The user filter narrows to one end user WITHIN the org.
 	hits, err = s.Search(ctx, "acme", "convos", "kube", ParseUserFilter(`user = "u1"`), 10, 0)
 	if err != nil {
-		t.Fatalf("filtered search: %v", err)
+		t.Fatalf("filtered index: %v", err)
 	}
 	if got := titles(t, hits); len(got) != 1 || got[0] != "Kubernetes migration plan" {
 		t.Errorf("user filter got %v, want only u1's Kubernetes document", got)
@@ -169,7 +171,7 @@ func TestSearchAndUserFilter(t *testing.T) {
 	// An empty query with a user filter lists that user's documents.
 	hits, err = s.Search(ctx, "acme", "convos", "", ParseUserFilter(`user = "u1"`), 10, 0)
 	if err != nil {
-		t.Fatalf("placeholder search: %v", err)
+		t.Fatalf("placeholder index: %v", err)
 	}
 	if len(hits) != 2 {
 		t.Errorf("placeholder search for u1 returned %d hits, want 2: %v", len(hits), titles(t, hits))
@@ -187,7 +189,7 @@ func TestSearchInputIsInert(t *testing.T) {
 	mustUpsert(t, s, "acme", "convos", []map[string]any{doc("id", "1", "title", "quarterly report")})
 
 	for _, q := range []string{
-		`"`, `report" OR "`, `NEAR(a b)`, `*`, `^report`, `a AND (b`, `--`, `';DROP TABLE search_docs;--`,
+		`"`, `report" OR "`, `NEAR(a b)`, `*`, `^report`, `a AND (b`, `--`, `';DROP TABLE docs;--`,
 	} {
 		if _, err := s.Search(ctx, "acme", "convos", q, nil, 10, 0); err != nil {
 			t.Errorf("query %q errored: %v", q, err)
@@ -211,13 +213,13 @@ func TestUpsertReplacesAndReindexes(t *testing.T) {
 	mustUpsert(t, s, "acme", "convos", []map[string]any{doc("id", "1", "title", "buffalo")})
 
 	if hits, err := s.Search(ctx, "acme", "convos", "aardvark", nil, 10, 0); err != nil {
-		t.Fatalf("search: %v", err)
+		t.Fatalf("index: %v", err)
 	} else if len(hits) != 0 {
 		t.Errorf("stale text still matches after replace: %v", titles(t, hits))
 	}
 	hits, err := s.Search(ctx, "acme", "convos", "buffalo", nil, 10, 0)
 	if err != nil {
-		t.Fatalf("search: %v", err)
+		t.Fatalf("index: %v", err)
 	}
 	if len(hits) != 1 {
 		t.Fatalf("replaced document not found by its new text: %d hits", len(hits))
@@ -243,7 +245,7 @@ func TestDeleteRemovesFromBothStores(t *testing.T) {
 		t.Fatalf("delete: %v", err)
 	}
 	if hits, err := s.Search(ctx, "acme", "convos", "delete", nil, 10, 0); err != nil {
-		t.Fatalf("search: %v", err)
+		t.Fatalf("index: %v", err)
 	} else if len(hits) != 0 {
 		t.Errorf("deleted document still searchable: %v", titles(t, hits))
 	}
@@ -341,7 +343,7 @@ func TestSearchableTextCoversAllStringFields(t *testing.T) {
 	})
 	hits, err := s.Search(ctx, "acme", "notes", "peregrine", nil, 10, 0)
 	if err != nil {
-		t.Fatalf("search: %v", err)
+		t.Fatalf("index: %v", err)
 	}
 	if len(hits) != 1 {
 		t.Errorf("document not findable by a non-title field: %d hits", len(hits))
@@ -372,7 +374,7 @@ func TestFoldingIsCaseAndAccentInsensitive(t *testing.T) {
 	}
 	// Transliteration is NOT claimed: "aero" is a different word from "ærø".
 	if hits, err := s.Search(ctx, "acme", "notes", "aero", nil, 10, 0); err != nil {
-		t.Fatalf("search: %v", err)
+		t.Fatalf("index: %v", err)
 	} else if len(hits) != 0 {
 		t.Errorf("query %q matched %d documents; folding must not transliterate", "aero", len(hits))
 	}
@@ -392,7 +394,7 @@ func TestRankingPrefersMoreMatchedTerms(t *testing.T) {
 	})
 	hits, err := s.Search(ctx, "acme", "notes", "kubernetes migration", nil, 10, 0)
 	if err != nil {
-		t.Fatalf("search: %v", err)
+		t.Fatalf("index: %v", err)
 	}
 	got := titles(t, hits)
 	if len(got) != 2 {
@@ -414,7 +416,7 @@ func TestLongTermsStayFindable(t *testing.T) {
 
 	hits, err := s.Search(ctx, "acme", "notes", "supercalifragilistic", nil, 10, 0)
 	if err != nil {
-		t.Fatalf("search: %v", err)
+		t.Fatalf("index: %v", err)
 	}
 	if len(hits) != 1 {
 		t.Errorf("long term not findable by its prefix: %d hits", len(hits))
@@ -437,7 +439,7 @@ func TestPrefixRangeStopsAtThePrefix(t *testing.T) {
 	})
 	hits, err := s.Search(ctx, "acme", "notes", "cat", nil, 10, 0)
 	if err != nil {
-		t.Fatalf("search: %v", err)
+		t.Fatalf("index: %v", err)
 	}
 	got := titles(t, hits)
 	if len(got) != 2 || !has(got, "cat") || !has(got, "catalog") {
@@ -529,7 +531,7 @@ func TestEmptyIndexUIDIsNeverStored(t *testing.T) {
 // the property a pod restart depends on.
 func TestPersistenceAcrossReopen(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "search.db")
+	path := filepath.Join(dir, "index.db")
 	ctx := context.Background()
 
 	first, err := openStore(path)
@@ -660,5 +662,154 @@ func mustUpsert(t *testing.T, s *Store, org, uid string, docs []map[string]any) 
 	}
 	if err := s.Upsert(context.Background(), org, uid, idx.PrimaryKey, docs); err != nil {
 		t.Fatalf("Upsert %s/%s: %v", org, uid, err)
+	}
+}
+
+// TestMigrateStoreCarriesTheKeyToo is the property that makes the rename safe.
+// cek keeps the wrapped data key beside the database as "<path>.dek"; moving the
+// .db without it strands the key, cek mints a fresh one, and every existing
+// document becomes undecryptable — data loss that presents as an empty index.
+func TestMigrateStoreCarriesTheKeyToo(t *testing.T) {
+	dir := t.TempDir()
+	for name, body := range map[string]string{
+		"search.db": "pages", "search.db-wal": "wal", "search.db-shm": "shm",
+		"search.db.dek": "wrapped-key",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatalf("seed %s: %v", name, err)
+		}
+	}
+	if err := migrateStore(dir, "search.db", "index.db"); err != nil {
+		t.Fatalf("migrateStore: %v", err)
+	}
+	for name, want := range map[string]string{
+		"index.db": "pages", "index.db-wal": "wal", "index.db-shm": "shm",
+		"index.db.dek": "wrapped-key",
+	} {
+		got, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Errorf("%s did not survive the rename: %v", name, err)
+			continue
+		}
+		if string(got) != want {
+			t.Errorf("%s = %q, want %q", name, got, want)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "search.db")); !os.IsNotExist(err) {
+		t.Error("the previous store still exists; two stores would drift apart")
+	}
+}
+
+// TestMigrateStoreIsIdempotentAndSafe proves repeated boots are a no-op, a fresh
+// deployment creates nothing, and two existing stores are left alone rather than
+// merged — guessing which encrypted store wins is not something to automate.
+func TestMigrateStoreIsIdempotentAndSafe(t *testing.T) {
+	t.Run("repeat is a no-op", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "search.db"), []byte("pages"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		for i := range 3 {
+			if err := migrateStore(dir, "search.db", "index.db"); err != nil {
+				t.Fatalf("call %d: %v", i+1, err)
+			}
+		}
+		if got, err := os.ReadFile(filepath.Join(dir, "index.db")); err != nil || string(got) != "pages" {
+			t.Errorf("repeated migration damaged the store: %q err=%v", got, err)
+		}
+	})
+	t.Run("fresh deployment creates nothing", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := migrateStore(dir, "search.db", "index.db"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "index.db")); !os.IsNotExist(err) {
+			t.Error("migration created a store on a fresh deployment")
+		}
+	})
+	t.Run("both present are left alone", func(t *testing.T) {
+		dir := t.TempDir()
+		for name, body := range map[string]string{"search.db": "previous", "index.db": "current"} {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := migrateStore(dir, "search.db", "index.db"); err != nil {
+			t.Fatal(err)
+		}
+		for name, want := range map[string]string{"search.db": "previous", "index.db": "current"} {
+			if got, _ := os.ReadFile(filepath.Join(dir, name)); string(got) != want {
+				t.Errorf("%s = %q, want %q untouched", name, got, want)
+			}
+		}
+	})
+}
+
+// TestAdoptLegacyTables proves a store whose TABLES were renamed still yields its
+// documents. Moving the store file is not enough on its own: the rows stay under
+// the previous table names, nothing queries them, and the index reads as empty
+// while every document sits intact one identifier away.
+func TestAdoptLegacyTables(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "index.db")
+
+	// A store in the PREVIOUS schema: same columns, previous table names.
+	first, err := openStore(path)
+	if err != nil {
+		t.Fatalf("openStore: %v", err)
+	}
+	for cur, prev := range map[string]string{"indexes": "search_indexes", "docs": "search_docs", "terms": "search_terms"} {
+		if _, err := first.db.Exec(`ALTER TABLE ` + cur + ` RENAME TO ` + prev); err != nil {
+			t.Fatalf("stage %s: %v", cur, err)
+		}
+	}
+	now := time.Now().Unix()
+	if _, err := first.db.Exec(
+		`INSERT INTO search_indexes(org, uid, primary_key, filterable, created_at, updated_at)
+		 VALUES('acme','convos','id','["user"]',?,?)`, now, now); err != nil {
+		t.Fatalf("stage index row: %v", err)
+	}
+	if _, err := first.db.Exec(
+		`INSERT INTO search_docs(org, uid, pk, usr, doc)
+		 VALUES('acme','convos','1','u1','{"id":"1","title":"kubernetes migration"}')`); err != nil {
+		t.Fatalf("stage doc row: %v", err)
+	}
+	if _, err := first.db.Exec(
+		`INSERT INTO search_terms(org, uid, term, pk) VALUES('acme','convos','kubernetes','1')`); err != nil {
+		t.Fatalf("stage term row: %v", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	// Reopening runs migrate(), which must adopt those rows.
+	s, err := openStore(path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	ctx := context.Background()
+
+	if idx, err := s.Index(ctx, "acme", "convos"); err != nil {
+		t.Errorf("index did not survive the table rename: %v", err)
+	} else if idx.PrimaryKey != "id" {
+		t.Errorf("primary key = %q, want id", idx.PrimaryKey)
+	}
+	hits, err := s.Search(ctx, "acme", "convos", "kubernetes", nil, 10, 0)
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if len(hits) != 1 {
+		t.Errorf("documents did not survive the table rename: %d hits", len(hits))
+	}
+
+	// The previous tables are gone, so a later boot has nothing left to adopt
+	// and cannot resurrect rows that were since deleted.
+	for _, prev := range []string{"search_indexes", "search_docs", "search_terms"} {
+		var n string
+		if err := s.db.QueryRow(
+			`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, prev).Scan(&n); err == nil {
+			t.Errorf("%s still exists after adoption", prev)
+		}
 	}
 }

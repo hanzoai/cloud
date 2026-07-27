@@ -1,4 +1,4 @@
-package search
+package index
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -23,7 +25,7 @@ import (
 // errNoIndex is returned when a uid has never been created for the org. The
 // handler maps it to Meilisearch's index_not_found, which is load-bearing: the
 // meilisearch JS client keys index auto-creation off exactly that code.
-var errNoIndex = errors.New("search: index not found")
+var errNoIndex = errors.New("index: index not found")
 
 // Index is the per-org index descriptor — Meilisearch's index object.
 type Index struct {
@@ -34,7 +36,7 @@ type Index struct {
 	UpdatedAt            string   `json:"updatedAt"`
 }
 
-// Store is the search database. ONE SQLite file ({DataDir}/search.db) holds
+// Store is the index database. ONE SQLite file ({DataDir}/index.db) holds
 // every org's indexes and documents; tenant isolation is the `org` column,
 // enforced on EVERY query — the same storage shape clients/ads and clients/crm
 // use. MaxOpenConns(1) serializes writes against the single-writer file.
@@ -53,11 +55,43 @@ type Index struct {
 // depended on FTS5 would open on a pure-Go build, pass its tests, and then fail
 // to create a single table in the shipped binary.
 //
-// search_terms is an ordinary inverted index instead: one row per (document,
+// terms is an ordinary inverted index instead: one row per (document,
 // term), keyed so a prefix query is an index range scan. It behaves identically
 // in every build lane and costs nothing but rows.
 type Store struct {
 	db *sql.DB
+}
+
+// migrateStore carries a store written under a previous name over to path.
+//
+// It moves the WHOLE family, not just the database: cek keeps the wrapped data
+// key beside the file as "<path>.dek", so renaming the .db alone would leave the
+// old key stranded, cek would mint a fresh one, and every existing document
+// would be undecryptable — data loss that looks like an empty index. The -wal
+// and -shm sidecars carry committed pages that have not been checkpointed yet,
+// so they move too.
+//
+// One-time and idempotent: it acts only when the previous store exists and the
+// current one does not. When BOTH exist it leaves them alone — merging two
+// encrypted stores is not something to guess at.
+func migrateStore(dir, previous, current string) error {
+	old, cur := filepath.Join(dir, previous), filepath.Join(dir, current)
+	if _, err := os.Stat(old); err != nil {
+		return nil // fresh deployment, or already carried over
+	}
+	if _, err := os.Stat(cur); err == nil {
+		return nil
+	}
+	for _, suffix := range []string{"", "-wal", "-shm", ".dek"} {
+		src, dst := old+suffix, cur+suffix
+		if _, err := os.Stat(src); err != nil {
+			continue // not every sidecar exists at every moment
+		}
+		if err := os.Rename(src, dst); err != nil {
+			return fmt.Errorf("index: carry %s over to %s: %w", src, dst, err)
+		}
+	}
+	return nil
 }
 
 func openStore(path string) (*Store, error) {
@@ -87,13 +121,13 @@ func openStore(path string) (*Store, error) {
 // migrate creates the index registry, the document row store, and the inverted
 // index over the extracted searchable text. Idempotent (IF NOT EXISTS).
 //
-// search_terms is ordered (org, uid, term, pk) so a prefix query reads one
+// terms is ordered (org, uid, term, pk) so a prefix query reads one
 // contiguous run of the primary key rather than scanning; the secondary index
 // on (org, uid, pk) is what makes re-indexing one document cheap, since a
 // replace deletes that document's terms before writing the new ones.
 func (s *Store) migrate() error {
 	const ddl = `
-CREATE TABLE IF NOT EXISTS search_indexes (
+CREATE TABLE IF NOT EXISTS indexes (
   org         TEXT NOT NULL,
   uid         TEXT NOT NULL,
   primary_key TEXT NOT NULL,
@@ -102,7 +136,7 @@ CREATE TABLE IF NOT EXISTS search_indexes (
   updated_at  INTEGER NOT NULL,
   PRIMARY KEY (org, uid)
 );
-CREATE TABLE IF NOT EXISTS search_docs (
+CREATE TABLE IF NOT EXISTS docs (
   org TEXT NOT NULL,
   uid TEXT NOT NULL,
   pk  TEXT NOT NULL,
@@ -110,18 +144,57 @@ CREATE TABLE IF NOT EXISTS search_docs (
   doc TEXT NOT NULL,
   PRIMARY KEY (org, uid, pk)
 );
-CREATE INDEX IF NOT EXISTS ix_search_docs_usr ON search_docs(org, uid, usr);
-CREATE TABLE IF NOT EXISTS search_terms (
+CREATE INDEX IF NOT EXISTS ix_docs_usr ON docs(org, uid, usr);
+CREATE TABLE IF NOT EXISTS terms (
   org  TEXT NOT NULL,
   uid  TEXT NOT NULL,
   term TEXT NOT NULL,
   pk   TEXT NOT NULL,
   PRIMARY KEY (org, uid, term, pk)
 ) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS ix_search_terms_pk ON search_terms(org, uid, pk);
+CREATE INDEX IF NOT EXISTS ix_terms_pk ON terms(org, uid, pk);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
-		return fmt.Errorf("search migrate: %w", err)
+		return fmt.Errorf("index migrate: %w", err)
+	}
+	return s.adoptLegacyTables()
+}
+
+// legacyTables maps a table's previous name to its current one. Moving the store
+// FILE is not enough when the tables inside it were renamed too: the rows would
+// still be there, under names nothing queries, and the index would read as empty
+// while every document sat intact one identifier away.
+var legacyTables = map[string]string{
+	"search_indexes": "indexes",
+	"search_docs":    "docs",
+	"search_terms":   "terms",
+}
+
+// adoptLegacyTables carries rows out of a previous schema's tables and drops
+// them. Idempotent: a table that is not there is skipped, and one that is gets
+// emptied by the DROP, so a second boot has nothing left to adopt. INSERT OR
+// IGNORE means rows already written under the current names win — the migration
+// never overwrites live data with older rows.
+func (s *Store) adoptLegacyTables() error {
+	for previous, current := range legacyTables {
+		var name string
+		err := s.db.QueryRow(
+			`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, previous).Scan(&name)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("index migrate: look for %s: %w", previous, err)
+		}
+		// The column lists are identical across the rename, so an unqualified
+		// INSERT…SELECT is exact.
+		if _, err := s.db.Exec(
+			`INSERT OR IGNORE INTO ` + current + ` SELECT * FROM ` + previous); err != nil {
+			return fmt.Errorf("index migrate: adopt %s into %s: %w", previous, current, err)
+		}
+		if _, err := s.db.Exec(`DROP TABLE ` + previous); err != nil {
+			return fmt.Errorf("index migrate: drop %s: %w", previous, err)
+		}
 	}
 	return nil
 }
@@ -148,7 +221,7 @@ func (s *Store) EnsureIndex(ctx context.Context, org, uid, primaryKey string) (I
 	// be dropped by name. The handlers already reject one, so reaching here means
 	// a caller inside the process got it wrong.
 	if strings.TrimSpace(uid) == "" {
-		return Index{}, fmt.Errorf("search: index uid is required")
+		return Index{}, fmt.Errorf("index: index uid is required")
 	}
 	if idx, err := s.Index(ctx, org, uid); err == nil {
 		return idx, nil
@@ -164,9 +237,9 @@ func (s *Store) EnsureIndex(ctx context.Context, org, uid, primaryKey string) (I
 	// understands.
 	filt, _ := json.Marshal([]string{"user"})
 	if _, err := s.db.ExecContext(ctx,
-		`INSERT OR IGNORE INTO search_indexes(org, uid, primary_key, filterable, created_at, updated_at)
+		`INSERT OR IGNORE INTO indexes(org, uid, primary_key, filterable, created_at, updated_at)
 		 VALUES(?,?,?,?,?,?)`, org, uid, primaryKey, string(filt), now, now); err != nil {
-		return Index{}, fmt.Errorf("search: create index: %w", err)
+		return Index{}, fmt.Errorf("index: create index: %w", err)
 	}
 	return s.Index(ctx, org, uid)
 }
@@ -177,10 +250,10 @@ func (s *Store) EnsureIndex(ctx context.Context, org, uid, primaryKey string) (I
 func (s *Store) Indexes(ctx context.Context, org string) ([]Index, []int, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT i.uid, i.primary_key, i.filterable, i.created_at, i.updated_at,
-		        (SELECT COUNT(*) FROM search_docs d WHERE d.org=i.org AND d.uid=i.uid)
-		   FROM search_indexes i WHERE i.org=? ORDER BY i.created_at, i.uid`, org)
+		        (SELECT COUNT(*) FROM docs d WHERE d.org=i.org AND d.uid=i.uid)
+		   FROM indexes i WHERE i.org=? ORDER BY i.created_at, i.uid`, org)
 	if err != nil {
-		return nil, nil, fmt.Errorf("search: list indexes: %w", err)
+		return nil, nil, fmt.Errorf("index: list indexes: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -193,7 +266,7 @@ func (s *Store) Indexes(ctx context.Context, org string) ([]Index, []int, error)
 			n              int
 		)
 		if err := rows.Scan(&idx.UID, &idx.PrimaryKey, &filt, &created, &upded, &n); err != nil {
-			return nil, nil, fmt.Errorf("search: scan index: %w", err)
+			return nil, nil, fmt.Errorf("index: scan index: %w", err)
 		}
 		_ = json.Unmarshal([]byte(filt), &idx.FilterableAttributes)
 		idx.CreatedAt, idx.UpdatedAt = rfc3339(created), rfc3339(upded)
@@ -211,13 +284,13 @@ func (s *Store) Index(ctx context.Context, org, uid string) (Index, error) {
 	)
 	err := s.db.QueryRowContext(ctx,
 		`SELECT uid, primary_key, filterable, created_at, updated_at
-		   FROM search_indexes WHERE org=? AND uid=?`, org, uid).
+		   FROM indexes WHERE org=? AND uid=?`, org, uid).
 		Scan(&idx.UID, &idx.PrimaryKey, &filt, &created, &upded)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Index{}, errNoIndex
 	}
 	if err != nil {
-		return Index{}, fmt.Errorf("search: read index: %w", err)
+		return Index{}, fmt.Errorf("index: read index: %w", err)
 	}
 	_ = json.Unmarshal([]byte(filt), &idx.FilterableAttributes)
 	idx.CreatedAt = rfc3339(created)
@@ -235,12 +308,12 @@ func (s *Store) DropIndex(ctx context.Context, org, uid string) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 	for _, q := range []string{
-		`DELETE FROM search_terms   WHERE org=? AND uid=?`,
-		`DELETE FROM search_docs    WHERE org=? AND uid=?`,
-		`DELETE FROM search_indexes WHERE org=? AND uid=?`,
+		`DELETE FROM terms   WHERE org=? AND uid=?`,
+		`DELETE FROM docs    WHERE org=? AND uid=?`,
+		`DELETE FROM indexes WHERE org=? AND uid=?`,
 	} {
 		if _, err := tx.ExecContext(ctx, q, org, uid); err != nil {
-			return fmt.Errorf("search: drop index %q: %w", uid, err)
+			return fmt.Errorf("index: drop index %q: %w", uid, err)
 		}
 	}
 	return tx.Commit()
@@ -250,7 +323,7 @@ func (s *Store) DropIndex(ctx context.Context, org, uid string) error {
 func (s *Store) SetFilterable(ctx context.Context, org, uid string, attrs []string) error {
 	filt, _ := json.Marshal(attrs)
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE search_indexes SET filterable=?, updated_at=? WHERE org=? AND uid=?`,
+		`UPDATE indexes SET filterable=?, updated_at=? WHERE org=? AND uid=?`,
 		string(filt), time.Now().Unix(), org, uid)
 	return err
 }
@@ -275,25 +348,25 @@ func (s *Store) Upsert(ctx context.Context, org, uid, primaryKey string, docs []
 		}
 		raw, err := json.Marshal(d)
 		if err != nil {
-			return fmt.Errorf("search: encode document %q: %w", pk, err)
+			return fmt.Errorf("index: encode document %q: %w", pk, err)
 		}
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO search_docs(org, uid, pk, usr, doc) VALUES(?,?,?,?,?)
+			`INSERT INTO docs(org, uid, pk, usr, doc) VALUES(?,?,?,?,?)
 			 ON CONFLICT(org, uid, pk) DO UPDATE SET usr=excluded.usr, doc=excluded.doc`,
 			org, uid, pk, stringify(d["user"]), string(raw)); err != nil {
-			return fmt.Errorf("search: store document %q: %w", pk, err)
+			return fmt.Errorf("index: store document %q: %w", pk, err)
 		}
 		// Drop the previous terms before writing the new ones, so a replaced
 		// document can never keep matching text it no longer contains.
 		if _, err := tx.ExecContext(ctx,
-			`DELETE FROM search_terms WHERE org=? AND uid=? AND pk=?`, org, uid, pk); err != nil {
-			return fmt.Errorf("search: reindex document %q: %w", pk, err)
+			`DELETE FROM terms WHERE org=? AND uid=? AND pk=?`, org, uid, pk); err != nil {
+			return fmt.Errorf("index: reindex document %q: %w", pk, err)
 		}
 		for _, term := range tokenize(searchableText(d)) {
 			if _, err := tx.ExecContext(ctx,
-				`INSERT OR IGNORE INTO search_terms(org, uid, term, pk) VALUES(?,?,?,?)`,
+				`INSERT OR IGNORE INTO terms(org, uid, term, pk) VALUES(?,?,?,?)`,
 				org, uid, term, pk); err != nil {
-				return fmt.Errorf("search: index document %q: %w", pk, err)
+				return fmt.Errorf("index: index document %q: %w", pk, err)
 			}
 		}
 	}
@@ -304,12 +377,12 @@ func (s *Store) Upsert(ctx context.Context, org, uid, primaryKey string, docs []
 func (s *Store) Document(ctx context.Context, org, uid, pk string) (json.RawMessage, error) {
 	var doc string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT doc FROM search_docs WHERE org=? AND uid=? AND pk=?`, org, uid, pk).Scan(&doc)
+		`SELECT doc FROM docs WHERE org=? AND uid=? AND pk=?`, org, uid, pk).Scan(&doc)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, sql.ErrNoRows
 	}
 	if err != nil {
-		return nil, fmt.Errorf("search: read document: %w", err)
+		return nil, fmt.Errorf("index: read document: %w", err)
 	}
 	return json.RawMessage(doc), nil
 }
@@ -317,10 +390,10 @@ func (s *Store) Document(ctx context.Context, org, uid, pk string) (json.RawMess
 // Documents pages an index in primary-key order and reports the total.
 func (s *Store) Documents(ctx context.Context, org, uid string, limit, offset int) ([]json.RawMessage, int, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT doc FROM search_docs WHERE org=? AND uid=? ORDER BY pk LIMIT ? OFFSET ?`,
+		`SELECT doc FROM docs WHERE org=? AND uid=? ORDER BY pk LIMIT ? OFFSET ?`,
 		org, uid, limit, offset)
 	if err != nil {
-		return nil, 0, fmt.Errorf("search: list documents: %w", err)
+		return nil, 0, fmt.Errorf("index: list documents: %w", err)
 	}
 	out, err := scanDocs(rows)
 	if err != nil {
@@ -328,8 +401,8 @@ func (s *Store) Documents(ctx context.Context, org, uid string, limit, offset in
 	}
 	var total int
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM search_docs WHERE org=? AND uid=?`, org, uid).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("search: count documents: %w", err)
+		`SELECT COUNT(*) FROM docs WHERE org=? AND uid=?`, org, uid).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("index: count documents: %w", err)
 	}
 	return out, total, nil
 }
@@ -344,12 +417,12 @@ func (s *Store) Delete(ctx context.Context, org, uid string, pks []string) error
 	defer func() { _ = tx.Rollback() }()
 	for _, pk := range pks {
 		if _, err := tx.ExecContext(ctx,
-			`DELETE FROM search_docs WHERE org=? AND uid=? AND pk=?`, org, uid, pk); err != nil {
-			return fmt.Errorf("search: delete document %q: %w", pk, err)
+			`DELETE FROM docs WHERE org=? AND uid=? AND pk=?`, org, uid, pk); err != nil {
+			return fmt.Errorf("index: delete document %q: %w", pk, err)
 		}
 		if _, err := tx.ExecContext(ctx,
-			`DELETE FROM search_terms WHERE org=? AND uid=? AND pk=?`, org, uid, pk); err != nil {
-			return fmt.Errorf("search: deindex document %q: %w", pk, err)
+			`DELETE FROM terms WHERE org=? AND uid=? AND pk=?`, org, uid, pk); err != nil {
+			return fmt.Errorf("index: deindex document %q: %w", pk, err)
 		}
 	}
 	return tx.Commit()
@@ -369,7 +442,7 @@ func (s *Store) Search(ctx context.Context, org, uid, q string, users []string, 
 	join, order := "", `ORDER BY d.pk`
 
 	if ranges := prefixRanges(q); len(ranges) > 0 {
-		// One range scan of search_terms per query term, unioned by the GROUP BY.
+		// One range scan of terms per query term, unioned by the GROUP BY.
 		// The subquery is joined rather than used as IN (…) so its match count is
 		// available to ORDER BY.
 		clauses := make([]string, len(ranges))
@@ -378,7 +451,7 @@ func (s *Store) Search(ctx context.Context, org, uid, q string, users []string, 
 			clauses[i] = `(term >= ? AND term < ?)`
 			matchArgs = append(matchArgs, r.lo, r.hi)
 		}
-		join = `JOIN (SELECT pk, COUNT(*) AS matched FROM search_terms
+		join = `JOIN (SELECT pk, COUNT(*) AS matched FROM terms
 		               WHERE org=? AND uid=? AND (` + strings.Join(clauses, " OR ") + `)
 		               GROUP BY pk) m ON m.pk = d.pk`
 		// The join's parameters bind BEFORE the outer WHERE's, matching SQL order.
@@ -396,10 +469,10 @@ func (s *Store) Search(ctx context.Context, org, uid, q string, users []string, 
 	args = append(args, limit, offset)
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT d.doc FROM search_docs d `+join+` WHERE `+strings.Join(where, " AND ")+
+		`SELECT d.doc FROM docs d `+join+` WHERE `+strings.Join(where, " AND ")+
 			` `+order+` LIMIT ? OFFSET ?`, args...)
 	if err != nil {
-		return nil, fmt.Errorf("search: query: %w", err)
+		return nil, fmt.Errorf("index: query: %w", err)
 	}
 	return scanDocs(rows)
 }
@@ -410,7 +483,7 @@ func scanDocs(rows *sql.Rows) ([]json.RawMessage, error) {
 	for rows.Next() {
 		var doc string
 		if err := rows.Scan(&doc); err != nil {
-			return nil, fmt.Errorf("search: scan document: %w", err)
+			return nil, fmt.Errorf("index: scan document: %w", err)
 		}
 		out = append(out, json.RawMessage(doc))
 	}
