@@ -3,7 +3,7 @@ package billing
 // usage_coresident.go — the co-resident source for GET /v1/billing/usage.
 //
 // WHY IT EXISTS. balance() already reads cloud's OWN finance ledger directly rather
-// than proxying "/v1/billing/balance" through commerceinproc, because co-resident the
+// than proxying "/v1/billing/balance" through the commerce transport, because co-resident the
 // ONLY registration of that path is balance() itself (commerce's api.Route() is behind
 // //go:build cloud and never compiled here), so the S2S proxy re-dispatches BY PATH
 // straight back into the same handler, which self-answers "sign in to view billing"
@@ -28,7 +28,7 @@ import (
 // {user,count,usage:[...]} envelope — enriched + optionally ?product=filtered /
 // ?groupBy=product-reduced exactly like the proxied path — or (nil, false, nil) when
 // finance is not co-resident (split deploy), so the caller falls back to the commerce
-// S2S read. This is what keeps /v1/billing/usage off the self-dispatching commerceinproc
+// S2S read. This is what keeps /v1/billing/usage off the self-dispatching commerce transport
 // hop; a real read failure surfaces as a non-nil error (never a masked-empty ledger).
 func coResidentUsage(ctx context.Context, org, product, groupBy string) ([]byte, bool, error) {
 	fin := finance.Current()

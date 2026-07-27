@@ -11,12 +11,12 @@ import (
 
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud/cek"
-	sqlitedrv "github.com/hanzoai/sqlite"
-	"github.com/hanzoai/ha"
-	"github.com/hanzoai/cloud/clients/commerceinproc"
+	"github.com/hanzoai/cloud/clients/commerce/transport"
 	"github.com/hanzoai/cloud/clients/metering"
 	"github.com/hanzoai/cloud/internal/org"
+	"github.com/hanzoai/ha"
 	s3 "github.com/hanzoai/s3-go"
+	sqlitedrv "github.com/hanzoai/sqlite"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 
@@ -151,8 +151,8 @@ func staticEdgePolicy(cfg *Config) edge.Policy {
 // the request-edge debit on every paid AI call.
 //
 // CO-RESIDENT (task #111): when commerce is folded in-process (Enabled("commerce")),
-// the gate DEBITS the in-process commerce handler over commerceinproc's self-routing
-// transport — a direct Go call, no socket to commerce.hanzo.svc:8001. The base is
+// the gate DEBITS the in-process commerce handler over the commerce transport's
+// self-routing dispatch — a direct Go call, no socket to commerce.hanzo.svc:8001. The base is
 // pinned NON-EMPTY (real CLOUD_COMMERCE_HTTP_URL, else the in-process placeholder) so
 // the gate stays ENABLED even after the standalone + its env are retired — a metering
 // gate that silently no-ops is a free-money hole, so it must never drop to
@@ -169,9 +169,9 @@ func buildMeteringClient(cfg *Config, log luxlog.Logger) *metering.Client {
 	inProcess := cfg.Enabled("commerce")
 	if inProcess {
 		if base == "" {
-			base = commerceinproc.PlaceholderBase
+			base = transport.PlaceholderBase
 		}
-		httpClient = commerceinproc.Client(0) // in-process dispatch; no network timeout
+		httpClient = transport.Client(0) // in-process dispatch; no network timeout
 	}
 	m, err := metering.New(metering.Config{
 		BaseURL: base,
@@ -214,7 +214,7 @@ func boolStr(b bool, t, f string) string {
 
 // wireTierReader installs the embedded ai module's per-tier SKU gate reader so it
 // resolves the caller's commerce subscription tier through the SAME co-resident
-// commerce client the metering gate bills over — in-process (commerceinproc) when
+// commerce client the metering gate bills over — in-process (the commerce transport) when
 // commerce is folded in, S2S HTTP with the service token otherwise — NEVER an authed
 // self-call to the cloud edge. That self-call is the toothless-gate bug: the edge
 // 401/403s a service call to /v1/billing/*, so the ai module's own HTTP lookup always
@@ -558,7 +558,7 @@ func EmitLifecycle(ctx context.Context, ev LifecycleEvent) {
 // call that reads the embedded commerce datastore (hanzoai/commerce MODULE, since
 // the un-fork) + the @hanzo/plans vocabulary, no network hop (the HIP-0106
 // co-resident default). The factory inversion stays because the concrete client
-// (clients/commerceinproc) imports clients/plan, which imports cloud — a direct
+// (clients/commerce) imports clients/plan, which imports cloud — a direct
 // call here would be a package cycle. Absent the registration it fails closed
 // rather than pretending.
 //
@@ -585,7 +585,7 @@ func pickCommerceClient(cfg *Config, log luxlog.Logger) CommerceClient {
 // commerceClientFactory constructs the embedded in-process Commerce client.
 // apps/commerce.go registers it in init(); pickCommerceClient calls it so
 // package cloud depends on the CommerceClient interface + this hook, never the
-// concrete commerceinproc package (whose entitlement client pulls clients/plan,
+// concrete clients/commerce package (whose entitlement client pulls clients/plan,
 // which imports cloud — the hook is what keeps the package graph acyclic).
 var commerceClientFactory func(cfg *Config, log luxlog.Logger) CommerceClient
 

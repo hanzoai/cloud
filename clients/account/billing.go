@@ -340,7 +340,7 @@ func billingData(s *cloud.Service[state], c *zip.Ctx) error {
 // could not otherwise wield. Safety rests on the edge: the gateway 401s a public Bearer
 // that is not an IAM JWT / hk-|pk-|sk- API key (the 64-hex service token is a JWT
 // candidate that fails to parse), so an EXTERNAL client can never reach this handler
-// holding it — only in-proc commerceinproc dispatch does. Constant-time compare; the token
+// holding it — only in-proc commerce-transport dispatch does. Constant-time compare; the token
 // is never logged.
 func s2sBillingCall(c *zip.Ctx) bool {
 	_, token := commerceCreds()
