@@ -126,6 +126,7 @@ func Grants(s *cloud.Service[core.State], c *zip.Ctx) error {
 // org (which the per-customer route carries in its path instead).
 type issueGrantRequest struct {
 	Org         string `json:"org"`
+	User        string `json:"user"` // optional member to credit; empty is the org itself
 	AmountCents int64  `json:"amountCents"`
 	Currency    string `json:"currency"`
 	Reason      string `json:"reason"`
@@ -145,6 +146,7 @@ func IssueGrant(s *cloud.Service[core.State], c *zip.Ctx) error {
 		return core.Fail(c, "org is required")
 	}
 	return core.ApplyGrant(s, c, org, core.CreditRequest{
+		User:        body.User,
 		AmountCents: body.AmountCents,
 		Currency:    body.Currency,
 		Reason:      body.Reason,

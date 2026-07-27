@@ -66,6 +66,37 @@ func WalletOf(c *zip.Ctx) (Wallet, bool) {
 	return Wallet{Ledger: ledger, Account: Subject(c, ledger)}, true
 }
 
+// WalletFor resolves the wallet of a NAMED member, for a caller that is addressing
+// someone other than itself — an operator crediting a customer, a reconciliation
+// moving a parked balance. It is the deposit-side twin of WalletOf and it asks the
+// SAME rule, so a credit lands where the gate will look: name a member of a pooled
+// tenant org and Payer answers that org's pool, because in a pooled org there is no
+// member wallet to credit and money put in one could never be spent.
+//
+// It takes an org and a bare name rather than a request because there is no request
+// — the target is not the caller. There is no credential to read, so no signed
+// `billing_account` claim participates: this resolves where a member's OWN token
+// would resolve, which is the account their spend will be gated on.
+//
+// A blank name is the org itself (the pool). A name is a NAME, not a key: a "/" in
+// it would silently address a different account than the one asked for, so it is
+// refused rather than flattened.
+func WalletFor(org, name string) (Wallet, bool) {
+	org = strings.TrimSpace(org)
+	name = strings.TrimSpace(name)
+	if org == "" || strings.Contains(name, "/") {
+		return Wallet{}, false
+	}
+	acct := account.Payer(account.Credential{Owner: org, Name: name})
+	if acct.Zero() {
+		return Wallet{}, false
+	}
+	// Both halves come from the resolved Account, so the ledger is the canonical,
+	// folded org the subject is built from — never a raw string that could disagree
+	// with it in case or whitespace.
+	return Wallet{Ledger: acct.Org(), Account: acct.Subject()}, true
+}
+
 // Subject resolves the ACCOUNT half of the address — the wallet key within ledger —
 // by feeding account.Payer the credential the identity boundary minted. It is the ONE
 // place a request becomes a wallet key, so the gate, the debit, the balance view and
