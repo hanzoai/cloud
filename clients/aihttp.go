@@ -199,6 +199,98 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 	}, nil
 }
 
+// ChatStream is the types.StreamCompleter capability: the SAME completion as
+// ChatCompletion, delivered delta by delta as the model produces it. It is one
+// upstream call with stream:true (+ stream_options.include_usage so the terminal
+// frame still carries real token counts), so the returned ChatResponse is the
+// identical value ChatCompletion would have returned — streaming is a delivery
+// property, never a different result.
+//
+// A delta that arrives after emit returns an error (a disconnected client) stops
+// the read and returns what was accumulated: the client hung up, the completion
+// did not fail. Transport failures are tagged types.ErrUpstreamBusy on the same
+// terms as ChatCompletion, so a caller's model-failover logic is unchanged.
+func (a *httpAI) ChatStream(ctx context.Context, req *types.ChatRequest, emit func(delta string) error) (*types.ChatResponse, error) {
+	model := strings.TrimSpace(req.Model)
+	if model == "" {
+		model = a.defaultModel
+	}
+
+	ctx, span := StartGenAISpan(ctx, "hanzo", "chat", model, req.Org, req.Project)
+	defer span.End()
+
+	ctx, cancel := context.WithTimeout(ctx, aiHTTPTimeout)
+	defer cancel()
+
+	stream, err := a.client.CreateChatCompletionStream(ctx, openai.ChatCompletionRequest{
+		Model: model,
+		Messages: []openai.ChatCompletionMessage{
+			{Role: openai.ChatMessageRoleUser, Content: req.Prompt},
+		},
+		StreamOptions: &openai.StreamOptions{IncludeUsage: true},
+	})
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "chat stream failed")
+		if transientChat(err) {
+			err = fmt.Errorf("%w: %w", err, types.ErrUpstreamBusy)
+		}
+		return nil, fmt.Errorf("cloud: chat stream (model %q): %w", model, err)
+	}
+	defer stream.Close()
+
+	var content strings.Builder
+	out := &types.ChatResponse{}
+	for {
+		frame, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			// A mid-stream failure with content already delivered is NOT a failure:
+			// the caller keeps (and has already shown) what the model produced.
+			if content.Len() > 0 {
+				break
+			}
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "chat stream failed")
+			if transientChat(err) {
+				err = fmt.Errorf("%w: %w", err, types.ErrUpstreamBusy)
+			}
+			return nil, fmt.Errorf("cloud: chat stream (model %q): %w", model, err)
+		}
+		if u := frame.Usage; u != nil {
+			out.PromptTokens, out.CompletionTokens, out.TotalTokens = u.PromptTokens, u.CompletionTokens, u.TotalTokens
+		}
+		if len(frame.Choices) == 0 {
+			continue // usage-only terminal frame
+		}
+		delta := frame.Choices[0].Delta.Content
+		if delta == "" {
+			continue
+		}
+		content.WriteString(delta)
+		if emit != nil {
+			if err := emit(delta); err != nil {
+				break // client gone — keep what we have
+			}
+		}
+	}
+
+	out.Content = content.String()
+	if strings.TrimSpace(out.Content) == "" {
+		// No content at all is the gateway's "overloaded, no capacity" shape —
+		// transient, so tag it busy for retry/failover, matching ChatCompletion.
+		span.SetStatus(codes.Error, "no content")
+		return nil, fmt.Errorf("cloud: chat stream (model %q): upstream returned no content: %w", model, types.ErrUpstreamBusy)
+	}
+	span.SetAttributes(
+		attribute.Int("gen_ai.usage.input_tokens", out.PromptTokens),
+		attribute.Int("gen_ai.usage.output_tokens", out.CompletionTokens),
+	)
+	return out, nil
+}
+
 // transientChat reports whether an upstream chat-completion error is a transient
 // overload the agent runner may safely retry or fail over on: HTTP
 // 429/500/502/503/504, or a gateway that surfaces "overloaded" without a typed
