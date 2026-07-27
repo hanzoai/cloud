@@ -201,7 +201,7 @@ func (manualKYC) Check(_ context.Context, ref string) (string, error) {
 // ---- Esign: the honest stub ----
 
 // stubEsign records a signature request reference but performs NO real signing —
-// the clients/sign subsystem is a goja bundle whose create→recipients→fields→send
+// the clients/esign subsystem is a goja bundle whose create→recipients→fields→send
 // sequence has no in-process Go seam today (see company.go docs / the gap list).
 // Completion arrives via /v1/company/esign/complete (a manual/webhook signal). It
 // never reports a request complete on its own.

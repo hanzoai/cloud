@@ -107,7 +107,7 @@ var frozen = []struct {
 	{"bots", false, false, false},           // was order 143
 	{"audit", false, false, false},          // was order 144
 	{"affiliates", false, false, false},     // was order 144
-	{"sign", true, true, false},             // was order 145
+	{"esign", true, true, false},            // was order 145; renamed sign->esign
 	{"product", false, false, false},        // was order 145
 	{"evals", false, false, false},          // was order 145
 	{"benchmark", false, false, false},      // benchmark plane (after evals, before treasury)
