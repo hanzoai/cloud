@@ -48,8 +48,8 @@ import (
 	"sync"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/datastore"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -120,7 +120,7 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 // requireDatastore returns the honest 503 when the datastore store is not
 // connected, rather than fabricating a result. Mirrors the analytics lens.
 func requireDatastore() error {
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return zip.Errorf(http.StatusServiceUnavailable, "sbom store unavailable: datastore (datastore) not connected")
 	}
 	return nil
@@ -148,13 +148,13 @@ func ensureTable(ctx context.Context) error {
 	if tableReady {
 		return nil
 	}
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return fmt.Errorf("datastore not connected")
 	}
-	if err := aiobject.DatastoreExec(ctx, createDatabase); err != nil {
+	if err := datastore.Exec(ctx, createDatabase); err != nil {
 		return fmt.Errorf("ensure database: %w", err)
 	}
-	if err := aiobject.DatastoreExec(ctx, createTable); err != nil {
+	if err := datastore.Exec(ctx, createTable); err != nil {
 		return fmt.Errorf("ensure %s: %w", sbomTable, err)
 	}
 	tableReady = true
@@ -192,7 +192,7 @@ func ingest(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 
 	if stmt, args := insertBatch(in, comps); stmt != "" {
-		if err := aiobject.DatastoreExec(c.Context(), stmt, args...); err != nil {
+		if err := datastore.Exec(c.Context(), stmt, args...); err != nil {
 			return zip.Errorf(http.StatusBadGateway, "sbom insert: %v", err)
 		}
 	}
@@ -231,7 +231,7 @@ func resolve(s *cloud.Service[state], c *zip.Ctx) error {
 		"component_name, component_version, component_type, purl, license, ingested_at " +
 		"FROM " + sbomTable + " FINAL WHERE image_digest = ? OR image_ref = ? " +
 		"ORDER BY component_type, component_name LIMIT " + fmt.Sprint(maxComponents+1)
-	rows, err := aiobject.DatastoreQuery(c.Context(), q, ref, ref)
+	rows, err := datastore.Query(c.Context(), q, ref, ref)
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "sbom query: %v", err)
 	}
@@ -265,7 +265,7 @@ func pullAndStore(s *cloud.Service[state], ctx context.Context, ref string) (*Sb
 	}
 	in := SbomIngest{ImageDigest: res.Digest, ImageRef: res.Ref, Format: "cyclonedx"}
 	if stmt, args := insertBatch(in, res.Components); stmt != "" {
-		if err := aiobject.DatastoreExec(ctx, stmt, args...); err != nil {
+		if err := datastore.Exec(ctx, stmt, args...); err != nil {
 			return nil, fmt.Errorf("persist pulled sbom: %w", err)
 		}
 	}
@@ -277,7 +277,7 @@ func pullAndStore(s *cloud.Service[state], ctx context.Context, ref string) (*Sb
 		"component_name, component_version, component_type, purl, license, ingested_at " +
 		"FROM " + sbomTable + " FINAL WHERE image_digest = ? OR image_ref = ? " +
 		"ORDER BY component_type, component_name LIMIT " + fmt.Sprint(maxComponents+1)
-	rows, err := aiobject.DatastoreQuery(ctx, q, res.Digest, res.Ref)
+	rows, err := datastore.Query(ctx, q, res.Digest, res.Ref)
 	if err != nil {
 		return nil, fmt.Errorf("reread pulled sbom: %w", err)
 	}
@@ -318,7 +318,7 @@ func Prefetch(ctx context.Context, log luxlog.Logger, ref string) {
 	}
 	// Already materialized? Cheap existence check keyed by ref (a tag ref maps to the
 	// same rows once resolved). Skip the network pull on a hit.
-	rows, err := aiobject.DatastoreQuery(ctx,
+	rows, err := datastore.Query(ctx,
 		"SELECT 1 FROM "+sbomTable+" WHERE image_ref = ? LIMIT 1", ref)
 	if err == nil && len(rows) > 0 {
 		return
@@ -337,7 +337,7 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{
 		"service":   "sbom",
 		"status":    "ok",
-		"datastore": aiobject.DatastoreEnabled(),
+		"datastore": datastore.Ready(),
 		"table":     sbomTable,
 	})
 }

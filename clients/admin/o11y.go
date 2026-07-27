@@ -18,7 +18,7 @@ package admin
 // the operator's o11y board on admin.hanzo.ai. It is the un-org-scoped twin of the
 // per-org console o11y: the same signals, aggregated across EVERY tenant, over the
 // ONE hanzoai/datastore (datastore) — the same warehouse + shared client
-// (aiobject.DatastoreQuery) the analytics/compute lenses already use, no second
+// (datastore.Query) the analytics/compute lenses already use, no second
 // connection.
 //
 // Signals, each from its canonical table in the one datastore:
@@ -45,9 +45,9 @@ import (
 	"strings"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
+	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/zap-proto/zip"
 )
 
@@ -165,7 +165,7 @@ func o11y(s *cloud.Service[core.State], c *zip.Ctx) error {
 
 	// Honest-empty when the warehouse is not connected: the board renders its zero
 	// state, never a fabricated fleet.
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return core.OK(c, payload)
 	}
 
@@ -174,39 +174,39 @@ func o11y(s *cloud.Service[core.State], c *zip.Ctx) error {
 	interval := o11yBucket(rangeLabel)
 
 	// LLM usage totals (all orgs).
-	if rows, err := aiobject.DatastoreQuery(ctx, o11yUsageTotalsSQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, o11yUsageTotalsSQL(), sinceTS); err == nil {
 		fillUsageTotals(&payload.Totals, firstRowOr(rows))
 	}
 	// Trace RED metrics (all services).
-	if rows, err := aiobject.DatastoreQuery(ctx, o11yTraceTotalsSQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, o11yTraceTotalsSQL(), sinceTS); err == nil {
 		fillTraceTotals(&payload.Totals, firstRowOr(rows))
 	}
 	// Fleet log volume.
-	if rows, err := aiobject.DatastoreQuery(ctx, o11yLogVolumeSQL(), sinceNanos); err == nil {
+	if rows, err := datastore.Query(ctx, o11yLogVolumeSQL(), sinceNanos); err == nil {
 		payload.Totals.LogVolume = chInt64(firstRowOr(rows)["c"])
 	}
 	// Usage time-series (fleet).
-	if rows, err := aiobject.DatastoreQuery(ctx, o11yUsageSeriesSQL(interval), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, o11yUsageSeriesSQL(interval), sinceTS); err == nil {
 		payload.Series = usageSeriesFromRows(rows)
 	}
 	// Log-volume time-series (fleet).
-	if rows, err := aiobject.DatastoreQuery(ctx, o11yLogSeriesSQL(interval), sinceNanos); err == nil {
+	if rows, err := datastore.Query(ctx, o11yLogSeriesSQL(interval), sinceNanos); err == nil {
 		payload.LogSeries = logSeriesFromRows(rows)
 	}
 	// Top orgs by usage.
-	if rows, err := aiobject.DatastoreQuery(ctx, o11yTopOrgsSQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, o11yTopOrgsSQL(), sinceTS); err == nil {
 		payload.TopOrgs = topOrgsFromRows(rows)
 	}
 	// Top models by usage.
-	if rows, err := aiobject.DatastoreQuery(ctx, o11yTopModelsSQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, o11yTopModelsSQL(), sinceTS); err == nil {
 		payload.TopModels = topModelsFromRows(rows)
 	}
 	// Top services by trace volume.
-	if rows, err := aiobject.DatastoreQuery(ctx, o11yTopServicesSQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, o11yTopServicesSQL(), sinceTS); err == nil {
 		payload.TopServices = topServicesFromRows(rows)
 	}
 	// Fleet LLM generations (Langfuse) — best-effort; near-empty today.
-	if rows, err := aiobject.DatastoreQuery(ctx, o11yLLMSQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, o11yLLMSQL(), sinceTS); err == nil {
 		r := firstRowOr(rows)
 		payload.LLM = o11yLLM{Generations: chInt64(r["gens"]), CostUsd: chFloat64(r["cost"])}
 	}
