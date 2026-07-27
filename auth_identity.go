@@ -107,11 +107,28 @@ func (c *idClaims) userID() string {
 // the distinct-from-userID() value stamped as X-User-Name so the direct-Bearer
 // path builds owner/name correctly — the gateway historically minted
 // X-User-Id==name, which userID() (sub-first) breaks on the in-binary path.
+// PREFERRED_USERNAME FIRST, and `name` only as a legacy fallback. The order used
+// to be reversed on the belief that IAM's `name` claim carried IAM's canonical
+// username. It does not: OIDC gives `name` DISPLAY semantics and IAM fills it from
+// User.DisplayName, so a real token read `name = "Zach Kelling"` — a human label
+// with a space in it, not the `<name>` half of `<owner>/<name>`.
+//
+// The cost landed on the money path, which addresses a wallet as `<org>/<username>`
+// (clients/principal/wallet.go). Preferring `name` addressed `hanzo/Zach Kelling`,
+// a wallet no funding path can name, while the balance sat in `hanzo/z`. Every
+// signed-in completion 402'd against a funded account. That file already documents
+// three prior recurrences of one bug — "two layers derived the same address two
+// ways"; this is the same bug arriving through the claim rather than the header.
+//
+// Fallback is retained, not removed: a token minted before IAM emitted
+// preferred_username has only `name`, and for those the old reading is still the
+// best available answer. New tokens carry the username explicitly, so the fallback
+// stops being reached as they roll over rather than needing a flag day.
 func (c *idClaims) username() string {
-	if c.Name != "" {
-		return c.Name
+	if c.PreferredUsername != "" {
+		return c.PreferredUsername
 	}
-	return c.PreferredUsername
+	return c.Name
 }
 
 // jwtSigAlgs is the accepted signature-algorithm allowlist passed to
