@@ -84,7 +84,11 @@ import (
 	"github.com/hanzoai/cloud/clients/content"
 	"github.com/hanzoai/cloud/clients/crm"
 	"github.com/hanzoai/cloud/clients/dataroom"
-	"github.com/hanzoai/cloud/clients/deploy"
+	// NOTE: clients/deploy is deliberately NOT imported — it is loaded at run
+	// time as a plugin (see the deploy entry in Wire). Deleting this import is
+	// the whole reason that works: an import here keeps its 253 exclusive
+	// packages — k8s.io/kubernetes/pkg, k8s.io/kubectl/pkg — linked into cloud
+	// whether or not any Wire entry referenced it.
 	"github.com/hanzoai/cloud/clients/destinations"
 	"github.com/hanzoai/cloud/clients/dns"
 	"github.com/hanzoai/cloud/clients/do"
@@ -304,9 +308,24 @@ func Wire() []cloud.MountSpec {
 		{Name: "x402", Mount: x402.Mount, Shutdown: ctxShutdown(x402.Shutdown)},
 		{Name: "paas", Mount: paas.Mount, OwnsHealth: true},
 		// GitOps deploy dashboard /v1/deploy/* (the ArgoCD-grade fleet view over the
-		// operator App CRs). After paas so the release seam paas installs is registered
-		// before a gitops rollback delegates to it; owns its own /v1/deploy/health.
-		{Name: "deploy", Mount: deploy.Mount, OwnsHealth: true},
+		// operator App CRs) — the second app that is NOT linked in. It runs as its own
+		// binary (cmd/deploy) and mounts at /v1/deploy over a private unix socket.
+		//
+		// Why this one next: after o11y it is the largest EXCLUSIVE contributor to the
+		// graph — 253 packages nothing else pulls, because it is the ONLY importer of
+		// k8s.io/kubernetes/pkg and k8s.io/kubectl/pkg. Every other candidate shares
+		// its weight with hanzoai/ai or hanzoai/commerce, so unlinking one frees single
+		// digits. clients/deploy was imported by this file and nothing else.
+		//
+		// It stays AFTER paas: the position is now cosmetic (the plugin carries its own
+		// paas mount, because the release seam is a func pointer and does not cross a
+		// process boundary — see cmd/deploy), but the two are still read as a pair.
+		//
+		// Not OwnsHealth: the plugin serves /v1/deploy/health itself, and the generic
+		// always-ok route Serve registers before MountAll still wins — the same
+		// behaviour o11y has. No Shutdown: zip.Load registers its own OnShutdown that
+		// stops the child.
+		cloud.PluginSpec("deploy", pluginAt("deploy"), "/v1/deploy"),
 		{Name: "functions", Mount: functions.Mount},
 		{Name: "tracker", Mount: tracker.Mount},
 		{Name: "templates", Mount: templates.Mount},

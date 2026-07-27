@@ -38,6 +38,12 @@ func PluginSpec(name string, p zip.Plugin, prefixes ...string) MountSpec {
 	return MountSpec{
 		Name:   name,
 		Global: true,
+		Plugin: true,
+		// The subtrees this subsystem owns, recorded on the spec rather than
+		// captured only in the closure. MountAll ignores Prefixes for a Global
+		// spec, so this costs nothing at mount — and it means the ONE list can be
+		// asked what a plugin serves without starting it.
+		Prefixes: prefixes,
 		Mount: func(router Router, _ Deps) error {
 			if len(prefixes) == 0 {
 				return fmt.Errorf("pluginspec %q: no prefix — a plugin that owns nothing serves nothing", name)

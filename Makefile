@@ -81,9 +81,26 @@ agentskills: ## Regenerate the FULL agent-skills catalog into clients/agentskill
 	python3 "$(OPENAPI_DIR)/skills.py" --no-services --out clients/agentskills/catalog
 	@echo ">> embedded FULL agent-skills catalog ($$(jq -r .skill_count clients/agentskills/catalog/hanzo/index.json) skills/brand)"
 
-build: ## Build the unified cloud binary into ./bin/cloud (embeds whatever webui/dist holds — run `webui` first for the real console).
+# PLUGINS are the subsystems that are NOT linked into cloud and ship as their own
+# binary (cloud.PluginSpec in the composition root). Read from apps/apps.go — the
+# single source — because make cannot link Go to ask Wire(); apps.TestPluginBinaries
+# proves this exact pattern yields exactly cloud.PluginNames(apps.Wire()).
+#
+# They must sit BESIDE bin/cloud: apps.pluginAt resolves a plugin from
+# os.Executable's directory, so a host loads the plugin it was built with rather
+# than whatever a $PATH happens to find. Without them `make build && ./bin/cloud`
+# fails to mount and refuses to boot.
+# (The '(' is matched by '.' rather than written literally: make counts parens
+# inside $(shell ...) and an escaped one ends the call early.)
+PLUGINS := $(shell grep -oE 'PluginSpec."[a-z0-9-]+"' apps/apps.go | cut -d'"' -f2)
+
+build: ## Build the unified cloud binary + its plugin binaries into ./bin (embeds whatever webui/dist holds — run `webui` first for the real console).
 	@mkdir -p bin
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$(BIN) $(PKG)
+	@for p in $(PLUGINS); do \
+	  echo "CGO_ENABLED=$(CGO_ENABLED) $(GO) build -o bin/$$p ./cmd/$$p"; \
+	  CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$$p ./cmd/$$p || exit 1; \
+	done
 
 build-standalone: webui build ## Build the REAL 1-binary console: console build:embed → webui/dist → go build.
 

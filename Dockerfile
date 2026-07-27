@@ -150,15 +150,37 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5" -ldflags="-s -w" -o /cloud ./cmd/cloud
+# The PLUGIN binaries — the subsystems that are no longer linked into /cloud and
+# therefore have to ship next to it, or the host fails to mount them and refuses
+# to boot. Same toolchain, same tags, same codec as /cloud: a plugin owns a store
+# too (o11y's annotation queues), so a pure-Go plugin beside a sqlcipher host
+# would be a second, weaker storage posture in one image.
+#
+# The list is READ FROM apps/apps.go, the single source — a Dockerfile cannot link
+# Go to ask Wire(), but it can read the same text, and apps.TestPluginBinaries
+# proves this exact pattern yields exactly cloud.PluginNames(apps.Wire()). A
+# second hand-maintained list here is how "it built, it just does not start" ships.
+RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
+    set -eu; mkdir -p /plugins; \
+    for p in $(grep -oE 'PluginSpec."[a-z0-9-]+"' apps/apps.go | cut -d'"' -f2); do \
+      echo ">> building plugin $p"; \
+      CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5" -ldflags="-s -w" -o "/plugins/$p" "./cmd/$p"; \
+    done; \
+    test -n "$(ls -A /plugins)" || { echo "FATAL: no plugin binaries built — apps.go declares none, or the pattern drifted"; exit 1; }
 # The functional smoke prober (cmd/smoke) — a stdlib-only, static binary shipped
 # alongside /cloud so the release gate can `docker exec` it against the freshly-built
 # image (and any deployment can be smoked via `docker run --entrypoint /smoke ...`).
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -ldflags="-s -w" -o /smoke ./cmd/smoke
-# Prove the SHIPPED binary binds sqlite3_* to libsqlcipher, not a plaintext libsqlite3.
-RUN readelf -d /cloud | grep -qE 'NEEDED.*(sqlcipher|sqlite3)' || { echo "FATAL: /cloud links no sqlite/sqlcipher .so"; exit 1; }; \
-    ! ldd /cloud 2>/dev/null | grep -E 'libsqlite3' | grep -vq 'libsqlcipher' || { echo "FATAL: /cloud resolves a NON-sqlcipher libsqlite3 (plaintext risk)"; exit 1; }
+# Prove every SHIPPED binary binds sqlite3_* to libsqlcipher, not a plaintext
+# libsqlite3 — the plugins too: an unencrypted store is not less of a problem for
+# being in a child process.
+RUN set -eu; for b in /cloud /plugins/*; do \
+      readelf -d "$b" | grep -qE 'NEEDED.*(sqlcipher|sqlite3)' || { echo "FATAL: $b links no sqlite/sqlcipher .so"; exit 1; }; \
+      ! ldd "$b" 2>/dev/null | grep -E 'libsqlite3' | grep -vq 'libsqlcipher' || { echo "FATAL: $b resolves a NON-sqlcipher libsqlite3 (plaintext risk)"; exit 1; }; \
+    done
 
 # ── final image (alpine, NOT scratch — CGO needs libc + libsqlcipher) ─────────
 FROM ghcr.io/hanzoai/mirror/alpine:3.22@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6
@@ -198,6 +220,10 @@ COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /etc/group /etc/group
 COPY --from=build /cloud /cloud
+# The plugin binaries land BESIDE /cloud, which is exactly where apps.pluginAt
+# looks (os.Executable's dir, not $PATH) — so a host always starts the plugin it
+# was built and shipped with. Still one image, still one artifact to ship.
+COPY --from=build /plugins/ /
 COPY --from=build /smoke /smoke
 EXPOSE 8080 9090 9653
 USER 65532:65532
