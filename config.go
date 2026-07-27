@@ -315,8 +315,10 @@ type Config struct {
 	// completions-capable secret key (sk-/hk-) set here would instead drive both.
 	//
 	// AIDefaultModel is the served model an agent with no explicit model falls
-	// back to (CLOUD_AI_DEFAULT_MODEL, default deepseek-v4-flash). Model routing
-	// is the gateway's job; this is the ONLY cloud-side model default.
+	// back to (CLOUD_AI_DEFAULT_MODEL, default DefaultModel — the bare "enso"
+	// alias the gateway resolves to a tier per call). Model routing is the
+	// gateway's job; this is the ONLY cloud-side model default, and its literal
+	// lives in exactly one place (model.go).
 	//
 	// AIFallbackModel is the reliable model the agent runner fails over to when
 	// the agent's own model stays throttled (429/overloaded) after bounded retries
@@ -447,7 +449,7 @@ func LoadConfig() *Config {
 		// key, no expiry cliff. Never plaintext.
 		AIBaseURL:          getenv("CLOUD_AI_BASE_URL", "https://api.hanzo.ai/v1"),
 		AIAPIKey:           getenv("CLOUD_AI_API_KEY", ""),
-		AIDefaultModel:     getenv("CLOUD_AI_DEFAULT_MODEL", "deepseek-v4-flash"),
+		AIDefaultModel:     getenv("CLOUD_AI_DEFAULT_MODEL", DefaultModel),
 		AIFallbackModel:    getenv("CLOUD_AI_FALLBACK_MODEL", "best"),
 		AIAuthClientID:     getenv("IAM_CLIENT_ID", ""),
 		AIAuthClientSecret: getenv("IAM_CLIENT_SECRET", ""),

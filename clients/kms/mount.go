@@ -272,11 +272,15 @@ type secretPutRequest struct {
 // path/env. ?path= narrows to a subpath; ?env= selects the environment.
 func listSecrets(s *cloud.Service[state], ctx *zip.Ctx) error {
 	org := reqOrg(ctx)
-	env := envOr(ctx.Query("env"))
+	// The KMS operator (the fleet's only machine consumer) spells these
+	// `environment` and `secretPath`; this plane's own clients use `env` and
+	// `path`. Accept both so one endpoint serves both callers — the operator can
+	// be repointed here without a lockstep operator release.
+	env := envOr(firstQuery(ctx, "env", "environment"))
 	if !validEnv(env) {
 		return zip.ErrBadRequest("'env' must not contain '/', control characters, or exceed 63 bytes")
 	}
-	sub := ctx.Query("path")
+	sub := firstQuery(ctx, "path", "secretPath")
 	if !ValidSubpath(sub) {
 		return zip.ErrBadRequest("'path' must be '/'-separated non-empty segments without '.', '..', or control characters")
 	}
@@ -284,7 +288,32 @@ func listSecrets(s *cloud.Service[state], ctx *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "%v", err)
 	}
-	return ctx.JSON(http.StatusOK, map[string]any{"secrets": metas, "total": len(metas)})
+	// Superset response: `secrets`/`total` for this plane's clients, `names` for
+	// the operator, which reads that key. Emitting both means the standalone KMS
+	// can be retired without a flag day — a consumer of either shape keeps working.
+	names := make([]string, 0, len(metas))
+	for _, m := range metas {
+		names = append(names, m.Name)
+	}
+	return ctx.JSON(http.StatusOK, map[string]any{"secrets": metas, "total": len(metas), "names": names})
+}
+
+// firstQuery returns the first non-empty value among alias query keys, so one
+// handler serves callers that spell the same parameter differently.
+func firstQuery(ctx *zip.Ctx, keys ...string) string {
+	return firstNonEmpty(ctx.Query, keys...)
+}
+
+// firstNonEmpty is firstQuery's lookup rule, taken as a plain function so the
+// precedence (primary before alias, empty treated as absent) is testable without
+// standing up a request context.
+func firstNonEmpty(get func(string) string, keys ...string) string {
+	for _, k := range keys {
+		if v := get(k); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // getSecret reads one secret value. The trailing wildcard is the sub-path + name
