@@ -50,12 +50,10 @@ import (
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	nooptrace "go.opentelemetry.io/otel/trace/noop"
-	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 	uberzap "go.uber.org/zap"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/hanzoai/cloud"
 	"github.com/luxfi/zap"
@@ -123,18 +121,14 @@ func mountTraceSink(deps cloud.Deps) error {
 	}
 	traceExporter = exp
 
-	// Register the Cost-0 handler: it receives the LIVE proto span batch (no ZAP
-	// wire encode, no socket) and writes it to o11y_traces via the real dstraces
-	// exporter. The only serialization is an in-memory OTLP proto round-trip to
-	// bridge SDK-exporter proto spans -> collector pdata.
+	// Register the Cost-0 handler: it receives the LIVE pdata batch by value — no
+	// ZAP wire encode, no socket, and now no serialization at all. The previous
+	// path marshalled to OTLP proto and unmarshalled straight back to reach the
+	// same pdata, which is what made "Cost 0" untrue and pulled proto/otlp in.
 	traceInproc.Register(TraceDest, func(ctx context.Context, _ zap.Destination, p zap.Payload) (zap.Payload, error) {
-		spans, ok := p.Value.([]*tracepb.ResourceSpans)
+		td, ok := p.Value.(ptrace.Traces)
 		if !ok {
-			return zap.Payload{}, fmt.Errorf("o11y trace sink: unexpected payload type %T (want []*tracepb.ResourceSpans)", p.Value)
-		}
-		td, err := protoToTraces(spans)
-		if err != nil {
-			return zap.Payload{}, fmt.Errorf("o11y trace sink: proto->pdata: %w", err)
+			return zap.Payload{}, fmt.Errorf("o11y trace sink: unexpected payload type %T (want ptrace.Traces)", p.Value)
 		}
 		return zap.Payload{}, exp.ConsumeTraces(ctx, td)
 	})
@@ -194,71 +188,53 @@ func buildTraceExporter(ctx context.Context, dsn string) (exporter.Traces, error
 	return exp, nil
 }
 
-// protoToTraces bridges SDK-exporter OTLP proto spans (what otlptrace.Client hands
-// UploadTraces) to collector pdata (what the dstraces exporter consumes). The two
-// use distinct generated proto packages but the SAME OTLP wire format
-// (resource_spans = field 1), so a marshal+unmarshal is the one public, stable
-// bridge — an in-memory round-trip, never a socket.
-func protoToTraces(spans []*tracepb.ResourceSpans) (ptrace.Traces, error) {
-	b, err := proto.Marshal(&tracepb.TracesData{ResourceSpans: spans})
-	if err != nil {
-		return ptrace.Traces{}, err
-	}
-	return (&ptrace.ProtoUnmarshaler{}).UnmarshalTraces(b)
-}
-
 // nopHost is the minimal component.Host the exporter needs at Start: it uses no
 // extensions (in-memory sending queue, no persistent-storage extension).
 type nopHost struct{}
 
 func (nopHost) GetExtensions() map[component.ID]component.Component { return nil }
 
-// NewTraceExporter builds the OTel span exporter cloud installs on its ONE tracer
-// provider. It is an otlptrace.Exporter whose Client routes every batch through
-// the Router: in-process to the embedded datastore sink when mounted (Cost 0 —
-// the native proto batch is delivered by value, never serialized to a socket),
-// else falling back to the wire client. otlptrace owns the (public) SDK-span ->
-// OTLP-proto conversion; this owns only WHERE the proto batch goes. wire may be
-// nil (in-process only). The composition root (cmd/cloud) still installs the
-// provider and owns the single-provider invariant; this owns the transport.
-func NewTraceExporter(ctx context.Context, wire otlptrace.Client) (*otlptrace.Exporter, error) {
-	return otlptrace.New(ctx, &routerTraceClient{router: Router, dest: TraceDest, wire: wire})
+// NewTraceExporter builds the span exporter cloud installs on its ONE tracer
+// provider. It converts SDK spans to pdata once and routes the result through
+// the Router: in-process to the embedded datastore sink when mounted, else to
+// the ZAP wire. wire may be nil (in-process only). The composition root
+// (cmd/cloud) still installs the provider and owns the single-provider
+// invariant; this owns the transport.
+func NewTraceExporter(_ context.Context, wire sdktrace.SpanExporter) (sdktrace.SpanExporter, error) {
+	return &routerTraceExporter{router: Router, dest: TraceDest, wire: wire}, nil
 }
 
-// routerTraceClient is the otlptrace.Client that routes cloud's own spans through
-// the ZAP Router: in-process to the embedded sink when mounted, else the wire.
-type routerTraceClient struct {
+// routerTraceExporter routes cloud's own spans through the ZAP Router:
+// in-process to the embedded sink when mounted, else the wire.
+type routerTraceExporter struct {
 	router *zap.Router
 	dest   zap.Destination
-	wire   otlptrace.Client // nil ⇒ in-process only
+	wire   sdktrace.SpanExporter // nil ⇒ in-process only
 }
 
-var _ otlptrace.Client = (*routerTraceClient)(nil)
+var _ sdktrace.SpanExporter = (*routerTraceExporter)(nil)
 
-// Start/Stop only bind the wire fallback; the in-process interface is stateless.
-func (c *routerTraceClient) Start(ctx context.Context) error {
-	if c.wire != nil {
-		return c.wire.Start(ctx)
+// ExportSpans converts once, then routes: the Router prefers the Cost-0
+// in-process interface (the sink's handler receives the LIVE pdata), and only
+// when nothing can reach the destination does the wire fallback run. With no
+// fallback, ErrNoRoute surfaces — visible, never a silent drop. Steady state
+// always has the sink; only the brief pre-mount boot window can hit it.
+func (c *routerTraceExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpan) error {
+	if len(spans) == 0 {
+		return nil
 	}
-	return nil
-}
-
-func (c *routerTraceClient) Stop(ctx context.Context) error {
-	if c.wire != nil {
-		return c.wire.Stop(ctx)
-	}
-	return nil
-}
-
-// UploadTraces routes the proto batch: the Router prefers the Cost-0 in-process
-// interface (the sink's handler receives the LIVE spans), and only when nothing
-// can reach the destination does the wire fallback run. With no fallback,
-// ErrNoRoute surfaces (visible, never a silent drop) — steady state always has the
-// sink; only the brief pre-mount boot window can hit it.
-func (c *routerTraceClient) UploadTraces(ctx context.Context, protoSpans []*tracepb.ResourceSpans) error {
-	_, err := c.router.Send(ctx, c.dest, zap.Payload{Value: protoSpans})
+	td := spansToTraces(spans)
+	_, err := c.router.Send(ctx, c.dest, zap.Payload{Value: td})
 	if errors.Is(err, zap.ErrNoRoute) && c.wire != nil {
-		return c.wire.UploadTraces(ctx, protoSpans)
+		return c.wire.ExportSpans(ctx, spans)
 	}
 	return err
+}
+
+// Shutdown only binds the wire fallback; the in-process interface is stateless.
+func (c *routerTraceExporter) Shutdown(ctx context.Context) error {
+	if c.wire != nil {
+		return c.wire.Shutdown(ctx)
+	}
+	return nil
 }
