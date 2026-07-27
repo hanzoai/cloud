@@ -56,6 +56,20 @@ type idClaims struct {
 	// check below, never toward granting admin).
 	Type string         `json:"type"`
 	Orgs []model.OrgRef `json:"orgs"` // membership SET (home first); empty on legacy tokens
+
+	// subjectOrg is the org resolved from the token SUBJECT rather than from any
+	// claim — set ONLY by the API-key resolver (iamKeys.lookup), from the IAM user
+	// row the accessKey belongs to. It is the machine-credential answer to "whose
+	// org is this?", and it exists because an hk-/sk- key is not a member of
+	// anything: IAM mints no `orgs` claim for one, so the membership set homeOrg
+	// reads for a human is legitimately empty here.
+	//
+	// UNEXPORTED AND UNTAGGED ON PURPOSE. encoding/json cannot populate it, so no
+	// token can carry it and no caller can forge it — it is only ever set by the
+	// code path that already authenticated the key against IAM. That is the same
+	// rule the identity headers follow: never decoded from the request, only minted
+	// from something verified.
+	subjectOrg string
 }
 
 // mintedProject returns the project id to stamp into X-Project-Id, or "" when the
@@ -218,15 +232,48 @@ func kmsMachineAudience(owner string) string {
 // from any app owned by the reserved admin org conferred platform admin. One
 // poisoned value, two defects; one accessor, both closed.
 //
-// EMPTY MEANS EMPTY. A token with no `orgs` (minted before IAM v1.33.0, or a
-// machine token, for which IAM omits the claim by design) resolves NO home org, and
-// the caller must fail closed — an org-less request, every org() gate 403. It must
-// never fall back to `owner`, because that is precisely the app-selected value this
-// exists to stop trusting. Callers log the fail-closed case so a real legacy
-// principal is visible rather than silently denied.
+// TWO PRINCIPAL KINDS, TWO SOURCES — they are different questions, so they are two
+// branches rather than one fallback chain:
+//
+//   - A MACHINE credential (hk-/sk- API key) is a member of nothing, so IAM mints it
+//     no `orgs` claim at all. Its org comes from the token SUBJECT: iamKeys.lookup
+//     resolves the accessKey to its IAM user row and records that row's owner in
+//     subjectOrg. Reading it here is not a fallback to `owner` — it never passed
+//     through an application, so it carries none of the app-selection hazard.
+//
+//   - A HUMAN token carries the membership set, and its first entry is the home org.
+//
+// EMPTY STILL MEANS EMPTY for a human. A token with neither (minted before IAM
+// v1.33.0) resolves NO home org and the caller must fail closed — an org-less
+// request, every org() gate 403. It must never fall back to `owner`, which is
+// precisely the app-selected value this exists to stop trusting. Callers log that
+// case so a real legacy principal is visible rather than silently denied.
+//
+// Order matters: subjectOrg is checked FIRST because a key principal's empty `orgs`
+// is correct-by-design, not a degraded token. Reading the membership set first and
+// failing closed on it is what 403'd every customer API key on org-scoped routes
+// (/v1/agents, /v1/gpus, /v1/billing/*) in v1.801.244 while leaving unscoped
+// /v1/models working — which is why the pre-pin probe, which only ever asserted
+// /v1/models, could not see it.
+// A MACHINE JWT (client_credentials, IAM `type` == "application" — e.g. the
+// per-org "<org>-platform-kms" sync identity) is the third case, and it reads
+// `owner` DELIBERATELY. That is not the hazard this function exists to remove: the
+// hazard was a HUMAN whose org followed whichever app they logged in through, and a
+// machine cannot choose — it IS the application, its `owner` is that application's
+// own organization, and obtaining the token at all requires that app's client
+// secret. There is no user to mis-attribute. Omitting this branch would fail closed
+// on the KMS sync identity, whose org-scoped data access runs through this same
+// boundary (see isKMSMachinePrincipal, which gates ONLY the admin grant precisely so
+// that access keeps working).
 func (c *idClaims) homeOrg() string {
+	if c.subjectOrg != "" {
+		return c.subjectOrg // API key: resolved from the subject
+	}
+	if isMachinePrincipal(c) {
+		return c.Owner // machine JWT: the app IS the principal
+	}
 	if len(c.Orgs) == 0 {
-		return ""
+		return "" // human token with no membership set: fail closed
 	}
 	return c.Orgs[0].Org
 }
