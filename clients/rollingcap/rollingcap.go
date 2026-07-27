@@ -18,8 +18,8 @@
 //
 // It composes three co-resident GLOBALS and owns no state of its own:
 //
-//	aiobject.TierReader()  — the caller's commerce plan tier   (installed by wireTierReader)
-//	finance.Current()      — the per-org ledger's windowed sum  (installed by wireFinance)
+//	aiobject.TierReader()  — the caller's commerce plan tier   (installed by apps/ai.go)
+//	finance.Current()      — the per-org ledger's windowed sum  (published by cloud.BuildDeps)
 //	flags.Int(key)         — the admin-editable per-tier caps    (the platform-switch registry)
 //
 // The two knobs are platform switches, so admin.hanzo.ai renders and edits them live
@@ -89,8 +89,8 @@ func init() {
 // Mount installs the rolling-cap reader. It registers no routes — the platform
 // switches (registered in init) surface in the admin cockpit on their own. No-op when
 // the tier or finance layer is not co-resident (standalone / split deploy): ai's hook
-// stays nil, behavior unchanged. Runs after MountAll's prerequisites — wireTierReader
-// + wireFinance have already installed the globals it reads.
+// stays nil, behavior unchanged. Runs after MountAll's prerequisites — the composition
+// root's installBilling has already installed the globals it reads.
 func Mount(_ *zip.App, _ cloud.Deps) error {
 	tier := aiobject.TierReader()
 	fin := finance.Current()

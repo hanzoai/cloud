@@ -19,7 +19,7 @@ package entitlements
 // THE ADDRESS IS LOAD-BEARING. A money gate that reads a different wallet than the
 // debit writes is the bug this codebase has already shipped twice, both times by
 // keying the ORG POOL: "every new signup lives in 'hanzo', so a brand-new $0
-// account read HANZO's balance and sailed through the gate" (build.go wireFinance).
+// account read HANZO's balance and sailed through the gate" (apps/ai.go installBilling).
 // Read on the org pool, this paywall would admit every free signup in the shared
 // org for as long as the platform's own pool is funded — a total bypass. So the
 // credit leg reads principal.WalletOf's address and nothing else.

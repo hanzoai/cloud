@@ -183,12 +183,19 @@ func init() {
 	})
 }
 
-// Wire returns every linked subsystem as a cloud.MountSpec, in mount order. The
-// slice position IS the order: cloud.MountAll iterates it as-given, registering each
-// subsystem's teardown as a zip shutdown hook so teardown runs in reverse (LIFO).
-// Enablement is a separate axis: cloud.Serve mounts only the specs cfg.Enabled(name)
-// admits, so a STAGED subsystem is linked but inert until named.
+// Wire composes the process: it installs the host bindings the co-resident
+// inference module resolves (see ai.go) and returns every linked subsystem as a
+// cloud.MountSpec, in mount order. The slice position IS the order: cloud.MountAll
+// iterates it as-given, registering each subsystem's teardown as a zip shutdown hook
+// so teardown runs in reverse (LIFO). Enablement is a separate axis: cloud.Serve
+// mounts only the specs cfg.Enabled(name) admits, so a STAGED subsystem is linked
+// but inert until named.
+//
+// The bindings are NOT a MountSpec on purpose: a spec is skipped whenever its name
+// is absent from an explicit CLOUD_ENABLE list, and a money gate that silently stops
+// being installed is a revenue leak, not a degraded feature.
 func Wire() []cloud.MountSpec {
+	installAI()
 	return []cloud.MountSpec{
 		// embedded NATS :4222 + JetStream.
 		{Name: "pubsub", Mount: pubsub.Mount, Shutdown: pubsub.Shutdown},

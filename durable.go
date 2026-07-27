@@ -12,9 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	aiobject "github.com/hanzoai/ai/object"
 	tasksauth "github.com/hanzoai/tasks/pkg/auth"
-	tasksclient "github.com/hanzoai/tasks/pkg/sdk/client"
 	tasksengine "github.com/hanzoai/tasks/pkg/tasks"
 )
 
@@ -37,21 +35,21 @@ const durableGatedZAPPort = 9999
 var embeddedTasks *tasksengine.Embedded
 
 // EmbeddedTasks returns the ONE in-process tasks engine, or nil until
-// wireDurableIngest has run (or if it failed to start). The Tasks HTTP/UI surface
-// (clients/tasks, mounted at /v1/tasks/*) serves on THIS shared engine — there is
-// exactly one engine per process, shared by ai's durable ingest AND the Tasks
-// product surface, never a second Embed. The surface resolves it lazily (per
-// request) because subsystem Mount runs during MountAll, before wireDurableIngest.
+// wireDurableIngest has run (or if it failed to start). Every consumer resolves it
+// through THIS accessor, lazily, per request: the Tasks HTTP/UI surface
+// (clients/tasks, mounted at /v1/tasks/*) and the inference module's ingest dialer
+// (apps/ai.go) both run on the ONE shared engine, never a second Embed — and both
+// are wired before the engine starts, since Mount and Wire run ahead of it.
 func EmbeddedTasks() *tasksengine.Embedded { return embeddedTasks }
 
 // wireDurableIngest embeds the ONE hanzoai/tasks engine IN-PROCESS — the unified durable
-// queue (there is no second async system; tasks/CONTRACT) — and injects a per-org
-// loopback ZAP dialer into ai's ingest. A long ingest (github/crawl/s3) then runs as a
-// durable workflow in the OWNER's namespace (CONTRACT §6: namespace maps 1:1 to org),
-// tracked in the ONE Tasks product. In-process ZAP = mega fast, low latency/memory, no
-// HTTP. Fail-soft by construction: any embed error leaves ai's dialer unset →
-// EnqueueIngest returns ErrTasksNotConfigured → the handler runs ingest inline (always
-// works). Called once, after MountAll (ai is mounted) and before Listen.
+// queue (there is no second async system; tasks/CONTRACT). A long ingest
+// (github/crawl/s3) then runs as a durable workflow in the OWNER's namespace
+// (CONTRACT §6: namespace maps 1:1 to org), tracked in the ONE Tasks product.
+// In-process ZAP = mega fast, low latency/memory, no HTTP. Fail-soft by
+// construction: any embed error leaves EmbeddedTasks nil → the dialer reports
+// ErrTasksNotConfigured → the handler runs ingest inline (always works). Called
+// once, after MountAll and before Listen.
 func wireDurableIngest(ctx context.Context, deps Deps) {
 	// A stable data dir the engine owns. Cloud's container is distroless (no /tmp), so
 	// Embed's default os.MkdirTemp("") fallback fails — pin it to cloud's data root.
@@ -77,11 +75,8 @@ func wireDurableIngest(ctx context.Context, deps Deps) {
 		return
 	}
 	embeddedTasks = emb
-	addr := fmt.Sprintf("127.0.0.1:%d", emb.ZAPPort())
-	aiobject.SetIngestDialer(func(org string) (tasksclient.Client, error) {
-		return tasksclient.Dial(tasksclient.Options{HostPort: addr, Namespace: "default"})
-	})
-	deps.Logger.Info("durable ingest wired: in-process tasks engine", "addr", addr, "dataDir", dataDir)
+	deps.Logger.Info("durable ingest: in-process tasks engine up",
+		"addr", fmt.Sprintf("127.0.0.1:%d", emb.ZAPPort()), "dataDir", dataDir)
 
 	// Expose the SAME engine on a cluster-reachable, IDENTITY-GATED ZAP listener so the
 	// standalone tasksd's consumers (auto, hanzo-playground, platform) run their durable
