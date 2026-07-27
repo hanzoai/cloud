@@ -14,8 +14,12 @@
 //     hanzoai/tasks engine (drip.go): each enrollment's next_run_at lives in
 //     SQLite, a per-minute engine schedule sweeps due steps, every step is
 //     claimed once (idempotent) and delivered through the ONE send gate.
-//   - Audiences — cohort filters evaluated live against the org's analytics
-//     events (hanzo.events), honest-empty when the warehouse is not wired.
+//   - Audiences — who to reach, resolved to real mailboxes through Hanzo IAM
+//     (roster.go): an audience with no event filter is EVERY mailable customer
+//     in the org, and one with an event narrows that roster to the cohort the
+//     analytics warehouse (hanzo.events) selected. Honest-empty when the roster
+//     or warehouse cannot be read — never a fabricated number, never a send to
+//     nobody reported as a success.
 //   - Promo codes — the "First 1,000: 90% off month 1" launch promo (discounts.md)
 //     realized as a non-cash wallet credit through the finance ledger, with the
 //     hard 1,000 cap, one-per-org, one-per-instrument and team-seat-cap guards.
@@ -30,6 +34,13 @@
 // which checks the per-org suppression list and then hands off to the platform
 // notify rail (notify.Send) — marketing never builds a second sender.
 //
+// A PRODUCT ANNOUNCEMENT ("a new model is available") is therefore not a feature
+// of its own: it is a one-step sequence with an audience enrolled into it —
+// POST /v1/marketing/sequences/:id/enroll with an audienceId instead of an
+// address. It reuses the drip engine and so inherits every guarantee already
+// proven there — claimed-once delivery, the suppression gate, the signed
+// unsubscribe footer — which is precisely why there is no blast engine beside it.
+//
 // TENANT ISOLATION is enforced SERVER-SIDE on every request: the org is
 // principal.Org(c) — the value SanitizeIdentity minted from the VALIDATED bearer
 // owner claim (HIP-0026) — NEVER a client-supplied header. Every store query
@@ -41,6 +52,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -241,29 +253,6 @@ func nonNeg(n int64) int64 {
 	return n
 }
 
-// toInt64 coerces a datastore cell (which the driver may return as any numeric
-// Go type) to int64. Used for warehouse aggregate reads (audience counts).
-func toInt64(v any) int64 {
-	switch n := v.(type) {
-	case int64:
-		return n
-	case int32:
-		return int64(n)
-	case int:
-		return int64(n)
-	case uint64:
-		return int64(n)
-	case uint32:
-		return int64(n)
-	case float64:
-		return int64(n)
-	case float32:
-		return int64(n)
-	default:
-		return 0
-	}
-}
-
 // toString coerces a datastore cell to a string (warehouse distinct_id reads).
 func toString(v any) string {
 	switch s := v.(type) {
@@ -278,14 +267,16 @@ func toString(v any) string {
 	}
 }
 
-// mapErr maps a store sentinel error to the right HTTP error. Non-sentinel errors
+// mapErr maps a sentinel error to the right HTTP error. Non-sentinel errors
 // become a 500 with the wrapped message.
 func mapErr(err error, notFoundMsg string) error {
-	switch err {
-	case errNotFound:
+	switch {
+	case errors.Is(err, errNotFound):
 		return zip.ErrNotFound(notFoundMsg)
-	case errConflict:
+	case errors.Is(err, errConflict):
 		return zip.ErrConflict("already exists")
+	case errors.Is(err, errIAMUnavailable), errors.Is(err, errWarehouse):
+		return zip.Errorf(http.StatusServiceUnavailable, "%v", err)
 	default:
 		return zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
