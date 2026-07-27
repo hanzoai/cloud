@@ -258,13 +258,13 @@ func reachable(path string) bool {
 		return true // the SPA shell + static assets that render the paywall screen itself.
 	}
 	// The auth routes moved when the /v1 surface was namespaced (/v1/signin →
-	// /v1/auth/signin, /v1/get-account → /v1/auth/account). This list matches by
+	// /v1/ai/signin, /v1/get-account → /v1/ai/account). This list matches by
 	// STRING, so it does not follow them: the old spellings here would put a 402
 	// in front of sign-in. Pinned by TestAuthRoutesAreNeverPaywalled.
 	switch path {
-	case "/v1/auth/signin", // auth: session bootstrap (the console posts the OAuth code here).
-		"/v1/auth/signout",
-		"/v1/auth/account", // auth: the account read AuthGate loads before anything else.
+	case "/v1/ai/signin", // auth: session bootstrap (the console posts the OAuth code here).
+		"/v1/ai/signout",
+		"/v1/ai/account",   // auth: the account read AuthGate loads before anything else.
 		"/v1/entitlements": // this paywall's OWN projection — what the shell renders the upgrade UI from.
 		return true
 	}
