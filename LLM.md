@@ -304,6 +304,24 @@ embedded underneath.
   "stopped" runs that were never started. Isolation holds because the org is the
   validated one cloud sends, never a client's, and the runtime keys every run
   under `tenants/{org}/`.
+- **A customer IS an IAM user; marketing keeps no contact list.** Who to email is
+  read IN-PROCESS from the embedded IAM (`clients/marketing/roster.go` →
+  `iam/pkg/store.GetMailableUsers` over `clients/iam.DB()`), the same seam
+  `clients/platform` uses for the IAM-owned Project — no HTTP hop to `/v1/iam`
+  from inside the binary, IAM's `model.User` verbatim, read-only, masked. The org
+  is `principal.Org`, which IS IAM's `Owner`, so an audience can only ever resolve
+  its own tenant; `GetMailableUsers` REFUSES an empty org rather than falling back
+  to the all-orgs view that `GetProjects` deliberately allows. IAM not co-mounted
+  is a 503, never an empty audience — a send reported successful to nobody is the
+  worse failure. An audience with no event filter is every mailable customer;
+  with one, `matchCohort` joins the warehouse `distinct_id`s to that roster and
+  COUNTS what matched nobody instead of inventing an address.
+- **A product announcement is not its own engine.** It is a one-step sequence with
+  an audience enrolled into it — `POST /v1/marketing/sequences/:id/enroll` takes
+  `audienceId` where it takes `address` — so it inherits the drip engine's
+  claimed-once delivery, the ONE send gate (`state.deliver` → suppression →
+  `notify.Send`), and the signed unsubscribe footer. Never add a blast path beside
+  `deliver`: the gate is only absolute because it is the only door.
 - **Absence is only meaningful from a callee that could have said otherwise.**
   `runtime.ErrNotFound` (the operation ANSWERED "no such target") is separate from
   `runtime.ErrNotServed` (the operation does not exist). Conflating them makes a
