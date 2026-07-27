@@ -17,6 +17,7 @@ import (
 //  4. Activate happens only after Place succeeds    (never a half-swapped state)
 
 type fakeTarget struct {
+	name      string
 	kind      Kind
 	placed    []string // release IDs, in order
 	activated []string // placement IDs, in order
@@ -24,7 +25,12 @@ type fakeTarget struct {
 	live      string
 }
 
-func (f *fakeTarget) Name() string { return "fake" }
+func (f *fakeTarget) Name() string {
+	if f.name != "" {
+		return f.name
+	}
+	return "fake"
+}
 func (f *fakeTarget) Kind() Kind   { return f.kind }
 
 func (f *fakeTarget) Place(_ context.Context, r Release) (Placement, error) {
