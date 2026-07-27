@@ -191,6 +191,28 @@ func Encrypting() bool {
 	return err == nil && len(k) == 32
 }
 
+// Exists reports whether a store lives at path — the question "has this org/
+// subsystem been created yet?", asked by every caller that discovers stores by
+// walking the data directory.
+//
+// os.Stat on the database file alone does NOT answer it. The pure-Go codec holds
+// the database in its envelope and materializes the file on close, so a store that
+// is OPEN right now has only its sidecar on disk; the live codec writes the
+// database in place and has both. A caller that stats only the database therefore
+// sees a store on one build and not the other, and on the pure-Go build skips
+// precisely the stores that are in use. cek mints the sidecar eagerly, before the
+// first byte of database is written, on both codecs — so "database or sidecar" is
+// the marker that holds on every build and at every point in a store's life.
+//
+// The layout stays cek's own: callers ask this rather than knowing the suffix.
+func Exists(path string) bool {
+	if _, err := os.Stat(path); err == nil {
+		return true
+	}
+	_, err := os.Stat(path + dekSuffix)
+	return err == nil
+}
+
 // Open returns a *sql.DB for the SQLite database at path, encrypted at rest when
 // a master key is configured. It is the single drop-in replacement for
 // sql.Open("sqlite", path) across every cloud store.
