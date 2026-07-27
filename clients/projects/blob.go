@@ -16,6 +16,7 @@ import (
 
 	s3 "github.com/hanzoai/s3-go"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/s3admin"
 	"github.com/hanzoai/cloud/clients/sites"
 )
@@ -312,7 +313,12 @@ func (b *blobStore) ensureBucket(ctx context.Context, cli *s3.Client) error {
 func purgePrefix(ctx context.Context, cli *s3.Client, bucket, prefix string) error {
 	objCh := cli.ListObjects(ctx, bucket, s3.ListObjectsOptions{Prefix: prefix + "/", Recursive: true})
 	toDelete := make(chan s3.ObjectInfo)
-	go func() {
+	// Contained: this feeder runs per deploy over object metadata from the store,
+	// and an unrecovered panic on a spawned goroutine takes the whole binary down
+	// rather than failing this purge. close(toDelete) is deferred INSIDE the work,
+	// so a panic still closes the channel and RemoveObjects below drains and
+	// returns instead of blocking forever on a producer that is never coming back.
+	cloud.Go(nil, "projects.purgePrefix", []any{"bucket", bucket, "prefix", prefix}, func() {
 		defer close(toDelete)
 		for obj := range objCh {
 			if obj.Err != nil {
@@ -320,7 +326,7 @@ func purgePrefix(ctx context.Context, cli *s3.Client, bucket, prefix string) err
 			}
 			toDelete <- obj
 		}
-	}()
+	})
 	for rmErr := range cli.RemoveObjects(ctx, bucket, toDelete, s3.RemoveObjectsOptions{}) {
 		if rmErr.Err != nil {
 			return rmErr.Err
