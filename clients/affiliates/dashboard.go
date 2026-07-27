@@ -137,7 +137,7 @@ func myEarnings(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	return c.JSON(http.StatusOK, map[string]any{
 		"isAffiliate":   true,
-		"marginBps":     s.State.marginBps,
+		"marginBps":     affiliateMarginBps(),
 		"accruedCents":  a.AccruedCents,
 		"pendingCents":  a.PendingCents(),
 		"paidCents":     a.PaidCents,
