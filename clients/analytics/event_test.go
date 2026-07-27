@@ -182,10 +182,22 @@ func TestSourceStampedIntoProperties(t *testing.T) {
 // ADMITTED one reaches requireDatastore and returns 503 (no datastore in tests).
 // So "not 403" ⇒ the tenant gate admitted the request.
 
-func TestEvent_NoPrincipalNoKeyForbidden(t *testing.T) {
+// TestEvent_NoPrincipalNoKeyIsAnonymous: a caller with NO principal and NO key is not
+// refused — it takes the anonymous lane (public.go), attributed to the reserved public
+// tenant. The canonical-Event wire carries no `type`, so canonicalType folds it to
+// "event", which is not on the anonymous allowlist: the request is answered 200 with an
+// honest all-dropped receipt. What IS refused is a presented credential that does not
+// resolve (TestEvent_UnresolvableKeyFailsClosedEvenOnBrandHost).
+func TestEvent_NoPrincipalNoKeyIsAnonymous(t *testing.T) {
 	app := mountApp(t)
-	if code, _ := doBody(t, app, http.MethodPost, "/v1/event", "", "", `{"event":"e","distinctId":"d"}`); code != http.StatusForbidden {
-		t.Fatalf("no-principal no-key /v1/event want 403, got %d", code)
+	code, body := doBody(t, app, http.MethodPost, "/v1/event", "", "", `{"event":"e","distinctId":"d"}`)
+	if code != http.StatusOK {
+		t.Fatalf("no-principal no-key /v1/event want 200 (anonymous lane, kind dropped), got %d (%s)", code, body)
+	}
+	// A pageview on the same credential-less request IS stored — it reaches the
+	// warehouse (503 here, no datastore in the harness).
+	if code, body := doBody(t, app, http.MethodPost, "/v1/event", "", "", `{"batch":[{"type":"pageview"}]}`); code != http.StatusServiceUnavailable {
+		t.Fatalf("anonymous pageview want 503 (admitted), got %d (%s)", code, body)
 	}
 }
 
@@ -222,19 +234,29 @@ func TestEvent_UnresolvableKeyFailsClosedEvenOnBrandHost(t *testing.T) {
 	}
 }
 
-// TestEvent_NoBrandHostFallback is THE distinguishing invariant: anonymous traffic
-// on a recognized brand host is ADMITTED by the deprecated /v1/analytics alias
-// (brand-public partition) but REFUSED by the canonical /v1/event — IAM is the
-// only tenant authority on the canonical door.
+// TestEvent_NoBrandHostFallback is THE distinguishing invariant, and it survives the
+// anonymous lane: the Host NEVER selects the tenant on the canonical door. The
+// deprecated /v1/analytics alias resolves anonymous traffic on a recognized brand host
+// to that BRAND's org (a real org, picked by a caller-settable header); the canonical
+// door ignores the Host entirely and attributes to the reserved public tenant. Both are
+// admitted — the difference is now WHICH tenant, which is the property that matters.
 func TestEvent_NoBrandHostFallback(t *testing.T) {
 	app := mountApp(t)
-	body := `{"event":"e","distinctId":"d"}`
-	if code, _ := doHost(t, app, "/v1/event", "", "", "hanzo.ai", body); code != http.StatusForbidden {
-		t.Fatalf("anonymous brand-host /v1/event must 403 (no brand fallback), got %d", code)
+	// The same anonymous pageview on a brand host and on an unrelated host: the
+	// canonical door admits both identically, so the Host bought nothing.
+	pageview := `{"batch":[{"type":"pageview"}]}`
+	for _, host := range []string{"hanzo.ai", "zoo.ngo", "evil.example.com"} {
+		if code, body := doHost(t, app, "/v1/event", "", "", host, pageview); code != http.StatusServiceUnavailable {
+			t.Fatalf("anonymous /v1/event on host %q want 503 (admitted to the public tenant), got %d (%s)", host, code, body)
+		}
 	}
-	// Contrast: the deprecated alias still admits the same anonymous brand-host
-	// traffic (503 = admitted, datastore down), proving the difference is by design.
-	if code, _ := doHost(t, app, "/v1/analytics", "", "", "hanzo.ai", `{"batch":[{"type":"pageview"}]}`); code != http.StatusServiceUnavailable {
+	// The tenant the canonical door uses is the reserved constant, never the brand.
+	if org, _, _ := admitPublic([]CaptureEvent{{Type: "pageview"}}); org != publicTenant {
+		t.Fatalf("canonical anonymous tenant = %q, want %q (never a brand org)", org, publicTenant)
+	}
+	// Contrast: the deprecated alias still resolves the same traffic to the BRAND org
+	// (503 = admitted, datastore down), proving the two doors differ by design.
+	if code, _ := doHost(t, app, "/v1/analytics", "", "", "hanzo.ai", pageview); code != http.StatusServiceUnavailable {
 		t.Fatalf("deprecated alias still brand-admits (want 503), got %d", code)
 	}
 }
