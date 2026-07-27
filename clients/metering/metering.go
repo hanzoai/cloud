@@ -203,20 +203,28 @@ func (c *Client) Enabled() bool { return c != nil && c.baseURL != "" }
 
 // AuthInput identifies who to authorize.
 //
-// User is the PREPAID BILLING KEY — the org slug (e.g. "hanzo"), NOT
-// "org/sub". Prepaid balance is per-org: one credit covers the whole org,
-// exactly as the proven LLM gate does (ai/routers/filter_balance.go
-// resolveBillingKey returns user.Owner — the org slug — and queries
-// GET /v1/billing/balance?user=<org>). Keying per-user instead would check an
-// empty per-user ledger and deny a funded org. IdentityFromGatewayHeaders sets
-// this correctly from the gateway's X-Org-Id.
+// (Org, User) IS THE MONEY'S ADDRESS: Org names the LEDGER that holds the balance,
+// User the ACCOUNT within it. Both halves are resolved by the ONE rule —
+// principal.WalletOf, which is hanzoai/account.Payer — and a caller passes what it
+// resolved, never a re-derivation of its own.
 //
-// Actor is the full "org/sub" identity (e.g. "hanzo/alice") recorded on the
-// usage transaction for the audit trail. It never affects which balance is
-// gated or debited — that is always the org (User).
+// User is therefore the payer's SUBJECT, not "the org slug". For a pooled tenant
+// the two coincide, because Payer answers the org itself and finance reads the org
+// pool from a bare slug — which is why "User is always the org" held for years and
+// why it was wrong: in the shared signup org, whose members are strangers to each
+// other, Payer answers "<org>/<name>" and the pool is a balance that member neither
+// owns nor can spend. A gate keyed on the org there checks a pool while the debit
+// spends a person, and clients/principal/wallet.go catalogues what that costs.
 //
-// Org overrides the client default org (the X-Org-Id namespace) for this
-// call; it normally equals User. Currency defaults to "usd".
+// A caller that legitimately holds only an org — a resource meter billing an org's
+// build minutes, say — passes the org and gets the pool; that is the same rule,
+// answered for an org credential, not an exception to it.
+//
+// Actor is the full "org/sub" identity (e.g. "hanzo/alice") recorded on the usage
+// transaction for the audit trail. It is ATTRIBUTION ONLY: for a machine key the
+// payer is the org while the actor is the key, so the two axes are never each other.
+//
+// Currency defaults to "usd".
 type AuthInput struct {
 	User     string
 	Actor    string
@@ -232,7 +240,7 @@ type AuthInput struct {
 	// Project and Service scope the per-scope spend cap + rate limit (issue #70).
 	// Service is server-derived (route/provider). Empty = the org-wide default
 	// scope. Forwarded to commerce so the right scope cap is resolved; they never
-	// change which BALANCE is gated (always the org via User).
+	// change which BALANCE is gated — that is the address (Org, User), always.
 	Project string
 	Service string
 
@@ -544,7 +552,7 @@ func (c *Client) Tier(ctx context.Context, subject, org string) (string, error) 
 // that build a Usage without a money.Amount; from them Record reconstructs the
 // same money.Amount. Amount, when non-zero, always wins.
 type Usage struct {
-	User     string `json:"user"`            // per-org billing key (org slug) — the debit destination.
+	User     string `json:"user"`            // the ACCOUNT half of the debit's address (see AuthInput.User) — a pooled org's slug, or the payer subject the gate authorized.
 	Actor    string `json:"actor,omitempty"` // org/sub identity for the audit trail (commerce ignores unknown fields today; forward-compatible).
 	Org      string `json:"-"`               // routed via X-Org-Id, not the body.
 	Currency string `json:"currency,omitempty"`

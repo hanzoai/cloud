@@ -44,10 +44,12 @@ import (
 // exact served cost after. zen's Meter/Gate are wired here; ai's edge gate stays
 // 0 for these paths.
 //
-// Billing granularity is org / project / user, mirroring the edge gate's
+// Billing granularity is wallet / project / user, mirroring the edge gate's
 // identityFromCtx exactly:
-//   - the HOME org (principal.BillingOrg) is the balance key — who PAYS. An admin
-//     acting in another org bills the admin's home org, never the org acted on.
+//   - the WALLET (principal.WalletOf) is the balance key — who PAYS. Its Ledger is
+//     the home org, so an admin acting in another org bills the admin's own books,
+//     never the org acted on; its Account is the wallet within them, resolved by
+//     the ONE rule (account.Payer). A request with no resolvable wallet is refused.
 //   - the project (principal.ValidatedProject) scopes spend caps; a project may
 //     carry its own billing account, resolved server-side by commerce from the
 //     org's project binding (the X-Billing-Account-Id header only attributes,
@@ -72,30 +74,48 @@ func mountZen(a cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// cloudTenantResolver is the multi-tenant billing-identity resolver: it keys
-// the balance on the validated HOME org (who pays), resolves the project scope
-// from a validated claim, and attributes the user. It mirrors the edge gate's
-// identityFromCtx so a zen* debit lands on the SAME ledger axes the edge gate
-// would have used — home-org balance, project+service scope, user actor — and a
-// masquerading admin bills their own home org, never the org acted on. A request
-// with no validated principal resolves to an empty Tenant, which zen's Valid()
-// gate refuses (no free, anonymous usage).
+// cloudTenantResolver is the multi-tenant billing-identity resolver: it resolves
+// the money's ADDRESS once (principal.WalletOf), scopes the project from a
+// validated claim, and attributes the user. It mirrors the edge gate's
+// identityFromCtx by calling the SAME resolver, not by keeping a second copy in
+// step — so a zen* request gates and debits the very wallet the edge gate, the ai
+// gate, the ai debit and GET /v1/billing/balance address.
+//
+// THE ADDRESS IS TWO HALVES AND BOTH TRAVEL. It used to send only the ledger
+// (BillingOrg) and let the gate read the org POOL, on the premise that prepaid
+// balance is per-org. That premise is false for a member of the shared signup org,
+// where members are strangers to each other and each holds their own account:
+// zen then gated a pool a member cannot spend from while the ai path debited the
+// member's own wallet — the third recurrence of one bug, catalogued in
+// clients/principal/wallet.go. A brand-new $0 signup read the signup org's funded
+// pool and served for free; a member who had bought credit was refused because the
+// purchase had landed in that same pool.
+//
+// A request with no resolvable wallet returns the ZERO Tenant, which zen's Valid()
+// gate refuses with its 402 (no free, anonymous usage) — the ok-bit is the answer
+// and it propagates; there is no substitute payer.
 func cloudTenantResolver(c *zip.Ctx) zen.Tenant {
-	home, _ := principal.BillingOrg(c)
+	w, ok := principal.WalletOf(c)
+	if !ok {
+		return zen.Tenant{}
+	}
 	project, _ := principal.ValidatedProject(c)
 	return zen.Tenant{
 		Org:        c.Org(),
 		User:       c.User(),
-		BillingOrg: home,
+		BillingOrg: w.Ledger,
+		Wallet:     w.Account,
 		Project:    project,
 	}
 }
 
 // commerceGate is zen's pre-serve authorization backed by cloud commerce. It
-// asks the metering client whether the home org can cover the request's
-// estimated cost (priced at the tier that WILL serve, so an overflow is gated
-// against its real cost). The balance key is the home org (User); the project
-// scopes the spend cap. The estimate is exact 18-dp atto-USD from zen, folded to
+// asks the metering client whether the request's WALLET can cover its estimated
+// cost (priced at the tier that WILL serve, so an overflow is gated against its
+// real cost). The balance key is the wallet (Tenant.Payer — the account within
+// the ledger BillingOrg names), the same address the debit below spends from and
+// the same one the ai path and the balance view read; the project scopes the
+// spend cap. The estimate is exact 18-dp atto-USD from zen, folded to
 // whole cents for the balance check (a sub-cent estimate gates as "any positive
 // balance", the same contract as the edge gate's AmountCents). An unconfigured
 // metering client (nil) admits everything — zen's own tenant gate still refuses
@@ -106,7 +126,7 @@ func commerceGate(m *metering.Client) zen.Gate {
 		return nil
 	}
 	return func(ctx context.Context, t zen.Tenant, model string, est hmoney.Amount) error {
-		if t.BillingOrg == "" {
+		if t.BillingOrg == "" || t.Payer() == "" {
 			return fmt.Errorf("a billable tenant is required (no anonymous usage)")
 		}
 		// zen's estimate is an exact 18-dp USD value. Fold it to whole cents for
@@ -121,8 +141,9 @@ func commerceGate(m *metering.Client) zen.Gate {
 		// request of ANY size against any positive balance.
 		cents := credit(est).Cents()
 		v, err := m.AuthorizeVerdict(ctx, metering.AuthInput{
-			User:        t.BillingOrg,
+			User:        t.Payer(), // the ACCOUNT within the ledger — never the bare org
 			Org:         t.BillingOrg,
+			Actor:       t.User,
 			AmountCents: cents,
 			Project:     t.Project,
 			Service:     zenService,
@@ -142,7 +163,7 @@ func commerceGate(m *metering.Client) zen.Gate {
 }
 
 // commerceMeter is zen's post-serve usage recorder backed by cloud commerce.
-// It debits the home org for the EXACT served cost as a typed money.Amount
+// It debits the gated WALLET for the EXACT served cost as a typed money.Amount
 // (native 18-dp USD — the same precision the co-resident finance ledger holds),
 // so an exact per-token cost is never floored to cents or micros. Attributed to
 // the requested zen SKU with real token counts. The debit is detached (background
@@ -160,7 +181,7 @@ func commerceMeter(m *metering.Client) zen.Meter {
 type commerceMeterImpl struct{ m *metering.Client }
 
 func (g commerceMeterImpl) Record(ctx context.Context, u zen.Usage) {
-	if u.Tenant.BillingOrg == "" {
+	if u.Tenant.BillingOrg == "" || u.Tenant.Payer() == "" {
 		return // never debit an unattributable request
 	}
 	// Beside the commerce debit, land the SAME warehouse row + gen_ai span every
@@ -211,8 +232,14 @@ func (g commerceMeterImpl) Record(ctx context.Context, u zen.Usage) {
 }
 
 // meterUsage projects a served zen.Usage onto the commerce debit. It is the ONE
-// place the debit's amount is chosen, and it is pure — no ledger, no warehouse —
-// so the money property is a unit test rather than an integration.
+// place the debit's amount AND its address are chosen, and it is pure — no ledger,
+// no warehouse — so the money property is a unit test rather than an integration.
+//
+// The address is Tenant.Payer, the very expression commerceGate authorized against:
+// the gate and the debit read one value, so they cannot come to mean two wallets.
+// Actor stays Tenant.User — for a machine key the payer is the org while the actor
+// is the key, so an address read off the actor bills the wrong account and an actor
+// read off the address loses the audit trail. They are different axes; both travel.
 //
 // The amount is the RETAIL Charge: what the caller pays. Cost is the upstream
 // COGS we pay to serve the call; it is never the debit. It rides only the
@@ -223,7 +250,7 @@ func (g commerceMeterImpl) Record(ctx context.Context, u zen.Usage) {
 // customer price (usageBilledCents), never its CostIn/CostOut COGS.
 func meterUsage(u zen.Usage) metering.Usage {
 	return metering.Usage{
-		User:             u.Tenant.BillingOrg,
+		User:             u.Tenant.Payer(), // the ACCOUNT the gate authorized
 		Org:              u.Tenant.BillingOrg,
 		Actor:            u.Tenant.User,
 		Model:            u.Model,
