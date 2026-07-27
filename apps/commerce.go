@@ -25,11 +25,11 @@ import (
 
 	"github.com/hanzoai/cloud"
 	accountclient "github.com/hanzoai/cloud/clients/account"
-	"github.com/hanzoai/cloud/clients/commerceclient"
-	"github.com/hanzoai/cloud/clients/commerceinproc"
+	"github.com/hanzoai/cloud/clients/commerce"
+	"github.com/hanzoai/cloud/clients/commerce/transport"
 	financeclient "github.com/hanzoai/cloud/clients/finance"
 	"github.com/hanzoai/cloud/clients/principal"
-	"github.com/hanzoai/commerce"
+	commercemod "github.com/hanzoai/commerce"
 	commercebilling "github.com/hanzoai/commerce/api/billing"
 	catalogapi "github.com/hanzoai/commerce/api/catalog"
 	planapi "github.com/hanzoai/commerce/api/plan"
@@ -45,10 +45,10 @@ import (
 func init() {
 	// In-process CommerceClient factory — pickCommerceClient calls it when the
 	// commerce subsystem is enabled. Registered HERE (not called directly from
-	// package cloud) because commerceclient's entitlement client imports
+	// package cloud) because the commerce client's entitlement client imports
 	// clients/plan, which imports cloud: the hook keeps the package graph acyclic.
 	cloud.RegisterCommerceClientFactory(func(cfg *cloud.Config, _ log.Logger) cloud.CommerceClient {
-		return commerceclient.InProcessClient(cfg.Brand)
+		return commerce.InProcessClient(cfg.Brand)
 	})
 }
 
@@ -131,7 +131,7 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 		dataDir = filepath.Join(deps.DataDir, "commerce")
 	}
 
-	embedded, err := commerce.Embed(context.Background(), commerce.EmbedConfig{
+	embedded, err := commercemod.Embed(context.Background(), commercemod.EmbedConfig{
 		DataDir: dataDir,
 		// RequireIdentity stays gateway-owned: the gateway in front of the cloud
 		// binary is the trust boundary per HIP-0026.
@@ -141,7 +141,7 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 		App: app,
 		// ONE LEDGER: commerce's POST /v1/billing/credit mints into cloud's native
 		// finance ledger (the SAME per-org account the AI spend-gate reads), so a
-		// granted credit is immediately spendable. commerce.Embed calls
+		// granted credit is immediately spendable. commercemod.Embed calls
 		// creditledger.Set(this) before routes register; nil would leave commerce on
 		// its own datastore (standalone), but in this unified binary finance is
 		// co-resident, so we inject the finance-backed ledger adapter.
@@ -256,8 +256,8 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 	// the console billingRead block above: without a co-resident handler this authorize
 	// fell through to the account bridge's /v1/billing/* wildcard (order 122), which — being
 	// service-token-forwardable (billing.go billingForwardable) — re-forwarded it to
-	// COMMERCE_URL (the public api.hanzo.ai edge = THIS binary) over commerceinproc's
-	// self-routing transport, re-entering the same wildcard until the depth-8 guard refused
+	// COMMERCE_URL (the public api.hanzo.ai edge = THIS binary) over the commerce transport's
+	// self-routing dispatch, re-entering the same wildcard until the depth-8 guard refused
 	// → 502 → the gate fails OPEN (the cap is a policy overlay, so no traffic was blocked,
 	// but ~135 502s/30m spammed the money path and each burned 8 full-app dispatches). The
 	// plain GET /v1/billing/spend-alerts (registered above) already broke this loop for the
@@ -322,9 +322,9 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 	// this registration the POST fell through to the account bridge's /v1/billing/*
 	// wildcard (order 122). That wildcard is service-token-forwardable for topup/token
 	// (billing.go billingForwardable), so billingData re-forwarded it to COMMERCE_URL
-	// (default the public api.hanzo.ai edge = THIS binary) over commerceinproc's
-	// self-routing transport, re-entering the SAME wildcard until the depth-8 guard
-	// refused → the "commerceinproc: in-process dispatch depth 8 exceeded" 502 that broke
+	// (default the public api.hanzo.ai edge = THIS binary) over the commerce transport's
+	// self-routing dispatch, re-entering the SAME wildcard until the depth-8 guard
+	// refused → the "commerce transport: in-process dispatch depth 8 exceeded" 502 that broke
 	// top-up outright. Registering commerce's real TopupWithToken co-resident here
 	// (order 100 < 122) shadows the wildcard and serves the charge in-process at depth 1
 	// — no HTTP hop, no self-dispatch. topup/token STAYS in billingForwardable as the
@@ -357,7 +357,7 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 	// The remaining console billing WRITES that share topup/token's self-dispatch loop
 	// class — each is a POST the console makes (billingForwardable in billing.go), each had
 	// NO co-resident handler, so each fell through to the account bridge's /v1/billing/*
-	// wildcard (order 122) and re-entered it over commerceinproc until the depth-8 guard
+	// wildcard (order 122) and re-entered it over the commerce transport until the depth-8 guard
 	// refused (the same "in-process dispatch depth 8 exceeded" 502 that broke top-up). Each
 	// commerce handler exists in the vendored module (v1.49.13); registering them co-resident
 	// (order 100 < 122) shadows the wildcard and serves the write in-process at depth 1. They
@@ -408,12 +408,12 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 	)
 
 	// In-process seams:
-	//   - commerceinproc routes the S2S billing byte-stream into the co-resident
+	//   - the commerce transport routes the S2S billing byte-stream into the co-resident
 	//     app (the metering debit path) instead of a socket to a standalone pod.
-	//   - commerceclient reads the Embedded's datastore DIRECTLY (entitlements +
+	//   - the commerce client reads the Embedded's datastore DIRECTLY (entitlements +
 	//     BalanceCents) — no HTTP shape at all.
-	commerceinproc.SetApp(app)
-	commerceclient.PublishEmbedded(embedded)
+	transport.SetApp(app)
+	commerce.PublishEmbedded(embedded)
 
 	// Usage-cap enforcement on the FINANCE path. The unified binary records usage in
 	// the finance ledger (fin.RecordUsage), NOT commerce's transaction store — which

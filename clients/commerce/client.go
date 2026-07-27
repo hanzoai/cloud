@@ -15,7 +15,7 @@
 // the specified secure default, so an unverifiable product is never enabled. A
 // clean "resolved, but no plan licenses this product" is a real Active:false answer
 // (the gate turns it into a 402 upgrade prompt), never an error and never a grant.
-package commerceclient
+package commerce
 
 import (
 	"context"
@@ -48,7 +48,7 @@ type inProcessClient struct {
 }
 
 // published is the process-global Embedded the lazy InProcessClient resolves. Mount
-// sets it once (mirrors commerceinproc.SetHandler for the http seam) so the client
+// sets it once (mirrors transport.SetHandler for the http seam) so the client
 // cloud builds in BuildDeps — BEFORE MountAll — still routes to the live datastore.
 var published atomic.Pointer[commercemod.Embedded]
 

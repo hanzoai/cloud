@@ -32,7 +32,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/clients/commerceinproc"
+	"github.com/hanzoai/cloud/clients/commerce/transport"
 )
 
 // Commerce is the narrow money seam an attributed-credit program needs: read a
@@ -60,12 +60,12 @@ type Client struct {
 }
 
 // NewClient builds the production binding. base is the commerce HTTP URL (via
-// commerceinproc.BaseURL at the call site); token is COMMERCE_SERVICE_TOKEN.
+// transport.BaseURL at the call site); token is COMMERCE_SERVICE_TOKEN.
 func NewClient(base, token string) *Client {
 	return &Client{
 		base:  strings.TrimRight(strings.TrimSpace(base), "/"),
 		token: strings.TrimSpace(token),
-		http:  commerceinproc.Client(15 * time.Second),
+		http:  transport.Client(15 * time.Second),
 	}
 }
 

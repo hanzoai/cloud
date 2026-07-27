@@ -48,7 +48,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/commerceinproc"
+	"github.com/hanzoai/cloud/clients/commerce/transport"
 	"github.com/zap-proto/zip"
 )
 
@@ -61,10 +61,10 @@ var httpClient = &http.Client{Timeout: 15 * time.Second}
 // commerceHTTP is the client for the commerce S2S seam ONLY (commerceDo). Separate
 // from httpClient (which also dials EVM JSON-RPC) so that — when commerce is folded
 // in-process (task #111) — commerce calls dispatch to the in-process handler via
-// commerceinproc's self-routing transport (no socket to the standalone), while the
+// the commerce transport's self-routing dispatch (no socket to the standalone), while the
 // HUSD chain RPC keeps going over the real network. Off the co-resident path it is a
 // plain HTTP client, exactly like before.
-var commerceHTTP = commerceinproc.Client(15 * time.Second)
+var commerceHTTP = transport.Client(15 * time.Second)
 
 // transferTopic is keccak256("Transfer(address,address,uint256)") — the ERC-20
 // Transfer event signature, topics[0] of every transfer log. A universally-fixed

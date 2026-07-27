@@ -1,12 +1,12 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package commerceclient_test
+package commerce_test
 
 import (
 	"context"
 	"testing"
 
-	inproc "github.com/hanzoai/cloud/clients/commerceclient"
+	"github.com/hanzoai/cloud/clients/commerce"
 	"github.com/hanzoai/commerce/datastore"
 	"github.com/hanzoai/commerce/models/transaction"
 	"github.com/hanzoai/commerce/models/types/currency"
@@ -57,7 +57,7 @@ func TestBalanceCents(t *testing.T) {
 	seedDeposit(t, ctx, org, "z", 5000) // $50 into hanzo/z-style wallet
 
 	t.Run("deposit_read_back", func(t *testing.T) {
-		got, err := inproc.BalanceCents(ctx, org, "z", "usd", false)
+		got, err := commerce.BalanceCents(ctx, org, "z", "usd", false)
 		if err != nil {
 			t.Fatalf("BalanceCents: %v", err)
 		}
@@ -67,7 +67,7 @@ func TestBalanceCents(t *testing.T) {
 	})
 
 	t.Run("subject_lowercased_and_trimmed", func(t *testing.T) {
-		got, err := inproc.BalanceCents(ctx, org, "  Z  ", "usd", false)
+		got, err := commerce.BalanceCents(ctx, org, "  Z  ", "usd", false)
 		if err != nil {
 			t.Fatalf("BalanceCents: %v", err)
 		}
@@ -77,7 +77,7 @@ func TestBalanceCents(t *testing.T) {
 	})
 
 	t.Run("empty_currency_defaults_usd", func(t *testing.T) {
-		got, err := inproc.BalanceCents(ctx, org, "z", "", false)
+		got, err := commerce.BalanceCents(ctx, org, "z", "", false)
 		if err != nil {
 			t.Fatalf("BalanceCents: %v", err)
 		}
@@ -89,7 +89,7 @@ func TestBalanceCents(t *testing.T) {
 	t.Run("holds_clamp_available_at_zero", func(t *testing.T) {
 		seedDeposit(t, ctx, org, "poor", 3000)
 		seedHold(t, ctx, org, "poor", 5000) // hold exceeds balance → available would be -2000
-		got, err := inproc.BalanceCents(ctx, org, "poor", "usd", false)
+		got, err := commerce.BalanceCents(ctx, org, "poor", "usd", false)
 		if err != nil {
 			t.Fatalf("BalanceCents: %v", err)
 		}
@@ -99,7 +99,7 @@ func TestBalanceCents(t *testing.T) {
 	})
 
 	t.Run("no_transactions_is_honest_zero", func(t *testing.T) {
-		got, err := inproc.BalanceCents(ctx, org, "ghost", "usd", false)
+		got, err := commerce.BalanceCents(ctx, org, "ghost", "usd", false)
 		if err != nil {
 			t.Fatalf("BalanceCents: %v", err)
 		}
@@ -116,19 +116,19 @@ func TestBalanceCents_FailClosed(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("empty_args_error", func(t *testing.T) {
-		if _, err := inproc.BalanceCents(ctx, "", "z", "usd", false); err == nil {
+		if _, err := commerce.BalanceCents(ctx, "", "z", "usd", false); err == nil {
 			t.Error("empty org must error")
 		}
-		if _, err := inproc.BalanceCents(ctx, "acme", "  ", "usd", false); err == nil {
+		if _, err := commerce.BalanceCents(ctx, "acme", "  ", "usd", false); err == nil {
 			t.Error("empty subject must error")
 		}
 	})
 
 	t.Run("not_co_resident_errors_not_zero", func(t *testing.T) {
-		inproc.PublishEmbedded(nil)
-		t.Cleanup(func() { inproc.PublishEmbedded(nil) })
+		commerce.PublishEmbedded(nil)
+		t.Cleanup(func() { commerce.PublishEmbedded(nil) })
 
-		got, err := inproc.BalanceCents(ctx, "acme", "z", "usd", false)
+		got, err := commerce.BalanceCents(ctx, "acme", "z", "usd", false)
 		if err == nil {
 			t.Fatal("BalanceCents must error when commerce is not co-resident (never a phantom 0)")
 		}
