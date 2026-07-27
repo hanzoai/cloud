@@ -39,7 +39,18 @@ func TestIAMEmbedBehindMiddlewareChain(t *testing.T) {
 	// nil validator = the unauthenticated case: no JWKS, no principal established,
 	// but forgeable X-User-*/X-Org-* headers are still stripped (defense in depth).
 	app.Use(SanitizeIdentity(nil, "admin"))
-	app.Use(BillingGate(m, DefaultPrice))
+	// DefaultPrice governs the IAM paths under test — that is the exemption being
+	// asserted — but it prices NOTHING today (every subsystem self-meters in-handler,
+	// and unpriced paths default to 0), so it cannot supply the control. The control
+	// path carries its own price so the gate is proven LIVE; without that, the IAM
+	// 2xx results below are equally explained by a gate that never denies anything.
+	price := func(c *zip.Ctx) int64 {
+		if c.Path() == controlPricedPath {
+			return 1
+		}
+		return DefaultPrice(c)
+	}
+	app.Use(BillingGate(m, price))
 
 	var sawForgedAdmin atomic.Bool
 	stub := zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -52,9 +63,10 @@ func TestIAMEmbedBehindMiddlewareChain(t *testing.T) {
 	for _, p := range []string{"/v1/iam", "/.well-known", "/login/oauth"} {
 		app.All(p+"/*", stub)
 	}
-	// Priced control path (/v1/agent/* → DefaultPrice=1). With a zero balance the
-	// gate MUST deny it, proving the gate is live.
-	app.Post("/v1/agent/run", func(c *zip.Ctx) error {
+	// Priced control path. With a zero balance the gate MUST deny it, proving the
+	// gate is live. It is deliberately NOT an IAM path and not a real route: it
+	// exists only to make "the gate denies when it should" observable.
+	app.Post(controlPricedPath, func(c *zip.Ctx) error {
 		return c.JSON(http.StatusOK, map[string]bool{"ok": true})
 	})
 
@@ -90,16 +102,21 @@ func TestIAMEmbedBehindMiddlewareChain(t *testing.T) {
 
 	// Control: the gate must deny the priced path at zero balance. If this passes,
 	// the gate is not engaged and the IAM 2xx results above prove nothing.
-	req := httptest.NewRequest(http.MethodPost, "/v1/agent/run", nil)
+	req := httptest.NewRequest(http.MethodPost, controlPricedPath, nil)
 	resp, err := app.Fiber().Test(req)
 	if err != nil {
-		t.Fatalf("control /v1/agent/run: %v", err)
+		t.Fatalf("control %s: %v", controlPricedPath, err)
 	}
 	_ = resp.Body.Close()
 	if resp.StatusCode == http.StatusOK {
-		t.Errorf("priced /v1/agent/run returned 200 at zero balance — billing gate not engaged; the IAM 2xx assertions do not prove the exemption")
+		t.Errorf("priced %s returned 200 at zero balance — billing gate not engaged; the IAM 2xx assertions do not prove the exemption", controlPricedPath)
 	}
 }
+
+// controlPricedPath is the synthetic priced route the gate-liveness control uses.
+// It is not a product route: DefaultPrice charges nothing anywhere, so a control
+// drawn from the real table cannot distinguish a live gate from a dead one.
+const controlPricedPath = "/v1/probe/priced"
 
 // TestDefaultPriceExemptsIAM pins the price-0 (ungated, unbilled) exemption for
 // every IAM-owned prefix, so a future DefaultPrice edit that starts billing an
