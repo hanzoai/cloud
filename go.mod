@@ -39,7 +39,7 @@ require (
 	github.com/nats-io/nats.go v1.50.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor v0.144.0
 	github.com/spf13/cobra v1.10.2
-	github.com/vulcand/oxy/v2 v2.0.0-00010101000000-000000000000
+	github.com/vulcand/oxy/v2 v2.2.0
 	github.com/zap-proto/fiber/v3 v3.2.1
 	github.com/zap-proto/go v1.3.0
 	github.com/zap-proto/md v0.1.0
@@ -758,8 +758,6 @@ replace github.com/uber/jaeger-client-go => github.com/uber/jaeger-client-go v2.
 replace github.com/abbot/go-http-auth => github.com/containous/go-http-auth v0.4.1-0.20200324110947-a37a7636d23e
 
 replace github.com/mailgun/minheap => github.com/containous/minheap v0.0.0-20190809180810-6e71eb837595
-
-replace github.com/vulcand/oxy/v2 => github.com/traefik/oxy/v2 v2.0.0-20260126093803-fb11d60e0fdf
 
 // SQLite: github.com/hanzoai/sqlite is the only engine cloud links. It registers
 // the "sqlite" driver under both build tags — cgo through hanzoai/csqlite against
