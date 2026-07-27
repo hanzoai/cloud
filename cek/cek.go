@@ -191,6 +191,34 @@ func Encrypting() bool {
 	return err == nil && len(k) == 32
 }
 
+// inMemory reports whether path names an in-memory database rather than a file.
+// SQLite spells that ":memory:", or any file: URI carrying mode=memory (including
+// the shared-cache form, where several handles address ONE in-memory database by
+// name). None of them produce a file, so none of them are cek's business.
+func inMemory(path string) bool {
+	p := strings.TrimSpace(path)
+	if p == ":memory:" {
+		return true
+	}
+	if !strings.HasPrefix(p, "file:") {
+		return false
+	}
+	if strings.HasPrefix(p, "file::memory:") {
+		return true
+	}
+	// mode=memory as a query parameter, e.g. file:name?mode=memory&cache=shared.
+	q := p
+	if i := strings.IndexByte(p, '?'); i >= 0 {
+		q = p[i+1:]
+	}
+	for _, kv := range strings.Split(q, "&") {
+		if strings.TrimSpace(kv) == "mode=memory" {
+			return true
+		}
+	}
+	return false
+}
+
 // Exists reports whether a store lives at path — the question "has this org/
 // subsystem been created yet?", asked by every caller that discovers stores by
 // walking the data directory.
@@ -217,6 +245,21 @@ func Exists(path string) bool {
 // a master key is configured. It is the single drop-in replacement for
 // sql.Open("sqlite", path) across every cloud store.
 func Open(path string) (*sql.DB, error) {
+	// An in-memory database never reaches disk, so there is nothing at rest to
+	// encrypt and no master key to require. Treating the spelling as a filename
+	// instead creates a FILE literally named ":memory:" — silently making an
+	// ephemeral store durable, and making every opener of ":memory:" in a given
+	// working directory share one store.
+	if inMemory(path) {
+		// Opened on the registered driver with the DSN exactly as given: an
+		// in-memory DSN is already a complete DSN, and the keyed builder would wrap
+		// it as a filename (file::memory: becomes a file named "file::memory:").
+		db, err := sql.Open("sqlite", path)
+		if err != nil {
+			return nil, fmt.Errorf("cek: open in-memory %q: %w", path, err)
+		}
+		return db, nil
+	}
 	master, err := resolveMaster()
 	if err != nil {
 		return nil, err
