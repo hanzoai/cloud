@@ -107,6 +107,10 @@ var platformAdminRoutes = []adminRoute{
 	{"GET", "/v1/admin/flags"},
 	{"GET", "/v1/admin/waitlist"},
 	{"POST", "/v1/admin/waitlist/boost"},
+	{"GET", "/v1/admin/infra"},
+	{"POST", "/v1/admin/infra/volumes/v1/snapshot"},
+	{"DELETE", "/v1/admin/infra/volumes/v1"},
+	{"POST", "/v1/admin/infra/nodes/1/cordon"},
 }
 
 // adminRoutes is the full surface (both tiers) — the fail-closed gate test denies an
