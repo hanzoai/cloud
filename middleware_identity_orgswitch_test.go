@@ -79,6 +79,11 @@ func walletProbe(t *testing.T, claims idClaims, selected string) (billOrg, billU
 func memberClaims(owner string, orgs ...string) idClaims {
 	c := tokenClaims("hanzo-cloud", owner, owner+"@example.test", false, time.Now().Add(time.Hour))
 	c.Name = "alice"
+	// Take FULL control of the membership set: tokenClaims seeds the ordinary
+	// app-org == user-org case, but this helper states the tenancy explicitly, and
+	// `memberClaims(owner)` with no orgs must keep meaning a pre-claim LEGACY token
+	// (the empty set), not a token that quietly inherited a home org.
+	c.Orgs = nil
 	for _, o := range orgs {
 		c.Orgs = append(c.Orgs, model.OrgRef{Org: o, Role: "member"})
 	}
@@ -140,14 +145,25 @@ func TestNonMemberSelectionIgnored(t *testing.T) {
 }
 
 // TestLegacyTokenCannotSwitch: a token minted before IAM shipped the `orgs` claim
-// carries an EMPTY membership set, so it can select nothing and stays pinned to
-// home. Same for an opaque key and a client_credentials machine, for which IAM never
-// mints the claim at all. The switch is strictly additive — no token gains reach.
+// carries an EMPTY membership set, so it can select nothing — AND, since the home
+// org is now read from that same set, it resolves no home either. It bills nothing.
+//
+// CONTRACT CHANGE, deliberate. This test previously asserted such a token "stays
+// pinned to home" and expected `hanzo` — but that value came from the `owner`
+// claim, which carries the minting APPLICATION's org, not the user's. Pinning to it
+// is the vulnerability, not the safe default: it is what let a caller choose their
+// tenant (and, when the app belonged to the admin org, their privilege) by choosing
+// a login route. So the fallback is gone and this token now resolves NOTHING.
+//
+// The test's original intent — "no token gains reach" — is strengthened rather than
+// weakened: it previously reached one org, and now reaches none. Denial is
+// recoverable by re-authenticating within a token TTL; silently billing whichever
+// tenant owned the app is not. See idClaims.homeOrg.
 func TestLegacyTokenCannotSwitch(t *testing.T) {
 	noClaim := memberClaims("hanzo") // no orgs at all
 	billOrg, _, dataOrg, ok := walletProbe(t, noClaim, "acme")
-	if !ok || billOrg != "hanzo" || dataOrg != "hanzo" {
-		t.Fatalf("legacy token switched: bill=%q data=%q ok=%v, want hanzo/hanzo/true", billOrg, dataOrg, ok)
+	if ok || billOrg != "" || dataOrg != "" {
+		t.Fatalf("legacy token resolved a tenant: bill=%q data=%q ok=%v, want empty/empty/false", billOrg, dataOrg, ok)
 	}
 }
 
