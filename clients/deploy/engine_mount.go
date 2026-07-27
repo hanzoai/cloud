@@ -72,7 +72,7 @@ func envOr(k, d string) string {
 
 // registerEngineRoutes adds the engine (write) routes alongside the existing
 // read/visualize routes. Called from routes() in deploy.go.
-func registerEngineRoutes(app *zip.App, s *cloud.Service[state]) {
+func registerEngineRoutes(app cloud.Router, s *cloud.Service[state]) {
 	app.Post("/v1/deploy/reconcile", guard(s, cloud.Handle(s, engineReconcile)))
 }
 

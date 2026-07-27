@@ -58,9 +58,9 @@ var mounted *cloud.Service[state]
 
 // Mount wires the company surface. It keeps a package global for Shutdown, so it
 // constructs the Service value directly (the "complex flavour").
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("company.Mount: nil zip.App")
+		return fmt.Errorf("company.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("company.Mount: nil deps.Logger")
@@ -102,7 +102,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Post("/v1/company", cloud.Handle(s, begin))
 	app.Get("/v1/company", cloud.Handle(s, get))
 	g := app.Group("/v1/company")

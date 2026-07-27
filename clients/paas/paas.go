@@ -215,7 +215,7 @@ type nsCache struct {
 // Mount wires the /v1/paas/* surface onto app. Every handler is behind the IAM
 // guard (SuperAdmin or OrgAdmin, org-confined), then reads/patches the operator
 // App CRs + their Deployments.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "paas", build, routes)
 }
 
@@ -237,7 +237,7 @@ func build(b cloud.Base) (state, error) {
 // routes registers the /v1/paas/* surface. Every mutating/observing route is behind
 // the IAM guard (SuperAdmin or org-confined OrgAdmin); the health probe is public
 // (real k8s reachability).
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/paas")
 	g.Get("/apps", guard(s, cloud.Handle(s, listApps)))
 	g.Get("/apps/:app", guard(s, cloud.Handle(s, getApp)))

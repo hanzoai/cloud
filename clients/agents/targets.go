@@ -533,7 +533,7 @@ func toTargetView(t Target, load TargetLoad) targetView {
 // mountTargets registers the target routes. Called from Mount BEFORE the
 // /v1/agents/:ref wildcard (Fiber matches in registration order) so "targets" is not
 // captured as a ref. The static /v1/agents/targets precedes /v1/agents/targets/:id.
-func mountTargets(s *cloud.Service[state], app *zip.App) {
+func mountTargets(s *cloud.Service[state], app cloud.Router) {
 	g := app.Group("/v1/agents")
 	g.Post("/targets", cloud.Handle(s, registerTarget))
 	g.Get("/targets", cloud.Handle(s, listTargets))

@@ -36,9 +36,9 @@ var mounted *cloud.Service[state]
 // Mount wires /v1/legal/* and opens the sealed store under {DataDir}/legal.db. The
 // e-sign and filing seams default to the honest stubs; a real provider is a
 // config-driven swap (the seams are provider-agnostic).
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("legal.Mount: nil zip.App")
+		return fmt.Errorf("legal.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("legal.Mount: nil deps.Logger")
@@ -63,7 +63,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/legal")
 	g.Get("/health", cloud.Handle(s, health))
 	g.Get("/templates", cloud.Handle(s, listTemplates))

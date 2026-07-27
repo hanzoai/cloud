@@ -195,7 +195,7 @@ type state struct {
 	wh     *warehouse
 }
 
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "research", build, routes)
 }
 
@@ -214,7 +214,7 @@ func build(b cloud.Base) (state, error) {
 // apps.go), so a graceful stop flushes and releases each org's SQLite file.
 func Shutdown() error { return shutdownStores() }
 
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	shutdownStores = s.State.stores.CloseAll
 	mountedStores = s.State.stores // the in-process evidence seam (compose.go)
 	g := app.Group("/v1/research")

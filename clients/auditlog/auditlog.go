@@ -48,9 +48,9 @@ type state struct {
 // SAME *audit.Recorder Serve builds and the AuditTrail middleware writes (handed
 // through deps.Audit, which is NOT in Base) — this subsystem opens NO second store.
 // Constructs the value directly (cloud.NewBase) since the store comes from Deps.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("auditlog.Mount: nil zip.App")
+		return fmt.Errorf("auditlog.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("auditlog.Mount: nil deps.Logger")
@@ -62,7 +62,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 // routes registers the org-scoped audit surface.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/audit", cloud.Handle(s, list))
 }
 

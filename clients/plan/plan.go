@@ -42,9 +42,9 @@ import (
 var host *goja.Host
 
 // Mount registers the /v1/plans/* surface on app per HIP-0106.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("plan.Mount: nil zip.App")
+		return fmt.Errorf("plan.Mount: nil app")
 	}
 	logger := deps.Logger
 	if logger == nil {

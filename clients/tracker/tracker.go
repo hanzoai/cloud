@@ -115,9 +115,9 @@ func storeFor(s *cloud.Service[state], c *zip.Ctx, org string) (*Store, error) {
 // Mount wires the tracker surface onto app per HIP-0106. Complex flavour: it
 // holds a package-global (mounted) so Shutdown can close every per-tenant store,
 // so it constructs the Service value directly rather than via cloud.Mount.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("tracker.Mount: nil zip.App")
+		return fmt.Errorf("tracker.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("tracker.Mount: nil deps.Logger")
@@ -141,7 +141,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // routes registers the tracker surface. Literal routes register before their
 // :param siblings so Fiber's first-match scan resolves the collection endpoints
 // before the detail ones.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/tracker")
 	g.Post("/projects", cloud.Handle(s, createProject))
 	g.Get("/projects", cloud.Handle(s, listProjects))

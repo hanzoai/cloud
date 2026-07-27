@@ -9,7 +9,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/types"
-	"github.com/zap-proto/zip"
 )
 
 // Mount wires the unified tool plane at /v1/tools/* and installs the two providers
@@ -40,9 +39,9 @@ type state struct {
 var mounted *cloud.Service[state]
 
 // Mount registers the tool plane on app.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("tools.Mount: nil zip.App")
+		return fmt.Errorf("tools.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("tools.Mount: nil deps.Logger")
@@ -83,7 +82,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Collection root (/v1/tools) stays flat — Group(p).Get("") yields "p/".
 	app.Get("/v1/tools", cloud.Handle(s, listTools))
 	g := app.Group("/v1/tools")

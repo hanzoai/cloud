@@ -253,9 +253,9 @@ func nonNil(xs []string) []string {
 }
 
 // Mount wires the agents surface onto app per HIP-0106.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("agents.Mount: nil zip.App")
+		return fmt.Errorf("agents.Mount: nil app")
 	}
 	log := deps.Logger
 	if log == nil {
@@ -278,8 +278,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	s := &cloud.Service[state]{
 		Base: cloud.NewBase(deps, "agents"),
 		State: state{
-			store:         store,
-			ai:            deps.AI,
+			store: store,
+			ai:    deps.AI,
 			// cloud.ZenModel guards the CONFIG boundary: an operator who points
 			// CLOUD_AI_DEFAULT_MODEL at an upstream name still gets the Hanzo name
 			// stamped on every agent seeded or created without one. The caller

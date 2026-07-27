@@ -16,7 +16,7 @@ import (
 
 // noopMount mounts nothing: the fake specs below carry the behavior under test in
 // their Shutdown, not their Mount.
-func noopMount(*zip.App, cloud.Deps) error { return nil }
+func noopMount(cloud.Router, cloud.Deps) error { return nil }
 
 // freeAddr reserves an ephemeral loopback port and hands back its address; the
 // listener is closed so the app under test can bind it.

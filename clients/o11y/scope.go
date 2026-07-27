@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
@@ -45,7 +46,7 @@ func admin(c *zip.Ctx) bool { return c.IsAdmin() }
 // The public surface is FLAT and version-less (one /v1/, no nested /api/vN): the
 // upstream engine version is an internal impl detail resolved inside the
 // handlers, never leaked into the route.
-func mountScope(a *zip.App) {
+func mountScope(a cloud.Router) {
 	// Tenant-scoped, org-pinned reads — the ONE owner of these paths (handlers below).
 	a.Get("/v1/o11y/logs", handleLogs)
 	a.Get("/v1/o11y/metrics", handleMetrics)

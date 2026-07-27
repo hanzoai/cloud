@@ -74,9 +74,9 @@ type service struct {
 var mounted *service
 
 // Mount registers the entitlements surface on app per HIP-0106.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("entitlements.Mount: nil zip.App")
+		return fmt.Errorf("entitlements.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("entitlements.Mount: nil deps.Logger")

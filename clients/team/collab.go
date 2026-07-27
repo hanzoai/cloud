@@ -44,6 +44,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/types"
@@ -63,7 +64,7 @@ type collabService struct {
 	hub      *collabHub
 }
 
-func (s *collabService) register(app *zip.App, guard guardFn) {
+func (s *collabService) register(app cloud.Router, guard guardFn) {
 	// App-level (NOT under /v1/team): the front derives both paths from
 	// COLLABORATOR_URL (wss://<host>/collaborator → the live Y.js WebSocket;
 	// http(s)://<host>/collaborator/rpc/:id → the snapshot RPC).

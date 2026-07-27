@@ -38,7 +38,7 @@ type state struct{}
 
 // Mount wires the KB control-plane onto app per HIP-0106. CRUD + fixtures are the
 // framework's surface; this adds only retrieval + connectors.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	// kbAI reaches the lazy index() singleton (built on first use, without deps)
 	// so embeddings run through the org/project-aligned EMBED client — the read-only
 	// (pk-) credential, split from the completions (M2M) client (deps.AI).
@@ -56,7 +56,7 @@ func build(b cloud.Base) (state, error) {
 
 // routes registers the retrieval + connector surface at /v1/kb. One prefix: the
 // same handler reachable at two paths is two answers to "where is this".
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	for _, p := range []string{"/v1/kb"} {
 		app.Post(p+"/search", cloud.Handle(s, search))                 // RAG entry point
 		app.Get(p+"/graph", cloud.Handle(s, graph))                    // force-directed knowledge graph

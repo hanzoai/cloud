@@ -84,7 +84,7 @@ var mounted *state
 
 // Mount opens the per-org registry stores, installs the process seam, and registers
 // the /v1/experiments surface.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("experiments.Mount: nil deps.Logger")
 	}
@@ -114,7 +114,7 @@ func Shutdown() error {
 	return mounted.stores.CloseAll()
 }
 
-func routes(app *zip.App, s *cloud.Service[*state]) {
+func routes(app cloud.Router, s *cloud.Service[*state]) {
 	g := app.Group("/v1/experiments")
 	g.Get("/health", cloud.Handle(s, health)) // static before :id
 	app.Post("/v1/experiments", cloud.Handle(s, create))

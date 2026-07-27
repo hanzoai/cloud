@@ -62,9 +62,9 @@ var mounted *cloud.Service[state]
 // Mount wires the wallets surface onto app per HIP-0106. Complex flavour: it
 // holds a package-global (mounted, the finance seam singleton) so it constructs
 // the Service value directly rather than via cloud.Mount.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("wallets.Mount: nil zip.App")
+		return fmt.Errorf("wallets.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("wallets.Mount: nil deps.Logger")
@@ -103,7 +103,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 // routes registers the wallets surface. Static /v1/wallets/accounts routes
 // register BEFORE the /v1/wallets/:id param route so the static segment wins.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/wallets")
 	g.Post("/accounts", cloud.Handle(s, createAccount))
 	g.Get("/accounts", cloud.Handle(s, listAccounts))

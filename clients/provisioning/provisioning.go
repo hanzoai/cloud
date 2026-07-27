@@ -196,9 +196,9 @@ type listItem struct {
 // flavour of the generic subsystem: it keeps a package global (mounted) for
 // cross-package reach and starts a recurring footprint meter, so it constructs the
 // Service value directly rather than through cloud.Mount.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("provisioning.Mount: nil zip.App")
+		return fmt.Errorf("provisioning.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("provisioning.Mount: nil deps.Logger")
@@ -242,7 +242,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 // routes registers the CRUD surface for each provisionable kind (the same handler
 // factories bound per kind).
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	for _, kind := range kinds {
 		k := kind
 		app.Post("/v1/"+k, create(s, k))

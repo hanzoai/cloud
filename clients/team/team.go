@@ -42,9 +42,9 @@ var mounted *cloud.Service[state]
 // MountAll, HIP-0106) — the SAME contract clients/tracker, clients/crm and
 // clients/agents rely on. Mount does NOT re-register it (a second identical route
 // is dead — Fiber matches the first-registered — and violates one-way).
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("team.Mount: nil zip.App")
+		return fmt.Errorf("team.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("team.Mount: nil deps.Logger")

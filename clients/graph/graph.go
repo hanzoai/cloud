@@ -53,7 +53,7 @@ type state struct {
 }
 
 // Mount wires the chain-data surface onto app per HIP-0106.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "graph", build, routes)
 }
 
@@ -67,7 +67,7 @@ func build(b cloud.Base) (state, error) {
 }
 
 // routes is the ONE place the surface is wired.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/indexers", cloud.Handle(s, listIndexers))
 	app.Get("/v1/oracles", cloud.Handle(s, listOracles))
 }

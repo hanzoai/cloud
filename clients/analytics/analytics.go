@@ -86,7 +86,7 @@ const (
 type state struct{}
 
 // Mount wires the analytics surface onto app per HIP-0106.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "analytics", build, routes)
 }
 
@@ -135,7 +135,7 @@ func installHostCarve(b cloud.Base) {
 // routes registers the analytics surface. Health owns /v1/analytics/health
 // explicitly (not JWT-gated: liveness must be probe-able); the data endpoints are
 // all org-gated in-handler.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/analytics/health", cloud.Handle(s, health))
 	app.Get("/v1/analytics/overview", cloud.Handle(s, overview))
 	app.Get("/v1/analytics/timeseries", cloud.Handle(s, timeseries))

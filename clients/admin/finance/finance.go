@@ -27,7 +27,7 @@ import (
 var errUnconfigured = errors.New("not configured")
 
 // Routes registers the finance dashboard (SuperAdmin only).
-func Routes(app *zip.App, s *cloud.Service[core.State]) {
+func Routes(app cloud.Router, s *cloud.Service[core.State]) {
 	g := app.Group("/v1/admin")
 	g.Get("/finance", core.Guard(s, Finance))
 	// One-time commerce→finance balance cutover (SuperAdmin only). Idempotent per org.

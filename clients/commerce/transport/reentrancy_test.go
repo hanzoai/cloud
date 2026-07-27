@@ -42,7 +42,7 @@ func TestRoundTripReentrancyBounded(t *testing.T) {
 		}
 		return c.Bytes(http.StatusOK, []byte("ok"))
 	})
-	SetApp(app)
+	SetApp(app.Fiber())
 	defer SetHandler(nil)
 
 	// Enter THROUGH the transport so the outer request is dispatch depth 1.
@@ -69,7 +69,7 @@ func TestRoundTripReentrancyBounded(t *testing.T) {
 func TestRoundTripSingleDispatchOK(t *testing.T) {
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	app.All("/ok", func(c *zip.Ctx) error { return c.Bytes(http.StatusOK, []byte("ok")) })
-	SetApp(app)
+	SetApp(app.Fiber())
 	defer SetHandler(nil)
 
 	client := Client(0)

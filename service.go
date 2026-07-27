@@ -73,9 +73,9 @@ type Service[S any] struct {
 // State from Base (open stores, dial clients — returns an error to fail the
 // mount closed); `routes` registers the handlers. A package's exported Mount is
 // then one line: `return cloud.Mount(app, deps, "name", build, routes)`.
-func Mount[S any](app *zip.App, deps Deps, name string, build func(Base) (S, error), routes func(*zip.App, *Service[S])) error {
+func Mount[S any](app Router, deps Deps, name string, build func(Base) (S, error), routes func(Router, *Service[S])) error {
 	if app == nil {
-		return fmt.Errorf("%s.Mount: nil zip.App", name)
+		return fmt.Errorf("%s.Mount: nil app", name)
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("%s.Mount: nil deps.Logger", name)

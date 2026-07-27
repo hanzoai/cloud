@@ -54,9 +54,9 @@ import (
 // The state is built from Deps fields NOT on cloud.Base (deps.Audit, deps.IAMIssuer), so
 // it constructs the cloud.Service value directly (cloud.NewBase + &cloud.Service[core.State]{…})
 // rather than via cloud.Mount.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("admin.Mount: nil zip.App")
+		return fmt.Errorf("admin.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("admin.Mount: nil deps.Logger")
@@ -91,7 +91,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // through the two-tier gate: org-scoped panels behind core.GuardScoped, the platform
 // control plane behind core.Guard. Each carved-out domain (audit/customer/revenue/finance)
 // owns its own route registration.
-func routes(app *zip.App, s *cloud.Service[core.State]) {
+func routes(app cloud.Router, s *cloud.Service[core.State]) {
 	g := app.Group("/v1/admin")
 	// Org-scoped panels — GuardScoped. Cross-tenant reads are impossible for a non-super
 	// caller.

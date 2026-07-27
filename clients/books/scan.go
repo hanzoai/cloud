@@ -45,7 +45,7 @@ const maxScanUpload = 8 << 20
 
 // scannerRoutes registers the scanner + inbox + vendors/rules + transactions surface on the
 // books app (called from routes()).
-func scannerRoutes(app *zip.App, s *cloud.Service[*state]) {
+func scannerRoutes(app cloud.Router, s *cloud.Service[*state]) {
 	app.Post("/v1/books/scan", cloud.Handle(s, scanHandler))
 	app.Post("/v1/books/scan/book", cloud.Handle(s, scanBookHandler))
 	app.Post("/v1/books/inbox", cloud.Handle(s, inboxUploadHandler))

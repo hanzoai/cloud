@@ -67,9 +67,9 @@ var mounted *cloud.Service[state]
 // Mount wires /v1/destinations/* onto app. Complex flavour (a package global for the
 // seam + Shutdown, and it installs the analytics fan-out sink), so it constructs the
 // Service value directly.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("destinations.Mount: nil zip.App")
+		return fmt.Errorf("destinations.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("destinations.Mount: nil deps.Logger")
@@ -107,7 +107,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/destinations")
 	g.Get("", cloud.Handle(s, list))
 	g.Get("/:platform", cloud.Handle(s, get))

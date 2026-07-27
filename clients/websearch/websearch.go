@@ -281,9 +281,9 @@ func writeRaw(w http.ResponseWriter, status int, body string) {
 }
 
 // Mount registers the web-search surface on app.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("websearch.Mount: nil zip.App")
+		return fmt.Errorf("websearch.Mount: nil app")
 	}
 	logger := deps.Logger
 	if logger == nil {

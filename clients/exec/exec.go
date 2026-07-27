@@ -121,9 +121,9 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 // Mount registers the code-interpreter surface on app. The gateway terminates
 // user auth for the chat UI, but code exec is called server-side by the chat
 // node process with the shared service key, so we enforce that key here.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("exec.Mount: nil zip.App")
+		return fmt.Errorf("exec.Mount: nil app")
 	}
 	logger := deps.Logger
 	if logger == nil {

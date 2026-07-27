@@ -45,9 +45,9 @@ var mounted *cloud.Service[state]
 // Mount wires /v1/gateway/config onto app over the shared policy store. The store
 // is owned by deps (not a Base dep), so this constructs the Service value directly
 // via cloud.NewBase rather than cloud.Mount.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("gateway.Mount: nil zip.App")
+		return fmt.Errorf("gateway.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("gateway.Mount: nil deps.Logger")
@@ -65,7 +65,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 // routes registers the gateway config plane.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/gateway")
 	g.Get("/config", cloud.Handle(s, get))
 	g.Put("/config", cloud.Handle(s, put))

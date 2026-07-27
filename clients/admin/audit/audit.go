@@ -25,7 +25,7 @@ import (
 )
 
 // Routes registers the /v1/admin/audit* surface (SuperAdmin only).
-func Routes(app *zip.App, s *cloud.Service[core.State]) {
+func Routes(app cloud.Router, s *cloud.Service[core.State]) {
 	g := app.Group("/v1/admin")
 	g.Get("/audit", core.Guard(s, Records))
 	g.Get("/audit/verify", core.Guard(s, Verify))

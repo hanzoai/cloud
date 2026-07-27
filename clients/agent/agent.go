@@ -6,6 +6,7 @@
 //     one path that returns tool_calls AND carries per-org reserve/settle billing);
 //   - ToolPlane: the unified tool registry (tools.Default()), so /v1/agent's
 //     server-executed tools are the org's activated MCP/registry tools.
+//
 // /v1/agent is a DISTINCT path (not /v1/chat, which ai owns as completions), so a
 // specific route wins over ai's /v1/* glob — no collision.
 package agent
@@ -35,7 +36,7 @@ const maxCompletionResponse = 8 << 20
 // the tool plane. The caller identity comes from cloud's validated principal.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("agent.Mount: nil zip.App")
+		return fmt.Errorf("agent.Mount: nil app")
 	}
 	_, err := hz.Mount(app, hz.Deps{
 		Logger:  deps.Logger,
@@ -55,7 +56,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 // ── Completer: replay /v1/chat/completions in-process ─────────────────────────────
 
-type aiCompleter struct{ app *zip.App }
+type aiCompleter struct{ app cloud.Router }
 
 // Complete replays the request against the SAME app at /v1/chat/completions, so it
 // flows the whole middleware chain (per-org reserve/settle billing) and returns

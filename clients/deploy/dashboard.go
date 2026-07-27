@@ -46,7 +46,7 @@ const dashPrefix = "/v1/deploy"
 
 // registerDashboardRoutes wires the ArgoCD-UI-compatible API surface (no FE —
 // the SPA is a separate hanzoai/spa App). Called from routes() (deploy.go).
-func registerDashboardRoutes(app *zip.App, s *cloud.Service[state]) {
+func registerDashboardRoutes(app cloud.Router, s *cloud.Service[state]) {
 	// Bootstrap (the SPA awaits settings + userinfo before first render).
 	app.Get(dashPrefix+"/settings", guard(s, cloud.Handle(s, dashSettings)))
 	// userinfo is the ONE deliberately PUBLIC bootstrap route: it is how the SPA

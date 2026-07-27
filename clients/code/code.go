@@ -75,9 +75,9 @@ type service struct {
 var mounted *service
 
 // Mount wires /v1/code/* onto app per HIP-0106.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("code.Mount: nil zip.App")
+		return fmt.Errorf("code.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("code.Mount: nil deps.Logger")
@@ -87,7 +87,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	s := &service{
 		dataDir: deps.DataDir,
-		embed:   newEmbedder(deps.Embed, ""), // embeddings ride the read-only (pk-) embed credential
+		embed:   newEmbedder(deps.Embed, ""),            // embeddings ride the read-only (pk-) embed credential
 		synth:   newSynth(deps.AI, deps.AIDefaultModel), // synthesis is chat completion → M2M
 		log:     deps.Logger.New("subsystem", "code"),
 		stores:  cloud.NewOrgStore(deps.DataDir, "code", openStore),

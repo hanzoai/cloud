@@ -136,7 +136,7 @@ type state struct {
 }
 
 // Mount registers the customer-facing /v1/billing/* read surface on app.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "billing", build, routes)
 }
 
@@ -150,7 +150,7 @@ func build(b cloud.Base) (state, error) {
 
 // routes registers the customer-facing /v1/billing/* read surface plus the
 // /v1/finance/* projection (same commerceProxy).
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/billing/usage", cloud.Handle(s, usage))
 	// The per-account routed-usage breakdown the dashboard reads, in the billing
 	// namespace beside /v1/billing/usage. The data is owned by clients/link (the

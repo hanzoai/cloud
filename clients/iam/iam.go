@@ -61,16 +61,17 @@ import (
 	"github.com/hanzoai/cloud"
 )
 
-// iamPrefixes are the canonical absolute prefixes the IAM identity surface owns —
-// the ONE list, used both to register the real routes (safeMount) and to serve the
-// fail-closed 503 when IAM cannot boot. Everything outside them belongs to cloud, so
-// the console catch-all keeps serving the SPA.
+// Prefixes are the canonical absolute prefixes the IAM identity surface owns —
+// the ONE list. It registers the real routes (safeMount), serves the fail-closed 503
+// when IAM cannot boot, and is the MountSpec.Prefixes apps.Wire() hands MountAll, so
+// IAM's middleware can only ever land on identity's own subtrees. Everything outside
+// them belongs to cloud, so the console catch-all keeps serving the SPA.
 //
 // The bare /healthz is deliberately excluded — it is a shared-liveness path, not an
 // auth surface, so 503-ing it would mask the binary's own health rather than an
 // identity outage. It is also why iam2 must not be co-mingled: iam2 serves its OWN
 // /healthz, which silently took over the shared binary's.
-var iamPrefixes = []string{
+var Prefixes = []string{
 	"/v1/iam",      // OIDC/OAuth2 + entity CRUD + the Casdoor verb-alias compat layer
 	"/login/oauth", // browser authorize surface (the /v1/iam/oauth/authorize 302 target)
 }
@@ -89,9 +90,10 @@ var embeddedDB orm.DB
 func DB() orm.DB { return embeddedDB }
 
 // Mount opens IAM's embedded store, seeds config from the same init_data.json the
-// deployment provides (non-fatal), and registers the whole IAM v2 surface onto cloud's
-// shared zip.App. Called once by cloud.MountAll when "iam" is enabled.
-func Mount(app *zip.App, deps cloud.Deps) error {
+// deployment provides (non-fatal), and registers the whole IAM v2 surface at the
+// prefixes identity owns (Prefixes). Called once by cloud.MountAll when "iam" is
+// enabled.
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	log := deps.Logger.New("subsystem", "iam")
 
 	dbPath, initDataPath := paths(deps)
@@ -134,7 +136,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return nil
 	}
 
-	log.Info("iam embedded in-process (clean iam-v2, zip-native + hanzoai/orm — Casdoor iam-v1 retired)", "db", dbPath, "prefixes", iamPrefixes)
+	log.Info("iam embedded in-process (clean iam-v2, zip-native + hanzoai/orm — Casdoor iam-v1 retired)", "db", dbPath, "prefixes", Prefixes)
 	return nil
 }
 
@@ -174,14 +176,14 @@ func paths(deps cloud.Deps) (dbPath, initDataPath string) {
 // documents for exactly this host ("registered at the /v1/iam/* and root
 // /.well-known/* wildcards"), and it confines iam2 to the prefixes below, so cloud's
 // console catch-all keeps serving everything else.
-func safeMount(app *zip.App, db orm.DB) (err error) {
+func safeMount(app cloud.Router, db orm.DB) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("iam mount panicked: %v", r)
 		}
 	}()
 	h := zip.AdaptNetHTTP(iamserver.Handler(db))
-	for _, prefix := range iamPrefixes {
+	for _, prefix := range Prefixes {
 		app.All(prefix, h)
 		app.All(prefix+"/*", h)
 	}
@@ -199,13 +201,13 @@ func safeMount(app *zip.App, db orm.DB) (err error) {
 // stay up — the fold's blast-radius isolation. During staged rollout hanzo.id is still
 // served by the standalone iam pod via ingress, so clients never see this path until
 // cutover.
-func mountFailClosed(app *zip.App) {
+func mountFailClosed(app cloud.Router) {
 	failed := zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte(`{"error":"iam unavailable","code":503}`))
 	}))
-	for _, p := range iamPrefixes {
+	for _, p := range Prefixes {
 		app.All(p+"/*", failed)
 	}
 }

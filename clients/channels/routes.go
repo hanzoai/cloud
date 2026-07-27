@@ -28,7 +28,7 @@ const sendMaxBody = 1 << 20 // 1 MiB
 
 // routes registers the /v1/channels surface. The :channel send route is LAST:
 // zip matches in registration order, so the static paths above must win.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/channels")
 	app.Get("/v1/channels", cloud.Terminal(cloud.Handle(s, list)))
 	g.Get("/inbox", cloud.Terminal(cloud.Handle(s, inbox)))

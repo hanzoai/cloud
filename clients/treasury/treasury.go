@@ -89,9 +89,9 @@ type state struct {
 var mounted *cloud.Service[state]
 
 // Mount wires the treasury surface onto app per HIP-0106.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("treasury.Mount: nil zip.App")
+		return fmt.Errorf("treasury.Mount: nil app")
 	}
 	log := deps.Logger
 	if log == nil {

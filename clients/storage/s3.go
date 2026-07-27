@@ -117,9 +117,9 @@ type state struct {
 // Mount wires /v1/s3/* onto app. The "s3"-product meter and the guard-wrapped,
 // unconditional route set make this a direct construction (cloud.NewBase), not
 // cloud.Mount.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("s3.Mount: nil zip.App")
+		return fmt.Errorf("s3.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("s3.Mount: nil deps.Logger")

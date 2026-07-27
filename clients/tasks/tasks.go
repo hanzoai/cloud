@@ -44,9 +44,9 @@ import (
 
 // Mount adapts the shared engine's HTTP surface + the static UI onto app. It
 // creates NO engine — the ONE engine lives in cloud.EmbeddedTasks (durable.go).
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("tasks.Mount: nil zip.App")
+		return fmt.Errorf("tasks.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("tasks.Mount: nil deps.Logger")

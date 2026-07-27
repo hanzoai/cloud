@@ -223,7 +223,7 @@ func mountRuntime(deps cloud.Deps) error {
 // same discipline as the o11y wildcard). No path rewrite: the Sentry routes are
 // literal /v1/sentry/… in the runtime. The DSN-ingest routes are principal-gate-exempt
 // (isSentryIngestPath); the reads stay gated.
-func mountSentry(a *zip.App) {
+func mountSentry(a cloud.Router) {
 	a.All("/v1/sentry/*", zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := runtimeHandler
 		if h == nil {

@@ -211,7 +211,7 @@ var eventIngestSink eventSink
 // available. Fail-soft at every branch — a missing DSN or a Datastore construction
 // error logs and returns nil, leaving the write path unmounted (the retired
 // console-worker is already gone, so "unmounted" is inert — no double-write).
-func mountEventIngest(a *zip.App, deps cloud.Deps) error {
+func mountEventIngest(a cloud.Router, deps cloud.Deps) error {
 	log := deps.Logger.New("subsystem", "o11y-event-ingest")
 
 	dsn := embeddedDSN()

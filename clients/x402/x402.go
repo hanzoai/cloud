@@ -136,7 +136,7 @@ var mounted *cloud.Service[state]
 
 // Mount wires /v1/x402 and the settlement store. Direct construction (not
 // cloud.Mount) because it holds the package singleton the middleware reaches.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil || deps.Logger == nil {
 		return errMount("nil app or logger")
 	}
@@ -163,7 +163,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/x402")
 	g.Get("/settlements/:id", cloud.Handle(s, getSettlement))
 }

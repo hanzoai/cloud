@@ -38,7 +38,7 @@ const (
 
 // mountRouting registers the route-work machine surface. Called from mountTargets
 // AFTER the target CRUD routes so the extra-segment paths are unambiguous.
-func mountRouting(s *cloud.Service[state], app *zip.App) {
+func mountRouting(s *cloud.Service[state], app cloud.Router) {
 	assertSingleReplica(s.Log)
 	g := app.Group("/v1/agents")
 	g.Post("/targets/:id/claim-key", cloud.Handle(s, mintClaimKey))

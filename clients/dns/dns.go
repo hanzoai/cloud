@@ -52,7 +52,7 @@ type edge struct {
 
 // Mount wires the DNS dashboard forward head at /v1/dns/* (all verbs, full path
 // passthrough). Registered as a subsystem in apps.Wire(); on by default.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	e := &edge{
 		base: strings.TrimRight(strings.TrimSpace(dnsURL()), "/"),
 		http: &http.Client{

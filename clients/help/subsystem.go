@@ -57,7 +57,7 @@ type state struct {
 // conversation thread) is the framework's generic role-gated surface
 // (/v1/framework/hd-*); this adds ONLY the public help center. It owns no store —
 // every read/write delegates to the framework in-process API.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "help", build, routes)
 }
 
@@ -91,7 +91,7 @@ func publicOrg(brand string) string {
 // grows the bucket map without bound). So this plane does NOT rate-limit per IP; it
 // bounds each request (body size, content clips, fail-closed validation) and delegates
 // the edge limit to the ingress — the house pattern ("ingress carries the edge limit").
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/help")
 	g.Get("/articles", cloud.Handle(s, listArticles))
 	g.Get("/articles/:slug", cloud.Handle(s, getArticle))

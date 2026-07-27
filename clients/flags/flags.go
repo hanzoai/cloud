@@ -55,7 +55,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
 )
 
 // Type is the switch kind the cockpit renders (and how the value is decoded).
@@ -433,7 +432,7 @@ type state struct {
 // seam, and registers the /v1/flags surface. The native engine being absent (!cgo)
 // degrades every switch to env/default and the HTTP surface reports it — never an
 // error at boot.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("flags.Mount: nil deps.Logger")
 	}

@@ -73,7 +73,7 @@ var annQueues *annService
 // by MountO11y inside the one order-69 mount, so every route precedes the order-70
 // wildcard. A store-open failure fails the mount (a broken data plane must not
 // silently serve empty queues).
-func mountAnnotationQueues(a *zip.App, deps cloud.Deps) error {
+func mountAnnotationQueues(a cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("o11y.mountAnnotationQueues: empty DataDir")
 	}

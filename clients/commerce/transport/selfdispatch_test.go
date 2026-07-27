@@ -60,7 +60,7 @@ func TestSetAppSelfDispatch(t *testing.T) {
 		return c.Bytes(http.StatusOK, body)
 	})
 
-	SetApp(app)
+	SetApp(app.Fiber())
 
 	req, err := http.NewRequest(http.MethodGet, BaseURL("")+"/v1/billing/balance", nil)
 	if err != nil {
@@ -151,7 +151,7 @@ func TestSpendAlertsAuthorizeShadowsBridge(t *testing.T) {
 	t.Run("bug_wildcard_self_loops", func(t *testing.T) {
 		t.Cleanup(func() { SetHandler(nil) })
 		app, specificHits, wildcardHits := build(false)
-		SetApp(app)
+		SetApp(app.Fiber())
 		status, body := do(t)
 		t.Logf("no-shadow => status=%d wildcardHits=%d body=%s", status, atomic.LoadInt32(wildcardHits), body)
 		if got := atomic.LoadInt32(specificHits); got != 0 {
@@ -171,7 +171,7 @@ func TestSpendAlertsAuthorizeShadowsBridge(t *testing.T) {
 	t.Run("fix_specific_route_shadows_wildcard", func(t *testing.T) {
 		t.Cleanup(func() { SetHandler(nil) })
 		app, specificHits, wildcardHits := build(true)
-		SetApp(app)
+		SetApp(app.Fiber())
 		status, body := do(t)
 		t.Logf("shadowed => status=%d specificHits=%d wildcardHits=%d body=%s",
 			status, atomic.LoadInt32(specificHits), atomic.LoadInt32(wildcardHits), body)
@@ -245,7 +245,7 @@ func assertPostShadowsBridge(t *testing.T, specificPattern, requestPath string) 
 	t.Run("bug_wildcard_self_loops", func(t *testing.T) {
 		t.Cleanup(func() { SetHandler(nil) })
 		app, specificHits, wildcardHits := build(false)
-		SetApp(app)
+		SetApp(app.Fiber())
 		status, body := do()
 		t.Logf("no-shadow %s => status=%d wildcardHits=%d body=%s", requestPath, status, atomic.LoadInt32(wildcardHits), body)
 		if got := atomic.LoadInt32(specificHits); got != 0 {
@@ -267,7 +267,7 @@ func assertPostShadowsBridge(t *testing.T, specificPattern, requestPath string) 
 	t.Run("fix_specific_route_shadows_wildcard", func(t *testing.T) {
 		t.Cleanup(func() { SetHandler(nil) })
 		app, specificHits, wildcardHits := build(true)
-		SetApp(app)
+		SetApp(app.Fiber())
 		status, body := do()
 		t.Logf("shadowed %s => status=%d specificHits=%d wildcardHits=%d body=%s",
 			requestPath, status, atomic.LoadInt32(specificHits), atomic.LoadInt32(wildcardHits), body)

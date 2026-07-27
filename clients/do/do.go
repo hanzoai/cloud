@@ -105,7 +105,7 @@ func configured(s *cloud.Service[state]) bool { return s.State.vpcs != nil && s.
 // generic subsystem entrypoint. Routes register unconditionally (even when
 // unconfigured) so the surface owns its space and fails closed under its own name
 // rather than 404-ing to a fallthrough.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "do", build, routes)
 }
 
@@ -130,7 +130,7 @@ func build(b cloud.Base) (state, error) {
 // routes is the ONE place the surface is wired — shared by Mount (real godo) and
 // the test (injected fakes). Static list/create register before the :id param
 // route so an id can never shadow the collection handler.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/vpcs", cloud.Handle(s, listVPCs))
 	app.Post("/v1/vpcs", cloud.Handle(s, createVPC))
 	app.Get("/v1/vpcs/:id", cloud.Handle(s, getVPC))

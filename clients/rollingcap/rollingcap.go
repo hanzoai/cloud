@@ -36,7 +36,6 @@ import (
 	"time"
 
 	aiobject "github.com/hanzoai/ai/object"
-	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/finance"
@@ -91,7 +90,7 @@ func init() {
 // the tier or finance layer is not co-resident (standalone / split deploy): ai's hook
 // stays nil, behavior unchanged. Runs after MountAll's prerequisites — wireTierReader
 // + wireFinance have already installed the globals it reads.
-func Mount(_ *zip.App, _ cloud.Deps) error {
+func Mount(_ cloud.Router, _ cloud.Deps) error {
 	tier := aiobject.TierReader()
 	fin := finance.Current()
 	if tier == nil || fin == nil {

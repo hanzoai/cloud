@@ -18,12 +18,12 @@ import (
 // party depend on these exact prefixes being served in-process.
 func TestPrefixesCoverAuthCritical(t *testing.T) {
 	have := map[string]bool{}
-	for _, p := range iamPrefixes {
+	for _, p := range Prefixes {
 		have[p] = true
 	}
 	for _, n := range []string{"/v1/iam", "/login/oauth"} {
 		if !have[n] {
-			t.Errorf("iamPrefixes missing auth-critical prefix %q", n)
+			t.Errorf("Prefixes missing auth-critical prefix %q", n)
 		}
 	}
 }

@@ -46,9 +46,9 @@ var mounted *cloud.Service[state]
 // (idv.FromConfig): Manual by default, a real provider when named — and FAIL-CLOSED,
 // so a named-but-misconfigured provider fails the mount rather than silently
 // downgrading to Manual.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("compliance.Mount: nil zip.App")
+		return fmt.Errorf("compliance.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("compliance.Mount: nil deps.Logger")
@@ -99,7 +99,7 @@ func kmsGetter(deps cloud.Deps) idv.SecretFn {
 
 // routes registers the compliance surface. Static + collection routes register
 // before :id params so an id can never shadow a sibling route (Fiber first-match).
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/compliance")
 	g.Get("/health", cloud.Handle(s, health))
 	g.Get("/status", cloud.Handle(s, status))
