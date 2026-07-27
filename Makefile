@@ -47,7 +47,7 @@ OPENAPI_DIR    ?= ../openapi
 # that runs them, and needs a real libsqlcipher to do it.
 CGO_ENABLED     ?= 0
 
-.PHONY: help native webui deploy-ui agentskills build build-standalone run smoke test test-cgo test-codec vet tidy docker docker-push clean
+.PHONY: help native webui deploy-ui agentskills build build-standalone run smoke e2e test test-cgo test-codec vet tidy docker docker-push clean
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -100,6 +100,26 @@ run: build ## Run with iam,base,kms,gateway,o11y enabled (matches README quickst
 
 smoke: ## Build and run cmd/cloud-smoke (mount-time integration check).
 	$(GO) run ./cmd/cloud-smoke
+
+# The ONE end-to-end target: builds this repo's binary, boots it on isolated ports
+# with a fresh data dir, seeds identity through the same operator upsert production
+# uses, and drives it with the real Playwright suite (universe/e2e) — a real login,
+# a real cross-tenant refusal, and a real SMTP delivery through the drip engine.
+# Needs no cluster and no network. SUITE=<path> if universe is not a sibling.
+e2e: ## Boot the binary locally and run the Playwright e2e suite against it.
+	@E2E_ARGS="$(E2E_ARGS)" ./e2e/run.sh
+
+# The console's IAM/cloud origins are NEXT_PUBLIC_* — inlined at BUILD time — so a
+# bundle built for production points its login at hanzo.id and its reads at
+# api.hanzo.ai. This rebuilds it against the loopback instance so the UI specs
+# exercise the local binary end to end. It OVERWRITES webui/dist with a
+# localhost-pinned bundle: run plain `make webui` before shipping anything.
+E2E_ORIGIN ?= http://127.0.0.1:18080
+e2e-ui: ## Rebuild the console pointed at the local instance, then run e2e.
+	NEXT_PUBLIC_IAM_URL=$(E2E_ORIGIN) NEXT_PUBLIC_CLOUD_URL=$(E2E_ORIGIN) \
+	NEXT_PUBLIC_IAM_CLIENT_ID=hanzo-cloud NEXT_PUBLIC_IAM_APP_NAME=hanzo-cloud \
+	NEXT_PUBLIC_IAM_ORG_NAME=hanzo $(MAKE) webui
+	@E2E_ARGS="$(E2E_ARGS)" ./e2e/run.sh
 
 # The data plane has no plaintext-at-rest mode: cek refuses to open a store without
 # a master key, on every build. The server makes that a boot decision (serve.go); a

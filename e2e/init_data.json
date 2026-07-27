@@ -1,0 +1,65 @@
+{
+  "organizations": [
+    {
+      "owner": "admin",
+      "name": "hanzo",
+      "displayName": "Hanzo",
+      "passwordType": "argon2id",
+      "defaultApplication": "hanzo-console",
+      "languages": ["en"]
+    },
+    {
+      "owner": "admin",
+      "name": "acme",
+      "displayName": "Acme",
+      "passwordType": "argon2id",
+      "defaultApplication": "hanzo-console",
+      "languages": ["en"]
+    }
+  ],
+  "certs": [
+    {
+      "owner": "admin",
+      "name": "cert-signing",
+      "displayName": "Token signing",
+      "scope": "JWT",
+      "type": "x509",
+      "cryptoAlgorithm": "RS256",
+      "bitSize": 2048,
+      "expireInYears": 20
+    }
+  ],
+  "applications": [
+    {
+      "owner": "admin",
+      "name": "hanzo-console",
+      "displayName": "Hanzo Console",
+      "organization": "hanzo",
+      "cert": "cert-signing",
+      "isShared": true,
+      "enablePassword": true,
+      "enableSignUp": false,
+      "enableSigninSession": true,
+      "clientId": "hanzo-console",
+      "clientSecret": "${E2E_CLIENT_SECRET}",
+      "grantTypes": ["password", "refresh_token", "authorization_code"],
+      "redirectUris": ["${E2E_REDIRECT_URI}"],
+      "expireInHours": 24
+    },
+    {
+      "owner": "admin",
+      "name": "hanzo-cloud",
+      "displayName": "Hanzo Cloud",
+      "organization": "hanzo",
+      "cert": "cert-signing",
+      "isShared": true,
+      "enablePassword": true,
+      "enableSignUp": false,
+      "enableSigninSession": true,
+      "clientId": "hanzo-cloud",
+      "grantTypes": ["authorization_code", "refresh_token"],
+      "redirectUris": ["${E2E_REDIRECT_URI}"],
+      "expireInHours": 24
+    }
+  ]
+}
