@@ -25,7 +25,7 @@ import (
 // git stdout → HTTP response — so a multi-GB pack never lands in this process's
 // memory. This file is only the HTTP framing (pkt-line service header, content
 // types, gzip, Git-Protocol passthrough) around the ONE pack seam the SSH
-// transport (ssh.go) also drives. Patterns ported from gitea v1.24.7
+// transport (ssh.go) also drives. Patterns ported from the upstream forge
 // (routers/web/repo/githttp.go).
 
 const (
@@ -38,7 +38,7 @@ const (
 // large-repo perf win (cheaper negotiation, partial clone).
 func gitProtocol(c *zip.Ctx) string { return c.Header("Git-Protocol") }
 
-// setGitNoCache applies git's smart-HTTP no-cache headers (gitea setHeaderNoCache).
+// setGitNoCache applies git's smart-HTTP no-cache headers (the upstream forge's setHeaderNoCache).
 func setGitNoCache(c *zip.Ctx) {
 	c.SetHeader("Expires", "Fri, 01 Jan 1980 00:00:00 GMT")
 	c.SetHeader("Pragma", "no-cache")
