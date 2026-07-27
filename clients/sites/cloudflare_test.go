@@ -12,8 +12,24 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
+// testPurger builds a Purger the way these tests need it: a ZERO coalescing window,
+// so every call is admitted and the assertions are about the request rather than the
+// debounce, but with the two fields only NewPurger otherwise supplies. A bare struct
+// literal left pending nil, so admit panicked writing to it, and left ceiling zero,
+// so takeToken (inMinute >= ceiling) refused every call and nothing was ever sent.
+// The tests do not use NewPurger itself because it reads the real environment and
+// arms a 10s window.
+func testPurger(token, zone, api string, c *http.Client) *Purger {
+	return &Purger{
+		token: token, zoneID: zone, api: api, client: c,
+		log:     luxlog.New("test"),
+		pending: map[string]*purgeState{},
+		ceiling: 120, // NewPurger's default; 0 would rate-limit every call away
+	}
+}
+
 func TestPurgerUnconfiguredIsNoop(t *testing.T) {
-	p := &Purger{api: "http://127.0.0.1:0", client: &http.Client{Timeout: time.Second}, log: luxlog.New("test")}
+	p := testPurger("", "", "http://127.0.0.1:0", &http.Client{Timeout: time.Second})
 	if p.Configured() {
 		t.Fatal("expected unconfigured")
 	}
@@ -42,7 +58,7 @@ func TestPurgerPostsTagsWithAuth(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := &Purger{token: "tok-secret", zoneID: "zone123", api: srv.URL, client: srv.Client(), log: luxlog.New("test")}
+	p := testPurger("tok-secret", "zone123", srv.URL, srv.Client())
 	if !p.Configured() {
 		t.Fatal("expected configured")
 	}
@@ -68,14 +84,14 @@ func TestPurgerPropagatesServerError(t *testing.T) {
 		w.WriteHeader(403)
 	}))
 	defer srv.Close()
-	p := &Purger{token: "t", zoneID: "z", api: srv.URL, client: srv.Client(), log: luxlog.New("test")}
+	p := testPurger("t", "z", srv.URL, srv.Client())
 	if err := p.PurgeTags(context.Background(), "site-x-y"); err == nil {
 		t.Fatal("expected error on non-2xx")
 	}
 }
 
 func TestPurgerEmptyTagsIsNoop(t *testing.T) {
-	p := &Purger{token: "t", zoneID: "z", api: "http://127.0.0.1:0", client: &http.Client{Timeout: time.Second}, log: luxlog.New("test")}
+	p := testPurger("t", "z", "http://127.0.0.1:0", &http.Client{Timeout: time.Second})
 	if err := p.PurgeTags(context.Background()); err != nil {
 		t.Fatalf("empty PurgeTags: %v", err)
 	}
