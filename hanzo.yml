@@ -30,7 +30,7 @@ test:
       fi
       . "$HOME/.cargo/env" 2>/dev/null || true
       # zccache: drop-in compiler cache — no-op unless the runner carries it, so
-      # it never breaks the gate; where present (arc/gitea + Actions cache) it
+      # it never breaks the gate; where present (self-hosted runners + Actions cache) it
       # warms the Rust compile cross-run.
       command -v zccache >/dev/null 2>&1 && export RUSTC_WRAPPER=zccache || true
       cargo build --release --locked --manifest-path native/flags/Cargo.toml
