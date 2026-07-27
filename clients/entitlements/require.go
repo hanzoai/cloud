@@ -11,13 +11,17 @@ package entitlements
 // It applies a verdict; it does not compute one. WHAT the caller's standing is
 // lives in standing.go (subscription OR prepaid credit, resolved from the two
 // authorities). This file decides only WHETHER and HOW to refuse: the admin kill
-// switch, the invariant that the path to payment stays reachable, and the shape of
-// the 402. Policy is never restated here — the plan→product rule lives once, in
+// switch and the fail posture. WHAT the caller's standing is, the invariant that the
+// path to payment stays reachable (cloud.Reachable), and the shape of the 402
+// (cloud.Refuse) all live in the ROOT package now, because the edge filters serve.go
+// mounts could never import this leaf and so grew their own divergent copies. This
+// file is what is genuinely product-scoped and nothing more: the licence leg
+// (CheckEntitlement for one product) and its application. Policy is never restated
+// here — the plan→product rule lives once, in
 // @hanzo/plans, resolved by commerce.CheckEntitlement.
 
 import (
-	"net/http"
-	"strings"
+	"context"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/flags"
@@ -55,15 +59,17 @@ const enforceKey = cloud.SwitchPaywallEnforced
 // refuses a customer. ON = revenue: an unresolvable standing refuses. It exists so
 // the choice between those two is made live, by an owner watching real traffic,
 // instead of being frozen into a constant at build time.
-const strictKey = "paywall_strict"
+const strictKey = cloud.SwitchPaywallStrict
 
 func init() {
 	flags.Register(flags.Def{
 		Key: enforceKey, Category: "Launch", Type: flags.TypeBool, Default: "false",
-		// PAYWALL_ENFORCED remains the fallback, so a deployment with no cockpit
-		// write behaves exactly as it did before this switch governed anything.
-		// The first write in admin.hanzo.ai takes over and hot-applies.
-		Env:   "PAYWALL_ENFORCED",
+		// NO Env FALLBACK, deliberately, and TestSwitchesDefaultOff pins it. An env
+		// var that can turn the gate ON cannot be turned OFF from the cockpit — the
+		// kill switch would be defeated by the very variable that armed the gate,
+		// which is the one failure mode this switch exists to prevent. serve.go used
+		// to OR a PAYWALL_ENFORCED config field on top of the switch and had exactly
+		// that hole; the field is gone. The cockpit is the single source of truth.
 		Label: "Paywall enforced",
 		Desc: "Refuse gated product routes for a caller with neither an active subscription nor prepaid credit. " +
 			"OFF = dark: the gate admits everything and consults no billing authority. This is the kill switch — " +
@@ -130,7 +136,7 @@ func RequireProduct(commerce cloud.CommerceClient, product string) zip.Handler {
 		if !flags.Bool(enforceKey) {
 			return c.Next() // dark — byte-identical to no middleware at all.
 		}
-		if reachable(c.Path()) {
+		if cloud.Reachable(c.Path()) {
 			return c.Next()
 		}
 		if !principal.Validated(c) {
@@ -148,144 +154,44 @@ func RequireProduct(commerce cloud.CommerceClient, product string) zip.Handler {
 		// org against the platform's own balance. A caller with no resolvable wallet
 		// simply has no credit leg; the subscription leg still answers.
 		w, _ := principal.WalletOf(c)
-		switch s := Resolve(c.Context(), commerce, org, product, w); {
+		switch s := cloud.Stand(c.Context(), licensedBy(c.Context(), commerce, org, product), w); {
 		case s.Admits():
 			return c.Next()
-		case s == Unknown:
+		case s == cloud.Unknown:
 			if flags.Bool(strictKey) {
 				c.Log().Warn("paywall: standing unresolvable; refusing (strict)", "product", product, "org", org)
-				return refuse(c, product, reasonUnresolved)
+				return cloud.Refuse(c, product, cloud.ReasonUnresolved)
 			}
 			c.Log().Warn("paywall: standing unresolvable; admitting", "product", product, "org", org)
 			return c.Next()
 		default:
 			// The ONE proven refusal: no plan licenses the product AND the wallet is empty.
 			c.Log().Info("paywall: no subscription and no credit", "product", product, "org", org, "standing", s.String())
-			return refuse(c, product, reasonUnpaid)
+			return cloud.Refuse(c, product, cloud.ReasonUnpaid)
 		}
 	}
 }
 
-// ── the refusal ─────────────────────────────────────────────────────────────────
+// ── the subscription leg ────────────────────────────────────────────────────────
 
-// The two reasons a 402 can carry. `unpaid` is the proven refusal; `unresolved` is
-// the strict-posture refusal, and it is a DISTINCT code because the caller's cure is
-// different — an unpaid caller must buy something, an unresolved one must retry.
-const (
-	reasonUnpaid     = "unpaid"
-	reasonUnresolved = "unresolved"
-)
-
-// Refusal is the 402 body. A bare 402 is useless to the console shell, so this names
-// WHAT is gated, WHY, and every way to cure it — one Cure per admit leg, so the body
-// is the structural mirror of the gate and can never drift from it.
+// licensedBy asks the ONE entitlement authority whether org's plan licenses product,
+// and reports the answer in the shape the shared predicate composes. commerce may be
+// nil (not co-resident); a query error or a nil result with no error is machinery that
+// returned nothing, and machinery that returned nothing has NOT said "no" — all three
+// are cloud.LicenceUnknown, never cloud.LicenceNone.
 //
-// The cure paths are RELATIVE and same-origin, deliberately: a hard-coded
-// cloud.hanzo.ai would brand a Lux / Zoo / Pars deployment as Hanzo, and this binary
-// white-labels by host. They point at the two API surfaces the shell already reads
-// and that `reachable` guarantees are never gated — /v1/plans (what to buy, with
-// prices, from @hanzo/plans) and /v1/billing (where to pay, subscribe or top up).
-type Refusal struct {
-	Error   string `json:"error"`   // stable machine code: always "payment_required"
-	Product string `json:"product"` // the gated @hanzo/plans product id
-	Reason  string `json:"reason"`  // "unpaid" | "unresolved"
-	Message string `json:"message"` // one human sentence
-	Cure    []Cure `json:"cure"`    // the ways to fix it, in the order to offer them
-}
-
-// Cure is one way out of a 402: Kind names the admit leg it satisfies
-// ("subscribe" | "credit"), URL where to do it.
-type Cure struct {
-	Kind string `json:"kind"`
-	URL  string `json:"url"`
-}
-
-// cures are the two ways to cure a refusal — exactly the two legs standing.Resolve
-// admits on, in the order the console should offer them (a subscription is the
-// steady state; prepay is the no-commitment path).
-var cures = []Cure{
-	{Kind: "subscribe", URL: "/v1/plans"},
-	{Kind: "credit", URL: "/v1/billing"},
-}
-
-func refuse(c *zip.Ctx, product, reason string) error {
-	msg := "this org has no active subscription for " + product + " and no prepaid credit"
-	if reason == reasonUnresolved {
-		msg = "billing could not be verified for " + product + "; retry shortly"
+// The plan->product policy lives ONCE, in @hanzo/plans, resolved by CheckEntitlement.
+// We read its verdict; we never restate it.
+func licensedBy(ctx context.Context, commerce cloud.CommerceClient, org, product string) cloud.Licence {
+	if commerce == nil {
+		return cloud.LicenceUnknown
 	}
-	return c.JSON(http.StatusPaymentRequired, Refusal{
-		Error:   "payment_required",
-		Product: product,
-		Reason:  reason,
-		Message: msg,
-		Cure:    cures,
-	})
-}
-
-// ── the invariant: the path to payment is never gated ───────────────────────────
-
-// reachable reports whether a path must be served REGARDLESS of standing.
-//
-// This is not a scope selector — which routes this middleware guards is decided by
-// where it is applied. It is a SAFETY PROPERTY of the gate: a customer who has not
-// yet paid must still be able to reach the paths that let them pay, and a lapsed one
-// must be able to cure their own lapse. Gate those and you deadlock every prospect
-// and every lapsed customer at once — a self-inflicted total revenue stop that looks
-// like success in a naive test, because everything returns 402. So the list lives
-// INSIDE the gate: no future wiring mistake can gate the pay path, whatever it wraps.
-//
-// Gating too little is a revenue leak we fix next week. Gating too much is an outage.
-// The list is therefore deliberately generous, and anything ambiguous belongs on it.
-//
-// Traced from the console subscribe flow (console src/components/products/
-// PlansModule.tsx → src/lib/api/plans.ts): PlansApi.plans() reads /v1/billing/plans
-// through the per-tenant billing proxy, and checkout drives the /v1/billing/* money
-// surface (subscribe/subscriptions/balance/payment-methods/usage/invoices/credit/
-// deposit/topup/gpu/spend-alerts/payment-config) — which also carries the INBOUND
-// PROVIDER WEBHOOKS at /v1/billing/webhooks/:provider. Gating an inbound payment
-// webhook loses payments outright, so that prefix is load-bearing twice over.
-func reachable(path string) bool {
-	// Liveness / readiness / metrics — a gate must never hide whether the process
-	// is up, or an incident becomes invisible at exactly the wrong moment.
-	switch path {
-	case "/health", "/healthz", "/readyz", "/livez", "/metrics":
-		return true
+	ent, err := commerce.CheckEntitlement(ctx, org, product)
+	if err != nil || ent == nil {
+		return cloud.LicenceUnknown
 	}
-	if strings.HasSuffix(path, "/health") {
-		return true // the per-subsystem HIP-0106 probe, /v1/<name>/health.
+	if ent.Active {
+		return cloud.LicenceActive
 	}
-	if !strings.HasPrefix(path, "/v1/") {
-		return true // the SPA shell + static assets that render the paywall screen itself.
-	}
-	switch path {
-	case "/v1/signin", // auth: session bootstrap (the console posts the OAuth code here).
-		"/v1/signout",
-		"/v1/get-account",  // auth: the account read AuthGate loads before anything else.
-		"/v1/entitlements": // this paywall's OWN projection — what the shell renders the upgrade UI from.
-		return true
-	}
-	for _, sub := range reachableTrees {
-		// A sub-tree covers its own ROOT as well as everything under it. Matching only
-		// "<root>/" is how a paywall ends up refusing the exact URL its own 402 points
-		// at — one missing slash and the cure is behind the gate. One rule, both forms.
-		if path == strings.TrimSuffix(sub, "/") || strings.HasPrefix(path, sub) {
-			return true
-		}
-	}
-	return false
-}
-
-// reachableTrees are the /v1 sub-trees the paywall may never refuse. Every entry is
-// written as a root WITH its trailing slash and covers the bare root too.
-var reachableTrees = []string{
-	"/v1/billing/",      // the whole money surface: subscribe, top up, AND the inbound provider webhooks.
-	"/v1/iam/",          // IAM login / OAuth token exchange / .well-known OIDC discovery.
-	"/v1/account/",      // the account surface the shell renders before any purchase decision.
-	"/v1/admin/",        // platform sudo — including the cockpit that holds this gate's kill switch.
-	"/v1/plans/",        // the plans catalog — WHAT to buy (@hanzo/plans) — and its sub-routes.
-	"/v1/models/",       // the model catalog the shell reads for discovery, and /v1/models/:id.
-	"/v1/orgs/",         // org read + switch: the shell must resolve which org it is buying for.
-	"/v1/waitlist/",     // admission's join API — an un-admitted user must still reach it.
-	"/v1/flags/",        // the guard's public mode read; also how the kill switch is observed.
-	"/v1/entitlements/", // per-org enablement reads/writes that sit beside the projection.
+	return cloud.LicenceNone
 }

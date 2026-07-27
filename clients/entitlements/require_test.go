@@ -150,14 +150,14 @@ func TestRequireProduct(t *testing.T) {
 		{
 			name:     "neither → 402 unpaid",
 			enforced: true, commerce: refusing, ledger: &fakeLedger{credit: atto(0)},
-			want: http.StatusPaymentRequired, reason: reasonUnpaid,
+			want: http.StatusPaymentRequired, reason: cloud.ReasonUnpaid,
 		},
 
 		// EXACT atto boundary — no cents, no threshold, no rounding.
 		{
 			name:     "balance == 0 atto denies",
 			enforced: true, commerce: refusing, ledger: &fakeLedger{credit: atto(0)},
-			want: http.StatusPaymentRequired, reason: reasonUnpaid,
+			want: http.StatusPaymentRequired, reason: cloud.ReasonUnpaid,
 		},
 		{
 			name:     "balance == 1 atto admits (a 10^-18 USD credit is credit)",
@@ -184,7 +184,7 @@ func TestRequireProduct(t *testing.T) {
 		{
 			name:     "strict: unresolvable → 402 unresolved",
 			enforced: true, strict: true, commerce: broken, ledger: nil,
-			want: http.StatusPaymentRequired, reason: reasonUnresolved,
+			want: http.StatusPaymentRequired, reason: cloud.ReasonUnresolved,
 		},
 		{
 			name:     "strict does NOT refuse a funded caller whose plan is unreadable",
@@ -221,9 +221,9 @@ func boolText(b bool) string {
 	return "false"
 }
 
-func decodeRefusal(t *testing.T, body []byte) Refusal {
+func decodeRefusal(t *testing.T, body []byte) cloud.Refusal {
 	t.Helper()
-	var r Refusal
+	var r cloud.Refusal
 	if err := json.Unmarshal(body, &r); err != nil {
 		t.Fatalf("decode Refusal: %v (body=%s)", err, body)
 	}
@@ -330,7 +330,7 @@ func TestRefusalIsActionable(t *testing.T) {
 		t.Fatalf("want 402, got %d (body=%s)", code, body)
 	}
 	r := decodeRefusal(t, body)
-	if r.Error != "payment_required" || r.Product != "world" || r.Reason != reasonUnpaid || r.Message == "" {
+	if r.Error != "payment_required" || r.Product != "world" || r.Reason != cloud.ReasonUnpaid || r.Message == "" {
 		t.Fatalf("refusal is not self-describing: %+v", r)
 	}
 	// One cure per admit leg — the body is the structural mirror of the gate.
@@ -342,7 +342,7 @@ func TestRefusalIsActionable(t *testing.T) {
 		if kinds[want] == "" {
 			t.Fatalf("refusal must name where to %s: %+v", want, r.Cure)
 		}
-		if !reachable(kinds[want]) {
+		if !cloud.Reachable(kinds[want]) {
 			t.Fatalf("cure %q points at %q, which the gate itself would refuse", want, kinds[want])
 		}
 	}
