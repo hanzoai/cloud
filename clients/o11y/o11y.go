@@ -260,10 +260,13 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	// /v1/sentry routes (see the report's dep-bump note); until then these 404, inert.
 	mountSentry(a)
 	// WRITE plane — opt-in, order-independent (no /v1/o11y/* Fiber route).
-	if err := mountIngest(deps); err != nil { // OTLP collector (:4317/:4318)
+	if err := mountIngest(deps); err != nil { // ZAP ingest collector (:4317)
 		return err
 	}
 	if err := mountTraceSink(deps); err != nil { // in-process trace sink
+		return err
+	}
+	if err := mountProbes(deps); err != nil { // fleet health probes -> hanzo_service_up
 		return err
 	}
 	// TERMINAL sub-mount: the hanzoai/o11y module wildcard /v1/o11y/* — the runtime
@@ -285,6 +288,7 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 // Datastore — so buffered spans/logs/rows flush before exit. Best-effort: the
 // first error is returned but every teardown still runs. Idempotent and nil-safe.
 func ShutdownO11y(ctx context.Context) error {
+	stopProbes()
 	var firstErr error
 	if err := shutdownAnnotationQueues(); err != nil && firstErr == nil {
 		firstErr = err
