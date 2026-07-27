@@ -321,9 +321,9 @@ type connectionView struct {
 // package global `mounted` (the in-process token-custody seam) and pairs with a
 // Shutdown, so it constructs the cloud.Service value directly (cloud.NewBase +
 // &cloud.Service[state]{…}) rather than via cloud.Mount.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("integrations.Mount: nil zip.App")
+		return fmt.Errorf("integrations.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("integrations.Mount: nil deps.Logger")
@@ -421,7 +421,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // cloud.Terminal-wrapped so its bad-signature 401 / malformed-body 400 is written
 // in-band and survives the commerce /v1 ErrorHandlerJSON (co-mounted ahead of us),
 // which would otherwise flatten a propagated 4xx to 500. Uniform reject codes.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/integrations", cloud.Handle(s, list))
 	app.Post("/v1/integrations/slack/events", cloud.Terminal(cloud.Handle(s, slackEvents)))
 	app.Post("/v1/integrations/slack/commands", cloud.Terminal(cloud.Handle(s, slackCommands)))

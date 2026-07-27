@@ -192,9 +192,9 @@ func toDeploymentView(d Deployment) deploymentView {
 // Mount wires the projects surface onto app per HIP-0106. Complex flavour: it keeps
 // a package global (mounted) for Shutdown and registers cross-package resolvers, so
 // it constructs the Service value directly rather than through cloud.Mount.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("projects.Mount: nil zip.App")
+		return fmt.Errorf("projects.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("projects.Mount: nil deps.Logger")
@@ -244,7 +244,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 // routes registers the projects surface and the mirrored /v1/platform/sites surface.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Post("/v1/projects", cloud.Handle(s, create))
 	app.Post("/v1/projects/fork", cloud.Handle(s, fork))
 	app.Get("/v1/projects", cloud.Handle(s, list))
@@ -303,7 +303,7 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 // site surfaces (/v1/sites and /v1/platform/sites) are the same engine, so they
 // get the same four routes from this one registration — a release published on
 // one is visible and activatable on the other because there is only one store.
-func siteReleases(app *zip.App, s *cloud.Service[state], base string) {
+func siteReleases(app cloud.Router, s *cloud.Service[state], base string) {
 	app.Post(base+"/:slug/publish", cloud.Handle(s, publishSiteRelease))
 	app.Post(base+"/:slug/releases", cloud.Handle(s, createRelease))
 	app.Get(base+"/:slug/releases", cloud.Handle(s, listReleases))

@@ -84,9 +84,9 @@ type state struct {
 var mounted *hcloud.Service[state]
 
 // Mount wires the /v1/dataroom/* surface onto app per HIP-0106.
-func Mount(app *zip.App, deps hcloud.Deps) error {
+func Mount(app hcloud.Router, deps hcloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("dataroom.Mount: nil zip.App")
+		return fmt.Errorf("dataroom.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("dataroom.Mount: nil deps.Logger")
@@ -136,7 +136,7 @@ func Mount(app *zip.App, deps hcloud.Deps) error {
 }
 
 // routes wires the /v1/dataroom/* surface onto app.
-func routes(app *zip.App, s *hcloud.Service[state]) {
+func routes(app hcloud.Router, s *hcloud.Service[state]) {
 	g := app.Group("/v1/dataroom")
 	// --- admin surface (validated principal → org) ---------------------------
 	g.Get("/documents", admin(s, "documents.list", nil, false))

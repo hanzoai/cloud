@@ -30,7 +30,6 @@ import (
 	"fmt"
 
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
 )
 
 // state is the subsystem's own data: the per-org registry stores (shared by the CRUD
@@ -49,9 +48,9 @@ var mounted *state
 // Mount opens the per-org registry stores, wires /v1/webhooks, and starts the bus
 // dispatcher (fail-soft). It never returns an error for a bus problem — only for a
 // genuinely unusable Deps — so a messaging fault can never abort the binary's boot.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("webhooks.Mount: nil zip.App")
+		return fmt.Errorf("webhooks.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("webhooks.Mount: nil deps.Logger")
@@ -93,7 +92,7 @@ func Shutdown(_ context.Context) error {
 }
 
 // routes registers the /v1/webhooks CRUD surface via the express-style group.
-func routes(app *zip.App, s *cloud.Service[*state]) {
+func routes(app cloud.Router, s *cloud.Service[*state]) {
 	g := app.Group("/v1/webhooks")
 	g.Get("", cloud.Handle(s, listEndpoints))
 	g.Post("", cloud.Handle(s, createEndpoint))

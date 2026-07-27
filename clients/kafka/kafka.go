@@ -28,7 +28,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/kafka/protocol"
 	"github.com/hanzoai/kafka/types"
-	"github.com/zap-proto/zip"
 )
 
 // order 6: mounts after clients/pubsub (order 5) so the embedded NATS :4222 is
@@ -44,7 +43,7 @@ const startupProbe = 3 * time.Second
 var broker *protocol.Broker
 
 // Mount starts the embedded Kafka adaptor when CLOUD_KAFKA_ENABLED is set.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("kafka.Mount: nil deps.Logger")
 	}

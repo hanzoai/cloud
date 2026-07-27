@@ -69,7 +69,7 @@ type state struct{}
 
 // Mount registers the read-only templates surface. No store, no DataDir — the
 // catalog is embedded reference content, validated once in build.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "templates", build, routes)
 }
 
@@ -84,7 +84,7 @@ func build(b cloud.Base) (state, error) {
 }
 
 // routes registers the read-only templates surface.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Collection root (/v1/templates) stays flat — Group(p).Get("") yields "p/".
 	app.Get("/v1/templates", cloud.Handle(s, list))
 	g := app.Group("/v1/templates")

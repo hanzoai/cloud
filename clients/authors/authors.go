@@ -141,9 +141,9 @@ var mounted *cloud.Service[state]
 var stopScheduler = func() {}
 
 // Mount wires the authors surface onto app per HIP-0106.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("authors.Mount: nil zip.App")
+		return fmt.Errorf("authors.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("authors.Mount: nil deps.Logger")
@@ -183,7 +183,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 // routes registers the authors surface.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/authors", cloud.Handle(s, myAuthors))
 	app.Get("/v1/authors/basis", cloud.Handle(s, basis))
 	app.Post("/v1/authors/connect", cloud.Handle(s, connect))

@@ -16,7 +16,7 @@ type state struct {
 // Mount wires the share surface onto app. Mirrors clients/zt: one line over the
 // generic subsystem entrypoint; routes() is the ONE place routes are declared,
 // Express-style via app.Group.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "share", build, routes)
 }
 
@@ -32,7 +32,7 @@ func build(b cloud.Base) (state, error) {
 }
 
 // routes — the ONE registration point, Express-ish .Group. Static before :param.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/share")
 	g.Post("/enable", cloud.Handle(s, enable)) // provision + hand the CLI its credential
 	g.Get("", cloud.Handle(s, listShares))     // the org's active shares (CLI + console)

@@ -58,9 +58,9 @@ type handler struct {
 }
 
 // Mount registers the discovery routes on app per HIP-0106.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("agentskills.Mount: nil zip.App")
+		return fmt.Errorf("agentskills.Mount: nil app")
 	}
 	sub, err := fs.Sub(catalogFS, "catalog")
 	if err != nil {

@@ -33,7 +33,7 @@ import (
 // and is the ledger the charge lands on. The registrar's wholesale credentials come
 // from the platform secret store (KMS) via the operator-injected env NAMECOM_USER /
 // NAMECOM_TOKEN — never hard-coded, exactly as clients/sites reads CF_API_TOKEN.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "domain", buildState, routes)
 }
 
@@ -70,7 +70,7 @@ func buildState(b cloud.Base) (state, error) {
 	return state{svc: svc, reg: reg, log: b.Log}, nil
 }
 
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Handlers mount AFTER commerce, whose /v1 error filter flattens a propagated
 	// error to 500 — so wrap in Terminal to preserve real 4xx/402/409 statuses.
 	h := func(fn func(*cloud.Service[state], *zip.Ctx) error) func(*zip.Ctx) error {

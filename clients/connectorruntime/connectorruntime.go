@@ -21,9 +21,9 @@ import (
 // credential travels in the request `auth`. The route is DISTINCT from
 // automations' GET /v1/automations/connectors (the catalogue), so the two
 // subsystems compose without collision.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("connectorruntime.Mount: nil zip.App")
+		return fmt.Errorf("connectorruntime.Mount: nil app")
 	}
 	log := deps.Logger
 	app.Post("/v1/automations/connectors/:id/run", runHandler)

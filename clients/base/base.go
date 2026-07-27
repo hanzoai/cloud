@@ -101,9 +101,9 @@ var mounted *subsystem
 // Mount wires the base subsystem onto app per HIP-0106: the always-on health
 // route, then — behind CLOUD_BASE_EMBED — the public waitlist lane and the
 // authenticated per-org hosting lane.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("base.Mount: nil zip.App")
+		return fmt.Errorf("base.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("base.Mount: nil deps.Logger")

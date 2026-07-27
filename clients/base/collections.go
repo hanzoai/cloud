@@ -46,6 +46,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
@@ -77,7 +78,7 @@ func orchestratorHost() string {
 // mountCollections wires the /v1/collections[/*] Base data-plane forward. Always on
 // (independent of the per-org embed gate): the console's Base product needs it
 // whether or not this binary ALSO hosts per-org Bases at /v1/base/*.
-func mountCollections(app *zip.App) error {
+func mountCollections(app cloud.Router) error {
 	proxy, err := newCollectionsProxy(orchestratorURL(), orchestratorHost())
 	if err != nil {
 		return fmt.Errorf("base.mountCollections: %w", err)
