@@ -275,15 +275,29 @@ func Reachable(path string) bool {
 	if !strings.HasPrefix(path, "/v1/") {
 		return true // the SPA shell + static assets that render the paywall screen itself.
 	}
-	// These three moved when the /v1 surface was namespaced (/v1/signin →
-	// /v1/ai/signin, /v1/get-account → /v1/ai/account). The list matches by STRING,
-	// so it does NOT follow a route: the old spellings here would put a 402 in front
-	// of SIGN-IN — the same shape of outage the trailing-slash and casing bugs caused
-	// twice already. Pinned by TestAuthRoutesAreAlwaysReachable.
+	// The auth surface, under EVERY spelling it has ever answered on. This list
+	// matches by STRING and does NOT follow a route, so a spelling that drifts out
+	// of the list puts a 402 in front of SIGN-IN — the outage the trailing-slash and
+	// casing bugs already caused twice.
+	//
+	// It said these had "moved" to /v1/ai/*. They had not: production answers
+	// /v1/signin, /v1/signout and /v1/get-account, while /v1/ai/signin,
+	// /v1/ai/signout and /v1/ai/account are all 404. So the list exempted three
+	// paths that do not exist and gated the three that do — flipping the enforce
+	// flag would have locked every unpaid user out of logging in, which is exactly
+	// the failure the comment warned about, pointed the wrong way.
+	//
+	// Both spellings stay listed. This file's own rule is that the list is
+	// deliberately generous and anything ambiguous belongs on it: gating too little
+	// is a revenue leak, gating sign-in is an outage. Pinned by
+	// TestAuthRoutesAreAlwaysReachable + TestPayPathStaysReachable.
 	switch path {
-	case "/v1/ai/signin", // auth: session bootstrap (the console posts the OAuth code here).
+	case "/v1/signin", // auth: session bootstrap (the console posts the OAuth code here).
+		"/v1/signout",
+		"/v1/get-account", // auth: the account read AuthGate loads before anything else.
+		"/v1/ai/signin",   // the namespaced spellings, kept so a future move cannot regress this.
 		"/v1/ai/signout",
-		"/v1/ai/account",   // auth: the account read AuthGate loads before anything else.
+		"/v1/ai/account",
 		"/v1/entitlements": // the paywall's OWN projection — what the shell renders upgrade UI from.
 		return true
 	}
