@@ -106,7 +106,7 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 	// default — the anti-cross-tenant billing property (resource_billing.go).
 	fee := cloud.ResourceFeeCents(runFeeEnvPrefix, runKind)
 	project, projectValidated := principal.ValidatedProject(c)
-	if err := s.Bill.Gate(c.Context(), principal.HomeOrg(c), project, projectValidated, runKind, fee); err != nil {
+	if err := s.Bill.Gate(c.Context(), principal.Ledger(c), project, projectValidated, runKind, fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 
@@ -177,7 +177,7 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 	ensureSecretSync(s, c.Context(), org, a)
 
 	// Record the paid unit on the run's OWN org ledger (fire-and-forget).
-	s.Bill.Meter(principal.HomeOrg(c), principal.Project(c), runKind, fee, c.RequestID(), cloud.ClientIP(c))
+	s.Bill.Meter(principal.Ledger(c), principal.Project(c), runKind, fee, c.RequestID(), cloud.ClientIP(c))
 
 	s.Log.Info("run (container-serverless)", "org", org, "app", slug, "ns", tenantNamespace(org),
 		"image", image, "min", minScale, "max", maxScale, "actor", c.User(), "requestID", c.RequestID())
