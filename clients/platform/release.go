@@ -30,6 +30,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -194,39 +195,72 @@ func (p releasePlan) run(ctx context.Context) (releaseStep, error) {
 // build or smoke leaves NO tag and universe is never told of a phantom version.
 func startRelease(s *cloud.Service[state], c *zip.Ctx, req runnerBuildReq) error {
 	ref := firstNonEmpty(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
-	sha, err := resolveCommit(s, c.Context(), releaseRepoSlug, ref)
+	bldID, image, err := launchRelease(s, c.Context(), ref,
+		strings.TrimSpace(req.Repo), strings.TrimSpace(req.Dockerfile))
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "resolve %s: %v", ref, err)
+		return err
 	}
-	version, err := computeReleaseVersion(s, c.Context(), releaseRepoSlug)
+	return c.JSON(http.StatusAccepted, runnerBuildResp{
+		BuildJobID: bldID, Status: "releasing", RunnerPool: "32g", Image: image,
+	})
+}
+
+// releasing is the in-flight guard. A release is a fabric-wide operation that
+// mints the next version from the tags that already exist, so two overlapping
+// runs would compute the SAME version and race to publish it. Only one at a
+// time; a second trigger is refused rather than queued, because by the time the
+// first finishes its commit is already the newer one.
+var releasing atomic.Bool
+
+// launchRelease pins the commit, computes the next version, and starts the
+// DETACHED build → smoke → tag → notify pipeline, returning the build id and the
+// image it will publish. It is the ONE release entry point: the /v1/runner HTTP
+// path and the push trigger both come through here, so a release cut by either
+// is the same pipeline with the same guards. Errors are zip errors so the HTTP
+// caller can return them directly.
+func launchRelease(s *cloud.Service[state], ctx context.Context, ref, repo, dockerfile string) (string, string, error) {
+	if !releasing.CompareAndSwap(false, true) {
+		return "", "", zip.Errorf(http.StatusConflict, "a release is already in flight")
+	}
+	ok := false
+	defer func() {
+		// Hand the flag to the goroutine on success; clear it on every early exit.
+		if !ok {
+			releasing.Store(false)
+		}
+	}()
+
+	sha, err := resolveCommit(s, ctx, releaseRepoSlug, ref)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "compute release version: %v", err)
+		return "", "", zip.Errorf(http.StatusBadGateway, "resolve %s: %v", ref, err)
+	}
+	version, err := computeReleaseVersion(s, ctx, releaseRepoSlug)
+	if err != nil {
+		return "", "", zip.Errorf(http.StatusBadGateway, "compute release version: %v", err)
 	}
 	tag := "v" + version
 	image := releaseImage + ":" + tag
-	repoURL := firstNonEmpty(strings.TrimSpace(req.Repo), releaseRepoURL)
-	dockerfile := firstNonEmpty(strings.TrimSpace(req.Dockerfile), "Dockerfile")
-
 	bldID, err := genID("rel")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return "", "", zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	plan := releaseFor(s, repoURL, sha, image, tag, dockerfile, bldID)
+	repoURL := firstNonEmpty(repo, releaseRepoURL)
+	plan := releaseFor(s, repoURL, sha, image, tag, firstNonEmpty(dockerfile, "Dockerfile"), bldID)
 
-	ctx := context.WithoutCancel(c.Context())
+	detached := context.WithoutCancel(ctx)
 	go func() {
-		reached, rerr := plan.run(ctx)
+		defer releasing.Store(false)
+		reached, rerr := plan.run(detached)
 		if rerr != nil {
 			s.Log.Error("release failed", "version", version, "image", image, "reached", reached.String(), "err", rerr)
 			return
 		}
 		s.Log.Info("release published", "version", version, "image", image, "sha", sha)
 	}()
+	ok = true
 
 	s.Log.Info("release started", "version", version, "image", image, "repo", repoURL, "sha", sha)
-	return c.JSON(http.StatusAccepted, runnerBuildResp{
-		BuildJobID: bldID, Status: "releasing", RunnerPool: "32g", Image: image,
-	})
+	return bldID, image, nil
 }
 
 // releaseFor assembles the production pipeline for one version. Each seam is the REAL
