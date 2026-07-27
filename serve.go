@@ -370,6 +370,26 @@ func Serve(specs []MountSpec, enable []string) error {
 		})
 	}
 
+	// The binary's own health, and the ONE place it admits a plane is dead.
+	//
+	// A subsystem that mounts fail-closed (commerce with an unusable KV_URL, team
+	// in degraded mode) keeps the process up and answers 503 on its own routes.
+	// From outside that is indistinguishable from a subsystem which was simply
+	// never enabled — which is how a dead revenue plane once shipped behind a green
+	// pod and a green gate. Degradations() makes the difference visible.
+	//
+	// It answers 200 EVEN WHEN DEGRADED, on purpose. This doubles as the container
+	// probe, and taking a pod out of rotation because one plane of many is broken
+	// would turn a partial outage into a total one — the opposite of what
+	// fail-closed mounting is for. The release smoke reads the `degraded` field and
+	// refuses the image; that is the right place to say no, before it ships.
+	app.Get("/v1/health", func(c *zip.Ctx) error {
+		if d := Degradations(); len(d) > 0 {
+			return c.JSON(200, map[string]any{"status": "degraded", "degraded": d})
+		}
+		return c.JSON(200, map[string]any{"status": "ok"})
+	})
+
 	if err := MountAll(app, specs, cfg, deps); err != nil {
 		return fmt.Errorf("mount: %w", err)
 	}

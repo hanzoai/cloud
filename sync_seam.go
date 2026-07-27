@@ -24,7 +24,7 @@ type SyncEvent struct {
 	Org      string // tenant (from the signed installation / gateway identity)
 	Locator  string // source repo locator (a clone URL, or "<org>/<repo>")
 	Repo     string // short repo name (git)
-	Branch   string
+	Ref      string // FULL ref: refs/heads/<branch> or refs/tags/<tag>
 	Before   string
 	After    string
 	Actor    string // who made the upstream push — the loop guard compares it to the sync's own Actor

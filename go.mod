@@ -14,7 +14,7 @@ require (
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.2.0
-	github.com/hanzoai/commerce v1.49.25
+	github.com/hanzoai/commerce v1.49.26
 	github.com/hanzoai/decimal v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
 	github.com/hanzoai/goa v1.0.0
@@ -39,11 +39,11 @@ require (
 	github.com/nats-io/nats.go v1.50.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor v0.144.0
 	github.com/spf13/cobra v1.10.2
-	github.com/vulcand/oxy/v2 v2.0.0-00010101000000-000000000000
+	github.com/vulcand/oxy/v2 v2.2.0
 	github.com/zap-proto/fiber/v3 v3.2.1
 	github.com/zap-proto/go v1.3.0
 	github.com/zap-proto/md v0.1.0
-	github.com/zap-proto/zip v1.10.0
+	github.com/zap-proto/zip v1.11.0
 	go.opentelemetry.io/collector/component v1.54.0
 	go.opentelemetry.io/collector/confmap v1.54.0
 	go.opentelemetry.io/collector/confmap/provider/envprovider v1.50.0
@@ -758,8 +758,6 @@ replace github.com/uber/jaeger-client-go => github.com/uber/jaeger-client-go v2.
 replace github.com/abbot/go-http-auth => github.com/containous/go-http-auth v0.4.1-0.20200324110947-a37a7636d23e
 
 replace github.com/mailgun/minheap => github.com/containous/minheap v0.0.0-20190809180810-6e71eb837595
-
-replace github.com/vulcand/oxy/v2 => github.com/traefik/oxy/v2 v2.0.0-20260126093803-fb11d60e0fdf
 
 // SQLite: github.com/hanzoai/sqlite is the only engine cloud links. It registers
 // the "sqlite" driver under both build tags — cgo through hanzoai/csqlite against
