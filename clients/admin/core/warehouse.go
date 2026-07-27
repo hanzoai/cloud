@@ -67,10 +67,6 @@ var (
 	InvoiceEvents      = []string{EvInvoiceFinalized, EvInvoicePaid, EvInvoiceVoid}
 )
 
-// WarehouseReady reports whether the shared datastore ledger is connected, the
-// gate every fleet read checks first (honest-empty when false).
-func WarehouseReady() bool { return datastore.Ready() }
-
 // BillingEventsReady reports whether the warehouse is connected AND the
 // collector's commerce.events table is provisioned — the two-part gate every
 // billing fleet view opens with, so an unwired collector degrades to an honest
@@ -168,33 +164,6 @@ func CHInt64(v any) int64 {
 			return 0
 		}
 		return int64(f)
-	default:
-		return 0
-	}
-}
-
-func CHFloat64(v any) float64 {
-	switch n := v.(type) {
-	case float64:
-		return n
-	case float32:
-		return float64(n)
-	case int:
-		return float64(n)
-	case int64:
-		return float64(n)
-	case int32:
-		return float64(n)
-	case uint64:
-		return float64(n)
-	case uint32:
-		return float64(n)
-	case string:
-		f, err := strconv.ParseFloat(strings.TrimSpace(n), 64)
-		if err != nil {
-			return 0
-		}
-		return f
 	default:
 		return 0
 	}
