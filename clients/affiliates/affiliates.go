@@ -270,9 +270,9 @@ var mounted *cloud.Service[state]
 // Mount wires the affiliates surface onto app per HIP-0106. Complex flavour: it
 // holds a package-global (mounted) so Shutdown can release the store, so it
 // constructs the Service value directly rather than via cloud.Mount.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("affiliates.Mount: nil zip.App")
+		return fmt.Errorf("affiliates.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("affiliates.Mount: nil deps.Logger")
@@ -302,7 +302,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 // routes registers the affiliates surface. The static /sweep binds before the
 // /:id/* param routes (distinct segment counts).
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/affiliates", cloud.Handle(s, myAffiliates))
 	app.Get("/v1/affiliates/me", cloud.Handle(s, myAffiliatesMe))
 	// Self-service dashboard reads/writes (all org-scoped to the caller's own affiliate).

@@ -84,9 +84,9 @@ var mounted *cloud.Service[state]
 
 // Mount wires the /v1/ingress control plane onto app and, in edge role, starts the
 // edge data plane.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("ingress.Mount: nil zip.App")
+		return fmt.Errorf("ingress.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("ingress.Mount: nil deps.Logger")
@@ -164,7 +164,7 @@ func Shutdown(ctx context.Context) error {
 // mountRoutes registers the /v1/ingress control-plane surface. routes/services/
 // middlewares share uniform CRUD (list/get/delete keyed by kind); create+update
 // share one handler per kind (POST and PUT both land there).
-func mountRoutes(s *cloud.Service[state], app *zip.App) {
+func mountRoutes(s *cloud.Service[state], app cloud.Router) {
 	g := app.Group("/v1/ingress")
 	g.Get("/status", cloud.Handle(s, status))
 	g.Get("/tls", cloud.Handle(s, getTLS))

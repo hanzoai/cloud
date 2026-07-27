@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
 )
 
 // TestMountFunc_IsTheSubsystemSignature pins the registry's mount contract: the
@@ -24,5 +23,5 @@ import (
 //
 // What remains is the only claim worth making, and the build enforces it.
 func TestMountFunc_IsTheSubsystemSignature(t *testing.T) {
-	var _ cloud.MountFunc = func(*zip.App, cloud.Deps) error { return nil }
+	var _ cloud.MountFunc = func(cloud.Router, cloud.Deps) error { return nil }
 }

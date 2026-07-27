@@ -24,7 +24,7 @@ import (
 // while a lesser admin is hard-pinned to their own.
 
 // limitRoutes registers the promo + cap control plane. Called from routes().
-func limitRoutes(app *zip.App, s *cloud.Service[core.State]) {
+func limitRoutes(app cloud.Router, s *cloud.Service[core.State]) {
 	g := app.Group("/v1/admin")
 	// Platform plan promo — SuperAdmin only.
 	g.Get("/promos", core.Guard(s, getPromo))

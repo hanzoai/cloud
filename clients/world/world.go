@@ -36,7 +36,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
-	"github.com/zap-proto/zip"
 )
 
 const (
@@ -67,9 +66,9 @@ type service struct {
 var mounted *service
 
 // Mount registers the world surface on app per HIP-0106.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("world.Mount: nil zip.App")
+		return fmt.Errorf("world.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("world.Mount: nil deps.Logger")

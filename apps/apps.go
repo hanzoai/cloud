@@ -207,7 +207,7 @@ func Wire() []cloud.MountSpec {
 		// hanzoai/metrics — native o11y. It declares its OWN narrow metrics.Deps (no
 		// hanzoai/cloud import), so Typed cannot adapt it; mountMetrics builds that Deps
 		// from cloud.Deps and calls metrics.Mount explicitly.
-		{Name: "metrics", Mount: mountMetrics},
+		{Name: "metrics", Mount: cloud.Global(mountMetrics), Global: true},
 		// Embedded runtime edge (/v1/ingress/*). STAGED — edge listeners stay off unless
 		// the operator names "ingress" in CLOUD_ENABLE.
 		{Name: "ingress", Mount: ingress.Mount, Shutdown: ingress.Shutdown},
@@ -220,7 +220,7 @@ func Wire() []cloud.MountSpec {
 		// (zip-native + hanzoai/orm, beego-free); the retired Casdoor iam-v1 embed is GONE.
 		// STAGED: the operator adds "iam" to --enable only after IAM config + the fold are
 		// verified (login/authorize/token/jwks + the operator SSO chain).
-		{Name: "iam", Mount: iam.Mount},
+		{Name: "iam", Mount: iam.Mount, Prefixes: iam.Prefixes},
 		// Embedded Base app engine + viral waitlist (/v1/waitlist/*). STAGED behind
 		// CLOUD_BASE_EMBED. OwnsHealth: native /v1/base/health.
 		{Name: "base", Mount: base.Mount, Shutdown: base.Shutdown, OwnsHealth: true},
@@ -231,13 +231,13 @@ func Wire() []cloud.MountSpec {
 		// them precedence. NOT OwnsHealth: /v1/o11y/health stays the generic always-ok
 		// route (registered before MountAll), exactly as when the former module co-entry —
 		// which also set OwnsHealth=false — triggered it.
-		{Name: "o11y", Mount: o11y.MountO11y, Shutdown: o11y.ShutdownO11y},
-		{Name: "authz", Mount: authz.Mount},
+		{Name: "o11y", Mount: cloud.Global(o11y.MountO11y), Shutdown: o11y.ShutdownO11y, Global: true},
+		{Name: "authz", Mount: cloud.Global(authz.Mount), Global: true},
 		// Embedded commerce plane /v1/commerce/*, /_/commerce/* — the hanzoai/commerce
 		// MODULE via the adapter in commerce.go (un-forked; the in-process
 		// CommerceClient is wired directly in pickCommerceClient).
-		{Name: "commerce", Mount: mountCommerce},
-		{Name: "licensing", Mount: licensing.Mount},
+		{Name: "commerce", Mount: cloud.Global(mountCommerce), Global: true},
+		{Name: "licensing", Mount: cloud.Global(licensing.Mount), Global: true},
 		// clients/plan.Mount. Enable id normalized "plans" -> "plan" to match the
 		// package + generated cmd/plan (one subsystem, one name). Its product routes
 		// stay /v1/plans/* (incl. the OwnsHealth /v1/plans/health probe) — unchanged.
@@ -484,7 +484,7 @@ func Wire() []cloud.MountSpec {
 		// catch-all so /v1/chat resolves here (Fiber first-match); the ai module's
 		// beego /v1/chat alias behind its /v1/* glob is thereby shadowed, while ai
 		// keeps /v1/chat/completions + /v1/completions.
-		{Name: "agent", Mount: agent.Mount},
+		{Name: "agent", Mount: cloud.Global(agent.Mount), Global: true},
 		// The UNIFIED GROUNDED ADVISOR — POST /v1/ask. DISTINCT from /v1/chat/completions
 		// (ai's RAW model) and /v1/agent (tool-calling): it routes a plain-language question
 		// to the domain(s) that can GROUND it, reads the REAL figures from each domain's own
@@ -509,8 +509,8 @@ func Wire() []cloud.MountSpec {
 		// c.Next()s everything else to ai. zen owns the zen family; ai owns every
 		// other model and the /v1/models list. Order is load-bearing — Claim must
 		// run before ai's catch-all. (See hip-00NN.)
-		{Name: "zen", Mount: mountZen},
-		{Name: "ai", Mount: ai.Mount},
+		{Name: "zen", Mount: mountZen, Prefixes: []string{"/v1"}},
+		{Name: "ai", Mount: cloud.Global(ai.Mount), Global: true},
 		// Runtime wasm/proxy plugins — mounts dead last.
 		{Name: "plugins", Mount: plugin.Mount},
 	}

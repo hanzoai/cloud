@@ -17,8 +17,8 @@ import (
 	"net/http/httptest"
 	"strings"
 
+	"github.com/hanzoai/cloud"
 	fiber "github.com/zap-proto/fiber/v3"
-	"github.com/zap-proto/zip"
 )
 
 // booksMetricsPath is the books domain's grounded read the contributor replays. It is the ONE
@@ -31,9 +31,9 @@ const maxMetricsResponse = 1 << 20
 // booksContributor grounds financial questions against the books domain. It holds the app it
 // replays against (the SAME binary; the read flows the normal middleware chain), exactly as
 // agent.go's aiCompleter holds the app to replay /v1/chat/completions.
-type booksContributor struct{ app *zip.App }
+type booksContributor struct{ app cloud.Router }
 
-func newBooksContributor(app *zip.App) *booksContributor { return &booksContributor{app: app} }
+func newBooksContributor(app cloud.Router) *booksContributor { return &booksContributor{app: app} }
 
 func (booksContributor) Name() string { return "books" }
 

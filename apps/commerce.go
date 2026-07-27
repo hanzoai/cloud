@@ -103,7 +103,7 @@ var commercePrefixes = []string{
 // own gate chains (see commercePrefixes).
 func mountCommerce(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("commerce: nil zip.App")
+		return fmt.Errorf("commerce: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("commerce: nil deps.Logger")
@@ -412,7 +412,7 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 	//     app (the metering debit path) instead of a socket to a standalone pod.
 	//   - the commerce client reads the Embedded's datastore DIRECTLY (entitlements +
 	//     BalanceCents) — no HTTP shape at all.
-	transport.SetApp(app)
+	transport.SetApp(app.Fiber())
 	commerce.PublishEmbedded(embedded)
 
 	// Usage-cap enforcement on the FINANCE path. The unified binary records usage in
@@ -470,7 +470,7 @@ func hasCommercePrefix(path string) bool {
 }
 
 // of falling through to another subsystem's catch-all.
-func mountCommerceFailClosed(app *zip.App) {
+func mountCommerceFailClosed(app cloud.Router) {
 	failed := func(c *zip.Ctx) error {
 		c.SetHeader("Content-Type", "application/json")
 		return c.Bytes(http.StatusServiceUnavailable, []byte(`{"error":"commerce unavailable","code":503}`))
