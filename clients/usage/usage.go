@@ -57,6 +57,7 @@ import (
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/commerce/transport"
+	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
@@ -287,7 +288,7 @@ type ProviderRow struct {
 // interpolated) — a caller can never read another org's usage.
 func buildAnalyticsBlock(s *cloud.Service[state], ctx context.Context, org string, start, end time.Time) ProviderBreakdown {
 	empty := ProviderBreakdown{Available: false, Items: []ProviderRow{}, Source: llmTable}
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return empty
 	}
 	if err := aiobject.EnsureCloudUsageTable(ctx); err != nil {
@@ -304,7 +305,7 @@ func buildAnalyticsBlock(s *cloud.Service[state], ctx context.Context, org strin
 		"sum(cost_cents) AS cost_cents FROM " + llmTable +
 		" WHERE timestamp >= ? AND timestamp < ? AND organization = ? " +
 		"GROUP BY provider ORDER BY tokens DESC"
-	rows, err := aiobject.DatastoreQuery(ctx, sql, tsLiteral(start), tsLiteral(end), org)
+	rows, err := datastore.Query(ctx, sql, tsLiteral(start), tsLiteral(end), org)
 	if err != nil {
 		s.Log.Debug("cloud_usage per-provider query failed; analytics honest-empty", "org", org, "err", err)
 		return empty
@@ -377,7 +378,7 @@ func buildSpendBlock(s *cloud.Service[state], ctx context.Context, org string, s
 // when the datastore is not connected; (totals, true) otherwise. A query error also
 // degrades to honest-empty so the summary never 5xxs on a warehouse blip.
 func buildLLMBlock(s *cloud.Service[state], ctx context.Context, org string, start, end time.Time) (LLM, bool) {
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return buildLLM(false, nil), false
 	}
 	// Ensure the ai-owned ledger table exists (idempotent) so a fresh warehouse
@@ -392,7 +393,7 @@ func buildLLMBlock(s *cloud.Service[state], ctx context.Context, org string, sta
 		"sum(prompt_tokens) AS prompt_tokens, sum(completion_tokens) AS completion_tokens, " +
 		"sum(cost_cents) AS cost_cents, uniqExact(model) AS models " +
 		"FROM " + llmTable + " WHERE timestamp >= ? AND timestamp < ? AND organization = ?"
-	rows, err := aiobject.DatastoreQuery(ctx, sql, tsLiteral(start), tsLiteral(end), org)
+	rows, err := datastore.Query(ctx, sql, tsLiteral(start), tsLiteral(end), org)
 	if err != nil {
 		s.Log.Debug("cloud_usage query failed; llm honest-empty", "org", org, "err", err)
 		return buildLLM(false, nil), false

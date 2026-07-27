@@ -4,7 +4,7 @@
 //
 // It reads the ONE shared warehouse (commerce.events) — the table the commerce
 // analytics collector lands every subscription-lifecycle event in — over the SAME
-// client (aiobject.DatastoreQuery) the o11y/compute lenses use, with ZERO per-org
+// client (datastore.Query) the o11y/compute lenses use, with ZERO per-org
 // fan-out: one GROUP BY resolves each subscription's LATEST lifecycle state
 // (argMax by timestamp), so the whole fleet is one query, not N per-org commerce
 // reads. Honest by construction: no datastore connected or the collector's table
@@ -18,9 +18,9 @@ import (
 	"strconv"
 	"strings"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
+	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/zap-proto/zip"
 )
 
@@ -56,7 +56,7 @@ func Subscriptions(s *cloud.Service[core.State], c *zip.Ctx) error {
 		return core.OKList(c, []SubscriptionRow{}, 0)
 	}
 
-	rows, err := aiobject.DatastoreQuery(ctx, subscriptionsSQL())
+	rows, err := datastore.Query(ctx, subscriptionsSQL())
 	if err != nil {
 		return core.Fail(c, "subscriptions query: "+err.Error())
 	}
