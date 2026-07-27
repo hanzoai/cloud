@@ -14,7 +14,6 @@ import (
 	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/role"
-	"github.com/hanzoai/cloud/routers"
 	"github.com/hanzoai/cloud/writerpin"
 	"github.com/hanzoai/cloud/zapface"
 	luxlog "github.com/luxfi/log"
@@ -317,29 +316,30 @@ func Serve(specs []MountSpec, enable []string) error {
 	// subsystems (notably /v1/ai/*) at 0 to avoid double-billing.
 	app.Use(BillingGate(deps.Metering, DefaultPrice))
 
-	// Subscription paywall (task #36). Runs AFTER IdentityMiddleware (so it keys on the
-	// VALIDATED principal + owner claim, never a client X-Org-Id) and beside BillingGate,
-	// BEFORE MountAll so it precedes every subsystem /v1/<name>/* wildcard. DARK by
-	// default: PAYWALL_ENFORCED=false makes it a pure passthrough (zero behavior change)
-	// until an owner flips it. The plan read is the co-resident commerce client's OPTIONAL
-	// ActivePaidPlan capability, resolved by type-assertion — a commerce build that cannot
-	// answer (nil / split-deploy / disabled stub) makes the gate fail OPEN, never locking
-	// a subscriber out. The sell/service surface (sign-in/billing/plans/models/health) is
-	// always exempt, so the gate can never block the path to payment.
-	var planChecker routers.PlanChecker
-	if pc, ok := deps.Commerce.(routers.PlanChecker); ok {
-		planChecker = pc
-	}
-	// cfg.PaywallEnforced is a BOOT-time value: flipping the paywall needs a redeploy.
-	// See routers/paywall.go for why the cockpit switch cannot reach this middleware.
-	// Enforcement is read PER REQUEST from the platform switch an owner flips at
-	// admin.hanzo.ai, so turning the paywall on or off applies within one flag-cache
-	// TTL — no redeploy, no CR edit. Before the flag engine mounts (and when it is
-	// absent) Switch reports false, so PAYWALL_ENFORCED remains the floor and a
-	// deployment that already sets it keeps enforcing exactly as it did.
-	app.Use(routers.Paywall(func() bool {
-		return cfg.PaywallEnforced || Switch(SwitchPaywallEnforced)
-	}, planChecker))
+	// Spend gate — the ONE "may this principal spend?" enforcement point. Runs AFTER
+	// IdentityMiddleware (so it keys on the VALIDATED principal + owner claim, never a
+	// client X-Org-Id) and beside BillingGate, BEFORE MountAll so it precedes every
+	// subsystem /v1/<name>/* wildcard.
+	//
+	// It replaces routers.Paywall, which asked only "does this org hold a paid PLAN?".
+	// That question has no credit leg, so enabling it would have 402'd every prepaid
+	// customer — which is why it was mounted for months and never turned on. SpendGate
+	// admits on subscription OR prepaid credit (cloud.Stand), read at the wallet address
+	// the DEBIT writes, and applies to the billable paths only (cloud.Billable) — LLM
+	// and non-LLM resource trees alike.
+	//
+	// DARK by default and it must stay dark until a starter-credit path exists: there is
+	// none in this binary today, so enforcing would 402 every new signup on day one. See
+	// middleware_spend.go.
+	//
+	// Enforcement is read ONLY from the platform switch — there is no env var and no
+	// Config field. It used to be `cfg.PaywallEnforced || Switch(...)`, a boot-time OR
+	// that could not be turned OFF from the cockpit: the kill switch was defeated by the
+	// very variable that armed the gate. clients/entitlements now registers
+	// paywall_enforced with NO Env fallback for the same reason (its own
+	// TestSwitchesDefaultOff pins that, and was RED against the old registration).
+	// One reader, one answer, and the kill switch always wins.
+	app.Use(SpendGate(deps.Commerce))
 
 	// HIP-0106 liveness contract: every enabled subsystem answers
 	// GET /v1/<name>/health uniformly, registered at the compose root before
