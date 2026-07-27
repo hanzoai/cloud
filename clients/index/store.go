@@ -157,6 +157,45 @@ CREATE INDEX IF NOT EXISTS ix_terms_pk ON terms(org, uid, pk);
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("index migrate: %w", err)
 	}
+	return s.adoptLegacyTables()
+}
+
+// legacyTables maps a table's previous name to its current one. Moving the store
+// FILE is not enough when the tables inside it were renamed too: the rows would
+// still be there, under names nothing queries, and the index would read as empty
+// while every document sat intact one identifier away.
+var legacyTables = map[string]string{
+	"search_indexes": "indexes",
+	"search_docs":    "docs",
+	"search_terms":   "terms",
+}
+
+// adoptLegacyTables carries rows out of a previous schema's tables and drops
+// them. Idempotent: a table that is not there is skipped, and one that is gets
+// emptied by the DROP, so a second boot has nothing left to adopt. INSERT OR
+// IGNORE means rows already written under the current names win — the migration
+// never overwrites live data with older rows.
+func (s *Store) adoptLegacyTables() error {
+	for previous, current := range legacyTables {
+		var name string
+		err := s.db.QueryRow(
+			`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, previous).Scan(&name)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("index migrate: look for %s: %w", previous, err)
+		}
+		// The column lists are identical across the rename, so an unqualified
+		// INSERT…SELECT is exact.
+		if _, err := s.db.Exec(
+			`INSERT OR IGNORE INTO ` + current + ` SELECT * FROM ` + previous); err != nil {
+			return fmt.Errorf("index migrate: adopt %s into %s: %w", previous, current, err)
+		}
+		if _, err := s.db.Exec(`DROP TABLE ` + previous); err != nil {
+			return fmt.Errorf("index migrate: drop %s: %w", previous, err)
+		}
+	}
 	return nil
 }
 
