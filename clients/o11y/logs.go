@@ -19,7 +19,7 @@ import (
 // TWO honest tenant views over ONE store:
 //
 //   - ADMIN (validated SuperAdmin, c.IsAdmin()): the product's raw infra log stream
-//     from o11y_logs.distributed_logs_v2, filtered resources_string['app']=<workload>.
+//     from o11y_logs.distributed_records, filtered resources_string['app']=<workload>.
 //     These stdout lines carry NO org label, so ONLY the platform operator may see
 //     them — the Hanzo-staff infra view.
 //   - EVERY OTHER org: its OWN request log stream, derived from org-tagged spans in
@@ -104,18 +104,7 @@ func viewFor(admin bool) string {
 // these lines are unattributed to any tenant, so the caller has already been gated
 // on admin. app is bound as a positional parameter.
 func infraLogs(ctx context.Context, app string, sinceNs int64, windowSec, limit int) ([]logLine, error) {
-	q := "SELECT timestamp, severity_text, body FROM o11y_logs.distributed_logs_v2 WHERE resources_string['app'] = ?"
-	args := []any{app}
-	if sinceNs > 0 {
-		q += " AND timestamp > ?"
-		args = append(args, uint64(sinceNs))
-	} else {
-		q += " AND timestamp > toUnixTimestamp64Nano(now64() - toIntervalSecond(?))"
-		args = append(args, windowSec)
-	}
-	q += " ORDER BY timestamp DESC LIMIT ?"
-	args = append(args, uint64(limit))
-
+	q, args := infraLogsSQL(app, sinceNs, windowSec, limit)
 	rows, err := datastore.Query(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query infra logs: %w", err)
@@ -137,26 +126,10 @@ func infraLogs(ctx context.Context, app string, sinceNs int64, windowSec, limit 
 // requestLogs derives a per-org request log from org-tagged spans in o11y_traces.
 // org is bound as a positional parameter (never interpolated) and is the FIRST,
 // mandatory predicate — a tenant sees only its own requests. The product scope is a
-// route prefix (/v1/<product>/…) OR the product's own serviceName (separately
+// route prefix (/v1/<product>/…) OR the product's own service name (separately
 // deployed products), so it works for both cloud-fused and standalone products.
 func requestLogs(ctx context.Context, org string, svc service, sinceNs int64, windowSec, limit int) ([]logLine, error) {
-	routePrefix := "/v1/" + svc.ID
-	// response_status_code is LowCardinality(String) in o11y — coerce to Int in SQL
-	// so the row read gets a number (asInt64 on a string yields 0).
-	q := "SELECT timestamp, name, httpRoute, toInt32OrZero(response_status_code) AS http_status, status_code, duration_nano " +
-		"FROM o11y_traces.distributed_o11y_index_v3 WHERE attributes_string['hanzo.org'] = ? " +
-		"AND (httpRoute = ? OR startsWith(httpRoute, ?) OR serviceName = ?)"
-	args := []any{org, routePrefix, routePrefix + "/", svc.App}
-	if sinceNs > 0 {
-		q += " AND toUnixTimestamp64Nano(timestamp) > ?"
-		args = append(args, uint64(sinceNs))
-	} else {
-		q += " AND timestamp > now64() - toIntervalSecond(?)"
-		args = append(args, windowSec)
-	}
-	q += " ORDER BY timestamp DESC LIMIT ?"
-	args = append(args, uint64(limit))
-
+	q, args := requestLogsSQL(org, svc, sinceNs, windowSec, limit)
 	rows, err := datastore.Query(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query request logs: %w", err)
@@ -167,7 +140,7 @@ func requestLogs(ctx context.Context, org string, svc service, sinceNs int64, wi
 		httpStatus := asInt64(r["http_status"])
 		spanStatus := asInt64(r["status_code"])
 		durMs := float64(asInt64(r["duration_nano"])) / 1e6
-		route := asString(r["httpRoute"])
+		route := asString(r["http_route"])
 		if route == "" {
 			route = asString(r["name"])
 		}
@@ -180,6 +153,47 @@ func requestLogs(ctx context.Context, org string, svc service, sinceNs int64, wi
 		})
 	}
 	return out, nil
+}
+
+// ── pure SQL builders (table names + bound args; unit-tested) ────────────────
+
+// infraLogsSQL builds the admin infra-stream read over the log-record plane. Every
+// value (app, cursor/window, limit) is a bound positional parameter.
+func infraLogsSQL(app string, sinceNs int64, windowSec, limit int) (string, []any) {
+	q := "SELECT timestamp, severity_text, body FROM " + logTable + " WHERE resources_string['app'] = ?"
+	args := []any{app}
+	if sinceNs > 0 {
+		q += " AND timestamp > ?"
+		args = append(args, uint64(sinceNs))
+	} else {
+		q += " AND timestamp > toUnixTimestamp64Nano(now64() - toIntervalSecond(?))"
+		args = append(args, windowSec)
+	}
+	q += " ORDER BY timestamp DESC LIMIT ?"
+	return q, append(args, uint64(limit))
+}
+
+// requestLogsSQL builds the per-org request read over the span plane. The org is the
+// FIRST, mandatory predicate and is bound (never interpolated). response_status_code
+// is LowCardinality(String) in o11y — coerce to Int in SQL so the row read gets a
+// number (asInt64 on a string yields 0). The route and service name are materialized
+// attribute/resource columns; the route is aliased so the row key stays stable.
+func requestLogsSQL(org string, svc service, sinceNs int64, windowSec, limit int) (string, []any) {
+	routePrefix := "/v1/" + svc.ID
+	q := "SELECT timestamp, name, " + spanRoute + " AS http_route, " +
+		"toInt32OrZero(response_status_code) AS http_status, status_code, duration_nano " +
+		"FROM " + spanTable + " WHERE attributes_string['hanzo.org'] = ? " +
+		"AND (" + spanRoute + " = ? OR startsWith(" + spanRoute + ", ?) OR " + spanService + " = ?)"
+	args := []any{org, routePrefix, routePrefix + "/", svc.App}
+	if sinceNs > 0 {
+		q += " AND toUnixTimestamp64Nano(timestamp) > ?"
+		args = append(args, uint64(sinceNs))
+	} else {
+		q += " AND timestamp > now64() - toIntervalSecond(?)"
+		args = append(args, windowSec)
+	}
+	q += " ORDER BY timestamp DESC LIMIT ?"
+	return q, append(args, uint64(limit))
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────

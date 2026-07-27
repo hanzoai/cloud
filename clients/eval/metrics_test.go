@@ -246,4 +246,31 @@ func TestUsageWhereProjectScoped(t *testing.T) {
 	}
 }
 
+// TestLatencySQLReadsCanonicalSpanTable proves the GenAI latency lenses read the
+// canonical v1 span plane — one generation, no version suffixes — and carry none of
+// the retired generation's names. A read left on a dead name answers 200 with zero
+// rows against the new schema: silent, un-logged, invisible to any HTTP check.
+func TestLatencySQLReadsCanonicalSpanTable(t *testing.T) {
+	if genAISpanTable != "o11y_traces.distributed_spans" {
+		t.Errorf("genAISpanTable = %q, want o11y_traces.distributed_spans", genAISpanTable)
+	}
+	where := "attributes_string['gen_ai.system'] = 'hanzo' AND timestamp >= ? AND timestamp < ?"
+	for name, sql := range map[string]string{
+		"byModel": latencyByModelSQL(where),
+		"overall": latencyOverallSQL(where),
+	} {
+		if !strings.Contains(sql, "FROM "+genAISpanTable+" WHERE ") {
+			t.Errorf("%s must read %s; got %q", name, genAISpanTable, sql)
+		}
+		for _, dead := range []string{"o11y_index_v3", "durationNano", "serviceName", "hasError"} {
+			if strings.Contains(sql, dead) {
+				t.Errorf("%s names the retired %q; got %q", name, dead, sql)
+			}
+		}
+		if !strings.Contains(sql, "duration_nano") {
+			t.Errorf("%s must read duration_nano; got %q", name, sql)
+		}
+	}
+}
+
 func fptr(f float64) *float64 { return &f }

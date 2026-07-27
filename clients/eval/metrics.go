@@ -332,7 +332,6 @@ func (t *dsTelemetry) Metrics(ctx context.Context, f MetricsFilter) (Board, erro
 // so a latency miss cannot fail the dashboard. The org gate mirrors the ledger:
 // non-admin is pinned to gen_ai.hanzo.org_id; a SuperAdmin sees every org.
 func (t *dsTelemetry) latency(ctx context.Context, f MetricsFilter) (map[string]latPercentiles, LatencyStat) {
-	const spanTable = "o11y_traces.distributed_o11y_index_v3"
 	where := "attributes_string['gen_ai.system'] = 'hanzo' AND timestamp >= ? AND timestamp < ?"
 	args := []any{chTime(f.Since), chTime(f.Until)}
 	if !f.AllOrgs {
@@ -347,11 +346,7 @@ func (t *dsTelemetry) latency(ctx context.Context, f MetricsFilter) (map[string]
 	}
 
 	perModel := map[string]latPercentiles{}
-	modelSQL := "SELECT attributes_string['gen_ai.request.model'] AS model, " +
-		"quantile(0.5)(duration_nano) AS p50, quantile(0.95)(duration_nano) AS p95, " +
-		"quantile(0.99)(duration_nano) AS p99, count() AS n " +
-		"FROM " + spanTable + " WHERE " + where + " GROUP BY model"
-	if rows, err := datastore.Query(ctx, modelSQL, args...); err == nil {
+	if rows, err := datastore.Query(ctx, latencyByModelSQL(where), args...); err == nil {
 		for _, r := range rows {
 			model := asString(r["model"])
 			if model == "" || asInt64(r["n"]) == 0 {
@@ -366,10 +361,7 @@ func (t *dsTelemetry) latency(ctx context.Context, f MetricsFilter) (map[string]
 	}
 
 	overall := LatencyStat{Available: false}
-	overallSQL := "SELECT quantile(0.5)(duration_nano) AS p50, quantile(0.95)(duration_nano) AS p95, " +
-		"quantile(0.99)(duration_nano) AS p99, count() AS n " +
-		"FROM " + spanTable + " WHERE " + where
-	if rows, err := datastore.Query(ctx, overallSQL, args...); err == nil {
+	if rows, err := datastore.Query(ctx, latencyOverallSQL(where), args...); err == nil {
 		if r := firstRow(rows); asInt64(r["n"]) > 0 {
 			overall = LatencyStat{
 				Available: true,
@@ -380,6 +372,27 @@ func (t *dsTelemetry) latency(ctx context.Context, f MetricsFilter) (map[string]
 		t.log.Warn("evals metrics: overall latency unavailable (GenAI spans)", "err", err)
 	}
 	return perModel, overall
+}
+
+// genAISpanTable is the span plane the GenAI latency lenses read. ONE name, named
+// here once: a database names the signal, a table names the rows, and
+// `distributed_` is topology (a Distributed engine over the local table), never a
+// version. The writer is the collector — the two move together.
+const genAISpanTable = "o11y_traces.distributed_spans"
+
+// latencyByModelSQL / latencyOverallSQL are the pure GenAI-latency reads over the
+// span plane. `where` carries only bound placeholders (never interpolated values).
+func latencyByModelSQL(where string) string {
+	return "SELECT attributes_string['gen_ai.request.model'] AS model, " +
+		"quantile(0.5)(duration_nano) AS p50, quantile(0.95)(duration_nano) AS p95, " +
+		"quantile(0.99)(duration_nano) AS p99, count() AS n " +
+		"FROM " + genAISpanTable + " WHERE " + where + " GROUP BY model"
+}
+
+func latencyOverallSQL(where string) string {
+	return "SELECT quantile(0.5)(duration_nano) AS p50, quantile(0.95)(duration_nano) AS p95, " +
+		"quantile(0.99)(duration_nano) AS p99, count() AS n " +
+		"FROM " + genAISpanTable + " WHERE " + where
 }
 
 // usageWhere builds the cloud_usage time (+ org + project) predicate. Times are

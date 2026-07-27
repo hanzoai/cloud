@@ -18,7 +18,7 @@
 // tracer provider Sends there. When this sink is mounted, the Router delivers the
 // LIVE span batch to the handler (zero ZAP-wire serialize, zero socket, no second
 // collector hop) and the handler writes it to o11y_traces through the REAL
-// dstraces exporter — the one writer that produces the o11y_index_v3 schema the
+// dstraces exporter — the one writer that produces the o11y_traces.spans schema the
 // embedded query plane reads. When the sink is NOT mounted (standalone aid, embed
 // off), Router.Send returns ErrNoRoute and the producer falls back to the wire.
 //
@@ -148,9 +148,10 @@ func shutdownTraceSink(ctx context.Context) error {
 }
 
 // buildTraceExporter constructs the dstraces exporter as a consumer.Traces over
-// the datastore DSN and Starts it (idempotent schema ensure + sending-queue
-// consumers). Same exporter, same DSN target the ingest collector already runs in
-// prod — so Start against the live datastore carries no new risk.
+// the datastore DSN and Starts it (sending-queue consumers). The exporter creates
+// NO table — the schema is the migrator's job, and an insert against a table that
+// was never created hard-fails. Same exporter, same DSN target the ingest collector
+// already runs in prod — so Start against the live datastore carries no new risk.
 func buildTraceExporter(ctx context.Context, dsn string) (exporter.Traces, error) {
 	f := dstraces.NewFactory()
 	cfg := f.CreateDefaultConfig().(*dstraces.Config)

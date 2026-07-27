@@ -28,9 +28,6 @@ func TestAimSQL_ReadsCanonicalTables(t *testing.T) {
 		name, sql, table string
 		wantQMarks       int
 	}{
-		{"o11yAiTotals", aimO11yAITotalsSQL(), "o11y_ai.observations", 1},
-		{"o11yAiLatency", aimO11yAILatencySQL(), "o11y_ai.observations", 1},
-		{"o11yAiModels", aimO11yAIModelsSQL(), "o11y_ai.observations", 1},
 		{"usageTotals", aimUsageTotalsSQL(), "hanzo.cloud_usage", 1},
 		{"topModels", aimTopModelsSQL(), "hanzo.cloud_usage", 1},
 		{"evalTraces", aimEvalTracesSQL(), "hanzo.eval_traces", 1},
@@ -45,16 +42,6 @@ func TestAimSQL_ReadsCanonicalTables(t *testing.T) {
 		}
 		if n := strings.Count(c.sql, "?"); n != c.wantQMarks {
 			t.Errorf("%s: %d bind params, want %d (time bound only) — no interpolation; got %q", c.name, n, c.wantQMarks, c.sql)
-		}
-	}
-}
-
-// TestAimO11yAIScopedToGeneration proves the O11yAI lens is scoped to
-// generations only (not spans/events), matching the o11y LLM lens.
-func TestAimO11yAIScopedToGeneration(t *testing.T) {
-	for _, sql := range []string{aimO11yAITotalsSQL(), aimO11yAILatencySQL(), aimO11yAIModelsSQL()} {
-		if !strings.Contains(sql, "type = 'GENERATION'") {
-			t.Errorf("o11y_ai lens must scope to GENERATION observations; got %q", sql)
 		}
 	}
 }
@@ -88,9 +75,6 @@ func TestAimScoreSeries_IntervalBound(t *testing.T) {
 func TestAimEvalLatencyGuarded(t *testing.T) {
 	if !strings.Contains(aimEvalTracesSQL(), "end_time > start_time") {
 		t.Errorf("eval traces latency must guard end_time>start_time; got %q", aimEvalTracesSQL())
-	}
-	if !strings.Contains(aimO11yAILatencySQL(), "end_time > start_time") {
-		t.Errorf("o11y_ai latency must guard end_time>start_time; got %q", aimO11yAILatencySQL())
 	}
 }
 
@@ -142,12 +126,6 @@ func TestAimParsers(t *testing.T) {
 	})
 	if len(models) != 2 || models[0].Model != "glm-5.2" || models[1].Model != "deepseek-v4-flash" || models[0].Requests != 154 {
 		t.Fatalf("top models mis-parsed/reordered: %+v", models)
-	}
-	lf := lfModelsFromRows([]map[string]any{
-		{"model": "gpt-4o", "gens": uint64(42), "cost": float64(1.25)},
-	})
-	if len(lf) != 1 || lf[0].Model != "gpt-4o" || lf[0].Generations != 42 || lf[0].CostUsd != 1.25 {
-		t.Fatalf("o11y_ai models mis-parsed: %+v", lf)
 	}
 	names := scoreNamesFromRows([]map[string]any{
 		{"name": "accuracy", "n": uint64(320), "avg_value": float64(0.82), "min_value": float64(0), "max_value": float64(1)},

@@ -23,9 +23,6 @@ package admin
 // (datastore.Query), no second connection.
 //
 // Signals, each from its canonical table in the one datastore:
-//   - LLM generations → o11y_ai.observations : generations, cost (USD), latency
-//                                                (fleet-wide; honest-empty until the
-//                                                O11yAI ingest lands rows)
 //   - Per-model usage → hanzo.cloud_usage      : requests, tokens, cost per model
 //                                                (the live usage ledger the ai gateway
 //                                                writes — populated today)
@@ -52,9 +49,9 @@ package admin
 // INDEPENDENTLY — a table that is absent or a column that differs contributes its
 // zero-value (the enclosing `if err == nil`), never a failure, so the board always
 // renders what the datastore actually holds. admin READS only; it owns and creates
-// NO table. Money from cloud_usage is USD cents, from o11y_ai is USD; latency is
-// milliseconds; time bounds are POSITIONAL parameters (never interpolated), and the
-// bucket interval is a server-side constant — injection-safe.
+// NO table. Money from cloud_usage is USD cents; latency is milliseconds; time
+// bounds are POSITIONAL parameters (never interpolated), and the bucket interval is
+// a server-side constant — injection-safe.
 
 import (
 	"strconv"
@@ -67,38 +64,26 @@ import (
 )
 
 // Fully-qualified datastore tables. admin only READS these — the ai gateway owns
-// hanzo.cloud_usage, O11yAI owns o11y_ai.observations, and the eval telemetry
-// store (clients/eval) owns hanzo.eval_traces / hanzo.eval_scores.
+// hanzo.cloud_usage and the eval telemetry store (clients/eval) owns
+// hanzo.eval_traces / hanzo.eval_scores.
 const (
-	aimUsageTable  = "hanzo.cloud_usage"
-	aimO11yAIObs = "o11y_ai.observations"
-	aimEvalTraces  = "hanzo.eval_traces"
-	aimEvalScores  = "hanzo.eval_scores"
-	aimTopN        = 12
+	aimUsageTable = "hanzo.cloud_usage"
+	aimEvalTraces = "hanzo.eval_traces"
+	aimEvalScores = "hanzo.eval_scores"
+	aimTopN       = 12
 )
 
 // aiMetrics is the whole AI-metrics board payload.
 type aiMetrics struct {
-	Range          string           `json:"range"`
-	Start          string           `json:"start"`
-	End            string           `json:"end"`
-	O11yAI       aimO11yAI      `json:"o11yAi"`
-	Usage          aimUsage         `json:"usage"`
-	Evals          aimEvals         `json:"evals"`
-	TopModels      []aimModelStat   `json:"topModels"`      // cloud_usage per-model (populated today)
-	O11yAIModels []aimLfModelStat `json:"o11yAiModels"` // o11y_ai per-model (honest-empty today)
-	ScoreNames     []aimScoreStat   `json:"scoreNames"`     // eval_scores per score-name
-	EvalRuns       []aimRunStat     `json:"evalRuns"`       // recent eval runs (progress)
-	ScoreSeries    []aimScorePoint  `json:"scoreSeries"`    // avg eval score over time (progress trend)
-}
-
-// aimO11yAI is the fleet-wide O11yAI generation rollup (honest-empty today).
-// Cost is USD (O11yAI's native unit); latency is milliseconds (end_time-start_time).
-type aimO11yAI struct {
-	Generations  int64   `json:"generations"`
-	CostUsd      float64 `json:"costUsd"`
-	LatencyMsAvg float64 `json:"latencyMsAvg"`
-	LatencyMsP95 float64 `json:"latencyMsP95"`
+	Range       string          `json:"range"`
+	Start       string          `json:"start"`
+	End         string          `json:"end"`
+	Usage       aimUsage        `json:"usage"`
+	Evals       aimEvals        `json:"evals"`
+	TopModels   []aimModelStat  `json:"topModels"`   // cloud_usage per-model (populated today)
+	ScoreNames  []aimScoreStat  `json:"scoreNames"`  // eval_scores per score-name
+	EvalRuns    []aimRunStat    `json:"evalRuns"`    // recent eval runs (progress)
+	ScoreSeries []aimScorePoint `json:"scoreSeries"` // avg eval score over time (progress trend)
 }
 
 // aimUsage is the fleet LLM-usage KPI band from the live cloud_usage ledger.
@@ -130,13 +115,6 @@ type aimModelStat struct {
 	Requests  int64  `json:"requests"`
 	Tokens    int64  `json:"tokens"`
 	CostCents int64  `json:"costCents"`
-}
-
-// aimLfModelStat is one row of the per-model O11yAI leaderboard (honest-empty today).
-type aimLfModelStat struct {
-	Model       string  `json:"model"`
-	Generations int64   `json:"generations"`
-	CostUsd     float64 `json:"costUsd"`
 }
 
 // aimScoreStat is one row of the per-score-name eval leaderboard (eval_scores).
@@ -174,14 +152,13 @@ func aimetrics(s *cloud.Service[core.State], c *zip.Ctx) error {
 	rangeLabel := o11yRange(c.Query("range"))
 	since := computeSince(rangeLabel)
 	payload := aiMetrics{
-		Range:          rangeLabel,
-		Start:          since.Format(time.RFC3339),
-		End:            time.Now().UTC().Format(time.RFC3339),
-		TopModels:      []aimModelStat{},
-		O11yAIModels: []aimLfModelStat{},
-		ScoreNames:     []aimScoreStat{},
-		EvalRuns:       []aimRunStat{},
-		ScoreSeries:    []aimScorePoint{},
+		Range:       rangeLabel,
+		Start:       since.Format(time.RFC3339),
+		End:         time.Now().UTC().Format(time.RFC3339),
+		TopModels:   []aimModelStat{},
+		ScoreNames:  []aimScoreStat{},
+		EvalRuns:    []aimRunStat{},
+		ScoreSeries: []aimScorePoint{},
 	}
 
 	// Honest-empty when the warehouse is not connected: the board renders its zero
@@ -190,26 +167,8 @@ func aimetrics(s *cloud.Service[core.State], c *zip.Ctx) error {
 		return core.OK(c, payload)
 	}
 
-	sinceTS := chTS(since) // DateTime literal — cloud_usage.timestamp, o11y_ai.start_time, eval_*.ts
+	sinceTS := chTS(since) // DateTime literal — cloud_usage.timestamp, eval_*.ts
 	interval := o11yBucket(rangeLabel)
-
-	// ── O11yAI generations (fleet) — honest-empty until ingest lands rows ──
-	if rows, err := datastore.Query(ctx, aimO11yAITotalsSQL(), sinceTS); err == nil {
-		r := firstRowOr(rows)
-		payload.O11yAI.Generations = chInt64(r["gens"])
-		payload.O11yAI.CostUsd = chFloat64(r["cost"])
-	}
-	// O11yAI latency (separate query so a Nullable end_time / column mismatch never
-	// zeroes the proven generations+cost number above).
-	if rows, err := datastore.Query(ctx, aimO11yAILatencySQL(), sinceTS); err == nil {
-		r := firstRowOr(rows)
-		payload.O11yAI.LatencyMsAvg = chFloat64(r["lat_avg"])
-		payload.O11yAI.LatencyMsP95 = chFloat64(r["lat_p95"])
-	}
-	// O11yAI per-model.
-	if rows, err := datastore.Query(ctx, aimO11yAIModelsSQL(), sinceTS); err == nil {
-		payload.O11yAIModels = lfModelsFromRows(rows)
-	}
 
 	// ── Per-model usage (fleet) from the live cloud_usage ledger ──
 	if rows, err := datastore.Query(ctx, aimUsageTotalsSQL(), sinceTS); err == nil {
@@ -240,23 +199,6 @@ func aimetrics(s *cloud.Service[core.State], c *zip.Ctx) error {
 }
 
 // ── pure SQL builders (static SQL + one positional time bound; unit-tested) ──
-
-func aimO11yAITotalsSQL() string {
-	return "SELECT count() AS gens, toFloat64(sum(total_cost)) AS cost FROM " + aimO11yAIObs +
-		" WHERE type = 'GENERATION' AND start_time >= ?"
-}
-
-func aimO11yAILatencySQL() string {
-	lat := "(toUnixTimestamp64Milli(end_time) - toUnixTimestamp64Milli(start_time))"
-	return "SELECT round(avg(" + lat + "), 2) AS lat_avg, round(quantile(0.95)(" + lat + "), 2) AS lat_p95 " +
-		"FROM " + aimO11yAIObs + " WHERE type = 'GENERATION' AND start_time >= ? AND end_time > start_time"
-}
-
-func aimO11yAIModelsSQL() string {
-	return "SELECT provided_model_name AS model, count() AS gens, toFloat64(sum(total_cost)) AS cost " +
-		"FROM " + aimO11yAIObs + " WHERE type = 'GENERATION' AND start_time >= ? AND provided_model_name != '' " +
-		"GROUP BY model ORDER BY gens DESC LIMIT " + strconv.Itoa(aimTopN)
-}
 
 func aimUsageTotalsSQL() string {
 	return "SELECT count() AS requests, sum(total_tokens) AS tokens, " +
@@ -334,18 +276,6 @@ func aimModelsFromRows(rows []map[string]any) []aimModelStat {
 			Requests:  chInt64(r["requests"]),
 			Tokens:    chInt64(r["tokens"]),
 			CostCents: chInt64(r["cost_cents"]),
-		})
-	}
-	return out
-}
-
-func lfModelsFromRows(rows []map[string]any) []aimLfModelStat {
-	out := make([]aimLfModelStat, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, aimLfModelStat{
-			Model:       chStr(r["model"]),
-			Generations: chInt64(r["gens"]),
-			CostUsd:     chFloat64(r["cost"]),
 		})
 	}
 	return out

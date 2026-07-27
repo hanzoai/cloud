@@ -22,11 +22,10 @@ package admin
 // connection.
 //
 // Signals, each from its canonical table in the one datastore:
-//   - LLM usage  → hanzo.cloud_usage         : requests, tokens, cost, errors, top orgs, top models
-//   - Traces     → o11y_traces.distributed_o11y_index_v3 : request count, latency p50/p95/p99,
-//                                                              error rate, top services
-//   - Logs       → o11y_logs.distributed_logs_v2 : fleet log volume + volume-over-time
-//   - LLM gens   → o11y_ai.observations      : generations + cost (fleet-wide; honest-empty today)
+//   - LLM usage  → hanzo.cloud_usage                : requests, tokens, cost, errors, top orgs, top models
+//   - Traces     → o11y_traces.distributed_spans    : request count, latency p50/p95/p99,
+//                                                     error rate, top services
+//   - Logs       → o11y_logs.distributed_records    : fleet log volume + volume-over-time
 //
 // SUPERADMIN ONLY (the s.guard wrap in admin.go): the gateway strips a client
 // X-Org-Id and re-mints from the JWT owner, and this handler applies NO org filter,
@@ -52,14 +51,22 @@ import (
 )
 
 // Fully-qualified datastore tables. admin only READS these — the ZAP collector
-// (o11y_*), the ai ledger (hanzo.cloud_usage), and O11yAI own their writes.
+// (o11y_*) and the ai ledger (hanzo.cloud_usage) own their writes. One generation,
+// no version suffixes: the database names the signal, the table names the rows, and
+// `distributed_` is topology (a Distributed engine over the local table).
 const (
 	o11yUsageTable   = "hanzo.cloud_usage"
-	o11yTraceTable   = "o11y_traces.distributed_o11y_index_v3"
-	o11yLogTable     = "o11y_logs.distributed_logs_v2"
-	o11yAIObs  = "o11y_ai.observations"
+	o11yTraceTable   = "o11y_traces.distributed_spans"
+	o11yLogTable     = "o11y_logs.distributed_records"
 	o11yTopN         = 10
 	o11yServiceLimit = 12
+)
+
+// Span columns read by the RED lenses. The span table carries the service name and
+// the HTTP route as materialized resource/attribute columns; the `$$` separator is
+// part of the column identifier, so each is backtick-quoted.
+const (
+	spanService = "`resource_string_service$$name`"
 )
 
 // o11yGlobal is the whole fleet o11y board payload.
@@ -73,7 +80,6 @@ type o11yGlobal struct {
 	TopOrgs     []o11yOrgStat   `json:"topOrgs"`
 	TopModels   []o11yModelStat `json:"topModels"`
 	TopServices []o11ySvcStat   `json:"topServices"`
-	LLM         o11yLLM         `json:"llm"`
 }
 
 // o11yTotals is the fleet KPI band. LLM half from cloud_usage; RED half from traces;
@@ -88,14 +94,14 @@ type o11yTotals struct {
 	Errors           int64 `json:"errors"`
 	Orgs             int64 `json:"orgs"`
 	Models           int64 `json:"models"`
-	// Traces (o11y_index_v3), all services.
+	// Traces (o11y_traces.distributed_spans), all services.
 	TraceCount     int64   `json:"traceCount"`
 	LatencyP50Ms   float64 `json:"latencyP50Ms"`
 	LatencyP95Ms   float64 `json:"latencyP95Ms"`
 	LatencyP99Ms   float64 `json:"latencyP99Ms"`
 	TraceErrorRate float64 `json:"traceErrorRate"` // percent (0..100)
 	Services       int64   `json:"services"`
-	// Logs (distributed_logs_v2), fleet volume over the window.
+	// Logs (o11y_logs.distributed_records), fleet volume over the window.
 	LogVolume int64 `json:"logVolume"`
 }
 
@@ -136,12 +142,6 @@ type o11ySvcStat struct {
 	Requests     int64   `json:"requests"`
 	ErrorRate    float64 `json:"errorRate"` // percent (0..100)
 	LatencyP95Ms float64 `json:"latencyP95Ms"`
-}
-
-// o11yLLM is the fleet-wide O11yAI generation rollup (near-empty today → honest).
-type o11yLLM struct {
-	Generations int64   `json:"generations"`
-	CostUsd     float64 `json:"costUsd"`
 }
 
 // o11y answers GET /v1/admin/o11y. ?range=24h|7d|30d bounds the window (default 30d).
@@ -205,11 +205,6 @@ func o11y(s *cloud.Service[core.State], c *zip.Ctx) error {
 	if rows, err := datastore.Query(ctx, o11yTopServicesSQL(), sinceTS); err == nil {
 		payload.TopServices = topServicesFromRows(rows)
 	}
-	// Fleet LLM generations (O11yAI) — best-effort; near-empty today.
-	if rows, err := datastore.Query(ctx, o11yLLMSQL(), sinceTS); err == nil {
-		r := firstRowOr(rows)
-		payload.LLM = o11yLLM{Generations: chInt64(r["gens"]), CostUsd: chFloat64(r["cost"])}
-	}
 
 	return core.OK(c, payload)
 }
@@ -226,11 +221,11 @@ func o11yUsageTotalsSQL() string {
 
 func o11yTraceTotalsSQL() string {
 	return "SELECT count() AS traces, " +
-		"round(quantile(0.5)(durationNano) / 1e6, 2) AS p50, " +
-		"round(quantile(0.95)(durationNano) / 1e6, 2) AS p95, " +
-		"round(quantile(0.99)(durationNano) / 1e6, 2) AS p99, " +
+		"round(quantile(0.5)(duration_nano) / 1e6, 2) AS p50, " +
+		"round(quantile(0.95)(duration_nano) / 1e6, 2) AS p95, " +
+		"round(quantile(0.99)(duration_nano) / 1e6, 2) AS p99, " +
 		"round(100 * countIf(has_error) / greatest(count(), 1), 3) AS err_rate, " +
-		"uniqExact(serviceName) AS services " +
+		"uniqExact(" + spanService + ") AS services " +
 		"FROM " + o11yTraceTable + " WHERE timestamp >= ?"
 }
 
@@ -263,16 +258,11 @@ func o11yTopModelsSQL() string {
 }
 
 func o11yTopServicesSQL() string {
-	return "SELECT serviceName AS service, count() AS requests, " +
+	return "SELECT " + spanService + " AS service, count() AS requests, " +
 		"round(100 * countIf(has_error) / greatest(count(), 1), 3) AS error_rate, " +
-		"round(quantile(0.95)(durationNano) / 1e6, 2) AS p95 " +
-		"FROM " + o11yTraceTable + " WHERE timestamp >= ? AND serviceName != '' " +
+		"round(quantile(0.95)(duration_nano) / 1e6, 2) AS p95 " +
+		"FROM " + o11yTraceTable + " WHERE timestamp >= ? AND " + spanService + " != '' " +
 		"GROUP BY service ORDER BY requests DESC LIMIT " + strconv.Itoa(o11yServiceLimit)
-}
-
-func o11yLLMSQL() string {
-	return "SELECT count() AS gens, toFloat64(sum(total_cost)) AS cost FROM " + o11yAIObs +
-		" WHERE type = 'GENERATION' AND start_time >= ?"
 }
 
 // ── pure row parsers (unit-tested) ──
