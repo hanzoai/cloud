@@ -53,7 +53,7 @@
 // before the response, so the task ids reported here are already complete and
 // GET /tasks/:uid always reports `succeeded` — a client polling waitForTask
 // resolves immediately rather than never.
-package search
+package index
 
 import (
 	"database/sql"
@@ -84,7 +84,7 @@ const (
 	maxUID = 256
 )
 
-// state is search's own data; shared deps (logger, brand) live in the embedded
+// state is index's own data; shared deps (logger, brand) live in the embedded
 // cloud.Base, reached as s.Log / s.Brand.
 type state struct {
 	store *Store
@@ -96,31 +96,36 @@ type state struct {
 // mounted is the active service so Shutdown can release the store.
 var mounted *cloud.Service[state]
 
-// Mount wires the search surface onto app per HIP-0106.
+// Mount wires the index surface onto app per HIP-0106.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("search.Mount: nil app")
+		return fmt.Errorf("index.Mount: nil app")
 	}
 	if deps.Logger == nil {
-		return fmt.Errorf("search.Mount: nil deps.Logger")
+		return fmt.Errorf("index.Mount: nil deps.Logger")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("search.Mount: empty DataDir")
+		return fmt.Errorf("index.Mount: empty DataDir")
 	}
 	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("search.Mount: data dir: %w", err)
+		return fmt.Errorf("index.Mount: data dir: %w", err)
 	}
-	store, err := openStore(filepath.Join(deps.DataDir, "search.db"))
+	// Carry a store written under the subsystem's previous name over before
+	// opening, so a rename never presents an existing tenant with an empty index.
+	if err := migrateStore(deps.DataDir, "search.db", "index.db"); err != nil {
+		return fmt.Errorf("index.Mount: %w", err)
+	}
+	store, err := openStore(filepath.Join(deps.DataDir, "index.db"))
 	if err != nil {
-		return fmt.Errorf("search.Mount: open store: %w", err)
+		return fmt.Errorf("index.Mount: open store: %w", err)
 	}
-	b := cloud.NewBase(deps, "search")
+	b := cloud.NewBase(deps, "index")
 	s := &cloud.Service[state]{Base: b, State: state{store: store, taskSeq: new(atomic.Int64)}}
 	mounted = s
 
 	routes(app, s)
 
-	b.Log.Info("search mounted", "brand", deps.Brand)
+	b.Log.Info("index mounted", "brand", deps.Brand)
 	return nil
 }
 
@@ -144,10 +149,10 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	//
 	// This subsystem sets OwnsHealth, so it serves its own health: Meilisearch's
 	// {"status":"available"} body, failing closed when the store is unreadable.
-	app.Get("/v1/search/health", cloud.Handle(s, health))
-	app.Get("/v1/search/version", cloud.Handle(s, version))
+	app.Get("/v1/index/health", cloud.Handle(s, health))
+	app.Get("/v1/index/version", cloud.Handle(s, version))
 
-	g := app.Group("/v1/search")
+	g := app.Group("/v1/index")
 
 	g.Get("/stats", cloud.Handle(s, stats))
 	g.Get("/indexes", cloud.Handle(s, listIndexes))
@@ -214,7 +219,7 @@ func createIndex(s *cloud.Service[state], c *zip.Ctx) error {
 	return enqueued(s, c, uid, "indexCreation")
 }
 
-// listIndexes answers an org's whole search surface. Without it an index whose
+// listIndexes answers everything an org has indexed. Without it an index whose
 // uid a caller has forgotten is unreachable — there is no other way to enumerate
 // what an org holds.
 func listIndexes(s *cloud.Service[state], c *zip.Ctx) error {
@@ -555,7 +560,7 @@ func forbidden(c *zip.Ctx) error {
 // produced it.
 func internal(c *zip.Ctx, err error) error {
 	if mounted != nil {
-		mounted.Log.Error("search store", "err", err)
+		mounted.Log.Error("index store", "err", err)
 	}
 	return meiliError(c, http.StatusInternalServerError, "internal",
 		"An internal error occurred.", "system")
