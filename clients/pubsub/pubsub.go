@@ -30,10 +30,9 @@ import (
 	psembed "github.com/hanzoai/pubsub/embed"
 )
 
-// order 5: an infrastructure data plane that must bind before clients/kafka
-// (order 6) dials it. It registers no HTTP routes, so the order only fixes the
-// pubsub-before-kafka mount sequence.
-const order = 5
+// Mount order is the slice position in apps.Wire(): this infrastructure data
+// plane must bind BEFORE clients/kafka dials it. It registers no HTTP routes, so
+// the position only fixes the pubsub-before-kafka mount sequence.
 
 // srv holds the running embedded server so shutdown can stop it. Set once by Mount.
 var srv *psembed.Server
