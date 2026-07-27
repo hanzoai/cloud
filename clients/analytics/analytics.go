@@ -65,6 +65,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/sites"
+	"github.com/hanzoai/types"
 	"github.com/zap-proto/zip"
 )
 
@@ -184,18 +185,14 @@ func tenant(c *zip.Ctx) (string, bool) {
 }
 
 // window resolves the [start,end) window + bucket interval from ?range/?start/?end,
-// reusing ai/object.ResolveCloudUsageWindow so analytics and the console Overview
-// share ONE window grammar (24h|7d|30d|custom). A bad range is a 400.
-func window(c *zip.Ctx) (time.Time, time.Time, string, string, error) {
-	rangeLabel := strings.TrimSpace(c.Query("range"))
-	start, end, interval, err := aiobject.ResolveCloudUsageWindow(rangeLabel, c.Query("start"), c.Query("end"), time.Now())
+// reusing types.ParseWindow so analytics and the console Overview share ONE
+// window grammar (24h|7d|30d|custom). A bad range is a 400.
+func window(c *zip.Ctx) (time.Time, time.Time, types.Interval, string, error) {
+	w, err := types.ParseWindow(c.Query("range"), c.Query("start"), c.Query("end"), time.Now())
 	if err != nil {
 		return time.Time{}, time.Time{}, "", "", zip.ErrBadRequest(err.Error())
 	}
-	if rangeLabel == "" {
-		rangeLabel = "24h"
-	}
-	return start, end, interval, rangeLabel, nil
+	return w.Start, w.End, w.Interval, w.Label, nil
 }
 
 // requireDatastore returns the honest 503 when the datastore ledger is not
@@ -311,7 +308,7 @@ func overview(s *cloud.Service[state], c *zip.Ctx) error {
 		Range:    rangeLabel,
 		Start:    start.UTC().Format(time.RFC3339),
 		End:      end.UTC().Format(time.RFC3339),
-		Interval: interval,
+		Interval: string(interval),
 		Scope:    Scope{Org: org},
 		LLM:      llm,
 		Web:      buildWebOverview(erow, eventsOK),
@@ -338,10 +335,10 @@ func timeseries(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}
 
-	// bucketFn is a CLOSED server-chosen enum (never user input), so interpolating
-	// it is injection-safe; the org + time bounds stay bound parameters.
+	// interval admits only Hour or Day, so interpolating the bucket function is
+	// safe by construction; the org + time bounds stay bound parameters.
 	bucketFn := "Hour"
-	if interval == "day" {
+	if interval == types.Day {
 		bucketFn = "Day"
 	}
 	where, args := llmWhere(org, start, end)
@@ -357,7 +354,7 @@ func timeseries(s *cloud.Service[state], c *zip.Ctx) error {
 		Range:    rangeLabel,
 		Start:    start.UTC().Format(time.RFC3339),
 		End:      end.UTC().Format(time.RFC3339),
-		Interval: interval,
+		Interval: string(interval),
 		Scope:    Scope{Org: org},
 		Series:   buildSeries(start, end, interval, rows),
 		Source:   llmTable,

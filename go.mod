@@ -801,6 +801,7 @@ exclude github.com/ugorji/go v0.0.0-20171122102828-84cb69a8af83
 // --- /v1/deploy engine embed (argo gitops-engine, in-process) ---
 require (
 	github.com/hanzoai/deploy/gitops-engine v0.7.2
+	github.com/hanzoai/types v0.1.0
 	k8s.io/kubernetes v1.35.3 // indirect
 )
 
