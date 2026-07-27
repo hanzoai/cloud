@@ -377,3 +377,9 @@ func writeTreeNode(st storer.EncodedObjectStorer, node *treeNode) (plumbing.Hash
 // allowed, so it mirrors nameRE plus "/". The ref-update path uses it verbatim,
 // so this is the traversal/injection guard on the branch name.
 var branchRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$`)
+
+// refRE accepts a FULL ref under heads or tags and nothing else, so an inbound
+// event can never name refs/pull/*, a remote-tracking ref, or anything outside
+// those two namespaces. The suffix carries branchRE's own shape, which is what
+// rejects a traversal or an empty segment.
+var refRE = regexp.MustCompile(`^refs/(heads|tags)/[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$`)
