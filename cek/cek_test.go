@@ -46,8 +46,8 @@ func requireCipher(t *testing.T) {
 		}
 		t.Skip(msg)
 	}
-	if !sqlitedrv.EncryptionAvailable() {
-		skipOrFail("sqlite build cannot encrypt (pure-Go); run with CGO + libsqlcipher")
+	if !sqlitedrv.CodecLinked() {
+		skipOrFail("sqlite build lacks the live libsqlcipher codec (pure-Go envelope encrypts, but these tests migrate via sqlcipher_export); run with CGO + libsqlcipher")
 		return
 	}
 	probe := filepath.Join(t.TempDir(), "probe.db")
@@ -314,6 +314,38 @@ func TestMissingKeyFatalOnCapableBuild(t *testing.T) {
 		if err != nil {
 			t.Fatalf("pure-Go dev build should allow plaintext when no key: %v", err)
 		}
+	}
+}
+
+// TestEnsureDevKeyEncryptsOnPureGo proves the zero-config dev posture: a pure-Go
+// build with no configured key installs a deterministic dev key and runs through
+// the SAME encrypted path as production — the store is ciphertext at rest, never
+// plaintext. On a codec-linked (production) build EnsureDevKey is a no-op.
+func TestEnsureDevKeyEncryptsOnPureGo(t *testing.T) {
+	if sqlitedrv.CodecLinked() {
+		t.Skip("codec-linked build: EnsureDevKey is a no-op; production requires the real key")
+	}
+	resetMaster(nil)
+	os.Unsetenv(masterKeyEnv)
+
+	if !EnsureDevKey() {
+		t.Fatal("EnsureDevKey should install a dev key on a pure-Go build with no key")
+	}
+	if EnsureDevKey() {
+		t.Fatal("EnsureDevKey must be idempotent — a no-op once a key is installed")
+	}
+
+	path := filepath.Join(t.TempDir(), "settings.db")
+	db, err := Open(path)
+	if err != nil {
+		t.Fatalf("open with dev key: %v", err)
+	}
+	if _, err := db.Exec(`CREATE TABLE t(x)`); err != nil {
+		t.Fatalf("ddl: %v", err)
+	}
+	_ = db.Close()
+	if isPlaintextHeader(path) {
+		t.Fatal("SECURITY: dev-key store is plaintext at rest")
 	}
 }
 

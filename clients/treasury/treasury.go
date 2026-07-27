@@ -445,7 +445,7 @@ func adminSeed(s *cloud.Service[state], c *zip.Ctx) error {
 // clients/admin and clients/referrals. The customer /v1/finance surface stays bare
 // JSON (read via the /cloud proxy + restGet).
 func adminOK(c *zip.Ctx, data any) error {
-	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "msg": "", "data": data})
+	return cloud.OK(c, data)
 }
 
 // emitAudit records a treasury money action in cloud's tamper-evident trail.

@@ -109,25 +109,60 @@ func SetMasterKey(k []byte) {
 	}
 }
 
-// resolveMaster resolves the process master key exactly once:
+// EnsureDevKey installs a deterministic development master key when NO key is
+// configured AND the live codec is not linked — i.e. a pure-Go dev/CI build. It
+// lets that build run through the SAME encrypted path as production (per-db DEK,
+// SQLCipher-format envelope) with zero configuration, instead of a divergent
+// plaintext path. It is a NO-OP when a key is already configured (production uses
+// it) or the live codec is linked (a production binary, which MUST supply the real
+// KMS key and fails closed without it). Call once at boot, before the first Open.
+// Returns true when a dev key was installed. Not safe against a concurrent Open —
+// resolveMaster caches on first use, so this must run first.
+func EnsureDevKey() bool {
+	if len(masterOverride) == 32 || strings.TrimSpace(os.Getenv(masterKeyEnv)) != "" {
+		return false // a real key is configured — use it
+	}
+	if sqlitedrv.CodecLinked() {
+		return false // production build — require the real key (resolveMaster fails closed)
+	}
+	SetMasterKey(devKey())
+	return true
+}
+
+// devKey derives the deterministic development master key. It is intentionally
+// well-known — dev/CI data is not secret — and exists only so a pure-Go build
+// encrypts through the production code path rather than diverging to plaintext. It
+// is never reachable on a codec-linked (production) build; EnsureDevKey gates it.
+func devKey() []byte {
+	sum := sha256.Sum256([]byte("hanzo-cloud-dev-cek-master-v1"))
+	return sum[:]
+}
+
+// resolveMaster resolves the process master key exactly once. Every build encrypts
+// a keyed store — the live libsqlcipher codec when it is linked, the pure-Go codec
+// envelope otherwise (EncryptionAvailable is always true) — so a store is either
+// keyed-and-encrypted or it does not open. There is no plaintext-at-rest mode:
 //
-//	(key, nil)   — 32-byte key AND an encryption-capable build → encrypt.
-//	(nil, nil)   — no key AND a non-encrypting (pure-Go) build → dev/CI plaintext.
-//	(nil, error) — key malformed; OR key set on a non-encrypting build; OR NO key
-//	               on an encryption-capable build. The last is the production
-//	               fail-closed: a capable binary never silently ships plaintext.
+//	(key, nil)   — 32-byte key configured → encrypt (live codec or envelope; both
+//	               write ciphertext at rest).
+//	(nil, error) — no key, OR a malformed key. Opening the data plane with no key is
+//	               the fatal case: a build that can encrypt must never ship plaintext.
+//	               Dev/CI supplies a deterministic dev key at boot (SetMasterKey) so
+//	               it runs encrypted with zero config; production supplies the KMS key.
 func resolveMaster() ([]byte, error) {
 	masterOnce.Do(func() {
 		raw := masterOverride
 		if len(raw) == 0 {
 			b64 := strings.TrimSpace(os.Getenv(masterKeyEnv))
 			if b64 == "" {
+				// EncryptionAvailable is always true, so this is always fatal: a build
+				// that can encrypt never opens the data plane unencrypted. Callers that
+				// want a keyless dev run inject a dev key via SetMasterKey before Open.
 				if sqlitedrv.EncryptionAvailable() {
-					masterErr = fmt.Errorf("cek: %s is required on an encryption-capable build; "+
-						"refusing to open the data plane unencrypted (set the KMS master key, "+
-						"or run a pure-Go dev build)", masterKeyEnv)
+					masterErr = fmt.Errorf("cek: %s is required; refusing to open the data plane "+
+						"unencrypted (set the KMS master key, or inject a dev key at boot)", masterKeyEnv)
 				}
-				return // pure-Go dev/CI: plaintext is expected (no codec linked)
+				return
 			}
 			decoded, err := base64.StdEncoding.DecodeString(b64)
 			if err != nil {
@@ -140,20 +175,17 @@ func resolveMaster() ([]byte, error) {
 			masterErr = fmt.Errorf("cek: master key must decode to 32 bytes, got %d", len(raw))
 			return
 		}
-		if !sqlitedrv.EncryptionAvailable() {
-			masterErr = fmt.Errorf("cek: %s is set but this build cannot encrypt (pure-Go sqlite); "+
-				"rebuild CGO_ENABLED=1 linked against libsqlcipher, or unset it for a dev build", masterKeyEnv)
-			return
-		}
+		// A configured key always encrypts: the live codec when linked, the pure-Go
+		// codec envelope otherwise. There is no "key set but cannot encrypt" case.
 		masterKey = raw
 	})
 	return masterKey, masterErr
 }
 
 // Encrypting reports whether cek will encrypt at rest (a valid master key is
-// configured on an encryption-capable build). cloud calls this once at boot for
-// the posture log; a false result on a capable build means resolveMaster errored
-// and the first store Open will fail closed.
+// configured). cloud calls this once at boot for the posture log; a false result
+// means resolveMaster errored (no or invalid key) and the first store Open will
+// fail closed rather than write plaintext.
 func Encrypting() bool {
 	k, err := resolveMaster()
 	return err == nil && len(k) == 32
@@ -168,9 +200,9 @@ func Open(path string) (*sql.DB, error) {
 		return nil, err
 	}
 	if master == nil {
-		// Only reachable on a non-encrypting dev/CI build (a capable build with no
-		// key already errored above). Preserve the prior bare-path behavior.
-		return sql.Open("sqlite", path)
+		// Unreachable: resolveMaster returns a 32-byte key or a non-nil error, never
+		// (nil, nil). Fail closed anyway — cek never opens a store plaintext.
+		return nil, fmt.Errorf("cek: no master key resolved for %q", path)
 	}
 	return openEncrypted(path, master)
 }
@@ -339,6 +371,16 @@ func openExisting(path string, master []byte) (*sql.DB, error) {
 // the encrypted copy reproduces the source schema + per-table content hash +
 // integrity_check, re-opened via the exact keyed path the app uses).
 func migrateThenOpen(path string, master []byte) (*sql.DB, error) {
+	// Converting an existing plaintext database to SQLCipher uses libsqlcipher's
+	// ATTACH ... KEY + sqlcipher_export (see exportPlaintext), which only the live C
+	// codec provides. The pure-Go envelope opens and creates encrypted stores but
+	// cannot run that in-engine conversion; refuse cleanly rather than fail deep in
+	// the export. Legacy-plaintext migration is a production operation, and
+	// production links the live codec; a pure-Go dev/CI run starts from fresh
+	// encrypted stores (createFresh) instead.
+	if !sqlitedrv.CodecLinked() {
+		return nil, fmt.Errorf("cek: converting plaintext database %q to encrypted requires the live libsqlcipher codec; run a libsqlcipher-linked build to migrate it, or remove it to start from a fresh encrypted store", path)
+	}
 	dekPath := path + dekSuffix
 	// Plaintext header ⇒ an earlier attempt did not commit: discard any stale
 	// sidecar/tmp and redo from the plaintext source of truth.
