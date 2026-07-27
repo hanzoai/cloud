@@ -460,8 +460,51 @@ as an empty index.
 
 `.github/workflows` is intentionally empty of CI. The image and its `v*` tags have ONE
 owner, `clients/platform/release.go`: compute the next version → build → SMOKE the
-pushed image → tag → notify universe. The tag is a RECEIPT for a proven image, so a
+pushed image → tag → roll out. The tag is a RECEIPT for a proven image, so a
 change that breaks boot never reaches production and leaves no phantom tag.
+
+The final step has ONE writer: patch the operator `hanzo.ai/v1` Service CR's
+`spec.image` and let the operator reconcile. It used to write twice — that patch plus
+a `repository_dispatch` mirror at `hanzoai/universe` — composed best-effort so the
+step passed if EITHER landed. Two writers for one fact, and the composition HID their
+disagreement: patch fails, mirror succeeds, cluster and git now describe different
+production states with nothing reporting a problem. The mirror was also never running
+— it read `UNIVERSE_DISPATCH_TOKEN`, never set on the deployment, so it failed closed
+on every release and the CR patch was already doing all the work. A rollout with
+nowhere to write is now an ERROR: the image is built, smoke-passed and tagged but NOT
+live, and a release that claims otherwise is worse than one that fails.
+
+### Site releases already have a lifecycle — do not build a second one
+
+`clients/projects` owns the full versioned-release model for static sites, and it is
+the ONE way:
+
+- `<org>/.releases/<slug>/rel_<128-bit manifest digest>/` — immutable, content-
+  addressed, and a SIBLING of the mutable `<org>/<slug>/` prefix, so neither a
+  full-artifact deploy nor a project delete (both of which purge that subtree) can
+  shred a release the pointer still names.
+- `Store.ActivateRelease` — the flip is one atomic `UPDATE … WHERE EXISTS (release
+  row)`, so it cannot point a site at a release that was never created, and two
+  concurrent activations cannot leave the pointer disagreeing with whichever won.
+  `MarkLive` deliberately does NOT touch `current_release`.
+- `servePrefix` (`clients/projects/sites.go`) — the ONE read rule, re-validating the
+  id against `releaseIDRE` before it can widen a prefix. An unrecognized id falls back
+  to the legacy prefix, so there is no flag day and no migration.
+- Rollback is activating an older id. Routes are already mounted on both site
+  surfaces via `siteReleases`.
+
+A parallel `clients/cd` + `clients/site` lifecycle (kind-agnostic `Target`, a
+`CURRENT` pointer object next to the bundles) was built and then DELETED unmerged: it
+re-implemented all of the above with a weaker pointer — a `v<N>` counter instead of a
+content digest, and a plain PUT that could name a release whose row does not exist.
+Its one genuinely new finding is recorded as a gap below, not as a second system.
+
+**Known gap: releases are never garbage-collected.** `promote` writes a new immutable
+prefix per distinct content and nothing prunes them; `DeleteReleases` only runs on
+project delete. Retention belongs in `clients/projects` next to `promote`. When it is
+added, `activate` must also verify the bytes still exist before flipping — today
+`ActivateRelease` proves only that the ROW exists, which is sufficient only while
+nothing can prune the bytes out from under it.
 
 It is driven by the GitHub App. A push arrives HMAC-verified at
 `/v1/connector/github/webhook`, which fires `cloud.OnGitPush` — the SAME

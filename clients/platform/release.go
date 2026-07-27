@@ -40,15 +40,13 @@ import (
 const (
 	// releaseImage is the ONE image cloud self-publishes; releaseRepoSlug/URL name
 	// its source; releaseFloor is the version floor for the first release ever
-	// (mirrors release.yml). universeRepo receives the image-update dispatch.
+	// (mirrors release.yml).
 	releaseImage    = "ghcr.io/hanzoai/cloud"
 	releaseRepoSlug = "hanzoai/cloud"
 	releaseRepoURL  = "https://github.com/hanzoai/cloud"
 	releaseFloor    = "1.786.0"
-	universeRepo    = "hanzoai/universe"
 	// releaseServiceName is the operator Service CR metadata.name for cloud's own
-	// self-publish (crs/cloud.yaml) — the target of both the native CR rollout and
-	// the image-update mirror, so the two never name different CRs.
+	// self-publish (crs/cloud.yaml) — the target of the CR rollout.
 	releaseServiceName = "cloud"
 )
 
@@ -290,38 +288,31 @@ func releaseFor(s *cloud.Service[state], repoURL, sha, image, tag, dockerfile, b
 // rolloutRelease rolls the proven image live. It is the release pipeline's final
 // step, reached only AFTER the tag receipt is minted (build + smoke passed).
 //
-// PRIMARY — native CR rollout: patch the operator hanzo.ai/v1 Service CR's
-// spec.image directly (cloud.OnServiceRelease → clients/paas releaseService), so
-// the operator reconciles the Deployment. No ArgoCD, no repository_dispatch, no
-// git round-trip — the direct-CR seam this closes.
+// ONE WRITER: patch the operator hanzo.ai/v1 Service CR's spec.image
+// (cloud.OnServiceRelease → clients/paas releaseService) and let the operator
+// reconcile the Deployment. No ArgoCD, no repository_dispatch, no git round-trip.
 //
-// MIRROR — GitOps: also fire the image-update dispatch at universe
-// (notifyUniverse) so any environment still reconciled by the git/ArgoCD pipeline
-// stays in sync during the cutover.
+// It used to write TWICE — the CR patch plus a repository_dispatch mirror at
+// hanzoai/universe — composed best-effort so the step passed if EITHER landed.
+// That made "what is live" a question with two answers that could disagree, and
+// the composition hid the disagreement: the patch fails, the mirror succeeds, and
+// the cluster and git now describe different production states with nothing
+// reporting a problem. The mirror was also never actually running — it reads
+// UNIVERSE_DISPATCH_TOKEN, which is not configured on the cloud deployment, so it
+// failed closed on every release and every rollout in production was already the
+// CR patch alone. Deleting it removes a phantom second writer, not a second path.
 //
-// Best-effort composition: the step succeeds if EITHER path rolled the image, so a
-// missing cloud-api CR-patch RBAC (native) or a missing dispatch token (GitOps)
-// alone never fails a release that already produced a proven, tagged image.
+// The remaining failure is therefore reported honestly rather than tolerated: if
+// the CR patch cannot happen, the image is built, smoke-passed and tagged but NOT
+// live, and a release that says otherwise is worse than one that fails.
 func rolloutRelease(s *cloud.Service[state], ctx context.Context, image, sha string) error {
-	var crErr error
-	if cloud.ServiceReleaserRegistered() {
-		crErr = cloud.OnServiceRelease(ctx, cloud.ServiceReleaseEvent{Service: releaseServiceName, Image: image, SHA: sha})
-		if crErr == nil {
-			s.Log.Info("release rolled out via operator CR patch (native)", "service", releaseServiceName, "image", image)
-		} else {
-			s.Log.Warn("native CR rollout failed; relying on the GitOps mirror", "service", releaseServiceName, "image", image, "err", crErr)
-		}
-	} else {
-		crErr = fmt.Errorf("paas control plane not co-resident (no native CR rollout)")
+	if !cloud.ServiceReleaserRegistered() {
+		return fmt.Errorf("paas control plane not co-resident: no CR releaser registered, image %s is tagged but NOT live", image)
 	}
-
-	nuErr := notifyUniverse(s, ctx, image, sha)
-	if nuErr != nil {
-		s.Log.Warn("universe image-update mirror failed", "image", image, "err", nuErr)
+	if err := cloud.OnServiceRelease(ctx, cloud.ServiceReleaseEvent{Service: releaseServiceName, Image: image, SHA: sha}); err != nil {
+		return fmt.Errorf("roll out %s via operator CR patch: %w", releaseServiceName, err)
 	}
-	if crErr != nil && nuErr != nil {
-		return fmt.Errorf("rollout failed on both paths: native=%v; gitops=%v", crErr, nuErr)
-	}
+	s.Log.Info("release rolled out via operator CR patch", "service", releaseServiceName, "image", image)
 	return nil
 }
 
@@ -568,36 +559,6 @@ func tagRelease(s *cloud.Service[state], ctx context.Context, repo, sha, tag str
 		return fmt.Errorf("create tag %s: status %d", tag, code)
 	}
 	s.Log.Info("release tag minted (receipt for a pushed, smoke-passed image)", "repo", repo, "tag", tag, "sha", sha)
-	return nil
-}
-
-// notifyUniverse fires the image-update repository_dispatch at hanzoai/universe so the
-// GitOps pipeline rolls the proven image — the SAME image-update contract every
-// service uses (release.yml's notify-universe). Runs ONLY after the tag is minted, so
-// universe is never asked to deploy a phantom tag. Token is UNIVERSE_DISPATCH_TOKEN
-// from env (KMS-provisioned); fail closed if unset.
-func notifyUniverse(s *cloud.Service[state], ctx context.Context, image, sha string) error {
-	tok := getenv("UNIVERSE_DISPATCH_TOKEN", "")
-	if tok == "" {
-		return fmt.Errorf("no UNIVERSE_DISPATCH_TOKEN configured")
-	}
-	body := map[string]any{
-		"event_type": "image-update",
-		"client_payload": map[string]string{
-			"service": "cloud",
-			"image":   image,
-			"sha":     sha,
-			"env":     "all",
-		},
-	}
-	code, err := githubJSON(s, ctx, http.MethodPost, "/repos/"+universeRepo+"/dispatches", tok, body, nil)
-	if err != nil {
-		return err
-	}
-	if code != http.StatusNoContent {
-		return fmt.Errorf("notify universe: status %d", code)
-	}
-	s.Log.Info("universe notified (image-update)", "image", image, "sha", sha)
 	return nil
 }
 
