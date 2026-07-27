@@ -26,6 +26,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -101,6 +102,11 @@ type deliveryJob struct {
 }
 
 // dispatcher owns the bus consumer, the worker pool, and the delivery HTTP client.
+// errStreamConsumerPanicked is what a consumer reports when its goroutine panicked
+// rather than returning. It is a distinct value so "the consumer died on bad input"
+// is never silently read as "the bus closed".
+var errStreamConsumerPanicked = errors.New("webhooks: stream consumer panicked (recovered)")
+
 type dispatcher struct {
 	stores *cloud.OrgStore[*store]
 	log    luxlog.Logger
@@ -227,11 +233,20 @@ func (d *dispatcher) consume(ctx context.Context, cl *infra.PubSubClient) error 
 	errc := make(chan error, len(streams))
 	for _, s := range streams {
 		s := s
-		go func() {
-			errc <- cl.ConsumeMessages(ctx, s.stream, durableName, func(m *infra.StreamMessage) error {
+		// Contained: d.handle runs over bus payloads and delivers to customer-
+		// controlled endpoints, so it is fed by input we do not author on both
+		// sides. A panic here would kill the process rather than this consumer,
+		// taking every tenant with it. The inner defer answers errc first so the
+		// select below returns instead of blocking until ctx expires — a panicking
+		// consumer must look like a failed consumer, not a hung one.
+		cloud.Go(d.log, "webhooks.consume", []any{"stream", s.stream}, func() {
+			var once sync.Once
+			send := func(err error) { once.Do(func() { errc <- err }) }
+			defer send(errStreamConsumerPanicked)
+			send(cl.ConsumeMessages(ctx, s.stream, durableName, func(m *infra.StreamMessage) error {
 				return d.handle(ctx, m)
-			})
-		}()
+			}))
+		})
 	}
 	select {
 	case <-ctx.Done():
