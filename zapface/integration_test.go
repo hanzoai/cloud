@@ -26,27 +26,31 @@ func startZapApp(t *testing.T) (string, func()) {
 	t.Helper()
 	app := zip.New(zip.Config{})
 
-	// /v1 handlers (mirror ai/mount.go: app.All("/v1/*", ...)).
+	// /v1 handlers (mirror ai/mount.go: app.All("/v1/*", ...)). The surface is
+	// RESTful, so these switch on METHOD AND PATH — the same pair the dispatcher
+	// now has to carry, and the reason it can no longer infer a verb from a name.
 	app.All("/v1/*", func(c *zip.Ctx) error {
-		path := c.Path()
+		path, method := c.Path(), c.Method()
 		switch {
-		case strings.HasSuffix(path, "/get-global-providers"):
+		case method == "GET" && strings.HasSuffix(path, "/ai/providers/global"):
 			return c.JSON(200, fiber.Map{
 				"status": "ok", "msg": "",
 				"data": []fiber.Map{
 					{"owner": "admin", "name": "openai", "category": "Model", "_cookie": c.Header("Cookie")},
 				},
 			})
-		case strings.HasSuffix(path, "/get-providers"):
+		case method == "GET" && strings.HasSuffix(path, "/ai/providers"):
 			return c.JSON(200, fiber.Map{
 				"status": "ok", "msg": "",
 				"data":  []fiber.Map{{"owner": c.Query("owner"), "name": "p1"}},
 				"data2": 1,
 			})
-		case strings.HasSuffix(path, "/add-provider"):
+		case method == "POST" && strings.HasSuffix(path, "/ai/providers"):
 			body := map[string]any{}
 			_ = json.Unmarshal(c.Body(), &body)
 			return c.JSON(200, fiber.Map{"status": "ok", "msg": "added " + asString(body["name"])})
+		case method == "DELETE" && strings.Contains(path, "/ai/providers/"):
+			return c.JSON(200, fiber.Map{"status": "ok", "msg": "deleted " + path})
 		default:
 			return c.JSON(404, fiber.Map{"status": "error", "msg": "not found"})
 		}
@@ -130,10 +134,10 @@ func TestEndToEndOverWebSocket(t *testing.T) {
 		}
 	}
 
-	// 1) get-global-providers -> ok, real data, cookie replayed to /v1 handler.
-	rep := call("get-global-providers", nil, 1)
+	// 1) A global listing -> ok, real data, cookie replayed to the /v1 handler.
+	rep := call("GET ai/providers/global", nil, 1)
 	if !rep.ok || rep.status != 200 {
-		t.Fatalf("get-global-providers: ok=%v status=%d err=%s", rep.ok, rep.status, rep.errorJSON)
+		t.Fatalf("GET ai/providers/global: ok=%v status=%d err=%s", rep.ok, rep.status, rep.errorJSON)
 	}
 	var providers []map[string]any
 	if err := json.Unmarshal(superJSONUnwrap(rep.result), &providers); err != nil {
@@ -146,26 +150,43 @@ func TestEndToEndOverWebSocket(t *testing.T) {
 		t.Fatalf("cookie not replayed to /v1 handler: %v", providers[0]["_cookie"])
 	}
 
-	// 2) get-providers with a query param.
-	rep = call("get-providers", map[string]any{"owner": "admin"}, 2)
+	// 2) A collection list with a query param.
+	rep = call("GET ai/providers", map[string]any{"owner": "admin"}, 2)
 	if !rep.ok {
-		t.Fatalf("get-providers !ok: %s", rep.errorJSON)
+		t.Fatalf("GET ai/providers !ok: %s", rep.errorJSON)
 	}
 	_ = json.Unmarshal(superJSONUnwrap(rep.result), &providers)
 	if providers[0]["owner"] != "admin" {
-		t.Fatalf("get-providers owner query not forwarded: %v", providers)
+		t.Fatalf("owner query not forwarded: %v", providers)
 	}
 
-	// 3) add-provider (POST body).
-	rep = call("add-provider", map[string]any{"owner": "admin", "name": "claude"}, 3)
+	// 3) Create (POST body).
+	rep = call("POST ai/providers", map[string]any{"owner": "admin", "name": "claude"}, 3)
 	if !rep.ok {
-		t.Fatalf("add-provider !ok: %s", rep.errorJSON)
+		t.Fatalf("POST ai/providers !ok: %s", rep.errorJSON)
 	}
 
-	// 4) unknown method -> /v1 404 envelope -> !ok.
-	rep = call("get-nonexistent", nil, 4)
+	// 4) A DELETE reaches the DELETE route — the case the old prefix heuristic
+	// got wrong: it had no "get-" prefix, so it would have been sent as a POST
+	// and silently landed on the create route instead of destroying anything.
+	rep = call("DELETE ai/providers/admin/openai", nil, 4)
+	if !rep.ok {
+		t.Fatalf("DELETE ai/providers/admin/openai !ok: %s", rep.errorJSON)
+	}
+
+	// 5) unknown path -> /v1 404 envelope -> !ok.
+	rep = call("GET ai/nonexistent", nil, 5)
 	if rep.ok {
-		t.Fatalf("unknown method should not be ok")
+		t.Fatalf("unknown path should not be ok")
+	}
+
+	// 6) A method with NO verb is refused outright, not guessed at.
+	rep = call("get-providers", nil, 6)
+	if rep.ok {
+		t.Fatalf("a verbless method must be refused, not inferred")
+	}
+	if !strings.Contains(rep.errorJSON, "verb is required") {
+		t.Fatalf("refusal should name the missing verb, got %s", rep.errorJSON)
 	}
 }
 
