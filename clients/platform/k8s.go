@@ -785,22 +785,6 @@ const platformBuildOrg = "platform"
 // context fetch PRIVATE repos — BuildKit's gitsource presents it as the HTTPS
 // credential. Public repos ignore it; without the Secret the env is empty and
 // fetches are anonymous, exactly as before.
-// imageVersion returns the tag of image as a version string, empty when the
-// reference carries no tag. A registry host may carry a port, so the tag is
-// looked for after the last path separator; a leading v is dropped because
-// that is how the version is written everywhere else.
-func imageVersion(image string) string {
-	ref := image
-	if i := strings.LastIndex(ref, "/"); i >= 0 {
-		ref = ref[i+1:]
-	}
-	i := strings.LastIndex(ref, ":")
-	if i < 0 {
-		return ""
-	}
-	return strings.TrimPrefix(ref[i+1:], "v")
-}
-
 func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 	cmd := []any{"buildctl-daemonless.sh", "build"}
 	if strings.TrimSpace(dockerfile) != "" {
@@ -816,13 +800,6 @@ func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 			"--opt", "context="+buildCtx,
 		)
 	}
-	// The image tag IS the version, so hand it to the build rather than letting
-	// a Dockerfile infer one. A git context has no .git to describe from, and a
-	// build that guesses can disagree with the tag it is published under.
-	// Dockerfiles that declare no GIT_VERSION arg ignore it.
-	if v := imageVersion(image); v != "" {
-		cmd = append(cmd, "--opt", "build-arg:GIT_VERSION="+v)
-	}
 	cmd = append(cmd, "--secret", "id=GIT_AUTH_TOKEN,env=GIT_AUTH_TOKEN")
 	// Hand the image's own tag to the build as VERSION, so a binary can stamp the
 	// version it was published under (cloud's Dockerfile links it into
@@ -830,8 +807,15 @@ func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 	// default. The tag is already the authority here — deriving it means the
 	// version can never drift from the ref that was pushed. A Dockerfile with no
 	// `ARG VERSION` simply ignores it.
-	if _, tag := splitImageRef(image); tag != "" && tag != "latest" {
+	// GIT_VERSION is the same value without the leading v, which is how a
+	// Makefile that would otherwise run `git describe` writes it — a git context
+	// carries no .git to describe from. Both come from ONE splitImageRef call so
+	// they cannot disagree; a digest-pinned ref names no version, and
+	// splitImageRef reports the digest in the tag position, so the colon check
+	// suppresses both args rather than stamping a hash as a version.
+	if _, tag := splitImageRef(image); tag != "" && tag != "latest" && !strings.Contains(tag, ":") {
 		cmd = append(cmd, "--opt", "build-arg:VERSION="+tag)
+		cmd = append(cmd, "--opt", "build-arg:GIT_VERSION="+strings.TrimPrefix(tag, "v"))
 	}
 	return append(cmd, "--output", "type=image,name="+image+",push=true")
 }
