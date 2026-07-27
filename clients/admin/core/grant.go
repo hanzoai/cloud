@@ -30,6 +30,17 @@ type CreditRequest struct {
 	AmountCents int64  `json:"amountCents"`
 	Currency    string `json:"currency"`
 	Reason      string `json:"reason"`
+	// User names the MEMBER to credit, by IAM username — the `name` half of
+	// "<org>/<name>". Empty credits the org itself.
+	//
+	// It exists because "the org" is not always the account a request spends from.
+	// In the shared signup org, whose members are strangers to each other, each pays
+	// from their OWN wallet; a grant keyed on the org alone lands in a pool that
+	// member can neither spend nor see, while they are refused at $0. Which of the
+	// two a grant lands on is NOT decided here — principal.WalletFor asks account.Payer,
+	// the same rule the spend gate asks — so a pooled tenant org keeps one balance no
+	// matter what is named, and a per-member org can finally be funded per member.
+	User string `json:"user"`
 	// Source splits the grant into the commerce ledger's two money buckets:
 	//   - "trial"   (default) — a non-cash promo/comp credit: spendable on non-premium
 	//                metered usage only, NEVER refundable cash and NEVER paid out.
@@ -75,7 +86,7 @@ func grantNote(c *zip.Ctx, reason string) string {
 }
 
 // grantIdempotencyKey derives the DETERMINISTIC commerce idempotency key for a grant from
-// its (org, amount, currency, source) BOUND to the operator-supplied Idempotency-Key nonce
+// its (subject, amount, currency, source) BOUND to the operator-supplied Idempotency-Key nonce
 // — so a retried grant (a commit-then-timeout re-submit carrying the SAME nonce) dedupes at
 // commerce (X-Idempotency-Key, at-most-once), while two DISTINCT grants — even same org +
 // amount — never collide. Binding the amount/currency/source into the hash means a nonce
@@ -88,7 +99,10 @@ func grantNote(c *zip.Ctx, reason string) string {
 // additive — the pre-existing behavior. Effective end-to-end once the operator console
 // sends an Idempotency-Key per grant attempt (reused verbatim on retry); commerce already
 // enforces the dedup (api/billing/deposit.go).
-func grantIdempotencyKey(c *zip.Ctx, org, currency, source string, amountCents int64) string {
+// The SUBJECT is hashed, not the org: two grants of the same amount to two members
+// of one org are DIFFERENT grants, and hashing the org alone would make the second
+// dedupe away against the first — a silently dropped credit.
+func grantIdempotencyKey(c *zip.Ctx, subject, currency, source string, amountCents int64) string {
 	nonce := strings.TrimSpace(c.Header("Idempotency-Key"))
 	if nonce == "" {
 		nonce = strings.TrimSpace(c.Header("X-Idempotency-Key"))
@@ -97,7 +111,7 @@ func grantIdempotencyKey(c *zip.Ctx, org, currency, source string, amountCents i
 		return ""
 	}
 	sum := sha256.Sum256([]byte(strings.Join([]string{
-		org, strconv.FormatInt(amountCents, 10), currency, source, nonce,
+		subject, strconv.FormatInt(amountCents, 10), currency, source, nonce,
 	}, "|")))
 	return "grant-" + hex.EncodeToString(sum[:])
 }
@@ -138,6 +152,18 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 		return c.JSON(503, map[string]any{"status": "error", "msg": "grant refused: no durable audit store is configured on this deployment; a credit grant must be recorded before money moves", "data": nil})
 	}
 
+	// Resolve the ADDRESS the grant lands at — the same rule (account.Payer) the
+	// spend gate resolves the payer with, so the credit and the spend it funds name
+	// one wallet. Empty req.User is the org; a named member of a POOLED org still
+	// resolves to that org's pool, because that is the account their requests will
+	// be gated on. A refusal here means the name could not be turned into an address
+	// (a "/" in it would silently address something else), never a fallback.
+	w, addressed := principal.WalletFor(org, req.User)
+	if !addressed {
+		return Fail(c, "user must be a bare IAM username (no '/')")
+	}
+	subject := w.Account
+
 	tag, source := grantTag(req.Source)
 	notes := grantNote(c, req.Reason)
 
@@ -146,24 +172,31 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 	// with the commerce HTTP deposit as the split-deploy fallback. Both return the
 	// pre-balance (recorded even on failure), the entry/transaction id, and the post-balance,
 	// so the audit + response below are one shape regardless of which path moved the money.
-	before, txID, after, afterExact, derr := grantDeposit(s, c, org, currency, notes, tag, source, req.AmountCents)
+	// w.Ledger, not the raw path/body org: both halves of the address come from ONE
+	// resolved Account, so the ledger a deposit opens can never disagree in case with
+	// the subject written into it.
+	before, txID, after, afterExact, derr := grantDeposit(s, c, w.Ledger, subject, currency, notes, tag, source, req.AmountCents)
 	if derr != nil {
 		// The grant did not land — record the FAILED attempt (accountability), then
 		// surface the error. Never report a grant that failed as success.
 		EmitAudit(s, c, "admin.customer.credit", "credit", org,
 			map[string]any{"balanceCents": before},
-			map[string]any{"amountCents": req.AmountCents, "currency": currency, "reason": req.Reason, "source": source, "error": derr.Error()},
+			map[string]any{"amountCents": req.AmountCents, "currency": currency, "reason": req.Reason, "source": source, "subject": subject, "error": derr.Error()},
 			audit.Outcome{Result: "error", Status: 200, Reason: "grant failed"})
 		return Fail(c, "grant failed: "+derr.Error())
 	}
 
 	EmitAudit(s, c, "admin.customer.credit", "credit", org,
 		map[string]any{"balanceCents": before},
-		map[string]any{"balanceCents": after, "grantedCents": req.AmountCents, "currency": currency, "reason": req.Reason, "source": source, "transactionId": txID},
+		map[string]any{"balanceCents": after, "grantedCents": req.AmountCents, "currency": currency, "reason": req.Reason, "source": source, "subject": subject, "transactionId": txID},
 		audit.Outcome{Result: "success", Status: 200})
 
+	// subject is echoed because the operator does not choose it — account.Payer does.
+	// Naming a member of a pooled org credits the pool, and the response has to say so
+	// rather than let the caller assume a member wallet exists.
 	return OK(c, map[string]any{
 		"org":           org,
+		"subject":       subject,
 		"grantedCents":  req.AmountCents,
 		"currency":      currency,
 		"source":        source,
@@ -175,12 +208,20 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 
 // grantDeposit performs the ONE credit money-move for a grant. It prefers the co-resident
 // native finance wallet — the ai prepaid gate and the edge meter read/debit THAT wallet,
-// so an admin grant must credit it (subject == the org slug, the org-pool wallet) — and
-// falls back to the commerce HTTP deposit only when no finance ledger is co-resident (a
-// split deploy). It returns the pre-balance (so ApplyGrant can audit even a FAILED
-// attempt), the entry/transaction id, and the post-balance, so the audit + response are
-// one shape regardless of which path moved the money.
-func grantDeposit(s *cloud.Service[State], c *zip.Ctx, org, currency, notes, tag, source string, amountCents int64) (before int64, txID string, after int64, afterExact string, err error) {
+// so an admin grant must credit it — and falls back to the commerce HTTP deposit only when
+// no finance ledger is co-resident (a split deploy). It returns the pre-balance (so
+// ApplyGrant can audit even a FAILED attempt), the entry/transaction id, and the
+// post-balance, so the audit + response are one shape regardless of which path moved the
+// money.
+//
+// subject is the ACCOUNT within org's ledger, already resolved by account.Payer: the org
+// slug for a pooled org, "<org>/<name>" for a member of a per-member one. Every balance
+// read here uses it too — reading the pool around a member's credit would report a
+// before/after that never moved and audit a lie.
+//
+// The split-deploy fallback can only address the org: commerce's HTTP deposit is org-keyed.
+// It therefore refuses a member-addressed grant rather than silently crediting the pool.
+func grantDeposit(s *cloud.Service[State], c *zip.Ctx, org, subject, currency, notes, tag, source string, amountCents int64) (before int64, txID string, after int64, afterExact string, err error) {
 	ctx := c.Context()
 	// ONE credit path: prefer the in-proc commerce credit ledger (creditledger) — the
 	// SAME injected ledger adapter commerce's POST /v1/billing/credit mints through
@@ -191,16 +232,17 @@ func grantDeposit(s *cloud.Service[State], c *zip.Ctx, org, currency, notes, tag
 	// the SAME co-resident finance ledger for the audit trail (exact, sub-cent visible).
 	if led := creditledger.Get(); led != nil {
 		if fin := finance.Current(); fin != nil {
-			if bal, berr := fin.Balance(ctx, org, org, currency, false); berr == nil {
+			if bal, berr := fin.Balance(ctx, org, subject, currency, false); berr == nil {
 				before = bal.Cents()
 			}
 		}
 		id, balCents, cerr := led.Credit(ctx, creditledger.CreditInput{
 			Org:            org,
+			Subject:        subject,
 			Currency:       currency,
 			Reason:         notes,
 			Tag:            tag,
-			IdempotencyKey: grantIdempotencyKey(c, org, currency, source, amountCents),
+			IdempotencyKey: grantIdempotencyKey(c, subject, currency, source, amountCents),
 			AmountCents:    amountCents,
 		})
 		if cerr != nil {
@@ -208,16 +250,21 @@ func grantDeposit(s *cloud.Service[State], c *zip.Ctx, org, currency, notes, tag
 		}
 		after = balCents
 		if fin := finance.Current(); fin != nil {
-			if bal, berr := fin.Balance(ctx, org, org, currency, false); berr == nil {
+			if bal, berr := fin.Balance(ctx, org, subject, currency, false); berr == nil {
 				afterExact = bal.AttoString() // afterExact = the EXACT balance (sub-cent visible)
 			}
 		}
 		return before, id, after, afterExact, nil
 	}
 	// Split deploy: no co-resident credit ledger → the commerce billing HTTP deposit, with
-	// its operator-nonce idempotency key so a retried grant dedupes at commerce.
+	// its operator-nonce idempotency key so a retried grant dedupes at commerce. It is
+	// org-keyed, so a member-addressed grant has no destination here and is REFUSED —
+	// crediting the pool instead would put the money where that member cannot spend it.
+	if subject != org {
+		return 0, "", 0, "", fmt.Errorf("this deployment has no co-resident ledger; only the org itself can be credited over the commerce HTTP path (asked for %q)", subject)
+	}
 	beforeC, _ := s.State.Commerce.Credits(ctx, org)
-	idem := grantIdempotencyKey(c, org, currency, source, amountCents)
+	idem := grantIdempotencyKey(c, subject, currency, source, amountCents)
 	res, derr := s.State.Commerce.Deposit(ctx, org, money.Cents(amountCents), currency, notes, tag, idem)
 	if derr != nil {
 		return int64(beforeC), "", int64(beforeC), "", derr
