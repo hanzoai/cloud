@@ -187,7 +187,7 @@ func TestMirrorSelfHostThenPushDeploys(t *testing.T) {
 		t.Fatalf("want exactly 1 deploy trigger, got %d: %+v", len(got), got)
 	}
 	ev := got[0]
-	if ev.Org != "hanzoai" || ev.Repo != "cloud" || ev.Branch != "deploy" || ev.Commit != commit.String() {
+	if ev.Org != "hanzoai" || ev.Repo != "cloud" || ev.Ref != "refs/heads/deploy" || ev.Commit != commit.String() {
 		t.Fatalf("unexpected deploy event: %+v (want commit %s)", ev, commit)
 	}
 	if ev.CloneURL != "https://api.hanzo.test/v1/git/hanzoai/cloud.git" {
