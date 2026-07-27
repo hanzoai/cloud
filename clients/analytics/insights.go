@@ -27,8 +27,8 @@ import (
 	"strings"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/zap-proto/zip"
 )
 
@@ -156,7 +156,7 @@ func insightsEvents(s *cloud.Service[state], c *zip.Ctx) error {
 	if limit > 200 {
 		limit = 200
 	}
-	rows, err := aiobject.DatastoreQuery(c.Context(), `
+	rows, err := datastore.Query(c.Context(), `
 		SELECT id, timestamp, event, event_type, distinct_id, session_id,
 		       product, url, path, properties
 		FROM hanzo.events

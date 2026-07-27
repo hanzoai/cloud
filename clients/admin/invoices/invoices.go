@@ -5,7 +5,7 @@
 //
 // It reads the ONE shared warehouse (commerce.events) — the table the commerce
 // analytics collector lands every invoice-lifecycle event in — over the SAME client
-// (aiobject.DatastoreQuery) the o11y/compute lenses use, with ZERO per-org fan-out:
+// (datastore.Query) the o11y/compute lenses use, with ZERO per-org fan-out:
 // one GROUP BY resolves each invoice's LATEST lifecycle state (argMax by timestamp),
 // so the whole fleet is one query, not N per-org commerce reads. Honest by
 // construction: no datastore connected or the collector's table not provisioned yet →
@@ -18,9 +18,9 @@ import (
 	"strconv"
 	"strings"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
+	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/zap-proto/zip"
 )
 
@@ -56,7 +56,7 @@ func Invoices(s *cloud.Service[core.State], c *zip.Ctx) error {
 		return core.OKList(c, []InvoiceRow{}, 0)
 	}
 
-	rows, err := aiobject.DatastoreQuery(ctx, invoicesSQL())
+	rows, err := datastore.Query(ctx, invoicesSQL())
 	if err != nil {
 		return core.Fail(c, "invoices query: "+err.Error())
 	}

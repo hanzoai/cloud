@@ -19,7 +19,7 @@ package admin
 // org → app → project tree. It aggregates the operator-owned usage table
 // hanzo.compute_usage(org, app, project, kind, event, machine_id, size,
 // price_cents, ts) — the same warehouse (`datastore`, datastore) the analytics
-// subsystem reads, over the SAME shared client (aiobject.DatastoreQuery), no
+// subsystem reads, over the SAME shared client (datastore.Query), no
 // second connection. `kind` is an OPEN LowCardinality spectrum (bot | machine |
 // cluster | nodepool | container | function | …) — a bot is a machine running the
 // @hanzo/bot agent, a machine is raw compute visor opens — and each console lens
@@ -37,9 +37,9 @@ import (
 	"strings"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
+	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/zap-proto/zip"
 )
 
@@ -78,7 +78,7 @@ func compute(s *cloud.Service[core.State], c *zip.Ctx) error {
 	ctx := c.Context()
 	// Honest-empty when the warehouse is not connected or the usage table is not
 	// provisioned yet (the visor/commerce emitter is still being wired).
-	if !aiobject.DatastoreEnabled() || !computeTableExists(ctx) {
+	if !datastore.Ready() || !computeTableExists(ctx) {
 		return core.OKList(c, []computeLeaf{}, 0)
 	}
 
@@ -88,7 +88,7 @@ func compute(s *cloud.Service[core.State], c *zip.Ctx) error {
 	// warehouse's lower-case convention.
 	kind := strings.ToLower(strings.TrimSpace(c.Query("kind")))
 	sql, args := buildComputeQuery(c.Query("range"), kind, strings.TrimSpace(c.Query("org")))
-	rows, err := aiobject.DatastoreQuery(ctx, sql, args...)
+	rows, err := datastore.Query(ctx, sql, args...)
 	if err != nil {
 		return core.Fail(c, "compute query: "+err.Error())
 	}
@@ -146,7 +146,7 @@ func computeLeavesFromRows(rows []map[string]any) []computeLeaf {
 // computeTableExists probes for the operator-owned events table. Any error → false
 // (honest "not available yet"), mirroring analytics.tableExists.
 func computeTableExists(ctx context.Context) bool {
-	rows, err := aiobject.DatastoreQuery(ctx, "EXISTS TABLE "+computeTable)
+	rows, err := datastore.Query(ctx, "EXISTS TABLE "+computeTable)
 	if err != nil || len(rows) == 0 {
 		return false
 	}

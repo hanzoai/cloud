@@ -40,7 +40,7 @@ import (
 	"sync"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/hanzoai/cloud/clients/principal"
 )
 
@@ -321,7 +321,7 @@ func ensure(ctx context.Context) error {
 		return nil
 	}
 	for _, ddl := range schema {
-		if err := aiobject.DatastoreExec(ctx, ddl); err != nil {
+		if err := datastore.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("samples: ensure schema: %w", err)
 		}
 	}
@@ -347,7 +347,7 @@ func ensure(ctx context.Context) error {
 // bounded context so neither a slow warehouse nor a client disconnect can touch
 // its own contract.
 func Record(ctx context.Context, s Sample) error {
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return nil // no warehouse — the sample is dropped, the caller is untouched
 	}
 	s = s.sanitize()
@@ -357,7 +357,7 @@ func Record(ctx context.Context, s Sample) error {
 	if err := ensure(ctx); err != nil {
 		return err
 	}
-	if err := aiobject.DatastoreExec(ctx, insertStmt, s.args()...); err != nil {
+	if err := datastore.Exec(ctx, insertStmt, s.args()...); err != nil {
 		return fmt.Errorf("samples: record: %w", err)
 	}
 	return nil
