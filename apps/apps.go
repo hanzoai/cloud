@@ -41,7 +41,6 @@ import (
 	// External subsystem modules. As of the atomic wave-2 bump they NO LONGER
 	// self-register (no cloud.Register in their init) — the composition root wires
 	// each one explicitly below, so removing an entry here is the ONLY way to drop it.
-	"github.com/hanzoai/ai"
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/licensing"
 	"github.com/hanzoai/metrics"
@@ -510,7 +509,7 @@ func Wire() []cloud.MountSpec {
 		// other model and the /v1/models list. Order is load-bearing — Claim must
 		// run before ai's catch-all. (See hip-00NN.)
 		{Name: "zen", Mount: mountZen, Prefixes: []string{"/v1"}},
-		{Name: "ai", Mount: cloud.Global(ai.Mount), Global: true},
+		{Name: "ai", Mount: cloud.Global(mountAI), Global: true},
 		// Runtime wasm/proxy plugins — mounts dead last.
 		{Name: "plugins", Mount: plugin.Mount},
 	}
