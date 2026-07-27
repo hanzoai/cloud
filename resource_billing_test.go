@@ -109,7 +109,7 @@ func TestResourceMeter_GateAllowsFundedCallerOrg(t *testing.T) {
 	}
 }
 
-// payerFor resolves principal.HomeOrg(c) — the HOME org that PAYS — from a request's
+// payerFor resolves principal.Ledger(c) — the HOME org that PAYS — from a request's
 // identity headers, exactly as a create-handler does before passing it to Gate.
 func payerFor(t *testing.T, headers map[string]string) string {
 	t.Helper()
@@ -117,7 +117,7 @@ func payerFor(t *testing.T, headers map[string]string) string {
 	done := make(chan struct{})
 	app := zip.New(zip.Config{})
 	app.Use(func(c *zip.Ctx) error {
-		payer = principal.HomeOrg(c)
+		payer = principal.Ledger(c)
 		close(done)
 		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
 	})
@@ -133,7 +133,7 @@ func payerFor(t *testing.T, headers map[string]string) string {
 }
 
 // TestResourceMeter_GateKeysOnPayerForMasqueradingAdmin (LOW-1 fast-follow): the ml
-// + provisioning create-handlers pass principal.HomeOrg(c) (the HOME org) to the
+// + provisioning create-handlers pass principal.Ledger(c) (the HOME org) to the
 // pre-create balance Gate, matching the paired debit. So a masquerading SuperAdmin
 // (home=admin via X-User-Owner, acting in a victim org via X-Org-Id) is balance-gated
 // on the ADMIN's funds — never the victim's. Before the fix these two Gates keyed on
@@ -143,9 +143,10 @@ func payerFor(t *testing.T, headers map[string]string) string {
 func TestResourceMeter_GateKeysOnPayerForMasqueradingAdmin(t *testing.T) {
 	// A create-handler resolves Payer(c) from the request; for a masquerade it is home.
 	payer := payerFor(t, map[string]string{
-		"X-User-Id":    "u_admin", // validated principal
-		"X-Org-Id":     "victim",  // EFFECTIVE — the org being acted on
-		"X-User-Owner": "admin",   // HOME — the identity + billing anchor
+		"X-User-Id":      "u_admin", // validated principal
+		"X-Org-Id":       "victim",  // EFFECTIVE — the org being acted on
+		"X-User-Owner":   "admin",   // HOME — the identity + billing anchor
+		"X-User-IsAdmin": "true",    // platform sudo — what makes this a MASQUERADE
 	})
 	if payer != "admin" {
 		t.Fatalf("principal.Payer for a masquerade = %q, want admin (HOME org)", payer)
