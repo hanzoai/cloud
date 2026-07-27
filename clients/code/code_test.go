@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
-	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/hanzoai/cloud/cek"
 
 	"github.com/hanzoai/cloud/clients/provisioning"
 	"github.com/zap-proto/zip"
@@ -216,8 +217,10 @@ func TestPerOrgIsolationHTTP(t *testing.T) {
 	}
 	for _, org := range []string{"orgA", "orgB"} {
 		p := filepath.Join(s.dataDir, "orgs", provisioning.SanitizeOrg(org), "code.db")
-		if _, err := os.Stat(p); err != nil {
-			t.Fatalf("expected per-org db at %s: %v", p, err)
+		// cek.Exists, not os.Stat: a store still OPEN has not materialized its
+		// database file on the pure-Go codec — only its sidecar is on disk.
+		if !cek.Exists(p) {
+			t.Fatalf("expected per-org store at %s", p)
 		}
 	}
 }
