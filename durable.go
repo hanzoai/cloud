@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	aiobject "github.com/hanzoai/ai/object"
 	tasksauth "github.com/hanzoai/tasks/pkg/auth"
 	tasksclient "github.com/hanzoai/tasks/pkg/sdk/client"
 	tasksengine "github.com/hanzoai/tasks/pkg/tasks"
@@ -78,9 +77,9 @@ func wireDurableIngest(ctx context.Context, deps Deps) {
 	}
 	embeddedTasks = emb
 	addr := fmt.Sprintf("127.0.0.1:%d", emb.ZAPPort())
-	aiobject.SetIngestDialer(func(org string) (tasksclient.Client, error) {
+	ingestDialer = func(org string) (tasksclient.Client, error) {
 		return tasksclient.Dial(tasksclient.Options{HostPort: addr, Namespace: "default"})
-	})
+	}
 	deps.Logger.Info("durable ingest wired: in-process tasks engine", "addr", addr, "dataDir", dataDir)
 
 	// Expose the SAME engine on a cluster-reachable, IDENTITY-GATED ZAP listener so the
