@@ -311,20 +311,66 @@ func TestNewShardRouter_DisabledCases(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := &Config{ShardPeers: tc.peers, ShardSelf: tc.self}
-			if r := newShardRouter(cfg, testLog()); r != nil {
+			if r := newShardRouter(cfg, testLog(), nil); r != nil {
 				t.Fatalf("newShardRouter(%q, %q) = non-nil, want nil (sharding off)", tc.peers, tc.self)
 			}
 		})
 	}
 	// Enabled: 3 peers, self in set.
 	cfg := &Config{ShardPeers: "cloud-0@a:8000,cloud-1@b:8000,cloud-2@c:8000", ShardSelf: "cloud-1"}
-	r := newShardRouter(cfg, testLog())
+	r := newShardRouter(cfg, testLog(), nil)
 	if r == nil {
 		t.Fatalf("newShardRouter with valid 3-peer set returned nil")
 	}
 	if r.self != "cloud-1" || len(r.peers) != 3 {
 		t.Fatalf("router self=%q peers=%d, want cloud-1/3", r.self, len(r.peers))
 	}
+}
+
+// TestShardRouterLiveMembership: with a live-members source (durable plane on) the router
+// elects over the CURRENT set, so removing a pod re-homes its orgs to a live successor,
+// and the router activates even with no CLOUD_PEERS (a Deployment's random pod names).
+func TestShardRouterLiveMembership(t *testing.T) {
+	var live []ha.Member
+	src := func() []ha.Member { return live }
+
+	// No CLOUD_PEERS, but a live source + a stable self ⇒ routing is ON.
+	cfg := &Config{ShardPeers: "", ShardSelf: "cloud-1"}
+	r := newShardRouter(cfg, testLog(), src)
+	if r == nil {
+		t.Fatal("live membership must activate routing even without CLOUD_PEERS")
+	}
+
+	// Full set: every org has SOME owner drawn from the live members.
+	live = []ha.Member{{ID: "cloud-0", Addr: "10.0.0.0:8080"}, {ID: "cloud-1", Addr: "10.0.0.1:8080"}, {ID: "cloud-2", Addr: "10.0.0.2:8080"}}
+	owner3, ok := ha.Owner("acme", r.set())
+	if !ok {
+		t.Fatal("owner over the live set must resolve")
+	}
+
+	// Drain the elected owner out of the live set: the org re-homes to a DIFFERENT live pod
+	// (never the drained one) — the routing half of zero-downtime.
+	live = removeMember(live, owner3.ID)
+	owner2, ok := ha.Owner("acme", r.set())
+	if !ok || owner2.ID == owner3.ID {
+		t.Fatalf("after draining %s the org must re-home to a live pod, got %q (ok=%v)", owner3.ID, owner2.ID, ok)
+	}
+
+	// Momentarily-empty live snapshot falls back to the static peers, never stranding.
+	live = nil
+	if got := r.set(); len(got) != len(r.peers) {
+		t.Fatalf("empty live snapshot must fall back to static peers (%d), got %d", len(r.peers), len(got))
+	}
+}
+
+func removeMember(ms []ha.Member, id string) []ha.Member {
+	out := ms[:0:0]
+	for _, m := range ms {
+		if m.ID != id {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 func TestParsePeers(t *testing.T) {
