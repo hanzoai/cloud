@@ -56,8 +56,8 @@ var RepoSpec = Type("RepoSpec", func() {
 	})
 	Attribute("branch", String, "Branch/ref to build", func() { Default("main") })
 	// Default is "git" — Hanzo Git (our embedded git.hanzo.ai host). External
-	// providers (github/gitlab/bitbucket/gitea.com) stay available as sources.
-	Attribute("provider", String, "github|gitlab|bitbucket|gitea|git", func() { Default("git") })
+	// providers (github/gitlab/bitbucket/codeberg) stay available as sources.
+	Attribute("provider", String, "github|gitlab|bitbucket|git", func() { Default("git") })
 })
 
 // ImageSpec is a container image binding (source == "image") and the build
