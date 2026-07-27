@@ -150,7 +150,11 @@ func TestRule_UnauthenticatedBrowser_BouncedToWaitlist(t *testing.T) {
 // inference cluster-wide.
 func TestRule_APIKeyInference_NeverGated(t *testing.T) {
 	app := gateApp(t, "pending")
-	for _, key := range []string{"hk-43f50b6b", "sk-hz-abc", "pk-hz-obs", "fw_live_x", "hz_secret"} {
+	// The three families cloud actually mints, mirroring APIKeyPrefixes in
+	// auth_identity.go. fw_ and hz_ were dropped there as dead entries that were
+	// never minted and only widened what counts as a credential, so asserting them
+	// here would push that surface back open.
+	for _, key := range []string{"hk-43f50b6b", "sk-hz-abc", "pk-hz-obs"} {
 		// The exact paid-inference shape: Bearer key, JSON accept, NO session/user, on a
 		// GATED host — the exemption, not mode, must carry it through.
 		for _, p := range []string{"/v1/chat/completions", "/v1/models", "/v1/embeddings"} {
