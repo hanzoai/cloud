@@ -1043,8 +1043,8 @@ github.com/hanzoai/builder v0.3.13 h1:tAOJ+0Q0xrrovk7lkvaZxuKZ4lqENIB6tE0Rr9+6Bo
 github.com/hanzoai/builder v0.3.13/go.mod h1:TWZaiP0Y9tCMwtLH2EvQqBAeT1f3aJI5Y0XPM8S0wcE=
 github.com/hanzoai/captable v1.0.0 h1:utXPsOaPL+QV0rJaoNDFHvWFv7etf2kfm1bsFh6JRD0=
 github.com/hanzoai/captable v1.0.0/go.mod h1:czdMnzEvb8FWNKCzmh+z8PmwYeQp4MGyTPgo+Q5O+mk=
-github.com/hanzoai/commerce v1.49.22 h1:SNPlsfsJysgUvX7IThN5N7J7IjFdPDlaTn6TnUEwhEU=
-github.com/hanzoai/commerce v1.49.22/go.mod h1:0OLGzTPtSg7z2pNC8nh3Yndg35V3ooNV125iVE7g6Xs=
+github.com/hanzoai/commerce v1.49.23 h1:gSbCDvzrhZZ/l6z95gLOW11JlmxhpMWI1mfe1aPNLXM=
+github.com/hanzoai/commerce v1.49.23/go.mod h1:0E+PK5bnwGF5y+HD+ZzqUWSpYIFvmoCdCibBIy0uWQA=
 github.com/hanzoai/csqlite v0.1.0 h1:suwC3dh0INlfP/U0Es6cDf6JNQ+2+GVLLATPWCUux6k=
 github.com/hanzoai/csqlite v0.1.0/go.mod h1:H31a/O6VXuklR9UBkgY++bmAK5uzVfXPqU0F6P9Wsos=
 github.com/hanzoai/dashscopego v0.6.0 h1:sLUepwcnVajaDgzlgfuJWkZblBg9UIalkpFUjXHx0Fg=
@@ -1089,8 +1089,8 @@ github.com/hanzoai/notify v1.6.18 h1:YLIKheJSMhGqRuo7NRsMicHjAWSVFV6j6ZGqm2H+IBM
 github.com/hanzoai/notify v1.6.18/go.mod h1:O8OZj1cfUAIY39ROTPpiaVH8jv947VNfAGor2AZ/ebQ=
 github.com/hanzoai/o11y v1.5.31 h1:cq0oay92IbqCaRzazxoG7fMifhhVXF4zP1QfGR2wRpM=
 github.com/hanzoai/o11y v1.5.31/go.mod h1:npZ7y0k6+uP6CnKHGtiL+dgIuqI6e3WCV/+6IYNImw4=
-github.com/hanzoai/orm v0.6.12 h1:o7v7K9gW2DTnzoQEK4J3i6uGZcUY4D93ppU++OIHWOc=
-github.com/hanzoai/orm v0.6.12/go.mod h1:NKK3w1Es0emqA2aE2GH/uL2yvVLD0Uf1iSwmJm6nFxI=
+github.com/hanzoai/orm v0.6.14 h1:7r+p/Bb4I/py0qGSdkWZ01AtlOW9u+Jh2Fiu0P6XNS8=
+github.com/hanzoai/orm v0.6.14/go.mod h1:NKK3w1Es0emqA2aE2GH/uL2yvVLD0Uf1iSwmJm6nFxI=
 github.com/hanzoai/otel-collector v1.2.0 h1:lBDL5lKotq89JaqchcM+/oxEnjrjazEI2JJfDhotudc=
 github.com/hanzoai/otel-collector v1.2.0/go.mod h1:rNCSDd4fw23kCi5UQ4u2IGhSYifYMex5O6SwZGHtIPE=
 github.com/hanzoai/pdf v1.2.0 h1:3/zYs4estaf6hpa3Ug/NgfYEQpmkmMClmRcREAP8KUo=

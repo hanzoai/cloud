@@ -340,6 +340,13 @@ func (s *Store) GetIssue(ctx context.Context, org, projectID string, number int)
 // globally unique (it is unique per external system), so it is always scoped to the
 // project the mirror files into.
 func (s *Store) GetIssueByExtRef(ctx context.Context, org, projectID, extRef string) (Issue, error) {
+	// An empty anchor is a miss, never a match. Every native issue defaults to an
+	// empty ext_ref, so a blank anchor would otherwise select an unrelated team issue
+	// — and the mirror upsert, whose whole contract is "found ⇒ update in place",
+	// would overwrite it with external content. The miss is the only safe answer.
+	if strings.TrimSpace(extRef) == "" {
+		return Issue{}, errNotFound
+	}
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+issueCols+` FROM issues WHERE org=? AND project_id=? AND ext_ref=? ORDER BY number ASC LIMIT 1`,
 		org, projectID, extRef)
