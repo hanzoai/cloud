@@ -24,7 +24,7 @@ import (
 //
 // THE DECOMPLECTION. Identity is now the principal: when a VALIDATED principal is
 // present (X-User-Id is set ONLY by IdentityMiddleware from a real credential, never a
-// raw client header — see middleware_identity.go), /v1/auth/account reflects it. owner
+// raw client header — see middleware_identity.go), /v1/ai/account reflects it. owner
 // is the HOME org (principal.Owner) so a SuperAdmin org-switched into a tenant stays a
 // SuperAdmin; isAdmin is the validated bit. With NO principal it falls through
 // (c.Next()) to the casibase account surface unchanged — the anonymous sign-in page
@@ -33,11 +33,11 @@ import (
 // headers) and BEFORE MountAll (so it precedes the casibase account handler).
 // accountPath is the account read this middleware fronts. It is a named constant
 // because the interception is a PATH MATCH: when the /v1 surface was namespaced
-// (/v1/get-account → /v1/auth/account) a literal left un-updated here would not
+// (/v1/get-account → /v1/ai/account) a literal left un-updated here would not
 // error — the middleware would simply stop firing, fall through to the casibase
 // account surface, and hand the SPA the anonymous owner again. That is precisely
 // the bug this file exists to fix, silently restored.
-const accountPath = "/v1/auth/account"
+const accountPath = "/v1/ai/account"
 
 func AccountFromPrincipal() zip.Handler {
 	return func(c *zip.Ctx) error {

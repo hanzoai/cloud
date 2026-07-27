@@ -122,7 +122,7 @@ func TestPaywall_NoPlan402(t *testing.T) {
 // pay button can never happen.
 func TestPaywall_AllowlistedPassWithNoPlan(t *testing.T) {
 	paths := []string{
-		"/v1/auth/signin", "/v1/auth/signout", "/v1/auth/account",
+		"/v1/ai/signin", "/v1/ai/signout", "/v1/ai/account",
 		"/v1/billing/plans", "/v1/billing/subscriptions", "/v1/billing/balance",
 		"/v1/billing/payment-methods", "/v1/billing/usage",
 		"/v1/plans", "/v1/plans/resolve/pro",
@@ -280,7 +280,7 @@ func TestGated_CaseFoldedSoAllowlistStillMatches(t *testing.T) {
 		"/V1/iam/callback",
 		"/v1/IAM/callback",
 		"/V1/BILLING/subscribe",
-		"/V1/auth/signin",
+		"/V1/ai/signin",
 	} {
 		if gated(path) {
 			t.Errorf("gated(%q) = true, want false — 402 on the sell/service surface", path)
@@ -292,9 +292,9 @@ func TestGated_CaseFoldedSoAllowlistStillMatches(t *testing.T) {
 // list nor any allow prefix, so /v1/signin/ was paywalled: a 402 in front of sign-in.
 func TestGated_TrailingSlashDoesNotLockOut(t *testing.T) {
 	for _, path := range []string{
-		"/v1/auth/signin/",
-		"/v1/auth/signout/",
-		"/v1/auth/account/",
+		"/v1/ai/signin/",
+		"/v1/ai/signout/",
+		"/v1/ai/account/",
 		"/v1/entitlements/",
 		"/v1/plans/",
 		"/v1/models/",
@@ -394,8 +394,8 @@ func TestPaywall_NilReaderPassesEverything(t *testing.T) {
 // a 402 in front of signing in.
 //
 // The allow-list matches by STRING, so it does NOT move when a route moves. When
-// the /v1 surface was namespaced (/v1/signin → /v1/auth/signin, /v1/get-account →
-// /v1/auth/account) the paths changed underneath this list, and a list left
+// the /v1 surface was namespaced (/v1/signin → /v1/ai/signin, /v1/get-account →
+// /v1/ai/account) the paths changed underneath this list, and a list left
 // un-updated would have gated the entire sell/service entry path — the same shape
 // of outage the trailing-slash and case-folding bugs already caused here twice.
 //
@@ -403,9 +403,9 @@ func TestPaywall_NilReaderPassesEverything(t *testing.T) {
 // a route moves again, this test fails rather than production.
 func TestAuthRoutesAreNeverPaywalled(t *testing.T) {
 	for _, p := range []string{
-		"/v1/auth/signin",
-		"/v1/auth/signout",
-		"/v1/auth/account",
+		"/v1/ai/signin",
+		"/v1/ai/signout",
+		"/v1/ai/account",
 	} {
 		if gated(p) {
 			t.Errorf("gated(%q) = true — a 402 in front of sign-in", p)
