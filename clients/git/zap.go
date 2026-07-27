@@ -29,7 +29,11 @@ import (
 //
 //	POST /v1/<service>/zap/<procedure>
 //
-// mapped by zapface from the ZAP method "<service>/zap/<procedure>". Each adapter
+// mapped by zapface from the ZAP method "POST <service>/zap/<procedure>". The
+// verb is CARRIED, never inferred (zapface/dispatch.go splitMethod) — a method
+// with no verb is refused rather than defaulted, because on a RESTful surface
+// one path answers GET, PATCH and DELETE and a guess could send a delete as a
+// post. The path is rooted at /v1. Each adapter
 // resolves the org EXACTLY as the REST handler does (principal.Org →
 // X-Org-Id, minted by the identity middleware from the browser's replayed
 // credential), then calls the SAME core func the REST handler calls, and wraps
@@ -38,9 +42,9 @@ import (
 //
 // git's procedures (all over the core in core.go):
 //
-//	git/zap/createRepo  -> coreCreate   git/zap/deleteRepo -> coreDelete
-//	git/zap/listRepos   -> coreList     git/zap/usage      -> coreUsage
-//	git/zap/getRepo     -> coreGet
+//	POST git/zap/createRepo -> coreCreate   POST git/zap/deleteRepo -> coreDelete
+//	POST git/zap/listRepos  -> coreList     POST git/zap/usage      -> coreUsage
+//	POST git/zap/getRepo    -> coreGet
 //
 // The next service (e.g. crm, prompts) copies this file's shape: one mountZAP
 // registering /v1/<service>/zap/<proc> envelope adapters over its own core funcs.
