@@ -62,7 +62,7 @@ var mounted *state
 
 // Mount opens the per-org book stores, wires the commerce posting source, and registers
 // the /v1/books surface.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("books.Mount: nil deps.Logger")
 	}
@@ -106,7 +106,7 @@ func Shutdown() error {
 	return first
 }
 
-func routes(app *zip.App, s *cloud.Service[*state]) {
+func routes(app cloud.Router, s *cloud.Service[*state]) {
 	app.Get("/v1/books/accounts", cloud.Handle(s, accountsHandler))
 	app.Get("/v1/books/gl", cloud.Handle(s, glHandler))
 	app.Get("/v1/books/trial-balance", cloud.Handle(s, trialBalanceHandler))

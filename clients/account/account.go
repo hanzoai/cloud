@@ -104,9 +104,9 @@ func newService(deps cloud.Deps) *cloud.Service[state] {
 
 // MountAccount wires the SPECIFIC self-service routes (order 48) — the ones that must
 // win over the IAM /v1/iam/* wildcard (50) and the commerce embed (100).
-func MountAccount(app *zip.App, deps cloud.Deps) error {
+func MountAccount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("account.MountAccount: nil zip.App")
+		return fmt.Errorf("account.MountAccount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("account.MountAccount: nil deps.Logger")
@@ -120,9 +120,9 @@ func MountAccount(app *zip.App, deps cloud.Deps) error {
 
 // MountBridge wires the CATCH-ALL data bridges (order 122) — the /v1/billing/* and
 // /v1/commerce/* proxies that must sit AFTER clients/billing (121) + the commerce embed.
-func MountBridge(app *zip.App, deps cloud.Deps) error {
+func MountBridge(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("account.MountBridge: nil zip.App")
+		return fmt.Errorf("account.MountBridge: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("account.MountBridge: nil deps.Logger")
@@ -134,7 +134,7 @@ func MountBridge(app *zip.App, deps cloud.Deps) error {
 }
 
 // routesAccount wires the specific self-service routes (order 48).
-func routesAccount(s *cloud.Service[state], app *zip.App) {
+func routesAccount(s *cloud.Service[state], app cloud.Router) {
 	// GET /v1/csrf issues the anti-CSRF token the embedded SPA echoes as X-CSRF-Token on
 	// every money write (csrf.go). Safe (read-only), same-origin.
 	app.Get("/v1/csrf", cloud.Handle(s, issueCSRFToken))
@@ -162,7 +162,7 @@ func routesAccount(s *cloud.Service[state], app *zip.App) {
 }
 
 // routesBridge wires the per-tenant catch-all data bridges (order 122).
-func routesBridge(s *cloud.Service[state], app *zip.App) {
+func routesBridge(s *cloud.Service[state], app cloud.Router) {
 	// Per-tenant billing DATA bridge — the canonical /v1/billing/* the statically-exported
 	// console calls, forwarded to commerce with the admin service token and SCOPED to the
 	// validated caller's own subject (billing.go). Registered AFTER clients/billing's

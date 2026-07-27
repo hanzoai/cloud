@@ -146,9 +146,9 @@ func toView(s *cloud.Service[state], r Repo, branches []string, head string) rep
 }
 
 // Mount wires the git surface onto app per HIP-0106.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("git.Mount: nil zip.App")
+		return fmt.Errorf("git.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("git.Mount: nil deps.Logger")
@@ -209,7 +209,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 // routes registers the git control plane + smart-HTTP + SSH-key + ZAP surface.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/git")
 
 	// Control plane (JSON). Static /repos + /usage register before the

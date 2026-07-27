@@ -100,9 +100,9 @@ var (
 
 // Mount reads the plugin manifest and mounts every plugin onto app. Missing or
 // unset manifest is a no-op (cloud runs fine with zero plugins).
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("plugin.Mount: nil zip.App")
+		return fmt.Errorf("plugin.Mount: nil app")
 	}
 	log := deps.Logger.New("subsystem", "plugins")
 

@@ -57,9 +57,9 @@ var mounted *cloud.Service[state]
 // Mount wires the /v1/captable/* surface onto app per HIP-0106. Constructs the
 // value directly (cloud.NewBase) — this subsystem keeps a package global for the
 // Shutdown hook and opens a per-tenant goja host from deps.DataDir.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("captable.Mount: nil zip.App")
+		return fmt.Errorf("captable.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("captable.Mount: nil deps.Logger")
@@ -97,7 +97,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 // routes wires the /v1/captable/* route table → bundle route names. GET reads
 // carry no body; mutations do.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/captable")
 	// company
 	g.Get("/company", route(s, "company.get", nil, false))

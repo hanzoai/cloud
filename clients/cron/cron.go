@@ -42,7 +42,6 @@ import (
 	tasksworker "github.com/hanzoai/tasks/pkg/sdk/worker"
 	tasksengine "github.com/hanzoai/tasks/pkg/tasks"
 	luxlog "github.com/luxfi/log"
-	"github.com/zap-proto/zip"
 )
 
 const (
@@ -80,7 +79,7 @@ func org() string {
 // wait; until then nothing is scheduled. Fail-soft: no engine or no k8s API
 // leaves the subsystem idle (ConfigMap-less environments simply have zero
 // entries), never blocks boot.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("cron.Mount: nil deps.Logger")
 	}

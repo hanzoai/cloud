@@ -86,9 +86,9 @@ var mounted *cloud.Service[state]
 
 // Mount wires the crm surface onto app per HIP-0106. Complex flavour: it keeps a
 // package global (mounted) for Shutdown, so it constructs the Service value directly.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("crm.Mount: nil zip.App")
+		return fmt.Errorf("crm.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("crm.Mount: nil deps.Logger")
@@ -119,7 +119,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 // routes registers the CRM surface: companies, contacts, opportunities, the summary
 // roll-up, and the Startup Program application intake.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/crm")
 	g.Get("/summary", cloud.Handle(s, summary))
 

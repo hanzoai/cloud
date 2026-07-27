@@ -53,9 +53,9 @@ var mounted *cloud.Service[state]
 // validate deps, open the store, register routes, return. The store lifecycle
 // and package-global handle make this a direct construction (cloud.NewBase),
 // not cloud.Mount.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("security.Mount: nil zip.App")
+		return fmt.Errorf("security.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("security.Mount: nil deps.Logger")
@@ -89,7 +89,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 // routes registers the security surface. Static routes register before the :id
 // params so a scan id can never shadow /rules or /health (Fiber first-match).
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/security")
 	g.Get("/health", cloud.Handle(s, health))
 	g.Get("/rules", cloud.Handle(s, listRules))

@@ -181,7 +181,7 @@ func toEventView(e Event) eventView {
 // /v1/agents/:name wildcard (Fiber matches in registration order, so a bare
 // :name would otherwise capture "sessions"). Within the block, the static
 // /stream route precedes the /:id param for the same reason.
-func mountSessions(s *cloud.Service[state], app *zip.App) {
+func mountSessions(s *cloud.Service[state], app cloud.Router) {
 	g := app.Group("/v1/agents")
 	g.Post("/sessions", cloud.Handle(s, registerSession))
 	g.Get("/sessions", cloud.Handle(s, listSessions))

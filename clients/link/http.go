@@ -64,9 +64,9 @@ var mounted *cloud.Service[state]
 
 // Mount wires the /v1/links surface. The sessions seam is set from the agents
 // in-process adapter (adapters.go) so a revoke can stop the affected sessions.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("link.Mount: nil zip.App")
+		return fmt.Errorf("link.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("link.Mount: nil deps.Logger")

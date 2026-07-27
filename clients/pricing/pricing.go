@@ -47,9 +47,9 @@ var (
 )
 
 // Mount registers the pricing surface on app per HIP-0106.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("pricing.Mount: nil zip.App")
+		return fmt.Errorf("pricing.Mount: nil app")
 	}
 	logger := deps.Logger
 	if logger == nil {

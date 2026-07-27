@@ -80,7 +80,7 @@ type state struct {
 
 // Mount wires the usage surface onto app per HIP-0106 — one line over the generic
 // subsystem entrypoint: build the state, register the routes.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "usage", build, routes)
 }
 
@@ -107,7 +107,7 @@ func build(b cloud.Base) (state, error) {
 // No :param routes here, so registration order is irrelevant; the generic
 // /v1/usage/health liveness route (OwnsHealth=false) is a distinct path and never
 // shadows these.
-func routes(app *zip.App, s *cloud.Service[state]) {
+func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Collection root (/v1/usage) stays flat — Group(p).Post("") yields "p/".
 	app.Post("/v1/usage", cloud.Handle(s, record))
 	g := app.Group("/v1/usage")

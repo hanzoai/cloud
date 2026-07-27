@@ -68,9 +68,9 @@ type state struct {
 // Mount wires the compute surface onto app per HIP-0106. visor is a "complex" mount
 // (it keeps a "compute"-provider meter and a fleet-scoped sub-logger that both need
 // deps at construction), so it builds the Service value directly.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("visor.Mount: nil zip.App")
+		return fmt.Errorf("visor.Mount: nil app")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("visor.Mount: nil deps.Logger")

@@ -65,9 +65,9 @@ var httpClient = &http.Client{Timeout: 15 * time.Second}
 // HIP-0106. Read-only: every panel degrades to an honest empty state in the
 // console when this surface is unreachable, so these handlers prefer returning
 // an empty-but-valid body over a 5xx whenever the upstream hiccups.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("product.Mount: nil zip.App")
+		return fmt.Errorf("product.Mount: nil app")
 	}
 	logger := deps.Logger
 	if logger == nil {

@@ -16,7 +16,7 @@ import (
 )
 
 // bankRoutes registers the bank surface on the existing books app (called from routes()).
-func bankRoutes(app *zip.App, s *cloud.Service[*state]) {
+func bankRoutes(app cloud.Router, s *cloud.Service[*state]) {
 	app.Post("/v1/books/bank/import", cloud.Handle(s, bankImportHandler))
 	app.Post("/v1/books/bank/sync", cloud.Handle(s, bankSyncHandler))
 	app.Get("/v1/books/bank/transactions", cloud.Handle(s, bankTxnsHandler))
