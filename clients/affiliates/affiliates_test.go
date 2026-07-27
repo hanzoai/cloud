@@ -610,10 +610,10 @@ func TestMultiLevelUplineWalk(t *testing.T) {
 		id   string
 		want int64
 	}{
-		"orgC": {idC, share(10000, 2000)},      // L1 @ 20% of the 40% margin
-		"orgB": {idB, share(10000, l2RateBps)}, // L2 @ 5% of margin
-		"orgA": {idA, share(10000, l3RateBps)}, // L3 @ 2% of margin
-		"orgW": {idW, 0},                       // L4 — beyond depth cap, earns NOTHING
+		"orgC": {idC, share(10000, 2000)},             // L1 @ 20% of the 40% margin
+		"orgB": {idB, share(10000, defaultL2RateBps)}, // L2 @ 5% of margin
+		"orgA": {idA, share(10000, defaultL3RateBps)}, // L3 @ 2% of margin
+		"orgW": {idW, 0},                              // L4 — beyond depth cap, earns NOTHING
 	}
 	for org, w := range want {
 		a, err := s.State.store.GetByID(ctx, w.id)
@@ -785,12 +785,12 @@ func TestAffiliatesMeSurface(t *testing.T) {
 	if v.Levels[0].Level != 1 || v.Levels[0].RateBps != defaultRateBps || v.Levels[0].DownlineCount != 1 {
 		t.Fatalf("L1 row wrong: %+v", v.Levels[0])
 	}
-	if v.Levels[1].Level != 2 || v.Levels[1].RateBps != l2RateBps || v.Levels[1].DownlineCount != 1 {
+	if v.Levels[1].Level != 2 || v.Levels[1].RateBps != defaultL2RateBps || v.Levels[1].DownlineCount != 1 {
 		t.Fatalf("L2 row wrong: %+v", v.Levels[1])
 	}
 	// A earns L2 on orgC's $100 spend = 5% of the 40% margin (lazy sweep from the read).
-	if v.AccruedCents != share(10000, l2RateBps) {
-		t.Fatalf("A accrued via /me = %d, want %d", v.AccruedCents, share(10000, l2RateBps))
+	if v.AccruedCents != share(10000, defaultL2RateBps) {
+		t.Fatalf("A accrued via /me = %d, want %d", v.AccruedCents, share(10000, defaultL2RateBps))
 	}
 }
 
@@ -835,7 +835,7 @@ func TestAdminReferralsAnalytics(t *testing.T) {
 		t.Fatalf("decode accrualByLevel: %v", err)
 	}
 	// orgC's $100 spend, 40% margin: L1 to B = 20% of margin, L2 to A = 5% of margin.
-	if byLevel.L1Cents != share(10000, defaultRateBps) || byLevel.L2Cents != share(10000, l2RateBps) {
+	if byLevel.L1Cents != share(10000, defaultRateBps) || byLevel.L2Cents != share(10000, defaultL2RateBps) {
 		t.Fatalf("accrualByLevel wrong: %+v", byLevel)
 	}
 	var leaders []referrerRow
