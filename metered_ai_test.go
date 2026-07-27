@@ -189,6 +189,69 @@ func TestMeteredAI_ModelListerPreserved(t *testing.T) {
 	}
 }
 
+// streamAI is the full-capability transport shape (what httpAI is): it lists
+// models AND streams. It records the ChatStream calls it served.
+type streamAI struct {
+	listerAI
+	streamed int
+}
+
+func (s *streamAI) ChatStream(_ context.Context, _ *types.ChatRequest, emit func(string) error) (*types.ChatResponse, error) {
+	s.streamed++
+	for _, d := range []string{"he", "llo"} {
+		if err := emit(d); err != nil {
+			return nil, err
+		}
+	}
+	return &types.ChatResponse{Content: "hello", PromptTokens: 3, CompletionTokens: 2, TotalTokens: 5}, nil
+}
+
+// The optional StreamCompleter capability must survive the metering wrap — and
+// must NOT be fabricated on a transport that cannot stream, or the answer engine
+// would call a method the transport never implemented.
+func TestMeteredAI_StreamCompleterPreserved(t *testing.T) {
+	both := meteredAIClient(&streamAI{}, Deps{})
+	if _, ok := both.(types.StreamCompleter); !ok {
+		t.Fatalf("StreamCompleter capability lost through the metering wrap")
+	}
+	if _, ok := both.(types.ModelLister); !ok {
+		t.Fatalf("ModelLister lost when the transport also streams")
+	}
+	for _, plain := range []types.AIClient{
+		meteredAIClient(&recordingAI{}, Deps{}), // neither capability
+		meteredAIClient(listerAI{}, Deps{}),     // lists but cannot stream
+	} {
+		if _, ok := plain.(types.StreamCompleter); ok {
+			t.Fatalf("metering wrap fabricated a StreamCompleter on a non-streaming transport")
+		}
+	}
+}
+
+// A streamed completion must meter on exactly the same terms as a buffered one —
+// streaming can never be a cheaper way to buy inference.
+func TestMeteredAI_StreamMetersLikeCompletion(t *testing.T) {
+	inner := &streamAI{}
+	sc, ok := meteredAIClient(inner, Deps{}).(types.StreamCompleter)
+	if !ok {
+		t.Fatal("wrapped client must expose StreamCompleter")
+	}
+	var got []string
+	resp, err := sc.ChatStream(context.Background(), &types.ChatRequest{Model: "x", Prompt: "hi", Org: "acme"},
+		func(d string) error { got = append(got, d); return nil })
+	if err != nil {
+		t.Fatalf("ChatStream: %v", err)
+	}
+	if inner.streamed != 1 {
+		t.Fatalf("must delegate to the transport exactly once, got %d", inner.streamed)
+	}
+	if strings.Join(got, "") != "hello" || resp.Content != "hello" {
+		t.Fatalf("deltas %v and content %q must reconstruct the same answer", got, resp.Content)
+	}
+	if resp.TotalTokens != 5 {
+		t.Fatalf("usage must survive the wrap, got %d", resp.TotalTokens)
+	}
+}
+
 // BYOInferenceFeeMicros is the shared BYO fee model any BYO inference path (Workers
 // AI) prices with: BYOFeeBps of the equivalent metered price, FLOORED per call. The
 // token-proportional part is isolated by disabling the floor; the floor has its own

@@ -9,10 +9,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	luxlog "github.com/luxfi/log"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 

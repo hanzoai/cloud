@@ -149,8 +149,11 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 
 	g := app.Group("/v1/search")
 
+	g.Get("/stats", cloud.Handle(s, stats))
+	g.Get("/indexes", cloud.Handle(s, listIndexes))
 	g.Post("/indexes", cloud.Handle(s, createIndex))
 	g.Get("/indexes/:uid", cloud.Handle(s, getIndex))
+	g.Delete("/indexes/:uid", cloud.Handle(s, deleteIndex))
 	g.Get("/indexes/:uid/settings", cloud.Handle(s, getSettings))
 	g.Patch("/indexes/:uid/settings", cloud.Handle(s, patchSettings))
 	g.Post("/indexes/:uid/search", cloud.Handle(s, searchIndex))
@@ -209,6 +212,64 @@ func createIndex(s *cloud.Service[state], c *zip.Ctx) error {
 		return internal(c, err)
 	}
 	return enqueued(s, c, uid, "indexCreation")
+}
+
+// listIndexes answers an org's whole search surface. Without it an index whose
+// uid a caller has forgotten is unreachable — there is no other way to enumerate
+// what an org holds.
+func listIndexes(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return forbidden(c)
+	}
+	idxs, _, err := s.State.store.Indexes(c.Context(), org)
+	if err != nil {
+		return internal(c, err)
+	}
+	results := make([]map[string]any, 0, len(idxs))
+	for _, i := range idxs {
+		results = append(results, map[string]any{
+			"uid": i.UID, "primaryKey": i.PrimaryKey,
+			"createdAt": i.CreatedAt, "updatedAt": i.UpdatedAt,
+		})
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"results": results, "offset": 0, "limit": len(results), "total": len(results),
+	})
+}
+
+// stats reports per-index document counts for the org, Meilisearch's shape.
+func stats(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return forbidden(c)
+	}
+	idxs, counts, err := s.State.store.Indexes(c.Context(), org)
+	if err != nil {
+		return internal(c, err)
+	}
+	per := map[string]any{}
+	total := 0
+	for n, i := range idxs {
+		per[i.UID] = map[string]any{"numberOfDocuments": counts[n], "isIndexing": false}
+		total += counts[n]
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"databaseSize": total, "indexes": per,
+	})
+}
+
+// deleteIndex drops an index and everything in it. Meilisearch has this and it
+// is the only way to retire an index; without it a mistaken uid is permanent.
+func deleteIndex(s *cloud.Service[state], c *zip.Ctx) error {
+	org, uid, err := scope(c)
+	if err != nil {
+		return err
+	}
+	if err := s.State.store.DropIndex(c.Context(), org, uid); err != nil {
+		return internal(c, err)
+	}
+	return enqueued(s, c, uid, "indexDeletion")
 }
 
 func getIndex(s *cloud.Service[state], c *zip.Ctx) error {

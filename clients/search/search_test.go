@@ -445,6 +445,86 @@ func TestPrefixRangeStopsAtThePrefix(t *testing.T) {
 	}
 }
 
+// TestIndexesListsTheOrgsSurface proves an org can enumerate what it holds, with
+// document counts, and sees only its own. Without this an index whose uid nobody
+// remembers is unreachable.
+func TestIndexesListsTheOrgsSurface(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+	mustEnsure(t, s, "acme", "convos")
+	mustEnsure(t, s, "acme", "messages")
+	mustEnsure(t, s, "globex", "secrets")
+	mustUpsert(t, s, "acme", "convos", []map[string]any{
+		doc("id", "1", "title", "one"), doc("id", "2", "title", "two"),
+	})
+
+	idxs, counts, err := s.Indexes(ctx, "acme")
+	if err != nil {
+		t.Fatalf("Indexes: %v", err)
+	}
+	got := map[string]int{}
+	for n, i := range idxs {
+		got[i.UID] = counts[n]
+	}
+	if len(got) != 2 || got["convos"] != 2 || got["messages"] != 0 {
+		t.Errorf("acme surface = %v, want convos:2 messages:0", got)
+	}
+	if _, leaked := got["secrets"]; leaked {
+		t.Error("cross-tenant leak: acme's listing includes globex's index")
+	}
+
+	// An org with nothing gets an empty listing, never another org's.
+	if idxs, _, err := s.Indexes(ctx, "nobody"); err != nil || len(idxs) != 0 {
+		t.Errorf("empty org listing = %v (err %v), want none", idxs, err)
+	}
+}
+
+// TestDropIndexRemovesEverything proves deleting an index leaves no registry
+// row, no documents and no terms — a partial drop would leave a uid that lists
+// but cannot be read, or documents that match a search into nothing.
+func TestDropIndexRemovesEverything(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+	mustEnsure(t, s, "acme", "convos")
+	mustEnsure(t, s, "acme", "keep")
+	mustUpsert(t, s, "acme", "convos", []map[string]any{doc("id", "1", "title", "aardvark")})
+	mustUpsert(t, s, "acme", "keep", []map[string]any{doc("id", "1", "title", "aardvark")})
+
+	if err := s.DropIndex(ctx, "acme", "convos"); err != nil {
+		t.Fatalf("DropIndex: %v", err)
+	}
+	if _, err := s.Index(ctx, "acme", "convos"); err != errNoIndex {
+		t.Errorf("dropped index still in the registry: %v", err)
+	}
+	if _, total, err := s.Documents(ctx, "acme", "convos", 10, 0); err != nil || total != 0 {
+		t.Errorf("dropped index still holds %d documents (err %v)", total, err)
+	}
+	// The sibling index is untouched — a drop is scoped to its own uid.
+	if hits, err := s.Search(ctx, "acme", "keep", "aardvark", nil, 10, 0); err != nil || len(hits) != 1 {
+		t.Errorf("dropping convos damaged the keep index: %d hits, err %v", len(hits), err)
+	}
+}
+
+// TestEmptyIndexUIDIsNeverStored proves an index can never be created under an
+// empty uid. A blank uid is not addressable through the API — its documents
+// become invisible and its registry row cannot be dropped by name.
+func TestEmptyIndexUIDIsNeverStored(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureIndex(ctx, "acme", "", "id"); err == nil {
+		t.Error("EnsureIndex accepted an empty uid; documents written there are unreachable")
+	}
+	idxs, _, err := s.Indexes(ctx, "acme")
+	if err != nil {
+		t.Fatalf("Indexes: %v", err)
+	}
+	for _, i := range idxs {
+		if i.UID == "" {
+			t.Error("an index with an empty uid exists in the registry")
+		}
+	}
+}
+
 // TestPersistenceAcrossReopen proves indexes and documents survive a restart —
 // the property a pod restart depends on.
 func TestPersistenceAcrossReopen(t *testing.T) {
