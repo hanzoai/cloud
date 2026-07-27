@@ -254,11 +254,10 @@ func Wire() []cloud.MountSpec {
 		// otel-collector, prometheus and gonum are here and nowhere else — and it is
 		// imported by NOTHING but this line, so unlinking it is a pure subtraction.
 		//
-		// KNOWN GAP, see the branch report: o11y also owns /v1/sentry/* (mountSentry),
-		// which is a SECOND public prefix. zip.Load takes one, so /v1/sentry/* is not
-		// mounted on the host by this line and 404s until zip.Plugin can name more than
-		// one prefix. Do not merge this to main before that is closed.
-		cloud.PluginSpec("o11y", "/v1/o11y", o11yPlugin()),
+		// It owns TWO prefixes: the /v1/o11y read plane and the /v1/sentry/* wildcard
+		// mountSentry registers. Both are named here because zip.Load is variadic —
+		// a prefix left out is not an error, it is a silent 404 on that subtree.
+		cloud.PluginSpec("o11y", pluginAt("o11y"), "/v1/o11y", "/v1/sentry"),
 		{Name: "authz", Mount: cloud.Global(authz.Mount), Global: true},
 		// Embedded commerce plane /v1/commerce/*, /_/commerce/* — the hanzoai/commerce
 		// MODULE via the adapter in commerce.go (un-forked; the in-process
@@ -568,27 +567,30 @@ func ServeSingle(name string) error {
 	return fmt.Errorf("ServeSingle: unknown app %q — run `hanzo code ls`/`hanzo` for the list", name)
 }
 
-// o11yPlugin says where to find the o11y binary. Its two knobs map 1:1 onto
-// zip.Plugin's own fields, so there is no third notion of "where a plugin is"
-// and nothing to translate:
+// pluginAt says where to find the binary for the plugin named name. Its two knobs
+// are DERIVED from the name, so a plugin's configuration cannot disagree with its
+// identity and adding one invents no new env var to document:
 //
-//	CLOUD_O11Y_ADDR — already listening there; start nothing, just mount it.
-//	CLOUD_O11Y_BIN  — the binary's path on disk.
+//	CLOUD_<NAME>_ADDR — already listening there; start nothing, just mount it.
+//	CLOUD_<NAME>_BIN  — the binary's path on disk.
 //
-// The default is a file named "o11y" beside the running cloud binary, which is
-// the container layout: both binaries in the image, still one artifact to ship.
-// Resolving it from os.Executable rather than $PATH means a host always loads
-// the o11y it was built and shipped with, not whichever one a PATH happens to
-// find.
-func o11yPlugin() zip.Plugin {
-	if addr := strings.TrimSpace(os.Getenv("CLOUD_O11Y_ADDR")); addr != "" {
+// They map 1:1 onto zip.Plugin's own fields, so there is no third notion of "where
+// a plugin is" and nothing to translate.
+//
+// The default is a file named <name> beside the running cloud binary, which is the
+// container layout: every binary in the image, still one artifact to ship.
+// Resolving it from os.Executable rather than $PATH means a host always loads the
+// plugin it was built and shipped with, not whichever one a PATH happens to find.
+func pluginAt(name string) zip.Plugin {
+	env := "CLOUD_" + strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
+	if addr := strings.TrimSpace(os.Getenv(env + "_ADDR")); addr != "" {
 		return zip.Plugin{Addr: addr}
 	}
-	path := strings.TrimSpace(os.Getenv("CLOUD_O11Y_BIN"))
+	path := strings.TrimSpace(os.Getenv(env + "_BIN"))
 	if path == "" {
-		path = "o11y"
+		path = name
 		if self, err := os.Executable(); err == nil {
-			path = filepath.Join(filepath.Dir(self), "o11y")
+			path = filepath.Join(filepath.Dir(self), name)
 		}
 	}
 	return zip.Plugin{Path: path}
