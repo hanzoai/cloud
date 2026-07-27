@@ -120,7 +120,7 @@ func scanHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "books open failed")
 	}
-	ex, err := scanExtract(c.Context(), s.State.ai, s.State.model, org, principal.HomeOrg(c), text)
+	ex, err := scanExtract(c.Context(), s.State.ai, s.State.model, org, principal.Ledger(c), text)
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "scan extraction failed: %s", err.Error())
 	}
