@@ -108,6 +108,12 @@ func routes(app cloud.Router, s *cloud.Service[core.State]) {
 	g.Get("/compute", core.Guard(s, compute))
 	g.Get("/block-storage", core.Guard(s, blockStorage))
 	g.Get("/o11y", core.Guard(s, o11y))
+	// Per-subsystem lens on the one binary: the mount inventory (what is on/off) fused
+	// with the RED signals the request span already carries. See subsystems.go.
+	g.Get("/subsystems", core.Guard(s, subsystems))
+	// The ONE consolidated financial view — revenue, credits, spend by org, infra cost.
+	// See moneyboard.go.
+	g.Get("/money", core.Guard(s, moneyBoardHandler))
 	g.Get("/aimetrics", core.Guard(s, aimetrics))
 	g.Post("/sync", core.Guard(s, syncNow))
 
