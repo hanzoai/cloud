@@ -81,13 +81,16 @@ func TestDualMount_AdminConfigDoesNotShadowGate(t *testing.T) {
 		if r := do(t, app, "GET", path, "", "", false, nil); r.StatusCode != 403 {
 			t.Fatalf("BREACH: anonymous %s = %d, want 403 (guardScoped must reject no-principal)", path, r.StatusCode)
 		}
-		// A validated org principal is ADMITTED past the gate (not 403) and the
-		// route is MOUNTED, not shadowed by kms (not 404). We assert the gate/shadow
-		// decision only — the handler's own success (200 vs a downstream error under
-		// load) is orthogonal and proven in clients/admin/scope_test.go, so keep this
-		// cross-package test independent of IAM/datastore availability.
-		if r := do(t, app, "GET", path, "hanzo", "", false, nil); r.StatusCode == 403 || r.StatusCode == 404 {
-			t.Fatalf("%s with validated org principal = %d, want admitted+mounted (not 403/404; org-scoped cockpit admits; kms must not shadow)", path, r.StatusCode)
+		// The route is MOUNTED and owned by admin, not shadowed by kms (not 404).
+		// That is the whole claim of this test. Admission is deliberately NOT asserted
+		// here: GuardScoped admits a SuperAdmin, or an org ADMIN whose org is a
+		// configured white-label tenant, and IsWhiteLabelTenant is fail-closed on the
+		// empty WLTenants this cross-package app carries — so a 403 is the admin gate
+		// correctly firing, which itself proves admin (not kms) owns the path. Who
+		// gets admitted is proven in clients/admin/scope_test.go, keeping this test
+		// independent of IAM/datastore availability.
+		if r := do(t, app, "GET", path, "hanzo", "", false, nil); r.StatusCode == 404 {
+			t.Fatalf("%s = 404: route shadowed or unmounted; the admin cockpit must own it", path)
 		}
 	}
 
