@@ -103,27 +103,7 @@ func queryMetrics(ctx context.Context, q metricsQuery) (metricsResponse, error) 
 // redSeries fills the rate/errors/latency buckets from org-tagged request spans.
 // A non-admin is pinned to its own org; an admin sees the whole product.
 func redSeries(ctx context.Context, q metricsQuery, resp *metricsResponse) error {
-	routePrefix := "/v1/" + q.svc.ID
-	sql := "SELECT toStartOfInterval(timestamp, toIntervalSecond(?)) AS bucket, " +
-		"count() AS reqs, " +
-		// response_status_code is LowCardinality(String) in o11y; coerce before the
-		// numeric compare (a raw >= 500 raises NO_COMMON_TYPE). status_code is the
-		// numeric span status (2 = ERROR).
-		"countIf(toInt32OrZero(response_status_code) >= 500 OR status_code = 2) AS errs, " +
-		"quantile(0.5)(duration_nano) AS p50, " +
-		"quantile(0.95)(duration_nano) AS p95 " +
-		"FROM o11y_traces.distributed_o11y_index_v3 " +
-		"WHERE (httpRoute = ? OR startsWith(httpRoute, ?) OR serviceName = ?) " +
-		"AND timestamp > now64() - toIntervalSecond(?)"
-	args := []any{q.stepSec, routePrefix, routePrefix + "/", q.svc.App, q.rangeSec}
-	// THE tenant gate. A non-admin is pinned to rows carrying its own org
-	// attribution; a validated SuperAdmin sees the whole product (no org predicate).
-	if !q.admin {
-		sql += " AND attributes_string['hanzo.org'] = ?"
-		args = append(args, q.org)
-	}
-	sql += " GROUP BY bucket ORDER BY bucket ASC"
-
+	sql, args := redSeriesSQL(q)
 	rows, err := datastore.Query(ctx, sql, args...)
 	if err != nil {
 		return fmt.Errorf("query RED: %w", err)
@@ -155,6 +135,30 @@ func redSeries(ctx context.Context, q metricsQuery, resp *metricsResponse) error
 	// Never return a null series — the console renders an empty chart, not a crash.
 	ensureSeries(resp)
 	return nil
+}
+
+// redSeriesSQL builds the RED read over the span plane. The route and service name
+// are materialized attribute/resource columns; response_status_code is
+// LowCardinality(String), so it is coerced before the numeric compare (a raw >= 500
+// raises NO_COMMON_TYPE) — status_code is the numeric span status (2 = ERROR). The
+// tenant gate is the LAST predicate: a non-admin is pinned to rows carrying its own
+// org attribution; a validated SuperAdmin sees the whole product (no org predicate).
+func redSeriesSQL(q metricsQuery) (string, []any) {
+	routePrefix := "/v1/" + q.svc.ID
+	sql := "SELECT toStartOfInterval(timestamp, toIntervalSecond(?)) AS bucket, " +
+		"count() AS reqs, " +
+		"countIf(toInt32OrZero(response_status_code) >= 500 OR status_code = 2) AS errs, " +
+		"quantile(0.5)(duration_nano) AS p50, " +
+		"quantile(0.95)(duration_nano) AS p95 " +
+		"FROM " + spanTable + " " +
+		"WHERE (" + spanRoute + " = ? OR startsWith(" + spanRoute + ", ?) OR " + spanService + " = ?) " +
+		"AND timestamp > now64() - toIntervalSecond(?)"
+	args := []any{q.stepSec, routePrefix, routePrefix + "/", q.svc.App, q.rangeSec}
+	if !q.admin {
+		sql += " AND attributes_string['hanzo.org'] = ?"
+		args = append(args, q.org)
+	}
+	return sql + " GROUP BY bucket ORDER BY bucket ASC", args
 }
 
 // usageSeries fills the org's LLM usage (calls/tokens/cost) from the cloud_usage

@@ -152,7 +152,7 @@ Datastore trace store WITHOUT a socket, via the ZAP locality-adaptive **Router**
 - The handler bridges SDK-exporter proto spans → collector pdata (one in-memory
   OTLP round-trip — the pdata proto pkg differs but the OTLP wire is identical) and
   writes via the REAL `chtraces` exporter (`ConsumeTraces`), the one writer that
-  produces the `o11y_index_v3` schema the query plane reads. The pdata→SpanV3
+  produces the `o11y_traces.spans` schema the query plane reads. The pdata→span
   conversion is unexported, so the sink reuses the exporter as a `consumer.Traces`
   rather than duplicating ~90 lines of schema-coupled conversion.
 - **OPT-IN + fail-soft.** Mounts (via `mountTraceSink` in the one order-69 mount)

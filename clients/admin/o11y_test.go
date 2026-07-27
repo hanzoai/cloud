@@ -47,14 +47,13 @@ func TestO11ySQL_ReadsCanonicalTables(t *testing.T) {
 		wantQMarks       int
 	}{
 		{"usageTotals", o11yUsageTotalsSQL(), "hanzo.cloud_usage", 1},
-		{"traceTotals", o11yTraceTotalsSQL(), "o11y_traces.distributed_o11y_index_v3", 1},
-		{"logVolume", o11yLogVolumeSQL(), "o11y_logs.distributed_logs_v2", 1},
+		{"traceTotals", o11yTraceTotalsSQL(), "o11y_traces.distributed_spans", 1},
+		{"logVolume", o11yLogVolumeSQL(), "o11y_logs.distributed_records", 1},
 		{"usageSeries", o11yUsageSeriesSQL("1 HOUR"), "hanzo.cloud_usage", 1},
-		{"logSeries", o11yLogSeriesSQL("1 HOUR"), "o11y_logs.distributed_logs_v2", 1},
+		{"logSeries", o11yLogSeriesSQL("1 HOUR"), "o11y_logs.distributed_records", 1},
 		{"topOrgs", o11yTopOrgsSQL(), "hanzo.cloud_usage", 1},
 		{"topModels", o11yTopModelsSQL(), "hanzo.cloud_usage", 1},
-		{"topServices", o11yTopServicesSQL(), "o11y_traces.distributed_o11y_index_v3", 1},
-		{"llm", o11yLLMSQL(), "o11y_ai.observations", 1},
+		{"topServices", o11yTopServicesSQL(), "o11y_traces.distributed_spans", 1},
 	}
 	for _, c := range cases {
 		if !strings.Contains(c.sql, "FROM "+c.table) {
@@ -89,9 +88,28 @@ func TestO11yTop_LimitAndOrder(t *testing.T) {
 	if !strings.Contains(o11yTopServicesSQL(), "LIMIT 12") {
 		t.Errorf("topServices must limit %d", o11yServiceLimit)
 	}
-	// The LLM lens is scoped to generations only (not spans/events).
-	if !strings.Contains(o11yLLMSQL(), "type = 'GENERATION'") {
-		t.Errorf("llm lens must scope to GENERATION observations; got %q", o11yLLMSQL())
+}
+
+// TestO11ySpanSQL_ReadsRealColumns proves the RED lenses read the span plane's REAL
+// columns, not the retired generation's compat ALIASes (durationNano / serviceName /
+// hasError). The alias block goes with the dead generation, so a lens that still
+// names one returns rows today and errors after the cut.
+func TestO11ySpanSQL_ReadsRealColumns(t *testing.T) {
+	for name, sql := range map[string]string{
+		"traceTotals": o11yTraceTotalsSQL(),
+		"topServices": o11yTopServicesSQL(),
+	} {
+		for _, dead := range []string{"durationNano", "serviceName", "hasError", "httpRoute"} {
+			if strings.Contains(sql, dead) {
+				t.Errorf("%s names the retired alias column %q; got %q", name, dead, sql)
+			}
+		}
+		if !strings.Contains(sql, "duration_nano") {
+			t.Errorf("%s must read duration_nano; got %q", name, sql)
+		}
+		if !strings.Contains(sql, spanService) {
+			t.Errorf("%s must read %s; got %q", name, spanService, sql)
+		}
 	}
 }
 
