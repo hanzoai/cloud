@@ -268,7 +268,7 @@ func create(s *cloud.Service[state], k resourceKind) zip.Handler {
 		// post-success debit; fee==0 or unconfigured billing makes this a no-op.
 		fee := cloud.ResourceFeeCents(computeFeeEnvPrefix, k.kind)
 		_, projectValidated := principal.ValidatedProject(c)
-		if err := s.State.bill.Gate(c.Context(), principal.HomeOrg(c), project, projectValidated, k.kind, fee); err != nil {
+		if err := s.State.bill.Gate(c.Context(), principal.Ledger(c), project, projectValidated, k.kind, fee); err != nil {
 			return cloud.DenyResource(c, err)
 		}
 
@@ -299,7 +299,7 @@ func create(s *cloud.Service[state], k resourceKind) zip.Handler {
 		// Resource created — debit the caller's org ledger for the compute
 		// submission (per-org, env-attributed, async best-effort). Ongoing
 		// GPU-hour cost reuses s.State.bill.Meter from a future runtime usage watcher.
-		s.State.bill.Meter(principal.HomeOrg(c), project, k.kind, fee, c.RequestID(), cloud.ClientIP(c))
+		s.State.bill.Meter(principal.Ledger(c), project, k.kind, fee, c.RequestID(), cloud.ClientIP(c))
 		return c.JSON(http.StatusCreated, view(out, true))
 	}
 }

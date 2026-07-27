@@ -43,7 +43,7 @@ const (
 // BEFORE any work, so an out-of-funds caller gets a clean 402, never a half stream.
 func serveWeb(s *cloud.Service[*state], c *zip.Ctx, in AskRequest, q string) error {
 	dataOrg, _ := principal.Org(c) // gated non-empty at askHandler entry
-	payer := principal.HomeOrg(c)
+	payer := principal.Ledger(c)
 	if payer == "" {
 		payer = dataOrg
 	}
