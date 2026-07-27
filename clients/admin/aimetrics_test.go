@@ -28,9 +28,9 @@ func TestAimSQL_ReadsCanonicalTables(t *testing.T) {
 		name, sql, table string
 		wantQMarks       int
 	}{
-		{"langfuseTotals", aimLangfuseTotalsSQL(), "langfuse.observations", 1},
-		{"langfuseLatency", aimLangfuseLatencySQL(), "langfuse.observations", 1},
-		{"langfuseModels", aimLangfuseModelsSQL(), "langfuse.observations", 1},
+		{"o11yAiTotals", aimO11yAITotalsSQL(), "o11y_ai.observations", 1},
+		{"o11yAiLatency", aimO11yAILatencySQL(), "o11y_ai.observations", 1},
+		{"o11yAiModels", aimO11yAIModelsSQL(), "o11y_ai.observations", 1},
 		{"usageTotals", aimUsageTotalsSQL(), "hanzo.cloud_usage", 1},
 		{"topModels", aimTopModelsSQL(), "hanzo.cloud_usage", 1},
 		{"evalTraces", aimEvalTracesSQL(), "hanzo.eval_traces", 1},
@@ -49,12 +49,12 @@ func TestAimSQL_ReadsCanonicalTables(t *testing.T) {
 	}
 }
 
-// TestAimLangfuseScopedToGeneration proves the Langfuse lens is scoped to
+// TestAimO11yAIScopedToGeneration proves the O11yAI lens is scoped to
 // generations only (not spans/events), matching the o11y LLM lens.
-func TestAimLangfuseScopedToGeneration(t *testing.T) {
-	for _, sql := range []string{aimLangfuseTotalsSQL(), aimLangfuseLatencySQL(), aimLangfuseModelsSQL()} {
+func TestAimO11yAIScopedToGeneration(t *testing.T) {
+	for _, sql := range []string{aimO11yAITotalsSQL(), aimO11yAILatencySQL(), aimO11yAIModelsSQL()} {
 		if !strings.Contains(sql, "type = 'GENERATION'") {
-			t.Errorf("langfuse lens must scope to GENERATION observations; got %q", sql)
+			t.Errorf("o11y_ai lens must scope to GENERATION observations; got %q", sql)
 		}
 	}
 }
@@ -89,8 +89,8 @@ func TestAimEvalLatencyGuarded(t *testing.T) {
 	if !strings.Contains(aimEvalTracesSQL(), "end_time > start_time") {
 		t.Errorf("eval traces latency must guard end_time>start_time; got %q", aimEvalTracesSQL())
 	}
-	if !strings.Contains(aimLangfuseLatencySQL(), "end_time > start_time") {
-		t.Errorf("langfuse latency must guard end_time>start_time; got %q", aimLangfuseLatencySQL())
+	if !strings.Contains(aimO11yAILatencySQL(), "end_time > start_time") {
+		t.Errorf("o11y_ai latency must guard end_time>start_time; got %q", aimO11yAILatencySQL())
 	}
 }
 
@@ -147,7 +147,7 @@ func TestAimParsers(t *testing.T) {
 		{"model": "gpt-4o", "gens": uint64(42), "cost": float64(1.25)},
 	})
 	if len(lf) != 1 || lf[0].Model != "gpt-4o" || lf[0].Generations != 42 || lf[0].CostUsd != 1.25 {
-		t.Fatalf("langfuse models mis-parsed: %+v", lf)
+		t.Fatalf("o11y_ai models mis-parsed: %+v", lf)
 	}
 	names := scoreNamesFromRows([]map[string]any{
 		{"name": "accuracy", "n": uint64(320), "avg_value": float64(0.82), "min_value": float64(0), "max_value": float64(1)},
