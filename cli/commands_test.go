@@ -38,6 +38,20 @@ func withPlatform(t *testing.T, h http.HandlerFunc) string {
 	return srv.URL
 }
 
+// withCloud is withPlatform's sibling for routes the CLOUD binary serves.
+// /v1/runner is one: the platform host does not implement it, so a build sent
+// to PlatformURL answers 500 there and 401 here. Pointing this at CloudURL is
+// what the test is asserting.
+func withCloud(t *testing.T, h http.HandlerFunc) string {
+	t.Helper()
+	sandbox(t)
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	t.Setenv("HANZO_CLOUD_URL", srv.URL)
+	t.Setenv("HANZO_PLATFORM_TOKEN", "svc-tok")
+	return srv.URL
+}
+
 // apps list hits the LIVE board path /v1/paas/apps and renders the fleet table.
 func TestAppsListCommandTable(t *testing.T) {
 	withPlatform(t, func(w http.ResponseWriter, r *http.Request) {
@@ -214,7 +228,7 @@ func TestBuildCommandValidation(t *testing.T) {
 }
 
 func TestBuildCommand(t *testing.T) {
-	withPlatform(t, func(w http.ResponseWriter, r *http.Request) {
+	withCloud(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/runner" {
 			t.Errorf("path = %s", r.URL.Path)
 		}
