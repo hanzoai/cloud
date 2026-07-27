@@ -141,10 +141,13 @@ func agentUnits(s *cloud.Service[state], c *zip.Ctx, org string) []fleetUnit {
 		return nil
 	}
 	out := make([]fleetUnit, 0, len(targets))
+	now := time.Now()
 	for _, t := range targets {
 		u := fleetUnit{
 			Source: samples.SourceAgent, Unit: t.ID, Kind: t.Kind,
-			Label: t.Label, Host: t.Host, Status: t.Status,
+			// Liveness is decided by the heartbeat, not by whatever the row was
+			// last written with — see agents.Target.EffectiveStatus.
+			Label: t.Label, Host: t.Host, Status: t.EffectiveStatus(now),
 		}
 		if !t.Spec.IsZero() {
 			sp := &fleetSpec{OS: t.Spec.OS, Arch: t.Spec.Arch, CPUs: t.Spec.CPUs, Memory: t.Spec.Memory, GPUs: len(t.Spec.GPUs)}
