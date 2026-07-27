@@ -105,8 +105,8 @@ type Config struct {
 	PlatformURL string `json:"platform_url,omitempty"`
 	CloudURL    string `json:"cloud_url,omitempty"`
 	ClientID    string `json:"client_id,omitempty"`
-	APIKey      string `json:"apiKey,omitempty"`   // hk-… key; what `hanzo code` hands the agents
-	CodeTool    string `json:"code_tool,omitempty"` // default agent for bare `hanzo` / `hanzo code`: dev|claude|codex
+	APIKey      string `json:"apiKey,omitempty"`     // hk-… key; what `hanzo code` hands the agents
+	CodeTool    string `json:"code_tool,omitempty"`  // default agent for bare `hanzo` / `hanzo code`: dev|claude|codex
 	CodeModel   string `json:"code_model,omitempty"` // default model for `hanzo code` (else defaultCodeModel)
 }
 
@@ -578,7 +578,7 @@ func newRootCmd() *cobra.Command {
 	pf := root.PersistentFlags()
 	pf.StringVar(&f.org, "org", "", "organization (overrides config / HANZO_ORG)")
 	pf.StringVarP(&f.output, "output", "o", "", "output format: table|json")
-	pf.StringVar(&f.platformURL, "platform-url", "", "platform base URL (default "+defaultPlatformURL+")")
+	pf.StringVar(&f.platformURL, "platform-url", "", "platform base URL (default "+defaultPlatformURL+"); `hanzo build` targets --cloud-url instead")
 	pf.StringVar(&f.iamIssuer, "iam-issuer", "", "IAM issuer (default "+defaultIAMIssuer+")")
 	pf.StringVar(&f.cloudURL, "cloud-url", "", "cloud API base URL (default "+defaultCloudURL+")")
 	pf.StringVar(&f.clientID, "client-id", "", "IAM OAuth client id (default "+defaultClientID+")")

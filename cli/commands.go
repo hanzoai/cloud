@@ -16,6 +16,13 @@ func (e *Env) platform(gf *globalFlags) *Platform {
 	return newPlatform(e.PlatformURL, e.platformToken(gf.platformToken))
 }
 
+// runner builds the client for POST /v1/runner. That route is served by the
+// cloud binary, not by the platform app, so it is reached at CloudURL — the
+// platform host answers 500 for it. One route, one implementation, one door.
+func (e *Env) runner(gf *globalFlags) *Platform {
+	return newPlatform(e.CloudURL, e.platformToken(gf.platformToken))
+}
+
 // dashIfEmpty renders a string cell, "-" when empty.
 func dashIfEmpty(s string) string {
 	if s == "" {
@@ -279,7 +286,7 @@ func newBuildCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 			if br.OrganizationID == "" {
 				br.OrganizationID = e.Org // optional; server defaults to DEFAULT_BUILD_ORG_ID
 			}
-			job, err := e.platform(gf).EnqueueBuild(cmd.Context(), br, e.buildToken(buildToken))
+			job, err := e.runner(gf).EnqueueBuild(cmd.Context(), br, e.buildToken(buildToken))
 			if err != nil {
 				return err
 			}

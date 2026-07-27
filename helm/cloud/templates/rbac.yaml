@@ -1,0 +1,36 @@
+{{- if .Values.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "cloud.serviceAccountName" . }}
+  labels: {{- include "cloud.labels" . | nindent 4 }}
+{{- end }}
+{{- if .Values.rbac.create }}
+---
+# The live membership source (membership_k8s.go) lists+watches this deployment's own pods
+# to track the writer set for zero-downtime rolling upgrades. Namespaced, read-only, scoped
+# to pods — the least privilege that lets a replica see its peers leave/join.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "cloud.fullname" . }}-membership
+  labels: {{- include "cloud.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "cloud.fullname" . }}-membership
+  labels: {{- include "cloud.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "cloud.fullname" . }}-membership
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "cloud.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
