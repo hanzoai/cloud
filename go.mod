@@ -14,11 +14,11 @@ require (
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.2.0
-	github.com/hanzoai/commerce v1.49.21
+	github.com/hanzoai/commerce v1.49.22
 	github.com/hanzoai/decimal v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
 	github.com/hanzoai/goa v1.0.0
-	github.com/hanzoai/iam v1.33.15
+	github.com/hanzoai/iam v1.33.23
 	github.com/hanzoai/kafka v1.2.1
 	github.com/hanzoai/money v0.2.1
 	github.com/hanzoai/notify v1.6.18
@@ -757,7 +757,7 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v0.1.3
-	github.com/hanzoai/ai v1.831.6
+	github.com/hanzoai/ai v1.831.9
 	github.com/hanzoai/authz v1.10.7
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.5
