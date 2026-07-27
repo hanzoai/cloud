@@ -39,6 +39,7 @@ import (
 	"github.com/hanzoai/cloud/clients/admin/finance"
 	"github.com/hanzoai/cloud/clients/admin/health"
 	"github.com/hanzoai/cloud/clients/admin/iam"
+	"github.com/hanzoai/cloud/clients/admin/infra"
 	"github.com/hanzoai/cloud/clients/admin/invoices"
 	"github.com/hanzoai/cloud/clients/admin/metrics"
 	"github.com/hanzoai/cloud/clients/admin/revenue"
@@ -141,6 +142,7 @@ func routes(app cloud.Router, s *cloud.Service[core.State]) {
 	revenue.Routes(app, s)
 	finance.Routes(app, s)
 	metrics.Routes(app, s)
+	infra.Routes(app, s)
 	invoices.Routes(app, s)
 	subscriptions.Routes(app, s)
 }
