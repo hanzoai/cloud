@@ -60,6 +60,7 @@ test:
         ./clients/flags/ \
         ./clients/ml/ \
         ./clients/visor/ \
+        ./clients/translate/ \
         ./cli/
 
 kms:
