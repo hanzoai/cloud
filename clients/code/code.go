@@ -199,7 +199,7 @@ func (s *service) handleSearch(c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	eng, err := s.engineFor(org, principal.HomeOrg(c), principal.Project(c))
+	eng, err := s.engineFor(org, principal.Ledger(c), principal.Project(c))
 	if err != nil {
 		return zip.ErrInternal("open index")
 	}
@@ -239,7 +239,7 @@ func (s *service) handleContext(c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	eng, err := s.engineFor(org, principal.HomeOrg(c), principal.Project(c))
+	eng, err := s.engineFor(org, principal.Ledger(c), principal.Project(c))
 	if err != nil {
 		return zip.ErrInternal("open index")
 	}
@@ -344,7 +344,7 @@ func (s *service) handleAsk(c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	eng, err := s.engineFor(org, principal.HomeOrg(c), principal.Project(c))
+	eng, err := s.engineFor(org, principal.Ledger(c), principal.Project(c))
 	if err != nil {
 		return zip.ErrInternal("open index")
 	}
@@ -394,7 +394,7 @@ func (s *service) handleIndex(c *zip.Ctx) error {
 	if err != nil {
 		return zip.ErrInternal("open index")
 	}
-	res, err := s.indexRepo(c.Context(), org, principal.HomeOrg(c), principal.Project(c), store, repo, body.Files, body.Prune)
+	res, err := s.indexRepo(c.Context(), org, principal.Ledger(c), principal.Project(c), store, repo, body.Files, body.Prune)
 	if err != nil {
 		s.log.Warn("code index failed", "org", org, "repo", repo, "err", err)
 		return zip.ErrInternal("index failed")
