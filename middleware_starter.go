@@ -98,19 +98,42 @@ func StarterGrant() zip.Handler {
 //
 // ONLY THE CALLER'S HOME ORG IS FUNDED, and this is the abuse gate. The payer of
 // record is the SELECTED org (principal.BillingOrg reads X-Org-Id; IAM's signed `orgs`
-// claim lets a person pick any org they belong to). So a person who belongs to five
-// orgs can present five different wallets, and funding "whichever wallet is paying"
-// would mint $5 per org to anyone who can create orgs — which is unlimited, and whose
-// personal slugs auto-suffix. Requiring the selected org to be the caller's HOME org
-// (X-User-Owner, the validated `owner` claim, which no client can set) makes the grant
-// follow the person rather than the selection.
+// claim lets a person act in any org they belong to). So one person can present as
+// many wallets as they have memberships, and funding "whichever wallet is paying"
+// would mint $5 per org to anyone who can create them — which is unlimited, and whose
+// personal slugs auto-suffix. The grant therefore follows the PERSON: it fires only
+// where the selected org is the caller's own.
 //
-// It costs nothing legitimate. IAM's first-run provision MOVES the founder into the
+// MEMBERSHIP ALONE WOULD NOT BE ENOUGH, which is why this reads the home org and not
+// the `orgs` set at large. A founder is a member of every org they create, so
+// "selected ∈ orgs" admits all of them and the mint is back. What distinguishes the
+// one org that is theirs is POSITION: IAM builds the membership set home-first from
+// the authoritative user row (store.MemberOrgRefs seeds it with user.Owner, then
+// appends explicit memberships), so orgs[0] is the caller's own org and everything
+// they merely joined or created follows it.
+//
+// principal.Owner IS that value. It reads X-User-Owner, which SanitizeIdentity now
+// mints from idClaims.homeOrg() — orgs[0].org — rather than from the `owner` claim
+// (d14219415: "the home org is the USER's, never the minting app's"). That fix is
+// upstream of this gate and is what makes it reachable at all: `owner` carried the
+// APPLICATION's org, so it never equalled the ledger for an onboarded account and this
+// comparison could not match. Reading the same accessor SanitizeIdentity reads keeps
+// this one authority rather than a second opinion.
+//
+// It costs nothing legitimate. IAM's first-run provision moves the founder into the
 // org it creates, so a real new account's home IS the new org and it is funded. Orgs
-// created as ADDITIONAL are explicitly created without moving the caller
-// (clients/account: "create it WITHOUT moving them"), so they are never anyone's home
-// and never funded — which is the intended rule, stated once, enforced by the address
-// rather than by a flag on a handler that only one of several paths reaches.
+// created as ADDITIONAL never move the caller (clients/account: "create it WITHOUT
+// moving them"), so they can never occupy position 0 and are never funded — the
+// intended rule, enforced by the address rather than by a flag on a handler that only
+// one of several routes reaches.
+//
+// Comparison is BYTE-EXACT, and safely so: isMember (auth_identity.go) admits a
+// selected org only on `o.Org == org`, so X-Org-Id can only ever be a byte-identical
+// entry of the signed set, and X-User-Owner is entry zero of that same set. A case
+// difference here would mean the two values did not come from the same claim — a
+// reason to refuse a grant, not to normalise until they match. An empty home refuses:
+// a pre-v1.33.0 or machine token carries no membership set, and the field it would
+// otherwise fall back to is the one that was just removed for being wrong.
 func starterWallet(c *zip.Ctx) (principal.Wallet, bool) {
 	w, ok := principal.WalletOf(c)
 	if !ok || w.Ledger == "" || w.Account == "" {
@@ -119,8 +142,8 @@ func starterWallet(c *zip.Ctx) (principal.Wallet, bool) {
 	if strings.EqualFold(w.Ledger, account.SignupOrg) {
 		return principal.Wallet{}, false
 	}
-	if home := principal.Owner(c); home == "" || !strings.EqualFold(home, w.Ledger) {
-		return principal.Wallet{}, false // acting in an org that is not this caller's home
+	if home := principal.Owner(c); home == "" || home != w.Ledger {
+		return principal.Wallet{}, false // no signed home, or acting away from it
 	}
 	return w, true
 }
