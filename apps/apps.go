@@ -130,6 +130,7 @@ import (
 	"github.com/hanzoai/cloud/clients/rollingcap"
 	"github.com/hanzoai/cloud/clients/runtime"
 	"github.com/hanzoai/cloud/clients/sbom"
+	"github.com/hanzoai/cloud/clients/search"
 	"github.com/hanzoai/cloud/clients/security"
 	"github.com/hanzoai/cloud/clients/settings"
 	"github.com/hanzoai/cloud/clients/share"
@@ -406,6 +407,13 @@ func Wire() []cloud.MountSpec {
 		{Name: "entitlements", Mount: entitlements.Mount, Shutdown: entitlements.Shutdown},
 		{Name: "exec", Mount: exec.Mount},
 		{Name: "websearch", Mount: websearch.Mount},
+		// The in-binary full-text index (/v1/search): a per-org inverted index on
+		// Base/SQLite speaking the Meilisearch dialect, so a Meilisearch client
+		// repoints at it unchanged.
+		// websearch above queries the OUTSIDE world; this one indexes ours.
+		// OwnsHealth: its /v1/search/health is Meilisearch's {"status":"available"}
+		// and fails closed when the store is unreadable.
+		{Name: "search", Mount: search.Mount, Shutdown: ctxShutdown(search.Shutdown), OwnsHealth: true},
 		{Name: "world", Mount: world.Mount, Shutdown: ctxShutdown(world.Shutdown)},
 		// The bot runtime's ops face (/v1/bot/*). The transport itself is domain-free;
 		// the run control plane is "bots" below.
