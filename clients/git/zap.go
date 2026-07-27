@@ -64,7 +64,7 @@ func mountZAP(app *zip.App, s *cloud.Service[state]) {
 // result). It is the SAME shape every /v1 ZAP-facing handler returns, so the
 // bridge stays fully generic.
 func okEnvelope(c *zip.Ctx, data any) error {
-	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "msg": "", "data": data})
+	return cloud.OK(c, data)
 }
 
 // errEnvelope reports a handler error in the envelope with the given HTTP status
