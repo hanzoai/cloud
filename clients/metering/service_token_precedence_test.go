@@ -10,7 +10,7 @@ import (
 
 	"github.com/zap-proto/zip"
 
-	"github.com/hanzoai/cloud/clients/commerceinproc"
+	"github.com/hanzoai/cloud/clients/commerce/transport"
 	"github.com/hanzoai/cloud/clients/finance"
 	"github.com/hanzoai/cloud/clients/metering"
 	"github.com/hanzoai/commerce/datastore"
@@ -52,7 +52,7 @@ func stampIAMForS2S(c *zip.Ctx) error {
 }
 
 // TestInProcMeteringDispatch_ServiceTokenAuthPath exercises the FULL in-process
-// metering dispatch end to end — the metering client → commerceinproc self-routing
+// metering dispatch end to end — the metering client → the commerce transport self-routing
 // transport → the real commerce middleware chain (IAM stamp + Admin-masked
 // TokenRequired) → the balance handler → back to a gate verdict — with finance NOT
 // co-resident (the split-deploy / live topology whose balance read goes over the wire
@@ -68,7 +68,7 @@ func TestInProcMeteringDispatch_ServiceTokenAuthPath(t *testing.T) {
 	org.Invalidate("funded")
 	org.Invalidate("broke")
 
-	// finance NOT co-resident → the metering balance read goes over commerceinproc,
+	// finance NOT co-resident → the metering balance read goes over the commerce transport,
 	// through the real commerce middleware chain, exactly like the topology that 500'd.
 	finance.Publish(nil)
 
@@ -83,15 +83,15 @@ func TestInProcMeteringDispatch_ServiceTokenAuthPath(t *testing.T) {
 		}
 		return c.JSON(http.StatusOK, map[string]any{"user": c.Query("user"), "currency": "usd", "available": avail})
 	})
-	commerceinproc.SetApp(eng)
-	t.Cleanup(func() { commerceinproc.SetHandler(nil) })
+	transport.SetApp(eng)
+	t.Cleanup(func() { transport.SetHandler(nil) })
 
 	m, err := metering.New(metering.Config{
-		BaseURL:    commerceinproc.PlaceholderBase,
+		BaseURL:    transport.PlaceholderBase,
 		Token:      svc,
 		Org:        "hanzo",
 		FailOpen:   false, // fail-closed: a scope-gate 403 must surface, never silently allow.
-		HTTPClient: commerceinproc.Client(0),
+		HTTPClient: transport.Client(0),
 	})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
