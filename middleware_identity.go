@@ -30,6 +30,7 @@ import (
 	"log/slog"
 	"net/url"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/zap-proto/zip"
@@ -435,10 +436,19 @@ func validatedPrincipal(c *zip.Ctx, v *identityValidator) *idClaims {
 		}
 		return v.keys.resolve(c.Context(), tok)
 	}
+	// Parse ONCE. A ZAP socket replays its credential on every frame, so without
+	// this the same token was signature-verified per call on an already
+	// authenticated connection. A hit requires the same token bytes that
+	// validated, so this is a memo of the verification — not a second way to be
+	// trusted. See identity_cache.go.
+	if claims := v.claims.get(tok, time.Now()); claims != nil {
+		return claims
+	}
 	claims, err := v.validate(tok)
 	if err != nil {
 		return nil
 	}
+	v.claims.put(tok, claims)
 	return claims
 }
 
