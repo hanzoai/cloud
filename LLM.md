@@ -118,6 +118,16 @@ Dockerfile's dedicated `-tags libsqlite3` CGO stage, and fail under `make test`
 by design (clients/git, kms, flags, x402, cmd/kmsreseal, finance). Bundle-embed
 tests (clients/tasks/ui) need `make deploy-ui` first (real bundle is gitignored).
 
+Store-heavy subsystem tests are fsync-bound, not CPU-bound. A mount opens its own
+SQLite stores, so a test that mounts several subsystems commits many times, and
+`t.TempDir()` under `/tmp` puts every commit behind the ext4 journal — on a box with
+a concurrent build the same mount that costs milliseconds idle costs ~90s, at ~0%
+CPU, blocked in `jbd2_log_wait_commit`. Point `TMPDIR` at tmpfs to measure the real
+cost: `TMPDIR=/dev/shm/t GOWORK=off go test -p 1 ./clients/guide` runs the eight-seam
+cross-subsystem harness (`clients/guide/drivehome_e2e_test.go`) in under a second.
+Prefer one package per `go test` invocation regardless: `./...` links every main
+package at once (`cmd/cloud` alone links >6GB).
+
 ## Framework doctrine
 
 One way to do everything. Composable, orthogonal, DRY. A new subsystem is a
