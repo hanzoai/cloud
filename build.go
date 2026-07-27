@@ -77,6 +77,7 @@ func BuildDeps(cfg *Config) Deps {
 		Domain:          cfg.Domain,
 		IAMIssuer:       cfg.IAMIssuer,
 		DataDir:         cfg.DataDir,
+		MasterKey:       masterKeyBytes(cfg),
 		AIDefaultModel:  cfg.AIDefaultModel,
 		AIFallbackModel: cfg.AIFallbackModel,
 	}
@@ -1049,4 +1050,20 @@ func MountAll(app *zip.App, specs []MountSpec, cfg *Config, deps Deps) error {
 		logger.Info("mounted subsystem", "name", spec.Name)
 	}
 	return nil
+}
+
+// masterKeyBytes decodes the base64 KMS master (CLOUD_KMS_MASTER_KEY_REF) into
+// the 32 raw bytes a subsystem needs to encrypt its own store. nil on absent or
+// malformed — never a partial or wrong-length key, because a wrong key encrypts
+// against a store no other key can open.
+func masterKeyBytes(cfg *Config) []byte {
+	ref := strings.TrimSpace(cfg.KMSMasterKeyRef)
+	if ref == "" {
+		return nil
+	}
+	master, err := base64.StdEncoding.DecodeString(ref)
+	if err != nil || len(master) != 32 {
+		return nil
+	}
+	return master
 }
