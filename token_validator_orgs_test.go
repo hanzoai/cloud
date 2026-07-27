@@ -54,6 +54,10 @@ func TestVerifiedIdentityLegacyNoOrgs(t *testing.T) {
 	v := &TokenValidator{v: newIdentityValidator(testIssuer, jwks.URL, 0)}
 
 	claims := tokenClaims("hanzo-team", "acme", "ada@example.com", false, time.Now().Add(time.Hour))
+	// tokenClaims seeds the ordinary case (orgs[0] == owner) because that is what a
+	// real IAM token carries. This test is specifically about the PRE-CLAIM shape, so
+	// it clears the set explicitly rather than relying on the fixture's default.
+	claims.Orgs = nil
 	id, err := v.Validate(signWith(t, key, claims))
 	if err != nil {
 		t.Fatalf("validate: %v", err)
