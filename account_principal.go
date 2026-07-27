@@ -31,9 +31,17 @@ import (
 // and any legacy casibase-session caller are untouched. One truth, additive, fail-open
 // to the old path. MUST be registered AFTER IdentityMiddleware (needs the minted
 // headers) and BEFORE MountAll (so it precedes the casibase /v1/get-account handler).
+// accountPath is the account read this middleware fronts. It is a named constant
+// because the interception is a PATH MATCH: when the /v1 surface was namespaced
+// (/v1/get-account → /v1/ai/account) a literal left un-updated here would not
+// error — the middleware would simply stop firing, fall through to the casibase
+// account surface, and hand the SPA the anonymous owner again. That is precisely
+// the bug this file exists to fix, silently restored.
+const accountPath = "/v1/ai/account"
+
 func AccountFromPrincipal() zip.Handler {
 	return func(c *zip.Ctx) error {
-		if c.Method() != http.MethodGet || c.Path() != "/v1/get-account" {
+		if c.Method() != http.MethodGet || c.Path() != accountPath {
 			return c.Next()
 		}
 		user := c.User() // X-User-Id — minted only from a validated credential
