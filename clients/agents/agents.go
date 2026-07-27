@@ -220,9 +220,13 @@ func rfc3339(unix int64) string {
 	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
 }
 
+// toView projects a stored agent onto the wire. Model goes out through
+// cloud.ZenModel: writes already normalize, so in steady state this changes
+// nothing — it is the backstop that keeps a row written before the normalization
+// existed (or restored from an old backup) from publishing an upstream name.
 func toView(a Agent, runs int) agentView {
 	return agentView{
-		ID: a.ID, Name: a.Name, Model: a.Model, Description: a.Description,
+		ID: a.ID, Name: a.Name, Model: cloud.ZenModel(a.Model), Description: a.Description,
 		Tools: nonNil(a.Tools), Status: a.Status,
 		ExecutionMode: a.ExecutionMode, Schedule: a.Schedule,
 		ComputeRef: a.ComputeRef, ServiceAccountID: a.ServiceAccountID,
@@ -231,9 +235,12 @@ func toView(a Agent, runs int) agentView {
 	}
 }
 
+// toRunView projects one execution onto the wire. Run history is customer-visible
+// too, and a run recorded before the migration carries the model it actually ran
+// on — so it is guarded the same way the agent is.
 func toRunView(r Run) runView {
 	return runView{
-		ID: r.ID, Status: r.Status, Model: r.Model, Input: r.Input, Output: r.Output,
+		ID: r.ID, Status: r.Status, Model: cloud.ZenModel(r.Model), Input: r.Input, Output: r.Output,
 		Error: r.Error, DurationMs: r.DurationMs, CreatedAt: rfc3339(r.CreatedAt),
 	}
 }
@@ -273,7 +280,11 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		State: state{
 			store:         store,
 			ai:            deps.AI,
-			defaultModel:  strings.TrimSpace(deps.AIDefaultModel),
+			// cloud.ZenModel guards the CONFIG boundary: an operator who points
+			// CLOUD_AI_DEFAULT_MODEL at an upstream name still gets the Hanzo name
+			// stamped on every agent seeded or created without one. The caller
+			// boundary is guarded separately, in create/update.
+			defaultModel:  cloud.ZenModel(deps.AIDefaultModel),
 			failoverModel: strings.TrimSpace(deps.AIFallbackModel),
 			bill:          cloud.NewResourceMeter(deps, meterKind),
 			bus:           newBus(),
@@ -362,6 +373,11 @@ func create(s *cloud.Service[state], c *zip.Ctx) error {
 	// model falls back to the deployment default (a valid catalog model the
 	// operator configured) — trusted, not re-validated — so a bot launched
 	// without a model still runs. If neither is present the model is required.
+	//
+	// Then cloud.ZenModel normalizes: an upstream family name never enters the
+	// registry, so it can never be served back out of one. The registry stores
+	// exactly what we would show, which keeps the read guard in toView a no-op
+	// rather than a lie about what the agent runs on.
 	model := strings.TrimSpace(body.Model)
 	if model == "" {
 		if model = s.State.defaultModel; model == "" {
@@ -370,6 +386,7 @@ func create(s *cloud.Service[state], c *zip.Ctx) error {
 	} else if err := validateModel(s, c.Context(), model); err != nil {
 		return err
 	}
+	model = cloud.ZenModel(model)
 	if len(body.Instructions) > maxInstructions {
 		return zip.ErrBadRequest("instructions too large")
 	}
@@ -499,7 +516,7 @@ func update(s *cloud.Service[state], c *zip.Ctx) error {
 		if err := validateModel(s, c.Context(), m); err != nil {
 			return err
 		}
-		a.Model = m
+		a.Model = cloud.ZenModel(m)
 	}
 	if body.Instructions != nil {
 		if len(*body.Instructions) > maxInstructions {
@@ -956,7 +973,7 @@ func activity(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	evs := make([]activityView, 0, len(runs)+2*len(rows))
 	for _, r := range runs {
-		kind, msg := "invoked", "Invoked "+r.Model
+		kind, msg := "invoked", "Invoked "+cloud.ZenModel(r.Model)
 		if r.Status == "error" {
 			kind, msg = "failed", trimMsg(r.Error)
 		}

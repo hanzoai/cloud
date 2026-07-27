@@ -11,7 +11,7 @@
 // These `argo*` types are the MINIMAL ArgoCD v1alpha1 JSON the React app renders
 // (list + detail + tree). Distinct from the native `Application` (applications.go)
 // which backs the native /v1/deploy/applications surface — this backs the
-// ArgoCD-UI-compatible /v1/deploy/api/v1/* surface.
+// ArgoCD-UI-compatible /v1/deploy/* surface (dashboard.go; no /api/, no inner /v1).
 package deploy
 
 import (
