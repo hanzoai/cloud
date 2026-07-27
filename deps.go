@@ -11,6 +11,7 @@ package cloud
 
 import (
 	"github.com/hanzoai/cloud/clients/metering"
+	"github.com/hanzoai/ha"
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud/audit"
@@ -62,6 +63,15 @@ type Deps struct {
 	// gateway + per-org envelope Cipher. nil ⇒ local-only (no object store creds,
 	// dev/single-node), and every OrgStore is exactly the pre-durability cache.
 	Durable *Durability
+
+	// LiveMembers reads the CURRENT live writer set (the SAME ha.Membership snapshot the
+	// durability fencer elects over). Non-nil ONLY when the durable plane is active — the
+	// shard router then routes on the live set, so a draining/dead pod's orgs go to the
+	// ready successor that hydrates them (M3), not to the gone pod. nil ⇒ the router falls
+	// back to the static CLOUD_PEERS set: without the durable plane a peer cannot serve
+	// another pod's local-only files, so ownership must stay pinned to the ordinal (which
+	// reattaches its PVC across a restart). One field gates the whole live-routing path.
+	LiveMembers func() []ha.Member
 
 	// AIDefaultModel is the served model a subsystem uses when a caller supplies
 	// none (CLOUD_AI_DEFAULT_MODEL, default DefaultModel = "enso"). It is the ONE

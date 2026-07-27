@@ -28,7 +28,7 @@ require (
 	github.com/hanzoai/pubsub v1.0.0
 	github.com/hanzoai/s3-go v1.0.0
 	github.com/hanzoai/sign v1.0.0
-	github.com/hanzoai/sqlite v0.3.2
+	github.com/hanzoai/sqlite v0.4.0
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.5.0
 	github.com/luxfi/node v1.36.15
@@ -90,7 +90,7 @@ require (
 	github.com/hanzoai/go-cosyvoice v1.0.0 // indirect
 	github.com/hanzoai/go-openai-realtime v1.0.0 // indirect
 	github.com/hanzoai/go-openai-realtime/contrib/ws-gorilla v1.0.0 // indirect
-	github.com/hanzoai/sqlcipher v0.1.0 // indirect
+	github.com/hanzoai/sqlcipher v0.1.1 // indirect
 	github.com/hanzoai/xorm v1.4.4 // indirect
 	github.com/hanzokv/go/v9 v9.22.0 // indirect
 	github.com/hanzos3/go-sdk v1.0.2 // indirect
@@ -117,6 +117,10 @@ require (
 	k8s.io/controller-manager v0.34.0 // indirect
 	k8s.io/kube-aggregator v0.34.0 // indirect
 	k8s.io/kubectl v0.34.0 // indirect
+	modernc.org/libc v1.72.3 // indirect
+	modernc.org/mathutil v1.7.1 // indirect
+	modernc.org/memory v1.11.0 // indirect
+	modernc.org/sqlite v1.51.0 // indirect
 	rsc.io/qr v0.2.0 // indirect
 )
 

@@ -139,15 +139,15 @@ type Config struct {
 	// black-hole every request by forwarding it away with no shard of its own).
 	ShardSelf string
 
-	// ResearchDurable opts the per-org store into the HA object-store durability plane
-	// (hydrate-on-open + fenced ship to org-db, CLOUD_RESEARCH_DURABLE). It is OFF by
-	// default so a deploy never begins fencing real tenant data on the object store's
-	// conditional-PUT atomicity before that atomicity is validated against the deployed
-	// SeaweedFS version (the takeover-fence staging gate). With it off the store runs
-	// local-only per pod — still single-writer-per-org via the shard router (ha.Owner) —
-	// so the DDL-drift-proof + evidence-preserving record layer is fully active; only the
-	// cross-restart object-store snapshot/fence waits for the opt-in.
-	ResearchDurable bool
+	// PeerSelector is the Kubernetes label selector that names this deployment's writer
+	// pods (CLOUD_PEER_SELECTOR, e.g. "app.kubernetes.io/name=cloud,app.kubernetes.io/
+	// instance=<release>"). When set AND running in-cluster, membership is LIVE — the
+	// binary lists Ready, non-terminating pods matching it via the K8s API, so a rolling
+	// upgrade's changing pod set is tracked and a draining/dead pod is never elected an
+	// org's owner. Empty (dev / native-Go / not in a cluster) falls back to the STATIC
+	// ShardPeers/self set — capability-detected, no on/off flag. Deployment wiring the
+	// chart sets, not a feature toggle.
+	PeerSelector string
 
 	// ListenAddr is the public HTTP listener (default :8080).
 	ListenAddr string
@@ -433,9 +433,9 @@ func LoadConfig() *Config {
 		WriterURL:         strings.TrimRight(getenv("CLOUD_WRITER_URL", ""), "/"),
 		ReaderRetryBudget: getenvDuration("CLOUD_READER_RETRY_BUDGET", 25*time.Second),
 		WriterLease:       getenvBool("CLOUD_WRITER_LEASE"),
-		ResearchDurable:   getenvBool("CLOUD_RESEARCH_DURABLE"),
 		ShardPeers:        getenv("CLOUD_PEERS", ""),
 		ShardSelf:         firstNonEmptyStr(getenv("CLOUD_POD_NAME", ""), getenv("POD_NAME", "")),
+		PeerSelector:      getenv("CLOUD_PEER_SELECTOR", ""),
 		PaymentsZAPAddr:   getenv("CLOUD_PAYMENTS_ZAP_ADDR", ""),
 		VaultZAPAddr:      getenv("CLOUD_VAULT_ZAP_ADDR", ""),
 		// Billing gate (KMS-backed COMMERCE_SERVICE_TOKEN; never plaintext).
