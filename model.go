@@ -18,16 +18,21 @@ import "strings"
 
 // DefaultModel is the model a Hanzo agent runs on when the caller names none.
 //
-// It is the BARE alias on purpose. `enso` is resolved per call by the gateway,
-// which picks the tier the work warrants — typically enso-flash for a first
-// response, escalating when the request earns it. A caller who wants a fixed
-// tier pins enso-flash, enso-pro, or enso-ultra explicitly; the default stays
-// unpinned so an agent tracks the family instead of a frozen tier.
+// It is the FLASH tier on purpose, and pinned rather than left to the router.
+//
+// The bare `enso` alias does not mean "resolve to the cheapest adequate tier" —
+// its route opens on an Opus-class arm (zen catalog-enso.yaml, route[0]) and
+// bills $4/$20 per Mtok, against enso-flash at $2/$4 and the upstream base at
+// $0.14/$0.28. Defaulting every agent to the bare alias was a 28.6x input /
+// 71.4x output increase on work that mostly wants a fast first response, so the
+// default names the tier it actually wants. A caller who needs more pins
+// enso-pro or enso-ultra; a caller who wants the router's judgement pins `enso`.
 //
 // This constant is the only literal. The deployment knob (CLOUD_AI_DEFAULT_MODEL,
 // read into Config.AIDefaultModel) defaults to it, every subsystem reads that,
-// and nothing hardcodes a model name of its own.
-const DefaultModel = "enso"
+// and nothing hardcodes a model name of its own. Changing the tier is this line
+// plus the same value in the deployment's env — never a third place.
+const DefaultModel = "enso-flash"
 
 // upstreamModels are the model families Hanzo serves under its own name. Naming
 // one on a customer-visible surface discloses which base sits behind an enso or
@@ -66,10 +71,10 @@ func UpstreamModel(name string) bool {
 // ZenModel returns the Hanzo name for a model: an upstream family name becomes
 // DefaultModel, and a name that is already ours is returned unchanged (trimmed).
 //
-// Mapping to the bare alias rather than to a guessed tier is the honest answer.
-// We are not claiming which enso tier a given upstream base corresponds to; we
-// are saying the work runs on enso, and letting the gateway resolve the tier the
-// same way it does for every other agent.
+// Mapping to the default rather than to a guessed tier is the honest answer. We
+// are not claiming which enso tier a given upstream base corresponds to; we are
+// saying the work runs on whatever this deployment runs unnamed work on, which
+// is the same thing we would have told the caller had they named no model.
 func ZenModel(name string) string {
 	name = strings.TrimSpace(name)
 	if UpstreamModel(name) {
