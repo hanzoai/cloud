@@ -20,7 +20,7 @@ package admin
 // FLEET behaving" (RED metrics, logs, usage), this answers "how are the MODELS and
 // EVALS doing" — LLM generations, per-model spend, and eval-run quality/progress —
 // over the SAME ONE datastore (Datastore), the SAME shared client
-// (aiobject.DatastoreQuery), no second connection.
+// (datastore.Query), no second connection.
 //
 // Signals, each from its canonical table in the one datastore:
 //   - LLM generations → langfuse.observations : generations, cost (USD), latency
@@ -60,9 +60,9 @@ import (
 	"strconv"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
+	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/zap-proto/zip"
 )
 
@@ -186,7 +186,7 @@ func aimetrics(s *cloud.Service[core.State], c *zip.Ctx) error {
 
 	// Honest-empty when the warehouse is not connected: the board renders its zero
 	// state, never a fabricated fleet.
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return core.OK(c, payload)
 	}
 
@@ -194,45 +194,45 @@ func aimetrics(s *cloud.Service[core.State], c *zip.Ctx) error {
 	interval := o11yBucket(rangeLabel)
 
 	// ── Langfuse generations (fleet) — honest-empty until ingest lands rows ──
-	if rows, err := aiobject.DatastoreQuery(ctx, aimLangfuseTotalsSQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, aimLangfuseTotalsSQL(), sinceTS); err == nil {
 		r := firstRowOr(rows)
 		payload.Langfuse.Generations = chInt64(r["gens"])
 		payload.Langfuse.CostUsd = chFloat64(r["cost"])
 	}
 	// Langfuse latency (separate query so a Nullable end_time / column mismatch never
 	// zeroes the proven generations+cost number above).
-	if rows, err := aiobject.DatastoreQuery(ctx, aimLangfuseLatencySQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, aimLangfuseLatencySQL(), sinceTS); err == nil {
 		r := firstRowOr(rows)
 		payload.Langfuse.LatencyMsAvg = chFloat64(r["lat_avg"])
 		payload.Langfuse.LatencyMsP95 = chFloat64(r["lat_p95"])
 	}
 	// Langfuse per-model.
-	if rows, err := aiobject.DatastoreQuery(ctx, aimLangfuseModelsSQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, aimLangfuseModelsSQL(), sinceTS); err == nil {
 		payload.LangfuseModels = lfModelsFromRows(rows)
 	}
 
 	// ── Per-model usage (fleet) from the live cloud_usage ledger ──
-	if rows, err := aiobject.DatastoreQuery(ctx, aimUsageTotalsSQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, aimUsageTotalsSQL(), sinceTS); err == nil {
 		fillAimUsage(&payload.Usage, firstRowOr(rows))
 	}
-	if rows, err := aiobject.DatastoreQuery(ctx, aimTopModelsSQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, aimTopModelsSQL(), sinceTS); err == nil {
 		payload.TopModels = aimModelsFromRows(rows)
 	}
 
 	// ── Evals (fleet): traces + scores + progress ──
-	if rows, err := aiobject.DatastoreQuery(ctx, aimEvalTracesSQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, aimEvalTracesSQL(), sinceTS); err == nil {
 		fillAimEvalTraces(&payload.Evals, firstRowOr(rows))
 	}
-	if rows, err := aiobject.DatastoreQuery(ctx, aimEvalScoresSQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, aimEvalScoresSQL(), sinceTS); err == nil {
 		fillAimEvalScores(&payload.Evals, firstRowOr(rows))
 	}
-	if rows, err := aiobject.DatastoreQuery(ctx, aimScoreNamesSQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, aimScoreNamesSQL(), sinceTS); err == nil {
 		payload.ScoreNames = scoreNamesFromRows(rows)
 	}
-	if rows, err := aiobject.DatastoreQuery(ctx, aimEvalRunsSQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, aimEvalRunsSQL(), sinceTS); err == nil {
 		payload.EvalRuns = evalRunsFromRows(rows)
 	}
-	if rows, err := aiobject.DatastoreQuery(ctx, aimScoreSeriesSQL(interval), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, aimScoreSeriesSQL(interval), sinceTS); err == nil {
 		payload.ScoreSeries = scoreSeriesFromRows(rows)
 	}
 

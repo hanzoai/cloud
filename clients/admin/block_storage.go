@@ -26,7 +26,7 @@ package admin
 //     fabricated number).
 //   - The analytics DATASTORE's own fill from Datastore `system.disks` (the 200Gi PVC
 //     the datastore fork mounts) — total/free space over the SAME shared client
-//     (aiobject.DatastoreQuery) the analytics + compute lenses read, no second
+//     (datastore.Query) the analytics + compute lenses read, no second
 //     connection. This is THE number the operator scales on.
 //
 // SUPERADMIN ONLY (the s.guard wrap in admin.go): a cross-tenant infra read, all-orgs.
@@ -36,10 +36,10 @@ package admin
 import (
 	"context"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/admin/digitalocean"
+	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/zap-proto/zip"
 )
 
@@ -161,10 +161,10 @@ func alertLevel(pct float64) string {
 // Returns nil when the datastore isn't connected or the query fails (honest — the
 // console shows no datastore card, never a fabricated fill).
 func datastoreFill(ctx context.Context) *datastoreVolume {
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return nil
 	}
-	rows, err := aiobject.DatastoreQuery(ctx,
+	rows, err := datastore.Query(ctx,
 		"SELECT name, path, total_space, free_space FROM system.disks ORDER BY total_space DESC LIMIT 1")
 	if err != nil || len(rows) == 0 {
 		return nil
