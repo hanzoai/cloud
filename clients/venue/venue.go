@@ -645,7 +645,7 @@ func discoverAndFold(s *cloud.Service[state], c *zip.Ctx, org string, cr cred, d
 		// Bill NEW folds fail-closed (an existing fold refreshes free); the fee
 		// keys on the HOME (paying) org, the fold on the operating org.
 		if !prev[name] {
-			if berr := s.Bill.Gate(c.Context(), principal.HomeOrg(c), principal.Project(c), projectValidated, foldClusterKind, fee); berr != nil {
+			if berr := s.Bill.Gate(c.Context(), principal.Ledger(c), principal.Project(c), projectValidated, foldClusterKind, fee); berr != nil {
 				res.Error = "billing gate denied"
 				results = append(results, res)
 				continue
@@ -658,7 +658,7 @@ func discoverAndFold(s *cloud.Service[state], c *zip.Ctx, org string, cr cred, d
 			continue
 		}
 		if !prev[name] {
-			s.Bill.Meter(principal.HomeOrg(c), principal.Project(c), foldClusterKind, fee, c.RequestID(), cloud.ClientIP(c))
+			s.Bill.Meter(principal.Ledger(c), principal.Project(c), foldClusterKind, fee, c.RequestID(), cloud.ClientIP(c))
 		}
 		res.Folded = true
 		res.Nodes = rec.Nodes
