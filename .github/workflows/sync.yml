@@ -38,7 +38,12 @@ jobs:
     # pull is circular. github.server_url is setting.AppURL on Gitea
     # (services/actions/context.go:89), so this is the exact test for "am I upstream".
     if: ${{ github.server_url == 'https://github.com' }}
-    runs-on: ubuntu-latest
+    # Our own ARC pool, NOT ubuntu-latest. GitHub-hosted minutes are billing-blocked
+    # for this org, so a hosted job never starts: it fails before step 1 with "recent
+    # account payments have failed", which no amount of continue-on-error can catch —
+    # fail-soft protects the STEP, and there is no step. The nudge was dead on every
+    # push until this moved back to the pool that actually runs.
+    runs-on: hanzo-build-linux-amd64
     timeout-minutes: 2
     steps:
       - name: Nudge git.hanzo.ai to pull HEAD (mirror-sync)
