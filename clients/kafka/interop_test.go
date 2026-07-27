@@ -5,8 +5,8 @@ import (
 	"time"
 
 	psembed "github.com/hanzoai/pubsub/embed"
-	"github.com/hanzoai/stream/protocol"
-	"github.com/hanzoai/stream/types"
+	"github.com/hanzoai/kafka/protocol"
+	"github.com/hanzoai/kafka/types"
 	natsio "github.com/nats-io/nats.go"
 )
 

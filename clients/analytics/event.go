@@ -27,7 +27,7 @@
 // SERVER-SIDE and FAIL-CLOSED, in strict trust order:
 //
 //  1. a validated IAM bearer principal — its owner org;
-//  2. a write-only publishable key (pk_…) — HMAC-verified org, no IAM/DB hop (the
+//  2. a publishable key (pk-…) — IAM resolves it to its org; it can write but
 //     SAME key publishable.go mints; folded in here so a pk_ caller uses /v1/event
 //     directly);
 //  3. an out-of-band IAM access key (hk-/sk-…) — resolved through the ONE key seam
@@ -96,8 +96,17 @@ func eventTenant(c *zip.Ctx) (string, bool) {
 	if org, ok := tenant(c); ok {
 		return org, true
 	}
+	// ONE publishable key, and IAM issues it. A pk- on any ingest-shaped carrier
+	// (Bearer, x-hanzo-ingest-key, ?ingest_key= for sendBeacon, which cannot set
+	// headers) resolves through the SAME IAM seam as every other key. Cloud used
+	// to mint and verify its own pk_ under an HMAC of CLOUD_INGEST_KEY_SECRET —
+	// a second publishable-key family with its own prefix, secret and mint
+	// endpoint, beside the one IAM already owned.
+	//
+	// Safe only because a pk- no longer authenticates: IdentityFromRequest
+	// refuses it, so it attributes a write and never mints a reading principal.
 	if key := ingestKey(c); key != "" {
-		if org, ok := verifyPublishableKey(ingestSecret(), key); ok {
+		if org, ok := resolveKeyOrg(c.Context(), key); ok {
 			return org, true
 		}
 	}

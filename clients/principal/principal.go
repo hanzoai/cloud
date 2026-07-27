@@ -144,46 +144,61 @@ func Owner(c *zip.Ctx) string {
 	return strings.Clone(owner)
 }
 
-// BillingOrg resolves the org whose ledger PAYS for this request — the HOME org
-// (Owner). It is the ONE "who pays" resolver: the edge gate, the AI meter, and the
-// resource meter all key their balance CHECK and their DEBIT on it, so a platform
-// SuperAdmin masquerading into another org spends from the admin org's balance and
-// the debit lands on the admin ledger — never the org being acted on. DATA scope
-// keeps using Org (the effective org); this splits "who pays" (home) from "whose
-// data" (effective), which the old code conflated onto one org value.
+// BillingOrg resolves the org whose ledger PAYS for this request — the org the
+// caller SELECTED, i.e. the effective org (Org). It is the ONE "who pays" resolver:
+// the edge gate, the AI meter, and the resource meter all key their balance CHECK
+// and their DEBIT on it.
 //
-// Gated on Validated like Org: an unvalidated request bills nothing (("", false)),
-// so an off-gateway forge can neither probe nor drain a ledger. Falls back to the
-// effective Org when the home header is absent — a normal caller has home==effective
-// so the fallback is EXACT for them, and it preserves today's behavior on a gateway
-// that has not yet minted X-User-Owner; only an admin org-switch differs, and that
-// path always carries X-User-Owner once minted. Returns the resolved payer + true,
-// or ("", false) when the request may not be billed.
+// THE ORG IS THE PAYER OF RECORD. A person belongs to several orgs, picks one in the
+// switcher, and that org's wallet funds the work — the same org whose data they are
+// looking at, and the same org their top-up credited. Splitting "who pays" (home)
+// from "whose data" (effective) is what made the switcher a lie: a member of `acme`
+// could act in `acme` all day while every cent came out of their home org's books.
+// The two are ONE value again, and the trust boundary is what makes that safe:
+// SanitizeIdentity only ever sets X-Org-Id to an org the validated `orgs` claim says
+// the caller belongs to (isMember), so an unselected, stale, or forged org can never
+// become the effective org — and therefore can never become the payer.
+//
+// THE ONE EXCEPTION IS MASQUERADE, and it is not a selection. A platform SuperAdmin
+// may act in ANY org, membership or not (that is what platform sudo means), so its
+// effective org is not a statement about who should pay. It spends from its OWN
+// books: the debit lands on the admin ledger, never on the org being inspected. The
+// predicate needs no new header — the boundary already mints X-User-IsAdmin for
+// exactly that identity, and a SuperAdmin acting at home has Owner == Org anyway.
+//
+// FAIL CLOSED. An unvalidated request bills nothing, so an off-gateway forge can
+// neither probe nor drain a ledger; and an org that does not RESOLVE (absent, over
+// MaxOrgLen) bills nothing either, rather than falling through to a default. There
+// is no substitute payer: an unresolvable org must refuse, never charge someone else.
 func BillingOrg(c *zip.Ctx) (string, bool) {
-	if !Validated(c) {
+	org, ok := Org(c) // composes Validated; empty/oversized org ⟹ (", false) ⟹ refuse
+	if !ok {
 		return "", false
 	}
-	if owner := Owner(c); owner != "" {
-		return owner, true
+	if IsSuperAdmin(c) {
+		// Masquerade (or a SuperAdmin at home, where owner == org): spend own books.
+		if owner := Owner(c); owner != "" {
+			return owner, true
+		}
 	}
-	return Org(c) // rollout fallback: no home header yet ⟹ today's effective-org billing.
+	return org, true
 }
 
-// HomeOrg is the bare-string form of BillingOrg for the in-handler resource meters
+// Ledger is the bare-string form of BillingOrg for the in-handler resource meters
 // (ResourceMeter.Gate/Meter/MeterUsage), which take an org string rather than the
-// ctx. It returns the HOME org that PAYS (X-User-Owner, effective-org fallback), or
-// "" when unvalidated. Call it ONLY after the caller has already resolved AND gated
-// the effective org via Org (every resource handler does), so "" cannot occur on a
-// live path; the meter also no-ops on an empty org, so an unexpected "" bills nothing
-// rather than mis-billing. Use it for the billing key; keep Org for the data namespace.
+// ctx. It returns the SELECTED org that PAYS, or "" when the request may not be
+// billed. Call it ONLY after the caller has already resolved AND gated the effective
+// org via Org (every resource handler does), so "" cannot occur on a live path; the
+// meter also no-ops on an empty org, so an unexpected "" bills nothing rather than
+// mis-billing. Use it for the billing key; keep Org for the data namespace.
 //
-// It was called Payer, which now means something else: hanzoai/account.Payer returns
-// the ACCOUNT that pays, and this returns the ORG whose ledger holds it. Those are
-// different values on the same request — a person in the shared signup org pays from
-// account "hanzo/alice" held in ledger "hanzo" — so one name for both invited exactly
-// the confusion that let the gate key the pool while the debit spent the person.
-// An org names a ledger; an account names a wallet within it.
-func HomeOrg(c *zip.Ctx) string {
+// It is called Ledger, not Payer and no longer HomeOrg. Payer means something else
+// (hanzoai/account.Payer returns the ACCOUNT that pays, and this returns the ORG
+// whose ledger holds it), and HomeOrg became a lie the moment the SELECTED org
+// started paying — a name that states the wrong fact is how a gate ends up keying
+// one wallet while the debit spends another. An org names a ledger; an account names
+// a wallet within it; this is the ledger.
+func Ledger(c *zip.Ctx) string {
 	if org, ok := BillingOrg(c); ok {
 		return org
 	}

@@ -26,8 +26,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/stream/protocol"
-	"github.com/hanzoai/stream/types"
+	"github.com/hanzoai/kafka/protocol"
+	"github.com/hanzoai/kafka/types"
 	"github.com/zap-proto/zip"
 )
 

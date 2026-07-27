@@ -12,46 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// publishable.go — the FASTEST capture path: a write-only PUBLISHABLE KEY (pk_…)
-// that authenticates a direct-to-datastore ingest with ZERO network hop.
+// publishable.go — the public capture path: a PUBLISHABLE KEY (pk-…) attributes
+// a browser beacon to its tenant and writes straight to the datastore.
 //
-//	POST /v1/ingest        body: {batch:[WireEvent]}   auth: pk_…   -> {accepted,dropped}
-//	POST /v1/ingest/keys   mint a pk_ for the caller's org (validated principal)
-//	GET  /v1/errors        recent type:'error' events for the org (read lens)
+//	POST /v1/ingest   body: {batch:[WireEvent]}   auth: pk-…   -> {accepted,dropped}
+//	GET  /v1/errors   recent type:'error' events for the org (read lens)
 //
-// WHY a distinct key from the IAM hk-/sk-/pk- family: those resolve through IAM
-// (get-user?accessKey — a network round-trip) and mint a FULL principal that can
-// READ. A publishable key is meant to ship in a browser bundle, so it must be
-// write-only and cheap to verify. This key is:
+// ONE publishable key, and IAM issues it. pk- is publishable, sk- is secret, and
+// there is no third thing.
 //
-//   - INGEST-ONLY BY CONSTRUCTION. The `pk_` (underscore) prefix is deliberately
-//     NOT in isAPIKey's set (hk-/sk-/pk-/fw_/hz_, all dash/`fw_`/`hz_`), so the
-//     identity boundary (SanitizeIdentity) and OrgForKey both REFUSE it — it can
-//     never become a bearer principal, so it can never read. Its only door is the
-//     ingest verifier below. Write-only is a property of WHICH resolver accepts
-//     the value, not a flag on a row.
-//   - ORG-SCOPED, SIGNED, NON-FORGEABLE. The org is carried in the key but sealed
-//     under HMAC-SHA256(secret, org): a client cannot flip the org without the
-//     secret. The server stamps tenant_id from the VERIFIED org, never from the
-//     request body — the same tenant invariant the rest of the plane enforces.
-//   - LOWEST LATENCY. Verification is one HMAC compute — no IAM call, no keys
-//     table, no DB read. This is the no-Kafka, no-bridge, direct-to-Datastore
-//     path; it funnels through the SAME write core (ingestEvents) into the SAME
-//     hanzo.events table as every other adapter. One write path, many front doors.
+// This file used to mint and verify its OWN pk_ (underscore) under an
+// HMAC of CLOUD_INGEST_KEY_SECRET, with its own mint endpoint at
+// /v1/ingest/keys — a second publishable-key family sitting beside the one IAM
+// already owned. The underscore was load-bearing back then: pk_ was deliberately
+// kept OUT of isAPIKey's set, because anything isAPIKey resolved into "the same
+// principal a JWT yields", and a key meant for a browser bundle must not read.
 //
-// SECRET: the HMAC secret is CLOUD_INGEST_KEY_SECRET (KMS-injected by the
-// operator). Absent ⇒ mint and verify BOTH fail closed (503 / 403) — a deployment
-// without the secret never mints a forgeable key nor admits an unverifiable one.
+// That is fixed at the boundary instead of routed around: IdentityFromRequest now
+// refuses a pk- outright (cloud.IsPublishableKey), so publishable means
+// publishable no matter which door it arrives at. A pk- stays inside
+// APIKeyPrefixes on purpose — OrgForKey must resolve it to learn which tenant a
+// beacon belongs to. Resolvable, not authenticating.
+//
+// The tenant is whatever IAM resolves the key to, never a body or header claim,
+// so the tenant invariant the rest of the plane enforces holds here too. Every
+// door funnels through the SAME write core (ingestEvents) into the SAME
+// hanzo.events table: one write path, many front doors.
 package analytics
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/base64"
 	"encoding/json"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
@@ -61,13 +52,11 @@ import (
 )
 
 // ingestKeySecretEnv names the KMS-injected HMAC secret that seals a publishable
-// key's org. Absent ⇒ the publishable-key path is disabled (fails closed).
-const ingestKeySecretEnv = "CLOUD_INGEST_KEY_SECRET"
 
 // publishablePrefix marks a write-only ingest key. Underscore (not the dash of
-// the isAPIKey family) is load-bearing: it keeps pk_ OUT of the bearer/principal
+// the isAPIKey family) is load-bearing: it keeps pk- OUT of the bearer/principal
 // path, so a publishable key is structurally read-incapable.
-const publishablePrefix = "pk_"
+const publishablePrefix = cloud.PublishablePrefix
 
 // sourceIngest tags rows that arrived via the publishable-key direct ingest, so
 // the ONE hanzo.events table stays honest about origin (queryable as
@@ -76,69 +65,8 @@ const publishablePrefix = "pk_"
 const sourceIngest = "ingest"
 
 // sigBytes is the HMAC truncation length (128 bits) — ample against forgery while
-// keeping the key short enough to embed in a bundle.
-const sigBytes = 16
 
 // ── key codec (pure) ─────────────────────────────────────────────────────────
-
-// ingestSecret returns the configured HMAC secret, or "" when unset (path off).
-func ingestSecret() string { return strings.TrimSpace(os.Getenv(ingestKeySecretEnv)) }
-
-// keySig computes the org signature under the secret: HMAC-SHA256(secret, org),
-// truncated to sigBytes. The org is the only signed input — the tenant a key can
-// ever write into is fixed at mint time and cannot be shifted without the secret.
-func keySig(secret, org string) []byte {
-	m := hmac.New(sha256.New, []byte(secret))
-	m.Write([]byte(org))
-	return m.Sum(nil)[:sigBytes]
-}
-
-// mintPublishableKey mints "pk_<b64url(org)>.<b64url(sig)>" for org under secret.
-// '.' is the delimiter because it is OUTSIDE the base64url alphabet (which uses
-// '-' and '_'), so the two segments split unambiguously. Returns ("",false) when
-// the secret is unconfigured (fail closed) or org is empty.
-func mintPublishableKey(secret, org string) (string, bool) {
-	org = strings.TrimSpace(org)
-	if secret == "" || org == "" {
-		return "", false
-	}
-	b64 := base64.RawURLEncoding
-	return publishablePrefix + b64.EncodeToString([]byte(org)) + "." + b64.EncodeToString(keySig(secret, org)), true
-}
-
-// verifyPublishableKey resolves a presented key to its org, or ("",false) if the
-// key is not a well-formed, correctly-signed publishable key under the configured
-// secret. FAILS CLOSED: unconfigured secret, wrong prefix, malformed segments, or
-// a signature mismatch all return not-ok. Constant-time signature compare. Pure:
-// no I/O, so tests drive it directly.
-func verifyPublishableKey(secret, key string) (string, bool) {
-	key = strings.TrimSpace(key)
-	if secret == "" || !strings.HasPrefix(key, publishablePrefix) {
-		return "", false
-	}
-	body := key[len(publishablePrefix):]
-	dot := strings.IndexByte(body, '.')
-	if dot <= 0 || dot == len(body)-1 {
-		return "", false
-	}
-	b64 := base64.RawURLEncoding
-	orgBytes, err := b64.DecodeString(body[:dot])
-	if err != nil {
-		return "", false
-	}
-	sig, err := b64.DecodeString(body[dot+1:])
-	if err != nil {
-		return "", false
-	}
-	org := string(orgBytes)
-	if org == "" || len(org) > maxIngestOrgLen {
-		return "", false
-	}
-	if subtle.ConstantTimeCompare(sig, keySig(secret, org)) != 1 {
-		return "", false
-	}
-	return org, true
-}
 
 // maxIngestOrgLen bounds a decoded org (it becomes a warehouse partition key),
 // mirroring the cap OrgForKey applies to an IAM-resolved owner.
@@ -149,7 +77,7 @@ const maxIngestOrgLen = 128
 // ingestKey pulls the presented publishable key, in priority order: the
 // Authorization: Bearer header (the common browser-fetch shape), the
 // x-hanzo-ingest-key header, then the ?ingest_key= query (navigator.sendBeacon
-// cannot set headers). Only a pk_-prefixed value is returned — an unrelated
+// cannot set headers). Only a pk--prefixed value is returned — an unrelated
 // bearer (a real JWT/IAM key) is ignored here so this door never shadows the
 // identity path. "" when none is present.
 func ingestKey(c *zip.Ctx) string {
@@ -211,41 +139,21 @@ func foldException(e CaptureEvent) CaptureEvent {
 // ── handlers ─────────────────────────────────────────────────────────────────
 
 // ingest answers POST /v1/ingest — a THIN DEPRECATED ALIAS of the canonical door.
-// Since /v1/event now natively accepts the publishable key (pk_…, via eventTenant)
+// Since /v1/event now natively accepts the publishable key (pk-…, via eventTenant)
 // AND the {batch:[…]} wire (via decodeIngest), /v1/ingest is redundant: it delegates
 // to the EXACT canonical handler logic (eventHandle) — the SAME pluggable auth,
 // tolerant decode, error-fold, and ONE write core — differing only in a one-shot
 // deprecation log and the $source=ingest origin tag for the migration signal.
-// Existing pk_ callers keep working unchanged; there is ONE implementation.
+// Existing pk- callers keep working unchanged; there is ONE implementation.
 func ingest(s *cloud.Service[state], c *zip.Ctx) error {
 	deprecated(s, c, "/v1/event")
 	return eventHandle(c, sourceIngest)
 }
 
-// mintKey answers POST /v1/ingest/keys — an org owner (VALIDATED principal) mints
-// a publishable key for its OWN org. The key is org-scoped to the caller's tenant
-// (never a body-supplied org), so a caller can only ever mint a key that writes
-// into its own partition. Fails closed (503) when the secret is unconfigured.
-func mintKey(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	secret := ingestSecret()
-	if secret == "" {
-		return zip.Errorf(http.StatusServiceUnavailable, "publishable keys unavailable: ingest key secret not configured")
-	}
-	key, ok := mintPublishableKey(secret, org)
-	if !ok {
-		return zip.Errorf(http.StatusServiceUnavailable, "could not mint publishable key")
-	}
-	return c.JSON(http.StatusOK, map[string]any{"key": key, "org": org, "scope": "ingest"})
-}
-
 // errorsLens answers GET /v1/errors — the error-tracking read view: recent
 // type:'error' events for the org, newest first. Tenant-scoped server-side and
 // gated on a VALIDATED principal (tenant()), NOT the publishable key — reads
-// require real auth, reinforcing that pk_ is write-only. The captured exception
+// require real auth, reinforcing that pk- is write-only. The captured exception
 // is surfaced straight from properties.$exception. limit defaults 50, caps 200.
 func errorsLens(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)

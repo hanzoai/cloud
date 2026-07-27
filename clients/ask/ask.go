@@ -176,7 +176,7 @@ func narrate(s *cloud.Service[*state], c *zip.Ctx, question string, facts []Fact
 		Model:      s.State.model,
 		Prompt:     narratePrompt(question, facts, tmpl),
 		Org:        org,
-		BillingOrg: principal.HomeOrg(c),
+		BillingOrg: principal.Ledger(c),
 	})
 	if err != nil || res == nil || strings.TrimSpace(res.Content) == "" {
 		return tmpl

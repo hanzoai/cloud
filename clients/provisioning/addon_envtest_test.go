@@ -57,7 +57,7 @@ func TestPatchAddonSecret_RealAPIServer(t *testing.T) {
 	}
 
 	const name = "commerce-addons"
-	const kvURL = "redis://default:pw@kv:6379"
+	const kvURL = "kv://default:pw@kv:6379"
 	const sqlURL = "postgres://admin:pw@sql:5432/db?sslmode=disable"
 
 	// data reads the live Secret and base64-decodes .data into plain strings.
