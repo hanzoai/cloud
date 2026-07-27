@@ -58,6 +58,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/commerceinproc"
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/types"
 	"github.com/zap-proto/zip"
 )
 
@@ -128,18 +129,15 @@ func summary(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrUnauthorized("sign in to view usage")
 	}
-	rangeLabel := strings.TrimSpace(c.Query("range"))
-	start, end, interval, err := aiobject.ResolveCloudUsageWindow(rangeLabel, c.Query("start"), c.Query("end"), time.Now())
+	w, err := types.ParseWindow(c.Query("range"), c.Query("start"), c.Query("end"), time.Now())
 	if err != nil {
 		return zip.ErrBadRequest(err.Error())
 	}
-	if rangeLabel == "" {
-		rangeLabel = "24h"
-	}
+	rangeLabel, start, end, interval := w.Label, w.Start, w.End, w.Interval
 	ctx := c.Context()
 
 	// ── Spend (commerce) ── best-effort; unconfigured/unreachable → honest zeros.
-	spend := buildSpendBlock(s, ctx, org, start, end, interval)
+	spend := buildSpendBlock(s, ctx, org, start, end, string(interval))
 
 	// ── LLM totals (warehouse) ── honest-empty when the datastore is not connected.
 	llm, warehouseOK := buildLLMBlock(s, ctx, org, start, end)
@@ -154,7 +152,7 @@ func summary(s *cloud.Service[state], c *zip.Ctx) error {
 		Range:    rangeLabel,
 		Start:    start.UTC().Format(time.RFC3339),
 		End:      end.UTC().Format(time.RFC3339),
-		Interval: interval,
+		Interval: string(interval),
 		Scope:    Scope{Org: org, User: user},
 		Spend:    spend,
 		LLM:      llm,
@@ -216,15 +214,12 @@ func analytics(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusPaymentRequired, "analytics datastore is a paid feature — upgrade at console.hanzo.ai")
 	}
 
-	rangeLabel := strings.TrimSpace(c.Query("range"))
 	now := time.Now()
-	start, end, _, werr := aiobject.ResolveCloudUsageWindow(rangeLabel, c.Query("start"), c.Query("end"), now)
+	w, werr := types.ParseWindow(c.Query("range"), c.Query("start"), c.Query("end"), now)
 	if werr != nil {
 		return zip.ErrBadRequest(werr.Error())
 	}
-	if rangeLabel == "" {
-		rangeLabel = "24h"
-	}
+	rangeLabel, start, end := w.Label, w.Start, w.End
 	// Clamp the window to the plan's retention entitlement: a tenant may never read
 	// older than access.RetentionDays, even with a custom ?start.
 	if floor := now.Add(-time.Duration(access.RetentionDays) * 24 * time.Hour); start.Before(floor) {

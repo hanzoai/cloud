@@ -28,6 +28,7 @@ package analytics
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/types"
 	"math"
 	"sort"
 	"strconv"
@@ -299,8 +300,8 @@ func buildCommerceOverview(row map[string]any, ok bool) CommerceOverview {
 // series so the client charts a continuous line. Bucket alignment matches
 // toStartOf{Hour,Day}(…, 'UTC'): Go's Truncate over the step lands on the same
 // UTC boundaries. Pure (mirrors ai/object buildCloudUsageSeries).
-func buildSeries(start, end time.Time, interval string, rows []map[string]any) []SeriesPoint {
-	step := stepOf(interval)
+func buildSeries(start, end time.Time, interval types.Interval, rows []map[string]any) []SeriesPoint {
+	step := interval.Step()
 
 	type agg struct{ requests, tokens, spend int64 }
 	idx := make(map[int64]agg, len(rows))
@@ -324,13 +325,6 @@ func buildSeries(start, end time.Time, interval string, rows []map[string]any) [
 		})
 	}
 	return out
-}
-
-func stepOf(interval string) time.Duration {
-	if strings.EqualFold(interval, "day") {
-		return 24 * time.Hour
-	}
-	return time.Hour
 }
 
 // buildTopModels assembles the top-models table, computing each model's share of
