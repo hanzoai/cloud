@@ -196,6 +196,41 @@ func kmsMachineAudience(owner string) string {
 	return owner + kmsMachineAudSuffix
 }
 
+// homeOrg returns the USER's own organization — the tenant whose ledger pays and
+// whose membership decides platform authority. It reads the FIRST entry of the
+// signed `orgs` claim, which IAM builds home-first by construction from the
+// authoritative user row (store.MemberOrgRefs: `refs := []OrgRef{{Org: user.Owner,
+// …}}`, then explicit membership rows, deduped home-wins).
+//
+// IT IS DELIBERATELY NOT claims.Owner. The `owner` claim has never carried the
+// user's org: IAM stamps the APPLICATION's org into it (oidc/jwt.go Sign:
+// `Owner: app.Organization`). Same user, same password, two apps ⇒ two different
+// `owner` values. That read as correct for years only because, pre-onboarding, the
+// app org and the user org were both "hanzo"; onboarding broke the coincidence, not
+// the claim. IAM knew — internal/authz/authz.go refuses to trust these claims
+// internally and says the organization "comes from the token SUBJECT … never from
+// the token's `owner`/`organization` claims" — and the Sign/SignUserToken pair
+// documents the divergence while naming cloud's SanitizeIdentity as the consumer.
+//
+// Consuming `owner` made the tenant CALLER-SELECTABLE: a user picked which org's
+// ledger to spend by choosing which app to authenticate through (a hanzo user via
+// lux-cloud billed lux), and — because the same value gated SuperAdmin — a token
+// from any app owned by the reserved admin org conferred platform admin. One
+// poisoned value, two defects; one accessor, both closed.
+//
+// EMPTY MEANS EMPTY. A token with no `orgs` (minted before IAM v1.33.0, or a
+// machine token, for which IAM omits the claim by design) resolves NO home org, and
+// the caller must fail closed — an org-less request, every org() gate 403. It must
+// never fall back to `owner`, because that is precisely the app-selected value this
+// exists to stop trusting. Callers log the fail-closed case so a real legacy
+// principal is visible rather than silently denied.
+func (c *idClaims) homeOrg() string {
+	if len(c.Orgs) == 0 {
+		return ""
+	}
+	return c.Orgs[0].Org
+}
+
 // isKMSMachinePrincipal reports whether a validated token is a per-org KMS-sync
 // machine identity: its audience set contains the owner-bound machine audience
 // (<owner>-platform-kms). Such a principal is a client_credentials machine identity
