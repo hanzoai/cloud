@@ -63,14 +63,51 @@ func WalletOf(c *zip.Ctx) (Wallet, bool) {
 	if !ok {
 		return Wallet{}, false
 	}
-	sub := strings.TrimSpace(c.User())
-	acct := account.Payer(account.Credential{
+	return Wallet{Ledger: ledger, Account: Subject(c, ledger)}, true
+}
+
+// Subject resolves the ACCOUNT half of the address — the wallet key within ledger —
+// by feeding account.Payer the credential the identity boundary minted. It is the ONE
+// place a request becomes a wallet key, so the gate, the debit, the balance view and
+// the paywall address the same wallet by construction rather than by four call sites
+// that happen to agree.
+//
+// THE NAME HALF IS X-User-Name, NOT X-User-Id. Both minters set X-User-Id from the
+// JWT `sub`, and IAM's `sub` is a UUID; X-User-Name is the IAM USERNAME the boundary
+// mints from the validated `name`/`preferred_username` claim — expressly "the `name`
+// half of <owner>/<name>" (auth_identity.go username). Reading the id instead
+// addressed "hanzo/<uuid>", a wallet NO funding path can name: an admin grant credits
+// the org pool, a finance deposit names "<org>/<username>", and the ai gate + debit
+// resolve the username too. So it was a ghost — always $0, never fundable, and the
+// paywall's credit leg read it. This is the third recurrence of one bug (see the two
+// above): every time, two layers derived the same address two ways.
+//
+// ONE Payer CALL, so the signed claim ALWAYS decides. The name is resolved first and
+// the credential is built once: a two-branch version that took a PayerOf shortcut when
+// the username was absent silently dropped `billing_account`, and a token whose
+// signature says "person:acme/bob" would have gated the acme POOL. The claim is the
+// whole reason the module exists; it cannot be conditional on a header's shape.
+func Subject(c *zip.Ctx, ledger string) string {
+	name := strings.TrimSpace(c.Header("X-User-Name"))
+	if name == "" {
+		name = nameOf(strings.TrimSpace(c.User()))
+	}
+	return account.Payer(account.Credential{
 		Owner:   ledger,
-		Name:    sub,
+		Name:    name,
 		Account: BillingAccount(c),
 	}).Subject()
-	if acct == "" {
-		acct = sub
+}
+
+// nameOf reduces X-User-Id to the `name` half of an account key. The header's shape is
+// path-dependent — the gateway historically minted the bare username, the in-binary
+// direct-Bearer path mints the UUID `sub`, and callers hold it as an "<owner>/<name>"
+// key — so the only fact common to all three is that anything after a slash is the
+// name and anything without one is already the name. It is a parse, never a decision:
+// Payer alone decides who the resulting credential pays.
+func nameOf(id string) string {
+	if i := strings.IndexByte(id, '/'); i >= 0 {
+		return id[i+1:]
 	}
-	return Wallet{Ledger: ledger, Account: acct}, true
+	return id
 }
