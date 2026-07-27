@@ -127,6 +127,7 @@ var frozen = []struct {
 	{"legal", true, true},            // new: Hanzo Legal — template + generation engine + e-sign/filing (after compliance)
 	{"agent", false, false},          // new: /v1/agent tool-calling round (before zen/ai catch-all)
 	{"ask", false, false},            // new: unified grounded advisor /v1/ask (before zen/ai catch-all)
+	{"translate", false, true},       // new: /v1/translate, two tiers over one endpoint (HIP-0516); Shutdown closes the per-org translation memories
 	{"zen", false, false},            // zen* claim middleware before ai's catch-all (hip-00NN)
 	{"ai", false, false},             // was order 150
 	{"plugins", false, false},        // was order 900

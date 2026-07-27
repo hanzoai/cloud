@@ -137,6 +137,7 @@ import (
 	"github.com/hanzoai/cloud/clients/templates"
 	"github.com/hanzoai/cloud/clients/tools"
 	"github.com/hanzoai/cloud/clients/tracker"
+	"github.com/hanzoai/cloud/clients/translate"
 	"github.com/hanzoai/cloud/clients/treasury"
 	"github.com/hanzoai/cloud/clients/usage"
 	"github.com/hanzoai/cloud/clients/validators"
@@ -494,6 +495,13 @@ func Wire() []cloud.MountSpec {
 		// next) WITHOUT a router edit. Mounts BEFORE the ai /v1/* catch-all so /v1/ask wins
 		// Fiber's first-match; after books/agent so the domains it composes are wired.
 		{Name: "ask", Mount: ask.Mount},
+		// POST /v1/translate (HIP-0516) — the ONE translation surface: a quality tier
+		// on the model plane and a bulk tier on MADLAD-400, behind one endpoint, one
+		// auth path, one meter. It COMPOSES the model plane (deps.AI, which already
+		// gates + debits its own tokens) rather than standing up a second inference
+		// stack, and owns only its per-org translation memory → Shutdown. Mounts
+		// BEFORE the zen/ai catch-all so /v1/translate resolves here.
+		{Name: "translate", Mount: translate.Mount, Shutdown: ctxShutdown(translate.Shutdown)},
 		// The bare /v1/* AI catch-all — the LAST route position. Every owning subsystem above
 		// wins its own namespace (Fiber first-match); AI is the fallback for the rest of /v1/*.
 		// zen mounts as a /v1-scoped Claim middleware BEFORE ai: it routes zen* models
