@@ -221,7 +221,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Push generated files without a local git client (hanzo.app builder).
 	// A distinct trailing segment, so it never shadows the :org/:repo routes.
 	g.Post("/repos/:name/push", cloud.Handle(s, pushFiles))
-	// Gitea push-webhook ingest (git.hanzo.ai). A static segment that never
+	// Hanzo Git push-webhook ingest (git.hanzo.ai). A static segment that never
 	// shadows the :org/:repo smart-HTTP routes; HMAC-authed, drives the same
 	// fireBranchBuild core a native push does (webhook.go). cloud.Terminal writes
 	// the handler's bad-signature 401 / malformed-body 400 in-band so the commerce

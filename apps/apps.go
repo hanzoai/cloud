@@ -361,7 +361,7 @@ func Wire() []cloud.MountSpec {
 		{Name: "analytics", Mount: analytics.Mount, OwnsHealth: true},
 		{Name: "git", Mount: git.Mount},
 		// Universal sync (/v1/sync/links + engine). Registers the cloud.SyncEngine the
-		// GitHub/Gitea webhooks enqueue to; git is its first provider. Owns per-org
+		// GitHub/Hanzo Git webhooks enqueue to; git is its first provider. Owns per-org
 		// DB handles, so its Shutdown closes them on SIGTERM.
 		{Name: "sync", Mount: sync.Mount, Shutdown: ctxShutdown(sync.Shutdown)},
 		{Name: "visor", Mount: visor.Mount},
