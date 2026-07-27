@@ -7,7 +7,7 @@
 // hanzoai/sqlite). The retired Casdoor/Beego fork (github.com/hanzoai/iam-v1) is
 // GONE from cloud's graph: there is no beego process-global to corrupt, no
 // InitEmbed, no session-manager hook, no shared-AppConfig co-residence hazard with
-// the sibling `ai` casdoor fork. iamserver.Mount registers the whole IAM v2 surface
+// the sibling `ai` casdoor fork. iamserver.Route registers the whole IAM v2 surface
 // (OIDC discovery/JWKS, oauth authorize/token/userinfo/introspect/revoke,
 // get-app-login, signin, the v2 entity CRUD, and the Casdoor verb-alias compat
 // layer) ZIP-NATIVELY onto cloud's shared app — no net/http adaptor round-trip. The
@@ -62,7 +62,7 @@ import (
 )
 
 // iamPrefixes are the canonical absolute prefixes the IAM identity surface owns,
-// used ONLY for the fail-closed 503 — on success iamserver.Mount registers the real
+// used ONLY for the fail-closed 503 — on success iamserver.Route registers the real
 // routes itself. The bare /healthz is deliberately excluded — it is a shared-liveness
 // path, not an auth surface, so 503-ing it would mask the binary's own health rather
 // than an identity outage.
@@ -119,7 +119,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		log.Info("iam seed applied", "created", sum.Created, "skipped", sum.Skipped, "init_data", initDataPath)
 	}
 
-	// iamserver.Mount registers the whole surface at the canonical absolute paths. It
+	// iamserver.Route registers the whole surface at the canonical absolute paths. It
 	// PANICS only if a registered enterprise feature fails to mount (none today);
 	// recover so a future boot-misconfig degrades to fail-closed 503 instead of crashing
 	// the shared binary — the same blast-radius isolation the whole fold gives.
@@ -156,7 +156,7 @@ func paths(deps cloud.Deps) (dbPath, initDataPath string) {
 	return dbPath, initDataPath
 }
 
-// safeMount runs iamserver.Mount under a recover so its only panic path — a registered
+// safeMount runs iamserver.Route under a recover so its only panic path — a registered
 // enterprise feature failing to mount — becomes an error the caller fail-closes on,
 // never a crash of the shared cloud binary. With zero features registered today it
 // always returns nil.
@@ -166,7 +166,7 @@ func safeMount(app *zip.App, db orm.DB) (err error) {
 			err = fmt.Errorf("iam mount panicked: %v", r)
 		}
 	}()
-	iamserver.Mount(app, db)
+	iamserver.Route(app, db)
 	return nil
 }
 

@@ -5,24 +5,21 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hanzoai/beego/v2/server/web"
 	"github.com/zap-proto/zip"
 )
 
-// The EMBED session→principal bridge (validatedPrincipal → sessionAccessToken) must
-// be a SAFE NO-OP whenever there is no in-process IAM session manager — i.e. on any
-// binary that does not mount clients/iam (and in these tests, where GlobalSessions
-// is never initialised). A first-party-session cookie present WITHOUT a bearer and
-// WITHOUT a session manager must resolve ANONYMOUS (never a principal, never a panic),
-// so the bridge can never widen auth on a non-embed deployment.
+// A first-party session cookie presented WITHOUT a bearer must resolve ANONYMOUS —
+// never a principal, never a panic — so the session bridge can never widen auth.
+//
+// This used to be conditional on Beego's global session manager being nil, which
+// is how the retired Casdoor iam-v1 embed stored sessions. That embed is gone and
+// IAM v2 is zip-native, so nothing populates that global and sessionAccessToken is
+// now unconditionally "". The property under test is unchanged and is now
+// unconditional too: no skip, no framework global, just the guarantee.
 func TestSessionBridge_NoSessionManager_IsAnonymous(t *testing.T) {
-	if web.GlobalSessions != nil {
-		t.Skip("a session manager is initialised in this process; the no-op path is not exercised")
-	}
-	name := web.BConfig.WebConfig.Session.SessionName
-	if name == "" {
-		name = "beegosessionID"
-	}
+	// The cookie name the retired embed used. Any opaque session id must be
+	// ignored regardless of what it is called.
+	const name = "beegosessionID"
 
 	app, got := newIdentityApp(t, nil) // nil validator: no JWT path can validate either
 	probe(t, app, func(r *http.Request) {

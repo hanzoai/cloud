@@ -320,9 +320,10 @@ func billingProbe(t *testing.T, headers map[string]string) (billingOrg, billingU
 // admin's spend was silently charged to the org being acted on.
 func TestIdentityFromCtx_AdminMasqueradeBillsHomeOrg(t *testing.T) {
 	billOrg, billUser, dataOrg := billingProbe(t, map[string]string{
-		"X-User-Id":    "u_admin", // validated principal
-		"X-Org-Id":     "victim",  // EFFECTIVE — the org being acted on
-		"X-User-Owner": "admin",   // HOME — the identity + billing anchor
+		"X-User-Id":      "u_admin", // validated principal
+		"X-Org-Id":       "victim",  // EFFECTIVE — the org being acted on
+		"X-User-Owner":   "admin",   // HOME — the identity + billing anchor
+		"X-User-IsAdmin": "true",    // platform sudo — what makes this a MASQUERADE
 	})
 	if billOrg != "admin" {
 		t.Errorf("billing org (debit ledger) = %q, want %q (HOME org pays, not the acted-on org)", billOrg, "admin")
@@ -432,6 +433,7 @@ func TestIdentityFromCtx_MasqueradeKeepsTheAdminsLedger(t *testing.T) {
 		"X-User-Id":            "u_admin",
 		"X-Org-Id":             "victim",     // EFFECTIVE — the org being acted on
 		"X-User-Owner":         "admin",      // HOME — who pays
+		"X-User-IsAdmin":       "true",       // platform sudo — what makes this a MASQUERADE
 		"X-Billing-Account-Id": "org:victim", // a claim naming the VICTIM's ledger
 	})
 	if billOrg == "victim" || billUser == "victim" {
