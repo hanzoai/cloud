@@ -262,8 +262,44 @@ func (c *OrgStore[T]) forPath(slug, dbKey, path string) (T, error) {
 	var zero T
 	c.mu.Lock()
 	if st, ok := c.byPath[path]; ok {
+		// Cache hit. If this durable store opened DEGRADED (read-only) and this replica
+		// has since become the org's elected owner — a rolling-upgrade membership change
+		// — promote it IN PLACE (M3): re-acquire the lease, hydrate the latest snapshot,
+		// and swap in a writer handle, with no process restart. The check is I/O-free and
+		// only does real work when the store is unowned AND newly elected (rare).
+		d := c.durables[path]
+		if d == nil || !d.PendingPromotion() {
+			c.mu.Unlock()
+			return st, nil
+		}
+		if inf, promoting := c.inflight[path]; promoting {
+			c.mu.Unlock()
+			<-inf.done
+			return inf.st, inf.err
+		}
+		inf := &openState[T]{done: make(chan struct{})}
+		c.inflight[path] = inf
+		delete(c.byPath, path)
+		delete(c.durables, path)
 		c.mu.Unlock()
-		return st, nil
+
+		st2, d2, err := c.promote(slug, dbKey, path, st, d)
+		inf.st, inf.d, inf.err = st2, d2, err
+		c.mu.Lock()
+		delete(c.inflight, path)
+		if d2 != nil { // a usable store (promoted writer, or the kept read-only one)
+			c.byPath[path] = st2
+			c.durables[path] = d2
+		}
+		c.mu.Unlock()
+		close(inf.done)
+		if err != nil && d2 != nil && c.log != nil {
+			// Reopen degraded again (transient store/membership blip): still serving the
+			// prior read-only state, so log and keep availability rather than surface it.
+			c.log.Warn("org store promotion incomplete — serving prior state", "subsystem", c.subsystem, "org", slug, "err", err)
+			return st2, nil
+		}
+		return st2, err
 	}
 	// Local-only (no Durability): open under c.mu — disk I/O only, unchanged from the
 	// pre-durability cache.
@@ -336,6 +372,32 @@ func (c *OrgStore[T]) openDurable(slug, dbKey, path string) (T, *org.Durable, er
 		return zero, nil, err
 	}
 	return st, d, nil
+}
+
+// promote upgrades a degraded (read-only) store to the writer, in place, when this
+// replica has become the org's elected owner (M3 — no process restart). It PROBES first
+// (TryClaim: only the lease CAS, no file I/O), so a transient membership/store blip that
+// is not yet claimable leaves the read-only handle serving untouched. Only once the lease
+// is claimed does it quiesce — close the read-only handle — and re-open as owner, whose
+// Hydrate renews that same lease and CarryForward-restores the latest snapshot under the
+// FRESH handle (never under the live one — the file swap is exactly why the reopen is
+// required). The fence's monotone round makes this safe against a still-running prior
+// owner: the reopen claims a strictly higher round, so any late ship from the deposed
+// writer is rejected — never two live writers for one org.
+//
+// Returns the store to (re)publish and an error to LOG: (new writer, nil) on success;
+// (the same read-only store, nil-or-err) when not yet claimable; (zero, err) only if the
+// reopen hard-fails after the claim (a local disk error — the entry is then dropped and
+// the failure surfaced).
+func (c *OrgStore[T]) promote(slug, dbKey, path string, old T, oldDur *org.Durable) (T, *org.Durable, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), durableOpTimeout)
+	claimed, err := oldDur.TryClaim(ctx)
+	cancel()
+	if err != nil || !claimed {
+		return old, oldDur, err // not the owner yet / store blip: keep serving read-only.
+	}
+	_ = old.Close() // quiesce: release the read-only handle before CarryForward swaps the file.
+	return c.openDurable(slug, dbKey, path)
 }
 
 // Sync ships the org's local file to its durable object, fenced at the lease round
