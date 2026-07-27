@@ -35,8 +35,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"sort"
@@ -73,6 +75,8 @@ var probes = []probe{
 	{"router-stats-platform", http.MethodGet, "/v1/router/stats?scope=platform", classPublic},
 	{"templates", http.MethodGet, "/v1/templates", classPublic},
 	{"prompts-catalog", http.MethodGet, "/v1/prompts/catalog", classPublic},
+	{"health", http.MethodGet, "/v1/health", classHealth},
+	{"plans", http.MethodGet, "/v1/plans", classPublic}, // the paywall's own cure URL
 	{"kms-health", http.MethodGet, "/v1/kms/health", classPublic},
 	{"deploy-health", http.MethodGet, "/v1/deploy/health", classPublic},
 	{"s3-health", http.MethodGet, "/v1/s3/health", classPublic},
@@ -136,6 +140,22 @@ func main() {
 			r.pass, r.reason = evaluate(p, status, hasToken, *strict)
 		}
 		results = append(results, r)
+	}
+
+	// A status-code sweep cannot see a plane that mounted fail-closed: commerce
+	// with an unusable KV_URL answers an honest 503 on its own routes, which reads
+	// as "staged" and passes. That is how a dead revenue surface once shipped
+	// behind a green gate. /v1/health names the failed planes; any of them is a
+	// hard fail, because the image is not fit to ship.
+	if dead, err := degradedPlanes(client, baseURL); err != nil {
+		fmt.Fprintf(os.Stderr, "\nsmoke: could not read /v1/health: %v\n", err)
+		os.Exit(1)
+	} else if len(dead) > 0 {
+		fmt.Fprintf(os.Stderr, "\nsmoke: FAILED — %d subsystem(s) mounted fail-closed:\n", len(dead))
+		for _, name := range degradedNamesOf(dead) {
+			fmt.Fprintf(os.Stderr, "  %-14s %s\n", name, dead[name])
+		}
+		os.Exit(1)
 	}
 
 	report(results, baseURL, hasToken, *strict)
@@ -272,4 +292,41 @@ func envInt(k string, def int) int {
 		}
 	}
 	return def
+}
+
+// degradedPlanes asks /v1/health which subsystems mounted fail-closed. An empty
+// map means every enabled plane booted. A transport error is itself a failure —
+// a smoke that cannot reach health has proven nothing.
+func degradedPlanes(client *http.Client, baseURL string) (map[string]string, error) {
+	req, err := http.NewRequest(http.MethodGet, baseURL+"/v1/health", nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+	// Tolerate an older binary with no `degraded` field: absent means healthy, so
+	// this gate can roll out before every environment serves the new shape.
+	var h struct {
+		Degraded map[string]string `json:"degraded"`
+	}
+	if err := json.Unmarshal(body, &h); err != nil {
+		return nil, nil
+	}
+	return h.Degraded, nil
+}
+
+func degradedNamesOf(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
