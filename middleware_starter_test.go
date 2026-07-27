@@ -252,6 +252,48 @@ func TestStarterGrant_SwitchedOrgIsNotFunded(t *testing.T) {
 	}
 }
 
+// TestStarterGrant_NoSignedHomeIsNotFunded: a token carrying no membership set — a
+// pre-v1.33.0 JWT, an hk-/sk- key, a client_credentials machine — mints no
+// X-User-Owner, because SanitizeIdentity derives it from orgs[0] and fails closed when
+// there is none. The grant must refuse rather than fall back: the field it would fall
+// back to (the `owner` claim) is the APPLICATION's org, which is exactly what
+// d14219415 removed for letting a caller select the paying tenant.
+func TestStarterGrant_NoSignedHomeIsNotFunded(t *testing.T) {
+	fin, led := wireFakes(t)
+	app := starterApp()
+
+	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	req.Header.Set("X-User-Id", "alice")
+	req.Header.Set("X-Org-Id", "acme")
+	// X-User-Owner deliberately ABSENT — no signed membership set on the token.
+	if _, err := app.Fiber().Test(req); err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+
+	if fin.balanceCalls.Load() != 0 || led.credits.Load() != 0 {
+		t.Fatalf("a token with no signed home was funded: balance=%d credits=%d, want 0/0",
+			fin.balanceCalls.Load(), led.credits.Load())
+	}
+}
+
+// TestStarterGrant_HomeComparisonIsByteExact pins the comparison. Both sides come from
+// the SAME signed set — X-Org-Id can only be a byte-identical member entry (isMember
+// compares with ==), and X-User-Owner is entry zero of it — so a case difference means
+// the two values did not come from the same claim, and a grant on a mismatched pair
+// would be funding an address nobody proved the caller owns.
+func TestStarterGrant_HomeComparisonIsByteExact(t *testing.T) {
+	fin, led := wireFakes(t)
+	app := starterApp()
+
+	if got := starterHit(app, "Acme", "acme", "alice"); got != http.StatusOK {
+		t.Fatalf("probe status %d, want 200", got)
+	}
+	if fin.balanceCalls.Load() != 0 || led.credits.Load() != 0 {
+		t.Fatalf("case-mismatched home/selected was funded: balance=%d credits=%d, want 0/0",
+			fin.balanceCalls.Load(), led.credits.Load())
+	}
+}
+
 // TestStarterGrant_FundedAccountIsNotGranted is the retroactive-payout guard at the
 // middleware level: on the first request after a deploy every existing org is
 // "unseen", and a funded one must still be skipped.
