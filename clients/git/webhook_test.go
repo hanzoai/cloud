@@ -234,40 +234,31 @@ func TestWebhookZeroShaNoOp(t *testing.T) {
 	}
 }
 
-// TestWebhookAcceptsBothHeaderSpellings pins the rename-in-flight contract: the
-// same signed push fires a build whether it arrives with the X-Git-* names cloud
-// now prefers or the X-Gitea-* names the git image still sends. That is what lets
-// the two images roll in EITHER order — without it, a fork roll landing before a
-// cloud roll would silently stop triggering every deploy.
-//
-// One app and one capture for both cases, asserting the count CLIMBS 1 then 2, so
-// neither spelling can pass on the other's build.
-func TestWebhookAcceptsBothHeaderSpellings(t *testing.T) {
+// TestWebhookUsesGitHeaders pins the one spelling we accept: X-Git-Event /
+// X-Git-Signature. The X-Gitea-* fallback is gone — git.hanzo.ai is this binary's
+// own /v1/git plane, so there is no separate image left to send the old names.
+func TestWebhookUsesGitHeaders(t *testing.T) {
 	t.Setenv(webhookSecretEnv, testWebhookSecret)
 	got := captureBuilder(t)
 	app := mountApp(t)
 
-	for i, pair := range []struct{ ev, sig string }{
-		{eventHeader, sigHeader},
-		{eventHeaderPre, sigHeaderPre},
-	} {
-		body := pushPayload("acme", "code", "refs/heads/main", "a1",
-			"1111111111111111111111111111111111111111", "hanzo-dev")
-		req := httptest.NewRequest(http.MethodPost, "/v1/git/webhook", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set(pair.ev, "push")
-		req.Header.Set(pair.sig, signHook(testWebhookSecret, body))
-		resp, err := app.Fiber().Test(req, testCfg)
-		if err != nil {
-			t.Fatalf("%s: Test POST: %v", pair.ev, err)
-		}
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusNoContent {
-			t.Fatalf("%s: status = %d, want 204", pair.ev, resp.StatusCode)
-		}
-		if n := waitForBuilds(t, got, i+1, 3*time.Second); n != i+1 {
-			t.Fatalf("%s/%s not honored: builds = %d, want %d", pair.ev, pair.sig, n, i+1)
-		}
+	body := pushPayload("acme", "code", "refs/heads/main", "a1",
+		"1111111111111111111111111111111111111111", "hanzo-dev")
+	req := httptest.NewRequest(http.MethodPost, "/v1/git/webhook", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(eventHeader, "push")
+	req.Header.Set(sigHeader, signHook(testWebhookSecret, body))
+	resp, err := app.Fiber().Test(req, testCfg)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("X-Git-* push = %d, want 2xx", resp.StatusCode)
+	}
+	got.Lock()
+	defer got.Unlock()
+	if len(got.events) != 1 {
+		t.Fatalf("X-Git-* push must fire exactly one build, got %d", len(got.events))
 	}
 }
 
