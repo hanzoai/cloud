@@ -175,12 +175,22 @@ func (k *iamKeys) lookup(ctx context.Context, key string) *idClaims {
 	if strings.TrimSpace(env.Data.Owner) == "" {
 		return nil
 	}
+	owner := strings.TrimSpace(env.Data.Owner)
 	return &idClaims{
-		Owner:             strings.TrimSpace(env.Data.Owner),
+		Owner:             owner,
 		Name:              strings.TrimSpace(env.Data.Name),
 		PreferredUsername: strings.TrimSpace(env.Data.Name),
 		Email:             strings.TrimSpace(env.Data.Email),
 		IsAdmin:           env.Data.IsAdmin,
+		// The org came from the SUBJECT: IAM resolved this accessKey to a user row,
+		// and that row's owner is the tenant. No application mints it and no claim
+		// carries it, so it is NOT the app-selected value homeOrg exists to reject —
+		// it is the same "the organization comes from the token subject" rule IAM
+		// states for itself in internal/authz/authz.go. Recorded here so the identity
+		// boundary can tell a KEY principal (which legitimately has no `orgs`, because
+		// a machine is a member of nothing) from a HUMAN token that has merely lost
+		// its claim — the latter must still fail closed.
+		subjectOrg: owner,
 	}
 }
 
