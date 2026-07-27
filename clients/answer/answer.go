@@ -218,7 +218,7 @@ func (e Engine) Run(ctx context.Context, p Params, out Sink) {
 	// crawl service degrades to the snippets and never breaks the stream.
 	if p.readTop > 0 && len(srcs) > 0 {
 		out.status("reading", "")
-		srcs = read(ctx, srcs, p.readTop)
+		srcs = read(ctx, e.Log, srcs, p.readTop)
 	}
 
 	// 5) SYNTHESIZE — one grounded completion over the numbered sources, with
