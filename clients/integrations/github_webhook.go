@@ -128,15 +128,34 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	branch := strings.TrimPrefix(ev.Ref, "refs/heads/")
 
+	clone := strings.TrimSpace(ev.Repository.CloneURL)
+	if clone == "" && ev.Repository.FullName != "" {
+		clone = "https://github.com/" + ev.Repository.FullName + ".git"
+	}
+
+	// Hand the push to the SAME deploy trigger the embedded git server fires, so an
+	// upstream merge and a native push travel one seam rather than two CIs. This
+	// runs BEFORE the token mint and the mirror on purpose: a build reads from
+	// GitHub, so it must not be lost because native mirroring was unavailable —
+	// otherwise a sync outage silently stops the fleet from releasing. Best-effort
+	// by the seam's contract. Bot-authored pushes are excluded by the same guard
+	// automations use: our outbound mirror pushes AS the App, and a release must
+	// never rebuild itself.
+	if !isBotActor(actorOf(ev)) {
+		if err := cloud.OnGitPush(c.Context(), cloud.GitPushEvent{
+			Org: org, Repo: ev.Repository.Name, Branch: branch,
+			Commit: ev.After, CloneURL: clone,
+		}); err != nil {
+			s.Log.Warn("github push: build trigger failed",
+				"org", org, "repo", ev.Repository.Name, "branch", branch, "err", err)
+		}
+	}
+
 	// Mint the installation token HERE (the App plane owns token custody) and pass
 	// it THROUGH the event, so the engine's git provider fetches without re-minting.
 	tok, err := InstallationToken(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "mint github installation token: %v", err)
-	}
-	clone := strings.TrimSpace(ev.Repository.CloneURL)
-	if clone == "" && ev.Repository.FullName != "" {
-		clone = "https://github.com/" + ev.Repository.FullName + ".git"
 	}
 	// The universal sync engine is the ONE place a sync happens: it resolves the
 	// SyncLink(s) whose source is this GitHub repo and applies each (the git
@@ -165,21 +184,6 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 			"repo": ev.Repository.Name, "ref": ev.Ref, "branch": branch,
 			"before": ev.Before, "after": ev.After, "pusher": actorOf(ev),
 		})
-		// Hand the push to the SAME deploy trigger the embedded git server fires,
-		// so an upstream merge builds exactly what a native push builds — one seam,
-		// not a second CI. CloneURL is the GitHub URL, which is what an app's
-		// RepoURL carries for a GitHub-sourced app, and what identifies cloud's own
-		// upstream for the self-release. Best-effort by the seam's contract: a
-		// build we could not start never fails the webhook we already verified.
-		// Bot-authored pushes are excluded by the same guard as automations — our
-		// outbound mirror pushes AS the App, and a release must not rebuild itself.
-		if err := cloud.OnGitPush(c.Context(), cloud.GitPushEvent{
-			Org: org, Repo: ev.Repository.Name, Branch: branch,
-			Commit: ev.After, CloneURL: clone,
-		}); err != nil {
-			s.Log.Warn("github push: build trigger failed",
-				"org", org, "repo", ev.Repository.Name, "branch", branch, "err", err)
-		}
 	}
 	return c.JSON(http.StatusOK, map[string]any{"ran": res.Ran, "skipped": res.Skipped})
 }
