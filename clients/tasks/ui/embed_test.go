@@ -27,10 +27,12 @@ func TestRealBundleEmbedded(t *testing.T) {
 	if strings.Contains(html, "No UI build present") {
 		t.Fatal("embedded index.html is still the placeholder — dist/ was not synced")
 	}
-	// The SPA is built with base '/_/tasks/', so its module entrypoint and
-	// assets resolve same-origin under the path cloud serves.
-	if !strings.Contains(html, "/_/tasks/assets/") {
-		t.Errorf("index.html does not reference /_/tasks/assets/ — wrong base path:\n%s", html)
+	// The SPA is built with base '/tasks/', which must match the path cloud mounts
+	// it on (tasks.go: StripPrefix("/tasks", …) behind /tasks and /tasks/*), or the
+	// entrypoint and every hashed chunk resolve to a prefix nothing serves and the
+	// page loads as a blank shell.
+	if !strings.Contains(html, "/tasks/assets/") {
+		t.Errorf("index.html does not reference /tasks/assets/ — wrong base path:\n%s", html)
 	}
 	// A real Vite build ships hashed JS chunks.
 	if _, err := fs.Stat(root, "assets"); err != nil {
@@ -39,7 +41,7 @@ func TestRealBundleEmbedded(t *testing.T) {
 }
 
 // TestHandlerServesIndexAndAssets exercises the SPA-fallback + asset paths the
-// same way the browser hits them through StripPrefix("/_/tasks", …).
+// same way the browser hits them through StripPrefix("/tasks", …).
 func TestHandlerServesIndexAndAssets(t *testing.T) {
 	h := Handler()
 
