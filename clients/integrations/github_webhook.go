@@ -165,6 +165,21 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 			"repo": ev.Repository.Name, "ref": ev.Ref, "branch": branch,
 			"before": ev.Before, "after": ev.After, "pusher": actorOf(ev),
 		})
+		// Hand the push to the SAME deploy trigger the embedded git server fires,
+		// so an upstream merge builds exactly what a native push builds — one seam,
+		// not a second CI. CloneURL is the GitHub URL, which is what an app's
+		// RepoURL carries for a GitHub-sourced app, and what identifies cloud's own
+		// upstream for the self-release. Best-effort by the seam's contract: a
+		// build we could not start never fails the webhook we already verified.
+		// Bot-authored pushes are excluded by the same guard as automations — our
+		// outbound mirror pushes AS the App, and a release must not rebuild itself.
+		if err := cloud.OnGitPush(c.Context(), cloud.GitPushEvent{
+			Org: org, Repo: ev.Repository.Name, Branch: branch,
+			Commit: ev.After, CloneURL: clone,
+		}); err != nil {
+			s.Log.Warn("github push: build trigger failed",
+				"org", org, "repo", ev.Repository.Name, "branch", branch, "err", err)
+		}
 	}
 	return c.JSON(http.StatusOK, map[string]any{"ran": res.Ran, "skipped": res.Skipped})
 }
