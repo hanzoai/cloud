@@ -27,6 +27,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -357,17 +358,40 @@ func overview(s *cloud.Service[core.State], c *zip.Ctx) error {
 	commercePartial := false
 	if orgErr == nil {
 		orgCount = len(orgs)
+		// FAN OUT. Each org costs two independent reads (users, money), so doing this
+		// serially made the dashboard's latency O(orgs): at 122 orgs that is ~244
+		// blocking round-trips before a single tile renders, and it grows every time a
+		// tenant signs up. The reads do not depend on each other, so they run
+		// concurrently under a fixed ceiling — bounded so a large fleet cannot stampede
+		// the finance ledger or the IAM store.
+		const maxParallelOrgReads = 12
+		var (
+			mu  sync.Mutex
+			wg  sync.WaitGroup
+			sem = make(chan struct{}, maxParallelOrgReads)
+		)
 		for _, o := range orgs {
-			userCount += orgUserCount(s, ctx, cr, o.Name)
-			sp, cr2, ok := core.OrgMoney(s, ctx, o.Name)
-			spend += sp
-			credits += cr2
-			if !ok {
-				// This org's money did not read — the fleet spend/credits totals are now
-				// an UNDERCOUNT, so the commerce source must report degraded, not healthy.
-				commercePartial = true
-			}
+			wg.Add(1)
+			go func(org string) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+				uc := orgUserCount(s, ctx, cr, org)
+				sp, cr2, ok := core.OrgMoney(s, ctx, org)
+				mu.Lock()
+				defer mu.Unlock()
+				userCount += uc
+				spend += sp
+				credits += cr2
+				if !ok {
+					// This org's money did not read — the fleet spend/credits totals are
+					// now an UNDERCOUNT, so the commerce source must report degraded,
+					// not healthy.
+					commercePartial = true
+				}
+			}(o.Name)
 		}
+		wg.Wait()
 	}
 
 	// Commerce freshness derives from the SAME per-org reads the totals fold — NOT a
