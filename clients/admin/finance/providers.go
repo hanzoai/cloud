@@ -25,6 +25,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/datastore"
+	"github.com/hanzoai/types"
 	"github.com/zap-proto/zip"
 )
 
@@ -175,7 +176,8 @@ func fundingClass(pc ProviderCredit) string {
 // usage split by funding class over the window (default last 30d). SuperAdmin-guarded.
 func UsageFunding(s *cloud.Service[core.State], c *zip.Ctx) error {
 	ctx := c.Context()
-	start, end, _, werr := aiobject.ResolveCloudUsageWindow("", c.Query("from"), c.Query("to"), time.Now().UTC())
+	w, werr := types.ParseWindow("", c.Query("from"), c.Query("to"), time.Now().UTC())
+	start, end := w.Start, w.End
 	if werr != nil {
 		end = time.Now().UTC()
 		start = end.AddDate(0, 0, -30)

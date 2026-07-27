@@ -29,6 +29,7 @@ require (
 	github.com/hanzoai/s3-go v1.0.0
 	github.com/hanzoai/sign v1.0.0
 	github.com/hanzoai/sqlite v0.4.0
+	github.com/hanzoai/types v0.1.0
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.5.0
 	github.com/luxfi/node v1.36.15
@@ -741,7 +742,7 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v0.1.3
-	github.com/hanzoai/ai v1.831.9
+	github.com/hanzoai/ai v1.831.11
 	github.com/hanzoai/authz v1.10.7
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.5
