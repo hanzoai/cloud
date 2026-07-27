@@ -3,6 +3,7 @@ package migration
 import (
 	"context"
 	"database/sql"
+	"github.com/hanzoai/cloud/cek"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -32,6 +33,8 @@ func TestRoundTripPerOrgUserRouting(t *testing.T) {
 	dir := t.TempDir()
 	srcPath := filepath.Join(dir, "src.sqlite")
 
+	// The source stands in for POSTGRES and is read as a plain file, not a cek
+	// store — it is deliberately not encrypted.
 	src, err := sql.Open("sqlite", srcPath)
 	if err != nil {
 		t.Fatalf("open src: %v", err)
@@ -135,6 +138,15 @@ CREATE TABLE legacy_audit (
 		}
 	}
 
+	// Close the pool BEFORE reading anything back. A dst handle owns an open
+	// transaction until it is closed, and on the pure-Go encryption backend the
+	// ciphertext at the real path is only written when the handle seals — so a
+	// verification that reads while the writer is still open sees an unfinished
+	// file. Closing here is also what the migration itself does before its output
+	// is considered complete. The defer above stays as the error-path net; Close is
+	// safe twice.
+	pool.Close()
+
 	// Verify each routing path materialised the expected dst files.
 	for _, expected := range []string{
 		filepath.Join(dstRoot, "hanzo", "z@hanzo.ai", "cloud.sqlite"),
@@ -148,7 +160,9 @@ CREATE TABLE legacy_audit (
 		}
 	}
 	// Stronger check — count rows in the per-user file.
-	dst1, err := sql.Open("sqlite", filepath.Join(dstRoot, "hanzo", "z@hanzo.ai", "cloud.sqlite"))
+	// Read through cek: the dst files the migration writes are encrypted at rest,
+	// so a bare sql.Open cannot read them.
+	dst1, err := cek.Open(filepath.Join(dstRoot, "hanzo", "z@hanzo.ai", "cloud.sqlite"))
 	if err != nil {
 		t.Fatalf("open dst1: %v", err)
 	}
@@ -162,7 +176,7 @@ CREATE TABLE legacy_audit (
 	}
 
 	// org_settings row should land under _org sentinel.
-	dst2, err := sql.Open("sqlite", filepath.Join(dstRoot, "hanzo", "_org", "cloud.sqlite"))
+	dst2, err := cek.Open(filepath.Join(dstRoot, "hanzo", "_org", "cloud.sqlite"))
 	if err != nil {
 		t.Fatalf("open dst2: %v", err)
 	}
@@ -176,7 +190,7 @@ CREATE TABLE legacy_audit (
 	}
 
 	// legacy_audit row should land under the _global sentinel.
-	dst3, err := sql.Open("sqlite", filepath.Join(dstRoot, "_global", "_org", "cloud.sqlite"))
+	dst3, err := cek.Open(filepath.Join(dstRoot, "_global", "_org", "cloud.sqlite"))
 	if err != nil {
 		t.Fatalf("open dst3: %v", err)
 	}
