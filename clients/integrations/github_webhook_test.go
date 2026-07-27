@@ -201,7 +201,7 @@ func TestWebhookOrgIsolationAndFailClosed(t *testing.T) {
 		t.Fatalf("valid push must enqueue one sync event, got %d", eng.count())
 	}
 	in := eng.last()
-	if in.Kind != "git" || in.Provider != "github" || in.Org != "acme" || in.Repo != "widgets" || in.Branch != "main" {
+	if in.Kind != "git" || in.Provider != "github" || in.Org != "acme" || in.Repo != "widgets" || in.Ref != "refs/heads/main" {
 		t.Fatalf("wrong sync event: %+v", in)
 	}
 	if in.Locator != "https://github.com/acme-gh/widgets.git" {
@@ -246,13 +246,22 @@ func TestWebhookOrgIsolationAndFailClosed(t *testing.T) {
 		t.Fatal("unknown installation must not enqueue a sync event")
 	}
 
-	// 7) ping → 200. 8) tag (non-branch) → 200 ignored. 9) branch delete → 200 ignored.
+	// 7) ping → 200. 8) tag push → SYNCS (releases are cut by tag). 9) delete → ignored.
 	if r := webhookPost(t, app, "ping", ghSign(secret, []byte(`{"zen":"x"}`)), "", []byte(`{"zen":"x"}`)); r.Code != http.StatusOK {
 		t.Fatalf("ping want 200, got %d", r.Code)
 	}
+	// A tag is a ref like any other: it must reach native, or publishing stops
+	// with nothing failing to say so.
 	before = eng.count()
 	tag := pushPayload(t, 111, "widgets", "refs/tags/v1.0.0")
 	webhookPost(t, app, "push", ghSign(secret, tag), "", tag)
+	if eng.count() != before+1 {
+		t.Fatal("a tag push MUST enqueue a sync event")
+	}
+
+	// A delete is still never propagated — native is canonical, and an inbound
+	// event may not remove a ref it does not own.
+	before = eng.count()
 	del, _ := json.Marshal(map[string]any{
 		"ref": "refs/heads/gone", "deleted": true,
 		"repository":   map[string]any{"name": "widgets"},
@@ -260,7 +269,7 @@ func TestWebhookOrgIsolationAndFailClosed(t *testing.T) {
 	})
 	webhookPost(t, app, "push", ghSign(secret, del), "", del)
 	if eng.count() != before {
-		t.Fatal("tag push and branch delete must NOT enqueue a sync event")
+		t.Fatal("a branch delete must NOT enqueue a sync event")
 	}
 }
 

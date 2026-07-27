@@ -44,9 +44,15 @@ func buildFromPush(s *cloud.Service[state], ctx context.Context, ev cloud.GitPus
 	// launchBuildJob), so nothing leaks.
 	ctx = context.WithoutCancel(ctx)
 
+	// The event carries a FULL ref so tags reach us; an app tracks a BRANCH, so
+	// name the branch once, here, rather than making every caller think in refs.
+	// CutPrefix answers both questions at once: a tag yields isBranch false and
+	// never rebuilds an app.
+	branch, isBranch := strings.CutPrefix(ev.Ref, "refs/heads/")
+
 	n := 0
 	for _, a := range apps {
-		if a.Source != "git" || !sameRepo(a.RepoURL, ev.CloneURL) || !tracksBranch(a, ev.Branch) {
+		if a.Source != "git" || !sameRepo(a.RepoURL, ev.CloneURL) || !isBranch || !tracksBranch(a, branch) {
 			continue
 		}
 		n++
@@ -67,10 +73,10 @@ func buildFromPush(s *cloud.Service[state], ctx context.Context, ev cloud.GitPus
 			continue
 		}
 		s.Log.Info("build launched (git push)", "org", ev.Org, "app", a.Slug, "job", jobName,
-			"repo", ev.Repo, "branch", ev.Branch, "commit", shortTag(ev.Commit))
+			"repo", ev.Repo, "ref", ev.Ref, "commit", shortTag(ev.Commit))
 	}
 	if n == 0 {
-		s.Log.Debug("git push: no app tracks this repo+branch", "org", ev.Org, "repo", ev.Repo, "branch", ev.Branch)
+		s.Log.Debug("git push: no app tracks this repo+ref", "org", ev.Org, "repo", ev.Repo, "ref", ev.Ref)
 	}
 	return nil
 }
@@ -85,7 +91,10 @@ func sameRepo(a, b string) bool {
 // releaseBranch is the only branch that cuts a release. A release publishes the
 // next version of the image the whole fleet runs, so it follows the one branch
 // that is reviewed and merged into, never a feature branch.
-const releaseBranch = "main"
+// releaseRef is the full ref whose merges publish the next version. Matching on
+// the full ref rather than a short name keeps a tag named "main" from cutting a
+// release: refs/tags/main is not refs/heads/main.
+const releaseRef = "refs/heads/main"
 
 // isReleasePush reports whether a landed push is a merge to cloud's own upstream
 // default branch — the event that should publish the next version.
@@ -95,7 +104,7 @@ const releaseBranch = "main"
 // ignored: the pipeline pins an exact commit, and resolving a branch name again
 // here could build something newer than the event describes.
 func isReleasePush(ev cloud.GitPushEvent) bool {
-	return ev.Branch == releaseBranch && ev.Commit != "" && sameRepo(releaseRepoURL, ev.CloneURL)
+	return ev.Ref == releaseRef && ev.Commit != "" && sameRepo(releaseRepoURL, ev.CloneURL)
 }
 
 func normRepo(u string) string {
