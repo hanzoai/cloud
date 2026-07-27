@@ -36,7 +36,13 @@ import (
 var sqliteEngines = map[string]string{
 	"github.com/hanzoai/csqlite": "cgo: the C engine behind hanzoai/sqlite, linked against libsqlcipher for at-rest encryption",
 
-	"github.com/hanzoai/sqlite/internal/engine": "cgo-free: hanzoai/sqlite's vendored pure-Go engine, keyed through the hanzoai/sqlcipher codec VFS",
+	// cgo-free: hanzoai/sqlite has no engine of its own on this path — driver_nocgo.go
+	// blank-imports modernc, which registers "sqlite" in its own init, so modernc IS
+	// the fork's pure-Go backend and owns the name. It is reached ONLY through the
+	// fork (nothing here imports it directly), and at-rest encryption is not lost by
+	// its being unkeyed: cek wraps it in the pure-Go SQLCipher envelope, which reads
+	// and writes the same page format as the C codec.
+	"modernc.org/sqlite": "cgo-free: the engine behind hanzoai/sqlite's !cgo backend, encrypted at rest by cek's SQLCipher envelope",
 }
 
 // sqliteNames are the driver names that engine may answer to. "sqlite" is
