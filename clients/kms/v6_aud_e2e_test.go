@@ -27,6 +27,7 @@ import (
 	gojose "github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/hanzoai/cloud"
+	model "github.com/hanzoai/iam/pkg/model"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
 )
@@ -38,7 +39,8 @@ const e2eIssuer = "https://test.iam"
 // "<org>-platform-kms" application (owner=<org>, aud=<org>-platform-kms).
 type machineClaims struct {
 	jwt.Claims
-	Owner string `json:"owner"`
+	Owner string         `json:"owner"`
+	Orgs  []model.OrgRef `json:"orgs"` // membership SET, home org first.
 }
 
 // e2eJWKS serves a single-key JWKS (kid=test-key) for pub — the endpoint the
@@ -79,6 +81,7 @@ func mintMachineToken(t *testing.T, key *rsa.PrivateKey, owner, aud string, exp 
 			IssuedAt: jwt.NewNumericDate(time.Now()),
 		},
 		Owner: owner,
+		Orgs:  []model.OrgRef{{Org: owner}},
 	}).Serialize()
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
@@ -89,8 +92,8 @@ func mintMachineToken(t *testing.T, key *rsa.PrivateKey, owner, aud string, exp 
 func e2eCfg(t *testing.T, jwksURL string) *cloud.Config {
 	t.Helper()
 	return &cloud.Config{
-		Brand:     "hanzo",
-		Domain:    "api.hanzo.ai",
+		Brand:           "hanzo",
+		Domain:          "api.hanzo.ai",
 		IAMIssuer:       e2eIssuer,
 		JWKSURL:         jwksURL,
 		AdminOrg:        "admin",

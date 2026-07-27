@@ -30,6 +30,7 @@ import (
 
 	gojose "github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
+	model "github.com/hanzoai/iam/pkg/model"
 	"github.com/zap-proto/zip"
 )
 
@@ -38,8 +39,9 @@ import (
 // idClaims reads (owner, isAdmin) and go-jose's registered aud.
 type redClaims struct {
 	jwt.Claims
-	Owner   string `json:"owner"`
-	IsAdmin bool   `json:"isAdmin"`
+	Owner   string         `json:"owner"`
+	IsAdmin bool           `json:"isAdmin"`
+	Orgs    []model.OrgRef `json:"orgs"` // membership SET, home org first — what IAM mints for a USER.
 }
 
 // mintRed signs a token with an arbitrary aud SET and an explicit isAdmin, against
@@ -63,6 +65,12 @@ func mintRed(t *testing.T, key *rsa.PrivateKey, owner string, aud []string, isAd
 		},
 		Owner:   owner,
 		IsAdmin: isAdmin,
+		// SuperAdmin is HOME-ORG MEMBERSHIP (middleware_identity.go SanitizeIdentity):
+		// homeOrg == adminOrg and human. `owner` names the APP's org, not the user's,
+		// and isAdmin is deliberately not a term. A human token therefore has to carry
+		// the orgs claim or it is nobody, which is why these mints stopped granting
+		// admin when the gate moved off `owner`.
+		Orgs: []model.OrgRef{{Org: owner}},
 	}).Serialize()
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
