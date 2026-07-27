@@ -1,0 +1,684 @@
+name: release
+
+# Cuts a release of ghcr.io/hanzoai/cloud. The invariant this workflow exists to
+# enforce:
+#
+#     a git tag v<X.Y.Z> exists  ⇔  an image ghcr.io/hanzoai/cloud:v<X.Y.Z>
+#     was pushed AND booted to "listening" in the smoke test.
+#
+# The tag is a RECEIPT for a proven image, minted only AFTER a successful push —
+# never a trigger for a build that might fail. The prior design triggered builds
+# FROM pushed tags, so a tag could exist with no image behind it (a failed or
+# never-run build) — universe would then try to roll that tag and the pods went
+# ImagePullBackOff (phantom v1.786.42/43). Here the order is inverted:
+#
+#     main push → compute next version → build → SMOKE → push image → tag → notify
+#
+# so a push/smoke/build failure fails the run BEFORE the tag step and leaves no
+# tag; universe is only ever notified of a version whose image is proven present.
+#
+# DO NOT push v* tags by hand anymore. This workflow OWNS them. A hand-cut tag has
+# no image behind it (exactly the phantom this prevents) and won't build (there is
+# no `tags:` trigger). Every merge to main IS the release; skip one with the usual
+# `[skip ci]` in the commit/merge message (a docs-only change need not ship).
+#
+# concurrency: a single serialized lane (cancel-in-progress:false — a
+# mid-flight push must finish, never be killed between "image pushed" and "tag
+# created"). Two main pushes can therefore never compute the same next number:
+# the queued run starts only after the running one tags, re-reads the tags, and
+# lands on the next patch. Monotonic by construction.
+#
+# The next version is max(highest git tag, highest pushed container tag) + 1 (patch
+# bump only — never a major/minor jump). Folding in the container tags means we
+# never reuse a number that already has a pushed image, even if some earlier run
+# pushed an image but died before tagging.
+#
+# ── Infra notes (unchanged, still true) ─────────────────────────────────────────
+# Self-hosted arcd amd64 scale set — NEVER GitHub-hosted runners (this org's
+# GitHub-hosted Actions are billing-frozen). GHCR login uses GH_PAT, not the repo
+# GITHUB_TOKEN: the ghcr.io/hanzoai/cloud package is linked to a DIFFERENT repo
+# (hanzoai/ai, from the cloud→ai module rename), so this repo's GITHUB_TOKEN is
+# denied write to it (permission_denied: write_package). GH_PAT (admin:org +
+# write:packages) writes any hanzoai package regardless of package-repo linkage,
+# and is the BuildKit gh_token the Dockerfile uses to fetch private cross-org Go
+# modules. amd64-only: the cluster is amd64; one platform completes on the live
+# scale set without waiting on the arm64 pool.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Cut tags on the cloud repo (git tag push) → contents: write. packages: write
+# to push the image; id-token for provenance.
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+# One serialized release lane. Never cancel in-flight: a run killed between
+# "image pushed" and "tag created" is exactly the drift we are preventing.
+concurrency:
+  group: release-cloud
+  cancel-in-progress: false
+
+jobs:
+  build-amd64:
+    # ARC ephemeral runners match jobs targeting the scale-set NAME as a label.
+    runs-on: [hanzo-build-linux-amd64]
+    outputs:
+      # The FINAL assigned version comes from the Tag step (atomic free-version
+      # assignment), NOT the compute step — under concurrency the compute value may
+      # have been superseded. notify-universe must roll the version that was actually
+      # tagged + whose image was actually retagged.
+      version: ${{ steps.tag.outputs.version }}
+      version_v: ${{ steps.tag.outputs.version_v }}
+    steps:
+      - name: Checkout (full history + all tags — the version floor is read from tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Compute next version (monotonic patch bump over git + container tags)
+        id: ver
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force --quiet
+
+          # Highest semver git tag (vX.Y.Z), normalised without the leading v.
+          git_max="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' \
+            | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)"
+
+          # Best-effort: highest ALREADY-PUSHED container tag, so a number that has
+          # an image (even from a run that died before tagging) is never reused.
+          cont_max=""
+          if command -v gh >/dev/null 2>&1; then
+            cont_max="$(GH_TOKEN="$GH_PAT" gh api \
+              '/orgs/hanzoai/packages/container/cloud/versions?per_page=100' \
+              --jq '.[].metadata.container.tags[]?' 2>/dev/null \
+              | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)"
+          fi
+
+          # Floor = highest of the two; fall back to 1.786.0 only if the repo has
+          # no tags at all (first release ever).
+          max="$(printf '%s\n%s\n%s\n' "1.786.0" "$git_max" "$cont_max" \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+
+          major="${max%%.*}"; rest="${max#*.}"; minor="${rest%%.*}"; patch="${rest##*.}"
+          version="${major}.${minor}.$((patch + 1))"
+
+          # This version is a STARTING HINT only. It labels the smoke-built image and
+          # seeds the OCI metadata; the FINAL version is assigned atomically in the Tag
+          # step (which recomputes + retries on collision), so a taken number here is
+          # NOT fatal — the Tag step finds the next free one. Just note it and proceed.
+          if git rev-parse -q --verify "refs/tags/v${version}" >/dev/null; then
+            echo "note: hint v${version} already tagged — the Tag step will assign the next free version"
+          fi
+
+          echo "version=${version}"     >> "$GITHUB_OUTPUT"
+          echo "version_v=v${version}"  >> "$GITHUB_OUTPUT"
+          echo "major_minor=${major}.${minor}" >> "$GITHUB_OUTPUT"
+          echo "sha_short=$(git rev-parse --short "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
+          echo "Next release: v${version} (git_max='${git_max:-none}' container_max='${cont_max:-none}')"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+          driver-opts: network=host
+
+      - name: Mirror credential (registry.hanzo.ai)
+        # Dual-host: pull the KMS deploy kubeconfig (same Universal Auth flow
+        # the hanzoai/ci reusable uses), read the cluster-synced
+        # registry-credentials dockerconfig, and log in. Best-effort: absent
+        # creds → GHCR-only release, never a blocked tag.
+        env:
+          KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
+          KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
+          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+        run: |
+          set -uo pipefail
+          # Direct credential first (repo/org secret — works on private repos,
+          # where the Free plan hides org KMS secrets); KMS kubeconfig fallback.
+          if [ -n "${REGISTRY_USER:-}" ] && [ -n "${REGISTRY_PASSWORD:-}" ]; then
+            if echo "$REGISTRY_PASSWORD" | docker login registry.hanzo.ai -u "$REGISTRY_USER" --password-stdin; then
+              echo "MIRROR_OK=1" >> "$GITHUB_ENV"
+            else
+              echo "mirror login failed (registry.hanzo.ai unreachable) — mirror skipped, release continues"
+            fi
+            exit 0
+          fi
+          [ -z "${KMS_CLIENT_ID:-}" ] && { echo "no KMS creds — mirror skipped"; exit 0; }
+          TOKEN=$(curl -sf "$KMS_ENDPOINT/v1/kms/auth/login" -H 'Content-Type: application/json'             -d "{\"clientId\":\"$KMS_CLIENT_ID\",\"clientSecret\":\"$KMS_CLIENT_SECRET\"}" | jq -r '.accessToken // empty')
+          [ -z "$TOKEN" ] && { echo "KMS login failed — mirror skipped"; exit 0; }
+          KC=$(curl -sf "$KMS_ENDPOINT/v1/kms/orgs/hanzo/secrets/deploy/KUBECONFIG?env=prod"                 -H "Authorization: Bearer $TOKEN" | jq -r '.secret.value // empty')
+          [ -z "$KC" ] && { echo "no KUBECONFIG in KMS — mirror skipped"; exit 0; }
+          echo "$KC" | base64 -d > "$RUNNER_TEMP/kubeconfig"
+          command -v kubectl >/dev/null 2>&1 || {
+            KVER=$(curl -fsSL https://dl.k8s.io/release/stable.txt)
+            mkdir -p "$HOME/.local/bin"
+            curl -fsSL "https://dl.k8s.io/release/${KVER}/bin/linux/amd64/kubectl" -o "$HOME/.local/bin/kubectl" && chmod +x "$HOME/.local/bin/kubectl"
+            export PATH="$HOME/.local/bin:$PATH"
+          }
+          CFG=$(KUBECONFIG="$RUNNER_TEMP/kubeconfig" kubectl -n hanzo get secret registry-credentials                   -o jsonpath='{.data.\.dockerconfigjson}' 2>/dev/null | base64 -d || true)
+          [ -z "$CFG" ] && { echo "registry-credentials unreadable — mirror skipped"; exit 0; }
+          UP=$(echo "$CFG" | jq -r '.auths["registry.hanzo.ai"].auth // empty' | base64 -d)
+          [ -z "$UP" ] && { echo "no registry auth — mirror skipped"; exit 0; }
+          echo "::add-mask::${UP#*:}"
+          if echo "${UP#*:}" | docker login registry.hanzo.ai -u "${UP%%:*}" --password-stdin; then
+            echo "MIRROR_OK=1" >> "$GITHUB_ENV"
+          else
+            echo "mirror login failed (registry.hanzo.ai unreachable) — mirror skipped, release continues"
+          fi
+
+      - name: Log in to ghcr.io (GH_PAT — writes the cloud package despite its ai-repo linkage)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: hanzo-dev
+          password: ${{ secrets.GH_PAT }}
+
+      - name: Resolve decomplection artifact digests (the Go-only build's prebuilt inputs)
+        id: artifacts
+        run: |
+          set -euo pipefail
+          # cloud compiles ONLY Go; it pulls three prebuilt artifacts (console SPA,
+          # agent-skills catalog, native flags staticlib). Resolve each published
+          # :latest to an IMMUTABLE digest so THIS release is reproducible (pinned,
+          # not floating :latest) AND a console/skills/flags change is picked up —
+          # its CI republished :latest, so this resolves to the NEW digest. A MISSING
+          # artifact FAILS the release HERE, before build/smoke/push/tag: the receipt
+          # invariant means we never tag an image that couldn't embed the real console.
+          command -v crane >/dev/null 2>&1 || {
+            mkdir -p "$HOME/.local/bin"
+            curl -fsSL "https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_x86_64.tar.gz" \
+              | tar -xz -C "$HOME/.local/bin" crane
+          }
+          export PATH="$HOME/.local/bin:$PATH"
+          resolve() {
+            local repo="$1" d
+            d="$(crane digest "ghcr.io/hanzoai/${repo}:latest" 2>/dev/null || true)"
+            [ -n "$d" ] || { echo "::error::decomplection artifact ghcr.io/hanzoai/${repo}:latest is not published — refusing to cut a release that would embed a stale/placeholder ${repo}"; return 1; }
+            printf 'ghcr.io/hanzoai/%s@%s' "$repo" "$d"
+          }
+          CONSOLE_IMAGE="$(resolve console-embed)" || exit 1
+          SKILLS_IMAGE="$(resolve agent-skills)" || exit 1
+          FLAGS_IMAGE="$(resolve cloud-flags)" || exit 1
+          {
+            echo "console_image=${CONSOLE_IMAGE}"
+            echo "skills_image=${SKILLS_IMAGE}"
+            echo "flags_image=${FLAGS_IMAGE}"
+          } >> "$GITHUB_OUTPUT"
+          echo "resolved: console=${CONSOLE_IMAGE} skills=${SKILLS_IMAGE} flags=${FLAGS_IMAGE}"
+
+      - name: OCI labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/hanzoai/cloud
+          tags: type=raw,value=${{ steps.ver.outputs.version_v }}
+
+      # ── Build → SMOKE → push → tag ───────────────────────────────────────────
+      # 1. Build once to a LOCAL tag (load into the daemon, do NOT push). Warms
+      #    the BuildKit cache — the expensive console/npm + Go layers land here.
+      # 2. Boot that exact image and assert it reaches "listening" with no
+      #    startup-crash signature (the gate).
+      # 3. Re-run build with push:true and the real tags: identical context /
+      #    platform / secrets, so every layer is a cache hit from step 1 and the
+      #    step only exports + pushes the already-tested image. Nothing that failed
+      #    the smoke test can reach the registry.
+      # 4. Only after the push succeeds, mint + push the git tag (the receipt).
+      - name: Build (load locally for the smoke test)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: cloud:smoke
+          labels: ${{ steps.meta.outputs.labels }}
+          # cloud compiles ONLY Go: pull the three prebuilt artifacts pinned to the
+          # digests resolved above (reproducible, and fresh — a console/skills/flags
+          # change is a new digest). No node/python/rust toolchain in this build.
+          build-args: |
+            CONSOLE_IMAGE=${{ steps.artifacts.outputs.console_image }}
+            SKILLS_IMAGE=${{ steps.artifacts.outputs.skills_image }}
+            FLAGS_IMAGE=${{ steps.artifacts.outputs.flags_image }}
+          # GIT_AUTH_TOKEN: BuildKit secret the Dockerfile consumes to fetch private
+          # cross-org Go modules (hanzoai/*, luxfi/*) over authenticated git.
+          secrets: |
+            GIT_AUTH_TOKEN=${{ secrets.GH_PAT }}
+
+      - name: Smoke test — the binary MUST boot to "listening" with no crash signature
+        run: |
+          set -euo pipefail
+          IMAGE=cloud:smoke
+          CID=""
+          cleanup() { [ -n "$CID" ] && docker rm -f "$CID" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+
+          # Minimal, production-representative boot env:
+          #  • a writable ephemeral /data root — the audit store, the embedded
+          #    KMS secrets plane and every per-tenant SQLite open files under
+          #    CLOUD_DATA_DIR; an unwritable dir would fail EVERY image before
+          #    MountAll and the gate would stop discriminating good from bad; and
+          #  • a throwaway 32-byte KMS master key so the KMS plane mounts on its
+          #    normal ready path exactly as prod does (no real secret is used).
+          # The subsystem that crashed the incident (metrics, mount order 40)
+          # mounts AFTER kms (order 10), so the boot must get past kms for the
+          # gate to observe the panic — this env does exactly that.
+          KEY="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
+          CID="$(docker run -d \
+            --tmpfs /data:rw,size=64m \
+            -e CLOUD_DATA_DIR=/data \
+            -e CLOUD_ENV=smoke \
+            -e CLOUD_KMS_MASTER_KEY_REF="$KEY" \
+            "$IMAGE")"
+
+          # Poll up to 60s for boot to either finish ("listening" is logged once
+          # every subsystem has mounted and both transports are about to bind) or
+          # die (a Mount panic exits the process). A healthy boot is ~1-2s; the
+          # ceiling only guards a cold daemon.
+          listening=0
+          for _ in $(seq 1 60); do
+            logs="$(docker logs "$CID" 2>&1 || true)"
+            if printf '%s' "$logs" | grep -q '"message":"listening"'; then listening=1; break; fi
+            if [ "$(docker inspect -f '{{.State.Running}}' "$CID" 2>/dev/null || echo false)" != "true" ]; then break; fi
+            sleep 1
+          done
+
+          logs="$(docker logs "$CID" 2>&1 || true)"
+          echo "::group::cloud:smoke boot logs"
+          printf '%s\n' "$logs"
+          echo "::endgroup::"
+
+          # (1) No startup-crash signature. Catches the incident's Mount
+          #     type-assert panic AND any generic Go panic — case-insensitive so a
+          #     re-worded variant can't slip through — BEFORE a byte is pushed.
+          if printf '%s' "$logs" | grep -Eiq 'metrics\.Mount|mount metrics|panic|want \*zip\.App'; then
+            echo "SMOKE FAIL: startup-crash signature in boot logs (see above)"
+            exit 1
+          fi
+
+          # (2) Reached "listening" — proof that MountAll returned for every
+          #     enabled subsystem (a failed Mount returns before this line).
+          if [ "$listening" -ne 1 ]; then
+            echo "SMOKE FAIL: binary never reached \"listening\" (a subsystem did not mount)"
+            exit 1
+          fi
+
+          # (3) Still alive — a server that logged "listening" then exited (e.g. a
+          #     listener bind failure) is not a healthy image.
+          if [ "$(docker inspect -f '{{.State.Running}}' "$CID" 2>/dev/null || echo false)" != "true" ]; then
+            echo "SMOKE FAIL: process exited after \"listening\""
+            exit 1
+          fi
+
+          echo "SMOKE PASS: cloud:smoke booted to \"listening\" with no crash signature"
+
+      # ── Functional smoke — authenticated per-subsystem probe (the REAL gate) ─────
+      # The boot check above proves the process REACHES "listening"; this proves the
+      # mounted HTTP surface actually WORKS. /smoke (cmd/smoke, baked into the image)
+      # hits ONE side-effect-free read per core subsystem and FAILS the release on any
+      # broken code — above all a 402 on a READ (the balance-gate-over-blocks-reads
+      # regression) or a 5xx (a crash, e.g. the /v1/billing/usage self-dispatch 500).
+      # So a release can never ship with chat/billing/projects/kms/... down.
+      - name: Functional smoke — per-subsystem probe (fails the release if a core endpoint is broken)
+        env:
+          KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
+          KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
+          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
+          # A KMS-provisioned short-lived smoke bearer, injected as a secret (NEVER
+          # hardcoded). Absent → the anonymous matrix still gates public/authed and
+          # catches every 402-on-read / 5xx.
+          SMOKE_TOKEN: ${{ secrets.SMOKE_TOKEN }}
+        run: |
+          set -euo pipefail
+          IMAGE=cloud:smoke
+          CID=""
+          cleanup() { [ -n "$CID" ] && docker rm -f "$CID" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+
+          KEY="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
+          CID="$(docker run -d \
+            --tmpfs /data:rw,size=64m \
+            -e CLOUD_DATA_DIR=/data -e CLOUD_ENV=smoke -e CLOUD_KMS_MASTER_KEY_REF="$KEY" \
+            "$IMAGE")"
+
+          # Wait for the HTTP listener to bind (or the process to die).
+          up=0
+          for _ in $(seq 1 60); do
+            lg="$(docker logs "$CID" 2>&1 || true)"
+            printf '%s' "$lg" | grep -q '"message":"listening"' && { up=1; break; }
+            [ "$(docker inspect -f '{{.State.Running}}' "$CID" 2>/dev/null || echo false)" != "true" ] && break
+            sleep 1
+          done
+          if [ "$up" != 1 ]; then
+            echo "::group::boot logs"; docker logs "$CID" 2>&1 || true; echo "::endgroup::"
+            echo "FUNCTIONAL SMOKE INFRA FAIL: image never reached \"listening\""
+            exit 1
+          fi
+
+          # Token: prefer the injected secret; else mint from KMS (a provisioned smoke
+          # identity); else run the anonymous matrix. Never hardcoded.
+          if [ -z "${SMOKE_TOKEN:-}" ] && [ -n "${KMS_CLIENT_ID:-}" ]; then
+            KT=$(curl -sf "$KMS_ENDPOINT/v1/kms/auth/login" -H 'Content-Type: application/json' \
+              -d "{\"clientId\":\"$KMS_CLIENT_ID\",\"clientSecret\":\"$KMS_CLIENT_SECRET\"}" | jq -r '.accessToken // empty' || true)
+            [ -n "$KT" ] && SMOKE_TOKEN=$(curl -sf "$KMS_ENDPOINT/v1/kms/orgs/hanzo/secrets/smoke/TOKEN?env=prod" \
+              -H "Authorization: Bearer $KT" | jq -r '.secret.value // empty' || true)
+          fi
+          if [ -n "${SMOKE_TOKEN:-}" ]; then echo "::add-mask::$SMOKE_TOKEN"; echo "smoke: AUTHENTICATED matrix"; else echo "smoke: ANONYMOUS matrix (no SMOKE_TOKEN wired)"; fi
+
+          # /smoke is baked into the image (Dockerfile) — exec it INSIDE the container,
+          # so it probes the real mounted surface at localhost:8080 with no port/network
+          # plumbing. A non-zero exit here fails the release BEFORE any image is pushed.
+          docker exec \
+            -e SMOKE_BASE_URL=http://127.0.0.1:8080 \
+            -e SMOKE_TOKEN="${SMOKE_TOKEN:-}" \
+            "$CID" /smoke
+
+      # ── Migration smoke — the gate the v1.800.1 crashloop would have tripped ─────
+      # The plain smoke above boots on a FRESH /data, so every subsystem's migrate()
+      # takes its CREATE-TABLE path and no forward-migration is exercised — which is
+      # exactly why a DDL valid on a fresh store but broken on a pre-existing one (an
+      # index over a not-yet-ADDed column: affiliates referrer_org in v1.800.1, wallets
+      # project/agent before it) sailed through CI and took api.hanzo.ai down. This
+      # step reproduces the REAL prod upgrade path: boot the PRIOR released image to lay
+      # its on-disk (cek-encrypted) SQLite schema into a persistent volume, then boot
+      # the candidate over that SAME volume and require it to still reach "listening".
+      # A migrate() that assumes a fresh store dies here, before any image is pushed.
+      - name: Migration smoke — candidate MUST boot over the PRIOR release's on-disk schema
+        env:
+          # The image whose on-disk schema a prod upgrade migrates FROM — the tag the
+          # fleet runs today. Bump to the last-DEPLOYED tag as releases roll (override
+          # without a code change via the SMOKE_MIGRATION_BASELINE repo/org variable).
+          BASELINE: ${{ vars.SMOKE_MIGRATION_BASELINE }}
+        run: |
+          set -euo pipefail
+          BASELINE="${BASELINE:-ghcr.io/hanzoai/cloud:v1.799.19}"
+          CANDIDATE=cloud:smoke
+          VOL="cloudmig-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          B1=""; B2=""
+          cleanup() { docker rm -f "$B1" "$B2" >/dev/null 2>&1 || true; docker volume rm "$VOL" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker volume create "$VOL" >/dev/null
+
+          # ONE throwaway 32-byte master key for BOTH boots: cek seals each per-db DEK
+          # under it on the baseline boot and unwraps it on the candidate boot. A
+          # mismatched key fails closed (never opens), so sharing it is what puts the
+          # MIGRATE path — not a decrypt error — under test.
+          KEY="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
+
+          boot() { # $1=image $2=name -> prints container id
+            docker run -d --name "$2" \
+              -v "$VOL":/data \
+              -e CLOUD_DATA_DIR=/data \
+              -e CLOUD_ENV=smoke \
+              -e CLOUD_KMS_MASTER_KEY_REF="$KEY" \
+              "$1"
+          }
+          wait_listen() { # $1=container -> 0 if "listening", 1 if it died / timed out
+            for _ in $(seq 1 90); do
+              lg="$(docker logs "$1" 2>&1 || true)"
+              printf '%s' "$lg" | grep -q '"message":"listening"' && return 0
+              [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null || echo false)" != "true" ] && return 1
+              sleep 1
+            done
+            return 1
+          }
+          # A fresh docker named volume is root:root 0755, but the cloud image runs
+          # NON-ROOT, so it cannot create cek's <db>.cek.lock under /data (the single-boot
+          # smoke only worked because --tmpfs is world-writable). Make the shared volume
+          # writable for BOTH boots, re-opening it between them so the candidate can read
+          # the baseline's files even if their runtime UIDs differ.
+          chmod_vol() { docker run --rm --user 0 -v "$VOL":/data --entrypoint sh "$CANDIDATE" -c 'chmod -R 0777 /data'; }
+
+          # Boot 1 — the prior release writes its real schema into the volume. It must
+          # reach "listening" (proof every subsystem migrated + its DB is on disk); if
+          # the pinned baseline can't boot in this env the gate is blind, so fail loud.
+          echo "migration baseline: $BASELINE"
+          pulled=0; for _ in 1 2 3; do if docker pull "$BASELINE"; then pulled=1; break; fi; sleep 5; done
+          [ "$pulled" = 1 ] || { echo "MIGRATION SMOKE INFRA FAIL: cannot pull baseline $BASELINE"; exit 1; }
+          chmod_vol
+          B1="$(boot "$BASELINE" cloudmig_base)"
+          if ! wait_listen "$B1"; then
+            echo "::group::baseline boot logs"; docker logs "$B1" 2>&1 || true; echo "::endgroup::"
+            echo "MIGRATION SMOKE INFRA FAIL: baseline $BASELINE did not reach \"listening\" — cannot stage the prior schema (inspect/bump SMOKE_MIGRATION_BASELINE)"
+            exit 1
+          fi
+          docker stop "$B1" >/dev/null
+          chmod_vol
+
+          # Boot 2 — the candidate migrates that on-disk schema IN PLACE. This is the gate.
+          B2="$(boot "$CANDIDATE" cloudmig_cand)"
+          listening=0; wait_listen "$B2" && listening=1
+          logs="$(docker logs "$B2" 2>&1 || true)"
+          echo "::group::candidate migration boot logs"; printf '%s\n' "$logs"; echo "::endgroup::"
+
+          # 'no such column'/'no such table' is the exact index-before-ADD-COLUMN crash;
+          # 'panic' catches any generic Mount failure. The load-bearing check is the
+          # "listening" assertion below — a migrate() crash exits before it.
+          if printf '%s' "$logs" | grep -Eiq 'panic|no such column|no such table'; then
+            echo "MIGRATION SMOKE FAIL: candidate logged a DDL/migration error over the prior schema (the v1.800.1-class regression)"
+            exit 1
+          fi
+          if [ "$listening" -ne 1 ]; then
+            echo "MIGRATION SMOKE FAIL: candidate did NOT reach \"listening\" over the $BASELINE schema — a subsystem's migrate() crashes on a pre-existing store"
+            exit 1
+          fi
+          echo "MIGRATION SMOKE PASS: candidate booted to \"listening\" over the $BASELINE on-disk schema"
+
+      - name: Push (cache hit from the smoke build — publishes the tested image)
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          # Push ONLY the immutable, per-commit sha- tag (always unique — never races)
+          # and the floating latest. The v<X.Y.Z> version is NOT pushed here: the
+          # compute-step version may be claimed by a concurrent release between compute
+          # and now, and pushing it would clobber that release's :vX image (mutable tag
+          # corruption). The version is assigned + the proven sha-image retagged to it
+          # ATOMICALLY in the Tag step below, so :vX exists iff its git tag exists.
+          tags: |
+            ghcr.io/hanzoai/cloud:sha-${{ steps.ver.outputs.sha_short }}
+            ghcr.io/hanzoai/cloud:latest
+          labels: ${{ steps.meta.outputs.labels }}
+          # SAME artifact digests as the smoke build → every layer is a cache hit from
+          # step 1 and the pushed image is byte-identical to the one smoke proved.
+          build-args: |
+            CONSOLE_IMAGE=${{ steps.artifacts.outputs.console_image }}
+            SKILLS_IMAGE=${{ steps.artifacts.outputs.skills_image }}
+            FLAGS_IMAGE=${{ steps.artifacts.outputs.flags_image }}
+          secrets: |
+            GIT_AUTH_TOKEN=${{ secrets.GH_PAT }}
+
+      # THE RECEIPT + ATOMIC VERSION ASSIGNMENT (race-safe). Reached only because
+      # build + smoke + push all succeeded, so a proven image exists under the unique
+      # sha- tag. Here we assign the next FREE v<X.Y.Z> and retag that proven image to
+      # it — atomically, with the git-tag push as the serialization point:
+      #   * Recompute the next version FRESH (compute-step's value may have been claimed
+      #     by a concurrent release in the build window).
+      #   * If that version's git tag already exists, bump and retry.
+      #   * Retag the proven sha-image → :vX (+ :X.Y.Z + :X.Y) via imagetools (metadata
+      #     only, NO rebuild — byte-identical to the smoke-passed image).
+      #   * Push the git tag; the FIRST pusher of vX wins, a loser deletes its local tag
+      #     and recomputes. So concurrent releases each grab a distinct free number and
+      #     the invariant "git tag vX ⇔ image :vX pushed+smoke-passed" holds under race.
+      - name: Tag the proven image (atomic free-version assignment — race-safe)
+        id: tag
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          git config user.name  "hanzo-dev"
+          git config user.email "dev@hanzo.ai"
+          SHA_IMG="ghcr.io/hanzoai/cloud:sha-${{ steps.ver.outputs.sha_short }}"
+          PUSH_URL="https://x-access-token:${GH_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+          for attempt in $(seq 1 8); do
+            git fetch --tags --force --quiet
+            git_max="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' \
+              | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)"
+            # Newest page only — NOT --paginate. Container versions are created
+            # newest-first and version tags are monotonic, so the highest version
+            # is always among the most-recent versions; paginating the WHOLE
+            # registry history is what livelocked this step as tags accumulated.
+            # Fail-CLOSED. An ORPHANED container tag — image pushed by a run that
+            # died or was cancelled after imagetools-create but before its git tag —
+            # MUST raise the floor, or a later run reassigns that same number to a
+            # different image (an ambiguous mutable prod tag; the v1.801.50 flip). A
+            # git-only floor can't see the orphan, so if the container-tag lookup
+            # ERRORS (vs legitimately returning no tags) we retry the whole attempt
+            # rather than silently proceeding — a version with a pushed image is never
+            # reused. (Reordering git-tag before imagetools-create is the WRONG fix: it
+            # reintroduces the phantom "tag ⇔ no image" this workflow exists to prevent.)
+            cont_max=""
+            if command -v gh >/dev/null 2>&1; then
+              if cont_raw="$(GH_TOKEN="$GH_PAT" gh api \
+                  '/orgs/hanzoai/packages/container/cloud/versions?per_page=100' \
+                  --jq '.[].metadata.container.tags[]?' 2>/dev/null)"; then
+                cont_max="$(printf '%s\n' "$cont_raw" \
+                  | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)"
+              else
+                echo "  container-tag lookup failed — retry so an orphaned tag can't be reused (attempt $attempt)"; sleep 3; continue
+              fi
+            fi
+            max="$(printf '%s\n%s\n%s\n' "1.786.0" "$git_max" "$cont_max" \
+              | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+            major="${max%%.*}"; rest="${max#*.}"; minor="${rest%%.*}"; patch="${rest##*.}"
+            VER="${major}.${minor}.$((patch + 1))"; V="v${VER}"
+            if git rev-parse -q --verify "refs/tags/$V" >/dev/null; then
+              echo "  $V already tagged — recomputing (attempt $attempt)"; sleep 3; continue
+            fi
+            docker buildx imagetools create \
+              -t "ghcr.io/hanzoai/cloud:${V}" \
+              -t "ghcr.io/hanzoai/cloud:${VER}" \
+              -t "ghcr.io/hanzoai/cloud:${major}.${minor}" \
+              "$SHA_IMG"
+            # Dual-host: mirror the release tags to OUR fleet registry (server-
+            # side copy) so the cluster never depends on GHCR to deploy. crane,
+            # not buildx imagetools: the IAM token realm doesn't answer buildx's
+            # multi-scope token request (spec gap, tracked), crane's single-scope
+            # flow works. Best-effort — a mirror hiccup never blocks the receipt.
+            if [ "${MIRROR_OK:-}" = "1" ]; then
+              command -v crane >/dev/null 2>&1 || {
+                curl -fsSL https://github.com/google/go-containerregistry/releases/download/v0.20.2/go-containerregistry_Linux_x86_64.tar.gz \
+                  | tar -xz -C "$HOME/.local/bin" crane 2>/dev/null || {
+                    mkdir -p "$HOME/.local/bin"
+                    curl -fsSL https://github.com/google/go-containerregistry/releases/download/v0.20.2/go-containerregistry_Linux_x86_64.tar.gz \
+                      | tar -xz -C "$HOME/.local/bin" crane
+                  }
+                export PATH="$HOME/.local/bin:$PATH"
+              }
+              for MT in "${V}" "${VER}" "${major}.${minor}"; do
+                # Bounded: registry.hanzo.ai can *hang* (not just fail), and this
+                # is best-effort — an unbounded crane copy once livelocked the whole
+                # tag step and held the serialized release lane. timeout makes the
+                # mirror truly best-effort so the git-tag receipt below always runs.
+                timeout 120 crane copy "$SHA_IMG" "registry.hanzo.ai/hanzoai/cloud:${MT}" \
+                  || echo "::warning::mirror registry.hanzo.ai/hanzoai/cloud:${MT} failed or timed out"
+              done
+            fi
+            git tag -a "$V" -m "release $V — image ghcr.io/hanzoai/cloud:$V (retagged from sha-${{ steps.ver.outputs.sha_short }}, smoke-passed ${GITHUB_SHA})"
+            if git push "$PUSH_URL" "$V" 2>/dev/null; then
+              echo "Tagged $V → ghcr.io/hanzoai/cloud:$V"
+              echo "version=${VER}"    >> "$GITHUB_OUTPUT"
+              echo "version_v=${V}"    >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "  push of $V lost the race — recomputing (attempt $attempt)"
+            git tag -d "$V" >/dev/null 2>&1 || true
+            sleep 3
+          done
+          echo "::error::could not acquire a free version tag after 8 attempts"
+          exit 1
+
+  # ── Promote: the declared-tag bump that makes the release DEPLOY ─────────────
+  # The tag minted above is the receipt for a pushed, smoke-passed image; THIS job
+  # records it as the desired state Hanzo CD reconciles. The universe-crs ArgoCD
+  # Application (ns hanzo-cd, `automated` sync + selfHeal) syncs
+  # infra/k8s/operator/crs/*.yaml → cluster and the operator rolls the Deployment,
+  # so a tag bump committed here reaches api.hanzo.ai with NO hand-dispatch and NO
+  # hand-edit of the CR.
+  #
+  # This is the SAME yq-bump → `deploy(<svc>): <tag>` universe commit the hanzoai/ci
+  # reusable (build.yml deploy step) does for every other service. cloud owns it
+  # HERE because its image is built by this workflow, not the ci reusable — its
+  # hanzo.yml carries no main `images:` entry and `# NO deploy`, so the shared
+  # deploy step never bumps cloud's CR. A direct in-cluster CR patch is NOT enough:
+  # ArgoCD selfHeal reverts any live edit not also recorded in git within ~45s.
+  # The retired notify-universe repository_dispatch had no receiver after the
+  # image-update.yml deploy hub was deleted in the Hanzo CD cutover; the git commit
+  # IS the sanctioned path now.
+  promote:
+    needs: build-amd64
+    # Only a real release promotes: build+smoke+push+tag all succeeded, so a
+    # proven v* image exists. A failure earlier leaves version_v empty → skipped.
+    if: ${{ needs.build-amd64.outputs.version_v != '' }}
+    runs-on: [hanzo-build-linux-amd64]
+    steps:
+      - name: Record the proven tag in universe crs/cloud.yaml (Hanzo CD rolls it)
+        env:
+          # GH_PAT already pushes this repo's git tags above (contents:write on the
+          # hanzoai org), so it writes hanzoai/universe too — the SAME token the ci
+          # reusable falls back to for the universe deploy commit.
+          GH_PAT: ${{ secrets.GH_PAT }}
+          VERSION_V: ${{ needs.build-amd64.outputs.version_v }}
+        run: |
+          set -euo pipefail
+          [ -n "${GH_PAT:-}" ] || { echo "::error::no GH_PAT — cannot record the declared-tag bump in universe"; exit 1; }
+
+          # Bare arc runners ship no yq — provision the static binary (sudo-free,
+          # same pattern the ci reusable and this workflow's kubectl/crane fetches use).
+          if ! command -v yq >/dev/null 2>&1; then
+            mkdir -p "$HOME/.local/bin"; export PATH="$HOME/.local/bin:$PATH"
+            curl -fsSL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 \
+              -o "$HOME/.local/bin/yq" && chmod +x "$HOME/.local/bin/yq"
+          fi
+
+          git clone -q --depth 1 \
+            "https://x-access-token:${GH_PAT}@github.com/hanzoai/universe.git" \
+            "$RUNNER_TEMP/universe"
+          CR="$RUNNER_TEMP/universe/infra/k8s/operator/crs/cloud.yaml"
+          [ -f "$CR" ] || { echo "::error::crs/cloud.yaml not found in universe"; exit 1; }
+
+          CUR="$(yq -r '.spec.image.tag // ""' "$CR")"
+          echo "cloud CR: ${CUR:-<empty>} → ${VERSION_V}"
+
+          # Monotonic guard: never roll the CR BACKWARD. Release runs finish under a
+          # serialized lane but a slow older run must never overwrite a newer promote.
+          # Skip iff the CR already holds a semver >= the version we just cut.
+          CURN="${CUR#v}"; NEWN="${VERSION_V#v}"
+          if printf '%s' "$CURN" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            top="$(printf '%s\n%s\n' "$CURN" "$NEWN" | sort -V | tail -1)"
+            if [ "$top" = "$CURN" ] && [ "$CURN" != "$NEWN" ]; then
+              echo "::notice::cloud CR already at v${CURN} (≥ ${VERSION_V}) — not rolling back"; exit 0
+            fi
+          fi
+
+          yq -i ".spec.image.tag = \"${VERSION_V}\"" "$CR"
+          if git -C "$RUNNER_TEMP/universe" diff --quiet; then
+            echo "::notice::crs/cloud.yaml already at ${VERSION_V} — nothing to record"; exit 0
+          fi
+          git -C "$RUNNER_TEMP/universe" -c user.name=hanzo-ci -c user.email=dev@hanzo.ai \
+            commit -qam "deploy(cloud): ${VERSION_V} (${GITHUB_REPOSITORY}@$(echo "${GITHUB_SHA}" | cut -c1-7))"
+
+          # Rebase-safe push: universe main advances on every service's deploy, so a
+          # concurrent commit must not make cloud's promote lose the whole roll. Retry
+          # a few times, rebasing between attempts.
+          for attempt in $(seq 1 5); do
+            if git -C "$RUNNER_TEMP/universe" push -q origin HEAD:main; then
+              echo "recorded deploy(cloud): ${VERSION_V} — Hanzo CD (universe-crs) will roll it to api.hanzo.ai"
+              exit 0
+            fi
+            echo "  universe push lost the race — rebasing (attempt ${attempt})"
+            git -C "$RUNNER_TEMP/universe" pull -q --rebase origin main || true
+            sleep 3
+          done
+          echo "::error::could not record the cloud tag bump in universe after 5 attempts"; exit 1

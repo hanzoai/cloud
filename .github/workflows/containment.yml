@@ -1,0 +1,155 @@
+name: containment
+
+# Guards the Stage-1 byzantine ceremony containment (clients/controlplane,
+# build tag `controlplane`). Its increment-1 crypto is stub/forgeable BY
+# DESIGN (SHA256-of-public-inputs commitments, symmetric-HMAC
+# proof-of-possession, seed-derived threshold shares — see
+# clients/controlplane/doc.go) and MUST NEVER reach a release/serve binary.
+# Three independent checks; any one failing blocks the PR:
+#
+#   1. grep (tag)    — no build/release invocation anywhere in the repo
+#      (Dockerfile, Makefile, shell scripts, any workflow) may pass a `-tags`
+#      value containing `controlplane` to go build/vet/run/install. The
+#      package's own `//go:build controlplane` tag declarations
+#      (clients/controlplane/*) are the thing being guarded, not a violation,
+#      and are excluded by path.
+#   2. grep (spoof)  — no build/release invocation may pass
+#      `-X testing.testBinary=1` (or any -ldflags containing it) to a REAL
+#      `go build`. That linker flag is what `go test` itself uses to make
+#      testing.Testing() report true (cmd/go/internal/load/test.go) — the
+#      runtime guard in containment.go trusts that signal, so this is the one
+#      concrete way to spoof it in a non-test binary. This grep is what turns
+#      "someone could type this" into "CI fails the PR that types it".
+#   3. build         — `go build ./...` (no tag — exactly what the Dockerfile
+#      and Makefile run) must not link clients/controlplane into any cmd/
+#      main, and `go build ./clients/controlplane/...` with no tag must match
+#      zero buildable packages (proves the tag still gates every file in it).
+#
+# Runtime belt-and-suspenders (defense in depth, not a substitute for the
+# above): clients/controlplane/containment.go fail-closed panics if its stub
+# crypto is ever constructed outside a go-test binary (testing.Testing()==
+# false) — see TestContainment_NonHarnessProcessRefuses in
+# containment_test.go. KNOWN RESIDUAL: testing.Testing() is a linker-set
+# string var (testing.testBinary), not cryptographically bound to "actually
+# is a test" — `-ldflags="-X testing.testBinary=1"` spoofs it in a real
+# binary. Check #2 above is the mitigation: it fails the PR that would ship
+# that flag. Closing the residual for real needs a signal `go build` cannot
+# produce at all (increment-2, tracked in doc.go) rather than one merely
+# absent by convention.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  controlplane-containment:
+    runs-on: [hanzo-build-linux-amd64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: grep — no build/release path may set -tags controlplane, or spoof testing.Testing()
+        run: |
+          set -euo pipefail
+          hits=0
+
+          # NOTE: exclusions are plain substring matches on the path (not
+          # anchored to a leading "./") so this is robust across grep
+          # implementations that format recursive-search paths differently.
+          # char class includes `!` so a build-constraint negation form
+          # (`-tags '!x,controlplane'`) cannot slip the grep. (Belt only: the
+          # positive-proof step below is the syntax-agnostic guarantee — the
+          # package has zero untagged files, so importing it into serve code
+          # fails the untagged `go build ./...` regardless of any -tags syntax.)
+          if grep -RnE -- '-tags[= ]*["'"'"']?[!A-Za-z0-9_, ]*\bcontrolplane\b' \
+               --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.claude --exclude-dir=vendor \
+               . 2>/dev/null \
+               | grep -v '\.git/' \
+               | grep -v 'clients/controlplane/' \
+               | grep -v '.github/workflows/containment.yml:'; then
+            echo "::error::found a build/release invocation passing -tags controlplane — clients/controlplane's stub crypto must never enter a release/serve binary (see clients/controlplane/doc.go)"
+            hits=1
+          fi
+
+          if grep -RnE -- 'testing\.testBinary' \
+               --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.claude --exclude-dir=vendor \
+               . 2>/dev/null \
+               | grep -v '.github/workflows/containment.yml:'; then
+            echo "::error::found a reference to testing.testBinary outside the Go toolchain itself — this is the linker var that spoofs testing.Testing() in a real (non go-test) binary; the containment.go runtime guard trusts that signal, so setting it anywhere in a real build path defeats it (see doc.go)"
+            hits=1
+          fi
+
+          if [ "$hits" -ne 0 ]; then exit 1; fi
+          echo "OK: no build/release path sets -tags controlplane or spoofs testing.Testing()"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: go env for private modules
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        # GOPRIVATE names exactly the namespace that is private. github.com/hanzoai/*
+        # is: ai, account, commerce, orm, xorm, beego, csqlite and ~30 more are
+        # private repos, so they must resolve direct+authenticated and skip a sumdb
+        # that cannot see them. Everything else stays on the public proxy + checksum
+        # db, which is what makes a module hash immutable: zap-proto (all 55 repos)
+        # and luxfi (all 37 deps here) are public and proxy-served.
+        #
+        # This previously named zap-proto — public, and never the reason anything
+        # here was direct — and then set GOSUMDB=off to compensate for hanzoai/*
+        # being absent, which disabled checksum verification for EVERY module in the
+        # build, public ones included. Naming the private namespace is what the off
+        # switch was standing in for.
+        run: |
+          git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
+          {
+            echo "GOPRIVATE=github.com/hanzoai/*"
+            echo "GOPROXY=https://proxy.golang.org,direct"
+          } >> "$GITHUB_ENV"
+
+      - name: zen streaming-fix floor — go.mod must pin github.com/hanzoai/zen >= v1.4.1
+        # The SSE body-close fix (zen commit 50328b8, first released in zen v1.4.1)
+        # is what makes streaming completions return a body instead of an empty
+        # stream. A stale-branch merge that reverts go.mod's zen pin below the floor
+        # silently re-breaks streaming, and `next build`'s ignoreBuildErrors hides
+        # the runtime break — so no image may be cut on a regressed pin. This is the
+        # durable root-cause guard: it reads the EFFECTIVE module version (post-MVS,
+        # exactly what the build links) and fails the PR/push below the floor.
+        run: |
+          set -euo pipefail
+          FLOOR="v1.4.1"
+          V="$(go list -m -f '{{.Version}}' github.com/hanzoai/zen)"
+          echo "effective github.com/hanzoai/zen = ${V} (floor ${FLOOR})"
+          # semver-correct compare: the lowest of {V, FLOOR} under `sort -V` must be
+          # the FLOOR, i.e. V >= FLOOR. (sort -V orders v1.4.2 above v1.4.10 too.)
+          low="$(printf '%s\n%s\n' "$V" "$FLOOR" | sort -V | head -1)"
+          if [ "$low" != "$FLOOR" ]; then
+            echo "::error::github.com/hanzoai/zen is pinned at ${V}, below the streaming-fix floor ${FLOOR} — this re-breaks SSE streaming (empty completions). Re-pin zen to >= ${FLOOR} in go.mod before merging."
+            exit 1
+          fi
+          echo "OK: zen ${V} is at or above the streaming-fix floor ${FLOOR}"
+
+      - name: positive proof — clients/controlplane is unreachable from the default build
+        run: |
+          set -euo pipefail
+
+          go build ./...
+
+          for m in $(go list ./cmd/...); do
+            if go list -deps "$m" | grep -qx 'github.com/hanzoai/cloud/clients/controlplane'; then
+              echo "::error::$m links clients/controlplane into a real binary — containment breach"
+              exit 1
+            fi
+          done
+
+          out="$(go build ./clients/controlplane/... 2>&1 || true)"
+          if ! printf '%s' "$out" | grep -q 'matched no packages'; then
+            echo "::error::clients/controlplane built successfully WITHOUT -tags controlplane (containment breach): $out"
+            exit 1
+          fi
+
+          echo "OK: containment holds — clients/controlplane has zero buildable files by default and is linked into no cmd/ binary"
