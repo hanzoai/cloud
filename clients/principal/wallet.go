@@ -42,22 +42,27 @@ type Wallet struct {
 }
 
 // WalletOf resolves the wallet this request spends from, or ok=false when the
-// request may not touch money at all (no validated principal — never key a ledger
-// on a restored, client-forged X-Org-Id, or an anonymous caller could probe and
-// drain a victim org's balance).
+// request may not touch money at all: no validated principal (never key a ledger on
+// a restored, client-forged X-Org-Id, or an anonymous caller could probe and drain a
+// victim org's balance), or no resolvable org.
 //
-// Ledger is the HOME org (BillingOrg: the validated `owner` claim, effective-org
-// fallback), NOT the effective X-Org-Id — so a platform SuperAdmin masquerading
-// into another org spends from the admin org's books, never the org being acted on.
-// Account is resolved by the ONE rule (account.Payer) from the signed
-// `billing_account` claim, falling back to Payer's legacy rule for a pre-claim
-// token. An org-less validated principal keeps the bare subject: no org names no
-// account, but a subject can still gate.
+// Ledger is the SELECTED org (BillingOrg) — the org the caller switched into, which
+// the trust boundary already proved they belong to; a masquerading SuperAdmin is the
+// one exception and spends from its own books. Account is resolved by the ONE rule
+// (account.Payer) from the signed `billing_account` claim, falling back to Payer's
+// legacy rule for a pre-claim token.
+//
+// AN UNRESOLVABLE ORG REFUSES. It used to discard BillingOrg's ok-bit and return a
+// wallet with an EMPTY ledger, ok=true — and an empty ledger is not "no ledger", it
+// is "whatever the next layer substitutes". The metering client substituted the
+// BRAND org, so a principal whose owner claim carried a zero-width rune was gated
+// against Hanzo's balance and, had the debit not errored on the empty org, would have
+// spent it. There is no substitute payer; the ok-bit is the answer and it propagates.
 func WalletOf(c *zip.Ctx) (Wallet, bool) {
-	if !Validated(c) {
+	ledger, ok := BillingOrg(c) // composes Validated; refuses an unresolvable org
+	if !ok {
 		return Wallet{}, false
 	}
-	ledger, _ := BillingOrg(c) // "" only for a validated principal with no usable org
 	sub := strings.TrimSpace(c.User())
 	acct := account.Payer(account.Credential{
 		Owner:   ledger,
