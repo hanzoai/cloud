@@ -154,6 +154,11 @@ func routesAccount(s *cloud.Service[state], app *zip.App) {
 	// that must beat the /v1/commerce/* bridge (122) AND the commerce embed (100) — so it
 	// mounts here at 48, ahead of both.
 	app.Post("/v1/commerce/topup/wallet", rateLimit(s, s.State.writesRL, requireCSRF(s, cloud.Handle(s, walletTopup))))
+	// The accepted rails are public on-chain data (chain, token, treasury), read by
+	// the browser to render the send UI. A GET with no side effects and no secret,
+	// so it needs neither CSRF nor the write limiter — but it MUST sit beside the
+	// POST at this priority, or the /v1/commerce/* bridge swallows it.
+	app.Get("/v1/commerce/topup/rails", cloud.Handle(s, topupRails))
 }
 
 // routesBridge wires the per-tenant catch-all data bridges (order 122).
