@@ -5,9 +5,6 @@ import (
 	"net/url"
 	"strings"
 
-	gogit "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
-
 	"github.com/hanzoai/cloud"
 )
 
@@ -34,23 +31,23 @@ import (
 // detached) is a silent no-op. Never returns an error: the import must not fail
 // because indexing-on-import could not be triggered.
 func emitImportPush(s *cloud.Service[state], ctx context.Context, org, project, repo, srcURL string) {
-	r, err := openRepoForIndex(s, org, project, repo)
+	r, err := openRepository(s, Repo{Org: org, Project: project, Name: repo})
 	if err != nil {
 		s.Log.Warn("index-on-import: open repo", "org", org, "repo", repo, "err", err)
 		return
 	}
-	branch, after, ok := defaultBranchTip(r)
+	branch, after, ok := defaultBranchTip(ctx, r)
 	if !ok {
 		return // no default-branch tip yet — nothing to index
 	}
 	cloud.EmitLifecycle(ctx, cloud.LifecycleEvent{
-		Kind:   cloud.LifecyclePushLanded,
-		Org:    org,
+		Kind:    cloud.LifecyclePushLanded,
+		Org:     org,
 		Project: project,
-		Repo:   repo,
-		Branch: branch,
-		After:  after,
-		Origin: importHost(srcURL),
+		Repo:    repo,
+		Branch:  branch,
+		After:   after,
+		Origin:  importHost(srcURL),
 	})
 	s.Log.Info("index-on-import: emitted push.landed", "org", org, "repo", repo, "branch", branch, "commit", shortSHA(after))
 }
@@ -58,20 +55,16 @@ func emitImportPush(s *cloud.Service[state], ctx context.Context, org, project, 
 // defaultBranchTip resolves a bare repo's default branch NAME (the symbolic-HEAD
 // target — the same identity index_on_push's isDefaultBranch checks) and its tip
 // commit SHA. ok is false for an empty or detached repo (no branch to index).
-func defaultBranchTip(r *gogit.Repository) (branch, sha string, ok bool) {
-	sym, err := r.Reference(plumbing.HEAD, false) // false: keep the symbolic ref
+func defaultBranchTip(ctx context.Context, r Repository) (branch, sha string, ok bool) {
+	branch, err := r.DefaultBranch(ctx)
+	if err != nil || branch == "" {
+		return "", "", false
+	}
+	rev, _, err := r.Resolve(ctx, "")
 	if err != nil {
 		return "", "", false
 	}
-	branch = sym.Target().Short()
-	if branch == "" {
-		return "", "", false
-	}
-	h, err := r.Head()
-	if err != nil {
-		return "", "", false
-	}
-	return branch, h.Hash().String(), true
+	return branch, rev.String(), true
 }
 
 // importHost returns the lowercased host of a clone URL — the Origin the outbound

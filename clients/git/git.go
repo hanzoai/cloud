@@ -47,8 +47,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	gogit "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
@@ -528,27 +526,21 @@ func recordUsage(s *cloud.Service[state], ctx context.Context, org, project, nam
 
 // refState reads the repo's branches and resolved HEAD for the detail view.
 // Best-effort: a read error yields empty state rather than failing the request.
-func refState(s *cloud.Service[state], org, project, name string) (branches []string, head string) {
-	st, err := s.State.storage.storer(org, project, name)
+func refState(ctx context.Context, s *cloud.Service[state], org, project, name string) (branches []string, head string) {
+	repo, err := openRepository(s, Repo{Org: org, Project: project, Name: name})
 	if err != nil {
 		return nil, ""
 	}
-	repo, err := gogit.Open(st, nil)
-	if err != nil {
-		return nil, ""
+	if rev, _, err := repo.Resolve(ctx, ""); err == nil {
+		head = rev.String()
 	}
-	if h, err := repo.Head(); err == nil {
-		head = h.Hash().String()
-	}
-	iter, err := repo.Branches()
+	bs, _, err := repo.Refs(ctx)
 	if err != nil {
 		return branches, head
 	}
-	defer iter.Close()
-	_ = iter.ForEach(func(ref *plumbing.Reference) error {
-		branches = append(branches, ref.Name().Short())
-		return nil
-	})
+	for _, b := range bs {
+		branches = append(branches, b.Name)
+	}
 	return branches, head
 }
 

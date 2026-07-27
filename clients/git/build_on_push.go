@@ -10,9 +10,6 @@ import (
 	"strings"
 	"time"
 
-	gogit "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing/object"
-
 	"github.com/hanzoai/cloud"
 	"gopkg.in/yaml.v2"
 )
@@ -80,10 +77,10 @@ type pipeline struct {
 // reusable already read — one schema, three readers.
 type pipelineImage struct {
 	Name       string `yaml:"name"`
-	Repo       string `yaml:"repo"`        // bare registry repo, e.g. ghcr.io/hanzoai/foo
-	Context    string `yaml:"context"`     // build context dir (default ".")
-	Dockerfile string `yaml:"dockerfile"`  // default "<context>/Dockerfile"
-	TagSuffix  string `yaml:"tag-suffix"`  // default = name
+	Repo       string `yaml:"repo"`       // bare registry repo, e.g. ghcr.io/hanzoai/foo
+	Context    string `yaml:"context"`    // build context dir (default ".")
+	Dockerfile string `yaml:"dockerfile"` // default "<context>/Dockerfile"
+	TagSuffix  string `yaml:"tag-suffix"` // default = name
 }
 
 // enqueueReq is platform's /v1/arcd/enqueue body (EnqueueBody). Field-for-field the
@@ -121,15 +118,15 @@ func buildOnPush(s *cloud.Service[state], ctx context.Context, ev cloud.Lifecycl
 	if !nativeCICDEnabled() || ev.Kind != cloud.LifecyclePushLanded || ev.Org == "" || ev.Repo == "" || ev.Branch == "" {
 		return
 	}
-	repo, err := openRepoForIndex(s, ev.Org, ev.Project, ev.Repo)
+	repo, err := openRepository(s, Repo{Org: ev.Org, Project: ev.Project, Name: ev.Repo})
 	if err != nil {
 		s.Log.Warn("native ci/cd: open repo", "org", ev.Org, "repo", ev.Repo, "err", err)
 		return
 	}
-	if !isDefaultBranch(repo, ev.Branch) {
+	if !isDefaultBranch(ctx, repo, ev.Branch) {
 		return // only the canonical branch builds+deploys in the MVP
 	}
-	pl, path, err := readPipeline(repo, ev.After)
+	pl, path, err := readPipeline(ctx, repo, ev.After)
 	if err != nil {
 		s.Log.Warn("native ci/cd: read pipeline", "org", ev.Org, "repo", ev.Repo, "err", err)
 		return
@@ -147,34 +144,26 @@ func buildOnPush(s *cloud.Service[state], ctx context.Context, ev cloud.Lifecycl
 // location), and falls back to the root `hanzo.yml` when that directory is absent or
 // declares no image. Returns the parsed pipeline + the config path it came from
 // (for the log), or (nil,"",nil) when the repo carries no native pipeline at all.
-func readPipeline(repo *gogit.Repository, after string) (*pipeline, string, error) {
-	commit, err := resolveIndexCommit(repo, after)
-	if err != nil {
-		return nil, "", err
-	}
-	tree, err := commit.Tree()
+func readPipeline(ctx context.Context, repo Repository, after string) (*pipeline, string, error) {
+	rev, _, err := repo.Resolve(ctx, after)
 	if err != nil {
 		return nil, "", err
 	}
 	// Native-first: every workflow file under .hanzo/workflows/, images merged.
-	if sub, err := tree.Tree(".hanzo/workflows"); err == nil {
+	if entries, err := repo.Tree(ctx, rev, ".hanzo/workflows"); err == nil {
 		merged := &pipeline{}
 		var from []string
-		for _, e := range sub.Entries {
+		for _, e := range entries {
 			name := strings.ToLower(e.Name)
-			if !strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml") {
-				continue
-			}
-			f, ferr := sub.TreeEntryFile(&e)
-			if ferr != nil {
-				continue
-			}
-			txt, cerr := f.Contents()
-			if cerr != nil {
+			if e.Dir || (!strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml")) {
 				continue
 			}
 			var p pipeline
-			if yaml.Unmarshal([]byte(txt), &p) == nil && len(p.Images) > 0 {
+			b, berr := repo.Blob(ctx, rev, e.Path, 0)
+			if berr != nil || b.Binary {
+				continue
+			}
+			if yaml.Unmarshal(b.Content, &p) == nil && len(p.Images) > 0 {
 				merged.Images = append(merged.Images, p.Images...)
 				from = append(from, e.Name)
 			}
@@ -184,28 +173,21 @@ func readPipeline(repo *gogit.Repository, after string) (*pipeline, string, erro
 		}
 	}
 	// Fallback: the root hanzo.yml (GitHub-Actions-compatible location).
-	if pl := pipelineFromTreeFile(tree, "hanzo.yml"); pl != nil {
+	if pl := pipelineFromBlob(ctx, repo, rev, "hanzo.yml"); pl != nil {
 		return pl, "hanzo.yml", nil
 	}
 	return nil, "", nil
 }
 
-// pipelineFromTreeFile parses one tree file as a pipeline, returning nil when the
-// file is absent, unreadable, binary, or declares no image.
-func pipelineFromTreeFile(tree *object.Tree, path string) *pipeline {
-	f, err := tree.File(path)
-	if err != nil {
-		return nil
-	}
-	if bin, _ := f.IsBinary(); bin {
-		return nil
-	}
-	txt, err := f.Contents()
-	if err != nil {
+// pipelineFromBlob parses one file at a revision as a pipeline, returning nil when
+// the file is absent, unreadable, binary, or declares no image.
+func pipelineFromBlob(ctx context.Context, repo Repository, rev Revision, path string) *pipeline {
+	b, err := repo.Blob(ctx, rev, path, 0)
+	if err != nil || b.Binary {
 		return nil
 	}
 	var p pipeline
-	if yaml.Unmarshal([]byte(txt), &p) != nil || len(p.Images) == 0 {
+	if yaml.Unmarshal(b.Content, &p) != nil || len(p.Images) == 0 {
 		return nil
 	}
 	return &p

@@ -142,7 +142,7 @@ func coreGet(s *cloud.Service[state], ctx context.Context, org, project, name st
 	if err != nil {
 		return repoView{}, fmt.Errorf("get: %w", err)
 	}
-	branches, head := refState(s, org, project, name)
+	branches, head := refState(ctx, s, org, project, name)
 	return toView(s, r, branches, head), nil
 }
 
