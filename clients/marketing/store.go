@@ -13,12 +13,18 @@ import (
 	_ "github.com/hanzoai/sqlite"
 )
 
-// Sentinel errors. Handlers map these to HTTP status codes:
+// Sentinel errors. Handlers map these to HTTP status codes (mapErr):
 //
-//	errNotFound → 404, errConflict → 409.
+//	errNotFound → 404, errConflict → 409, errIAMUnavailable/errWarehouse → 503.
+//
+// The two 503s are the honest "I cannot tell you who the customers are" — a
+// resolution that cannot read the identity store or the warehouse must refuse,
+// never resolve to an empty audience and report a successful send to nobody.
 var (
-	errNotFound = errors.New("marketing: not found")
-	errConflict = errors.New("marketing: already exists")
+	errNotFound       = errors.New("marketing: not found")
+	errConflict       = errors.New("marketing: already exists")
+	errIAMUnavailable = errors.New("marketing: identity store unavailable; enable the co-resident iam subsystem")
+	errWarehouse      = errors.New("marketing: analytics warehouse not configured")
 )
 
 // Store is the marketing database. ONE SQLite file ({DataDir}/marketing.db)
