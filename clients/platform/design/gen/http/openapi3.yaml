@@ -2134,7 +2134,7 @@ components:
                     example: Non iusto et autem possimus quibusdam dolor.
                 provider:
                     type: string
-                    description: github|gitlab|bitbucket|gitea|git
+                    description: github|gitlab|bitbucket|git
                     example: Nam optio corporis.
                 url:
                     type: string
