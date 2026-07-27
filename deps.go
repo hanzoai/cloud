@@ -58,6 +58,12 @@ type Deps struct {
 	// land at {DataDir}/orgs/{orgSlug}/{service}.db per HIP-0302.
 	DataDir string
 
+	// MasterKey is the 32-byte at-rest KEK (decoded CLOUD_KMS_MASTER_KEY_REF), for
+	// subsystems that encrypt their own stores and would otherwise each need a key
+	// provisioned separately. One process, one key. nil ⇒ unset/invalid, and each
+	// subsystem falls back to whatever it did before.
+	MasterKey []byte
+
 	// Durable is the per-deployment HA-durability factory an OrgStore wires
 	// WithDurable: the shared ha election + vfs FencedStore over the SeaweedFS S3
 	// gateway + per-org envelope Cipher. nil ⇒ local-only (no object store creds,
