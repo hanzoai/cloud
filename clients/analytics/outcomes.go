@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud/clients/datastore"
 )
 
 // SubjectOutcome is one subject's (distinct_id's) participation in an experiment
@@ -46,7 +46,7 @@ func Outcomes(ctx context.Context, org, exposureEvent, metricEvent string, start
 		return nil, err
 	}
 	sql, args := outcomesSQL(org, exposureEvent, metricEvent, start, end)
-	rows, err := aiobject.DatastoreQuery(ctx, sql, args...)
+	rows, err := datastore.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, warehouseErr("outcomes", err)
 	}
