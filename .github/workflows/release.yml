@@ -648,7 +648,11 @@ jobs:
           CR="$RUNNER_TEMP/universe/infra/k8s/operator/crs/cloud.yaml"
           [ -f "$CR" ] || { echo "::error::crs/cloud.yaml not found in universe"; exit 1; }
 
-          CUR="$(yq -r '.spec.image.tag // ""' "$CR")"
+          # SCOPED to the App document. crs/cloud.yaml is MULTI-DOCUMENT (App +
+          # IngressRoute), and an unscoped yq path emits one line PER document — so
+          # this read returned "v1.801.218\n\n" and the monotonic guard below was
+          # comparing against a multi-line string.
+          CUR="$(yq -r 'select(.kind == "App") | .spec.image.tag // ""' "$CR")"
           echo "cloud CR: ${CUR:-<empty>} → ${VERSION_V}"
 
           # Monotonic guard: never roll the CR BACKWARD. Release runs finish under a
@@ -662,7 +666,15 @@ jobs:
             fi
           fi
 
-          yq -i ".spec.image.tag = \"${VERSION_V}\"" "$CR"
+          # SCOPED to the App document — this is load-bearing. An unscoped `yq -i`
+          # assignment applies to EVERY document in the file, so it did not just
+          # update the App: it CREATED .spec.image on the IngressRoute, which
+          # ingressroutes.hanzo.ai does not declare. Hanzo CD then could not build a
+          # typed value for that resource and the ENTIRE universe-crs Application
+          # went sync=Unknown — no App, KMSSecret, PVC, Middleware or Service in the
+          # fleet could be applied from git, while CD still reported the last
+          # successful sync. One stray field froze every deploy.
+          VERSION_V="$VERSION_V" yq -i '(select(.kind == "App") | .spec.image.tag) = strenv(VERSION_V)' "$CR"
           if git -C "$RUNNER_TEMP/universe" diff --quiet; then
             echo "::notice::crs/cloud.yaml already at ${VERSION_V} — nothing to record"; exit 0
           fi
