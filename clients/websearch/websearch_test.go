@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -48,11 +48,6 @@ var okHandler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { 
 // reach the native search handler + firecrawl-shaped scrape.
 func TestMountRoutesThroughRouter(t *testing.T) {
 	mockBing(t, bingFixture)
-	crawlUp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, `{"status":"completed","results":[{"url":"https://ex","markdown":"# M","success":true}]}`)
-	}))
-	defer crawlUp.Close()
-	t.Setenv("WEBSEARCH_CRAWL_ENDPOINT", crawlUp.URL)
 	t.Setenv("WEBSEARCH_API_KEY", "k")
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
@@ -80,7 +75,15 @@ func TestMountRoutesThroughRouter(t *testing.T) {
 	}
 
 	// Firecrawl scrape (the /v1/scrape path the client builds) routes to the
-	// crawl-backed handler and returns the firecrawl shape.
+	// in-process crawl handler and answers in the firecrawl shape.
+	//
+	// The URL is deliberately one that cannot be fetched, and the assertion is on
+	// the ENVELOPE, not on success. What this test owns is that the route exists,
+	// the key is accepted, and the reply decodes as firecrawl — asserting a live
+	// fetch here would make a router test depend on the network and on some third
+	// party's uptime. That scrape maps a failed fetch to success:false is asserted
+	// in TestScrapeReportsFetchFailure, and the fetch itself is covered in
+	// clients/crawl.
 	sreq := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/websearch/v1/scrape",
 		strings.NewReader(`{"url":"https://ex"}`))
 	sreq.Header.Set("Authorization", "Bearer k")
@@ -90,10 +93,43 @@ func TestMountRoutesThroughRouter(t *testing.T) {
 		t.Fatalf("scrape route: %v", err)
 	}
 	b, _ := io.ReadAll(sresp.Body)
-	if sresp.StatusCode != http.StatusOK || !strings.Contains(string(b), `"success":true`) {
-		t.Fatalf("scrape route status %d body %s", sresp.StatusCode, string(b))
-	}
 	_ = sresp.Body.Close()
+	if sresp.StatusCode != http.StatusOK {
+		t.Fatalf("scrape route status %d body %s — the route must be reachable with a valid key", sresp.StatusCode, string(b))
+	}
+	var env firecrawlResponse
+	if err := json.Unmarshal(b, &env); err != nil {
+		t.Fatalf("scrape reply is not the firecrawl envelope: %v (%s)", err, string(b))
+	}
+}
+
+// Scrape reports an unfetchable URL as a 200 carrying success:false, not as an
+// HTTP error. The firecrawl client treats a non-2xx as a broken provider and can
+// disable the tool; "that page could not be read" is an answer, not a fault of the
+// request. A URL the address guard refuses is used because it fails identically on
+// every machine and needs no network.
+func TestScrapeReportsFetchFailure(t *testing.T) {
+	t.Setenv("WEBSEARCH_API_KEY", "svc-key")
+
+	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/websearch/v1/scrape",
+		strings.NewReader(`{"url":"http://127.0.0.1:1/"}`))
+	req.Header.Set("Authorization", "Bearer svc-key")
+	rec := httptest.NewRecorder()
+	scrapeHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 even when the fetch fails", rec.Code)
+	}
+	var out firecrawlResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode: %v (%s)", err, rec.Body.String())
+	}
+	if out.Success {
+		t.Fatal("success = true for a URL that cannot be fetched")
+	}
+	if out.Error == "" {
+		t.Fatal("no error message — a caller debugging a failed scrape has nothing to go on")
+	}
 }
 
 // A signed-in console user reaches search WITHOUT the shared key: the identity
@@ -248,113 +284,6 @@ func TestSearchUnsetKeyFailsClosed(t *testing.T) {
 	}
 }
 
-// Scrape must Bearer-auth, call Hanzo Crawl, and adapt its {url,markdown,...}
-// result into the firecrawl {success,data:{markdown,metadata}} shape.
-func TestScrapeAdaptsCrawlToFirecrawlShape(t *testing.T) {
-	var gotCrawlBody string
-	crawlSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/crawl" {
-			t.Fatalf("crawl path = %q, want /crawl", r.URL.Path)
-		}
-		b, _ := io.ReadAll(r.Body)
-		gotCrawlBody = string(b)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"status":"completed","results":[{"url":"https://ex.com","markdown":"# Hello","success":true,"metadata":{"title":"Ex"}}]}`)
-	}))
-	defer crawlSrv.Close()
-
-	t.Setenv("WEBSEARCH_API_KEY", "svc-key")
-	t.Setenv("WEBSEARCH_CRAWL_ENDPOINT", crawlSrv.URL)
-
-	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/websearch/v1/scrape",
-		strings.NewReader(`{"url":"https://ex.com","formats":["markdown"]}`))
-	req.Header.Set("Authorization", "Bearer svc-key")
-	rec := httptest.NewRecorder()
-	scrapeHandler(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d body=%s, want 200", rec.Code, rec.Body.String())
-	}
-	if !strings.Contains(gotCrawlBody, `"urls":["https://ex.com"]`) {
-		t.Fatalf("crawl body = %q, want urls array with the target", gotCrawlBody)
-	}
-	var out firecrawlResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
-		t.Fatalf("decode response: %v (%s)", err, rec.Body.String())
-	}
-	if !out.Success || out.Data == nil || out.Data.Markdown != "# Hello" {
-		t.Fatalf("response = %+v, want success with markdown '# Hello'", out)
-	}
-	if out.Data.Metadata["title"] != "Ex" {
-		t.Fatalf("metadata not passed through: %+v", out.Data.Metadata)
-	}
-}
-
-// REGRESSION: the deployed hanzoai/crawl:0.0.1 (Crawl4AI 0.8.6) returns `markdown`
-// as an OBJECT {raw_markdown, fit_markdown, ...}, not a bare string, AND signals
-// the batch with a boolean "success" (no "status"). A `string` Markdown field
-// errored the whole decode → crawl() failed → every scrape returned {success:false}.
-// This asserts the real 0.8.6 envelope + object markdown adapt correctly.
-func TestScrapeHandlesCrawl4AIObjectMarkdown(t *testing.T) {
-	crawlSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{
-			"success": true,
-			"server_processing_time_s": 1.2,
-			"results": [{
-				"url": "https://ex.com",
-				"success": true,
-				"status_code": 200,
-				"markdown": {
-					"raw_markdown": "# Raw Hello\n\nlots of nav noise",
-					"fit_markdown": "# Hello\n\nclean body",
-					"markdown_with_citations": "# Hello [1]",
-					"references_markdown": "[1]: https://ex.com"
-				},
-				"metadata": {"title": "Ex", "description": "d"}
-			}]
-		}`)
-	}))
-	defer crawlSrv.Close()
-
-	t.Setenv("WEBSEARCH_API_KEY", "svc-key")
-	t.Setenv("WEBSEARCH_CRAWL_ENDPOINT", crawlSrv.URL)
-
-	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/websearch/v1/scrape",
-		strings.NewReader(`{"url":"https://ex.com"}`))
-	req.Header.Set("Authorization", "Bearer svc-key")
-	rec := httptest.NewRecorder()
-	scrapeHandler(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d body=%s, want 200", rec.Code, rec.Body.String())
-	}
-	var out firecrawlResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
-		t.Fatalf("decode response: %v (%s)", err, rec.Body.String())
-	}
-	if !out.Success || out.Data == nil {
-		t.Fatalf("response = %+v, want success:true with data (object markdown must decode)", out)
-	}
-	if out.Data.Markdown != "# Hello\n\nclean body" {
-		t.Fatalf("markdown = %q, want the fit_markdown '# Hello\\n\\nclean body'", out.Data.Markdown)
-	}
-	if out.Data.Metadata["title"] != "Ex" {
-		t.Fatalf("metadata not passed through: %+v", out.Data.Metadata)
-	}
-}
-
-// The bare-string markdown form (older mirror / other crawlers) must still work.
-func TestMarkdownFieldAcceptsBareString(t *testing.T) {
-	var r crawlResult
-	if err := json.Unmarshal([]byte(`{"url":"u","markdown":"# S","success":true}`), &r); err != nil {
-		t.Fatalf("decode bare-string markdown: %v", err)
-	}
-	if string(r.Markdown) != "# S" {
-		t.Fatalf("markdown = %q, want '# S'", r.Markdown)
-	}
-}
-
 // Scrape fails closed with no configured key.
 func TestScrapeUnsetKeyFailsClosed(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "")
@@ -378,17 +307,5 @@ func TestScrapeWrongKeyRejected(t *testing.T) {
 	scrapeHandler(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rec.Code)
-	}
-}
-
-// crawlEndpoint honors its default and the env override.
-func TestCrawlEndpointDefaultsAndOverrides(t *testing.T) {
-	t.Setenv("WEBSEARCH_CRAWL_ENDPOINT", "")
-	if got := crawlEndpoint(); got != defaultCrawlEndpoint {
-		t.Fatalf("crawlEndpoint() = %q, want default", got)
-	}
-	t.Setenv("WEBSEARCH_CRAWL_ENDPOINT", "http://crawl:11235")
-	if got := crawlEndpoint(); got != "http://crawl:11235" {
-		t.Fatalf("crawlEndpoint() override = %q", got)
 	}
 }
