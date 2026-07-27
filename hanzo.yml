@@ -51,8 +51,8 @@ test:
       # that key exists, not in the hermetic gate.
       go test -count=1 -timeout 15m -skip 'TestRecord_DebitsFinanceInProcess' \
         ./apps/ \
-        ./clients/commerceclient/ \
-        ./clients/commerceinproc/ \
+        ./clients/commerce/ \
+        ./clients/commerce/transport/ \
         ./clients/metering/ \
         ./clients/catalogsync/ \
         ./clients/bots/ \
