@@ -13,8 +13,12 @@ package answer
 import (
 	"context"
 	"strings"
+	"sync"
 
 	aiobject "github.com/hanzoai/ai/object"
+	luxlog "github.com/luxfi/log"
+
+	"github.com/hanzoai/cloud"
 )
 
 const (
@@ -41,7 +45,7 @@ var crawl = crawlPages
 // read fetches the top sources and swaps each Snippet for the page's markdown.
 // top<=0 (search/news) is a no-op — those modes ground on snippets and stay fast.
 // Never returns an error: every failure path yields the sources unchanged.
-func read(ctx context.Context, srcs []Source, top int) []Source {
+func read(ctx context.Context, log luxlog.Logger, srcs []Source, top int) []Source {
 	if top <= 0 || len(srcs) == 0 {
 		return srcs
 	}
@@ -57,7 +61,7 @@ func read(ctx context.Context, srcs []Source, top int) []Source {
 	}
 
 	text := make(map[string]string, top)
-	for _, p := range crawl(ctx, urls) {
+	for _, p := range crawl(ctx, log, urls) {
 		if md := strings.TrimSpace(p.Markdown); md != "" {
 			text[p.URL] = md
 		}
@@ -79,12 +83,22 @@ func read(ctx context.Context, srcs []Source, top int) []Source {
 // ctx; the in-flight HTTP call still ends on its own 30s transport timeout. This
 // collapses to a direct ctx-carrying call at the next ai bump — the ctx-threaded
 // signature ships in hanzoai/ai on this same branch.
-func crawlPages(ctx context.Context, urls []string) []Page {
+func crawlPages(ctx context.Context, log luxlog.Logger, urls []string) []Page {
 	done := make(chan []Page, 1) // buffered: the goroutine never blocks after we give up
-	go func() {
+	var once sync.Once
+	send := func(p []Page) { once.Do(func() { done <- p }) }
+
+	// Contained, not bare. This goroutine parses pages we did not author, so it is
+	// one of the likeliest places in the binary to panic — and an unrecovered panic
+	// on a spawned goroutine kills the PROCESS, taking every other tenant with it
+	// (middleware.Recover covers only the request goroutine). The inner defer is
+	// registered first so it runs first: the caller is answered with "no pages"
+	// before the panic is recovered and logged, otherwise the loop would sit out its
+	// entire wall clock waiting for a result that is never coming.
+	cloud.Go(log, "answer.crawl", []any{"urls", len(urls)}, func() {
+		defer send(nil)
 		res, err := aiobject.Crawl(urls)
 		if err != nil {
-			done <- nil
 			return
 		}
 		out := make([]Page, 0, len(res))
@@ -93,8 +107,8 @@ func crawlPages(ctx context.Context, urls []string) []Page {
 				out = append(out, Page{URL: r.URL, Markdown: r.Markdown})
 			}
 		}
-		done <- out
-	}()
+		send(out)
+	})
 	select {
 	case pages := <-done:
 		return pages
