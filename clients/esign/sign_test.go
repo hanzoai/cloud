@@ -1,4 +1,4 @@
-package sign
+package esign
 
 import (
 	"bytes"
@@ -143,12 +143,12 @@ func TestFullSigningFlow(t *testing.T) {
 	pdfB64 := base64.StdEncoding.EncodeToString(pdf)
 
 	// 1. anonymous owner route → 403
-	if code, _ := do(t, app, http.MethodGet, "/v1/sign/documents", "", nil); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodGet, "/v1/esign/documents", "", nil); code != http.StatusForbidden {
 		t.Fatalf("anon list want 403, got %d", code)
 	}
 
 	// 2. create document (DRAFT)
-	code, body := do(t, app, http.MethodPost, "/v1/sign/documents", org, map[string]any{
+	code, body := do(t, app, http.MethodPost, "/v1/esign/documents", org, map[string]any{
 		"title": "Mutual NDA", "pdfBase64": pdfB64, "subject": "Please sign",
 	})
 	if code != http.StatusCreated {
@@ -168,8 +168,8 @@ func TestFullSigningFlow(t *testing.T) {
 	for k, v := range vfs.m {
 		if bytes.Equal(v, pdf) {
 			foundOriginal = true
-			if !strings.HasPrefix(k, "sign/") {
-				t.Fatalf("blob key %q is not tenant-scoped under sign/", k)
+			if !strings.HasPrefix(k, "esign/") {
+				t.Fatalf("blob key %q is not tenant-scoped under esign/", k)
 			}
 		}
 	}
@@ -179,7 +179,7 @@ func TestFullSigningFlow(t *testing.T) {
 	}
 
 	// 3. add a SIGNER recipient
-	code, body = do(t, app, http.MethodPost, "/v1/sign/documents/"+docID+"/recipients", org, map[string]any{
+	code, body = do(t, app, http.MethodPost, "/v1/esign/documents/"+docID+"/recipients", org, map[string]any{
 		"email": "signer@acme.test", "name": "Sam Signer", "role": "SIGNER",
 	})
 	if code != http.StatusCreated {
@@ -197,13 +197,13 @@ func TestFullSigningFlow(t *testing.T) {
 		{"recipientId": recID, "type": "SIGNATURE", "page": 1, "positionX": 10, "positionY": 70, "width": 30, "height": 8},
 		{"recipientId": recID, "type": "DATE", "page": 1, "positionX": 60, "positionY": 70, "width": 25, "height": 5},
 	} {
-		code, body = do(t, app, http.MethodPost, "/v1/sign/documents/"+docID+"/fields", org, f)
+		code, body = do(t, app, http.MethodPost, "/v1/esign/documents/"+docID+"/fields", org, f)
 		if code != http.StatusCreated {
 			t.Fatalf("add field want 201, got %d (%s)", code, body)
 		}
 	}
 	// capture field ids from the document view
-	code, body = do(t, app, http.MethodGet, "/v1/sign/documents/"+docID, org, nil)
+	code, body = do(t, app, http.MethodGet, "/v1/esign/documents/"+docID, org, nil)
 	if code != http.StatusOK {
 		t.Fatalf("get doc want 200, got %d (%s)", code, body)
 	}
@@ -226,7 +226,7 @@ func TestFullSigningFlow(t *testing.T) {
 	}
 
 	// 5. send → PENDING
-	code, body = do(t, app, http.MethodPost, "/v1/sign/documents/"+docID+"/send", org, map[string]any{})
+	code, body = do(t, app, http.MethodPost, "/v1/esign/documents/"+docID+"/send", org, map[string]any{})
 	if code != http.StatusOK {
 		t.Fatalf("send want 200, got %d (%s)", code, body)
 	}
@@ -235,7 +235,7 @@ func TestFullSigningFlow(t *testing.T) {
 	}
 
 	// 6. recipient views via token (anonymous) → readStatus OPENED
-	base := "/v1/sign/o/" + org + "/sign/" + token
+	base := "/v1/esign/o/" + org + "/sign/" + token
 	code, body = do(t, app, http.MethodGet, base, "", nil)
 	if code != http.StatusOK {
 		t.Fatalf("token view want 200, got %d (%s)", code, body)
@@ -262,7 +262,7 @@ func TestFullSigningFlow(t *testing.T) {
 	}
 
 	// 9. download → a REAL signed PDF (has the PKCS#7 signature dict + ByteRange)
-	code, body = do(t, app, http.MethodGet, "/v1/sign/documents/"+docID+"/download", org, nil)
+	code, body = do(t, app, http.MethodGet, "/v1/esign/documents/"+docID+"/download", org, nil)
 	if code != http.StatusOK {
 		t.Fatalf("download want 200, got %d (%s)", code, body)
 	}
@@ -288,7 +288,7 @@ func TestFullSigningFlow(t *testing.T) {
 	}
 
 	// 10. audit trail records the whole lifecycle
-	code, body = do(t, app, http.MethodGet, "/v1/sign/documents/"+docID+"/audit", org, nil)
+	code, body = do(t, app, http.MethodGet, "/v1/esign/documents/"+docID+"/audit", org, nil)
 	if code != http.StatusOK {
 		t.Fatalf("audit want 200, got %d (%s)", code, body)
 	}
@@ -316,22 +316,22 @@ func TestTenantIsolation(t *testing.T) {
 	pdf, _ := os.ReadFile("testdata/example.pdf")
 	pdfB64 := base64.StdEncoding.EncodeToString(pdf)
 
-	code, body := do(t, app, http.MethodPost, "/v1/sign/documents", "orgA", map[string]any{"title": "A", "pdfBase64": pdfB64})
+	code, body := do(t, app, http.MethodPost, "/v1/esign/documents", "orgA", map[string]any{"title": "A", "pdfBase64": pdfB64})
 	if code != http.StatusCreated {
 		t.Fatalf("orgA create: %d (%s)", code, body)
 	}
 	docID := decode(t, body)["id"].(string)
 
 	// orgB cannot read orgA's document
-	if code, _ := do(t, app, http.MethodGet, "/v1/sign/documents/"+docID, "orgB", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/esign/documents/"+docID, "orgB", nil); code != http.StatusNotFound {
 		t.Fatalf("cross-tenant read want 404, got %d", code)
 	}
 	// orgA can
-	if code, _ := do(t, app, http.MethodGet, "/v1/sign/documents/"+docID, "orgA", nil); code != http.StatusOK {
+	if code, _ := do(t, app, http.MethodGet, "/v1/esign/documents/"+docID, "orgA", nil); code != http.StatusOK {
 		t.Fatalf("owner read want 200, got %d", code)
 	}
 	// a bogus token under any org is unauthorized
-	if code, _ := do(t, app, http.MethodGet, "/v1/sign/o/orgA/sign/deadbeefdeadbeefdeadb", "", nil); code != http.StatusUnauthorized {
+	if code, _ := do(t, app, http.MethodGet, "/v1/esign/o/orgA/sign/deadbeefdeadbeefdeadb", "", nil); code != http.StatusUnauthorized {
 		t.Fatalf("bogus token want 401, got %d", code)
 	}
 }
@@ -376,7 +376,7 @@ func TestSequentialSigningOrder(t *testing.T) {
 	}
 	pdfB64 := base64.StdEncoding.EncodeToString(pdf)
 
-	code, body := do(t, app, http.MethodPost, "/v1/sign/documents", org, map[string]any{
+	code, body := do(t, app, http.MethodPost, "/v1/esign/documents", org, map[string]any{
 		"title": "Seq NDA", "pdfBase64": pdfB64, "signingOrder": "SEQUENTIAL",
 	})
 	if code != http.StatusCreated {
@@ -385,7 +385,7 @@ func TestSequentialSigningOrder(t *testing.T) {
 	docID := decode(t, body)["id"].(string)
 
 	addSigner := func(email string, order int) (string, string) {
-		c, b := do(t, app, http.MethodPost, "/v1/sign/documents/"+docID+"/recipients", org, map[string]any{
+		c, b := do(t, app, http.MethodPost, "/v1/esign/documents/"+docID+"/recipients", org, map[string]any{
 			"email": email, "role": "SIGNER", "signingOrder": order,
 		})
 		if c != http.StatusCreated {
@@ -398,7 +398,7 @@ func TestSequentialSigningOrder(t *testing.T) {
 	rec2, tok2 := addSigner("second@acme.test", 2)
 
 	addField := func(recID string) {
-		c, b := do(t, app, http.MethodPost, "/v1/sign/documents/"+docID+"/fields", org, map[string]any{
+		c, b := do(t, app, http.MethodPost, "/v1/esign/documents/"+docID+"/fields", org, map[string]any{
 			"recipientId": recID, "type": "SIGNATURE", "page": 1, "positionX": 10, "positionY": 70, "width": 30, "height": 8,
 		})
 		if c != http.StatusCreated {
@@ -408,20 +408,20 @@ func TestSequentialSigningOrder(t *testing.T) {
 	addField(rec1)
 	addField(rec2)
 
-	if c, b := do(t, app, http.MethodPost, "/v1/sign/documents/"+docID+"/send", org, map[string]any{}); c != http.StatusOK {
+	if c, b := do(t, app, http.MethodPost, "/v1/esign/documents/"+docID+"/send", org, map[string]any{}); c != http.StatusOK {
 		t.Fatalf("send: %d %s", c, b)
 	}
 
 	// field id per recipient
-	_, dv := do(t, app, http.MethodGet, "/v1/sign/documents/"+docID, org, nil)
+	_, dv := do(t, app, http.MethodGet, "/v1/esign/documents/"+docID, org, nil)
 	fieldFor := map[string]string{}
 	for _, fi := range decode(t, dv)["fields"].([]any) {
 		fm := fi.(map[string]any)
 		fieldFor[fm["recipientId"].(string)] = fm["id"].(string)
 	}
 
-	base1 := "/v1/sign/o/" + org + "/sign/" + tok1
-	base2 := "/v1/sign/o/" + org + "/sign/" + tok2
+	base1 := "/v1/esign/o/" + org + "/sign/" + tok1
+	base2 := "/v1/esign/o/" + org + "/sign/" + tok2
 	sig := func() map[string]any { return map[string]any{"value": signaturePNG(t), "isBase64": true} }
 
 	// recipient 2 is OUT OF TURN — must be refused.
