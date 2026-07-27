@@ -1,7 +1,7 @@
 // iam.go is the ONE HTTP path from the console subsystem to Hanzo IAM, acting as
 // the confidential first-party `hanzo-console` client (client_secret_basic). It
 // ports the privileged IAM primitives that console's server-only
-// src/lib/server/identity.ts drove — mint/revoke/get the per-user `hk-` key and
+// src/lib/server/identity.ts drove — mint/revoke/get the per-user Cloud API key and
 // create/read/update an organization — so those standalone Next server routes can
 // be retired and console statically exported (task #41, "True 1-binary FE").
 //
@@ -212,16 +212,16 @@ func (c *iamClient) do(ctx context.Context, method, path string, q url.Values, b
 	return env, nil
 }
 
-// ── the `hk-` Cloud API key (per-user) ───────────────────────────────────────
+// ── the Cloud API key (per-user) ─────────────────────────────────────────────
 
-// userKey is the subset of an IAM user row the key surface reads: the `hk-` access
+// userKey is the subset of an IAM user row the key surface reads: the access
 // key and the last time the key row changed (updatedTime).
 type userKey struct {
 	AccessKey   string `json:"accessKey"`
 	UpdatedTime string `json:"updatedTime"`
 }
 
-// getUserKey reads a user's CURRENT `hk-` key AUTHORITATIVELY from IAM (get-user).
+// getUserKey reads a user's CURRENT Cloud API key AUTHORITATIVELY from IAM (get-user).
 // The session claim can lag a freshly-minted key (it returns ”) — so GET /keys
 // must read IAM, not the claim (the "key never listed" bug identity.ts documents).
 // `id` is the `<owner>/<name>` composite IAM parses.
@@ -237,7 +237,7 @@ func (c *iamClient) getUserKey(ctx context.Context, id string) (userKey, error) 
 	return u, nil
 }
 
-// mintUserKey (re)generates the user's `hk-` key and returns the new secret — shown
+// mintUserKey (re)generates the user's Cloud API key and returns the new secret — shown
 // ONCE to the caller (POST /keys), never echoed again. IAM binds the key to `id`,
 // so a caller can only ever mint their OWN.
 func (c *iamClient) mintUserKey(ctx context.Context, id string) (string, error) {
@@ -257,7 +257,7 @@ func (c *iamClient) mintUserKey(ctx context.Context, id string) (string, error) 
 	return out.AccessKey, nil
 }
 
-// revokeUserKey clears the user's `hk-` key (immediate revoke; the gateway key
+// revokeUserKey clears the user's Cloud API key (immediate revoke; the gateway key
 // cache lapses within ~5m).
 func (c *iamClient) revokeUserKey(ctx context.Context, id string) error {
 	_, err := c.do(ctx, http.MethodPost, "/v1/iam/revoke-user-keys", url.Values{"id": {id}}, nil)
