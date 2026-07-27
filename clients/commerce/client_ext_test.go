@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package commerceclient_test
+package commerce_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	inproc "github.com/hanzoai/cloud/clients/commerceclient"
+	"github.com/hanzoai/cloud/clients/commerce"
 	"github.com/hanzoai/cloud/clients/plan"
 	commercemod "github.com/hanzoai/commerce"
 	"github.com/hanzoai/commerce/billing/grant"
@@ -54,9 +54,9 @@ func bootCommerce(t *testing.T) *commercemod.Embedded {
 	if err != nil {
 		t.Fatalf("Embed: %v", err)
 	}
-	inproc.PublishEmbedded(emb)
+	commerce.PublishEmbedded(emb)
 	t.Cleanup(func() {
-		inproc.PublishEmbedded(nil)
+		commerce.PublishEmbedded(nil)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = emb.Stop(ctx)
@@ -102,7 +102,7 @@ func hasFeature(features []string, want string) bool {
 func TestInProcessClient(t *testing.T) {
 	mountPlansVocab(t)
 	emb := bootCommerce(t)
-	client := inproc.InProcessClient("hanzo")
+	client := commerce.InProcessClient("hanzo")
 	ctx := context.Background()
 
 	t.Run("GetTenantConfig_echoes_org_and_brand", func(t *testing.T) {
@@ -166,10 +166,10 @@ func TestInProcessClient(t *testing.T) {
 	t.Run("fails_closed_when_commerce_not_co_resident", func(t *testing.T) {
 		// Temporarily un-publish so the lazy client resolves no Embedded: it MUST
 		// return an error (cannot verify) and NO entitlement — never a fabricated grant.
-		inproc.PublishEmbedded(nil)
-		t.Cleanup(func() { inproc.PublishEmbedded(emb) })
+		commerce.PublishEmbedded(nil)
+		t.Cleanup(func() { commerce.PublishEmbedded(emb) })
 
-		ent, err := inproc.InProcessClient("hanzo").CheckEntitlement(ctx, "maxco", "engine")
+		ent, err := commerce.InProcessClient("hanzo").CheckEntitlement(ctx, "maxco", "engine")
 		if err == nil {
 			t.Fatal("CheckEntitlement must fail closed when commerce is not co-resident")
 		}

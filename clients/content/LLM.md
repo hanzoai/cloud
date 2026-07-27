@@ -133,7 +133,7 @@ the origin, the commerce Listing is the runtime display layer karma already read
   status, never 5xxes). Non-catalog / non-`Asset` items are skipped (nil result).
 - Tenant-scoped: the S2S call is `Authorization: Bearer <COMMERCE_SERVICE_TOKEN>` +
   `X-Org-Id=<org>` over the co-resident/standalone commerce transport
-  (`clients/commerceinproc`) — the SAME admin S2S pattern billing/account use; commerce
+  (`clients/commerce/transport`) — the SAME admin S2S pattern billing/account use; commerce
   trusts `X-Org-Id` ONLY behind the service token, so every write stays on the caller's
   own store (`GET /v1/store/current` resolves it).
 - Fail-closed: no `COMMERCE_SERVICE_TOKEN` (or no store yet) ⇒ `not_configured`, recorded

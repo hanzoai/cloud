@@ -58,7 +58,7 @@ func publishFinance(t *testing.T, f *fakeFinance) {
 
 // TestBalance_ReadsFinanceLedgerNotCommerce is the regression for the live incident:
 // GET /v1/billing/balance proxied to commerce at the SAME path, which re-entered THIS
-// handler (commerceinproc dispatches the shared app by path; commerce's own billing
+// handler (the commerce transport dispatches the shared app by path; commerce's own billing
 // routes are never registered in the co-resident binary), answered "sign in to view
 // billing", and surfaced as "billing upstream status 500".
 //

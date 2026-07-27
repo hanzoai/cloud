@@ -43,7 +43,7 @@ import (
 	"github.com/hanzoai/cloud/clients/admin/metrics"
 	"github.com/hanzoai/cloud/clients/admin/revenue"
 	"github.com/hanzoai/cloud/clients/admin/subscriptions"
-	"github.com/hanzoai/cloud/clients/commerceinproc"
+	"github.com/hanzoai/cloud/clients/commerce/transport"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
@@ -66,7 +66,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		Base: b,
 		State: core.State{
 			IAM:        iam.New(iamBase(deps)),
-			Commerce:   commerce.New(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
+			Commerce:   commerce.New(transport.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
 			Health:     health.New(o11yHealthURL()),
 			DO:         digitalocean.New(doTokenFromEnv()),
 			AdminOrg:   adminOrgOf(deps),
