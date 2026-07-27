@@ -37,8 +37,12 @@ func init() {
 		Configured:   githubConfigured,
 		Creds:        githubCreds,
 		Authorize:    githubAuthorize,
-		Exchange:     githubExchange,
-		Revoke:       nil, // App installs are removed from GitHub, not token-revoked.
+		// The install URL is built from the app slug, not a client id, so the
+		// generic OAuth readiness check does not apply: without this the connect
+		// flow is refused for a credential a GitHub App install never uses.
+		AuthorizeReady: githubConfigured,
+		Exchange:       githubExchange,
+		Revoke:         nil, // App installs are removed from GitHub, not token-revoked.
 	})
 }
 
