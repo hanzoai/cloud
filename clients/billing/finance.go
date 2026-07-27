@@ -145,10 +145,23 @@ type financeLedgerEntry struct {
 // ── commerce wire shapes (only the fields we project) ──
 
 // commerceBalance is commerce GET /v1/billing/balance ({balance,holds,available} cents).
+//
+// Account names WHICH wallet the cents belong to — the billing subject this binary
+// resolved with the one rule (account.Payer), the same subject the ai spend gate debits
+// and a top-up credits. It is cloud-resolved, never decoded from upstream (commerce does
+// not send it), so it is empty on the split-deploy proxy path and omitted from the JSON
+// there rather than rendered as a blank account.
+//
+// It exists because "which account am I funding?" had no answer a client could trust: a
+// browser could only guess by decoding its own token, and a guess that disagrees with the
+// server is exactly how money lands in an account the gate never reads. Echoing the
+// resolved subject lets a checkout SHOW the payer before the customer pays, from the same
+// resolution that will actually be credited.
 type commerceBalance struct {
-	Balance   int64 `json:"balance"`
-	Holds     int64 `json:"holds"`
-	Available int64 `json:"available"`
+	Balance   int64  `json:"balance"`
+	Holds     int64  `json:"holds"`
+	Available int64  `json:"available"`
+	Account   string `json:"account,omitempty"`
 }
 
 // commerceTxn is one commerce ledger row (GET /v1/billing/transactions). Type is
