@@ -402,6 +402,58 @@ image to a prior semver and `/{name}/sync` requests a reconcile. SUPERADMIN-only
 `gitops-engine` (`hanzoai/deploy/gitops-engine` v0.7.2, no replace) in-process for the
 reconcile half behind `DEPLOY_ENGINE_ENABLED` (default off), with a prune-safety fuse.
 
+## Full-text search (`clients/search`, `/v1/search`)
+
+The in-binary index, speaking the Meilisearch REST dialect so a Meilisearch client
+repoints by changing one host. It replaced the standalone Meilisearch containers
+(`chat-meilisearch`, `search-fts5`); `search.hanzo.ai` still runs our own Meilisearch
+build for the docs corpus. Tenancy is the point: a standalone Meilisearch has ONE
+global keyspace behind a master key, so every consumer sharing an instance shares its
+indexes — here the tenant is `principal.Org` and every query filters `WHERE org=?`,
+so two orgs may both hold an index named `messages`. The credential is the org's
+ordinary API key, because the JS client already sends `Authorization: Bearer`.
+
+**The index is a term table, NOT FTS5, and must stay that way.** FTS5 is a
+compile-time module and this binary links the SYSTEM SQLite so the SQLCipher codec is
+real; that library ships `ENABLE_FTS3` + `HAS_CODEC` with no fts5, and the
+`sqlite_fts5` build tag only affects the VENDORED amalgamation, so it is inert here.
+An index built on FTS5 opens on a pure-Go build, passes its tests, and then cannot
+create a single table in the shipped image. `search_terms` is keyed
+`(org, uid, term, pk)` so a prefix query is an index range scan; it behaves the same
+in every build lane. Verify any SQLite module against the production lane
+(`-tags "libsqlite3 sqlite_fts5"` + `-lsqlcipher`) before designing on it.
+
+Health and version are registered as ABSOLUTE paths on `app`, like every other
+`OwnsHealth` subsystem — declared on the subsystem's group they answer on a bare app
+in tests and 404 in production.
+
+## Releases are cut by a merge to main
+
+`.github/workflows` is intentionally empty of CI. The image and its `v*` tags have ONE
+owner, `clients/platform/release.go`: compute the next version → build → SMOKE the
+pushed image → tag → notify universe. The tag is a RECEIPT for a proven image, so a
+change that breaks boot never reaches production and leaves no phantom tag.
+
+It is driven by the GitHub App. A push arrives HMAC-verified at
+`/v1/connector/github/webhook`, which fires `cloud.OnGitPush` — the SAME
+single-registrant seam the embedded git server uses, not a second CI — and
+`clients/platform` decides what the push means: an app tracking the repo rebuilds,
+and cloud's own upstream cuts a release. Cloud is the machine, so it calls the
+release in-process and the build token is never handed to a caller. The trigger runs
+BEFORE the token mint and the mirror, because a build reads from GitHub and must not
+be lost to a sync outage.
+
+`isReleasePush` is narrow on purpose: the release repo BY URL (an org does not
+identify a repo), `main` only, a pinned commit only. Single-flight, because the
+version is computed from existing tags and two overlapping runs would compute the
+same one. Bot-authored pushes are excluded, so the release's own tag and mirror
+pushes cannot retrigger it.
+
+The org an inbound webhook belongs to comes from the App INSTALLATION id via the
+`connections` row written by the install callback. Without that row every delivery is
+acked `200 {"ignored":"unknown installation"}` and silently does nothing — a 200 on
+that path is not evidence it worked; check for sync/build activity.
+
 ## The `hanzo` CLI targets THIS binary — one contract, one IAM login
 
 The `hanzo` CLI (`cli/`) is the same unified binary; its control-plane verbs speak the
