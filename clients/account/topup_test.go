@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -81,24 +82,46 @@ func (f *fakeCommerce) server(t *testing.T) *httptest.Server {
 	return srv
 }
 
-// husdReceipt builds a receipt carrying one HUSD Transfer(from→to, cents*1e16).
+// husdReceipt builds a receipt carrying one 18-decimal Transfer(from→to, cents*1e16).
 func husdReceipt(status, husd, from, to string, cents int64) map[string]any {
-	value := new(big.Int).Mul(big.NewInt(cents), husdCentDivisor)
+	return tokenReceipt(status, husd, from, to, cents, 18)
+}
+
+// tokenReceipt builds a receipt for a Transfer of `cents` worth of a token with the
+// given decimals — the knob that proves a 6-decimal USDC is not priced with an
+// 18-decimal divisor.
+func tokenReceipt(status, token, from, to string, cents int64, decimals int) map[string]any {
+	value := new(big.Int).Mul(big.NewInt(cents), centDivisor(decimals))
 	return map[string]any{
 		"status": status,
 		"logs": []any{map[string]any{
-			"address": husd,
+			"address": token,
 			"topics":  []any{transferTopic, addrToTopic(from), addrToTopic(to)},
 			"data":    "0x" + fmt.Sprintf("%064x", value),
 		}},
 	}
 }
 
-func setTopupEnv(t *testing.T, husd, treasury, rpcURL, commerceURL string) {
+// setTopupEnv configures ONE 18-decimal rail, preserving these tests' original
+// arithmetic (18 decimals ⇒ 1e16 per cent) so they still assert the same cents.
+// An empty token/treasury yields no rail at all — the "not configured" case.
+func setTopupEnv(t *testing.T, token, treasury, rpcURL, commerceURL string) {
 	t.Helper()
-	t.Setenv("HANZO_HUSD_ADDRESS", husd)
-	t.Setenv("HANZO_HUSD_TREASURY", treasury)
-	t.Setenv("HANZO_RPC_URL", rpcURL)
+	setTopupRails(t, commerceURL, rail{
+		ID: "hanzo-husd", Chain: "Hanzo", ChainID: 36963, RPCURL: rpcURL,
+		Token: token, Symbol: "HUSD", Decimals: 18, Treasury: treasury,
+	})
+}
+
+// setTopupRails installs an explicit rail set. Malformed rails are dropped by
+// loadTopupConfig, which is how the not-configured cases above stay 501.
+func setTopupRails(t *testing.T, commerceURL string, rails ...rail) {
+	t.Helper()
+	raw, err := json.Marshal(rails)
+	if err != nil {
+		t.Fatalf("marshal rails: %v", err)
+	}
+	t.Setenv("TOPUP_RAILS", string(raw))
 	t.Setenv("COMMERCE_URL", commerceURL)
 	t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-token")
 }
@@ -237,5 +260,119 @@ func TestTopup_SenderMismatch_400(t *testing.T) {
 		`{"txHash":"`+tTxHash+`","fromAddress":"`+tOther+`"}`)
 	if code != http.StatusBadRequest {
 		t.Fatalf("sender mismatch: want 400, got %d", code)
+	}
+}
+
+// ── rails: the multi-chain generalisation ────────────────────────────────────────
+
+const (
+	tUSDC     = "0x5555555555555555555555555555555555555555"
+	tTreasBase = "0x6666666666666666666666666666666666666666"
+)
+
+func usdcRail(rpcURL string) rail {
+	return rail{
+		ID: "base-usdc", Chain: "Base", ChainID: 8453, RPCURL: rpcURL,
+		Token: tUSDC, Symbol: "USDC", Decimals: 6, Treasury: tTreasBase,
+	}
+}
+
+// The decimals bug this design exists to prevent: USDC has 6 decimals, so 500 cents
+// is 5_000_000 base units. Priced with an 18-decimal divisor it would round to ZERO
+// and silently credit nothing; priced the other way it would credit 10^12 times too
+// much. The rail's own decimals must be what is used.
+func TestTopup_USDC_SixDecimals_PricedByRail(t *testing.T) {
+	rpc := &fakeRPC{result: tokenReceipt("0x1", tUSDC, tSender, tTreasBase, 500, 6)}
+	com := &fakeCommerce{balance: 500}
+	setTopupRails(t, com.server(t).URL, usdcRail(rpc.server(t).URL))
+	app := mountBrand(t, "hanzo")
+
+	code, body := callH(t, app, http.MethodPost, "/v1/commerce/topup/wallet", alice,
+		`{"rail":"base-usdc","txHash":"`+tTxHash+`","fromAddress":"`+tSender+`"}`)
+	if code != http.StatusOK {
+		t.Fatalf("usdc topup: want 200, got %d (%s)", code, body)
+	}
+	var r walletTopupResp
+	mustJSON(t, body, &r)
+	if r.CreditedCents != 500 {
+		t.Fatalf("6-decimal USDC must credit 500 cents, got %d", r.CreditedCents)
+	}
+	// The ledger row must describe the rail that was actually verified.
+	if com.payment["currency"] != "usdc" || com.payment["network"] != "Base" {
+		t.Fatalf("payment must record the real rail, got currency=%v network=%v",
+			com.payment["currency"], com.payment["network"])
+	}
+	if id, _ := com.payment["chainId"].(float64); id != 8453 {
+		t.Fatalf("chainId must be the rail's 8453, got %v", com.payment["chainId"])
+	}
+}
+
+// With several rails configured the client MUST name one: silently picking a default
+// could verify a transfer against another chain's treasury.
+func TestTopup_MultipleRails_RequiresNamingOne(t *testing.T) {
+	rpc := &fakeRPC{result: tokenReceipt("0x1", tUSDC, tSender, tTreasBase, 500, 6)}
+	com := &fakeCommerce{}
+	setTopupRails(t, com.server(t).URL,
+		usdcRail(rpc.server(t).URL),
+		rail{ID: "hanzo-husd", Chain: "Hanzo", ChainID: 36963, RPCURL: rpc.server(t).URL,
+			Token: tHusd, Symbol: "HUSD", Decimals: 18, Treasury: tTreasury},
+	)
+	app := mountBrand(t, "hanzo")
+
+	code, _ := callH(t, app, http.MethodPost, "/v1/commerce/topup/wallet", alice,
+		`{"txHash":"`+tTxHash+`"}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("omitting the rail with >1 configured: want 400, got %d", code)
+	}
+	code, _ = callH(t, app, http.MethodPost, "/v1/commerce/topup/wallet", alice,
+		`{"rail":"nope","txHash":"`+tTxHash+`"}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("unknown rail: want 400, got %d", code)
+	}
+}
+
+// A transfer on the right token but to ANOTHER rail's treasury must not credit.
+func TestTopup_WrongRailTreasury_400(t *testing.T) {
+	rpc := &fakeRPC{result: tokenReceipt("0x1", tUSDC, tSender, tTreasury, 500, 6)} // hanzo treasury
+	com := &fakeCommerce{}
+	setTopupRails(t, com.server(t).URL, usdcRail(rpc.server(t).URL))
+	app := mountBrand(t, "hanzo")
+
+	code, _ := callH(t, app, http.MethodPost, "/v1/commerce/topup/wallet", alice,
+		`{"rail":"base-usdc","txHash":"`+tTxHash+`"}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("transfer to a different treasury: want 400, got %d", code)
+	}
+}
+
+// The public listing gives a browser what it needs to send funds — and must not leak
+// the operational RPC endpoint, which lives on the same config struct.
+func TestTopupRails_PublishesSendInfoWithoutRPC(t *testing.T) {
+	com := &fakeCommerce{}
+	setTopupRails(t, com.server(t).URL, usdcRail("http://secret-rpc.internal"))
+	app := mountBrand(t, "hanzo")
+
+	code, body := callH(t, app, http.MethodGet, "/v1/commerce/topup/rails", alice, "")
+	if code != http.StatusOK {
+		t.Fatalf("rails: want 200, got %d (%s)", code, body)
+	}
+	var got struct{ Rails []map[string]any }
+	mustJSON(t, body, &got)
+	if len(got.Rails) != 1 || got.Rails[0]["treasury"] != tTreasBase || got.Rails[0]["decimals"].(float64) != 6 {
+		t.Fatalf("rails listing wrong: %s", body)
+	}
+	if _, leaked := got.Rails[0]["rpcUrl"]; leaked {
+		t.Fatalf("rails listing must not publish the RPC endpoint: %s", body)
+	}
+}
+
+// No rail configured ⇒ the listing is an empty array, not null, so a client can read
+// .length without a nil check — and the POST is an honest 501.
+func TestTopupRails_EmptyWhenUnconfigured(t *testing.T) {
+	t.Setenv("TOPUP_RAILS", "")
+	app := mountBrand(t, "hanzo")
+	code, body := callH(t, app, http.MethodGet, "/v1/commerce/topup/rails", alice, "")
+	if code != http.StatusOK || !strings.Contains(string(body), `"rails":[]`) {
+		t.Fatalf("unconfigured rails: want 200 with [], got %d (%s)", code, body)
 	}
 }
