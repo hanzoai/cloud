@@ -177,7 +177,7 @@ func requireCSRF(s *cloud.Service[state], next zip.Handler) zip.Handler {
 // co-resident money-WRITE route registered OUTSIDE this package — specifically
 // apps/commerce.go's POST /v1/billing/topup/token, which shadows the account-bridge's
 // POST /v1/billing/* wildcard (order 100 < 122) that would otherwise have wrapped the
-// write in requireCSRF. Moving the route co-resident to break the commerceinproc
+// write in requireCSRF. Moving the route co-resident to break the commerce transport
 // self-dispatch loop must NOT silently drop that anti-CSRF gate, so the identical
 // enforcement rides along as its own handler. It binds to the SAME process-wide key
 // (sharedCSRFKey) the GET /v1/csrf issuer and the bridge verifier use, so a token minted
