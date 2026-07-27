@@ -41,6 +41,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/cek"
 	kmsstore "github.com/luxfi/kms/pkg/store"
 )
 
@@ -149,8 +150,7 @@ func (s *secretStore) orgFileExists(org string) bool {
 		}
 		path = filepath.Join(s.dataDir, "orgs", slug, "kms.db")
 	}
-	_, err := os.Stat(path)
-	return err == nil
+	return cek.Exists(path)
 }
 
 // migrateSecrets creates the sealed-secret table. Idempotent (IF NOT EXISTS), so
@@ -302,7 +302,7 @@ func hasRestoredStore(dataDir string) bool {
 		if !e.IsDir() {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(root, e.Name(), "kms.db")); err == nil {
+		if cek.Exists(filepath.Join(root, e.Name(), "kms.db")) {
 			return true
 		}
 	}
