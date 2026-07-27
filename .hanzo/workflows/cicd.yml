@@ -80,6 +80,13 @@ jobs:
   # absent by convention.
   containment:
     runs-on: [hanzo-build-linux-amd64]
+    # Bounded so a wedged run frees its runner. Absent this the job inherits
+    # GitHub's six-hour default, and the failure that actually happens is a
+    # runner reclaimed mid-build (exit 130, "runner has received a shutdown
+    # signal") whose job then sits on the slot for the rest of the morning.
+    # Generous: these checks read the import graph, they do not link, and the
+    # whole pipeline runs 13-26 min cold.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
