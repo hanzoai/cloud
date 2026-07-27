@@ -85,7 +85,7 @@ func TestRESTPushCreatesCommit(t *testing.T) {
 	if len(events) != 2 {
 		t.Fatalf("want 2 build events, got %d: %+v", len(events), events)
 	}
-	if events[0].Repo != "app" || events[0].Branch != "main" || events[0].Commit != r1.Commit {
+	if events[0].Repo != "app" || events[0].Ref != "refs/heads/main" || events[0].Commit != r1.Commit {
 		t.Fatalf("event[0] = %+v (want commit %s)", events[0], r1.Commit)
 	}
 	if events[1].Commit != r2.Commit {
