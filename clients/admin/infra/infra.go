@@ -34,7 +34,7 @@ type board struct {
 // NOTE ON THE NOUN: this is INFRASTRUCTURE — droplets, volumes, DOKS clusters, load
 // balancers. The pre-existing /v1/fleet surface is compute workers and jobs. Different
 // nouns, deliberately not merged.
-func Routes(app *zip.App, s *cloud.Service[core.State]) {
+func Routes(app cloud.Router, s *cloud.Service[core.State]) {
 	b := &board{}
 	g := app.Group("/v1/admin")
 	g.Get("/infra", core.Guard(s, b.read))

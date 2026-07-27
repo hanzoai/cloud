@@ -97,8 +97,8 @@ var probes = []probe{
 	{"automations", http.MethodGet, "/v1/automations/connectors", classAuthed},
 
 	// ── tolerant (preview / SuperAdmin / cross-org / staged-optional) ──
-	{"get-account", http.MethodGet, "/v1/get-account", classTolerant},
-	{"get-chats", http.MethodGet, "/v1/get-chats", classTolerant},
+	{"account", http.MethodGet, "/v1/ai/account", classTolerant},
+	{"chats", http.MethodGet, "/v1/ai/chats", classTolerant},
 	{"kms-secrets", http.MethodGet, "/v1/kms/orgs/smoke/secrets", classTolerant}, // BUG 1: was 402
 	{"deploy-apps", http.MethodGet, "/v1/deploy/applications", classTolerant},
 	{"websearch", http.MethodGet, "/v1/websearch/search?q=hanzo", classTolerant},

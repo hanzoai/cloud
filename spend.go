@@ -275,10 +275,15 @@ func Reachable(path string) bool {
 	if !strings.HasPrefix(path, "/v1/") {
 		return true // the SPA shell + static assets that render the paywall screen itself.
 	}
+	// These three moved when the /v1 surface was namespaced (/v1/signin →
+	// /v1/ai/signin, /v1/get-account → /v1/ai/account). The list matches by STRING,
+	// so it does NOT follow a route: the old spellings here would put a 402 in front
+	// of SIGN-IN — the same shape of outage the trailing-slash and casing bugs caused
+	// twice already. Pinned by TestAuthRoutesAreAlwaysReachable.
 	switch path {
-	case "/v1/signin", // auth: session bootstrap (the console posts the OAuth code here).
-		"/v1/signout",
-		"/v1/get-account",  // auth: the account read AuthGate loads before anything else.
+	case "/v1/ai/signin", // auth: session bootstrap (the console posts the OAuth code here).
+		"/v1/ai/signout",
+		"/v1/ai/account",   // auth: the account read AuthGate loads before anything else.
 		"/v1/entitlements": // the paywall's OWN projection — what the shell renders upgrade UI from.
 		return true
 	}
