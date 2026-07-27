@@ -76,6 +76,7 @@ func BuildDeps(cfg *Config) Deps {
 		Env:             cfg.Env,
 		Domain:          cfg.Domain,
 		IAMIssuer:       cfg.IAMIssuer,
+		Self:            selfID(cfg),
 		DataDir:         cfg.DataDir,
 		MasterKey:       masterKeyBytes(cfg),
 		AIDefaultModel:  cfg.AIDefaultModel,
@@ -817,7 +818,7 @@ func buildDurability(cfg *Config, log luxlog.Logger) (*Durability, func() []ha.M
 	// membership_k8s.go). A single-pod deployment with no peers is its own sole writer.
 	// The 2s refresh keeps a drained pod out of every peer's election within a bound the
 	// terminationGracePeriod covers, so a rolling handoff loses no request.
-	self := firstNonEmptyStr(strings.TrimSpace(cfg.ShardSelf), hostnameOr("cloud-0"))
+	self := selfID(cfg)
 	peers := parsePeers(cfg.ShardPeers)
 	if len(peers) == 0 {
 		peers = []org.Member{{ID: self, Addr: self}}
@@ -933,6 +934,15 @@ func durableCipher(cfg *Config, log luxlog.Logger) *org.Cipher {
 		return nil
 	}
 	return c
+}
+
+// selfID is THIS process's stable id: the StatefulSet ordinal (CLOUD_POD_NAME /
+// POD_NAME, already resolved onto cfg.ShardSelf) falling back to the OS hostname.
+// ONE resolver — the durability membership elects on it and Deps.Self reports it, so
+// the id an operator reads in a status IS the id the ring routes by. Two resolutions
+// that drifted would name the same pod two different things at the worst moment.
+func selfID(cfg *Config) string {
+	return firstNonEmptyStr(strings.TrimSpace(cfg.ShardSelf), hostnameOr("cloud-0"))
 }
 
 // hostnameOr returns the OS hostname, or def when unavailable — a stable self id for
