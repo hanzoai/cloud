@@ -27,10 +27,18 @@ type ledger struct{}
 // compile-time proof the adapter satisfies commerce's exported seam.
 var _ creditledger.CreditLedger = ledger{}
 
-// Credit posts a balanced deposit (funding:platform → wallet) to the org's POOL
-// account (Subject == Org, the wallet the gate reads) and returns the ledger entry
-// id + the org's new available balance in cents. Idempotent on IdempotencyKey:
-// finance dedups on Ref, so the same key credits AT MOST once.
+// Credit posts a balanced deposit (funding:platform → wallet) to the ADDRESS the
+// input names — (Org, Subject), where an empty Subject is the org POOL — and returns
+// the ledger entry id + that account's new available balance in cents. Idempotent on
+// IdempotencyKey: finance dedups on Ref, so the same key credits AT MOST once.
+//
+// Subject exists because the pool is not always the account the gate reads. In the
+// shared signup org each member spends from their own wallet, so a pool-only credit
+// funds a balance nobody can spend while the member it was meant for is refused at
+// $0. The caller resolves the address with the SAME rule the gate resolves the payer
+// with (account.Payer, via principal), so a credit and the spend it funds land on one
+// wallet by construction. An org whose members share one balance names no subject and
+// is byte-for-byte unchanged.
 func (ledger) Credit(ctx context.Context, in creditledger.CreditInput) (string, int64, error) {
 	fin := finance.Current()
 	if fin == nil {
@@ -44,9 +52,13 @@ func (ledger) Credit(ctx context.Context, in creditledger.CreditInput) (string, 
 	if tag == "" {
 		tag = "grant:admin" // non-cash grant bucket (finance is a single wallet; Tags is a memo)
 	}
+	subject := in.Subject
+	if subject == "" {
+		subject = in.Org // pooled org: the slug IS the pool account the gate reads
+	}
 	id, err := fin.Deposit(ctx, types.DepositInput{
 		Org:      in.Org,
-		Subject:  in.Org, // org-pool wallet == the account the AI gate reads
+		Subject:  subject,
 		Amount:   money.FromCents(in.AmountCents),
 		Currency: cur,
 		Notes:    in.Reason,
@@ -56,7 +68,9 @@ func (ledger) Credit(ctx context.Context, in creditledger.CreditInput) (string, 
 	if err != nil {
 		return "", 0, err
 	}
-	bal, berr := fin.Balance(ctx, in.Org, in.Org, cur, false)
+	// Read back the account that was CREDITED, never the pool — reporting a pool
+	// balance after crediting a member is how a caller concludes the grant vanished.
+	bal, berr := fin.Balance(ctx, in.Org, subject, cur, false)
 	if berr != nil {
 		return id, 0, berr
 	}
