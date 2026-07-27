@@ -20,7 +20,7 @@ func gitSync(direction string) Sync {
 }
 
 func srcPush(repo string) Event {
-	return Event{Provider: provGitHub, Org: "acme", Locator: widgetsURL, Repo: repo, Branch: "main", After: "aaa", Actor: "octocat"}
+	return Event{Provider: provGitHub, Org: "acme", Locator: widgetsURL, Repo: repo, Ref: "refs/heads/main", After: "aaa", Actor: "octocat"}
 }
 
 func TestGitResolve(t *testing.T) {

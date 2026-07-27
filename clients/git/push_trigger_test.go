@@ -78,7 +78,7 @@ func TestPushFiresBuildTrigger(t *testing.T) {
 		t.Fatalf("want exactly 1 push event, got %d: %+v", len(got), got)
 	}
 	ev := got[0]
-	if ev.Org != "acme" || ev.Repo != "code" || ev.Branch != "main" || ev.Commit != commit.String() {
+	if ev.Org != "acme" || ev.Repo != "code" || ev.Ref != "refs/heads/main" || ev.Commit != commit.String() {
 		t.Fatalf("unexpected event: %+v (want commit %s)", ev, commit)
 	}
 	if ev.CloneURL != "https://api.hanzo.test/v1/git/acme/code.git" {

@@ -177,7 +177,7 @@ func TestInboundFastForwardAppliesEmitsOrigin(t *testing.T) {
 	events := captureLifecycle(t)
 	host := hostFromURL(t, src.url)
 	res, err := (githubImporter{}).InboundSync(ctx, cloud.GitInboundReq{
-		Org: "acme", Repo: "svc", Branch: "main", CloneURL: src.url, Origin: host,
+		Org: "acme", Repo: "svc", Ref: "refs/heads/main", CloneURL: src.url, Origin: host,
 	})
 	if err != nil {
 		t.Fatalf("inbound: %v", err)
@@ -229,7 +229,7 @@ func TestInboundConflictPreservesNative(t *testing.T) {
 	events := captureLifecycle(t)
 	host := hostFromURL(t, src.url)
 	res, err := (githubImporter{}).InboundSync(ctx, cloud.GitInboundReq{
-		Org: "acme", Repo: "app", Branch: "main", CloneURL: src.url, Origin: host,
+		Org: "acme", Repo: "app", Ref: "refs/heads/main", CloneURL: src.url, Origin: host,
 	})
 	if err != nil {
 		t.Fatalf("inbound: %v", err)
@@ -271,7 +271,7 @@ func TestInboundLoopPreventionTipEqual(t *testing.T) {
 	// native == source now; an inbound sync of the same tip is the loop echo.
 	events := captureLifecycle(t)
 	res, err := (githubImporter{}).InboundSync(ctx, cloud.GitInboundReq{
-		Org: "acme", Repo: "loop", Branch: "main", CloneURL: src.url, Origin: hostFromURL(t, src.url),
+		Org: "acme", Repo: "loop", Ref: "refs/heads/main", CloneURL: src.url, Origin: hostFromURL(t, src.url),
 	})
 	if err != nil {
 		t.Fatalf("inbound: %v", err)
@@ -297,7 +297,7 @@ func TestInboundNotImportedNoOp(t *testing.T) {
 	ctx := context.Background()
 
 	res, err := (githubImporter{}).InboundSync(ctx, cloud.GitInboundReq{
-		Org: "acme", Repo: "ghost", Branch: "main", CloneURL: src.url, Origin: hostFromURL(t, src.url),
+		Org: "acme", Repo: "ghost", Ref: "refs/heads/main", CloneURL: src.url, Origin: hostFromURL(t, src.url),
 	})
 	if err != nil {
 		t.Fatalf("inbound: %v", err)

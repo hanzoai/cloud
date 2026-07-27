@@ -112,8 +112,11 @@ func (githubImporter) InboundSync(ctx context.Context, req cloud.GitInboundReq) 
 	if !nameRE.MatchString(name) {
 		return cloud.GitSyncResult{}, fmt.Errorf("git: invalid repo name")
 	}
-	if !branchRE.MatchString(req.Branch) {
-		return cloud.GitSyncResult{}, fmt.Errorf("git: invalid branch")
+	// A FULL ref, so branches and tags are the same path. The suffix still goes
+	// through branchRE: it is what keeps a ref from escaping its namespace or
+	// carrying a traversal, and that property matters identically for a tag.
+	if !refRE.MatchString(req.Ref) {
+		return cloud.GitSyncResult{}, fmt.Errorf("git: invalid ref")
 	}
 	project := req.Project
 	store, err := storeFor(s, req.Org)
@@ -136,19 +139,19 @@ func (githubImporter) InboundSync(ctx context.Context, req cloud.GitInboundReq) 
 	if req.Token != "" {
 		cred = gitCred{User: "x-access-token", Token: req.Token}
 	}
-	res, err := s.State.storage.inboundFastForward(ctx, req.Org, project, name, req.Branch, src, cred)
+	res, err := s.State.storage.inboundFastForward(ctx, req.Org, project, name, req.Ref, src, cred)
 	if err != nil {
 		return cloud.GitSyncResult{}, err
 	}
 	switch {
 	case res.Conflict:
-		_ = store.RecordConflict(ctx, req.Org, project, name, req.Branch, res.Detail, time.Now().Unix())
+		_ = store.RecordConflict(ctx, req.Org, project, name, req.Ref, res.Detail, time.Now().Unix())
 		s.Log.Warn("git.inbound.conflict",
-			"org", req.Org, "project", project, "repo", name, "branch", req.Branch,
+			"org", req.Org, "project", project, "repo", name, "branch", req.Ref,
 			"origin", req.Origin, "detail", res.Detail)
 		return cloud.GitSyncResult{Conflict: true, Detail: res.Detail}, nil
 	case res.Applied:
-		_ = store.ClearConflict(ctx, req.Org, project, name, req.Branch)
+		_ = store.ClearConflict(ctx, req.Org, project, name, req.Ref)
 		recordUsage(s, context.WithoutCancel(ctx), req.Org, project, name)
 		// Fan the inbound advance into the lifecycle stream: push-to-deploy fires
 		// (native content changed) AND the outbound mirror suppresses the echo —
@@ -156,7 +159,7 @@ func (githubImporter) InboundSync(ctx context.Context, req cloud.GitInboundReq) 
 		// target and no ping-pong occurs. Other targets (e.g. gitlab) still receive it.
 		cloud.EmitLifecycle(ctx, cloud.LifecycleEvent{
 			Kind: cloud.LifecyclePushLanded, Org: req.Org, Project: project, Repo: name,
-			Branch: req.Branch, Before: res.Before, After: res.After, Origin: req.Origin,
+			Branch: req.Ref, Before: res.Before, After: res.After, Origin: req.Origin,
 		})
 		return cloud.GitSyncResult{Applied: true, Before: res.Before, After: res.After}, nil
 	default:
@@ -346,7 +349,7 @@ type ffResult struct {
 // a Conflict (native preserved), distinct from a network/auth error.
 var nonFFRE = regexp.MustCompile(`(?i)\[rejected\]|non-fast-forward|would clobber existing tag`)
 
-// inboundFastForward advances refs/heads/<branch> to the upstream tip IFF it is a
+// inboundFastForward advances a ref to the upstream tip IFF it is a
 // fast-forward, using a NON-forcing refspec so git itself refuses (and preserves
 // native on) a divergence. Returns:
 //   - Applied  the fetch fast-forwarded native (Before != After)
@@ -355,14 +358,18 @@ var nonFFRE = regexp.MustCompile(`(?i)\[rejected\]|non-fast-forward|would clobbe
 //
 // A non-rejection failure (network/auth) is returned as an error; native is
 // unchanged in that case too (a failed fetch never mutates a ref).
-func (s *storage) inboundFastForward(ctx context.Context, org, project, name, branch, srcURL string, cred gitCred) (ffResult, error) {
+func (s *storage) inboundFastForward(ctx context.Context, org, project, name, ref, srcURL string, cred gitCred) (ffResult, error) {
 	bareDir := s.absRepoPath(org, project, name)
 	env := mirrorGitEnv(srcURL, cred)
-	localRef := "refs/heads/" + branch
-	before := s.revParse(ctx, bareDir, localRef) // "" when the branch is new to native
+	// ref arrives FULL (refs/heads/<branch> or refs/tags/<tag>), so branches and
+	// tags take the same path. The non-forcing refspec below is what makes that
+	// safe for tags too: re-pointing an existing tag is not a fast-forward, so git
+	// rejects it and native keeps the tag it already published.
+	localRef := ref
+	before := s.revParse(ctx, bareDir, localRef) // "" when the ref is new to native
 
 	// The DESTINATION refspec has NO leading '+', so git enforces fast-forward on
-	// refs/heads/<branch>. protocol.version=2 = cheaper negotiation; credential.
+	// the ref. protocol.version=2 = cheaper negotiation; credential.
 	// helper= disables any leaky helper; --no-write-fetch-head keeps the bare repo
 	// clean; the pack streams to disk under a pack slot (bounded memory).
 	refspec := localRef + ":" + localRef
@@ -391,7 +398,7 @@ func (s *storage) inboundFastForward(ctx context.Context, org, project, name, br
 	if nonFFRE.MatchString(msg) {
 		return ffResult{
 			Conflict: true, Before: before, After: after,
-			Detail: "native branch " + branch + " has commits not on the upstream; fast-forward not possible (native preserved)",
+			Detail: "native ref " + ref + " has commits not on the upstream; fast-forward not possible (native preserved)",
 		}, nil
 	}
 	return ffResult{}, fmt.Errorf("git fetch: %w: %s", runErr, msg)
