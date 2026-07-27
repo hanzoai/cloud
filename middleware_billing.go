@@ -114,7 +114,15 @@ func BillingGate(m *metering.Client, price func(c *zip.Ctx) int64) zip.Handler {
 			Status:      "success",
 			ClientIP:    clientIP(c),
 		}
-		go func() { _, _ = m.Record(context.Background(), usage) }()
+		// Contained: this fires on EVERY billable request, so it is the highest-
+		// frequency spawn in the binary. It is also fire-and-forget — nothing reads
+		// its result — which means without containment a single panic inside Record
+		// (a nil meter, a store fault, a bad usage row) would kill the process for
+		// every tenant, on a path whose whole point is that the caller does not wait
+		// for it. The request logger names the org, so the line is actionable.
+		Go(c.Log(), "billing.record", []any{"service", in.Service, "request_id", c.RequestID()}, func() {
+			_, _ = m.Record(context.Background(), usage)
+		})
 		return nil
 	}
 }
