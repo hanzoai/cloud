@@ -33,6 +33,7 @@ require (
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.5.0
 	github.com/luxfi/node v1.36.15
+	github.com/luxfi/trace v1.4.0
 	github.com/luxfi/zapdb v1.10.1
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/nats-io/nats.go v1.50.0
@@ -41,9 +42,7 @@ require (
 	github.com/vulcand/oxy/v2 v2.0.0-00010101000000-000000000000
 	github.com/zap-proto/fiber/v3 v3.2.1
 	github.com/zap-proto/go v1.3.0
-	github.com/zap-proto/http v0.2.0
 	github.com/zap-proto/md v0.1.0
-	github.com/zap-proto/zap2pb v0.2.0
 	github.com/zap-proto/zip v1.8.3
 	go.opentelemetry.io/collector/component v1.54.0
 	go.opentelemetry.io/collector/confmap v1.54.0
@@ -57,8 +56,6 @@ require (
 	go.opentelemetry.io/collector/receiver v1.50.0
 	go.opentelemetry.io/collector/receiver/otlpreceiver v0.144.0
 	go.opentelemetry.io/collector/service v0.144.0
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0
-	go.opentelemetry.io/proto/otlp v1.10.0
 	golang.org/x/term v0.45.0
 	k8s.io/apimachinery v0.35.3
 	k8s.io/client-go v0.35.3
@@ -108,7 +105,11 @@ require (
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
 	github.com/vultr/govultr/v3 v3.30.0 // indirect
+	github.com/zap-proto/http v0.2.0 // indirect
+	github.com/zap-proto/zap2pb v0.2.0 // indirect
 	go.mongodb.org/mongo-driver v1.17.9 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0 // indirect
+	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	k8s.io/apiserver v0.35.3 // indirect
 	k8s.io/cli-runtime v0.35.3 // indirect
 	k8s.io/component-base v0.35.3 // indirect
@@ -713,7 +714,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260615183401-62b3387ff324 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260622175928-b703f567277d // indirect
 	google.golang.org/grpc v1.81.1 // indirect
-	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
+	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.1 // indirect

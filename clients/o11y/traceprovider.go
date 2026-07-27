@@ -30,6 +30,7 @@
 package o11y
 
 import (
+	luxtrace "github.com/luxfi/trace"
 	"context"
 	"log"
 	"os"
@@ -39,12 +40,10 @@ import (
 	aiobject "github.com/hanzoai/ai/object"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/zaptrace"
 )
 
 // defaultZapEndpoint is the collector's ZAP-native OTLP receiver (zapreceiver), used
@@ -85,11 +84,22 @@ func installTraceProvider(ctx context.Context, serviceName string) func(context.
 	if wireEndpoint == "" && legacy != "" {
 		wireEndpoint = defaultZapEndpoint
 	}
-	var wire otlptrace.Client
+	var wire sdktrace.SpanExporter
 	wireDesc := "none (in-process only)"
 	if wireEndpoint != "" {
-		wire = zaptrace.New(wireEndpoint)
-		wireDesc = "ZAP wire=" + wireEndpoint
+		// luxfi/trace owns the ZAP span wire now; cloud's zaptrace existed only
+		// to satisfy otlptrace.Client, an interface nothing here implements
+		// anymore.
+		w, err := luxtrace.NewZAPExporter(
+			luxtrace.ExporterConfig{Type: luxtrace.ZAP, Endpoint: wireEndpoint},
+			serviceName, "",
+		)
+		if err != nil {
+			log.Printf("telemetry: ZAP wire exporter: %v (in-process only)", err)
+		} else {
+			wire = w
+			wireDesc = "ZAP wire=" + wireEndpoint
+		}
 	}
 	exp, err := NewTraceExporter(ctx, wire)
 	if err != nil {
