@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/clients/commerce/transport"
 	"github.com/hanzoai/cloud/clients/metering"
@@ -228,9 +227,9 @@ func wireTierReader(m *metering.Client, log luxlog.Logger) {
 	if m == nil || !m.Enabled() {
 		return
 	}
-	aiobject.SetTierReader(func(ctx context.Context, subject, namespace string) (string, error) {
+	tierReader = func(ctx context.Context, subject, namespace string) (string, error) {
 		return m.Tier(ctx, subject, namespace)
-	})
+	}
 	log.Info("ai per-tier SKU gate wired to co-resident commerce (in-process tier read, fail-safe)")
 }
 
@@ -266,16 +265,16 @@ func wireFinance(cfg *Config, log luxlog.Logger) {
 	// the SAME wallet, or spend can outrun the balance that admitted it. Both use
 	// subject; keep them together. The gate reads a coarse cents balance (a >0
 	// threshold only); the DEBIT is 18-decimal-exact.
-	aiobject.SetBalanceReader(func(ctx context.Context, subject, namespace, currency string) (int64, error) {
+	balanceReader = func(ctx context.Context, subject, namespace, currency string) (int64, error) {
 		bal, err := fin.Balance(ctx, namespace, subject, currency, false)
 		if err != nil {
 			return 0, err
 		}
 		return bal.Cents(), nil
-	})
+	}
 	// The DEBIT is exact: the ai module emits the cost as a decimal-USD string, parsed
 	// here to 18-decimal USD (1e-18) so a sub-cent call bills precisely and is never floored.
-	aiobject.SetUsageRecorder(func(ctx context.Context, u aiobject.UsageEvent) error {
+	usageRecorder = func(ctx context.Context, u UsageEvent) error {
 		amt, err := money.ParseUSD(u.USD)
 		if err != nil {
 			return err
@@ -284,7 +283,7 @@ func wireFinance(cfg *Config, log luxlog.Logger) {
 			Org: u.Namespace, Subject: u.Subject, Amount: amt,
 			Currency: u.Currency, Model: u.Model, Provider: u.Provider, RequestID: u.RequestID,
 		})
-	})
+	}
 	log.Info("finance ledger wired (per-subject wallet in the org ledger, 18-decimal-exact, fail-closed)", "dataDir", cfg.DataDir)
 }
 
