@@ -23,6 +23,13 @@ import "sync/atomic"
 // about its key is worse than no switch.
 const SwitchPaywallEnforced = "paywall_enforced"
 
+// SwitchPaywallStrict is the posture on an UNRESOLVABLE standing. OFF (the
+// default) = availability: an authority we cannot reach never refuses a customer.
+// ON = revenue: an unresolvable standing refuses. It lives beside its sibling for
+// the same reason — SpendGate (this package) and RequireProduct (clients/
+// entitlements, which also REGISTERS it) must name one string.
+const SwitchPaywallStrict = "paywall_strict"
+
 // switchReader is the flag engine's Bool, installed by clients/flags.Mount.
 // atomic because Mount runs during boot while requests may already be served.
 var switchReader atomic.Pointer[func(string) bool]
