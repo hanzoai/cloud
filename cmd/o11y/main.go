@@ -19,6 +19,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -48,6 +49,13 @@ func run() error {
 	// only Logger and DataDir out of it, but building it the one canonical way
 	// keeps this entrypoint honest about what a subsystem may reach for.
 	deps := cloud.BuildDeps(cloud.LoadConfig())
+
+	// A plugin is a host for its own requests, so it owns its own providers —
+	// the SAME bootstrap cloud.Serve runs, not a second one. Before the mount, so
+	// the trace sink this process registers below is already the destination its
+	// own spans route to. Without this the child served /v1/o11y/* with the global
+	// no-op provider and emitted nothing.
+	defer cloud.InstallTelemetry(context.Background(), deps.Logger, "hanzo-o11y")(context.Background())
 
 	app := zip.New(zip.Config{AppName: "o11y", Logger: deps.Logger})
 
