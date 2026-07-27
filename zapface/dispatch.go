@@ -99,21 +99,25 @@ func (d *dispatcher) dispatch(call zaprpc.Call, cookieHeader, authHeader, accept
 
 // buildHTTPRequest maps (method, SuperJSON input) onto a /v1 request.
 //
-// the /v1 convention (mirrored from console/src/lib/api/providers.ts):
-//   - "get-*"  -> GET  /v1/<method> with scalar input fields as the query.
-//   - others   -> POST /v1/<method> with scalar input fields lifted to the
+// The method is an HTTP request line, "<VERB> <path>" (see splitMethod):
+//   - a read verb (GET/HEAD/DELETE) -> no body; scalar input fields become the query.
+//   - a write verb (POST/PUT/PATCH) -> scalar input fields lifted to the
 //     query (identity hints like id/owner) and the single nested
 //     object/array field as the JSON body (the resource); if there is no
 //     nested field, the whole input is the body.
 //
 // This single rule covers every twin shape without per-endpoint coupling:
 //
-//	get-provider {id}                 -> GET  ?id=...
-//	get-providers {owner,store,...}   -> GET  ?owner=...&store=...
-//	update-provider {id, provider}    -> POST ?id=...   body=provider
-//	add-provider <provider>           -> POST            body=<provider>
+//	GET ai/providers/acme/openai   {}            -> GET    /v1/ai/providers/acme/openai
+//	GET ai/providers               {owner,store} -> GET    /v1/ai/providers?owner=...&store=...
+//	PATCH ai/providers/acme/openai {provider}    -> PATCH  … body=provider
+//	POST ai/providers              <provider>    -> POST   /v1/ai/providers body=<provider>
+//	DELETE ai/providers/acme/openai {}           -> DELETE /v1/ai/providers/acme/openai
 func buildHTTPRequest(req zapRequest) (*http.Request, error) {
-	path := "/v1/" + strings.TrimPrefix(req.method, "/")
+	verb, path, err := splitMethod(req.method)
+	if err != nil {
+		return nil, err
+	}
 	inputJSON := superJSONUnwrap(req.payload)
 
 	scalars, nested := splitInput(inputJSON)
@@ -127,13 +131,13 @@ func buildHTTPRequest(req zapRequest) (*http.Request, error) {
 		target += "?" + enc
 	}
 
-	if strings.HasPrefix(req.method, "get-") {
-		r := httptest.NewRequest(http.MethodGet, target, nil)
+	if verb == http.MethodGet || verb == http.MethodHead || verb == http.MethodDelete {
+		r := httptest.NewRequest(verb, target, nil)
 		r.Header.Set("Accept", "application/json")
 		return r, nil
 	}
 
-	// Mutation: choose the body.
+	// Mutation with a body: choose it.
 	var body []byte
 	switch {
 	case nested != nil:
@@ -143,11 +147,49 @@ func buildHTTPRequest(req zapRequest) (*http.Request, error) {
 	default:
 		body = []byte("{}")
 	}
-	r := httptest.NewRequest(http.MethodPost, target, bytes.NewReader(body))
+	r := httptest.NewRequest(verb, target, bytes.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("Accept", "application/json")
 	r.ContentLength = int64(len(body))
 	return r, nil
+}
+
+// zapVerbs are the methods a ZAP call may name. Anything else is refused rather
+// than coerced — a caller that cannot say what it wants to do does not get a guess.
+var zapVerbs = map[string]bool{
+	http.MethodGet: true, http.MethodHead: true, http.MethodPost: true,
+	http.MethodPut: true, http.MethodPatch: true, http.MethodDelete: true,
+}
+
+// splitMethod reads a ZAP method as an HTTP request line: "<VERB> <path>", e.g.
+// "GET rag/stores" or "PATCH ai/providers/acme/openai". The path is rooted at /v1.
+//
+// The verb is CARRIED, not inferred. It used to be guessed from the method name —
+// a "get-" prefix meant GET and everything else meant POST — which worked only
+// because the route surface encoded its verb in every route name (/v1/get-store
+// vs /v1/update-store). Once the surface became RESTful that signal disappeared:
+// one path answers GET, PATCH and DELETE, and no prefix distinguishes them. A
+// heuristic there would silently send a delete as a POST.
+//
+// A method with no verb is an ERROR, not a default. Defaulting would turn a
+// caller's omission into a wrong-but-plausible request — for a surface where the
+// verb decides between reading a resource and destroying it, that is the one
+// behaviour worth refusing outright.
+func splitMethod(method string) (verb, path string, err error) {
+	m := strings.TrimSpace(method)
+	head, rest, ok := strings.Cut(m, " ")
+	if !ok {
+		return "", "", fmt.Errorf("method %q must be %q — the HTTP verb is required, not inferred", method, "<VERB> <path>")
+	}
+	verb = strings.ToUpper(strings.TrimSpace(head))
+	if !zapVerbs[verb] {
+		return "", "", fmt.Errorf("method %q names an unsupported verb %q", method, verb)
+	}
+	rest = strings.TrimSpace(rest)
+	if rest == "" {
+		return "", "", fmt.Errorf("method %q names no path", method)
+	}
+	return verb, "/v1/" + strings.TrimPrefix(rest, "/"), nil
 }
 
 // splitInput separates a JSON object into its scalar fields (rendered as query

@@ -36,7 +36,7 @@ func buildClientRequestBytes(method, payload string, promiseID uint32) []byte {
 // TestParseClientRequest proves the server decodes a real client frame: outer
 // rpc envelope -> inner ZapRequest -> (method, SuperJSON payload).
 func TestParseClientRequest(t *testing.T) {
-	const method = "get-providers"
+	const method = "GET ai/providers"
 	// console sends SuperJSON.stringify(input); a plain object X -> {"json":X}.
 	input := map[string]any{"owner": "admin", "store": "default", "limit": "20"}
 	innerJSON, _ := json.Marshal(input)
@@ -176,44 +176,53 @@ func TestBuildHTTPRequest(t *testing.T) {
 		wantBodyHa string // a substring expected in the body ('' = no body)
 	}{
 		{
-			name:       "get-global-providers no args",
-			method:     "get-global-providers",
+			name:       "global listing, no args",
+			method:     "GET ai/providers/global",
 			input:      nil,
 			wantMethod: "GET",
-			wantPath:   "/v1/get-global-providers",
+			wantPath:   "/v1/ai/providers/global",
 		},
 		{
-			name:       "get-provider with id",
-			method:     "get-provider",
-			input:      map[string]any{"id": "admin/openai"},
+			name:       "member read — the id is in the PATH, not a query param",
+			method:     "GET ai/providers/admin/openai",
+			input:      nil,
 			wantMethod: "GET",
-			wantPath:   "/v1/get-provider",
-			wantQuery:  map[string]string{"id": "admin/openai"},
+			wantPath:   "/v1/ai/providers/admin/openai",
 		},
 		{
-			name:       "get-providers list query",
-			method:     "get-providers",
+			name:       "collection list keeps its filters as a query",
+			method:     "GET ai/providers",
 			input:      map[string]any{"owner": "admin", "store": "default"},
 			wantMethod: "GET",
-			wantPath:   "/v1/get-providers",
+			wantPath:   "/v1/ai/providers",
 			wantQuery:  map[string]string{"owner": "admin", "store": "default"},
 		},
 		{
-			name:       "update-provider id+resource",
-			method:     "update-provider",
-			input:      map[string]any{"id": "admin/openai", "provider": map[string]any{"owner": "admin", "name": "openai", "type": "OpenAI"}},
-			wantMethod: "POST",
-			wantPath:   "/v1/update-provider",
-			wantQuery:  map[string]string{"id": "admin/openai"},
+			// The verb travels with the call. Under the old prefix heuristic this
+			// same request would have been sent as a POST.
+			name:       "member update is a PATCH with the resource as the body",
+			method:     "PATCH ai/providers/admin/openai",
+			input:      map[string]any{"provider": map[string]any{"owner": "admin", "name": "openai", "type": "OpenAI"}},
+			wantMethod: "PATCH",
+			wantPath:   "/v1/ai/providers/admin/openai",
 			wantBodyHa: `"type":"OpenAI"`,
 		},
 		{
-			name:       "add-provider bare resource",
-			method:     "add-provider",
+			name:       "create posts the bare resource to the collection",
+			method:     "POST ai/providers",
 			input:      map[string]any{"owner": "admin", "name": "openai", "type": "OpenAI"},
 			wantMethod: "POST",
-			wantPath:   "/v1/add-provider",
+			wantPath:   "/v1/ai/providers",
 			wantBodyHa: `"name":"openai"`,
+		},
+		{
+			// A DELETE carries no body — and under the old heuristic it would have
+			// been a POST, i.e. a destroy sent as a write to the wrong route.
+			name:       "member delete is a DELETE with no body",
+			method:     "DELETE ai/providers/admin/openai",
+			input:      nil,
+			wantMethod: "DELETE",
+			wantPath:   "/v1/ai/providers/admin/openai",
 		},
 	}
 
