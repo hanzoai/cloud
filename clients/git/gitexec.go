@@ -22,8 +22,8 @@ import (
 // cloud pod when large repos were mirrored. The git CLI (index-pack /
 // upload-pack / receive-pack) streams packs to and from disk, so memory stays
 // bounded by an OS pipe buffer regardless of repo size — the way real git hosts
-// (gitea, GitLab) serve smart-HTTP. The patterns here are ported from gitea
-// v1.24.7 (routers/web/repo/githttp.go, modules/git/command.go, cmd/serv.go).
+// (GitLab, and every other real forge) serve smart-HTTP. The patterns here are
+// ported from the upstream forge this plane was seeded from (routers/web/repo/githttp.go, modules/git/command.go, cmd/serv.go).
 //
 // Every git invocation:
 //   - takes an ARG SLICE (never a shell string) so a repo path or source URL can
@@ -135,7 +135,7 @@ func receiveMaxInputSize() string {
 func packSubcommand(service string) string { return strings.TrimPrefix(service, "git-") }
 
 // packetWrite pkt-line-encodes str: a 4-hex-digit length prefix (counting the 4
-// prefix bytes) then the payload. Ported verbatim from gitea
+// prefix bytes) then the payload. Ported verbatim from the upstream forge
 // (routers/web/repo/githttp.go) — the smart-HTTP "# service=…\n" info/refs
 // framing contract the git client requires before the advertisement body.
 func packetWrite(str string) []byte {
@@ -148,7 +148,7 @@ func packetWrite(str string) []byte {
 
 // safeGitProtocolHeader validates a client Git-Protocol header before it is
 // forwarded into the subprocess env as GIT_PROTOCOL (protocol v2 = far cheaper
-// negotiation + partial clone on large repos). Ported from gitea: one or more
+// negotiation + partial clone on large repos). Ported from upstream: one or more
 // alnum key=value pairs separated by colons — so a client can never smuggle
 // extra env or arguments through the header.
 var safeGitProtocolHeader = regexp.MustCompile(`^[0-9a-zA-Z]+=[0-9a-zA-Z]+(:[0-9a-zA-Z]+=[0-9a-zA-Z]+)*$`)
@@ -167,13 +167,13 @@ func gitProtocolEnv(protocol string) []string {
 // baseGitEnv is the hardened, MINIMAL environment EVERY git subprocess runs
 // under. It inherits NONE of the server's environment (no KMS keys, no
 // GIT_MIRROR_TOKEN leaking to a child) — only PATH plus the isolation knobs
-// gitea's modules/git uses:
+// the upstream forge's git module uses:
 //   - GIT_CONFIG_NOSYSTEM + GIT_CONFIG_GLOBAL=/dev/null: ignore /etc/gitconfig
 //     and any ~/.gitconfig — no operator config, no credential helper, no LFS
 //     smudge/clean filters (git >= 2.32, satisfied by the alpine 3.22 git).
 //   - HOME=/nonexistent: belt-and-suspenders against a stray global config.
 //   - GIT_TERMINAL_PROMPT=0: never block on an interactive credential prompt.
-//   - GIT_NO_REPLACE_OBJECTS=1: ignore refs/replace remaps (gitea).
+//   - GIT_NO_REPLACE_OBJECTS=1: ignore refs/replace remaps.
 //   - LC_ALL=C: stable, parseable output.
 //
 // PATH is passed through (not a secret) so git can find its helper executables
@@ -296,7 +296,7 @@ func (g *gitPackStream) Close() error {
 
 // runPackSSH drives `git <sub> <bareDir>` (plain native protocol — advertise +
 // negotiate + pack in one stream) over an SSH channel, streaming both directions
-// with bounded memory. Ported from gitea cmd/serv.go. The channel is a
+// with bounded memory. Ported from the upstream forge's serv command. The channel is a
 // bidirectional io.ReadWriteCloser (not an *os.File), so exec would deadlock on
 // Wait if it copied the channel itself; we own the pipes and drive completion
 // off git stdout closing (git exiting). The lingering client→git copy goroutine

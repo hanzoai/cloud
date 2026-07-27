@@ -7,13 +7,13 @@ import (
 
 // sync_seam.go is the inversion layer between the universal sync ENGINE
 // (clients/sync) and the two planes that trigger or execute it — the webhook
-// triggers (clients/integrations GitHub App, clients/git Gitea ingest) and the git
+// triggers (clients/integrations GitHub App, clients/git Hanzo Git ingest) and the git
 // object plane (clients/git). It is the SAME idiom as git_import.go's GitImporter:
 // the engine registers itself here at Mount; triggers call the package funcs below
 // with NO import of the engine package, so nothing imports the sync package except apps
 // (which mounts it). One seam, one direction, no cycles.
 
-// SyncEvent is a provider-agnostic sync trigger. A webhook (GitHub push, Gitea
+// SyncEvent is a provider-agnostic sync trigger. A webhook (GitHub push, Hanzo Git
 // push) or a manual run builds one and hands it to the registered engine via Sync;
 // the engine resolves the Syncs whose SOURCE matches (Provider, Locator/Repo)
 // for the org and applies each. Flat + string-typed so it crosses the trigger→

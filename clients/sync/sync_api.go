@@ -189,7 +189,7 @@ func patchSync(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := store.Upsert(c.Context(), cur); err != nil { // endpoints unchanged → updates in place
 		return zip.Errorf(http.StatusInternalServerError, "update sync: %v", err)
 	}
-	// Reconcile the derived outbound Gitea push-mirror to the (possibly new) direction.
+	// Reconcile the derived outbound push-mirror to the (possibly new) direction.
 	if cur.Kind == "git" {
 		reconcileOutboundMirror(c.Context(), s, cur, dirPushes(cur.Direction))
 	}
@@ -254,7 +254,7 @@ func deleteSync(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.ErrNotFound("sync not found")
 	}
-	// Tear down the outbound Gitea push-mirror (best-effort) so an unsynced repo never
+	// Tear down the outbound push-mirror (best-effort) so an unsynced repo never
 	// keeps pushing to the upstream.
 	if sy.Kind == "git" {
 		reconcileOutboundMirror(c.Context(), s, sy, false)
