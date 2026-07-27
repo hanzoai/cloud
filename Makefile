@@ -90,11 +90,19 @@ run: build ## Run with iam,base,kms,gateway,o11y enabled (matches README quickst
 smoke: ## Build and run cmd/cloud-smoke (mount-time integration check).
 	$(GO) run ./cmd/cloud-smoke
 
+# The data plane has no plaintext-at-rest mode: cek refuses to open a store without
+# a master key, on every build. The server makes that a boot decision (serve.go); a
+# test run has no boot, so the suite declares its own dev posture HERE — once, for
+# every package — instead of each package carrying a copy. A key already in the
+# environment always wins, so CI's real key is never overridden.
+DEV_KMS_KEY := AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+TEST_ENV = CLOUD_KMS_MASTER_KEY_REF="$${CLOUD_KMS_MASTER_KEY_REF:-$(DEV_KMS_KEY)}"
+
 test: ## Run unit + integration tests (pure-Go, exactly as prod ships).
-	CGO_ENABLED=$(CGO_ENABLED) $(GO) test ./...
+	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test ./...
 
 test-cgo: ## Prove the cgo build works too — forces the fork's pure-Go backend via -tags sqlite_purego so the embedded modernc importers don't double-register "sqlite".
-	CGO_ENABLED=1 $(GO) test -tags sqlite_purego ./...
+	$(TEST_ENV) CGO_ENABLED=1 $(GO) test -tags sqlite_purego ./...
 
 vet: ## go vet across the module.
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) vet ./...

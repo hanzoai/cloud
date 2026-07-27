@@ -103,28 +103,91 @@ const (
 const (
 	// maxDepth is the upline depth cap: L1 (direct), L2, L3.
 	maxDepth = 3
-	// l2RateBps / l3RateBps are the second- and third-level rates (5% / 2%).
-	l2RateBps int64 = 500
-	l3RateBps int64 = 200
-	// maxL1RateBps caps an affiliate's DIRECT (L1) rate so the WHOLE upline schedule
-	// (L1 + L2 + L3) never exceeds 100% of the margin. This is the structural guarantee
-	// that the SUM of every level's share on ONE source event stays ≤ that event's
-	// margin — i.e. total share ≤ margin, so the platform never pays out more than it
-	// earned. The admin set-rate endpoint enforces it.
-	maxL1RateBps int64 = bpsDenom - l2RateBps - l3RateBps // 9300
+	// defaultL2RateBps / defaultL3RateBps are the POLICY defaults for the second- and
+	// third-level rates (5% / 2%) — the schedule before anyone has set one. The live
+	// values come from the admin switches below; these are only the fallback.
+	defaultL2RateBps int64 = 500
+	defaultL3RateBps int64 = 200
 )
 
+// The L2/L3 upline switches. L1 is already per-affiliate (Affiliate.RateBps, negotiated
+// and stored on the row); these two were the last part of the schedule that could only
+// move with a redeploy. Commission rates are a commercial decision, not a deployment
+// one, so they belong in the same cockpit as the margin they are a rate of.
+const (
+	l2RateKey = "affiliate_l2_rate_bps"
+	l3RateKey = "affiliate_l3_rate_bps"
+)
+
+func init() {
+	flags.Register(flags.Def{
+		Key: l2RateKey, Category: "Gateway", Type: flags.TypeInt,
+		Default: strconv.FormatInt(defaultL2RateBps, 10),
+		Label:   "Affiliate upline — level 2 rate (bps)",
+		Desc: "Commission paid to the affiliate ONE step above the direct referrer, in " +
+			"basis points OF Hanzo's margin. 500 = 5%. L2+L3 must stay ≤ 10000; a pair " +
+			"that breaks that falls back to the defaults together.",
+	})
+	flags.Register(flags.Def{
+		Key: l3RateKey, Category: "Gateway", Type: flags.TypeInt,
+		Default: strconv.FormatInt(defaultL3RateBps, 10),
+		Label:   "Affiliate upline — level 3 rate (bps)",
+		Desc: "Commission paid two steps above the direct referrer, in basis points OF " +
+			"Hanzo's margin. 200 = 2%. Beyond level 3 nothing accrues.",
+	})
+}
+
+// uplineRates resolves the L2/L3 rates as a PAIR, because the invariant that binds
+// them cannot be checked on either alone: L2+L3 ≤ bpsDenom is what leaves room for
+// ANY L1 rate at all, and it is a property of the two together. A pair that breaks it
+// falls back to the policy defaults TOGETHER — half-applying an edit would produce a
+// schedule no one chose, which is worse than the one they were trying to replace.
+//
+// Individually-negative values are refused by the same test: with both non-negative,
+// either exceeding bpsDenom already breaks the sum.
+//
+// Read LIVE, per accrual, exactly like affiliateMarginBps — never captured at boot.
+func uplineRates() (l2, l3 int64) {
+	return clampUplineRates(int64(flags.Int(l2RateKey)), int64(flags.Int(l3RateKey)))
+}
+
+// clampUplineRates bounds a configured L2/L3 pair, falling back to the policy defaults
+// outside it. Pure, so the bound is testable without the engine — the same split as
+// clampMarginBps. 0 is LEGAL at either level (that level accrues nothing); only a
+// negative rate or a pair that leaves no room for L1 falls back.
+func clampUplineRates(l2, l3 int64) (int64, int64) {
+	if l2 < 0 || l3 < 0 || l2+l3 > bpsDenom {
+		return defaultL2RateBps, defaultL3RateBps
+	}
+	return l2, l3
+}
+
+// maxL1RateBps caps an affiliate's DIRECT (L1) rate so the WHOLE upline schedule
+// (L1 + L2 + L3) never exceeds 100% of the margin. This is the structural guarantee
+// that the SUM of every level's share on ONE source event stays ≤ that event's
+// margin — i.e. total share ≤ margin, so the platform never pays out more than it
+// earned. The admin set-rate endpoint enforces it.
+//
+// A function, not a constant, now that L2/L3 move: the cap has to be derived from the
+// rates in force at the moment the rate is set, or lowering L2 would silently leave
+// the old, tighter cap in place. uplineRates' clamp is what keeps this non-negative.
+func maxL1RateBps() int64 {
+	l2, l3 := uplineRates()
+	return bpsDenom - l2 - l3
+}
+
 // levelRateBps is the commission rate for a source org's spend at upline `level`
-// (1-indexed) accruing to affiliate `a`: L1 uses the affiliate's own rate, L2/L3 use
-// the platform constants. A level outside [1,maxDepth] earns nothing.
+// (1-indexed) accruing to affiliate `a`: L1 uses the affiliate's own negotiated rate,
+// L2/L3 the platform switches. A level outside [1,maxDepth] earns nothing.
 func levelRateBps(level int, a Affiliate) int64 {
+	l2, l3 := uplineRates()
 	switch level {
 	case 1:
 		return a.RateBps
 	case 2:
-		return l2RateBps
+		return l2
 	case 3:
-		return l3RateBps
+		return l3
 	default:
 		return 0
 	}
@@ -411,13 +474,15 @@ func myAffiliatesMe(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 // uplineSchedule renders the level rate schedule for a non-enrolled caller's /me view
-// so the console can show "what you'd earn": L1 at the given direct rate, L2/L3 at
-// the platform constants.
+// so the console can show "what you'd earn": L1 at the given direct rate, L2/L3 at the
+// platform switches — resolved here, so the quote reflects the schedule actually in
+// force rather than the one compiled in.
 func uplineSchedule(directRateBps int64) []levelView {
+	l2, l3 := uplineRates()
 	return []levelView{
 		{Level: 1, RateBps: directRateBps},
-		{Level: 2, RateBps: l2RateBps},
-		{Level: 3, RateBps: l3RateBps},
+		{Level: 2, RateBps: l2},
+		{Level: 3, RateBps: l3},
 	}
 }
 
