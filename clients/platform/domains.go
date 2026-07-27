@@ -20,42 +20,26 @@ package platform
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/fqdn"
 	"github.com/zap-proto/zip"
 )
 
-// hostnameRE is a syntactic DNS hostname: ≥2 dot-separated labels ending in an
-// alphabetic TLD, no scheme/port/path. The boundary guard for a BYO host — a
-// value that could never be a real domain is refused before any store/DNS work.
-var hostnameRE = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$`)
-
-// challengePrefix is the label under which the TXT ownership token is published.
-const challengePrefix = "_hanzo-challenge."
-
-func challengeName(host string) string { return challengePrefix + host }
-
-// dnsResolver is the minimal DNS surface custom-domain verification needs. The
-// default impl is the stdlib *net.Resolver (no dependency); tests inject a fake
-// so verification is deterministic without touching real DNS.
-type dnsResolver interface {
-	LookupTXT(ctx context.Context, name string) ([]string, error)
-	LookupCNAME(ctx context.Context, name string) (string, error)
-}
+// Hostname syntax, canonical form, the challenge name, the token, and the
+// ownership check itself all live in internal/fqdn — the ONE implementation,
+// shared with the PaaS sites path (clients/projects), which binds customer
+// hostnames against the same rules.
 
 // dns returns the configured resolver, defaulting to the system resolver so a
 // production Service that never set one still verifies against real DNS.
-func dns(s *cloud.Service[state]) dnsResolver {
+func dns(s *cloud.Service[state]) fqdn.Resolver {
 	if s.State.resolver != nil {
 		return s.State.resolver
 	}
@@ -85,17 +69,7 @@ func underSitesApex(s *cloud.Service[state], host string) bool {
 	return host == s.State.sitesHost || strings.HasSuffix(host, "."+s.State.sitesHost)
 }
 
-func sanitizeHost(raw string) string {
-	return strings.TrimSuffix(strings.ToLower(strings.TrimSpace(raw)), ".")
-}
-
 // ── views ──────────────────────────────────────────────────────────────────────
-
-type dnsRecordView struct {
-	Type  string `json:"type"`  // TXT | CNAME
-	Name  string `json:"name"`  // the record name the customer creates
-	Value string `json:"value"` // the record value
-}
 
 // domainView is one row in the app's domains panel. Status is honest and derived
 // from the operator CR (never fabricated):
@@ -105,25 +79,15 @@ type dnsRecordView struct {
 //	pending_deploy host is attached but the app has no Service CR yet (deploy it)
 //	pending        custom claim awaiting DNS verification (Records show the proof)
 type domainView struct {
-	Host      string          `json:"host"`
-	Kind      string          `json:"kind"`   // default | subtree | custom
-	Status    string          `json:"status"` // live | provisioning | pending_deploy | pending
-	URL       string          `json:"url"`
-	Verified  bool            `json:"verified"`
-	Primary   bool            `json:"primary,omitempty"`
-	Records   []dnsRecordView `json:"records,omitempty"`
-	Detail    string          `json:"detail,omitempty"`
-	CreatedAt int64           `json:"createdAt,omitempty"`
-}
-
-// challengeRecords are the exact DNS records a customer must publish for a custom
-// host: the TXT ownership token, plus the CNAME that routes traffic at the app's
-// Hanzo host once verified.
-func challengeRecords(s *cloud.Service[state], host, token, target string) []dnsRecordView {
-	return []dnsRecordView{
-		{Type: "TXT", Name: challengeName(host), Value: token},
-		{Type: "CNAME", Name: host, Value: target},
-	}
+	Host      string        `json:"host"`
+	Kind      string        `json:"kind"`   // default | subtree | custom
+	Status    string        `json:"status"` // live | provisioning | pending_deploy | pending
+	URL       string        `json:"url"`
+	Verified  bool          `json:"verified"`
+	Primary   bool          `json:"primary,omitempty"`
+	Records   []fqdn.Record `json:"records,omitempty"`
+	Detail    string        `json:"detail,omitempty"`
+	CreatedAt int64         `json:"createdAt,omitempty"`
 }
 
 // customDomainView renders a custom domain row. A verified row's status is the
@@ -138,7 +102,7 @@ func customDomainView(s *cloud.Service[state], d Domain, def string, endpoints [
 	}
 	v.Verified = false
 	v.Status = "pending"
-	v.Records = challengeRecords(s, d.Host, d.Token, def)
+	v.Records = fqdn.Records(d.Host, d.Token, def)
 	v.Detail = "awaiting DNS verification — publish the records below, then Verify"
 	return v
 }
@@ -237,11 +201,11 @@ func addDomain(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
-	host := sanitizeHost(body.Host)
+	host := fqdn.Clean(body.Host)
 	if host == "" {
 		return zip.ErrBadRequest("host is required")
 	}
-	if len(host) > 253 || !hostnameRE.MatchString(host) {
+	if !fqdn.Valid(host) {
 		return zip.ErrBadRequest("host must be a valid DNS hostname (e.g. app.yourco.com)")
 	}
 	def := defaultHost(s, org, a.Slug)
@@ -286,7 +250,7 @@ func addDomain(s *cloud.Service[state], c *zip.Ctx) error {
 		endpoints, phase := s.State.k8s.observeDomains(c.Context(), org, a.Slug)
 		return c.JSON(http.StatusOK, customDomainView(s, existing, def, endpoints, phase))
 	}
-	token, err := genDomainToken()
+	token, err := fqdn.Token()
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
@@ -314,7 +278,7 @@ func verifyDomain(s *cloud.Service[state], c *zip.Ctx) error {
 	if herr != nil {
 		return herr
 	}
-	host := sanitizeHost(c.Param("host"))
+	host := fqdn.Clean(c.Param("host"))
 	d, err := s.State.store.GetDomain(c.Context(), org, a.ID, host)
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("domain not found")
@@ -329,10 +293,9 @@ func verifyDomain(s *cloud.Service[state], c *zip.Ctx) error {
 		return c.JSON(http.StatusOK, customDomainView(s, d, def, endpoints, phase))
 	}
 
-	owned, detail := verifyDNS(s, c.Context(), host, d.Token)
-	if !owned {
+	if err := fqdn.Verify(c.Context(), dns(s), host, d.Token); err != nil {
 		v := customDomainView(s, d, def, nil, "")
-		v.Detail = detail
+		v.Detail = err.Error()
 		return c.JSON(http.StatusOK, v) // honest "still pending" — the check ran
 	}
 
@@ -362,7 +325,7 @@ func removeDomain(s *cloud.Service[state], c *zip.Ctx) error {
 	if herr != nil {
 		return herr
 	}
-	host := sanitizeHost(c.Param("host"))
+	host := fqdn.Clean(c.Param("host"))
 	if host == defaultHost(s, org, a.Slug) {
 		return zip.ErrBadRequest("the default domain cannot be removed")
 	}
@@ -382,25 +345,6 @@ func removeDomain(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrNotFound("domain not attached to this application")
 	}
 	return c.NoContent(http.StatusNoContent)
-}
-
-// verifyDNS checks the ownership challenge for host: the TXT record at
-// `_hanzo-challenge.<host>` must contain the claim token. This is the security
-// boundary — only someone who controls host's DNS zone can publish that record,
-// so a matching token proves control (the DNS-01 model). Apex-safe (no CNAME
-// requirement). Returns (owned, detail) where detail names what is missing.
-func verifyDNS(s *cloud.Service[state], ctx context.Context, host, token string) (owned bool, detail string) {
-	txts, err := dns(s).LookupTXT(ctx, challengeName(host))
-	if err == nil {
-		for _, t := range txts {
-			if strings.TrimSpace(t) == token {
-				return true, ""
-			}
-		}
-	}
-	return false, fmt.Sprintf(
-		"TXT record %s = %q not found yet — publish it and retry (DNS can take a few minutes to propagate)",
-		challengeName(host), token)
 }
 
 // persistHostsAndIngress writes the app's new active host set and re-applies the
@@ -464,13 +408,4 @@ func marshalHosts(hosts []string) string {
 	}
 	b, _ := json.Marshal(hosts)
 	return string(b)
-}
-
-// genDomainToken returns a 22-char URL-safe verification token (96 bits).
-func genDomainToken() (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(b), nil
 }
