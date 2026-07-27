@@ -146,7 +146,7 @@ func (s *storage) mirrorInto(ctx context.Context, org, project, name, srcURL str
 	// Fetch all refs + tags with mirror semantics, streaming the pack to disk
 	// under a pack-concurrency slot + memory bounds (packConfigArgs) so a multi-GB
 	// mirror can't OOM the pod. protocol.version=2 = cheaper negotiation;
-	// credential.helper= disables any interactive/leaky helper (gitea);
+	// credential.helper= disables any interactive/leaky helper;
 	// --no-write-fetch-head keeps a bare mirror clean.
 	args := append(packConfigArgs(""),
 		"-c", "protocol.version=2", "-c", "credential.helper=",

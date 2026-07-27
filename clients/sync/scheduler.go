@@ -15,7 +15,7 @@ import (
 
 // scheduler.go is the FRESHNESS driver: a periodic reconcile loop that keeps every
 // `poll`-triggered sync current WITHOUT waiting for a webhook. The engine (engine.go)
-// already reconciles on demand — a GitHub/Gitea webhook (cloud.Sync), a manual /run,
+// already reconciles on demand — a GitHub/Hanzo Git webhook (cloud.Sync), a manual /run,
 // or a chained propagation; but a sync whose upstream fires no webhook (or whose
 // webhook is missed) would drift stale. The `poll` trigger is that sync's opt-in to a
 // timer, and THIS loop is its driver — the third and final leg of the trigger enum
