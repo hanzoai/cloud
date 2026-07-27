@@ -20,6 +20,7 @@ func newTestSession(t *testing.T) *session {
 }
 
 func TestPersistenceCRUD(t *testing.T) {
+	requireSharedStore(t) // reopens the workspace store on a fresh handle mid-test
 	s := newTestSession(t)
 
 	// create a tracker Project

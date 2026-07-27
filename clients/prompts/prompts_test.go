@@ -2,7 +2,7 @@ package prompts
 
 import (
 	"context"
-	"database/sql"
+	"github.com/hanzoai/cloud/cek"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,7 +17,7 @@ import (
 func TestMigrateSelfHealsFromLegacyPromptSchema(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "prompts.db")
 
-	legacy, err := sql.Open("sqlite", path)
+	legacy, err := cek.Open(path)
 	if err != nil {
 		t.Fatalf("open legacy: %v", err)
 	}
