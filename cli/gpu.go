@@ -1072,11 +1072,16 @@ func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
 // presence record (activityId==runId==identity, no requestId so a reconnect
 // overwrites any prior/terminal record with a fresh online row).
 func (w *worker) register(ctx context.Context) error {
+	// Ensuring the namespaces is BEST-EFFORT: they already exist in any live org, so a
+	// transient API blip here must not kill the worker. It used to be fatal, and with
+	// systemd Restart=always/RestartSec=5 one 503 turned into an infinite crash-loop
+	// (observed at 141 restarts, machine offline the whole time). If a namespace truly
+	// is missing, the presence write below fails and surfaces the real error.
 	for _, ns := range []string{fleetNS, w.jobsNS} {
 		if _, err := w.call(ctx, http.MethodPost, "/v1/tasks/namespaces", map[string]any{
 			"namespaceInfo": map[string]any{"name": ns},
 		}, nil); err != nil {
-			return fmt.Errorf("ensure namespace %q: %w", ns, err)
+			fmt.Fprintf(os.Stderr, "ensure namespace %q (continuing): %v\n", ns, err)
 		}
 	}
 	_, err := w.call(ctx, http.MethodPost, "/v1/tasks/namespaces/"+fleetNS+"/activities", map[string]any{
