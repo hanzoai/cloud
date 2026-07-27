@@ -56,7 +56,7 @@ import (
 
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/commerceinproc"
+	"github.com/hanzoai/cloud/clients/commerce/transport"
 	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
@@ -88,7 +88,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // hard-coded) and the account-usage warehouse (a DDL latch over aiobject's shared
 // datastore — no handle of its own, so the subsystem needs no Shutdown).
 func build(b cloud.Base) (state, error) {
-	cr := newCommerceReader(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN"))
+	cr := newCommerceReader(transport.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN"))
 	b.Log.Info("usage surface", "prefix", "/v1/usage", "commerce", cr.configured())
 	return state{commerce: cr, warehouse: &warehouse{}}, nil
 }
@@ -429,7 +429,7 @@ func newCommerceReader(base, token string) *commerceReader {
 	return &commerceReader{
 		base:  strings.TrimRight(strings.TrimSpace(base), "/"),
 		token: strings.TrimSpace(token),
-		http:  commerceinproc.Client(15 * time.Second),
+		http:  transport.Client(15 * time.Second),
 	}
 }
 

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/commerceinproc"
+	"github.com/hanzoai/cloud/clients/commerce/transport"
 	"github.com/hanzoai/cloud/clients/framework"
 )
 
@@ -219,7 +219,7 @@ func TestCommerceStorefrontProductExists(t *testing.T) {
 	t.Setenv(commerceURLEnv, "") // force the in-process placeholder base
 
 	var gotPath, gotOrg, gotAuth string
-	commerceinproc.SetHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	transport.SetHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		gotPath, gotOrg, gotAuth = r.URL.Path, r.Header.Get("X-Org-Id"), r.Header.Get("Authorization")
 		switch r.URL.Path {
@@ -230,7 +230,7 @@ func TestCommerceStorefrontProductExists(t *testing.T) {
 			_, _ = io.WriteString(w, `{"error":"not found"}`)
 		}
 	}))
-	t.Cleanup(func() { commerceinproc.SetHandler(nil) })
+	t.Cleanup(func() { transport.SetHandler(nil) })
 
 	sf := newStorefront()
 	ok, err := sf.ProductExists(context.Background(), "karma", "valentina")

@@ -13,7 +13,7 @@ import (
 //
 // WHY IT IS NOT A COMMERCE PROXY. Co-resident, commerce registers its routes on the
 // HOST's zip app (apps/commerce.go mountCommerce → commerce.Embed with EmbedConfig.App),
-// and commerceinproc publishes that SAME shared app as the S2S "commerce" transport,
+// and the commerce transport publishes that SAME shared app as the S2S "commerce" transport,
 // which re-dispatches BY PATH. commerce's own billing routes are NOT registered in this
 // binary — api.Route(), which registers GET /v1/billing/balance, is called only from
 // commerce's mount.go, which is behind `//go:build cloud` and never compiled (cloud ships

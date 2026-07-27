@@ -46,7 +46,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/commerceinproc"
+	"github.com/hanzoai/cloud/clients/commerce/transport"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
@@ -69,7 +69,7 @@ func newCommerceProxy(base, token string) *commerceProxy {
 	return &commerceProxy{
 		base:  strings.TrimRight(strings.TrimSpace(base), "/"),
 		token: strings.TrimSpace(token),
-		http:  commerceinproc.Client(15 * time.Second),
+		http:  transport.Client(15 * time.Second),
 	}
 }
 
@@ -143,7 +143,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // build constructs the billing state: the commerce S2S proxy from its env
 // (COMMERCE_SERVICE_TOKEN is a KMS-sourced secret already on the cloud env).
 func build(b cloud.Base) (state, error) {
-	cp := newCommerceProxy(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN"))
+	cp := newCommerceProxy(transport.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN"))
 	b.Log.Info("billing surface mounted", "prefix", "/v1/billing", "commerce", cp.configured())
 	return state{commerce: cp}, nil
 }
@@ -297,7 +297,7 @@ func usage(s *cloud.Service[state], c *zip.Ctx) error {
 //
 // Co-resident it reads cloud's own finance ledger DIRECTLY (balance.go explains why this
 // is NOT a commerce proxy: proxying "/v1/billing/balance" re-enters THIS handler, because
-// commerceinproc dispatches the shared app by path and commerce's own billing routes are
+// the commerce transport dispatches the shared app by path and commerce's own billing routes are
 // never registered in this binary — the proxy called itself and answered "sign in to view
 // billing"). Off the co-resident path the commerce S2S proxy is unchanged.
 //
