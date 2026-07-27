@@ -112,7 +112,7 @@ func Serve(specs []MountSpec, enable []string) error {
 	// This is what lifts the deployment off replicas:1 without any shared RWX volume —
 	// per-pod RWO PVC + org→owner routing = one writer per tenant file. See
 	// shardrouter.go.
-	shardRtr := newShardRouter(cfg, deps.Logger)
+	shardRtr := newShardRouter(cfg, deps.Logger, deps.LiveMembers)
 	if shardRtr != nil {
 		deps.Logger.Info("shard routing ENABLED (horizontal writer scale)",
 			"self", shardRtr.self, "peers", shardRtr.peerIDs(),
@@ -130,14 +130,21 @@ func Serve(specs []MountSpec, enable []string) error {
 	// bootstrap via cloud.RegisterTelemetryInstaller (the cycle-free inversion).
 	telemetryShutdown := installTelemetry(context.Background(), "hanzo-cloud")
 
-	// Data-plane encryption posture (cek). On an encryption-capable build a
-	// missing/invalid CLOUD_KMS_MASTER_KEY_REF makes the FIRST store open fail
-	// closed (MountAll aborts) — the same fail-closed stance as the KMS store; we
-	// surface it here so the posture is never silent.
-	if cek.Encrypting() {
+	// Data-plane encryption posture (cek). Every build encrypts a keyed store — the
+	// live libsqlcipher codec in production, the pure-Go codec envelope in dev/CI —
+	// so a store either opens keyed-and-encrypted or fails closed; there is no
+	// plaintext-at-rest mode. EnsureDevKey gives a pure-Go dev/CI build with no
+	// configured key a deterministic dev key so it runs encrypted with zero config;
+	// a production (codec-linked) build with a missing/invalid CLOUD_KMS_MASTER_KEY_REF
+	// makes the FIRST store open fail closed (MountAll aborts). It runs BEFORE the
+	// posture read below, which caches the resolved key. Surfaced so it is never silent.
+	switch {
+	case cek.EnsureDevKey():
+		deps.Logger.Warn("data-plane encryption ACTIVE with a DEV key (pure-Go build, no KMS key configured — dev/CI only)")
+	case cek.Encrypting():
 		deps.Logger.Info("data-plane encryption ACTIVE (SQLCipher at rest, per-db DEK)")
-	} else {
-		deps.Logger.Warn("data-plane encryption OFF (pure-Go dev build, or missing key on a capable build → store opens fail closed)")
+	default:
+		deps.Logger.Warn("data-plane encryption posture: missing/invalid key on a production build → store opens fail closed")
 	}
 
 	// ReadBufferSize raises the fasthttp header ceiling above the 4 KiB fiber
@@ -453,6 +460,16 @@ func Serve(specs []MountSpec, enable []string) error {
 	select {
 	case <-ctx.Done():
 		deps.Logger.Info("shutdown requested")
+		// Graceful drain: go NotReady so peers re-elect this pod's orgs to live successors
+		// (each hydrates the latest fenced snapshot, M3) BEFORE we stop serving, then pause
+		// for that to propagate through the membership refresh. Only when sharding is active
+		// — a single-pod deployment has no successor, so it drains immediately and relies on
+		// the final ship (CloseAll) below. In-flight requests drain in app.ShutdownWithContext.
+		SetDraining()
+		if shardRtr != nil {
+			deps.Logger.Info("draining: NotReady, waiting for peers to re-elect owned orgs", "grace", shardDrainGrace)
+			time.Sleep(shardDrainGrace)
+		}
 	case err := <-listenErr:
 		return fmt.Errorf("listen: %w", err)
 	}
@@ -499,8 +516,18 @@ func healthMux() *http.ServeMux {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	}
-	mux.HandleFunc("/healthz", ok)
-	mux.HandleFunc("/readyz", ok)
+	mux.HandleFunc("/healthz", ok) // liveness: stays 200 while draining (finish the drain).
+	// readiness: 503 once draining so K8s marks the pod NotReady — removed from endpoints
+	// AND from every peer's writer election — before it stops serving (graceful handoff).
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if Draining() {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"status":"draining"}`))
+			return
+		}
+		ok(w, r)
+	})
 	mux.HandleFunc("/health", ok)
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")

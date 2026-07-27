@@ -13,6 +13,23 @@ imagePullSecrets: []
 
 replicaCount: 1
 
+# rbac grants the pod's ServiceAccount pods:list,watch so the LIVE membership source
+# (membership_k8s.go) can track the writer set for zero-downtime rolling upgrades. When
+# the durable plane is active, every replica elects org owners over this live set, so a
+# draining/dead pod is never routed an org's traffic. Disable only for a single-replica
+# deployment that never scales (the source falls back to self, no API access needed).
+rbac:
+  create: true
+serviceAccount:
+  create: true
+  name: ""
+
+# terminationGracePeriodSeconds MUST exceed the in-process drain (shardDrainGrace, ~6s,
+# during which the pod stays serving NotReady so peers re-elect its orgs) PLUS the shutdown
+# window (in-flight drain + final fenced ship, up to ~30s). 60s leaves headroom; a value
+# below ~40s risks SIGKILL before a pod ships its last writes.
+terminationGracePeriodSeconds: 60
+
 # Brand / domain / enabled subsystems mirror the binary's CLI flags
 # (cmd/cloud/main.go).
 hanzo:
@@ -74,9 +91,14 @@ probes:
       port: http
     initialDelaySeconds: 30
     periodSeconds: 30
+  # Readiness targets /readyz on the ops (metrics) listener, which returns 503 the moment
+  # the process begins a graceful shutdown (drain.go) — so Kubernetes marks the pod
+  # NotReady and stops routing to it BEFORE it tears down. Liveness stays on /health (200
+  # throughout the drain) so the pod is never killed mid-drain. Keep readiness on the
+  # metrics port: /readyz there is the ONLY drain-aware endpoint.
   readiness:
     httpGet:
-      path: /health
-      port: http
+      path: /readyz
+      port: metrics
     initialDelaySeconds: 5
-    periodSeconds: 10
+    periodSeconds: 5
