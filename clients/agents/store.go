@@ -7,12 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
 	// the "sqlite" database/sql name under both build tags (cgo →
 	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
 	// modernc directly instead would double-register "sqlite" under CGO and
 	// panic at init. Blank import registers the driver.
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/cek"
 	_ "github.com/hanzoai/sqlite"
 )
@@ -183,6 +185,72 @@ CREATE INDEX IF NOT EXISTS ix_runs_org_agent_created ON agent_runs(org, agent_na
 	// Per-target claim keys + serving liveness (the #48 route-work machine plane).
 	if err := s.migrateClaimKeys(); err != nil {
 		return err
+	}
+	// Rewrite any agent still holding an upstream model name to the Hanzo name.
+	if err := s.migrateModel(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// migrateModel rewrites every agent whose stored model carries an upstream family
+// name to cloud.ZenModel of it — the data half of the brand boundary. Writes have
+// normalized since; this moves the rows that predate that.
+//
+// IDEMPOTENT: it selects the rows to move by the same predicate that decides where
+// they land, so after one pass nothing matches and a re-run is a no-op. Safe to run
+// on every store open, which is how it reaches every org's database without anyone
+// touching a pod.
+//
+// REVERSIBLE: the pre-migration model is written to model_snapshot first, keyed by
+// agent id with INSERT OR IGNORE, so the FIRST value ever seen is the one kept — a
+// second pass can never overwrite the true original. Undo is one statement:
+//
+//	UPDATE agents SET model = (SELECT model FROM model_snapshot WHERE agent_id = agents.id)
+//	 WHERE id IN (SELECT agent_id FROM model_snapshot);
+//
+// agent_runs is deliberately NOT rewritten. A run is a record of what actually
+// happened and falsifying it would be worse than the leak; toRunView guards the
+// presentation instead.
+func (s *Store) migrateModel() error {
+	if _, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS model_snapshot (
+  agent_id TEXT PRIMARY KEY,
+  model    TEXT NOT NULL,
+  at       INTEGER NOT NULL
+)`); err != nil {
+		return fmt.Errorf("migrate: model_snapshot: %w", err)
+	}
+	rows, err := s.db.Query(`SELECT DISTINCT model FROM agents`)
+	if err != nil {
+		return fmt.Errorf("migrate: scan models: %w", err)
+	}
+	var stale []string
+	for rows.Next() {
+		var m string
+		if err := rows.Scan(&m); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("migrate: scan model: %w", err)
+		}
+		if cloud.UpstreamModel(m) {
+			stale = append(stale, m)
+		}
+	}
+	_ = rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("migrate: models: %w", err)
+	}
+	now := time.Now().Unix()
+	for _, m := range stale {
+		if _, err := s.db.Exec(
+			`INSERT OR IGNORE INTO model_snapshot(agent_id, model, at) SELECT id, model, ? FROM agents WHERE model = ?`,
+			now, m); err != nil {
+			return fmt.Errorf("migrate: snapshot %q: %w", m, err)
+		}
+		if _, err := s.db.Exec(
+			`UPDATE agents SET model = ?, updated_at = ? WHERE model = ?`,
+			cloud.ZenModel(m), now, m); err != nil {
+			return fmt.Errorf("migrate: rewrite %q: %w", m, err)
+		}
 	}
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -50,8 +51,10 @@ func TestHTTPCreateModelValidation(t *testing.T) {
 		t.Fatalf("catalog model want 201, got %d (%s)", code, body)
 	}
 
-	// An OMITTED model falls back to the deployment default (a valid catalog
-	// model), so the agent is created AND runnable — not a 400.
+	// An OMITTED model falls back to the deployment default, so the agent is
+	// created AND runnable — not a 400. This deployment's default is an UPSTREAM
+	// name, so what actually lands is cloud.DefaultModel: the brand boundary holds
+	// even against an operator who misconfigured CLOUD_AI_DEFAULT_MODEL.
 	code, body = do(t, app, http.MethodPost, "/v1/agents", "acme",
 		map[string]any{"name": "defaulted", "instructions": "be terse"})
 	if code != http.StatusCreated {
@@ -59,8 +62,8 @@ func TestHTTPCreateModelValidation(t *testing.T) {
 	}
 	var created agentView
 	_ = json.Unmarshal(body, &created)
-	if created.Model != defaultModel {
-		t.Fatalf("omitted model must store the deployment default %q, got %q", defaultModel, created.Model)
+	if created.Model != cloud.DefaultModel {
+		t.Fatalf("omitted model must store the Hanzo default %q, got %q", cloud.DefaultModel, created.Model)
 	}
 	// The defaulted agent runs (its stored default model is a real catalog model).
 	if code, body := do(t, app, http.MethodPost, "/v1/agents/defaulted/run", "acme",
