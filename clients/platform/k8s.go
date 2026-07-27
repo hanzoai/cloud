@@ -785,6 +785,22 @@ const platformBuildOrg = "platform"
 // context fetch PRIVATE repos — BuildKit's gitsource presents it as the HTTPS
 // credential. Public repos ignore it; without the Secret the env is empty and
 // fetches are anonymous, exactly as before.
+// imageVersion returns the tag of image as a version string, empty when the
+// reference carries no tag. A registry host may carry a port, so the tag is
+// looked for after the last path separator; a leading v is dropped because
+// that is how the version is written everywhere else.
+func imageVersion(image string) string {
+	ref := image
+	if i := strings.LastIndex(ref, "/"); i >= 0 {
+		ref = ref[i+1:]
+	}
+	i := strings.LastIndex(ref, ":")
+	if i < 0 {
+		return ""
+	}
+	return strings.TrimPrefix(ref[i+1:], "v")
+}
+
 func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 	cmd := []any{"buildctl-daemonless.sh", "build"}
 	if strings.TrimSpace(dockerfile) != "" {
@@ -799,6 +815,13 @@ func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 			"--opt", "source="+packFrontendImage,
 			"--opt", "context="+buildCtx,
 		)
+	}
+	// The image tag IS the version, so hand it to the build rather than letting
+	// a Dockerfile infer one. A git context has no .git to describe from, and a
+	// build that guesses can disagree with the tag it is published under.
+	// Dockerfiles that declare no GIT_VERSION arg ignore it.
+	if v := imageVersion(image); v != "" {
+		cmd = append(cmd, "--opt", "build-arg:GIT_VERSION="+v)
 	}
 	cmd = append(cmd, "--secret", "id=GIT_AUTH_TOKEN,env=GIT_AUTH_TOKEN")
 	// Hand the image's own tag to the build as VERSION, so a binary can stamp the
