@@ -73,10 +73,7 @@ type scope struct {
 // same subtree Serve's generic liveness route assumes — so only a subsystem that
 // owns something else has to say so.
 func newScope(app *zip.App, name string, prefixes []string) *scope {
-	if len(prefixes) == 0 {
-		prefixes = []string{"/v1/" + name}
-	}
-	return &scope{app: app, name: name, prefixes: prefixes, escaped: new([]string)}
+	return &scope{app: app, name: name, prefixes: MountPrefixes(name, prefixes), escaped: new([]string)}
 }
 
 // owns reports whether path is the subsystem's own subtree or lives inside it.
