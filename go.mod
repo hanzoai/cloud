@@ -788,11 +788,11 @@ replace github.com/mailgun/minheap => github.com/containous/minheap v0.0.0-20190
 
 replace github.com/vulcand/oxy/v2 => github.com/traefik/oxy/v2 v2.0.0-20260126093803-fb11d60e0fdf
 
-// Phantom-version fix: some transitive dep requires the non-existent
-// release (drop-in, package sqlite3) via a VERSIONED replace (left side pins the
-// phantom) so Go never tries to read v2.0.3's go.mod during module-graph load —
-// modernc). Every cloud store imports the fork, never modernc directly, so the
-// "sqlite" driver is registered exactly once.
+// SQLite: github.com/hanzoai/sqlite is the only engine cloud links. It registers
+// the "sqlite" driver under both build tags — cgo through hanzoai/csqlite against
+// libsqlcipher, cgo-free through its vendored pure-Go engine and the
+// hanzoai/sqlcipher codec VFS. Every store imports that facade, never an engine.
+// apps/sqlite_test.go fails the gate if a second engine or driver name appears.
 
 replace github.com/krakend/krakend-otel => github.com/hanzoai/krakend-otel v0.13.1
 
