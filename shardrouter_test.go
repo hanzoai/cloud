@@ -409,7 +409,11 @@ func TestPeersContain(t *testing.T) {
 // topology (self not in ring, empty self, iam co-enabled) and passes a valid one.
 func TestConfigValidate_ShardSafety(t *testing.T) {
 	base := func() *Config {
-		return &Config{Brand: "hanzo", Domain: "api.hanzo.ai", DataDir: "/var/lib/cloud"}
+		// Enable must be non-empty and iam-free to mean "iam off": an EMPTY enable
+		// list is mount-all, so Enabled("iam") holds and the shard gate — correctly —
+		// refuses the topology. The iam case below opts back in explicitly.
+		return &Config{Brand: "hanzo", Domain: "api.hanzo.ai", DataDir: "/var/lib/cloud",
+			Enable: []string{"gateway"}}
 	}
 	// Valid 3-peer set, self in ring, iam off → OK.
 	c := base()
