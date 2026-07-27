@@ -1,4 +1,4 @@
-package sign
+package esign
 
 import (
 	"bytes"
@@ -80,7 +80,7 @@ func newSigner(dataDir, env string) (*signer, error) {
 		return nil, fmt.Errorf("sign: refusing to boot in env %q without a KMS-custodied signing certificate — set CLOUD_SIGN_CERT_PEM + CLOUD_SIGN_KEY_PEM (base64 PEM injected from KMS); a self-signed cert must never seal legal documents in production", env)
 	}
 
-	dir := filepath.Join(dataDir, "sign")
+	dir := filepath.Join(dataDir, "esign")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("sign: mkdir %s: %w", dir, err)
 	}

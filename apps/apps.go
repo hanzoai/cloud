@@ -14,9 +14,13 @@
 // HIP-0106: the unified cloud binary is the APPLICATION layer plus the embedded KMS
 // secrets plane and the embedded IAM identity plane ("one Go binary embeds IAM +
 // KMS + o11y"). The edge/infra tier (mcp, gateway, ingress-edge) runs as its own
-// deployments for blast-radius isolation; several application folds (iam, base,
-// commerce, captable, dataroom, sign, ingress) are STAGED — linked here but mounted
-// only when the operator names them in CLOUD_ENABLE.
+// deployments for blast-radius isolation.
+//
+// Every subsystem below mounts under the default (empty CLOUD_ENABLE) EXCEPT the
+// staged ones — see config.go's stagedSubsystems, which is the single source of
+// that set. A subsystem is staged when its Mount can abort startup, so it must be
+// named in CLOUD_ENABLE deliberately; one whose Mount fails closed instead (as
+// clients/iam does) is not staged.
 //
 // Ordering provenance: order-int ascending; ties in the exact order the
 // pre-refactor init()-registry mounted them, captured empirically from origin/main
@@ -83,6 +87,7 @@ import (
 	"github.com/hanzoai/cloud/clients/do"
 	"github.com/hanzoai/cloud/clients/domain"
 	"github.com/hanzoai/cloud/clients/entitlements"
+	"github.com/hanzoai/cloud/clients/esign"
 	"github.com/hanzoai/cloud/clients/eval"
 	"github.com/hanzoai/cloud/clients/exec"
 	"github.com/hanzoai/cloud/clients/experiments"
@@ -124,10 +129,10 @@ import (
 	"github.com/hanzoai/cloud/clients/rollingcap"
 	"github.com/hanzoai/cloud/clients/runtime"
 	"github.com/hanzoai/cloud/clients/sbom"
+	"github.com/hanzoai/cloud/clients/search"
 	"github.com/hanzoai/cloud/clients/security"
 	"github.com/hanzoai/cloud/clients/settings"
 	"github.com/hanzoai/cloud/clients/share"
-	"github.com/hanzoai/cloud/clients/sign"
 	"github.com/hanzoai/cloud/clients/social"
 	"github.com/hanzoai/cloud/clients/storage"
 	"github.com/hanzoai/cloud/clients/sync"
@@ -355,7 +360,7 @@ func Wire() []cloud.MountSpec {
 		{Name: "analytics", Mount: analytics.Mount, OwnsHealth: true},
 		{Name: "git", Mount: git.Mount},
 		// Universal sync (/v1/sync/links + engine). Registers the cloud.SyncEngine the
-		// GitHub/Gitea webhooks enqueue to; git is its first provider. Owns per-org
+		// GitHub/Hanzo Git webhooks enqueue to; git is its first provider. Owns per-org
 		// DB handles, so its Shutdown closes them on SIGTERM.
 		{Name: "sync", Mount: sync.Mount, Shutdown: ctxShutdown(sync.Shutdown)},
 		{Name: "visor", Mount: visor.Mount},
@@ -401,6 +406,13 @@ func Wire() []cloud.MountSpec {
 		{Name: "entitlements", Mount: entitlements.Mount, Shutdown: entitlements.Shutdown},
 		{Name: "exec", Mount: exec.Mount},
 		{Name: "websearch", Mount: websearch.Mount},
+		// The in-binary full-text index (/v1/search): a per-org inverted index on
+		// Base/SQLite speaking the Meilisearch dialect, so a Meilisearch client
+		// repoints at it unchanged.
+		// websearch above queries the OUTSIDE world; this one indexes ours.
+		// OwnsHealth: its /v1/search/health is Meilisearch's {"status":"available"}
+		// and fails closed when the store is unreadable.
+		{Name: "search", Mount: search.Mount, Shutdown: ctxShutdown(search.Shutdown), OwnsHealth: true},
 		{Name: "world", Mount: world.Mount, Shutdown: ctxShutdown(world.Shutdown)},
 		// The bot runtime's ops face (/v1/bot/*). The transport itself is domain-free;
 		// the run control plane is "bots" below.
@@ -409,8 +421,8 @@ func Wire() []cloud.MountSpec {
 		{Name: "bots", Mount: bots.Mount},
 		{Name: "audit", Mount: auditlog.Mount},
 		{Name: "affiliates", Mount: affiliates.Mount},
-		// Hanzo Sign (e-signature) via goja + per-tenant Base. STAGED behind CLOUD_ENABLE. OwnsHealth.
-		{Name: "sign", Mount: sign.Mount, Shutdown: sign.Shutdown, OwnsHealth: true},
+		// Hanzo e-signature via goja + per-tenant Base. Mounts under the default. OwnsHealth.
+		{Name: "esign", Mount: esign.Mount, Shutdown: esign.Shutdown, OwnsHealth: true},
 		{Name: "product", Mount: product.Mount},
 		{Name: "evals", Mount: eval.Mount},
 		{Name: "benchmark", Mount: benchmark.Mount},

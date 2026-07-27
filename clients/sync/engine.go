@@ -10,7 +10,7 @@ import (
 )
 
 // engine.go is the ONE place a sync happens — a reconcile loop, not a noun. For
-// every trigger (a GitHub/Gitea webhook via cloud.Sync, a manual /run, or a chained
+// every trigger (a GitHub/Hanzo Git webhook via cloud.Sync, a manual /run, or a chained
 // propagation) it resolves the matching Syncs, then for each: guards the loop (an
 // event by the Sync's own actor is our echo), dedupes by cursor (an event that
 // leaves the cursor unchanged already happened), calls the kind's provider to

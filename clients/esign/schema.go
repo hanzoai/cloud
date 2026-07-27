@@ -1,4 +1,4 @@
-package sign
+package esign
 
 // schema is the per-tenant SQLite DDL NewBase runs (idempotently) on first open
 // of each tenant's {DataDir}/sign/{org}.db. It is a faithful, lean projection of
