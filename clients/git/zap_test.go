@@ -182,7 +182,7 @@ func TestZAPControlPlaneRoundTrip(t *testing.T) {
 	defer c.CloseNow()
 
 	// 1) createRepo over ZAP.
-	rep := zapCall(t, c, ctx, "git/zap/createRepo", map[string]any{"name": "zap"}, 1)
+	rep := zapCall(t, c, ctx, "POST git/zap/createRepo", map[string]any{"name": "zap"}, 1)
 	if !rep.ok || rep.status != http.StatusOK {
 		t.Fatalf("createRepo: ok=%v status=%d err=%s", rep.ok, rep.status, rep.errorJSON)
 	}
@@ -201,7 +201,7 @@ func TestZAPControlPlaneRoundTrip(t *testing.T) {
 	}
 
 	// 2) listRepos over ZAP — sees the ZAP-created repo.
-	rep = zapCall(t, c, ctx, "git/zap/listRepos", map[string]any{}, 2)
+	rep = zapCall(t, c, ctx, "POST git/zap/listRepos", map[string]any{}, 2)
 	if !rep.ok {
 		t.Fatalf("listRepos !ok: %s", rep.errorJSON)
 	}
@@ -226,7 +226,7 @@ func TestZAPControlPlaneRoundTrip(t *testing.T) {
 
 	// 4) A bad createRepo over ZAP maps the core error to a non-ok reply (the ZAP
 	// twin of the REST 400) — same core validation, different wire shape.
-	rep = zapCall(t, c, ctx, "git/zap/createRepo", map[string]any{"name": "bad name!"}, 3)
+	rep = zapCall(t, c, ctx, "POST git/zap/createRepo", map[string]any{"name": "bad name!"}, 3)
 	if rep.ok {
 		t.Fatalf("createRepo with invalid name should not be ok: %+v", rep)
 	}

@@ -11,7 +11,7 @@
 //   - git_provider.go the git provider, composing the existing git object-plane seams.
 //   - sync_api.go     /v1/sync CRUD + /v1/sync/:id/run (manual).
 //
-// Triggers (GitHub App webhook, Gitea push webhook) resolve to Syncs and call
+// Triggers (GitHub App webhook, Hanzo Git push webhook) resolve to Syncs and call
 // cloud.Sync — they never sync directly, so the engine is the single seam.
 package sync
 

@@ -30,6 +30,8 @@
 package o11y
 
 import (
+	luxmetric "github.com/luxfi/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	luxtrace "github.com/luxfi/trace"
 	"context"
 	"log"
@@ -117,6 +119,29 @@ func installTraceProvider(ctx context.Context, serviceName string) func(context.
 		)),
 	)
 	otel.SetTracerProvider(tp)
+
+	// The SAME composition-root ownership applies to metrics. Without a provider
+	// installed here, every instrument in the process binds to the global no-op
+	// and every measurement is discarded while the code looks instrumented —
+	// which is precisely what cloud's request counters did before this. luxfi/metric
+	// adapts the OTel SDK onto the ZAP wire, so metrics reach o11y the way traces
+	// and logs do.
+	if mexp, err := luxmetric.NewOTelZAPExporter(luxmetric.ZAPExporterConfig{
+		Endpoint: wireEndpoint,
+		AppName:  serviceName,
+		Resource: map[string]string{"deployment.environment": deploymentEnvironment()},
+	}); err != nil {
+		log.Printf("telemetry: metric exporter: %v (metrics disabled)", err)
+	} else {
+		mp := sdkmetric.NewMeterProvider(
+			sdkmetric.WithReader(sdkmetric.NewPeriodicReader(mexp)),
+			sdkmetric.WithResource(resource.NewSchemaless(
+				attribute.String("service.name", serviceName),
+				attribute.String("deployment.environment", deploymentEnvironment()),
+			)),
+		)
+		otel.SetMeterProvider(mp)
+	}
 
 	// Composition-root ownership: cloud installs the ONE tracer provider (wired to the
 	// o11y in-process trace sink) and DECLARES it to the embedded hanzoai/ai module so
