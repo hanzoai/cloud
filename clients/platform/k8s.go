@@ -807,8 +807,15 @@ func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 	// default. The tag is already the authority here — deriving it means the
 	// version can never drift from the ref that was pushed. A Dockerfile with no
 	// `ARG VERSION` simply ignores it.
-	if _, tag := splitImageRef(image); tag != "" && tag != "latest" {
+	// GIT_VERSION is the same value without the leading v, which is how a
+	// Makefile that would otherwise run `git describe` writes it — a git context
+	// carries no .git to describe from. Both come from ONE splitImageRef call so
+	// they cannot disagree; a digest-pinned ref names no version, and
+	// splitImageRef reports the digest in the tag position, so the colon check
+	// suppresses both args rather than stamping a hash as a version.
+	if _, tag := splitImageRef(image); tag != "" && tag != "latest" && !strings.Contains(tag, ":") {
 		cmd = append(cmd, "--opt", "build-arg:VERSION="+tag)
+		cmd = append(cmd, "--opt", "build-arg:GIT_VERSION="+strings.TrimPrefix(tag, "v"))
 	}
 	return append(cmd, "--output", "type=image,name="+image+",push=true")
 }

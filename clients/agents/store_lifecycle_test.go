@@ -2,10 +2,11 @@ package agents
 
 import (
 	"context"
-	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/cloud/cek"
 )
 
 // TestLifecycleFieldsRoundTrip: the four bot-lifecycle columns persist and read
@@ -103,7 +104,13 @@ func TestMigrationIdempotentOnLegacyDB(t *testing.T) {
 
 	// Hand-build the legacy schema + a legacy row, exactly as the pre-lifecycle
 	// migrate() would have, then close.
-	legacy, err := sql.Open("sqlite", path)
+	//
+	// Fabricated through cek, like every real store: what is under test is THIS
+	// package's migrate() over a legacy schema, not cek's storage format. Writing
+	// the fixture with a bare sql.Open would leave a plaintext file, and converting
+	// one is a production operation that requires the live libsqlcipher codec — so
+	// the fixture, not the code under test, would fail the build the suite runs on.
+	legacy, err := cek.Open(path)
 	if err != nil {
 		t.Fatalf("open legacy: %v", err)
 	}
