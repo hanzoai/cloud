@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
@@ -24,7 +25,7 @@ type pushCapture struct {
 	events []cloud.GitPushEvent
 }
 
-// signHook returns Gitea's hex HMAC-SHA256 of body under secret.
+// signHook returns the hex HMAC-SHA256 of body under secret.
 func signHook(secret string, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(body)
@@ -39,10 +40,10 @@ func postHook(t *testing.T, app *zip.App, event, sig string, body []byte) int {
 	req := httptest.NewRequest(http.MethodPost, "/v1/git/webhook", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	if event != "" {
-		req.Header.Set(giteaEventHeader, event)
+		req.Header.Set(eventHeader, event)
 	}
 	if sig != "" {
-		req.Header.Set(giteaSigHeader, sig)
+		req.Header.Set(sigHeader, sig)
 	}
 	resp, err := app.Fiber().Test(req, testCfg)
 	if err != nil {
@@ -67,7 +68,7 @@ func captureBuilder(t *testing.T) *pushCapture {
 }
 
 func pushPayload(owner, name, ref, before, after, pusher string) []byte {
-	var p giteaPush
+	var p pushEvent
 	p.Ref = ref
 	p.Before = before
 	p.After = after
@@ -184,7 +185,7 @@ func TestWebhookLoopGuardSkipsSyncActor(t *testing.T) {
 	}
 }
 
-// TestWebhookEventFilter proves a non-push Gitea event is an acknowledged 204
+// TestWebhookEventFilter proves a non-push event is an acknowledged 204
 // no-op that fires no build (even with a valid signature).
 func TestWebhookEventFilter(t *testing.T) {
 	t.Setenv(webhookSecretEnv, testWebhookSecret)
@@ -230,5 +231,59 @@ func TestWebhookZeroShaNoOp(t *testing.T) {
 	defer got.Unlock()
 	if len(got.events) != 0 {
 		t.Fatalf("no-op pushes must fire no build, got %+v", got.events)
+	}
+}
+
+// TestWebhookAcceptsBothHeaderSpellings pins the rename-in-flight contract: the
+// same signed push fires a build whether it arrives with the X-Git-* names cloud
+// now prefers or the X-Gitea-* names the git image still sends. That is what lets
+// the two images roll in EITHER order — without it, a fork roll landing before a
+// cloud roll would silently stop triggering every deploy.
+//
+// One app and one capture for both cases, asserting the count CLIMBS 1 then 2, so
+// neither spelling can pass on the other's build.
+func TestWebhookAcceptsBothHeaderSpellings(t *testing.T) {
+	t.Setenv(webhookSecretEnv, testWebhookSecret)
+	got := captureBuilder(t)
+	app := mountApp(t)
+
+	for i, pair := range []struct{ ev, sig string }{
+		{eventHeader, sigHeader},
+		{eventHeaderPre, sigHeaderPre},
+	} {
+		body := pushPayload("acme", "code", "refs/heads/main", "a1",
+			"1111111111111111111111111111111111111111", "hanzo-dev")
+		req := httptest.NewRequest(http.MethodPost, "/v1/git/webhook", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set(pair.ev, "push")
+		req.Header.Set(pair.sig, signHook(testWebhookSecret, body))
+		resp, err := app.Fiber().Test(req, testCfg)
+		if err != nil {
+			t.Fatalf("%s: Test POST: %v", pair.ev, err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent {
+			t.Fatalf("%s: status = %d, want 204", pair.ev, resp.StatusCode)
+		}
+		if n := waitForBuilds(t, got, i+1, 3*time.Second); n != i+1 {
+			t.Fatalf("%s/%s not honored: builds = %d, want %d", pair.ev, pair.sig, n, i+1)
+		}
+	}
+}
+
+// waitForBuilds blocks until want builds have been captured (or d elapses),
+// returning the final count. Polls rather than sleeps a fixed span because
+// fireBranchBuild is detached from the request (context.WithoutCancel).
+func waitForBuilds(t *testing.T, got *pushCapture, want int, d time.Duration) int {
+	t.Helper()
+	deadline := time.Now().Add(d)
+	for {
+		got.Lock()
+		n := len(got.events)
+		got.Unlock()
+		if n >= want || time.Now().After(deadline) {
+			return n
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

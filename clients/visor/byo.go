@@ -59,14 +59,14 @@ func attachCluster(s *cloud.Service[state], c *zip.Ctx) error {
 	// org, not the project sub-scope).
 	fee := cloud.ResourceFeeCents("CLOUD_COMPUTE_FEE_CENTS", byoClusterKind)
 	_, projectValidated := principal.ValidatedProject(c)
-	if err := s.State.bill.Gate(c.Context(), principal.HomeOrg(c), principal.Project(c), projectValidated, byoClusterKind, fee); err != nil {
+	if err := s.State.bill.Gate(c.Context(), principal.Ledger(c), principal.Project(c), projectValidated, byoClusterKind, fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 	rec, err := s.State.fleet.Register(c.Context(), org, project(c), name, req.Kubeconfig, req.Provider, req.Default)
 	if err != nil {
 		return zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
 	}
-	s.State.bill.Meter(principal.HomeOrg(c), principal.Project(c), byoClusterKind, fee, c.RequestID(), cloud.ClientIP(c))
+	s.State.bill.Meter(principal.Ledger(c), principal.Project(c), byoClusterKind, fee, c.RequestID(), cloud.ClientIP(c))
 	return c.JSON(http.StatusCreated, byoToClusterView(rec))
 }
 
