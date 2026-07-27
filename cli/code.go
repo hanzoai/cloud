@@ -6,8 +6,8 @@ package cli
 // remember.
 //
 //	hanzo code claude              # Claude Code on the default model
-//	hanzo code codex deepseek-v4-pro
-//	hanzo code dev glm5.2          # ids are resolved fuzzily: glm5.2 -> glm-5.2
+//	hanzo code codex enso-pro
+//	hanzo code dev zen5            # ids are resolved fuzzily: zen5pro -> zen5-pro
 //	hanzo code ls                  # what can I run?
 //
 // Two wire protocols cover all three agents: Claude Code speaks Anthropic,
@@ -71,7 +71,7 @@ func (t zenTier) slotID() string {
 var zenTiers = []zenTier{
 	{zen: "zen5-flash", env: "ANTHROPIC_DEFAULT_HAIKU_MODEL", name: "Zen5 Flash", desc: "Hanzo Zen5 Flash — fast, cheap tier"},
 	{zen: "zen5", carrier: "claude-sonnet-4-6[1m]", env: "ANTHROPIC_DEFAULT_SONNET_MODEL", name: "Zen5", desc: "Hanzo Zen5 — frontier tier (1M context)"},
-	{zen: "zen5-pro", carrier: "claude-opus-4-8[1m]", env: "ANTHROPIC_DEFAULT_OPUS_MODEL", name: "Zen5 Pro", desc: "Hanzo Zen5 Pro — DeepSeek-V4 class (1M context)"},
+	{zen: "zen5-pro", carrier: "claude-opus-4-8[1m]", env: "ANTHROPIC_DEFAULT_OPUS_MODEL", name: "Zen5 Pro", desc: "Hanzo Zen5 Pro — deep reasoning (1M context)"},
 	{zen: "zen5-pro", carrier: "claude-fable-5[1m]", env: "ANTHROPIC_DEFAULT_FABLE_MODEL", name: "Zen5 Pro (max effort)", desc: "Hanzo Zen5 Pro, top tier (1M context)"},
 	{zen: "zen5-coder", carrier: "claude-sonnet-5", name: "Zen5 Coder", desc: "Hanzo Zen5 Coder — code-specialized (1M context)"},
 }
@@ -272,14 +272,14 @@ func newCodeCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 		Long: "Run @hanzo/dev, Claude Code, or Codex against api.hanzo.ai with the endpoint,\n" +
 			"credential and model injected — no env vars to remember. `hanzo code` alone runs\n" +
 			"dev (the Hanzo agent); name an agent to pick another. Model ids resolve fuzzily\n" +
-			"(glm5.2 -> glm-5.2), -c resumes either harness, and agents run full-auto unless\n" +
+			"(zen5pro -> zen5-pro), -c resumes either harness, and agents run full-auto unless\n" +
 			"you pass --safe. Unknown options pass through; -- forces verbatim passthrough.",
 		Example: "  hanzo code                 # dev, the default agent\n" +
 			"  hanzo code claude\n" +
 			"  hanzo code claude -c\n" +
 			"  hanzo code codex -c\n" +
-			"  hanzo code codex deepseek-v4-pro\n" +
-			"  hanzo code dev glm5.2 -- --resume\n" +
+			"  hanzo code codex enso-pro\n" +
+			"  hanzo code dev zen5 -- --resume\n" +
 			"  hanzo code ls",
 		// Bare `hanzo code` (or `hanzo code <model>/-- args` with no agent name) runs
 		// the configured default agent (code_tool, else dev). A recognized agent name

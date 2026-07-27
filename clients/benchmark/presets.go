@@ -1,9 +1,11 @@
 package benchmark
 
-// Presets: "design your own router blend." A preset is a named arm-set + rank — exactly
-// what enso-ultra IS in the family catalog, but user-authored and served as enso-<name>.
-// The catalog is already family-as-data; a preset is a scoped catalog entry a caller
-// composes from the arena's measured leaderboard (pick the arms that win YOUR tasks).
+// Presets: "design your own router blend." A preset is a named arm-set + rank — the
+// same shape the enso tiers take in the family catalog, but user-authored and served
+// as enso-<name>. The catalog is already family-as-data; a preset is a scoped catalog
+// entry a caller composes from the arena's measured leaderboard (pick the arms that
+// win YOUR tasks). What a Hanzo-served tier is composed of stays ours; a preset
+// publishes only what its author put in it.
 //
 // This surface stores/serves preset DEFINITIONS (the blend); the zen/enso serving layer
 // resolves enso-<name> against them. Provenance-first: a preset records WHICH measured
@@ -76,14 +78,19 @@ func createPreset(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
-// referenceBlend is the shipped enso-ultra pool — the worked example a user forks.
+// referenceBlend is the worked example a user forks — a blend written in models
+// we name: Hanzo's own, plus the frontier models resold under their own brand.
+//
+// It is deliberately NOT the composition of enso-ultra. Publishing which bases
+// serve an enso tier is the Zen mapping, and the enso name exists precisely to
+// abstract it; a shipped preset is an example of the FORM, not a disclosure.
 func referenceBlend() Preset {
 	return Preset{
 		Name:  "ultra",
 		Owner: "hanzo",
-		Arms:  []string{"moonshotai/kimi-k3", "x-ai/grok-4.5", "anthropic-claude-opus-4.8", "google/gemini-3.1-pro", "openai-gpt-5.6-sol", "qwen/qwen3-max-thinking", "deepseek-v4-pro"},
-		Rank:  []string{"moonshotai/kimi-k3", "x-ai/grok-4.5", "anthropic-claude-opus-4.8"},
+		Arms:  []string{"enso-ultra", "zen5-pro", "x-ai/grok-4.5", "anthropic-claude-opus-4.8", "google/gemini-3.1-pro", "openai-gpt-5.6-sol"},
+		Rank:  []string{"enso-ultra", "x-ai/grok-4.5", "anthropic-claude-opus-4.8"},
 		Panel: 3,
-		Note:  "shipped enso-ultra blend; fork it and swap arms by your measured leaderboard.",
+		Note:  "example blend; fork it and swap arms by your measured leaderboard.",
 	}
 }
