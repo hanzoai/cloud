@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // newStore opens a throwaway store on a temp file. It exercises the real
@@ -742,4 +743,73 @@ func TestMigrateStoreIsIdempotentAndSafe(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestAdoptLegacyTables proves a store whose TABLES were renamed still yields its
+// documents. Moving the store file is not enough on its own: the rows stay under
+// the previous table names, nothing queries them, and the index reads as empty
+// while every document sits intact one identifier away.
+func TestAdoptLegacyTables(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "index.db")
+
+	// A store in the PREVIOUS schema: same columns, previous table names.
+	first, err := openStore(path)
+	if err != nil {
+		t.Fatalf("openStore: %v", err)
+	}
+	for cur, prev := range map[string]string{"indexes": "search_indexes", "docs": "search_docs", "terms": "search_terms"} {
+		if _, err := first.db.Exec(`ALTER TABLE ` + cur + ` RENAME TO ` + prev); err != nil {
+			t.Fatalf("stage %s: %v", cur, err)
+		}
+	}
+	now := time.Now().Unix()
+	if _, err := first.db.Exec(
+		`INSERT INTO search_indexes(org, uid, primary_key, filterable, created_at, updated_at)
+		 VALUES('acme','convos','id','["user"]',?,?)`, now, now); err != nil {
+		t.Fatalf("stage index row: %v", err)
+	}
+	if _, err := first.db.Exec(
+		`INSERT INTO search_docs(org, uid, pk, usr, doc)
+		 VALUES('acme','convos','1','u1','{"id":"1","title":"kubernetes migration"}')`); err != nil {
+		t.Fatalf("stage doc row: %v", err)
+	}
+	if _, err := first.db.Exec(
+		`INSERT INTO search_terms(org, uid, term, pk) VALUES('acme','convos','kubernetes','1')`); err != nil {
+		t.Fatalf("stage term row: %v", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	// Reopening runs migrate(), which must adopt those rows.
+	s, err := openStore(path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	ctx := context.Background()
+
+	if idx, err := s.Index(ctx, "acme", "convos"); err != nil {
+		t.Errorf("index did not survive the table rename: %v", err)
+	} else if idx.PrimaryKey != "id" {
+		t.Errorf("primary key = %q, want id", idx.PrimaryKey)
+	}
+	hits, err := s.Search(ctx, "acme", "convos", "kubernetes", nil, 10, 0)
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if len(hits) != 1 {
+		t.Errorf("documents did not survive the table rename: %d hits", len(hits))
+	}
+
+	// The previous tables are gone, so a later boot has nothing left to adopt
+	// and cannot resurrect rows that were since deleted.
+	for _, prev := range []string{"search_indexes", "search_docs", "search_terms"} {
+		var n string
+		if err := s.db.QueryRow(
+			`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, prev).Scan(&n); err == nil {
+			t.Errorf("%s still exists after adoption", prev)
+		}
+	}
 }
