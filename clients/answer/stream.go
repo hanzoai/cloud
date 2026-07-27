@@ -1,16 +1,13 @@
-package ask
+package answer
 
-// stream.go — the WEB domain's streamed envelope and its two sinks. The event
-// shapes match the @hanzo/ai SearchEvent union EXACTLY (type-discriminated), so a
-// client that consumes the SDK's search()/deepResearch() stream today consumes
-// /v1/ask (web mode) unchanged: sources → status → text → follow_ups → done (or
-// error). This is additive: the advisor's figure path still replies with a single
-// AskResponse JSON; only web mode can stream.
+// stream.go — the streamed envelope and its two sinks. The event shapes match the
+// @hanzo/ai SearchEvent union EXACTLY (type-discriminated), so a client that
+// consumes the SDK's search()/deepResearch() stream consumes this unchanged:
+// status → sources → status → text… → follow_ups → done.
 //
-// ONE loop, two deliveries: runWeb() drives a `sink`; sseSink writes SSE frames for
-// a streaming client, bufferSink accumulates the final answer/sources/follow-ups
-// for a single JSON reply. Neither leaks into the loop — runWeb() only calls sink
-// methods.
+// ONE loop, two deliveries: Run() drives a Sink; sseSink writes SSE frames for a
+// streaming client, bufferSink accumulates the final answer/sources/follow-ups for
+// a single JSON reply. Neither leaks into the loop — Run() only calls Sink methods.
 
 import (
 	"bufio"
@@ -21,20 +18,25 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// maxAnswerChunk caps a single streamed text delta (runes) so a long answer is
-// delivered progressively at word boundaries rather than one giant frame.
+// maxAnswerChunk caps a single streamed text delta (runes) when the AI plane
+// cannot token-stream, so a long answer is still delivered progressively at word
+// boundaries rather than one giant frame.
 const maxAnswerChunk = 200
 
-// sink receives the loop's envelope events. Implemented by sseSink (streaming) and
-// bufferSink (JSON). One method per SearchEvent variant keeps the loop declarative.
-// There is no fail() — the loop never hard-fails: a down model degrades to an honest
-// answer + a done frame (and is not billed), so the client always gets a terminal frame.
-type sink interface {
+// Sink receives the loop's envelope events — one method per SearchEvent variant,
+// which keeps the loop declarative. Implemented by sseSink (streaming) and
+// bufferSink (JSON).
+//
+// There is no fail(): the loop never hard-fails. A down model degrades to an
+// honest answer + a done frame (and is not billed), a down crawl degrades to
+// snippets — so the client ALWAYS gets a terminal frame. The union's `error`
+// variant is the CLIENT's (a transport failure it observes), never the server's.
+type Sink interface {
 	status(stage, detail string)
-	sources(s []webSource)
+	sources(s []Source)
 	text(delta string)
 	followUps(qs []string)
-	done(answer string, s []webSource)
+	done(answer string, s []Source)
 }
 
 // ── SSE sink ─────────────────────────────────────────────────────────────────
@@ -62,14 +64,14 @@ func (s *sseSink) status(stage, detail string) {
 	}
 	s.frame(e)
 }
-func (s *sseSink) sources(src []webSource) {
+func (s *sseSink) sources(src []Source) {
 	s.frame(map[string]any{"type": "sources", "sources": nonNilSrc(src)})
 }
 func (s *sseSink) text(delta string) { s.frame(map[string]any{"type": "text", "delta": delta}) }
 func (s *sseSink) followUps(qs []string) {
 	s.frame(map[string]any{"type": "follow_ups", "questions": nonNilStr(qs)})
 }
-func (s *sseSink) done(answer string, src []webSource) {
+func (s *sseSink) done(answer string, src []Source) {
 	s.frame(map[string]any{"type": "done", "answer": answer, "sources": nonNilSrc(src)})
 	// A terminal [DONE] sentinel mirrors the OpenAI SSE convention so a generic
 	// reader knows the stream is complete even if it ignores the typed done frame.
@@ -84,15 +86,15 @@ func (s *sseSink) done(answer string, src []webSource) {
 // status/text deltas are progress-only and not retained.
 type bufferSink struct {
 	answer string
-	srcs   []webSource
+	srcs   []Source
 	follow []string
 }
 
 func (b *bufferSink) status(string, string) {}
-func (b *bufferSink) sources(s []webSource) { b.srcs = s }
+func (b *bufferSink) sources(s []Source)    { b.srcs = s }
 func (b *bufferSink) text(string)           {}
 func (b *bufferSink) followUps(qs []string) { b.follow = qs }
-func (b *bufferSink) done(answer string, s []webSource) {
+func (b *bufferSink) done(answer string, s []Source) {
 	b.answer = answer
 	if s != nil {
 		b.srcs = s
@@ -104,7 +106,7 @@ func (b *bufferSink) done(answer string, s []webSource) {
 // wantsStream reports whether to stream SSE. Explicit `stream` in the body wins;
 // otherwise an `Accept: text/event-stream` (the SDK) or `?stream=1` opts in. Default
 // is a single JSON reply — friendlier for curl and simple clients.
-func wantsStream(c *zip.Ctx, req AskRequest) bool {
+func wantsStream(c *zip.Ctx, req Request) bool {
 	if req.Stream != nil {
 		return *req.Stream
 	}
@@ -160,8 +162,8 @@ func chunkText(s string, size int) []string {
 
 func isSpace(r rune) bool { return r == ' ' || r == '\n' || r == '\t' || r == '\r' }
 
-// webSourcesBlock renders the numbered grounding context the model synthesizes over.
-func webSourcesBlock(src []webSource) string {
+// sourcesBlock renders the numbered grounding context the model synthesizes over.
+func sourcesBlock(src []Source) string {
 	if len(src) == 0 {
 		return "(no web sources were found — answer from general knowledge and say so)"
 	}
@@ -172,9 +174,9 @@ func webSourcesBlock(src []webSource) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func nonNilSrc(s []webSource) []webSource {
+func nonNilSrc(s []Source) []Source {
 	if s == nil {
-		return []webSource{}
+		return []Source{}
 	}
 	return s
 }
