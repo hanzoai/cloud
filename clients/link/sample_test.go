@@ -75,13 +75,23 @@ func TestNewWindowIsANewRow(t *testing.T) {
 	}
 }
 
-// TestWindowlessCounterIsOneRow: a lifetime counter has no window, so it is one
-// row per lane, replaced forever — never appended and summed across polls.
+// TestWindowlessCounterIsOneRow: a lifetime counter reports no window class, so it
+// keys the zero instant — one row per lane, replaced forever, never appended and
+// summed across polls. A sample that DOES name a class keys that class's instance
+// instead, so the two cases cannot be confused; both directions are pinned here.
 func TestWindowlessCounterIsOneRow(t *testing.T) {
-	a := Sample{Provider: "hanzo", Machine: "m1", Window: WindowMonth, TotalTokens: 10}.Sanitize(now)
-	b := Sample{Provider: "hanzo", Machine: "m1", Window: WindowMonth, TotalTokens: 20}.Sanitize(now.Add(time.Hour))
+	a := Sample{Provider: "hanzo", Machine: "m1", TotalTokens: 10}.Sanitize(now)
+	b := Sample{Provider: "hanzo", Machine: "m1", TotalTokens: 20}.Sanitize(now.Add(time.Hour))
 	if !a.WindowStart.IsZero() || !b.WindowStart.IsZero() {
 		t.Fatalf("a windowless sample must key the zero instant, got %s / %s", a.WindowStart, b.WindowStart)
+	}
+	// A named window is NOT windowless: every valid class has a nominal duration, so
+	// it always resolves to a representable instance key.
+	for _, w := range []string{Window6h, WindowDay, WindowWeek, WindowMonth} {
+		got := Sample{Provider: "hanzo", Machine: "m1", Window: w, TotalTokens: 10}.Sanitize(now)
+		if got.WindowStart.IsZero() {
+			t.Fatalf("window %q collapsed onto the zero instant — a class sample must key its own instance", w)
+		}
 	}
 }
 
