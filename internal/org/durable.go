@@ -45,26 +45,13 @@ package org
 import (
 	"context"
 	"database/sql"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"os"
 	"sync"
 
 	"github.com/hanzoai/ha"
 	"github.com/hanzoai/vfs/replica"
 )
-
-// dekSuffix is cek's key-sidecar suffix (github.com/hanzoai/cloud/cek): the file
-// holding a database's wrapped page key. A durable snapshot ships it beside the
-// database bytes so a successor can open the encrypted file. Kept as a local
-// constant (a stable on-disk convention) so this package stays dep-free of cek.
-const dekSuffix = ".dek"
-
-// errCorruptFrame is returned when a durable payload does not decode as a
-// (sidecar, database) frame this package wrote — fail closed rather than restore
-// arbitrary bytes over a live database.
-var errCorruptFrame = errors.New("org: durable payload is not a valid (sidecar,db) frame")
 
 // Durability is the per-deployment, org-agnostic durable-store factory: the shared
 // election+fence over ONE object store, plus the optional at-rest envelope. It holds
@@ -74,6 +61,7 @@ type Durability struct {
 	fencer *CASFencer
 	fenced *replica.FencedStore
 	cipher *Cipher
+	codec  snapshotCodec // how the durable payload is produced/applied (swappable ship)
 }
 
 // NewDurability builds the factory over an atomic-CAS object store (the SeaweedFS S3
@@ -81,12 +69,42 @@ type Durability struct {
 // optional per-org envelope Cipher (nil ⇒ the durable object is stored in the clear;
 // pure-Go dev only). The SAME cond backs both the lease and the data ships, so they
 // share one linearizable register.
-func NewDurability(cond replica.ConditionalStore, view ownerView, cipher *Cipher) *Durability {
+//
+// The cond is an INTERFACE by design (replica.ConditionalStore): a read-through/
+// write-through cache tier (KV in front of S3) wraps it with a one-line decorator at the
+// buildDurability construction site, with no change here — the fence reads and CASes
+// through whatever store it is handed. The ship mechanism is likewise swappable: the
+// default wholeFile codec can be replaced by a WAL-frame delta codec behind snapshotCodec
+// without touching the fence or round. WithCheckpoint injects the envelope's re-encrypting
+// Checkpoint (crypto-integration seam).
+func NewDurability(cond replica.ConditionalStore, view ownerView, cipher *Cipher, opts ...DurabilityOption) *Durability {
+	var o durabilityOpts
+	for _, fn := range opts {
+		fn(&o)
+	}
 	return &Durability{
 		fencer: NewCASFencer(cond, view),
 		fenced: replica.NewFencedStore(cond),
 		cipher: cipher,
+		codec:  wholeFile{checkpoint: o.checkpoint},
 	}
+}
+
+// DurabilityOption configures a Durability.
+type DurabilityOption func(*durabilityOpts)
+
+type durabilityOpts struct {
+	checkpoint func(context.Context, *sql.DB) error
+}
+
+// WithCheckpoint injects the operation that folds the WAL into the real on-disk file and,
+// on the pure-Go encryption ENVELOPE, re-encrypts that real path — so a fenced ship reads
+// FRESH bytes, never stale ciphertext (which would be a lost acked write on takeover). The
+// composition root wires cek's Checkpoint here on the envelope backend; the default (no
+// option) is a raw TRUNCATE checkpoint, correct for the SQLCipher page-level and plaintext
+// backends that encrypt on write. This composes ship-before-ack with encrypt-on-checkpoint.
+func WithCheckpoint(fn func(context.Context, *sql.DB) error) DurabilityOption {
+	return func(o *durabilityOpts) { o.checkpoint = fn }
 }
 
 // For mints the Durable binding for one org DB: orgID is the org SLUG (the HRW
@@ -122,14 +140,12 @@ type Durable struct {
 // unopenable, so a store is always available for reads; writes fail closed until a
 // later open re-acquires.
 //
-// RECOVERY from a degraded open (Red M3): a pod that could not acquire at open stays
-// read-only for that store's cached lifetime — it does NOT re-acquire in place, because
-// a takeover CarryForward restores the durable snapshot OVER the local file, which is
-// unsafe under the live handle the store already handed out (stale reads). Recovery is
-// therefore a FRESH open: a pod restart (a readiness/liveness probe can gate on the
-// degraded log) or the shard router routing the org to a healthy owner. An in-process
-// quiesce-close-reopen on the cached entry is the future enhancement; until then the
-// safe, simple recovery is re-open.
+// RECOVERY from a degraded open (M3): a pod that could not acquire at open stays
+// read-only until this replica becomes the org's elected owner (a membership change),
+// at which point the OrgStore promotes the store IN PLACE — PendingPromotion gates it,
+// TryClaim proves the lease is claimable, then a quiesce-close-reopen swaps in a writer
+// handle and CarryForward-restores the latest snapshot under the FRESH handle (never
+// under the live one — the swap is why the reopen is required). No process restart.
 func (d *Durable) Hydrate(ctx context.Context) error {
 	lease, err := d.dy.fencer.Acquire(ctx, d.orgID)
 	if err != nil {
@@ -168,6 +184,42 @@ func (d *Durable) Owned() bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.owned
+}
+
+// PendingPromotion reports whether this store opened degraded (does not hold the lease)
+// yet this replica is NOW the org's elected owner — a membership change made it the
+// writer, so the store must be promoted (re-acquire + hydrate + reopen) to serve writes.
+// Cheap and I/O-free: a lock plus one HRW over the live member snapshot, evaluated only
+// when the store is not already owned. It is the per-request gate the OrgStore checks on
+// a cache hit; the actual promotion runs (rarely) only when this returns true.
+func (d *Durable) PendingPromotion() bool {
+	d.mu.Lock()
+	owned := d.owned
+	d.mu.Unlock()
+	if owned {
+		return false
+	}
+	return d.dy.fencer.ElectsSelf(d.orgID)
+}
+
+// TryClaim probes whether this replica can hold the org's writer lease right now and, if
+// so, claims it — the promotion gate. It performs ONLY the lease CAS (via the fencer), no
+// local-file I/O, so a failed probe (not the elected owner, or the store unreachable)
+// costs nothing and leaves any live handle untouched. On success the lease object names
+// this replica at a fresh round (fencing any prior owner); the caller then quiesces and
+// reopens, whose Hydrate renews THIS same lease and CarryForward-restores the latest
+// snapshot under the fresh handle. Returns (false, nil) when not the elected owner,
+// (false, err) on a store error, (true, nil) when claimed.
+func (d *Durable) TryClaim(ctx context.Context) (bool, error) {
+	_, err := d.dy.fencer.Acquire(ctx, d.orgID)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, ErrNotOwner), errors.Is(err, ErrNoMembership):
+		return false, nil
+	default:
+		return false, err
+	}
 }
 
 // Sync snapshots the local file and ships it to the durable object fenced at the
@@ -222,11 +274,9 @@ func (d *Durable) Close(ctx context.Context) error {
 	return nil
 }
 
-// snapshot copies the local file consistently: it takes the store's SOLE connection
-// (MaxOpenConns(1)), TRUNCATE-checkpoints the WAL so the main file holds every
-// committed page, then reads the file bytes while still holding the connection so no
-// writer can fold new frames in mid-read. The <db>.dek key sidecar (present only on
-// an encrypting build) is read too and framed with the database bytes.
+// snapshot produces the durable payload for the bound local database via the swappable
+// codec (default wholeFile: checkpoint + framed file copy). It takes the store's SOLE
+// connection through the codec so the payload is consistent against concurrent writes.
 func (d *Durable) snapshot(ctx context.Context) ([]byte, error) {
 	d.mu.Lock()
 	db := d.db
@@ -234,38 +284,13 @@ func (d *Durable) snapshot(ctx context.Context) ([]byte, error) {
 	if db == nil {
 		return nil, fmt.Errorf("org: durable %s not bound to a db", d.dbKey)
 	}
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("org: durable snapshot conn %s: %w", d.dbKey, err)
-	}
-	defer conn.Close()
-	// TRUNCATE-checkpoint the WAL so the main file holds every committed page, and
-	// CHECK the result: busy!=0 means the checkpoint could not fold all frames (a
-	// reader held the WAL), so the file on disk is MISSING committed rows. Fail closed
-	// — a partial snapshot shipped as complete is a silent lost write. (busy, logFrames,
-	// checkpointed) is the PRAGMA's row.
-	var busy, logFrames, checkpointed int
-	if err := conn.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &logFrames, &checkpointed); err != nil {
-		return nil, fmt.Errorf("org: durable checkpoint %s: %w", d.dbKey, err)
-	}
-	if busy != 0 {
-		return nil, fmt.Errorf("org: durable checkpoint %s did not complete (busy=%d, log=%d, checkpointed=%d) — snapshot would miss committed WAL frames", d.dbKey, busy, logFrames, checkpointed)
-	}
-	main, err := os.ReadFile(d.dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("org: durable read %s: %w", d.dbPath, err)
-	}
-	sidecar, err := os.ReadFile(d.dbPath + dekSuffix)
-	if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("org: durable read sidecar %s: %w", d.dbPath, err)
-	}
-	return frame(sidecar, main), nil
+	return d.dy.codec.produce(ctx, db, d.dbPath)
 }
 
-// restore is the hydrate callback: it opens the sealed durable payload, splits the
-// (sidecar, database) frame, writes the sidecar (so cek can open the encrypted file)
-// and atomically swaps the database bytes into place via replica.RestoreFile. An
-// empty payload (nothing shipped yet) keeps whatever the local file already holds.
+// restore is the hydrate callback: it opens the sealed durable payload (envelope
+// decryption is orthogonal, done HERE around the codec) and hands the plaintext to the
+// codec to apply onto the local file. An empty payload (nothing shipped yet) keeps
+// whatever the local file already holds.
 func (d *Durable) restore(sealed []byte) error {
 	if len(sealed) == 0 {
 		return nil
@@ -278,24 +303,7 @@ func (d *Durable) restore(sealed []byte) error {
 		}
 		payload = pt
 	}
-	sidecar, main, err := unframe(payload)
-	if err != nil {
-		return err
-	}
-	// RestoreFile FIRST: it MkdirAll's the parent and atomically swaps the database
-	// bytes into place. The sidecar is written AFTER, into the now-existing directory,
-	// so both the encrypted file and its key are present before cek opens them. (Writing
-	// the sidecar first would fail on a fresh successor whose orgs/<slug>/ dir does not
-	// exist yet.)
-	if err := replica.RestoreFile(d.dbPath, main); err != nil {
-		return err
-	}
-	if len(sidecar) > 0 {
-		if err := os.WriteFile(d.dbPath+dekSuffix, sidecar, 0o600); err != nil {
-			return fmt.Errorf("org: durable write sidecar %s: %w", d.dbPath, err)
-		}
-	}
-	return nil
+	return d.dy.codec.apply(d.dbPath, payload)
 }
 
 // restoreLatestReadOnly refreshes the local file from the durable object without a
@@ -307,27 +315,4 @@ func (d *Durable) restoreLatestReadOnly(ctx context.Context) {
 		return
 	}
 	_ = d.restore(payload)
-}
-
-// frame prepends the sidecar under a uvarint length so a successor can split it from
-// the database bytes. len(sidecar)==0 ⇒ a leading 0 byte, i.e. a plaintext store.
-func frame(sidecar, main []byte) []byte {
-	buf := make([]byte, 0, binary.MaxVarintLen64+len(sidecar)+len(main))
-	var n [binary.MaxVarintLen64]byte
-	m := binary.PutUvarint(n[:], uint64(len(sidecar)))
-	buf = append(buf, n[:m]...)
-	buf = append(buf, sidecar...)
-	return append(buf, main...)
-}
-
-// unframe splits a framed payload back into (sidecar, database). The bound is checked
-// as sl > len(b)-m (a SUBTRACTION, never m+sl) so a maliciously large uvarint length
-// cannot wrap uint64 addition past the guard and panic the slice — it fails closed.
-func unframe(b []byte) (sidecar, main []byte, err error) {
-	sl, m := binary.Uvarint(b)
-	if m <= 0 || sl > uint64(len(b)-m) {
-		return nil, nil, errCorruptFrame
-	}
-	off := m + int(sl)
-	return b[m:off], b[off:], nil
 }
