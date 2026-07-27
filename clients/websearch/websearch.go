@@ -16,9 +16,16 @@
 // own services — never a third-party search API:
 //   - GET  /v1/websearch/search        SearXNG-shaped. Served NATIVELY in-process
 //     by a keyless Go meta-search (search.go) — no SearXNG pod, no search SaaS.
-//   - POST /v1/websearch/v1/scrape      Firecrawl-shaped. Backed by Hanzo Crawl
-//     (also /v1/websearch/scrape)       (crawl.hanzo.svc, Crawl4AI): fetch the URL,
-//     return {success,data:{markdown,metadata}}.
+//   - POST /v1/websearch/v1/scrape      Firecrawl-shaped. Served NATIVELY in-process
+//     (also /v1/websearch/scrape)       by clients/crawl — fetch, extract, render —
+//     returning {success,data:{markdown,metadata}}.
+//
+// Both halves are now in-process Go, for the same reason and by the same shape: a
+// keyless meta-search here, a fetch-and-extract in clients/crawl. Neither has a pod
+// to be down. Scrape previously dialled a separate crawler at crawl.hanzo.svc that
+// did NOT exist — the name was NXDOMAIN — so this surface answered 200 while every
+// scrape inside it returned success:false. clients/crawl is the same capability
+// with no network hop and no second deployment to keep alive.
 //
 // The chat server calls these SERVER-SIDE in-cluster, so point
 // searxngInstanceUrl / firecrawlApiUrl at this surface (public api.hanzo.ai/v1
@@ -40,7 +47,6 @@
 package websearch
 
 import (
-	"bytes"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
@@ -48,35 +54,16 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/crawl"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
-// defaults are in-cluster service DNS; overridable via env.
-const (
-	// Hanzo Crawl (Crawl4AI) — the scrape backend.
-	defaultCrawlEndpoint = "http://crawl.hanzo.svc.cluster.local:11235"
-)
-
-func crawlEndpoint() string {
-	if v := strings.TrimSpace(os.Getenv("WEBSEARCH_CRAWL_ENDPOINT")); v != "" {
-		return v
-	}
-	return defaultCrawlEndpoint
-}
-
-// crawlToken is the optional bearer the Hanzo Crawl service expects
-// (CRAWL4AI_API_TOKEN on the crawl deployment). Empty ⇒ no header.
-func crawlToken() string { return strings.TrimSpace(os.Getenv("WEBSEARCH_CRAWL_TOKEN")) }
-
 // apiKey is the shared service key the chat server presents (firecrawl Bearer /
 // searxng X-API-Key). KMS-sourced, synced as WEBSEARCH_API_KEY.
 func apiKey() string { return strings.TrimSpace(os.Getenv("WEBSEARCH_API_KEY")) }
-
-var httpClient = &http.Client{Timeout: 45 * time.Second}
 
 // ── SearXNG-shaped search: native keyless meta-search, in-process ────────────
 // search.go's metaSearch runs the enabled keyless engines and returns the exact
@@ -135,65 +122,6 @@ type firecrawlData struct {
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
-// crawlRequest / crawlResult mirror Hanzo Crawl's /crawl contract
-// (ai/object/crawl4ai.go).
-type crawlRequest struct {
-	Urls []string `json:"urls"`
-}
-
-// markdownField decodes Crawl4AI's `markdown`, which is SHAPE-POLYMORPHIC across
-// versions and was the reason scrape returned empty content:
-//   - Crawl4AI ≤ ~0.5 / the older mirror: a bare JSON string.
-//   - Crawl4AI 0.8.x (the deployed hanzoai/crawl:0.0.1 = 0.8.6) and 0.9.x: an
-//     OBJECT {raw_markdown, fit_markdown, markdown_with_citations, ...}.
-//
-// A plain `string` field errors the whole json.Decode on the object form, so
-// crawl() failed and every scrape returned {success:false}. This unmarshaler
-// accepts either: a string verbatim, or the object's fit_markdown (the
-// noise-reduced, LLM-oriented variant) with raw_markdown as fallback.
-type markdownField string
-
-func (m *markdownField) UnmarshalJSON(b []byte) error {
-	// Bare string form.
-	var s string
-	if err := json.Unmarshal(b, &s); err == nil {
-		*m = markdownField(s)
-		return nil
-	}
-	// Object form: prefer the fit (cleaned) markdown, fall back to raw.
-	var obj struct {
-		FitMarkdown string `json:"fit_markdown"`
-		RawMarkdown string `json:"raw_markdown"`
-	}
-	if err := json.Unmarshal(b, &obj); err != nil {
-		return err
-	}
-	if obj.FitMarkdown != "" {
-		*m = markdownField(obj.FitMarkdown)
-	} else {
-		*m = markdownField(obj.RawMarkdown)
-	}
-	return nil
-}
-
-type crawlResult struct {
-	URL      string                 `json:"url"`
-	Markdown markdownField          `json:"markdown"`
-	Success  bool                   `json:"success"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
-}
-
-// crawlResponse is the Crawl4AI /crawl envelope. The field that signals batch
-// success differs by version — older builds set a top-level "status" string,
-// 0.8.x/0.9.x set a boolean "success" — but scrape only needs Results[0], whose
-// own per-result Success is authoritative, so both envelope fields are accepted
-// and neither is required.
-type crawlResponse struct {
-	Status  string        `json:"status"`
-	Success bool          `json:"success"`
-	Results []crawlResult `json:"results"`
-}
-
 func scrapeHandler(w http.ResponseWriter, r *http.Request) {
 	// Bearer auth (firecrawl always sends Authorization: Bearer <key>); fail
 	// closed if unconfigured.
@@ -214,49 +142,15 @@ func scrapeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := crawl(req.URL)
-	if err != nil || res == nil || !res.Success {
-		msg := "crawl failed"
-		if err != nil {
-			msg = err.Error()
-		}
-		writeJSON(w, http.StatusOK, firecrawlResponse{Success: false, Error: msg})
+	page, err := crawl.Fetch(r.Context(), req.URL)
+	if err != nil {
+		writeJSON(w, http.StatusOK, firecrawlResponse{Success: false, Error: err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, firecrawlResponse{
 		Success: true,
-		Data:    &firecrawlData{Markdown: string(res.Markdown), Metadata: res.Metadata},
+		Data:    &firecrawlData{Markdown: page.Markdown, Metadata: page.Metadata},
 	})
-}
-
-// crawl fetches one URL via Hanzo Crawl and returns its markdown result.
-func crawl(target string) (*crawlResult, error) {
-	body, _ := json.Marshal(crawlRequest{Urls: []string{target}})
-	req, err := http.NewRequest(http.MethodPost, crawlEndpoint()+"/crawl", bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if tok := crawlToken(); tok != "" {
-		req.Header.Set("Authorization", "Bearer "+tok)
-	}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("hanzo crawl returned %d: %s", resp.StatusCode, string(b))
-	}
-	var cr crawlResponse
-	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
-		return nil, err
-	}
-	if len(cr.Results) == 0 {
-		return nil, fmt.Errorf("hanzo crawl returned no results for %s", target)
-	}
-	return &cr.Results[0], nil
 }
 
 // ── shared JSON writers ─────────────────────────────────────────────────────
@@ -321,7 +215,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	g.Post("/v1/scrape", scrape)
 	g.Post("/scrape", scrape)
 
-	logger.Info("web search surface mounted (native searxng-compat meta-search + firecrawl-compat over Hanzo Crawl)",
-		"crawl", crawlEndpoint())
+	logger.Info("web search surface mounted (native searxng-compat meta-search + firecrawl-compat scrape, both in-process)")
 	return nil
 }

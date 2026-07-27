@@ -79,6 +79,7 @@ import (
 	"github.com/hanzoai/cloud/clients/company"
 	"github.com/hanzoai/cloud/clients/compliance"
 	"github.com/hanzoai/cloud/clients/content"
+	"github.com/hanzoai/cloud/clients/crawl"
 	"github.com/hanzoai/cloud/clients/crm"
 	"github.com/hanzoai/cloud/clients/dataroom"
 	"github.com/hanzoai/cloud/clients/deploy"
@@ -406,6 +407,13 @@ func Wire() []cloud.MountSpec {
 		{Name: "entitlements", Mount: entitlements.Mount, Shutdown: entitlements.Shutdown},
 		{Name: "exec", Mount: exec.Mount},
 		{Name: "websearch", Mount: websearch.Mount},
+		// Fetch one page and return it as markdown (/v1/crawl). Sibling to
+		// websearch, which finds URLs; this reads one. It is also what backs
+		// websearch's firecrawl-shaped /scrape, in-process — that path used to dial
+		// a separate crawler deployment that did not exist, so scrape answered 200
+		// with success:false on every call. No pod, no hop, one implementation
+		// behind both surfaces.
+		{Name: "crawl", Mount: crawl.Mount},
 		// The in-binary full-text index (/v1/index): a per-org inverted index on
 		// Base/SQLite speaking the Meilisearch dialect, so a Meilisearch client
 		// repoints at it unchanged. websearch above queries the OUTSIDE world;
