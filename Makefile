@@ -24,9 +24,12 @@ CONSOLE_DIR    ?= ../console
 # Path to a hanzoai/openapi checkout — the SOT the agent-skills catalog is generated from.
 OPENAPI_DIR    ?= ../openapi
 
-# The shipped binary is pure Go (Dockerfile: CGO_ENABLED=0 → scratch). Default all
-# build/test targets to that mode so `make build`/`make test` exercise exactly
-# what prod runs — and, critically, register the ONE "sqlite" driver exactly once:
+# The shipped binary is NOT pure Go. Dockerfile builds /cloud with
+#   CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5"
+# (CGO_ENABLED=0 there builds only the /smoke helper), so production links the live
+# libsqlcipher codec: databases are encrypted in place, per-commit, and shareable by
+# a second opener. The default below is pure Go for a DIFFERENT reason — it
+# registers the ONE "sqlite" driver exactly once:
 # cloud's stores use github.com/hanzoai/sqlite (its !cgo backend IS modernc), and
 # the embedded deps (ai/base/commerce/o11y/orm/tasks) that import modernc directly
 # then resolve to the SAME package → a single registration. A plain CGO_ENABLED=1
@@ -34,6 +37,14 @@ OPENAPI_DIR    ?= ../openapi
 # and panics at init ("sql: Register called twice for driver sqlite"); `make
 # test-cgo` proves the cgo path via the fork's `sqlite_purego` opt-out tag, which
 # forces the fork to modernc too so the whole binary registers "sqlite" once.
+#
+# CONSEQUENCE, worth knowing before trusting a green run: neither target links
+# libsqlcipher, so NEITHER exercises the engine the image ships. Without the codec,
+# cek falls back to the pure-Go envelope, whose properties differ — a store is
+# single-writer and durable at close rather than in-place and per-commit. The tests
+# that pin the shipped storage posture (clients/kms concurrent-open, audit
+# shareability) therefore skip in both targets. Closing that needs a third target
+# built with -tags "libsqlite3 sqlite_fts5" against a real libsqlcipher.
 CGO_ENABLED     ?= 0
 
 .PHONY: help native webui deploy-ui agentskills build build-standalone run smoke test test-cgo vet tidy docker docker-push clean
@@ -98,11 +109,18 @@ smoke: ## Build and run cmd/cloud-smoke (mount-time integration check).
 DEV_KMS_KEY := AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 TEST_ENV = CLOUD_KMS_MASTER_KEY_REF="$${CLOUD_KMS_MASTER_KEY_REF:-$(DEV_KMS_KEY)}"
 
-test: ## Run unit + integration tests (pure-Go, exactly as prod ships).
-	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test ./...
+# The release image builds with -tags "libsqlite3 sqlite_fts5" (see Dockerfile).
+# libsqlite3 needs cgo and the C library, but sqlite_fts5 does not — and without it
+# any store whose migration declares an FTS5 table fails to open, so a subsystem
+# built on full-text search (clients/code) cannot be tested at all. Carry the tag
+# the shipped build carries, so the suite exercises the same schema surface.
+TEST_TAGS := sqlite_fts5
+
+test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ships).
+	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -tags "$(TEST_TAGS)" ./...
 
 test-cgo: ## Prove the cgo build works too — forces the fork's pure-Go backend via -tags sqlite_purego so the embedded modernc importers don't double-register "sqlite".
-	$(TEST_ENV) CGO_ENABLED=1 $(GO) test -tags sqlite_purego ./...
+	$(TEST_ENV) CGO_ENABLED=1 $(GO) test -tags "sqlite_purego $(TEST_TAGS)" ./...
 
 vet: ## go vet across the module.
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) vet ./...
