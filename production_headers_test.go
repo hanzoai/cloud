@@ -77,18 +77,44 @@ func TestProductionHeaders_WiredWithBrandRegistry(t *testing.T) {
 }
 
 // TestConfig_VersionSourcing proves the exact expression LoadConfig uses for
-// Config.Version — getenv("CLOUD_VERSION", Version) — resolves from the
-// CLOUD_VERSION env, falling back to the link-time cloud.Version default. It
-// exercises the sourcing directly rather than LoadConfig, which registers
-// process-global flags and must not be called twice (see
-// config_controlplane_test.go).
+// Config.Version — getenv("CLOUD_VERSION", getenv("HANZO_VERSION", Version)) —
+// resolves CLOUD_VERSION first, then the operator-set HANZO_VERSION, then the
+// link-time cloud.Version default. It exercises the sourcing directly rather
+// than LoadConfig, which registers process-global flags and must not be called
+// twice (see config_controlplane_test.go).
+//
+// The HANZO_VERSION rung is what makes a rollout verifiable: the operator sets
+// it on every container from the image tag it rendered, so a pod reports the
+// build it actually is instead of the link-time "dev".
 func TestConfig_VersionSourcing(t *testing.T) {
+	// resolveVersion is the same function the boot path calls, so a regression
+	// there fails here rather than passing against a copy of the expression.
+	sourced := resolveVersion
+
+	t.Setenv("HANZO_VERSION", "")
 	t.Setenv("CLOUD_VERSION", "v9.9.9")
-	if got := getenv("CLOUD_VERSION", Version); got != "v9.9.9" {
+	if got := sourced(); got != "v9.9.9" {
 		t.Errorf("Version sourcing=%q want v9.9.9 (from CLOUD_VERSION)", got)
 	}
+
+	// The operator's value carries the deployed tag when no explicit override is set.
 	t.Setenv("CLOUD_VERSION", "")
-	if got := getenv("CLOUD_VERSION", Version); got != Version {
+	t.Setenv("HANZO_VERSION", "v1.801.233")
+	if got := sourced(); got != "v1.801.233" {
+		t.Errorf("Version sourcing=%q want v1.801.233 (from HANZO_VERSION)", got)
+	}
+
+	// An explicit CLOUD_VERSION still wins over the operator's value.
+	t.Setenv("CLOUD_VERSION", "v9.9.9")
+	if got := sourced(); got != "v9.9.9" {
+		t.Errorf("Version sourcing=%q want v9.9.9 (CLOUD_VERSION overrides HANZO_VERSION)", got)
+	}
+
+	// Neither set: the link-time default, so an un-deployed binary is never
+	// mistaken for a released one.
+	t.Setenv("CLOUD_VERSION", "")
+	t.Setenv("HANZO_VERSION", "")
+	if got := sourced(); got != Version {
 		t.Errorf("Version sourcing=%q want %q (cloud.Version default)", got, Version)
 	}
 }
