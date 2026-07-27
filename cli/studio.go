@@ -32,7 +32,32 @@ const (
 	studioProbeEvery  = 45 * time.Second
 	studioGraceWait   = 8 * time.Second
 	studioStartWindow = 180 * time.Second
+
+	// studioBootGrace is how long a freshly launched studio may stay silent before
+	// the liveness counter is allowed to call it dead. It exists because a booting
+	// studio and a dead one look IDENTICAL to the probes: while the 41GB Qwen-Edit
+	// model pages in, the HTTP server is not listening, so studioBusy() reports
+	// ok=false and the "alive-busy" guard cannot protect it either. With only
+	// studioStartWindow (180s) plus three 45s ticks, the supervisor killed the
+	// process ~5min into a load that needs 5-11min on a loaded box — then relaunched
+	// it into the same fate. A silent loop that renders nothing and never converges
+	// (observed: 5 restarts in 30 minutes, zero output, jobs failing "engine not up").
+	//
+	// This only defers the verdict for a process that is still ALIVE. One that has
+	// actually exited is restarted immediately, grace or not — see the loop below.
+	studioBootGrace = 15 * time.Minute
 )
+
+// studioExited reports whether the supervised child is gone (crashed or was
+// killed). Liveness may fire immediately in that case; boot grace is only ever
+// extended to a process that still exists and is presumably loading its model.
+// Signal 0 performs the permission/existence check without delivering anything.
+func studioExited(cmd *exec.Cmd) bool {
+	if cmd == nil || cmd.Process == nil {
+		return true
+	}
+	return cmd.Process.Signal(syscall.Signal(0)) != nil
+}
 
 func studioHealthy(ctx context.Context) bool {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -168,6 +193,7 @@ func studioBusy(ctx context.Context) (busy, ok bool) {
 // ends. Quiet by design: one line per restart event, not a probe firehose.
 func superviseStudio(ctx context.Context, dir string, out io.Writer) {
 	var cmd *exec.Cmd
+	var launchedAt time.Time
 	restart := func(reason string) {
 		stopStudio(cmd)
 		c, err := launchStudio(dir)
@@ -176,6 +202,7 @@ func superviseStudio(ctx context.Context, dir string, out io.Writer) {
 			return
 		}
 		cmd = c
+		launchedAt = time.Now()
 		deadline := time.Now().Add(studioStartWindow)
 		for time.Now().Before(deadline) && ctx.Err() == nil {
 			if studioHealthy(ctx) {
@@ -225,6 +252,12 @@ func superviseStudio(ctx context.Context, dir string, out io.Writer) {
 			if ok && busy {
 				// Alive-busy: slow health under render load is not death.
 				unhealthy = 0
+				continue
+			}
+			// A live process still inside its boot grace is LOADING, not dead: the
+			// model takes minutes to page in and serves nothing until it lands.
+			// Killing it here restarts the same slow load and never converges.
+			if !studioExited(cmd) && time.Since(launchedAt) < studioBootGrace {
 				continue
 			}
 			// Sustained silence with an idle or unreadable queue = actually dead.
