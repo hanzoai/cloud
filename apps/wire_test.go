@@ -34,7 +34,14 @@ var frozen = []struct {
 	{"account", false, false, false},        // was order 48
 	{"iam", false, false, false},            // was order 50
 	{"base", true, true, false},             // was order 60; per-org embed added Shutdown (#298)
-	{"o11y", false, true, true},             // ONE observability subsystem (was co-owned orders 69+70): read plane + the hanzoai/o11y module wildcard folded in as MountO11y's terminal sub-mount. OwnsHealth=false keeps /v1/o11y/health the generic always-ok route the module co-entry used to trigger.
+	// hasShutdown flipped true->false when o11y became a PLUGIN (cloud.PluginSpec,
+	// its own cmd/o11y binary). Deliberate and load-bearing, not drift: the host no
+	// longer owns any o11y resource to close. The collector/sink/Datastore moved into
+	// the child, which flushes them in its OWN app.OnShutdown, and zip.Load registers
+	// the host-side hook that stops the child. A Shutdown on this spec would now be a
+	// host closing something it does not have. Name/OwnsHealth/Global are UNCHANGED —
+	// position, health routing and the app-wide grant are all still pinned here.
+	{"o11y", false, false, true},            // ONE observability subsystem (was co-owned orders 69+70), now out-of-process. OwnsHealth=false keeps /v1/o11y/health the generic always-ok route, which Serve registers before MountAll and therefore ahead of the plugin's /v1/o11y/* mount.
 	{"authz", false, false, true},           // was order 70
 	{"commerce", false, false, true},        // was order 100
 	{"licensing", false, false, true},       // was order 110
