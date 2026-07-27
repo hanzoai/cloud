@@ -68,6 +68,7 @@ import (
 	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/sites"
+	"github.com/hanzoai/types"
 	"github.com/zap-proto/zip"
 )
 
@@ -187,18 +188,14 @@ func tenant(c *zip.Ctx) (string, bool) {
 }
 
 // window resolves the [start,end) window + bucket interval from ?range/?start/?end,
-// reusing ai/object.ResolveCloudUsageWindow so analytics and the console Overview
-// share ONE window grammar (24h|7d|30d|custom). A bad range is a 400.
+// reusing hanzoai/types.ParseWindow so analytics and the console Overview share ONE
+// window grammar (24h|7d|30d|custom). A bad range is a 400.
 func window(c *zip.Ctx) (time.Time, time.Time, string, string, error) {
-	rangeLabel := strings.TrimSpace(c.Query("range"))
-	start, end, interval, err := aiobject.ResolveCloudUsageWindow(rangeLabel, c.Query("start"), c.Query("end"), time.Now())
+	w, err := types.ParseWindow(c.Query("range"), c.Query("start"), c.Query("end"), time.Now())
 	if err != nil {
 		return time.Time{}, time.Time{}, "", "", zip.ErrBadRequest(err.Error())
 	}
-	if rangeLabel == "" {
-		rangeLabel = "24h"
-	}
-	return start, end, interval, rangeLabel, nil
+	return w.Start, w.End, string(w.Interval), w.Label, nil
 }
 
 // requireDatastore returns the honest 503 when the datastore ledger is not
