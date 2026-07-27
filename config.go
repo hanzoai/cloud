@@ -44,7 +44,9 @@ type Config struct {
 	Brand string
 
 	// Version is the API contract/build version emitted as the X-Api-Version
-	// response header. Sourced from CLOUD_VERSION, else the link-time cloud.Version
+	// response header. Sourced from CLOUD_VERSION, else HANZO_VERSION — which the
+	// operator sets on every container from the image tag it rendered, so a pod
+	// can name its own build without a rebuild — else the link-time cloud.Version
 	// default (see version.go).
 	Version string
 
@@ -414,7 +416,7 @@ func LoadConfig() *Config {
 
 		MarkdownDefaultPrefixes: splitTrim(getenv("CLOUD_MARKDOWN_DEFAULT_PREFIXES", "")),
 		Brand:                   getenv("CLOUD_BRAND", DefaultBrand),
-		Version:                 getenv("CLOUD_VERSION", Version),
+		Version:                 resolveVersion(),
 		Env:                     getenv("CLOUD_ENV", ""),
 		Role:                    role.Writer, // safe default; Serve refines + validates from CLOUD_ROLE
 
@@ -624,6 +626,17 @@ func getenv(key, dflt string) string {
 		return v
 	}
 	return dflt
+}
+
+// resolveVersion is the single source of Config.Version, so the test and the
+// boot path cannot disagree about how it is sourced.
+//
+// CLOUD_VERSION is the explicit override. HANZO_VERSION is set by the operator
+// on every container from the image tag it rendered, which is what lets a pod
+// report the build it actually is; without it the binary answers the link-time
+// default and a rollout cannot be verified from outside.
+func resolveVersion() string {
+	return getenv("CLOUD_VERSION", getenv("HANZO_VERSION", Version))
 }
 
 // splitTrim splits a comma-separated list, trimming and dropping empties.
