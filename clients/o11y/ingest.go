@@ -3,12 +3,12 @@
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 
-// OTLP telemetry INGEST — the in-process OpenTelemetry Collector that folds the
+// Telemetry INGEST — the in-process OpenTelemetry Collector that folds the
 // standalone otel-collector Deployment into the unified cloud binary.
 //
 // cloud already embeds the o11y QUERY runtime (embed.go) over the datastore
 // datastore. This file adds the WRITE side: a real OpenTelemetry Collector,
-// constructed IN-PROCESS, that accepts OTLP (gRPC :4317, HTTP :4318) and writes
+// constructed IN-PROCESS, that accepts the ZAP span wire (:4317) and writes
 // spans + logs into the SAME datastore the embedded query runtime reads
 // (o11y_traces / o11y_logs on the `insights` cluster). Consumers — cloud
 // itself, console-worker, and third-party OTel SDKs — point at cloud instead of
@@ -18,7 +18,7 @@
 // (a) the live consumers exercise and (b) compile against cloud's UPSTREAM
 // datastore driver (datastore-go v2.44.0 / ch-go v0.71.0):
 //
-//	receivers:  otlp (grpc + http)
+//	receivers:  zap (the ZAP span wire on 4317)
 //	processors: memory_limiter -> resource(service.namespace=hanzo, deployment.environment) -> batch
 //	exporters:  datastoretraces (traces), datastorelogsexporter (logs)
 //
@@ -58,7 +58,6 @@ import (
 	"go.opentelemetry.io/collector/processor/batchprocessor"
 	"go.opentelemetry.io/collector/processor/memorylimiterprocessor"
 	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/receiver/otlpreceiver"
 	"go.opentelemetry.io/collector/service/telemetry/otelconftelemetry"
 
 	resourceprocessor "github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor"
@@ -86,22 +85,22 @@ const defaultEnvironment = "production"
 var embeddedIngest *otelcol.Collector
 
 // mountIngest constructs and starts the in-process ingest collector. Called by
-// mountO11y (o11y.go). It binds only the OTLP receiver sockets (no /v1/o11y/*
+// mountO11y (o11y.go). It binds only the ZAP receiver socket (no /v1/o11y/*
 // Fiber route), so it is order-independent. The datastore DSN is the single
 // precondition — it is where the collector writes, so without it there is
 // nothing to run. Fail-soft: a missing DSN or a construction error returns nil.
 func mountIngest(deps cloud.Deps) error {
-	log := deps.Logger.New("subsystem", "o11y-otlp-ingest")
+	log := deps.Logger.New("subsystem", "o11y-zap-ingest")
 
 	dsn := embeddedDSN()
 	if dsn == "" {
-		log.Warn("OTLP ingest not started: no datastore DSN (needs O11Y_TELEMETRYSTORE_DATASTORE_DSN)")
+		log.Warn("ZAP ingest not started: no datastore DSN (needs O11Y_TELEMETRYSTORE_DATASTORE_DSN)")
 		return nil
 	}
 
 	col, err := buildIngestCollector(deps, dsn)
 	if err != nil {
-		log.Warn("OTLP ingest init failed; standalone otel-collector remains the ingest path", "err", err)
+		log.Warn("ZAP ingest init failed; standalone otel-collector remains the ingest path", "err", err)
 		return nil // fail-soft
 	}
 
@@ -114,7 +113,7 @@ func mountIngest(deps cloud.Deps) error {
 		}
 	}()
 	embeddedIngest = col
-	log.Info("OTLP ingest collector running", "otlp_grpc", ":4317", "otlp_http", ":4318", "sink", "datastore traces+logs")
+	log.Info("ZAP ingest collector running", "zap", ":4317", "sink", "datastore traces+logs")
 	return nil
 }
 
@@ -167,7 +166,7 @@ func buildIngestCollector(deps cloud.Deps, dsn string) (*otelcol.Collector, erro
 // so a config/factory drift fails fast at construction (see ingest_test.go).
 func ingestFactories() (otelcol.Factories, error) {
 	receivers, err := otelcol.MakeFactoryMap([]receiver.Factory{
-		otlpreceiver.NewFactory(),
+		newZapReceiverFactory(),
 	}...)
 	if err != nil {
 		return otelcol.Factories{}, err
@@ -213,12 +212,8 @@ func writeIngestConfig(deps cloud.Deps) (string, error) {
 
 	cfg := "" +
 		"receivers:\n" +
-		"  otlp:\n" +
-		"    protocols:\n" +
-		"      grpc:\n" +
-		"        endpoint: 0.0.0.0:4317\n" +
-		"      http:\n" +
-		"        endpoint: 0.0.0.0:4318\n" +
+		"  zap:\n" +
+		"    endpoint: 0.0.0.0:4317\n" +
 		"processors:\n" +
 		"  memory_limiter:\n" +
 		"    check_interval: 5s\n" +
@@ -249,15 +244,15 @@ func writeIngestConfig(deps cloud.Deps) (string, error) {
 		"      level: warn\n" +
 		"  pipelines:\n" +
 		"    traces:\n" +
-		"      receivers: [otlp]\n" +
+		"      receivers: [zap]\n" +
 		"      processors: [memory_limiter, resource, batch]\n" +
 		"      exporters: [datastoretraces]\n" +
 		"    logs:\n" +
-		"      receivers: [otlp]\n" +
+		"      receivers: [zap]\n" +
 		"      processors: [memory_limiter, resource, batch]\n" +
 		"      exporters: [datastorelogsexporter]\n"
 
-	path := filepath.Join(dataDir, "otlp-ingest.yaml")
+	path := filepath.Join(dataDir, "zap-ingest.yaml")
 	if err := os.WriteFile(path, []byte(cfg), 0o600); err != nil {
 		return "", err
 	}

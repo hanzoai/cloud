@@ -25,7 +25,9 @@ func TestWriteIngestConfig(t *testing.T) {
 	}
 	s := string(b)
 	for _, want := range []string{
-		"0.0.0.0:4317", "0.0.0.0:4318",
+		// One receiver, one port: the ZAP span wire on 4317. The OTLP HTTP
+		// listener on 4318 is gone with the OTLP receiver.
+		"0.0.0.0:4317", "zap:",
 		"datastoretraces", "datastorelogsexporter",
 		"level: none", "${env:CLOUD_OTLP_INGEST_DSN}", "deployment.environment",
 	} {
@@ -41,7 +43,7 @@ func TestWriteIngestConfig(t *testing.T) {
 
 // TestIngestCollectorValidates is the load-bearing correctness check: it proves
 // the trimmed factory set (ingestFactories) resolves EVERY component key in the
-// rendered pipeline config — otlp receiver, memory_limiter/resource/batch
+// rendered pipeline config — zap receiver, memory_limiter/resource/batch
 // processors, datastoretraces/datastorelogsexporter exporters, and both the
 // traces and logs pipelines — via otelcol's DryRun, which unmarshals the config,
 // validates every component, and builds the full pipeline graph.
