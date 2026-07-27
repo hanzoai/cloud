@@ -29,8 +29,8 @@ import (
 	"testing"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/datastore"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -45,14 +45,12 @@ func liveApp(t *testing.T) *zip.App {
 }
 
 func TestLiveCaptureRoundTrip(t *testing.T) {
-	// Connect the shared datastore client from DATASTORE_ADDR (async; poll ready).
-	aiobject.InitDatastore()
-	deadline := time.Now().Add(20 * time.Second)
-	for !aiobject.DatastoreEnabled() && time.Now().Before(deadline) {
-		time.Sleep(300 * time.Millisecond)
-	}
-	if !aiobject.DatastoreEnabled() {
-		t.Fatal("datastore did not connect (set DATASTORE_ADDR=127.0.0.1:9000 with a live Datastore)")
+	// Connect the shared datastore client from DATASTORE_ADDR. It dials in the
+	// background, so wait for it to latch before reading.
+	ready, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := datastore.Wait(ready); err != nil {
+		t.Fatalf("datastore did not connect (set DATASTORE_ADDR=127.0.0.1:9000 with a live Datastore): %v", err)
 	}
 	ctx := context.Background()
 
@@ -96,7 +94,7 @@ func TestLiveCaptureRoundTrip(t *testing.T) {
 
 	// Datastore MergeTree inserts are visible immediately to a direct SELECT.
 	// 1) Raw landing proof: per-event counts for THIS org.
-	rows, err := aiobject.DatastoreQuery(ctx,
+	rows, err := datastore.Query(ctx,
 		"SELECT event, count() AS n FROM hanzo.events WHERE tenant_id = ? GROUP BY event ORDER BY event", org)
 	if err != nil {
 		t.Fatalf("readback query: %v", err)
@@ -114,7 +112,7 @@ func TestLiveCaptureRoundTrip(t *testing.T) {
 
 	// 2) Privacy proof: the scrubbed signup_submitted row must NOT contain the
 	//    password or the raw email anywhere in its stored properties.
-	pr, err := aiobject.DatastoreQuery(ctx,
+	pr, err := datastore.Query(ctx,
 		"SELECT properties FROM hanzo.events WHERE tenant_id = ? AND event = 'signup_submitted'", org)
 	if err != nil || len(pr) == 0 {
 		t.Fatalf("props readback: %v", err)
@@ -136,7 +134,7 @@ func TestLiveCaptureRoundTrip(t *testing.T) {
 	overSQL := "SELECT countIf(event = '$pageview') AS pageviews, uniqExact(distinct_id) AS visitors, " +
 		"uniqExact(session_id) AS sessions, countIf(event = 'order_completed') AS orders, " +
 		"toFloat64(sum(revenue)) AS revenue FROM " + eventsTable + " WHERE " + where
-	orows, err := aiobject.DatastoreQuery(ctx, overSQL, args...)
+	orows, err := datastore.Query(ctx, overSQL, args...)
 	if err != nil || len(orows) == 0 {
 		t.Fatalf("overview lens query: %v", err)
 	}
@@ -160,7 +158,7 @@ func TestLiveCaptureRoundTrip(t *testing.T) {
 	prodSQL := "SELECT product_id AS productId, countIf(event = 'order_completed') AS orders, " +
 		"toFloat64(sum(revenue)) AS revenue, sum(quantity) AS units FROM " + eventsTable +
 		" WHERE " + pwhere + " AND product_id != '' GROUP BY product_id ORDER BY revenue DESC LIMIT 10"
-	prows, err := aiobject.DatastoreQuery(ctx, prodSQL, pargs...)
+	prows, err := datastore.Query(ctx, prodSQL, pargs...)
 	if err != nil {
 		t.Fatalf("top-products query: %v", err)
 	}
@@ -192,13 +190,10 @@ func livePost(t *testing.T, app *zip.App, path, user, org, body string) (int, []
 // (no principal) posted to a recognized brand Host lands under that brand's public
 // org, resolved server-side — never from a client field.
 func TestLiveAnonymousCapture(t *testing.T) {
-	aiobject.InitDatastore()
-	deadline := time.Now().Add(20 * time.Second)
-	for !aiobject.DatastoreEnabled() && time.Now().Before(deadline) {
-		time.Sleep(300 * time.Millisecond)
-	}
-	if !aiobject.DatastoreEnabled() {
-		t.Fatal("datastore did not connect")
+	ready, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := datastore.Wait(ready); err != nil {
+		t.Fatalf("datastore did not connect: %v", err)
 	}
 	ctx := context.Background()
 	if err := EnsureEventsTable(ctx); err != nil {
@@ -222,7 +217,7 @@ func TestLiveAnonymousCapture(t *testing.T) {
 	}
 	_ = resp.Body.Close()
 
-	rows, err := aiobject.DatastoreQuery(ctx,
+	rows, err := datastore.Query(ctx,
 		"SELECT tenant_id, event, product FROM hanzo.events WHERE JSONExtractString(properties,'marker') = ?", marker)
 	if err != nil {
 		t.Fatalf("readback: %v", err)

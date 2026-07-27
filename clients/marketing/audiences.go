@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/zap-proto/zip"
 )
 
@@ -136,13 +136,13 @@ func (s *Store) DeleteAudience(ctx context.Context, org, id string) (bool, error
 // and the time bound are ALL bound args — one tenancy invariant, no injection.
 func evalAudience(ctx context.Context, org string, a Audience) AudiencePreview {
 	out := AudiencePreview{Source: eventsTable, Sample: []string{}}
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		out.Reason = "analytics warehouse not configured"
 		return out
 	}
 	sinceLit := time.Now().UTC().AddDate(0, 0, -a.WindowDays).Format("2006-01-02 15:04:05")
 
-	countRows, err := aiobject.DatastoreQuery(ctx,
+	countRows, err := datastore.Query(ctx,
 		"SELECT uniqExact(distinct_id) AS n FROM "+eventsTable+" WHERE tenant_id = ? AND event = ? AND timestamp >= ?",
 		org, a.Event, sinceLit)
 	if err != nil {
@@ -153,7 +153,7 @@ func evalAudience(ctx context.Context, org string, a Audience) AudiencePreview {
 		out.Count = toInt64(countRows[0]["n"])
 	}
 
-	memberRows, err := aiobject.DatastoreQuery(ctx,
+	memberRows, err := datastore.Query(ctx,
 		"SELECT DISTINCT distinct_id FROM "+eventsTable+" WHERE tenant_id = ? AND event = ? AND timestamp >= ? LIMIT ?",
 		org, a.Event, sinceLit, audSampleLimit)
 	if err != nil {

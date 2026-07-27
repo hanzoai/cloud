@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud/clients/datastore"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -22,7 +22,7 @@ import (
 // ONE DATASTORE CLIENT (CTO consolidation). This store does NOT open a second
 // datastore connection with a parallel CLOUD_EVALS_DATASTORE_* cred namespace.
 // It routes every write and read over the SHARED datastore peer that ai/object
-// owns (aiobject.InitDatastore → DatastoreExec / DatastoreQuery), the same client
+// owns (clients/datastore), the same client
 // clients/analytics and the ai o11y ledger use. The connection, retry/backoff,
 // pooling and KMS-injected DATASTORE_* creds live in exactly one place; eval only
 // owns its two eval-specific tables (hanzo.eval_traces, hanzo.eval_scores) — the
@@ -156,9 +156,9 @@ type dsTelemetry struct {
 // (nil, nil) when no datastore is configured (DATASTORE_ADDR unset) — the caller
 // then runs with telemetry disabled (traces/scores are not persisted, and it says
 // so; never a fake success). The connection is opened asynchronously by
-// aiobject.InitDatastore (run from the shared ai Bootstrap), so this constructor
+// the first warehouse call, so this constructor
 // does NOT dial: it defers readiness to request time, where every op gates on
-// aiobject.DatastoreEnabled() for an honest "unavailable" during the boot window.
+// datastore.Ready() for an honest "unavailable" during the boot window.
 //
 // Creds are the ONE shared namespace (KMS-injected, never hard-coded), resolved
 // by aiobject: DATASTORE_ADDR / DATASTORE_DB / DATASTORE_USER / DATASTORE_PASSWORD.
@@ -177,7 +177,7 @@ func (t *dsTelemetry) table(name string) string { return t.db + "." + name }
 // eval-owned tables idempotently, latching only on first success so a transient
 // DDL failure is retried on the next call.
 func (t *dsTelemetry) ready(ctx context.Context) error {
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return fmt.Errorf("evals telemetry: datastore not connected")
 	}
 	t.mu.Lock()
@@ -241,7 +241,7 @@ PARTITION BY toYYYYMM(ts)
 ORDER BY (org, name, run_name, ts, id)`, t.table("eval_scores")),
 	}
 	for _, ddl := range stmts {
-		if err := aiobject.DatastoreExec(ctx, ddl); err != nil {
+		if err := datastore.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("evals telemetry: ensure table: %w", err)
 		}
 	}
@@ -257,7 +257,7 @@ ORDER BY (org, name, run_name, ts, id)`, t.table("eval_scores")),
 		"ALTER TABLE " + et + " ADD COLUMN IF NOT EXISTS end_time DateTime64(3, 'UTC')",
 	}
 	for _, ddl := range migrations {
-		if err := aiobject.DatastoreExec(ctx, ddl); err != nil {
+		if err := datastore.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("evals telemetry: migrate eval_traces: %w", err)
 		}
 	}
@@ -274,7 +274,7 @@ func (t *dsTelemetry) RecordTrace(ctx context.Context, tr Trace) error {
 	if err := t.ready(ctx); err != nil {
 		return err
 	}
-	return aiobject.DatastoreExec(ctx, "INSERT INTO "+t.table("eval_traces")+
+	return datastore.Exec(ctx, "INSERT INTO "+t.table("eval_traces")+
 		` (id, org, project, name, dataset, item_id, run_name, session_id, api_key_hash, model, input, output, start_time, end_time, ts)`+
 		` VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		tr.ID, tr.Org, tr.ProjectID, tr.Name, tr.Dataset, tr.ItemID, tr.RunName,
@@ -295,7 +295,7 @@ func (t *dsTelemetry) RecordScore(ctx context.Context, sc ScoreEvent) error {
 	if err := t.ready(ctx); err != nil {
 		return err
 	}
-	return aiobject.DatastoreExec(ctx, "INSERT INTO "+t.table("eval_scores")+
+	return datastore.Exec(ctx, "INSERT INTO "+t.table("eval_scores")+
 		` (id, org, name, trace_id, run_name, dataset, item_id, data_type, value, string_value, comment, ts)`+
 		` VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sc.ID, sc.Org, sc.Name, sc.TraceID, sc.RunName, sc.Dataset,
@@ -329,7 +329,7 @@ func (t *dsTelemetry) ListScores(ctx context.Context, f ScoreFilter) ([]ScoreEve
 	q += " ORDER BY ts DESC LIMIT ?"
 	args = append(args, uint64(boundedLimit(f.Limit)))
 
-	rows, err := aiobject.DatastoreQuery(ctx, q, args...)
+	rows, err := datastore.Query(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("evals telemetry: query scores: %w", err)
 	}
@@ -382,7 +382,7 @@ func (t *dsTelemetry) ListTraces(ctx context.Context, f TraceFilter) ([]Trace, e
 	q += " ORDER BY ts DESC LIMIT ?"
 	args = append(args, uint64(boundedLimit(f.Limit)))
 
-	rows, err := aiobject.DatastoreQuery(ctx, q, args...)
+	rows, err := datastore.Query(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("evals telemetry: query traces: %w", err)
 	}
@@ -540,7 +540,7 @@ func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }
 
 // ── datastore row coercion ────────────────────────────────────────────────────
 //
-// aiobject.DatastoreQuery returns each column already decoded into its native
+// datastore.Query returns each column already decoded into its native
 // datastore scan type (String→string, Float64→float64, DateTime64→time.Time).
 // These coercers accept the native value (and defensively its pointer form) so a
 // nil/absent column degrades to a zero value rather than panicking.

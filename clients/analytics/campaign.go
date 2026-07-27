@@ -30,7 +30,7 @@ import (
 	"context"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud/clients/datastore"
 )
 
 // CampaignEvents is the per-campaign funnel read from hanzo.events, scoped to
@@ -76,7 +76,7 @@ func CampaignMetrics(ctx context.Context, org, campaignID, variant string, start
 	if org == "" || campaignID == "" {
 		return out, nil
 	}
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return out, nil // honest-empty: no warehouse connected
 	}
 	where, args := campaignWhere(org, campaignID, variant, start, end)
@@ -90,7 +90,7 @@ func CampaignMetrics(ctx context.Context, org, campaignID, variant string, start
 		"toFloat64(sum(revenue)) AS revenue, " +
 		"uniqExact(distinct_id) AS visitors " +
 		"FROM " + eventsTable + " WHERE " + where
-	rows, err := aiobject.DatastoreQuery(ctx, sql, args...)
+	rows, err := datastore.Query(ctx, sql, args...)
 	if err != nil {
 		// Connected warehouse rejected/failed the query (or the events table is
 		// absent): honest-empty for the caller, with the error surfaced for logs.

@@ -37,7 +37,7 @@ import (
 	"sync"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud/clients/datastore"
 )
 
 const (
@@ -127,7 +127,7 @@ ORDER BY (org, sha256)`,
 }
 
 func (w *warehouse) ensure(ctx context.Context) error {
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return fmt.Errorf("research warehouse: datastore not connected")
 	}
 	w.dsMu.Lock()
@@ -136,7 +136,7 @@ func (w *warehouse) ensure(ctx context.Context) error {
 		return nil
 	}
 	for _, stmt := range researchDDL {
-		if err := aiobject.DatastoreExec(ctx, stmt); err != nil {
+		if err := datastore.Exec(ctx, stmt); err != nil {
 			return fmt.Errorf("research ddl: %w", err)
 		}
 	}
@@ -174,7 +174,7 @@ func (w *warehouse) rollUp(ctx context.Context, org, project string, exps []Expe
 		if e.TS > 0 {
 			ets = time.Unix(e.TS, 0).UTC()
 		}
-		if err := aiobject.DatastoreExec(ctx, researchExperimentInsert,
+		if err := datastore.Exec(ctx, researchExperimentInsert,
 			org, project, e.ID, hashExp(e), revisionOf(e.Revision), runStatus(e.Status), "private", uint8(0), uint8(0),
 			e.Kind, e.Subject, e.Task, e.Metric, e.Value, uint32(nonNeg(e.N)), uint32(nonNeg(e.NTotal)),
 			e.CostUSD, jsonObj(e.Meta), e.GitSHA, e.GitBranch, boolBit(e.GitDirty), jsonObj(e.LibVersions), ets); err != nil {
@@ -187,7 +187,7 @@ func (w *warehouse) rollUp(ctx context.Context, org, project string, exps []Expe
 		if a.TS > 0 {
 			ats = time.Unix(a.TS, 0).UTC()
 		}
-		if err := aiobject.DatastoreExec(ctx, researchAttemptInsert,
+		if err := datastore.Exec(ctx, researchAttemptInsert,
 			org, project, a.Benchmark, a.Item, a.Model, hashAtt(a), revisionOf(a.Revision), runStatus(a.Status),
 			a.Gold, a.Answer, boolBit(a.Correct), a.Response, sourceOf(a.Source), ats); err != nil {
 			return fmt.Errorf("research attempt roll-up: %w", err)
@@ -215,7 +215,7 @@ func (w *warehouse) rollUpArtifact(ctx context.Context, org, project string, a A
 	if a.TS > 0 {
 		ts = time.Unix(a.TS, 0).UTC()
 	}
-	return aiobject.DatastoreExec(ctx, researchArtifactInsert,
+	return datastore.Exec(ctx, researchArtifactInsert,
 		org, project, a.SHA256, a.Kind, a.Ref, a.RunID, "private", "raw-artifact",
 		a.GitSHA, a.GitBranch, boolBit(a.GitDirty), jsonObj(a.LibVersions), ts)
 }

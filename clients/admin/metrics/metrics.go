@@ -5,7 +5,7 @@
 //
 // It reads the ONE shared warehouse (commerce.events) — the table the commerce
 // analytics collector lands every subscription/invoice/usage-lifecycle event in —
-// over the SAME client (aiobject.DatastoreQuery) the o11y/compute lenses use, with
+// over the SAME client (datastore.Query) the o11y/compute lenses use, with
 // ZERO per-org fan-out. Each panel is ONE aggregate query that folds the whole fleet
 // (subscription state = latest-event-wins via argMax; new/churn/usage = windowed),
 // exactly the way o11y.go composes independent per-signal reads. An unconnected
@@ -22,10 +22,10 @@ import (
 	"strings"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/admin/money"
+	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/zap-proto/zip"
 )
 
@@ -154,19 +154,19 @@ func Metrics(s *cloud.Service[core.State], c *zip.Ctx) error {
 	m := SaaSMetrics{AsOf: now, Currency: "usd", Window: window}
 
 	// Revenue headline + plan-mix (run-rate, latest-event-wins over active subs).
-	if rows, err := aiobject.DatastoreQuery(ctx, headlineSQL()); err == nil {
+	if rows, err := datastore.Query(ctx, headlineSQL()); err == nil {
 		fillHeadline(&m.Revenue, core.CHFirstRow(rows))
 	}
-	if rows, err := aiobject.DatastoreQuery(ctx, byCategorySQL()); err == nil {
+	if rows, err := datastore.Query(ctx, byCategorySQL()); err == nil {
 		m.Revenue.ByCategory = byCategoryFromRows(rows)
 	}
-	if rows, err := aiobject.DatastoreQuery(ctx, byPlanSQL()); err == nil {
+	if rows, err := datastore.Query(ctx, byPlanSQL()); err == nil {
 		m.Subs.ByPlan = byPlanFromRows(rows)
 	}
 	m.Subs.TrialsActive = m.Revenue.Trials
 
 	// Windowed movement: new vs churned MRR + counts.
-	if rows, err := aiobject.DatastoreQuery(ctx, movementSQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, movementSQL(), sinceTS); err == nil {
 		r := core.CHFirstRow(rows)
 		m.Revenue.NewMRRCents = money.Cents(core.CHInt64(r["new_mrr"]))
 		m.Revenue.ChurnedMRRCents = money.Cents(core.CHInt64(r["churned_mrr"]))
@@ -175,18 +175,18 @@ func Metrics(s *cloud.Service[core.State], c *zip.Ctx) error {
 		m.Subs.Canceled = int(core.CHInt64(r["canceled_count"]))
 	}
 	// Recent movements feed.
-	if rows, err := aiobject.DatastoreQuery(ctx, recentSQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, recentSQL(), sinceTS); err == nil {
 		m.Subs.Recent = recentFromRows(rows)
 	}
 	// Metered usage headline (window).
-	if rows, err := aiobject.DatastoreQuery(ctx, usageSQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, usageSQL(), sinceTS); err == nil {
 		r := core.CHFirstRow(rows)
 		m.Usage.Requests = core.CHInt64(r["requests"])
 		m.Usage.WindowUsageCents = money.Cents(core.CHInt64(r["usage_cents"]))
 		m.Usage.Instrumented = m.Usage.Requests > 0
 	}
 	// Fleet org count (any billing activity).
-	if rows, err := aiobject.DatastoreQuery(ctx, orgCountSQL()); err == nil {
+	if rows, err := datastore.Query(ctx, orgCountSQL()); err == nil {
 		m.Orgs = int(core.CHInt64(core.CHFirstRow(rows)["orgs"]))
 	}
 	// Top customers by MRR + windowed usage (two reads merged, no fan-out).
@@ -362,7 +362,7 @@ func recentFromRows(rows []map[string]any) []SaaSEvent {
 // a pay-as-you-go org with usage but no subscription still appears.
 func topCustomers(ctx context.Context, sinceTS string, limit int) []SaaSCustomer {
 	byOrg := map[string]*SaaSCustomer{}
-	if rows, err := aiobject.DatastoreQuery(ctx, perOrgSubsSQL()); err == nil {
+	if rows, err := datastore.Query(ctx, perOrgSubsSQL()); err == nil {
 		for _, r := range rows {
 			org := core.CHStr(r["org"])
 			if org == "" {
@@ -379,7 +379,7 @@ func topCustomers(ctx context.Context, sinceTS string, limit int) []SaaSCustomer
 			}
 		}
 	}
-	if rows, err := aiobject.DatastoreQuery(ctx, perOrgUsageSQL(), sinceTS); err == nil {
+	if rows, err := datastore.Query(ctx, perOrgUsageSQL(), sinceTS); err == nil {
 		for _, r := range rows {
 			org := core.CHStr(r["org"])
 			if org == "" {

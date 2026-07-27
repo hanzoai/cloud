@@ -56,7 +56,7 @@ import (
 	"strconv"
 	"strings"
 
-	datastore "github.com/hanzo-ds/go"
+	ds "github.com/hanzo-ds/go"
 	luxlog "github.com/luxfi/log"
 	zip "github.com/zap-proto/zip"
 
@@ -276,16 +276,16 @@ func shutdownEventIngest(_ context.Context) error {
 // ch-go transport line the o11y runtime already uses (MVS-unified), so it
 // coexists in the single binary.
 type datastoreSink struct {
-	conn datastore.Conn
+	conn ds.Conn
 }
 
 // newDatastoreSink opens (and pings) the native Datastore connection from the DSN.
 func newDatastoreSink(ctx context.Context, dsn string) (*datastoreSink, error) {
-	opt, err := datastore.ParseDSN(dsn)
+	opt, err := ds.ParseDSN(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("parse datastore dsn: %w", err)
 	}
-	conn, err := datastore.Open(opt)
+	conn, err := ds.Open(opt)
 	if err != nil {
 		return nil, fmt.Errorf("open datastore: %w", err)
 	}

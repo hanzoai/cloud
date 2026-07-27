@@ -838,3 +838,5 @@ replace (
 	k8s.io/sample-cli-plugin => k8s.io/sample-cli-plugin v0.35.3
 	k8s.io/sample-controller => k8s.io/sample-controller v0.35.3
 )
+
+replace github.com/hanzoai/orm => github.com/hanzoai/orm v0.6.8-0.20260727003206-99d6e78a68de

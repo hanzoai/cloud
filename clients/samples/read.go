@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/hanzoai/cloud/clients/principal"
 )
 
@@ -130,10 +130,10 @@ func Series(ctx context.Context, q Query) ([]Sample, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return []Sample{}, nil
 	}
-	rows, err := aiobject.DatastoreQuery(ctx, sql, args...)
+	rows, err := datastore.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -152,10 +152,10 @@ func Latest(ctx context.Context, o string) (map[string]Sample, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return map[string]Sample{}, nil
 	}
-	rows, err := aiobject.DatastoreQuery(ctx, sql, args...)
+	rows, err := datastore.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
