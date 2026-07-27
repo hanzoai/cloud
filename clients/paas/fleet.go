@@ -7,7 +7,7 @@ package paas
 // (observeFleet → observeCR → drift.go). Rather than fork a SECOND k8s dynamic client and a
 // SECOND drift model into the admin subsystem, paas PUBLISHES its observer here once at Mount
 // and admin RESOLVES it at request time — the identical in-process-seam pattern
-// finance.Current() (the money plane) and commerceinproc.SetApp (the commerce plane) use for
+// finance.Current() (the money plane) and transport.SetApp (the commerce plane) use for
 // a co-resident host handing a narrow capability to a sibling subsystem.
 //
 // Fail-closed: nil before Mount, or when the k8s client did not resolve (split deploy / no

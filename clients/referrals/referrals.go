@@ -48,7 +48,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
-	"github.com/hanzoai/cloud/clients/commerceinproc"
+	"github.com/hanzoai/cloud/clients/commerce/transport"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/treasury"
 	"github.com/zap-proto/zip"
@@ -113,7 +113,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "referrals"), State: state{
 		store:      store,
-		commerce:   newCommerceClient(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
+		commerce:   newCommerceClient(transport.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
 		linkBase:   linkBase(deps),
 		auditStore: deps.Audit,
 	}}

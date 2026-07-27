@@ -22,7 +22,7 @@ import (
 // PlanChecker is the ONE commerce read the paywall needs: does org X hold a LIVE
 // (active or trialing) PAID plan, and which tier. It is a consumer-defined interface
 // (idiomatic Go) satisfied structurally by the co-resident commerce client
-// (clients/commerceclient.ActivePaidPlan) — an OPTIONAL capability resolved from
+// (clients/commerce.ActivePaidPlan) — an OPTIONAL capability resolved from
 // deps.Commerce by type-assertion (mirrors types.ModelLister), so the narrow
 // types.CommerceClient interface is untouched and a commerce build that cannot answer
 // (split-deploy / disabled stub) yields a nil PlanChecker → the paywall fails OPEN.
