@@ -91,6 +91,8 @@ require (
 	github.com/hanzoai/go-openai-realtime/contrib/ws-gorilla v1.0.0 // indirect
 	github.com/hanzoai/sqlcipher v0.1.1 // indirect
 	github.com/hanzoai/xorm v1.4.4 // indirect
+	github.com/hanzokv/go/extra/kvcmd/v9 v9.22.0 // indirect
+	github.com/hanzokv/go/extra/kvotel/v9 v9.22.0 // indirect
 	github.com/hanzokv/go/v9 v9.22.0 // indirect
 	github.com/hanzos3/go-sdk v1.0.2 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
