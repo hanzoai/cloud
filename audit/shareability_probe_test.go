@@ -22,10 +22,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 
 func TestShareability_ReaderSharesLiveWriterStore(t *testing.T) {
+	requireSharedStore(t)
+
 	dir := t.TempDir()
 	path := dir + "/audit.db"
 
@@ -52,9 +55,14 @@ func TestShareability_ReaderSharesLiveWriterStore(t *testing.T) {
 
 	// Reader: a SECOND, independent connection opened READ-ONLY against the SAME
 	// files while the writer appends. This is what a reader-role pod does.
-	ro, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
+	// Opened through cek: the store is encrypted at rest, so a bare sql.Open has no
+	// key and cannot read it. cek has no read-only mode, so this is a second RW
+	// handle that only ever reads — it still proves the reader sees the live
+	// writer's committed records, which is the claim, but it does not by itself
+	// prove the reader takes no write lock.
+	ro, err := cek.Open(path)
 	if err != nil {
-		t.Fatalf("reader Open(ro): %v", err)
+		t.Fatalf("reader Open: %v", err)
 	}
 	defer ro.Close()
 

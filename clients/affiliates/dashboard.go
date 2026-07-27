@@ -11,6 +11,7 @@ package affiliates
 import (
 	"context"
 	"crypto/rand"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -469,8 +470,12 @@ func adminSetRate(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
-	if body.RateBps < 0 || body.RateBps > maxL1RateBps {
-		return zip.ErrBadRequest("rateBps must be between 0 and 9300 (leaving headroom for the L2+L3 upline so a share can never exceed the margin)")
+	// The cap moves with the L2/L3 switches, so it is resolved per request and quoted
+	// in the refusal — a hardcoded 9300 would start lying the moment an owner edits the
+	// upline schedule, and the caller would have no way to learn the real bound.
+	if cap := maxL1RateBps(); body.RateBps < 0 || body.RateBps > cap {
+		return zip.ErrBadRequest(fmt.Sprintf(
+			"rateBps must be between 0 and %d (leaving headroom for the L2+L3 upline so a share can never exceed the margin)", cap))
 	}
 	ctx := c.Context()
 	a, err := s.State.store.SetRate(ctx, id, body.RateBps)
