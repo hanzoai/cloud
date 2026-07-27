@@ -86,11 +86,10 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce) {
 	s := &cloud.Service[state]{
 		Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}, "affiliates"),
 		State: state{
-			store:     store,
-			commerce:  fc,
-			clicks:    newClicks(),
-			linkBase:  "https://hanzo.ai",
-			marginBps: defaultMarginBps, // realistic 40% gross margin — the share base
+			store:    store,
+			commerce: fc,
+			clicks:   newClicks(),
+			linkBase: "https://hanzo.ai",
 		},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
