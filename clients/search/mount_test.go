@@ -25,7 +25,10 @@ func TestMountedRoutesAreReachable(t *testing.T) {
 	for _, tc := range []struct{ method, path string }{
 		{http.MethodGet, "/v1/search/health"},
 		{http.MethodGet, "/v1/search/version"},
+		{http.MethodGet, "/v1/search/stats"},
+		{http.MethodGet, "/v1/search/indexes"},
 		{http.MethodPost, "/v1/search/indexes"},
+		{http.MethodDelete, "/v1/search/indexes/x"},
 		{http.MethodGet, "/v1/search/indexes/x"},
 		{http.MethodGet, "/v1/search/indexes/x/settings"},
 		{http.MethodPatch, "/v1/search/indexes/x/settings"},

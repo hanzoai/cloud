@@ -143,6 +143,13 @@ func (s *Store) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
 // existing index keeps its original primary key, because changing it would
 // silently orphan every document already stored under the old one.
 func (s *Store) EnsureIndex(ctx context.Context, org, uid, primaryKey string) (Index, error) {
+	// An empty uid is refused rather than stored: it is not addressable through
+	// the API, so its documents would be invisible and its registry row could not
+	// be dropped by name. The handlers already reject one, so reaching here means
+	// a caller inside the process got it wrong.
+	if strings.TrimSpace(uid) == "" {
+		return Index{}, fmt.Errorf("search: index uid is required")
+	}
 	if idx, err := s.Index(ctx, org, uid); err == nil {
 		return idx, nil
 	} else if !errors.Is(err, errNoIndex) {
@@ -162,6 +169,37 @@ func (s *Store) EnsureIndex(ctx context.Context, org, uid, primaryKey string) (I
 		return Index{}, fmt.Errorf("search: create index: %w", err)
 	}
 	return s.Index(ctx, org, uid)
+}
+
+// Indexes lists an org's indexes in creation order, newest last, with the
+// document count each one holds. It is the org's whole search surface in one
+// answer — and the only way to see an index whose uid you do not already know.
+func (s *Store) Indexes(ctx context.Context, org string) ([]Index, []int, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT i.uid, i.primary_key, i.filterable, i.created_at, i.updated_at,
+		        (SELECT COUNT(*) FROM search_docs d WHERE d.org=i.org AND d.uid=i.uid)
+		   FROM search_indexes i WHERE i.org=? ORDER BY i.created_at, i.uid`, org)
+	if err != nil {
+		return nil, nil, fmt.Errorf("search: list indexes: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out, counts := []Index{}, []int{}
+	for rows.Next() {
+		var (
+			idx            Index
+			filt           string
+			created, upded int64
+			n              int
+		)
+		if err := rows.Scan(&idx.UID, &idx.PrimaryKey, &filt, &created, &upded, &n); err != nil {
+			return nil, nil, fmt.Errorf("search: scan index: %w", err)
+		}
+		_ = json.Unmarshal([]byte(filt), &idx.FilterableAttributes)
+		idx.CreatedAt, idx.UpdatedAt = rfc3339(created), rfc3339(upded)
+		out, counts = append(out, idx), append(counts, n)
+	}
+	return out, counts, rows.Err()
 }
 
 // Index reads one index descriptor, or errNoIndex.
@@ -185,6 +223,27 @@ func (s *Store) Index(ctx context.Context, org, uid string) (Index, error) {
 	idx.CreatedAt = rfc3339(created)
 	idx.UpdatedAt = rfc3339(upded)
 	return idx, nil
+}
+
+// DropIndex removes an index and every document and term in it, in ONE
+// transaction so an index can never survive as a registry row with no documents
+// or as orphaned documents with no registry row.
+func (s *Store) DropIndex(ctx context.Context, org, uid string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, q := range []string{
+		`DELETE FROM search_terms   WHERE org=? AND uid=?`,
+		`DELETE FROM search_docs    WHERE org=? AND uid=?`,
+		`DELETE FROM search_indexes WHERE org=? AND uid=?`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, org, uid); err != nil {
+			return fmt.Errorf("search: drop index %q: %w", uid, err)
+		}
+	}
+	return tx.Commit()
 }
 
 // SetFilterable replaces the filterable attribute list for an index.
