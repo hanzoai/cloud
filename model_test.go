@@ -54,9 +54,13 @@ func TestZenModel(t *testing.T) {
 	if got := ZenModel(ZenModel("deepseek-v4-flash")); got != DefaultModel {
 		t.Errorf("ZenModel is not idempotent: %q", got)
 	}
-	if DefaultModel != "enso" {
-		t.Errorf("DefaultModel = %q, want the bare alias %q so the gateway resolves the tier per call",
-			DefaultModel, "enso")
+	// The default is a PINNED tier, not the bare `enso` router alias. Bare enso
+	// opens on an Opus-class arm at $4/$20 per Mtok against enso-flash's $2/$4,
+	// so defaulting to it silently multiplied the cost of every unnamed agent
+	// call. If this assertion is ever relaxed back to "enso", price it first.
+	if DefaultModel != "enso-flash" {
+		t.Errorf("DefaultModel = %q, want %q — the bare alias routes to an Opus-class arm",
+			DefaultModel, "enso-flash")
 	}
 	if UpstreamModel(DefaultModel) {
 		t.Fatal("DefaultModel is itself an upstream name — the whole policy is inverted")
