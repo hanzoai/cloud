@@ -19,7 +19,7 @@ import (
 // whole object graph to build the clone pack (slow, and O(objects) work per
 // clone). Repacking with a bitmap lets pack-objects REUSE the bitmap, and the
 // commit-graph makes commit/ancestry queries (log, merge-base, the browse UI) a
-// memory-mapped read. This is the same housekeeping gitea/GitLab run; here it
+// memory-mapped read. This is the same housekeeping every large git host runs; here it
 // goes through the ONE hardened git-exec seam (gitexec.go) with the SAME memory
 // bounds + pack-concurrency slot as every other pack op, so gc'ing a multi-GB
 // repo can never OOM the pod. Per the object-plane program (#31).
