@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hanzoai/cloud/cek"
+
 	"github.com/hanzoai/cloud/clients/treasury/ledger"
 )
 
@@ -64,8 +66,10 @@ func TestManager_PerTenantIsolation(t *testing.T) {
 
 	// Distinct files on disk: orga.db, orgb.db (in finance/) and treasury.db (house).
 	for _, name := range []string{"finance/orga.db", "finance/orgb.db", "treasury.db"} {
-		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
-			t.Fatalf("expected file %s: %v", name, err)
+		// cek.Exists, not os.Stat: a store still OPEN has not materialized its
+		// database file on the pure-Go codec — only its sidecar is on disk.
+		if !cek.Exists(filepath.Join(dir, name)) {
+			t.Fatalf("expected store %s", name)
 		}
 	}
 
