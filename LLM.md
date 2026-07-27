@@ -420,12 +420,22 @@ image to a prior semver and `/{name}/sync` requests a reconcile. SUPERADMIN-only
 `gitops-engine` (`hanzoai/deploy/gitops-engine` v0.7.2, no replace) in-process for the
 reconcile half behind `DEPLOY_ENGINE_ENABLED` (default off), with a prune-safety fuse.
 
-## Full-text search (`clients/search`, `/v1/search`)
+## The index (`clients/index`, `/v1/index`)
 
 The in-binary index, speaking the Meilisearch REST dialect so a Meilisearch client
 repoints by changing one host. It replaced the standalone Meilisearch containers
-(`chat-meilisearch`, `search-fts5`); `search.hanzo.ai` still runs our own Meilisearch
-build for the docs corpus. Tenancy is the point: a standalone Meilisearch has ONE
+(`chat-meilisearch`, `search-fts5`).
+
+**Four different things, four names — do not merge them.** `hanzoai/search` is the
+SEARCH PRODUCT (our own Meilisearch build, serving `search.hanzo.ai` and the docs
+corpus). `clients/websearch` queries the OUTSIDE world. `hanzoai/crawl` fetches it.
+`clients/index` is the storage primitive an application writes documents into and
+queries back. It is NOT at `/v1/search`: that path belongs to the `hanzoai/ai` RAG
+plane, whose `/v1/search/{name}` pattern silently swallowed this subsystem's
+single-segment routes (`/health`, `/version` answered 404 in production while every
+deeper route worked). `GET /v1/openapi.json` is what shows two owners of one path.
+
+Tenancy is the point: a standalone Meilisearch has ONE
 global keyspace behind a master key, so every consumer sharing an instance shares its
 indexes — here the tenant is `principal.Org` and every query filters `WHERE org=?`,
 so two orgs may both hold an index named `messages`. The credential is the org's
@@ -436,14 +446,15 @@ compile-time module and this binary links the SYSTEM SQLite so the SQLCipher cod
 real; that library ships `ENABLE_FTS3` + `HAS_CODEC` with no fts5, and the
 `sqlite_fts5` build tag only affects the VENDORED amalgamation, so it is inert here.
 An index built on FTS5 opens on a pure-Go build, passes its tests, and then cannot
-create a single table in the shipped image. `search_terms` is keyed
+create a single table in the shipped image. `terms` is keyed
 `(org, uid, term, pk)` so a prefix query is an index range scan; it behaves the same
 in every build lane. Verify any SQLite module against the production lane
 (`-tags "libsqlite3 sqlite_fts5"` + `-lsqlcipher`) before designing on it.
 
-Health and version are registered as ABSOLUTE paths on `app`, like every other
-`OwnsHealth` subsystem — declared on the subsystem's group they answer on a bare app
-in tests and 404 in production.
+The store is `{DataDir}/index.db`, and a rename must carry the WHOLE family: cek
+keeps the wrapped data key beside it as `<path>.dek`, so moving the `.db` alone
+strands the key and every document becomes undecryptable — data loss that presents
+as an empty index.
 
 ## Releases are cut by a merge to main
 
