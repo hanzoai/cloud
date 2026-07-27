@@ -1002,6 +1002,27 @@ type MountSpec struct {
 	// Today it is held only by linked modules whose own Mount still takes *zip.App
 	// (see cloud.Global) — none of which installs middleware.
 	Global bool
+
+	// Plugin says this subsystem is NOT linked into this binary: it is served by
+	// a separate binary named <Name>, mounted at run time (see PluginSpec, which
+	// is the only thing that sets it). Routing, health and shutdown are identical
+	// either way — this exists so the ONE list that already says what the binary
+	// is composed of can also answer "and which of those ship as their own
+	// executable?", instead of a second list drifting alongside Wire(). The
+	// Dockerfile and the cmd/cloud tests both need that answer.
+	Plugin bool
+}
+
+// PluginNames returns the Name of every spec served by its own binary, in
+// Wire() order. Derived from the list, never a copy of it.
+func PluginNames(specs []MountSpec) []string {
+	var out []string
+	for _, s := range specs {
+		if s.Plugin {
+			out = append(out, s.Name)
+		}
+	}
+	return out
 }
 
 // MountAll mounts every ENABLED subsystem in specs, in slice order — the order is

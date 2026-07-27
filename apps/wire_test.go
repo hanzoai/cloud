@@ -63,7 +63,15 @@ var frozen = []struct {
 	{"wallets", false, true, false},         // was order 127
 	{"x402", false, true, false},            // new: x402 pay-per-use settlement (after wallets)
 	{"paas", true, false, false},            // was order 128
-	{"deploy", true, false, false},          // after paas (release seam), before functions
+	// OwnsHealth flipped true->false and Global false->true when deploy became a
+	// PLUGIN (cloud.PluginSpec, its own cmd/deploy binary) — the same two flips
+	// o11y took, for the same two reasons. Global: zip.Load registers the prefix
+	// itself, so it needs the bare *zip.App; a scoped Router would nest /v1/deploy
+	// under the subsystem name. OwnsHealth: the plugin still serves
+	// /v1/deploy/health, but the generic always-ok route Serve registers before
+	// MountAll now answers first, so claiming ownership here would be a lie about
+	// which route wins. Position and name are UNCHANGED.
+	{"deploy", false, false, true},          // after paas (release seam), before functions; out-of-process
 	{"functions", false, false, false},      // was order 128
 	{"tracker", false, false, false},        // was order 129
 	{"templates", false, false, false},      // was order 129

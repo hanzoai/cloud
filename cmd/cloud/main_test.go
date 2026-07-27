@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -28,12 +29,17 @@ import (
 // (pricing, o11y's annotation queues) refuse to open a data plane unencrypted,
 // which is correct, and a test box has no KMS. One dev-only key, one pattern.
 //
-// The o11y binary is new, and is the cost of a plugin subsystem: o11y is no
-// longer linked in, so the composition root can only mount it by starting the
-// real binary. Building it here is deliberate — the alternative, a stub, would
-// let these tests pass against a route table no deployment ever serves. Cached
-// after the first run. If it cannot be built the dependent tests fail with
-// zip's own fork/exec message, which names the missing file.
+// The plugin binaries are the cost of a plugin subsystem: they are no longer
+// linked in, so the composition root can only mount one by starting the real
+// binary. Building them here is deliberate — the alternative, a stub, would let
+// these tests pass against a route table no deployment ever serves. Cached after
+// the first run. If one cannot be built the dependent tests fail with zip's own
+// fork/exec message, which names the missing file.
+//
+// WHICH binaries is asked of the composition root (cloud.PluginNames over
+// apps.Wire()), never listed here: a test with its own list would keep passing
+// after someone extracts the next app and forgets to add it, which is precisely
+// the failure this harness exists to catch.
 func TestMain(m *testing.M) { os.Exit(runTests(m)) }
 
 // runTests exists so the temp dirs are removed on the way out: os.Exit does not
@@ -52,22 +58,26 @@ func runTests(m *testing.M) int {
 		defer os.RemoveAll(dir)
 		_ = os.Setenv("CLOUD_DATA_DIR", dir)
 	}
-	if os.Getenv("CLOUD_O11Y_BIN") == "" {
-		dir, err := os.MkdirTemp("", "cloud-test-plugins-")
-		if err != nil {
-			return 1
+	dir, err := os.MkdirTemp("", "cloud-test-plugins-")
+	if err != nil {
+		return 1
+	}
+	defer os.RemoveAll(dir)
+	for _, name := range cloud.PluginNames(apps.Wire()) {
+		env := "CLOUD_" + strings.ToUpper(strings.ReplaceAll(name, "-", "_")) + "_BIN"
+		if os.Getenv(env) != "" {
+			continue
 		}
-		defer os.RemoveAll(dir)
-		bin := filepath.Join(dir, "o11y")
+		bin := filepath.Join(dir, name)
 		// GOROOT/bin/go, not "go": the toolchain that is running this test is the
 		// one that must build the plugin, and it is not always on PATH.
-		cmd := exec.Command(goTool(), "build", "-o", bin, "./cmd/o11y")
+		cmd := exec.Command(goTool(), "build", "-o", bin, "./cmd/"+name)
 		cmd.Dir = "../.." // the package dir is cmd/cloud
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
-			os.Stderr.WriteString("TestMain: building the o11y plugin failed: " + err.Error() + "\n")
+			os.Stderr.WriteString("TestMain: building the " + name + " plugin failed: " + err.Error() + "\n")
 		} else {
-			_ = os.Setenv("CLOUD_O11Y_BIN", bin)
+			_ = os.Setenv(env, bin)
 		}
 	}
 	code := m.Run()
