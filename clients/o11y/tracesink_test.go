@@ -6,137 +6,104 @@
 package o11y
 
 import (
-	"go.opentelemetry.io/otel/sdk/resource"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/collector/pdata/ptrace"
 	"context"
-	"errors"
 	"testing"
 
+	"go.opentelemetry.io/collector/consumer"
+	"go.opentelemetry.io/collector/pdata/ptrace"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
-	"github.com/luxfi/zap"
+	"github.com/hanzoai/cloud"
+	luxlog "github.com/luxfi/log"
 )
 
-// fakeWire is a stand-in SpanExporter for the wire fallback, so routing is
-// exercised without a socket.
-type fakeWire struct{ calls int }
+// fakeConsumer stands in for the dstraces exporter so the seam is exercised
+// without a datastore.
+type fakeConsumer struct{ got []ptrace.Traces }
 
-func (f *fakeWire) ExportSpans(context.Context, []sdktrace.ReadOnlySpan) error {
-	f.calls++
+func (f *fakeConsumer) Capabilities() consumer.Capabilities {
+	return consumer.Capabilities{MutatesData: false}
+}
+func (f *fakeConsumer) ConsumeTraces(_ context.Context, td ptrace.Traces) error {
+	f.got = append(f.got, td)
 	return nil
 }
-func (f *fakeWire) Shutdown(context.Context) error { return nil }
 
+// TestTracing_EndToEnd_WithO11yLinkedIn is the proof the split had to keep: with
+// clients/o11y LINKED INTO this binary, a span opened on the process-global
+// tracer — the handle every caller in cloud already holds — arrives at o11y's
+// sink, converted to the pdata the datastore exporter consumes.
+//
+// It crosses the whole seam and nothing else: cloud.InstallTelemetry builds the
+// provider (host side), cloud.RegisterTraceSink carries the batch across, and
+// traceSink — the exact function mountTraceSink registers in production —
+// converts it. Before the split this path only existed because clients/o11y's
+// init() ran in the host; the plugin cut that wire and tracing went dark with no
+// test to notice.
+func TestTracing_EndToEnd_WithO11yLinkedIn(t *testing.T) {
+	t.Setenv("OTEL_EXPORTER_ZAP_ENDPOINT", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
+	t.Setenv("O11Y_TRACES_ZAP_INPROCESS", "true")
 
-// The core dogfood contract: a span produced by cloud's OWN tracer provider —
-// installed on the exporter NewTraceExporter builds — reaches the in-process sink
-// handler as the LIVE proto batch, with NO wire client configured and NO socket
-// opened. The only path from producer to handler is Router -> InProcessInterface.
-func TestTraceExporter_InProcessDeliversLiveSpans_NoSocket(t *testing.T) {
-	var gotName string
-	var gotCount int
-	traceInproc.Register(TraceDest, func(_ context.Context, _ zap.Destination, p zap.Payload) (zap.Payload, error) {
-		batch, ok := p.Value.(ptrace.Traces)
-		if !ok {
-			t.Errorf("handler payload = %T, want ptrace.Traces", p.Value)
-			return zap.Payload{}, nil
-		}
-		gotCount = batch.SpanCount()
-		if gotCount > 0 {
-			gotName = batch.ResourceSpans().At(0).ScopeSpans().At(0).Spans().At(0).Name()
-		}
-		return zap.Payload{}, nil
-	})
-	defer traceInproc.Register(TraceDest, nil)
+	sink := &fakeConsumer{}
+	cloud.RegisterTraceSink(traceSink(sink))
+	t.Cleanup(func() { cloud.RegisterTraceSink(nil) })
 
-	ctx := context.Background()
-	// wire=nil ⇒ in-process only. If the span did NOT route in-process, the export
-	// would ErrNoRoute (no socket, no wire) and gotCount would stay 0.
-	exp, err := NewTraceExporter(ctx, nil)
-	if err != nil {
-		t.Fatalf("NewTraceExporter: %v", err)
+	shutdown := cloud.InstallTelemetry(context.Background(), luxlog.New("o11y-test"), "hanzo-cloud")
+	if !cloud.TracerProviderInstalled() {
+		t.Fatal("host did not install a tracer provider")
 	}
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-		sdktrace.WithSyncer(exp), // synchronous: End -> export -> UploadTraces -> handler
-	)
-	defer func() { _ = tp.Shutdown(ctx) }()
 
-	_, span := tp.Tracer("cloud").Start(ctx, "cloud-own-span")
+	_, span := otel.Tracer(cloud.TracerName).Start(context.Background(), "GET /v1/ai/chat/completions")
+	span.SetAttributes(attribute.Int64("http.status_code", 200))
 	span.End()
 
-	if gotCount != 1 {
-		t.Fatalf("in-process handler received %d spans, want 1 (span did not route in-process)", gotCount)
+	shutdown(context.Background()) // forces the batch processor to flush
+
+	if len(sink.got) != 1 {
+		t.Fatalf("o11y's sink consumed %d batches, want 1 — cloud's spans are not reaching o11y", len(sink.got))
 	}
-	if gotName != "cloud-own-span" {
-		t.Fatalf("in-process handler span name = %q, want cloud-own-span", gotName)
+	td := sink.got[0]
+	if td.SpanCount() != 1 {
+		t.Fatalf("batch carried %d spans, want 1", td.SpanCount())
+	}
+	got := td.ResourceSpans().At(0).ScopeSpans().At(0).Spans().At(0)
+	if got.Name() != "GET /v1/ai/chat/completions" {
+		t.Fatalf("span name = %q, want the request span", got.Name())
+	}
+	// The resource is what o11y's Environment column and service filter read; a
+	// span that arrives unattributed is not usable telemetry.
+	res := td.ResourceSpans().At(0).Resource().Attributes()
+	if v, ok := res.Get("service.name"); !ok || v.Str() != "hanzo-cloud" {
+		t.Errorf("resource service.name = %v (present=%v), want hanzo-cloud", v, ok)
+	}
+	if v, ok := res.Get("deployment.environment"); !ok || v.Str() == "" {
+		t.Errorf("resource deployment.environment = %v (present=%v), want non-empty", v, ok)
 	}
 }
 
+// TestTraceSink_DeregistersOnShutdown: teardown must remove the route, so a span
+// exported after the datastore exporter is closing falls back to the wire rather
+// than writing into it. shutdownTraceSink does that before flushing.
+func TestTraceSink_DeregistersOnShutdown(t *testing.T) {
+	sink := &fakeConsumer{}
+	cloud.RegisterTraceSink(traceSink(sink))
+	t.Cleanup(func() { cloud.RegisterTraceSink(nil) })
 
-// With the in-process sink present, the router prefers it (Cost 0) and the wire
-// fallback is NEVER touched.
-func TestRouterTraceClient_PrefersInProcess(t *testing.T) {
-	called := false
-	traceInproc.Register(TraceDest, func(context.Context, zap.Destination, zap.Payload) (zap.Payload, error) {
-		called = true
-		return zap.Payload{}, nil
-	})
-	defer traceInproc.Register(TraceDest, nil)
-
-	wire := &fakeWire{}
-	c := &routerTraceExporter{router: Router, dest: TraceDest, wire: wire}
-	if err := c.ExportSpans(context.Background(), makeSpans(t)); err != nil {
-		t.Fatalf("ExportSpans: %v", err)
+	if err := shutdownTraceSink(context.Background()); err != nil {
+		t.Fatalf("shutdownTraceSink: %v", err)
 	}
-	if !called {
-		t.Fatal("in-process handler not called")
+	// With no route left the host's exporter returns ErrNoRoute (proved in
+	// cloud's own tests); here it is enough that the sink stops receiving.
+	if err := traceSink(sink)(context.Background(), makeSpans(t)); err != nil {
+		t.Fatalf("traceSink: %v", err)
 	}
-	if wire.calls != 0 {
-		t.Fatalf("wire fallback used though in-process available: calls=%d", wire.calls)
-	}
-}
-
-// With NO in-process sink, the router returns ErrNoRoute and the batch rides the
-// wire fallback (standalone aid / embed-off posture).
-func TestRouterTraceClient_WireFallbackOnNoRoute(t *testing.T) {
-	traceInproc.Register(TraceDest, nil) // ensure no handler
-	wire := &fakeWire{}
-	c := &routerTraceExporter{router: Router, dest: TraceDest, wire: wire}
-	if err := c.ExportSpans(context.Background(), makeSpans(t)); err != nil {
-		t.Fatalf("ExportSpans: %v", err)
-	}
-	if wire.calls != 1 {
-		t.Fatalf("wire fallback not used: calls=%d", wire.calls)
-	}
-}
-
-// With NO in-process sink AND NO wire fallback, ErrNoRoute surfaces — a routing
-// gap is visible, never a silent plaintext downgrade or silent drop.
-func TestRouterTraceClient_NoRouteNoWire_Errors(t *testing.T) {
-	traceInproc.Register(TraceDest, nil)
-	c := &routerTraceExporter{router: Router, dest: TraceDest}
-	// Real spans: an empty batch short-circuits before routing, by design — the
-	// SDK may call with none and that is not a routing failure.
-	if err := c.ExportSpans(context.Background(), makeSpans(t)); !errors.Is(err, zap.ErrNoRoute) {
-		t.Fatalf("want ErrNoRoute, got %v", err)
-	}
-}
-
-// TraceInprocEnabled is the ONE gate both the sink and the producer read.
-func TestTraceInprocEnabled_Gate(t *testing.T) {
-	for _, v := range []string{"1", "true", "TRUE", "yes", "on"} {
-		t.Setenv("O11Y_TRACES_ZAP_INPROCESS", v)
-		if !TraceInprocEnabled() {
-			t.Fatalf("TraceInprocEnabled()=false for %q, want true", v)
-		}
-	}
-	for _, v := range []string{"", "0", "false", "no", "off", "garbage"} {
-		t.Setenv("O11Y_TRACES_ZAP_INPROCESS", v)
-		if TraceInprocEnabled() {
-			t.Fatalf("TraceInprocEnabled()=true for %q, want false", v)
-		}
+	if len(sink.got) != 1 {
+		t.Fatalf("direct call consumed %d batches, want 1", len(sink.got))
 	}
 }
 
@@ -183,11 +150,8 @@ func TestSpansToTraces_PreservesIdentityAndGrouping(t *testing.T) {
 	}
 }
 
-
-
 // makeSpans produces finished spans on demand. Tests must not depend on a
-// package-level slice another test happens to fill first — ExportSpans returns
-// early on an empty batch, so that ordering bug reads as "routing is broken".
+// package-level slice another test happens to fill first.
 func makeSpans(t *testing.T) []sdktrace.ReadOnlySpan {
 	t.Helper()
 	var out []sdktrace.ReadOnlySpan

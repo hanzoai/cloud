@@ -18,9 +18,7 @@ import (
 
 	// The subsystem set is defined ONCE in the subsystems bundle (shared with
 	// cmd/hanzo). apps.Wire() returns it in mount order; main threads that
-	// slice into cloud.Serve — the composition root, no init()-registry. Linking
-	// subsystems also links clients/o11y, whose init() registers the telemetry
-	// bootstrap cloud.Serve runs (cloud.RegisterTelemetryInstaller).
+	// slice into cloud.Serve — the composition root, no init()-registry.
 	"github.com/hanzoai/cloud/apps"
 )
 
