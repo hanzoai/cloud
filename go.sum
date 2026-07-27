@@ -1120,6 +1120,8 @@ github.com/hanzoai/o11y v1.5.31-0.20260726155004-2b66f3201d03 h1:8Q7qETud4bQy/xO
 github.com/hanzoai/o11y v1.5.31-0.20260726155004-2b66f3201d03/go.mod h1:npZ7y0k6+uP6CnKHGtiL+dgIuqI6e3WCV/+6IYNImw4=
 github.com/hanzoai/o11y v1.5.31 h1:cq0oay92IbqCaRzazxoG7fMifhhVXF4zP1QfGR2wRpM=
 github.com/hanzoai/o11y v1.5.31/go.mod h1:npZ7y0k6+uP6CnKHGtiL+dgIuqI6e3WCV/+6IYNImw4=
+github.com/hanzoai/orm v0.6.8-0.20260727003206-99d6e78a68de h1:LFCY0r8OJO8GwLy4kNbMJmy+DCTymWyTFt1vZwRE/kc=
+github.com/hanzoai/orm v0.6.8-0.20260727003206-99d6e78a68de/go.mod h1:iWKnC2uXMldqj6ac1BiUz9Qt05w8SmFGJ1mxvU6URBw=
 github.com/hanzoai/orm v0.6.8 h1:llCC1r2lO3PQJqh50vUn209EpXSvpNL6fK2ySEQ5Z3c=
 github.com/hanzoai/orm v0.6.8/go.mod h1:jmszOBtvtaydmS6k3CuGAKgjAa7wjeIfeVQF3R3Ipy4=
 github.com/hanzoai/orm v0.6.10 h1:cYCm+fcx9hUf9ifki4x2eAn/uV6hRuw+676am387f7E=

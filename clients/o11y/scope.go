@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
@@ -108,7 +108,7 @@ func handleMetrics(c *zip.Ctx) error {
 	if !resolved {
 		return c.JSON(http.StatusOK, emptyMetrics(svc.ID))
 	}
-	if !aiobject.DatastoreEnabled() {
+	if !datastore.Ready() {
 		return zip.Errorf(http.StatusServiceUnavailable, "o11y metrics: datastore not connected")
 	}
 	rangeSec := boundRangeSec(c.Query("range"))
