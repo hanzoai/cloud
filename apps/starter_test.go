@@ -14,8 +14,10 @@ package apps
 //
 // It lives in package apps because this is where the real chain is assembled: the
 // cloud ledger adapter (ledger{}) that translates (Org, Subject) into a finance
-// posting. Testing account.EnsureStarterCredit against a stub ledger would prove only
-// that the stub agrees with itself.
+// posting. Testing cloud.EnsureStarterCredit against a stub ledger would prove only
+// that the stub agrees with itself. The middleware's own behaviour — the hot-path
+// cache, which principals are eligible — is proven in middleware_starter_test.go,
+// where a request context is cheap to build.
 
 import (
 	"context"
@@ -23,8 +25,11 @@ import (
 	"testing"
 
 	"github.com/hanzoai/account"
-	accountclient "github.com/hanzoai/cloud/clients/account"
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/finance"
+	"github.com/hanzoai/cloud/clients/money"
+	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/types"
 	commercecredit "github.com/hanzoai/commerce/billing/credit"
 	"github.com/hanzoai/commerce/billing/creditledger"
 )
@@ -45,26 +50,34 @@ func wireLedger(t *testing.T) finance.Client {
 	return fin
 }
 
+// starterWalletOf builds the address a credential resolves to, by the SAME rule the gate
+// uses. Owner is the home org (the ledger), name the person. No `billing_account`
+// claim is supplied because IAM v2 mints none, so Payer takes the fallback — which is
+// precisely the production shape.
+func starterWalletOf(owner, name string) principal.Wallet {
+	return principal.Wallet{
+		Ledger:  owner,
+		Account: account.Payer(account.Credential{Owner: owner, Name: name}).Subject(),
+	}
+}
+
 // gateBalance reads a principal's balance EXACTLY as the spend gate does: resolve the
 // payer with account.Payer (what principal.WalletOf calls), then read that subject in
 // the home org's ledger (what build.go's BalanceReader and metering's fetchAvailable
-// both call). Owner is the ledger, name the person.
-//
-// No `billing_account` claim is supplied because IAM v2 mints none — so Payer takes
-// the fallback, which is precisely the production shape.
+// both call).
 func gateBalance(t *testing.T, fin finance.Client, owner, name string) int64 {
 	t.Helper()
-	subject := account.Payer(account.Credential{Owner: owner, Name: name}).Subject()
-	bal, err := fin.Balance(context.Background(), owner, subject, "usd", false)
+	w := starterWalletOf(owner, name)
+	bal, err := fin.Balance(context.Background(), w.Ledger, w.Account, "usd", false)
 	if err != nil {
-		t.Fatalf("gate balance read (owner=%q name=%q subject=%q): %v", owner, name, subject, err)
+		t.Fatalf("gate balance read (owner=%q name=%q subject=%q): %v", owner, name, w.Account, err)
 	}
 	return bal.Cents()
 }
 
-// TestStarterCredit_LandsAtTheAddressTheGateReads is THE test. A freshly onboarded org
-// is granted, and the balance is then read through the gate's own address rule — not
-// the grant's return value. They must agree, or the grant funds a wallet nobody spends
+// TestStarterCredit_LandsAtTheAddressTheGateReads is THE test. A new account is
+// granted, and the balance is then read through the gate's own address rule — not the
+// grant's return value. They must agree, or the grant funds a wallet nobody spends
 // from.
 func TestStarterCredit_LandsAtTheAddressTheGateReads(t *testing.T) {
 	fin := wireLedger(t)
@@ -73,14 +86,13 @@ func TestStarterCredit_LandsAtTheAddressTheGateReads(t *testing.T) {
 		t.Fatalf("a brand-new org must start at zero, got %d cents", got)
 	}
 
-	reported, err := accountclient.EnsureStarterCredit(context.Background(), "acme")
+	reported, err := cloud.EnsureStarterCredit(context.Background(), starterWalletOf("acme", "alice"))
 	if err != nil {
 		t.Fatalf("EnsureStarterCredit: %v", err)
 	}
 
-	// The founder reads the grant.
 	if got := gateBalance(t, fin, "acme", "alice"); got != commercecredit.StarterCreditCents {
-		t.Fatalf("the GATE reads %d cents at acme/alice, want %d — the grant landed at an address the gate does not read",
+		t.Fatalf("the GATE reads %d cents at acme, want %d — the grant landed at an address the gate does not read",
 			got, commercecredit.StarterCreditCents)
 	}
 	// A second member of the same org reads the SAME pool: one grant funds the tenant,
@@ -93,13 +105,12 @@ func TestStarterCredit_LandsAtTheAddressTheGateReads(t *testing.T) {
 	}
 }
 
-// TestStarterCredit_AmountIsServerAuthoritative proves the granted amount is the
-// server's shared constant. EnsureStarterCredit takes no amount parameter at all, so
-// there is no client field that could reach it — this pins the value against drift
-// between the constant and what actually lands.
+// TestStarterCredit_AmountIsServerAuthoritative pins the granted amount to the shared
+// constant. EnsureStarterCredit takes no amount and no request body, so no client
+// field can reach it — this catches drift between the constant and what lands.
 func TestStarterCredit_AmountIsServerAuthoritative(t *testing.T) {
 	fin := wireLedger(t)
-	if _, err := accountclient.EnsureStarterCredit(context.Background(), "acme"); err != nil {
+	if _, err := cloud.EnsureStarterCredit(context.Background(), starterWalletOf("acme", "alice")); err != nil {
 		t.Fatalf("EnsureStarterCredit: %v", err)
 	}
 	if got := gateBalance(t, fin, "acme", "alice"); got != 500 {
@@ -108,12 +119,12 @@ func TestStarterCredit_AmountIsServerAuthoritative(t *testing.T) {
 }
 
 // TestStarterCredit_RetryGrantsOnce covers the sequential replays: a retried request,
-// a double-submitted form, a re-login, a redeploy that re-runs onboarding. Every one
-// derives the same address-keyed ref, so the ledger credits once.
+// a re-login, a process restart that empties the hot-path cache. Every one derives the
+// same address-keyed ref, so the ledger credits once.
 func TestStarterCredit_RetryGrantsOnce(t *testing.T) {
 	fin := wireLedger(t)
 	for i := 0; i < 5; i++ {
-		if _, err := accountclient.EnsureStarterCredit(context.Background(), "acme"); err != nil {
+		if _, err := cloud.EnsureStarterCredit(context.Background(), starterWalletOf("acme", "alice")); err != nil {
 			t.Fatalf("EnsureStarterCredit call %d: %v", i, err)
 		}
 	}
@@ -126,7 +137,7 @@ func TestStarterCredit_RetryGrantsOnce(t *testing.T) {
 // TestStarterCredit_ConcurrentGrantsOnce is the one that matters for money. A
 // sequential retry test passes against a read-then-write guard that is still racy;
 // only concurrency distinguishes a real idempotency barrier from a checked one.
-// Twenty goroutines start together and grant the same org.
+// Twenty goroutines start together and grant the same wallet.
 //
 // The barrier under test is finance.Deposit's dedup on Ref, which does its
 // EntryByRef check INSIDE the same transaction as the insert, over a store pinned to
@@ -146,7 +157,7 @@ func TestStarterCredit_ConcurrentGrantsOnce(t *testing.T) {
 		go func(i int) {
 			defer done.Done()
 			start.Wait() // release all goroutines at once
-			_, errs[i] = accountclient.EnsureStarterCredit(context.Background(), "acme")
+			_, errs[i] = cloud.EnsureStarterCredit(context.Background(), starterWalletOf("acme", "alice"))
 		}(i)
 	}
 	start.Done()
@@ -163,48 +174,98 @@ func TestStarterCredit_ConcurrentGrantsOnce(t *testing.T) {
 	}
 }
 
-// TestStarterCredit_PerOrgNotPerProcess proves the key is scoped to the account: two
-// different orgs each get their own grant. An over-broad key would fund the first org
-// and silently skip every one after it.
-func TestStarterCredit_PerOrgNotPerProcess(t *testing.T) {
+// TestStarterCredit_PerAccountNotPerProcess proves the key is scoped to the address:
+// three different orgs each get their own grant. An over-broad key would fund the
+// first and silently skip every one after it.
+func TestStarterCredit_PerAccountNotPerProcess(t *testing.T) {
 	fin := wireLedger(t)
-	for _, org := range []string{"acme", "globex", "initech"} {
-		if _, err := accountclient.EnsureStarterCredit(context.Background(), org); err != nil {
+	orgs := []string{"acme", "globex", "initech"}
+	for _, org := range orgs {
+		if _, err := cloud.EnsureStarterCredit(context.Background(), starterWalletOf(org, "founder")); err != nil {
 			t.Fatalf("EnsureStarterCredit(%s): %v", org, err)
 		}
 	}
-	for _, org := range []string{"acme", "globex", "initech"} {
+	for _, org := range orgs {
 		if got := gateBalance(t, fin, org, "founder"); got != commercecredit.StarterCreditCents {
 			t.Fatalf("org %s reads %d cents, want %d", org, got, commercecredit.StarterCreditCents)
 		}
 	}
 }
 
+// TestStarterCredit_FundedAccountIsNotGranted is the guard against a retroactive
+// payout to the whole customer base. A first-contact trigger sees every EXISTING
+// account on the first request after a deploy; if "unseen" meant "new", every funded
+// org in the fleet would take a free $5.
+func TestStarterCredit_FundedAccountIsNotGranted(t *testing.T) {
+	fin := wireLedger(t)
+	// An existing customer with money on the books.
+	if _, err := fin.Deposit(context.Background(), types.DepositInput{
+		Org: "acme", Subject: "acme", Amount: money.FromCents(2500), Currency: "usd",
+		Notes: "prior top-up", Ref: "prior-topup-1",
+	}); err != nil {
+		t.Fatalf("seed deposit: %v", err)
+	}
+	if _, err := cloud.EnsureStarterCredit(context.Background(), starterWalletOf("acme", "alice")); err != nil {
+		t.Fatalf("EnsureStarterCredit: %v", err)
+	}
+	if got := gateBalance(t, fin, "acme", "alice"); got != 2500 {
+		t.Fatalf("funded account reads %d cents, want its original 2500 — a retroactive starter credit was paid", got)
+	}
+}
+
+// TestStarterCredit_SpentAccountIsNotGranted is the other half of that guard, and the
+// reason a zero balance alone is not the eligibility test. An org that spent its
+// balance down to exactly zero reads $0 but is not new; only its usage history
+// distinguishes it from a fresh signup.
+func TestStarterCredit_SpentAccountIsNotGranted(t *testing.T) {
+	fin := wireLedger(t)
+	ctx := context.Background()
+	if _, err := fin.Deposit(ctx, types.DepositInput{
+		Org: "acme", Subject: "acme", Amount: money.FromCents(1000), Currency: "usd",
+		Notes: "prior top-up", Ref: "prior-topup-1",
+	}); err != nil {
+		t.Fatalf("seed deposit: %v", err)
+	}
+	if err := fin.RecordUsage(ctx, types.UsageInput{
+		Org: "acme", Subject: "acme", Amount: money.FromCents(1000), Currency: "usd", RequestID: "prior-usage-1",
+	}); err != nil {
+		t.Fatalf("seed usage: %v", err)
+	}
+	if got := gateBalance(t, fin, "acme", "alice"); got != 0 {
+		t.Fatalf("precondition: spent-out org should read 0, got %d", got)
+	}
+	if _, err := cloud.EnsureStarterCredit(ctx, starterWalletOf("acme", "alice")); err != nil {
+		t.Fatalf("EnsureStarterCredit: %v", err)
+	}
+	if got := gateBalance(t, fin, "acme", "alice"); got != 0 {
+		t.Fatalf("a spent-out account was granted %d cents — zero balance was mistaken for a new account", got)
+	}
+}
+
 // TestStarterCredit_PoolIsNotThePersonWallet is the NEGATIVE CONTROL for every other
-// test here, and the reason the grant fires on first-run onboarding rather than on
-// signup.
+// test here, and the reason the shared signup org is excluded from the grant.
 //
-// In the shared signup org the members are strangers, so account.Payer resolves each
-// to their OWN wallet, not the org pool. An org-keyed grant into that org therefore
-// lands somewhere no member's gate reads. This test asserts that gap exists — it is
-// what makes the passing address tests above meaningful rather than vacuous, and it
-// pins the trap so nobody "simplifies" the trigger into granting at signup.
+// In that org the members are strangers, so account.Payer resolves each to their OWN
+// wallet, not the org pool. An org-keyed grant there lands somewhere no member's gate
+// reads. This test asserts that gap exists — it is what makes the passing address
+// tests above meaningful rather than vacuous, and it pins the trap so nobody
+// "simplifies" the exclusion away.
 func TestStarterCredit_PoolIsNotThePersonWallet(t *testing.T) {
 	fin := wireLedger(t)
+	org := account.SignupOrg
 
-	// account.SignupOrg is the shared org every self-serve signup lands in.
-	if _, err := accountclient.EnsureStarterCredit(context.Background(), account.SignupOrg); err != nil {
-		t.Fatalf("EnsureStarterCredit(%s): %v", account.SignupOrg, err)
+	// Credit the POOL directly (what an org-keyed grant would do).
+	if _, err := cloud.EnsureStarterCredit(context.Background(), principal.Wallet{Ledger: org, Account: org}); err != nil {
+		t.Fatalf("EnsureStarterCredit(pool): %v", err)
 	}
-
-	// A member of the signup org reads their PERSON wallet — and it is EMPTY, because
-	// the grant went to the pool. This is the "looks fixed and 402s anyway" failure.
-	if got := gateBalance(t, fin, account.SignupOrg, "alice"); got != 0 {
-		t.Fatalf("a signup-org member reads %d cents from an org-keyed grant; the test's address model is wrong", got)
+	// A member of that org reads their PERSON wallet — EMPTY. This is the
+	// "looks fixed and 402s anyway" failure.
+	if got := gateBalance(t, fin, org, "alice"); got != 0 {
+		t.Fatalf("a signup-org member reads %d cents from a pool grant; the address model is wrong", got)
 	}
-	// Same ledger, different account: the pool itself did receive the money, so the
-	// zero above is an ADDRESS mismatch, not a failed write.
-	pool, err := fin.Balance(context.Background(), account.SignupOrg, account.SignupOrg, "usd", false)
+	// Same ledger, different account: the pool DID receive it, so the zero above is an
+	// ADDRESS mismatch, not a failed write.
+	pool, err := fin.Balance(context.Background(), org, org, "usd", false)
 	if err != nil {
 		t.Fatalf("pool balance: %v", err)
 	}
@@ -214,25 +275,17 @@ func TestStarterCredit_PoolIsNotThePersonWallet(t *testing.T) {
 	}
 }
 
-// TestStarterCredit_NoLedgerIsAnError proves a missing ledger is reported, never
-// silently treated as a successful grant. The caller logs it and the account stays at
-// $0 — which the gate refuses. A swallowed error here would be a grant that never
-// happened but looked like it did.
-func TestStarterCredit_NoLedgerIsAnError(t *testing.T) {
+// TestStarterCredit_NoLedgerIsInert proves a split deploy is a no-op, not a crash and
+// not a false success: with no co-resident ledger there is nothing to grant into, the
+// account stays at $0, and the gate refuses it.
+func TestStarterCredit_NoLedgerIsInert(t *testing.T) {
 	creditledger.Set(nil)
 	finance.Publish(nil)
-	if _, err := accountclient.EnsureStarterCredit(context.Background(), "acme"); err == nil {
-		t.Fatal("EnsureStarterCredit with no ledger returned nil error — a grant that did not happen must not report success")
+	got, err := cloud.EnsureStarterCredit(context.Background(), starterWalletOf("acme", "alice"))
+	if err != nil {
+		t.Fatalf("no-ledger must be inert, got error: %v", err)
 	}
-}
-
-// TestStarterCredit_EmptyOrgRefused proves an unnamed account is refused rather than
-// credited to a wallet nobody owns.
-func TestStarterCredit_EmptyOrgRefused(t *testing.T) {
-	wireLedger(t)
-	for _, org := range []string{"", "   "} {
-		if _, err := accountclient.EnsureStarterCredit(context.Background(), org); err == nil {
-			t.Fatalf("EnsureStarterCredit(%q) returned nil error — an unnamed account must be refused", org)
-		}
+	if got != 0 {
+		t.Fatalf("no-ledger reported balance %d, want 0", got)
 	}
 }

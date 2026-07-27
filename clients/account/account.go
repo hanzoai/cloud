@@ -386,19 +386,15 @@ func onboard(s *cloud.Service[state], c *zip.Ctx) error {
 
 	// FIRST-RUN: drive the ONE atomic IAM provision (org + admin move + hashed
 	// org-scoped credential), replacing the create-org + move-user pair — a mid-flight
-	// retry now converges on the founder's own org instead of orphaning it. Prefer it
-	// whenever the service-token path is wired; fall back to the legacy pair only when
-	// it is not, so a partial deploy still onboards.
-	//
-	// The org is then funded with the one-time starter credit (starter.go) — the
-	// funding path SpendGate is sequenced behind. Only FIRST-RUN grants: an additional
-	// org returns above, unfunded, because creating them is unlimited.
+	// retry now converges on the founder's own org instead of orphaning it. The org
+	// starts at a zero balance (usage is pre-paid). Prefer it whenever the
+	// service-token path is wired; fall back to the legacy pair only when it is not,
+	// so a partial deploy still onboards.
 	if s.State.iam.provisionReady() {
 		resp, err := onboardFirstRun(c.Context(), s.State.iam, cr.id, slug, displayName, body.Personal)
 		if err != nil {
 			return err
 		}
-		grantStarter(s, c, resp.Org)
 		return c.JSON(http.StatusOK, resp)
 	}
 
@@ -410,26 +406,7 @@ func onboard(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := s.State.iam.moveUserToOrg(c.Context(), cr.id, slug); err != nil {
 		return zip.Errorf(http.StatusBadGateway, "org created but could not assign you to it: %v", err)
 	}
-	grantStarter(s, c, slug)
 	return c.JSON(http.StatusOK, onboardResp{Org: slug, DisplayName: displayName, Additional: false})
-}
-
-// grantStarter funds a newly provisioned org and swallows failure by design.
-//
-// The org exists at this point — IAM has already committed it and moved the founder
-// in. Failing the response over an unfunded balance would report an error for an
-// account that was in fact created, and a retry would then collide with the org it
-// just made. So a grant failure is logged at WARN and the caller still gets its 200:
-// the account is real, it simply holds no credit yet, which the gate reads as $0 and
-// refuses. An unfunded account is a recoverable state (an admin grant tops it up);
-// a half-onboarded one is not.
-func grantStarter(s *cloud.Service[state], c *zip.Ctx, org string) {
-	balanceCents, err := EnsureStarterCredit(c.Context(), org)
-	if err != nil {
-		s.Log.Warn("starter credit not granted (org holds no credit; the gate will read $0)", "org", org, "err", err)
-		return
-	}
-	s.Log.Info("starter credit granted", "org", org, "balanceCents", balanceCents)
 }
 
 // onboardFirstRun drives the ONE atomic IAM provision for a zero-org caller (create
