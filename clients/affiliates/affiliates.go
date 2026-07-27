@@ -59,6 +59,7 @@ import (
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/authors"
 	"github.com/hanzoai/cloud/clients/commerceinproc"
+	"github.com/hanzoai/cloud/clients/flags"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/treasury"
 	"github.com/zap-proto/zip"
@@ -78,8 +79,9 @@ const (
 	// profit-share is computed on: the affiliate earns its rate of Hanzo's MARGIN, not
 	// of the customer's gross bill, so a payout can never exceed the margin Hanzo
 	// actually earned — and the customer's charge is never touched. A clearly-named
-	// POLICY default (mirrors metered_ai's price default): ops sets the real gross
-	// margin per deployment via AFFILIATE_MARGIN_BPS, cross-checking the finance board.
+	// POLICY default. The REAL value is set in admin.hanzo.ai (platform switch
+	// affiliate_margin_bps) against the finance board's actual cost of revenue; this
+	// literal is only the value before anyone has set one.
 	// 4000 = 40%. 10000 (100%) degrades to a gross-revenue share; 0 accrues nothing.
 	defaultMarginBps int64 = 4000
 	// grantCurrency is the ledger currency for a credits payout.
@@ -128,17 +130,41 @@ func levelRateBps(level int, a Affiliate) int64 {
 	}
 }
 
+// marginBpsKey is the admin-editable platform switch carrying Hanzo's gross-margin
+// fraction. It is what the affiliate share is computed ON, so it moves with the real
+// cost of revenue and must be changeable at any time, by us, without a deploy.
+const marginBpsKey = "affiliate_margin_bps"
+
+func init() {
+	flags.Register(flags.Def{
+		Key: marginBpsKey, Category: "Gateway", Type: flags.TypeInt,
+		Default: strconv.FormatInt(defaultMarginBps, 10),
+		Label:   "Affiliate share base — gross margin (bps)",
+		Desc: "Hanzo's gross margin on customer spend, in basis points, that every affiliate " +
+			"commission is a rate OF. 4000 = 40%. Set from the finance board's real cost of " +
+			"revenue; raise or lower it any time and the next accrual uses the new value. " +
+			"10000 degrades to a gross-revenue share; 0 accrues nothing.",
+	})
+}
+
 // affiliateMarginBps resolves the platform gross-margin fraction (basis points) from
-// AFFILIATE_MARGIN_BPS, clamped to [0,10000], else the policy default. An invalid or
-// out-of-range value falls through to the default so a typo can never silently zero
-// out (or over-inflate) the share base.
-func affiliateMarginBps() int64 {
-	v := strings.TrimSpace(os.Getenv("AFFILIATE_MARGIN_BPS"))
-	if v == "" {
-		return defaultMarginBps
-	}
-	n, err := strconv.ParseInt(v, 10, 64)
-	if err != nil || n < 0 || n > bpsDenom {
+// the admin-editable switch, clamped to [0,10000], else the policy default. An unset
+// or out-of-range value falls through to the default so a bad edit can never silently
+// zero out (or over-inflate) the share base.
+//
+// Read LIVE, per accrual — never captured at boot. It used to come from
+// AFFILIATE_MARGIN_BPS and be snapshotted into state at Mount, which meant the number
+// could not be changed at all without a redeploy: editing the env changed nothing
+// until the pod restarted, and there was no admin control. Margin tracks real costs
+// and moves, so a boot-time constant was the wrong shape for it.
+func affiliateMarginBps() int64 { return clampMarginBps(int64(flags.Int(marginBpsKey))) }
+
+// clampMarginBps bounds a configured margin to [0,10000], falling back to the
+// policy default outside it. Pure, so the bound is testable without the engine.
+// 0 and 10000 are both LEGAL (accrue nothing / share gross revenue) — only
+// genuinely impossible values fall back.
+func clampMarginBps(n int64) int64 {
+	if n < 0 || n > bpsDenom {
 		return defaultMarginBps
 	}
 	return n
@@ -173,7 +199,6 @@ type state struct {
 	commerce   commerce
 	clicks     *clicks         // in-memory coalescing buffer for public link-click pings
 	linkBase   string          // https://hanzo.ai (brand host) — the ?aff link prefix
-	marginBps  int64           // platform gross-margin fraction the share is computed on
 	auditStore *audit.Recorder // best-effort payout/accrual audit; nil disables it
 }
 
@@ -204,12 +229,11 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		commerce:   newCommerceClient(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
 		clicks:     newClicks(),
 		linkBase:   linkBase(deps),
-		marginBps:  affiliateMarginBps(),
 		auditStore: deps.Audit,
 	}}
 	mounted = s
 	routes(app, s)
-	s.Log.Info("affiliates mounted", "brand", s.Brand, "linkBase", s.State.linkBase, "marginBps", s.State.marginBps, "commerce", s.State.commerce.configured())
+	s.Log.Info("affiliates mounted", "brand", s.Brand, "linkBase", s.State.linkBase, "marginBps", affiliateMarginBps(), "commerce", s.State.commerce.configured())
 	return nil
 }
 
@@ -297,7 +321,7 @@ func myAffiliates(s *cloud.Service[state], c *zip.Ctx) error {
 		"requestedCode": a.RequestedCode,
 		"link":          affiliateLink(s, a.Code),
 		"rateBps":       a.RateBps,
-		"marginBps":     s.State.marginBps,
+		"marginBps":     affiliateMarginBps(),
 		"handle":        a.Handle,
 		"referredCount": referred,
 		"accruedCents":  a.AccruedCents,
@@ -375,7 +399,7 @@ func myAffiliatesMe(s *cloud.Service[state], c *zip.Ctx) error {
 		"code":          a.Code,
 		"link":          affiliateLink(s, a.Code),
 		"rateBps":       a.RateBps,
-		"marginBps":     s.State.marginBps,
+		"marginBps":     affiliateMarginBps(),
 		"handle":        a.Handle,
 		"levels":        levels,
 		"downlineTotal": len(downline),
@@ -832,7 +856,7 @@ func accrueSource(s *cloud.Service[state], ctx context.Context, sourceOrg string
 	// The share base is Hanzo's MARGIN on this spend, computed ONCE (level-independent).
 	// Every level's share is a rate of this margin, so their sum ≤ margin (share never
 	// touches the customer's bill). No margin → nothing to share (fail-closed).
-	margin := marginOf(spend, s.State.marginBps)
+	margin := marginOf(spend, affiliateMarginBps())
 	if margin <= 0 {
 		return 0, nil
 	}
@@ -899,7 +923,7 @@ func sweepAffiliate(s *cloud.Service[state], ctx context.Context, a Affiliate) (
 			s.Log.Warn("affiliates: spend read failed", "affiliate", a.ID, "source", src, "err", serr)
 			continue
 		}
-		margin := marginOf(spend, s.State.marginBps)
+		margin := marginOf(spend, affiliateMarginBps())
 		commission := margin * levelRateBps(level, a) / bpsDenom
 		if commission <= 0 {
 			continue
