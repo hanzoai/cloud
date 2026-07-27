@@ -72,7 +72,14 @@ const shardForwardTimeout = 25 * time.Second
 // in which case Middleware is a pass-through — byte-identical to today.
 type shardRouter struct {
 	self  string      // this pod's stable id (StatefulSet ordinal name, e.g. cloud-1)
-	peers []ha.Member // the full, stable writer set (id@addr), identical on every pod
+	peers []ha.Member // static writer set (CLOUD_PEERS) — the fallback + the boot log label
+
+	// members is the LIVE writer set the durable plane supplies (the SAME election
+	// snapshot the fencer uses). Non-nil ⇒ route on it, so a draining/dead pod's orgs go
+	// to the ready successor that hydrates them (M3). nil ⇒ static peers only: without the
+	// durable plane a peer cannot serve another pod's local-only files, so ownership stays
+	// pinned to the ordinal (which reattaches its PVC on restart).
+	members func() []ha.Member
 
 	log luxlog.Logger
 
@@ -80,17 +87,38 @@ type shardRouter struct {
 	clients map[string]*fasthttp.HostClient // addr → pooled streaming client, lazily built
 }
 
-// newShardRouter builds the router from config, or returns nil when sharding is off
-// (CLOUD_PEERS names ≤1 pod, or no self id) so the caller wires no middleware and the
-// single-pod path is unchanged. Config.Validate has already refused to boot a
-// multi-peer set that does not contain self, so a non-nil router always owns a shard.
-func newShardRouter(cfg *Config, log luxlog.Logger) *shardRouter {
+// newShardRouter builds the router, or returns nil when routing is off (single pod) so the
+// caller wires no middleware. Two activation paths: LIVE membership (live != nil — the
+// durable plane is on and tracks the pod set through K8s) activates routing on any stable
+// self id; otherwise the STATIC contract — CLOUD_PEERS names >1 pod AND self is one of
+// them (Config.Validate enforced this) — as before. self is the pod name (CLOUD_POD_NAME /
+// hostname), matching the id the live membership source assigns each pod.
+func newShardRouter(cfg *Config, log luxlog.Logger, live func() []ha.Member) *shardRouter {
 	peers := parsePeers(cfg.ShardPeers)
-	self := strings.TrimSpace(cfg.ShardSelf)
+	self := firstNonEmptyStr(strings.TrimSpace(cfg.ShardSelf), hostnameOr(""))
+	if live != nil {
+		if self == "" {
+			return nil // no stable id ⇒ cannot decide "do I own this org"; single-pod path.
+		}
+		return &shardRouter{self: self, peers: peers, members: live, log: log, clients: map[string]*fasthttp.HostClient{}}
+	}
 	if len(peers) < 2 || self == "" || !peersContain(peers, self) {
 		return nil
 	}
 	return &shardRouter{self: self, peers: peers, log: log, clients: map[string]*fasthttp.HostClient{}}
+}
+
+// set is the writer set to elect over: the LIVE membership when the durable plane provides
+// it (a rolling upgrade's current pods — draining/dead ones already dropped), else the
+// static CLOUD_PEERS set. A momentarily-empty live snapshot (a refresh blip) falls back to
+// peers so no org is ever stranded with no owner.
+func (r *shardRouter) set() []ha.Member {
+	if r.members != nil {
+		if m := r.members(); len(m) > 0 {
+			return m
+		}
+	}
+	return r.peers
 }
 
 // peerIDs returns the member ids for logging.
@@ -122,7 +150,7 @@ func (r *shardRouter) Middleware() zip.Handler {
 		if slug == "" {
 			return c.Continue()
 		}
-		owner, ok := ha.Owner(slug, r.peers)
+		owner, ok := ha.Owner(slug, r.set())
 		if !ok || owner.ID == r.self {
 			return c.Continue()
 		}
@@ -140,11 +168,13 @@ func (r *shardRouter) forward(c *zip.Ctx, owner ha.Member, slug string) error {
 	req := fc.Request()
 	resp := fc.Response()
 
-	// Loop guard / divergence fail-closed. Under the static, identical peer set this
-	// is unreachable (the owner always recomputes owner==self); if it ever fires,
-	// membership diverged and serving locally would touch another shard's files, so
-	// we refuse (421) instead. A client that forges the header only 421s ITS OWN
-	// cross-shard request — never another tenant, never availability for others.
+	// Loop guard / divergence fail-closed. On the static peer set this is unreachable
+	// (the owner always recomputes owner==self). Under LIVE membership two pods can briefly
+	// hold divergent views mid-refresh, so an already-forwarded request may reach a pod that
+	// no longer owns the org; rather than loop or serve another shard's files, we refuse
+	// (421) — a retryable, fail-closed signal that self-heals the instant views converge
+	// (bounded by the 2s refresh). A forged header only 421s the client's OWN cross-shard
+	// request — never another tenant, never others' availability.
 	if len(req.Header.Peek(shardHopHeader)) > 0 {
 		r.log.Error("shard loop guard tripped — membership divergence", "org_slug", slug, "owner", owner.ID, "self", r.self)
 		resp.Reset()
