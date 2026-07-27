@@ -1,0 +1,53 @@
+name: Sync to Hanzo Git
+# GitHub's only job for this repo is to hand main to git.hanzo.ai, which is
+# canonical and owns build, publish and deploy through .hanzo/workflows/cicd.yml.
+# Nothing here builds, tests, or deploys — that all runs on our own PaaS.
+#
+# This PUSHES the ref rather than asking the forge to pull it. A push is
+# deterministic and needs no timer, and it fails visibly when it does not happen.
+# The previous per-repo sync workflow asked the forge to pull and exited 0 when
+# its token was absent, so on every repo but one it reported success while doing
+# nothing. Silence is the failure mode worth designing out.
+#
+# Requires the forge repo to be a normal repository. While hanzoai/cloud is a
+# Gitea PULL MIRROR the forge refuses the push and this job fails — that failure
+# is the honest signal that CD is not running. Convert it with hanzoai/.github
+# `scripts/forge-migrate.sh convert --repo hanzoai/cloud`, which also enables
+# Actions there so cicd.yml can execute.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch: {}
+
+concurrency:
+  group: sync-to-hanzo-git
+  cancel-in-progress: false # never abandon a half-delivered ref
+
+jobs:
+  push-to-forge:
+    # Our own pool. GitHub-hosted minutes are billing-blocked for this org, so a
+    # hosted runner is a coin flip on the invoice; the build pool always runs.
+    runs-on: hanzo-build-linux-amd64
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the forge needs full history, not a shallow tip
+
+      - name: Push main and release tags to git.hanzo.ai
+        env:
+          # Instance token for git.hanzo.ai. The value lives in KMS at
+          # hanzo/prod:/git/admin-token and must be an ORGANIZATION secret —
+          # as a single-repo secret it silently covers only that one repo.
+          HANZO_GIT_TOKEN: ${{ secrets.HANZO_GIT_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${HANZO_GIT_TOKEN:-}" ]; then
+            echo "::error::HANZO_GIT_TOKEN is not available here, so main was not handed to git.hanzo.ai and no build ran. Add it as an organization secret (value in KMS at hanzo/prod:/git/admin-token)."
+            exit 1
+          fi
+          git push --follow-tags \
+            "https://x-access-token:${HANZO_GIT_TOKEN}@git.hanzo.ai/hanzoai/cloud.git" \
+            "${GITHUB_SHA}:refs/heads/main"
+          echo "handed ${GITHUB_SHA} to git.hanzo.ai — build, publish and deploy run there"
