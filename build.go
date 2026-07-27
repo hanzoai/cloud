@@ -362,15 +362,17 @@ func RegisterKMSClientFactory(f func(cfg *Config, log luxlog.Logger) (KMSClient,
 // ---- git-push-to-deploy ----
 
 // GitPushEvent describes a push that just landed on the embedded git server: the
-// org, the repo, the branch that moved, and its new tip commit. CloneURL is the
+// org, the repo, the FULL ref that moved (refs/heads/<b> or refs/tags/<t>), and
+// its new tip commit. CloneURL is the
 // canonical clone URL of that repo (https://<host>/v1/git/<org>/<repo>.git) — the
 // exact value an Application's RepoURL carries — so the builder can resolve which
-// app (if any) tracks this branch and needs a rebuild.
+// app (if any) tracks this ref and needs a rebuild. Tags reach the builder too:
+// releases are cut by tag, so filtering them here would stop publishing silently.
 type GitPushEvent struct {
 	Org      string
 	Project  string
 	Repo     string
-	Branch   string
+	Ref      string // FULL ref: refs/heads/<branch> or refs/tags/<tag>
 	Commit   string
 	CloneURL string
 }
