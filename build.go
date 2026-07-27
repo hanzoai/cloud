@@ -1022,6 +1022,10 @@ type MountSpec struct {
 // teardown needs no separate enablement gate.
 func MountAll(app *zip.App, specs []MountSpec, cfg *Config, deps Deps) error {
 	logger := deps.Logger
+	// Index the composition root BEFORE anything mounts: TracingMiddleware resolves
+	// hanzo.subsystem off this, and the inventory (including what is switched OFF) is
+	// what /v1/admin/subsystems reports. Built once, read lock-free per request.
+	indexSubsystems(specs, cfg)
 	for _, spec := range specs {
 		if !cfg.Enabled(spec.Name) {
 			logger.Debug("subsystem disabled", "name", spec.Name)
