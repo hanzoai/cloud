@@ -118,16 +118,17 @@ func Serve(specs []MountSpec, enable []string) error {
 			"writer_pin", "single-writer-per-shard")
 	}
 
-	// Telemetry bootstrap — the ONE site. Install the process-global OTel tracer
-	// provider (wired to the o11y in-process trace sink by clients/o11y) and ADOPT it
-	// into the embedded ai module, so ai emits its gen_ai span per LLM call through the
-	// SAME provider. Runs BEFORE MountAll mounts ai (ai's object.InitTelemetry reads
-	// the adopted-ready flag at mount), and on EVERY entrypoint — cmd/cloud AND every
-	// `hanzo <svc>` share this body — replacing the cmd/cloud-only bootstrap that left
-	// `hanzo <svc>` telemetry-dark. No-op (non-nil shutdown) when clients/o11y isn't
-	// linked or no sink/endpoint is configured. clients/o11y installs the concrete
-	// bootstrap via cloud.RegisterTelemetryInstaller (the cycle-free inversion).
-	telemetryShutdown := installTelemetry(context.Background(), "hanzo-cloud")
+	// Telemetry bootstrap — the ONE site, and a HOST concern: every request this
+	// process serves gets a span whether or not o11y is co-resident, so the host
+	// installs the tracer and meter providers itself rather than borrowing them from
+	// a subsystem that may now be a separate binary. Runs BEFORE MountAll — so the
+	// providers exist before ai mounts and the composition root can adopt them into
+	// it (apps/install.go), and so BOTH cmd/cloud and every `hanzo <svc>` entrypoint,
+	// which share this body, install identically. Spans leave through ONE Send: Cost-0
+	// to a co-resident sink when clients/o11y is linked in, the ZAP wire when it is a
+	// plugin. No-op (non-nil shutdown) when no sink/endpoint is configured. See
+	// telemetry.go.
+	telemetryShutdown := InstallTelemetry(context.Background(), deps.Logger, "hanzo-cloud")
 
 	// Data-plane encryption posture (cek). Every build encrypts a keyed store — the
 	// live libsqlcipher codec in production, the pure-Go codec envelope in dev/CI —
@@ -215,7 +216,7 @@ func Serve(specs []MountSpec, enable []string) error {
 	// authenticated pipeline nests under one span and the span CONTEXT it writes
 	// via SetContext parents every downstream span (agent.run → agent.step →
 	// chat) into a single trace. Spans ship over the SAME global provider installed
-	// above by installTelemetry, landing in hanzoai/datastore.
+	// above by InstallTelemetry, landing in hanzoai/datastore.
 	// Health/readiness/metrics + non-/v1 paths are skipped (see traceable). See
 	// middleware_tracing.go.
 	app.Use(TracingMiddleware())
