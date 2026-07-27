@@ -248,7 +248,7 @@ func createProject(s *cloud.Service[state], c *zip.Ctx) error {
 	kind := "project"
 	fee := createFeeCents(kind)
 	project, projectValidated := principal.ValidatedProject(c)
-	if err := s.Bill.Gate(c.Context(), principal.HomeOrg(c), project, projectValidated, kind, fee); err != nil {
+	if err := s.Bill.Gate(c.Context(), principal.Ledger(c), project, projectValidated, kind, fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 
@@ -264,7 +264,7 @@ func createProject(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	s.Bill.Meter(principal.HomeOrg(c), principal.Project(c), kind, fee, c.RequestID(), cloud.ClientIP(c))
+	s.Bill.Meter(principal.Ledger(c), principal.Project(c), kind, fee, c.RequestID(), cloud.ClientIP(c))
 	return c.JSON(http.StatusCreated, toProjectView(p))
 }
 
@@ -467,7 +467,7 @@ func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
 	const billKind = "issue"
 	fee := createFeeCents(billKind)
 	project, projectValidated := principal.ValidatedProject(c)
-	if err := s.Bill.Gate(c.Context(), principal.HomeOrg(c), project, projectValidated, billKind, fee); err != nil {
+	if err := s.Bill.Gate(c.Context(), principal.Ledger(c), project, projectValidated, billKind, fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 
@@ -486,7 +486,7 @@ func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	s.Bill.Meter(principal.HomeOrg(c), principal.Project(c), billKind, fee, c.RequestID(), cloud.ClientIP(c))
+	s.Bill.Meter(principal.Ledger(c), principal.Project(c), billKind, fee, c.RequestID(), cloud.ClientIP(c))
 	return c.JSON(http.StatusCreated, toIssueView(p.Key, created))
 }
 

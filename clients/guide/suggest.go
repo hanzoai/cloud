@@ -210,7 +210,7 @@ func chat(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 // narrate runs ONE grounded AI completion for the caller, billed to the caller's own
-// payer (principal.HomeOrg) and scoped to the caller's own org — so a suggestion/chat
+// payer (principal.Ledger) and scoped to the caller's own org — so a suggestion/chat
 // can never spend another tenant's budget. Returns "" when no AI plane is wired or
 // the call errors (the caller falls back to the deterministic output). A free
 // function (Go forbids methods on the external cloud.Service) — the ONE
@@ -219,7 +219,7 @@ func narrate(s *cloud.Service[state], c *zip.Ctx, org, prompt string) string {
 	if s.State.ai == nil || strings.TrimSpace(prompt) == "" {
 		return ""
 	}
-	payer := principal.HomeOrg(c)
+	payer := principal.Ledger(c)
 	res, err := s.State.ai.ChatCompletion(c.Context(), &cloud.ChatRequest{
 		Model:      s.State.model,
 		Prompt:     prompt,

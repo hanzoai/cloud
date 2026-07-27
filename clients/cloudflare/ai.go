@@ -11,9 +11,10 @@ package cloudflare
 //     (cloud.BYOInferenceFeeMicros), never the full inference cost (that double-bills).
 //   - O11Y (one, shared): it emits ONE gen_ai client span through clients.StartGenAISpan
 //     (gen_ai.system = "cloudflare"), the same span plane every LLM/embedding call uses.
-//   - PAYER: the HOME org (principal.HomeOrg) is billed, so a SuperAdmin acting in
-//     another org spends from the admin ledger — the token, though, is the EFFECTIVE
-//     org's. Same split the LLM meter enforces.
+//   - PAYER: the SELECTED org (principal.Ledger) is billed — the org the caller
+//     switched into, which is also the org whose token is used. A SuperAdmin
+//     masquerading is the one exception and spends from the admin ledger. Same rule
+//     the LLM meter enforces.
 //
 // A run needs only a validated org (authClient), not org admin: it is gated by BALANCE
 // like every model call, not by the admin bit that guards destructive verbs.
@@ -99,7 +100,7 @@ func aiRun(s *cloud.Service[state], c *zip.Ctx) error {
 	// Billing PAYER = the HOME org (X-User-Owner; falls back to the effective org for a
 	// normal caller). Project narrows the scope + its validated cap, exactly as the
 	// edge/LLM meters thread it.
-	payer := principal.HomeOrg(c)
+	payer := principal.Ledger(c)
 	project, projectValidated := principal.ValidatedProject(c)
 
 	// BALANCE/FREEZE gate BEFORE any Cloudflare contact. The BYO fee is FLOORED
