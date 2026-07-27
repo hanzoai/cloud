@@ -50,6 +50,16 @@ spec:
               exec:
                 command: ["/bin/sh", "-c", "sleep 3"]
           env:
+            # The tag actually deployed, surfaced as X-Api-Version so a running pod
+            # says which build it is. Read at config.go's getenv("CLOUD_VERSION", …);
+            # without it the binary falls back to the link-time default and every
+            # deployment answers "dev", which makes a rollout unverifiable from
+            # outside. Sourced from the same expression as image.tag above, so it
+            # cannot drift from the image, and it needs no rebuild — the release
+            # assigns the final version AFTER the image is pushed, so a link-time
+            # stamp would race it (see version.go).
+            - name: CLOUD_VERSION
+              value: "{{ .Values.image.tag | default .Chart.AppVersion }}"
             # Mirrors the resolved replica count so Config.Validate can enforce the
             # single-replica contract embedded IAM requires (memory session store).
             - name: CLOUD_REPLICAS
