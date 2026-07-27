@@ -813,8 +813,6 @@ func providerFromURL(raw string) string {
 		return "gitlab"
 	case strings.Contains(r, "bitbucket"):
 		return "bitbucket"
-	case strings.Contains(r, "gitea"):
-		return "gitea"
 	default:
 		return "git"
 	}
