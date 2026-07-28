@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/k8s"
 	"github.com/zap-proto/zip"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -160,7 +161,7 @@ func dashProjects(s *cloud.Service[state], c *zip.Ctx) error {
 // exists; any error (CRD absent — the norm here, or RBAC) or an empty set yields
 // (nil, false) so the caller synthesizes. It never fails the request.
 func listAppProjects(s *cloud.Service[state], ctx context.Context) ([]argoProject, bool) {
-	list, err := s.State.dyn.Resource(appProjectGVR).List(ctx, metav1.ListOptions{})
+	list, err := s.State.dyn.Resource(k8s.CDAppProjects).List(ctx, metav1.ListOptions{})
 	if err != nil || list == nil || len(list.Items) == 0 {
 		return nil, false
 	}

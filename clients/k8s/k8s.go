@@ -42,3 +42,14 @@ var Volumes = schema.GroupVersionResource{Version: "v1", Resource: "persistentvo
 // WRITES those Apps, so "the App CR declares vX" and "CD has applied commit abc"
 // answer different questions and neither implies the other.
 var CDApplications = schema.GroupVersionResource{Group: "apps.hanzo.ai", Version: "v1alpha1", Resource: "applications"}
+
+// CDAppProjects is Hanzo CD's AppProject CR (apps.hanzo.ai/v1alpha1) — the policy
+// envelope a CD Application is admitted under: which repos it may pull from, which
+// destinations it may write to, which resource kinds it may create. It answers a
+// different question from CDApplications: an Application is ONE tracked git source,
+// a project is the boundary a whole set of them is allowed to act within.
+//
+// Same group as every other CD kind. The cluster has never served argoproj.io — a
+// GVR naming that group resolves to "the server doesn't have a resource type", which
+// a caller that treats any error as "CD is not installed" will read as absence.
+var CDAppProjects = schema.GroupVersionResource{Group: "apps.hanzo.ai", Version: "v1alpha1", Resource: "appprojects"}
