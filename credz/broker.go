@@ -59,7 +59,7 @@ func Publish(p Posture, src Source, dataDir, adminOrg string, log Logger) (io.Cl
 	if err != nil {
 		return nil, err
 	}
-	b := &broker{ln: ln, src: src, org: adminOrg, log: log, sock: sock}
+	b := &broker{ln: ln, src: src, org: adminOrg, log: log}
 	go b.serve()
 	log.Info("credz broker LISTENING (this process holds the root key and the sealed store)",
 		"sock", sock, "admin_org", adminOrg)
@@ -95,11 +95,10 @@ func listen(sock string) (*net.UnixListener, error) {
 }
 
 type broker struct {
-	ln   *net.UnixListener
-	src  Source
-	org  string
-	log  Logger
-	sock string
+	ln  *net.UnixListener
+	src Source
+	org string
+	log Logger
 }
 
 func (b *broker) Close() error {
