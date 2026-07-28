@@ -45,6 +45,10 @@ type transcriptTurn struct {
 	Commit  string
 	Subject string
 	Model   string
+	// Committed records that this turn actually RAN a commit — the causal
+	// evidence --bind needs. A clock alone cannot tell "this turn produced that
+	// commit" from "that commit happened to land while this turn was running".
+	Committed bool
 }
 
 func newAgentPublishCmd(envOf func() *Env) *cobra.Command {
@@ -249,22 +253,23 @@ func readTranscript(path string) ([]transcriptTurn, error) {
 		if json.Unmarshal(rec.Message, &msg) != nil {
 			continue
 		}
-		text := renderContent(msg.Content)
+		text, committed := renderContent(msg.Content)
 		if strings.TrimSpace(text) == "" {
 			continue
 		}
 		at, _ := time.Parse(time.RFC3339, rec.Timestamp)
-		out = append(out, transcriptTurn{Role: rec.Type, Text: text, At: at, Model: msg.Model})
+		out = append(out, transcriptTurn{Role: rec.Type, Text: text, At: at,
+			Model: msg.Model, Committed: committed})
 	}
 	return out, sc.Err()
 }
 
 // renderContent flattens a message body to readable text. Content is either a
 // bare string or the block array (text / thinking / tool_use / tool_result).
-func renderContent(raw json.RawMessage) string {
+func renderContent(raw json.RawMessage) (string, bool) {
 	var s string
 	if json.Unmarshal(raw, &s) == nil {
-		return s
+		return s, false
 	}
 	var blocks []struct {
 		Type     string          `json:"type"`
@@ -274,9 +279,10 @@ func renderContent(raw json.RawMessage) string {
 		Input    json.RawMessage `json:"input"`
 	}
 	if json.Unmarshal(raw, &blocks) != nil {
-		return ""
+		return "", false
 	}
 	var b strings.Builder
+	committed := false
 	for _, x := range blocks {
 		switch x.Type {
 		case "text":
@@ -287,10 +293,17 @@ func renderContent(raw json.RawMessage) string {
 			}
 		case "tool_use":
 			b.WriteString("[" + x.Name + "]")
+			// The tool ARGUMENTS are not published — they are noise a reader
+			// skips, and the change they made is already in the commit. They are
+			// read for exactly one fact: did this turn run a commit?
+			if bytes.Contains(x.Input, []byte("git commit")) ||
+				bytes.Contains(x.Input, []byte("git merge")) {
+				committed = true
+			}
 		}
 		b.WriteString("\n")
 	}
-	return strings.TrimSpace(b.String())
+	return strings.TrimSpace(b.String()), committed
 }
 
 // scanTurns runs the SAME engine the server runs, locally, and returns one human
@@ -348,15 +361,30 @@ func originURL(ctx context.Context, dir string) string {
 	return strings.TrimSpace(out)
 }
 
-// bindNotes records the binding for commits that carry no trailer, by asking the
-// one question a timestamp can honestly answer: which turn was in flight when
-// this commit was authored? A commit authored between turn N and turn N+1 was
-// produced during turn N.
+// bindWindow bounds how long a turn may be considered "in flight". A turn is
+// minutes of work; when the gap to the next turn is hours — the operator walked
+// away, or the session was resumed days later — a commit landing in that gap
+// tells you nothing about which turn produced it.
+const bindWindow = 15 * time.Minute
+
+// bindNotes records the binding for commits that carry no trailer, for history
+// written before the trailer convention existed.
 //
-// The note SAYS SO — it carries `Hanzo-Bind: time` — so a reader can tell a
-// derived link from one the agent declared about itself in a trailer. A commit
-// that already carries either is never touched: git's existing statement wins,
-// and re-running this is idempotent.
+// IT REFUSES TO GUESS. The first version of this bound every commit authored
+// inside the session's overall time span, and on a real multi-week session that
+// was 3,203 commits — nearly the entire repository, most of it other people's
+// work and merges. A timestamp overlap is not authorship, and a provenance
+// record that over-claims is worse than none: it makes every honest link in the
+// same ref suspect.
+//
+// So a commit is bound only on CAUSAL evidence: the turn it lands in must
+// itself have run a commit (the harness log records the tool call), and the turn
+// must have been in flight for less than bindWindow when the commit was
+// authored. The note carries `Hanzo-Bind: time` so a reader can always tell a
+// derived link from one the agent declared about itself in a trailer.
+//
+// A commit that already carries either statement is never touched: git's
+// existing word wins, and re-running this is idempotent.
 func bindNotes(ctx context.Context, dir, session string, turns []transcriptTurn) (int, error) {
 	existing := map[string]bool{}
 	links, err := readLinks(ctx, dir)
@@ -366,7 +394,6 @@ func bindNotes(ctx context.Context, dir, session string, turns []transcriptTurn)
 	for _, l := range links {
 		existing[l.Commit] = true
 	}
-	// Commits authored inside the session's window, oldest first.
 	if len(turns) == 0 {
 		return 0, nil
 	}
@@ -390,8 +417,8 @@ func bindNotes(ctx context.Context, dir, session string, turns []transcriptTurn)
 			continue
 		}
 		turn := turnInFlight(turns, at)
-		if turn == 0 {
-			continue
+		if turn == 0 || !turns[turn-1].Committed || at.Sub(turns[turn-1].At) > bindWindow {
+			continue // no causal evidence — leave the commit unbound
 		}
 		note := agents.TrailerSession + ": " + session + "\n" +
 			agents.TrailerTurn + ": " + strconv.Itoa(turn) + "\n" +
