@@ -107,8 +107,29 @@ func run(addr, zapAddr, enable string) error {
 	secret, rootKey := stampAndScrub()
 
 	on := enabled(enable)
+	// THE BROKER FIRST, and eagerly. Every other app pulls its data-plane key and
+	// its scoped credentials from it, so an app that starts before it has nothing
+	// to ask — and the broker is itself an app, so left in manifest order it comes
+	// up whenever its turn arrives. It is also lazy by default, which means it does
+	// not come up at all until a request reaches /v1/kms: the fleet then waits on a
+	// process nothing has asked for. Starting it here makes the dependency explicit
+	// instead of a property of list order.
 	for _, a := range manifest.Apps {
-		if on != nil && !on[a.Name] {
+		if a.Name != launch.Broker || (on != nil && !on[a.Name]) {
+			continue
+		}
+		p := a.Plugin()
+		p.Lazy = false
+		p.Env = append(p.Env, childEnv(a.Name, secret, rootKey)...)
+		p.Start = startTimeout()
+		if err := app.Add(zip.Load(p, a.Prefixes...)); err != nil {
+			return err
+		}
+		delete(on, a.Name)
+	}
+
+	for _, a := range manifest.Apps {
+		if a.Name == launch.Broker || (on != nil && !on[a.Name]) {
 			continue
 		}
 		p := a.Plugin()
