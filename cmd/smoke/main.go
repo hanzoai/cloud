@@ -63,7 +63,7 @@ type probe struct {
 }
 
 // probes is the core-subsystem matrix — one side-effect-free read per major product
-// surface mounted in apps/apps.go (+ the AI module catch-all). Paths are the LITERAL
+// surface the manifest routes (+ the AI module catch-all). Paths are the LITERAL
 // registered routes (no /api/ prefix); verified against their registration sites.
 var probes = []probe{
 	// ── liveness ── (/healthz is on the SEPARATE health listener :9090; the main
