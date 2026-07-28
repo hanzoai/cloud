@@ -31,8 +31,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/clients/agents"
-	"github.com/hanzoai/cloud/clients/security/detect"
+	"github.com/hanzoai/cloud/apps/agents"
+	"github.com/hanzoai/cloud/apps/security/detect"
 	"github.com/spf13/cobra"
 )
 

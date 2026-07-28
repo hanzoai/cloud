@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/treasury"
+	"github.com/hanzoai/cloud/apps/treasury"
 )
 
 // Standalone entry for the treasury app.

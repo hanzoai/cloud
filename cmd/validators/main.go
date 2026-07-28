@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/validators"
+	"github.com/hanzoai/cloud/apps/validators"
 )
 
 // Standalone entry for the validators app.

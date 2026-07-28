@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/cek"
-	"github.com/hanzoai/cloud/clients/sites"
+	"github.com/hanzoai/cloud/apps/sites"
 	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/openapi"

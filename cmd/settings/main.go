@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/settings"
+	"github.com/hanzoai/cloud/apps/settings"
 )
 
 // Standalone entry for the settings app.

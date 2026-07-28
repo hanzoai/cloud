@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/knowledge"
+	"github.com/hanzoai/cloud/apps/knowledge"
 )
 
 // Standalone entry for the knowledge app.
