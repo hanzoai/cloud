@@ -18,8 +18,15 @@ import (
 // and compared against the RFC3339Nano ts column lexicographically (RFC3339 is
 // order-preserving as text, so a string range is a correct time range).
 type Filter struct {
-	Org        string    // actor_org exact match (tenant scope)
+	Org        string    // actor_org exact match (the org acted IN)
 	Sub        string    // actor_sub exact match (a specific user)
+	Home       string    // actor_home exact match — the org the actor came FROM.
+	// Impersonated restricts to CROSS-ORG actions only (actor_home <> ''), which
+	// is the question this control exists to answer: "show me every time a
+	// platform admin acted inside a tenant that was not their own." Without it an
+	// auditor would have to scan the whole trail to find the events that matter
+	// most.
+	Impersonated bool
 	Action     string    // action exact match
 	Resource   string    // res_type exact match
 	ResourceID string    // res_id exact match (a specific resource instance)
@@ -88,6 +95,14 @@ func (f Filter) build() (string, []any) {
 	if f.Sub != "" {
 		add("actor_sub = ?", f.Sub)
 	}
+	if f.Home != "" {
+		add("actor_home = ?", f.Home)
+	}
+	if f.Impersonated {
+		// No bound value — a fixed predicate, not caller input, so it stays
+		// consistent with "no caller value ever reaches the SQL text".
+		conds = append(conds, "actor_home <> ''")
+	}
 	if f.Action != "" {
 		add("action = ?", f.Action)
 	}
@@ -112,7 +127,7 @@ func (f Filter) build() (string, []any) {
 	return " WHERE " + strings.Join(conds, " AND "), args
 }
 
-const selectCols = `seq, ts, actor_org, actor_sub, actor_email, action, res_type, res_id,
+const selectCols = `seq, ts, actor_org, actor_sub, actor_email, actor_home, action, res_type, res_id,
   auth_method, is_admin, result, status, reason, source_ip, user_agent,
   request_id, method, path, before, after, prev_hash, hash`
 
@@ -125,7 +140,7 @@ func scanRecord(sc interface{ Scan(...any) error }) (Record, error) {
 		before, after string
 	)
 	if err := sc.Scan(
-		&rec.Seq, &ts, &rec.Actor.Org, &rec.Actor.Sub, &rec.Actor.Email,
+		&rec.Seq, &ts, &rec.Actor.Org, &rec.Actor.Sub, &rec.Actor.Email, &rec.Actor.Home,
 		&rec.Action, &rec.Resource.Type, &rec.Resource.ID,
 		&rec.Auth.Method, &isAdmin, &rec.Outcome.Result, &rec.Outcome.Status, &rec.Outcome.Reason,
 		&rec.SourceIP, &rec.UserAgent, &rec.RequestID, &rec.Method, &rec.Path,
