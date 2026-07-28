@@ -63,5 +63,16 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if d := cloud.IngestDialer(); d != nil {
 		aiobject.SetIngestDialer(d)
 	}
+	// A TRAMPOLINE, not a snapshot like the four above: clients/rollingcap installs
+	// its reader from Mount, and apps.Wire() mounts rollingcap AFTER this package in
+	// some binaries. Resolving cloud.RollingCapReader() per request instead of once
+	// at wire time takes mount order out of the equation entirely.
+	aiobject.SetRollingCapReader(func(ctx context.Context, subject, namespace string) (bool, error) {
+		f := cloud.RollingCapReader()
+		if f == nil {
+			return false, nil // no cap installed → uncapped, the same semantics a nil hook had
+		}
+		return f(ctx, subject, namespace)
+	})
 	return aimod.Mount(app, deps)
 }

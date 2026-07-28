@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud/clients/datastore"
 )
 
@@ -33,7 +32,7 @@ import (
 // parameters. No value a client controls is ever concatenated into SQL.
 
 // warehouse is the account-usage datastore projection. It holds ONLY the
-// idempotent-DDL latch; the connection itself is aiobject's (a package global), so
+// idempotent-DDL latch; the connection itself is clients/datastore's (a package global), so
 // the warehouse owns no closable handle and the usage subsystem needs no Shutdown.
 // dsReady latches the DDL on success only, so a datastore still connecting at boot
 // is retried on the next call rather than permanently written off.
@@ -506,7 +505,7 @@ func (w *warehouse) HanzoTotals(ctx context.Context, org string, from, to time.T
 	if !datastore.Ready() {
 		return nil, false
 	}
-	if err := aiobject.EnsureCloudUsageTable(ctx); err != nil {
+	if err := datastore.EnsureCloudUsage(ctx); err != nil {
 		return nil, false
 	}
 	q, args := hanzoQuery(org, from, to)

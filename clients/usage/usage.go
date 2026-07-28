@@ -54,7 +54,6 @@ import (
 	"strings"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/commerce/transport"
 	"github.com/hanzoai/cloud/clients/datastore"
@@ -86,8 +85,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 // build constructs the usage state: the commerce S2S reader from its env
 // (COMMERCE_SERVICE_TOKEN is a KMS-sourced secret already on the cloud env, never
-// hard-coded) and the account-usage warehouse (a DDL latch over aiobject's shared
-// datastore — no handle of its own, so the subsystem needs no Shutdown).
+// hard-coded) and the account-usage warehouse (a DDL latch over clients/datastore's
+// shared connection — no handle of its own, so the subsystem needs no Shutdown).
 func build(b cloud.Base) (state, error) {
 	cr := newCommerceReader(transport.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN"))
 	b.Log.Info("usage surface", "prefix", "/v1/usage", "commerce", cr.configured())
@@ -286,7 +285,7 @@ func buildAnalyticsBlock(s *cloud.Service[state], ctx context.Context, org strin
 	if !datastore.Ready() {
 		return empty
 	}
-	if err := aiobject.EnsureCloudUsageTable(ctx); err != nil {
+	if err := datastore.EnsureCloudUsage(ctx); err != nil {
 		s.Log.Debug("cloud_usage ensure failed; analytics honest-empty", "err", err)
 		return empty
 	}
@@ -382,7 +381,7 @@ func buildLLMBlock(s *cloud.Service[state], ctx context.Context, org string, sta
 	}
 	// Ensure the ai-owned ledger table exists (idempotent) so a fresh warehouse
 	// yields honest zeros, not an error.
-	if err := aiobject.EnsureCloudUsageTable(ctx); err != nil {
+	if err := datastore.EnsureCloudUsage(ctx); err != nil {
 		s.Log.Debug("cloud_usage ensure failed; llm honest-empty", "err", err)
 		return buildLLM(false, nil), false
 	}
