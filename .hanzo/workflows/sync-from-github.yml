@@ -1,0 +1,81 @@
+name: Sync from GitHub
+
+# git.hanzo.ai is CANONICAL and gates natively; development also lands on
+# github.com/hanzoai/cloud. This job carries GitHub's commits to the forge.
+#
+# WITHOUT IT THIS REPO DRIFTS, and it had: the forge sat 10 commits behind main
+# with nothing to close the gap. cloud is one of only 13 non-mirror repos in the
+# hanzoai org, and non-mirror is exactly the gap between the two mechanisms that
+# keep the forge current:
+#
+#   hanzoai/mirrors reconcile.py — makes qualifying GitHub repos pull-mirrors on
+#     a 6h schedule, and the server then syncs them. It is idempotent and
+#     "existing mirrors are left alone", so a repo that already exists as a
+#     NON-mirror is skipped forever.
+#   this file — the per-repo pull, for repos that are native-canonical and so
+#     must not be mirrors.
+#
+# A non-mirror repo without this file has neither, and drifts silently. Sibling
+# repos that carry it (commerce, iam, app, git, console, universe) sit 0-1
+# commits behind; the two that lacked it, cloud and ci, sat 10 and 3 behind.
+#
+# ONE deterministic direction: an in-cluster PULL. The runner reaches both ends,
+# so the sync has no ingress dependency and nothing has to push INTO the forge
+# from outside — which matters, because GitHub org secrets are inert on this
+# Free-plan org and a GitHub-side push has no working credential.
+#
+# Fast-forward ONLY. A divergence fails LOUDLY rather than force-pushing either
+# side and destroying whichever history lost the race. hanzoai/id is currently
+# 163 ahead / 150 behind and this guard is what keeps it from being papered over.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: sync-from-github
+  cancel-in-progress: false
+
+jobs:
+  ff-main:
+    runs-on: [hanzo-build-linux-amd64]
+    steps:
+      - name: Checkout main (full history for the ancestry check)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Fast-forward main from github.com/hanzoai/cloud
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_PAT:-}" ]; then
+            echo "::error::GH_PAT is unset on the forge; this repo is private and cannot be fetched anonymously."
+            exit 1
+          fi
+          git fetch --quiet "https://x-access-token:${GH_PAT}@github.com/hanzoai/cloud.git" main
+          LOCAL="$(git rev-parse HEAD)"
+          REMOTE="$(git rev-parse FETCH_HEAD)"
+          if [ "$LOCAL" = "$REMOTE" ]; then
+            echo "in sync at $LOCAL"
+            exit 0
+          fi
+          if git merge-base --is-ancestor "$LOCAL" "$REMOTE"; then
+            echo "fast-forwarding $LOCAL -> $REMOTE"
+            git push origin "$REMOTE:refs/heads/main"
+            # A push made with the workflow token does NOT trigger other workflows
+            # (loop prevention), so synced commits would never gate. Dispatch it
+            # explicitly — a real fast-forward means real commits arrived.
+            curl -fsS --max-time 20 -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              "${{ github.server_url }}/v1/repos/${{ github.repository }}/actions/workflows/cicd.yml/dispatches" \
+              -d '{"ref":"main"}' || echo "gate dispatch failed (non-fatal)"
+          else
+            echo "DIVERGED: native $LOCAL is not an ancestor of GitHub $REMOTE." >&2
+            echo "Resolve by hand; this job will not force-push either side." >&2
+            exit 1
+          fi
