@@ -35,51 +35,50 @@ type release struct {
 }
 
 var index struct {
-	once sync.Once
+	mu   sync.Mutex
 	byID map[string]struct{ url, sum string }
-	err  error
 }
 
 // key is name+os+arch: one index serves a mixed-arch fleet.
 func key(name, goos, goarch string) string { return name + "/" + goos + "/" + goarch }
 
-// fetch fetches the release index ONCE per process. 108 apps resolving
-// through here must not become 108 requests, and the set of artifacts does not
-// change under a running host — a new one is a new release, which is a new
-// index at a new URL.
+// fetch reads the release index, caching only SUCCESS. 108 apps resolving
+// through here must not become 108 requests, but a lazy plugin can first
+// resolve minutes after boot: caching a failure would let one blip while the
+// network was still coming up disable every plugin for the life of the process.
 func fetch() (map[string]struct{ url, sum string }, error) {
-	index.once.Do(func() {
-		src := strings.TrimSpace(os.Getenv(Plugins))
-		if src == "" {
-			return
+	index.mu.Lock()
+	defer index.mu.Unlock()
+	if index.byID != nil {
+		return index.byID, nil
+	}
+	src := strings.TrimSpace(os.Getenv(Plugins))
+	if src == "" {
+		return nil, nil
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(src)
+	if err != nil {
+		return nil, fmt.Errorf("plugins index %s: %w", src, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("plugins index %s: %s", src, resp.Status)
+	}
+	var rel release
+	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+		return nil, fmt.Errorf("plugins index %s: %w", src, err)
+	}
+	m := make(map[string]struct{ url, sum string }, len(rel.Binaries))
+	for _, b := range rel.Binaries {
+		// No digest, no trust — and failing here names the index.
+		if b.SHA256 == "" || b.URL == "" {
+			continue
 		}
-		client := &http.Client{Timeout: 30 * time.Second}
-		resp, err := client.Get(src)
-		if err != nil {
-			index.err = fmt.Errorf("plugins index %s: %w", src, err)
-			return
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			index.err = fmt.Errorf("plugins index %s: %s", src, resp.Status)
-			return
-		}
-		var rel release
-		if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-			index.err = fmt.Errorf("plugins index %s: %w", src, err)
-			return
-		}
-		m := make(map[string]struct{ url, sum string }, len(rel.Binaries))
-		for _, b := range rel.Binaries {
-			// No digest, no trust — and failing here names the index.
-			if b.SHA256 == "" || b.URL == "" {
-				continue
-			}
-			m[key(b.Name, b.OS, b.Arch)] = struct{ url, sum string }{b.URL, b.SHA256}
-		}
-		index.byID = m
-	})
-	return index.byID, index.err
+		m[key(b.Name, b.OS, b.Arch)] = struct{ url, sum string }{b.URL, b.SHA256}
+	}
+	index.byID = m
+	return m, nil
 }
 
 // remote resolves this app to a release artifact for the running platform.
