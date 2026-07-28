@@ -97,8 +97,9 @@ func newAgentPublishCmd(envOf func() *Env) *cobra.Command {
 			}
 
 			// Git states the binding. --bind records it for commits made during the
-			// session that never carried a trailer.
-			if bind {
+			// session that never carried a trailer. --dry-run writes nothing at all,
+			// here included: a preview that mutates the repo is not a preview.
+			if bind && !dryRun {
 				n, err := bindNotes(ctx, repoDir, sessionIDOf(transcript), turns)
 				if err != nil {
 					return err
