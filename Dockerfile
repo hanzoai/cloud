@@ -85,7 +85,7 @@ ENV GOTOOLCHAIN=auto
 # AND confirm cek's frozen-fixture test still opens (format unchanged)
 # before shipping. A MAJOR bump (4.x → 5.x) changes the default format and would
 # orphan existing encrypted stores — migrate/rewrap them first.
-RUN apk add --no-cache ca-certificates tzdata git gcc musl-dev sqlcipher-dev=4.6.1-r0 pkgconfig binutils
+RUN apk add --no-cache ca-certificates tzdata git gcc musl-dev sqlcipher-dev=4.6.1-r1 pkgconfig binutils
 RUN addgroup -g 65532 -S nonroot && adduser -u 65532 -S nonroot -G nonroot
 # mattn/go-sqlite3's `libsqlite3` tag hard-codes `-lsqlite3`, but alpine's
 # sqlcipher-dev ships ONLY libsqlcipher (no libsqlite3.so). Symlink so the link
