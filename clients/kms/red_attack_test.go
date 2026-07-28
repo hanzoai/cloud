@@ -26,7 +26,7 @@ func TestVector1_OrgCaseFoldCollision(t *testing.T) {
 
 	// Tenant A: validated org "hanzo" writes a secret in its own org.
 	body, _ := json.Marshal(map[string]string{"name": "STRIPE_KEY", "value": "sk-tenantA-owns-this", "env": "prod"})
-	resp := do(t, app, "POST", "/v1/kms/orgs/hanzo/secrets", "hanzo", string(body), false, nil)
+	resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, nil)
 	if resp.StatusCode != 200 {
 		t.Fatalf("tenantA POST = %d, want 200: %s", resp.StatusCode, readAll(resp.Body))
 	}
@@ -34,7 +34,7 @@ func TestVector1_OrgCaseFoldCollision(t *testing.T) {
 	// Tenant B: DISTINCT validated org "Hanzo" (capital H) targets :org=hanzo.
 	// Guard: EqualFold("Hanzo","hanzo") == true  → PASSES.
 	// Path built from :org param "hanzo" → /orgs/hanzo → tenantA's record.
-	resp = do(t, app, "GET", "/v1/kms/orgs/hanzo/secrets/STRIPE_KEY?env=prod", "Hanzo", "", false, nil)
+	resp = do(t, app, "GET", "/v1/kms/secrets/STRIPE_KEY?env=prod", "Hanzo", "", false, nil)
 	if resp.StatusCode == 200 {
 		v, _ := decode(t, resp.Body)["value"].(string)
 		if v == "sk-tenantA-owns-this" {
@@ -57,15 +57,15 @@ func TestVector1b_ExactOrgMatchNoSplit(t *testing.T) {
 
 	// Owner uses its exact casing — allowed.
 	body, _ := json.Marshal(map[string]string{"name": "K", "value": "written-mixedcase", "env": "default"})
-	if r := do(t, app, "POST", "/v1/kms/orgs/AcmeCorp/secrets", owner, string(body), false, nil); r.StatusCode != 200 {
+	if r := do(t, app, "POST", "/v1/kms/secrets", owner, string(body), false, nil); r.StatusCode != 200 {
 		t.Fatalf("POST exact-case = %d, want 200", r.StatusCode)
 	}
 	// Same owner, lowercased :org — EXACT match fails → 403. No second bucket.
-	r := do(t, app, "GET", "/v1/kms/orgs/acmecorp/secrets/K", owner, "", false, nil)
+	r := do(t, app, "GET", "/v1/kms/secrets/K", owner, "", false, nil)
 	if r.StatusCode != 403 {
 		t.Fatalf("BREACH: lowercased :org for owner %q = %d, want 403 (exact-match guard)", owner, r.StatusCode)
 	}
-	r = do(t, app, "POST", "/v1/kms/orgs/acmecorp/secrets", owner, string(body), false, nil)
+	r = do(t, app, "POST", "/v1/kms/secrets", owner, string(body), false, nil)
 	if r.StatusCode != 403 {
 		t.Fatalf("BREACH: owner %q could write a lowercased bucket = %d, want 403", owner, r.StatusCode)
 	}
@@ -131,7 +131,7 @@ func TestVector2b_NoAPIControlledPathSplit(t *testing.T) {
 		"env":   "default",
 		"path":  "../a", // attempt to climb to another org — must be rejected
 	})
-	r := do(t, app, "POST", "/v1/kms/orgs/b/secrets", "b", string(body), false, nil)
+	r := do(t, app, "POST", "/v1/kms/secrets", "b", string(body), false, nil)
 	if r.StatusCode != 400 {
 		t.Fatalf("path='../a' climb = %d, want 400 (validSubpath must reject '..'): %s", r.StatusCode, readAll(r.Body))
 	}
@@ -206,7 +206,7 @@ func TestDeepB_SiblingOrgListPrefix(t *testing.T) {
 	// Seed secrets in org "x", "xy", and "x-attacker".
 	for _, org := range []string{"x", "xy", "x-attacker"} {
 		body, _ := json.Marshal(map[string]string{"name": "S", "value": "v-" + org, "env": "default"})
-		if r := do(t, app, "POST", "/v1/kms/orgs/"+org+"/secrets", org, string(body), false, nil); r.StatusCode != 200 {
+		if r := do(t, app, "POST", "/v1/kms/secrets", org, string(body), false, nil); r.StatusCode != 200 {
 			t.Fatalf("seed %s = %d", org, r.StatusCode)
 		}
 	}
@@ -235,16 +235,16 @@ func TestDeepC_RESTListNoPrefixEscalation(t *testing.T) {
 	app, _ := newApp(t, baseCfg(t, masterKeyB64(t)))
 	// victim xy stores a secret.
 	body, _ := json.Marshal(map[string]string{"name": "VICT", "value": "secret", "env": "default"})
-	if r := do(t, app, "POST", "/v1/kms/orgs/xy/secrets", "xy", string(body), false, nil); r.StatusCode != 200 {
+	if r := do(t, app, "POST", "/v1/kms/secrets", "xy", string(body), false, nil); r.StatusCode != 200 {
 		t.Fatalf("seed = %d", r.StatusCode)
 	}
 	// attacker "x" tries to list xy → 403 (exact org mismatch).
-	r := do(t, app, "GET", "/v1/kms/orgs/xy/secrets", "x", "", false, nil)
+	r := do(t, app, "GET", "/v1/kms/secrets", "x", "", false, nil)
 	if r.StatusCode != 403 {
 		t.Fatalf("BREACH: prefix-attacker x listed xy = %d, want 403", r.StatusCode)
 	}
 	// attacker "x" lists its OWN org with a crafted ?path= trying to climb — validSubpath blocks "..".
-	r = do(t, app, "GET", "/v1/kms/orgs/x/secrets?path=../xy", "x", "", false, nil)
+	r = do(t, app, "GET", "/v1/kms/secrets?path=../xy", "x", "", false, nil)
 	if r.StatusCode != 400 {
 		t.Fatalf("BREACH: ?path=../xy climb = %d, want 400", r.StatusCode)
 	}
@@ -285,14 +285,14 @@ func TestVector4_NoCrossOrgExistenceOracle(t *testing.T) {
 
 	// victim org stores a secret.
 	body, _ := json.Marshal(map[string]string{"name": "REAL", "value": "v", "env": "default"})
-	if r := do(t, app, "POST", "/v1/kms/orgs/victim/secrets", "victim", string(body), false, nil); r.StatusCode != 200 {
+	if r := do(t, app, "POST", "/v1/kms/secrets", "victim", string(body), false, nil); r.StatusCode != 200 {
 		t.Fatalf("seed = %d", r.StatusCode)
 	}
 
 	// attacker org probes an EXISTING secret in victim's org.
-	rExist := do(t, app, "GET", "/v1/kms/orgs/victim/secrets/REAL", "attacker", "", false, nil)
+	rExist := do(t, app, "GET", "/v1/kms/secrets/REAL", "attacker", "", false, nil)
 	// attacker org probes a NON-EXISTING secret in victim's org.
-	rMiss := do(t, app, "GET", "/v1/kms/orgs/victim/secrets/NOPE", "attacker", "", false, nil)
+	rMiss := do(t, app, "GET", "/v1/kms/secrets/NOPE", "attacker", "", false, nil)
 
 	if rExist.StatusCode != rMiss.StatusCode {
 		t.Fatalf("EXISTENCE ORACLE: existing→%d vs missing→%d differ (attacker learns victim's keys)",
@@ -316,7 +316,7 @@ func TestVector7_NameWithSlashKeyShapeConfusion(t *testing.T) {
 
 	// Caller in org "x" PUTs a secret whose NAME contains a slash and env-like tail.
 	body, _ := json.Marshal(map[string]string{"name": "sub/EVIL", "value": "slash-in-name", "env": "default"})
-	r := do(t, app, "POST", "/v1/kms/orgs/x/secrets", "x", string(body), false, nil)
+	r := do(t, app, "POST", "/v1/kms/secrets", "x", string(body), false, nil)
 	if r.StatusCode != 200 {
 		t.Logf("POST name-with-slash rejected: %d (%s) — good, name is validated", r.StatusCode, readAll(r.Body))
 		return
@@ -329,7 +329,7 @@ func TestVector7_NameWithSlashKeyShapeConfusion(t *testing.T) {
 	// PUT key:  kms/secrets/ /orgs/x /default/ sub/EVIL   → "kms/secrets//orgs/x/default/sub/EVIL"
 	// GET(sub/EVIL) key: path=/orgs/x/sub name=EVIL → "kms/secrets//orgs/x/sub/default/EVIL"
 	// These DIFFER (env position differs), so no collision — but prove the retrieval story.
-	rg := do(t, app, "GET", "/v1/kms/orgs/x/secrets/sub/EVIL?env=default", "x", "", false, nil)
+	rg := do(t, app, "GET", "/v1/kms/secrets/sub/EVIL?env=default", "x", "", false, nil)
 	t.Logf("GET sub/EVIL → status=%d body=%s", rg.StatusCode, readAll(rg.Body))
 
 	// The record IS retrievable only via the exact (path,name) the store layer keyed.
@@ -357,7 +357,7 @@ func TestVector7b_DegenerateNames(t *testing.T) {
 	}
 	for _, tc := range cases {
 		body, _ := json.Marshal(map[string]string{"name": tc.name, "value": "v"})
-		r := do(t, app, "POST", "/v1/kms/orgs/x/secrets", "x", string(body), false, nil)
+		r := do(t, app, "POST", "/v1/kms/secrets", "x", string(body), false, nil)
 		t.Logf("[%s] name=%.20q... → status=%d (expected ~%d)", tc.note, tc.name, r.StatusCode, tc.want)
 	}
 }
@@ -411,26 +411,26 @@ func TestVector3_AdminConfigPrecedence(t *testing.T) {
 	t.Logf("/v1/admin/orgs without admin = %d (gate intact)", r.StatusCode)
 }
 
-// TestAdminEdge_ValidOrgStillEnforcedForAdmin: a SuperAdmin bypasses the
-// org-EQUALITY check but NOT validOrg — so an admin cannot address a malformed
-// :org (empty, oversized, or with forbidden chars). Confirms admin is scoped to
-// well-formed org labels only (the store path is still /orgs/{validOrg}).
-func TestAdminEdge_ValidOrgStillEnforcedForAdmin(t *testing.T) {
+// TestAdminHasNoCrossOrgReachOverHTTP: there is no longer an admin bypass to
+// scope, because there is no org in the URL to bypass with. A platform admin gets
+// its OWN org's secrets exactly like any other caller — cross-org access exists
+// only in-process, for the component that holds the master key. This replaces a
+// test that checked validOrg was still enforced for an admin naming :org; that
+// vector no longer exists to defend.
+func TestAdminHasNoCrossOrgReachOverHTTP(t *testing.T) {
 	app, _ := newApp(t, baseCfg(t, masterKeyB64(t)))
 
-	// admin with a forbidden-char :org → 400 (validOrg rejects before store touch).
-	// Route needs a non-empty :org segment, so use an over-length label.
-	longOrg := strings.Repeat("a", 64) // > 63 → validOrg false
-	r := do(t, app, "GET", "/v1/kms/orgs/"+longOrg+"/secrets", "admin", "", true, nil)
-	if r.StatusCode != 400 {
-		t.Fatalf("admin over-length :org = %d, want 400 (validOrg enforced for admin too)", r.StatusCode)
-	}
-	// admin with a well-formed :org → allowed (reaches store; empty list is 200).
-	r = do(t, app, "GET", "/v1/kms/orgs/anyorg/secrets", "admin", "", true, nil)
+	// An admin reads its own org, and gets an empty list rather than anyone else's.
+	r := do(t, app, "GET", "/v1/kms/secrets", "admin", "", true, nil)
 	if r.StatusCode != 200 {
-		t.Fatalf("admin well-formed :org = %d, want 200", r.StatusCode)
+		t.Fatalf("admin listing its own org = %d, want 200", r.StatusCode)
 	}
-	t.Logf("admin scoped to validOrg labels: over-length→400, well-formed→200")
+	// There is no route that accepts another org's name, admin or not.
+	for _, p := range []string{"/v1/kms/orgs/other/secrets", "/v1/kms/admin/orgs/other/secrets"} {
+		if r := do(t, app, "GET", p, "admin", "", true, nil); r.StatusCode != 404 {
+			t.Fatalf("%s = %d, want 404: no URL may name an org", p, r.StatusCode)
+		}
+	}
 }
 
 // TestAdminEdge_NonAdminEmptyOrgDenied: a caller with NO validated org (anonymous
@@ -440,7 +440,7 @@ func TestAdminEdge_ValidOrgStillEnforcedForAdmin(t *testing.T) {
 func TestAdminEdge_NonAdminEmptyOrgDenied(t *testing.T) {
 	app, _ := newApp(t, baseCfg(t, masterKeyB64(t)))
 	// Non-admin, no org header at all.
-	r := do(t, app, "GET", "/v1/kms/orgs/hanzo/secrets", "", "", false, nil)
+	r := do(t, app, "GET", "/v1/kms/secrets", "", "", false, nil)
 	if r.StatusCode != 403 {
 		t.Fatalf("empty-principal GET = %d, want 403", r.StatusCode)
 	}
@@ -460,7 +460,7 @@ func TestAdminEdge_NonAdminEmptyOrgDenied(t *testing.T) {
 func TestVector8_ForgedOrgNoPrincipalDenied(t *testing.T) {
 	app, _ := newApp(t, baseCfg(t, masterKeyB64(t)))
 
-	req := httptest.NewRequest("GET", "/v1/kms/orgs/victim/secrets", nil)
+	req := httptest.NewRequest("GET", "/v1/kms/secrets", nil)
 	req.Header.Set("X-Org-Id", "victim") // forged; EQUALS the route :org
 	// deliberately NO X-User-Id / X-User-IsAdmin — the anonymous-forge signature.
 	resp, err := app.Fiber().Test(req)

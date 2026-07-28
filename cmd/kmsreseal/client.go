@@ -90,7 +90,7 @@ func (c *kmsClient) login(ctx context.Context, clientID, clientSecret string) (s
 // response shapes — the standalone's {"secret":{"value":...}} and cloud's
 // {"value":...} — so the same method reads either face. 404 → errSecretNotFound.
 func (c *kmsClient) getSecret(ctx context.Context, token string, org, path, env, key string) ([]byte, error) {
-	u := c.base + "/v1/kms/orgs/" + url.PathEscape(org) + "/secrets/" + escapeRest(restOf(path, key)) +
+	u := c.base + "/v1/kms/secrets/" + escapeRest(restOf(path, key)) +
 		"?env=" + url.QueryEscape(env)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -114,7 +114,7 @@ func (c *kmsClient) getSecret(ctx context.Context, token string, org, path, env,
 // folder-sync CRs (empty keys[]) into concrete keys at RUN time. Never returns a
 // value (the list surface is keys-only by construction on both faces).
 func (c *kmsClient) listFolder(ctx context.Context, token, org, path, env string) ([]string, error) {
-	u := c.base + "/v1/kms/orgs/" + url.PathEscape(org) + "/secrets?env=" + url.QueryEscape(env)
+	u := c.base + "/v1/kms/secrets?env=" + url.QueryEscape(env)
 	if path != "" {
 		u += "&path=" + url.QueryEscape(path)
 	}
@@ -157,7 +157,7 @@ func (c *kmsClient) putSecret(ctx context.Context, token string, org, path, env,
 		"env":   env,
 		"value": string(value),
 	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/v1/kms/orgs/"+url.PathEscape(org)+"/secrets", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/v1/kms/secrets", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -188,7 +188,7 @@ func (c *kmsClient) health(ctx context.Context) (int, error) {
 // path and returns the status — used by preflight/verify's auth matrix. token=""
 // sends no Authorization header.
 func (c *kmsClient) probeStatus(ctx context.Context, method, token, org, path, env, key string) (int, error) {
-	u := c.base + "/v1/kms/orgs/" + url.PathEscape(org) + "/secrets/" + escapeRest(restOf(path, key)) +
+	u := c.base + "/v1/kms/secrets/" + escapeRest(restOf(path, key)) +
 		"?env=" + url.QueryEscape(env)
 	req, err := http.NewRequestWithContext(ctx, method, u, nil)
 	if err != nil {

@@ -98,7 +98,7 @@ func (f *fakeStandalone) seed(org, path, env, key, val string) {
 	f.store[Coord{org, path, env, key}] = val
 }
 
-// Do serves GET /v1/kms/orgs/{org}/secrets/{rest}?env= and the LIST + login the tool
+// Do serves GET /v1/kms/{org}/secrets/{rest}?env= and the LIST + login the tool
 // uses, enforcing owner==org from the tool's org-bound token exactly like the real
 // standalone's canActOnOrg.
 func (f *fakeStandalone) Do(r *http.Request) (*http.Response, error) {
@@ -111,8 +111,8 @@ func (f *fakeStandalone) Do(r *http.Request) (*http.Response, error) {
 		return resp(200, `{"accessToken":"org:hanzo","expiresIn":3600,"tokenType":"Bearer"}`), nil
 	}
 
-	// /v1/kms/orgs/{org}/secrets(/{rest})
-	const marker = "/v1/kms/orgs/"
+	// /v1/kms/{org}/secrets(/{rest})
+	const marker = "/v1/kms/"
 	i := strings.Index(path, marker)
 	if i < 0 {
 		return resp(404, `{"message":"no route"}`), nil

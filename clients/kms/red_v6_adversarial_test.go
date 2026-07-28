@@ -112,8 +112,8 @@ func TestRed_MultiValueAud_OwnerStillGoverns(t *testing.T) {
 
 	sealPlatformSecret(t, deps.KMS, paasOrgA, paasValueA)       // maxpower's secret
 	sealPlatformSecret(t, deps.KMS, paasOrgB, "s3kr3t-of-acme") // acme's own secret
-	maxpowerPath := "/v1/kms/orgs/" + paasOrgA + paasEnvPath
-	acmePath := "/v1/kms/orgs/" + paasOrgB + paasEnvPath
+	maxpowerPath := "/v1/kms" + paasEnvPath
+	acmePath := "/v1/kms" + paasEnvPath
 	future := time.Now().Add(time.Hour)
 
 	multi := mintRed(t, key, paasOrgB, []string{"hanzo-console", paasOrgA + "-platform-kms"}, false, future)
@@ -153,7 +153,7 @@ func TestRed_AdminOrgMachineToken(t *testing.T) {
 
 	sealPlatformSecret(t, deps.KMS, paasOrgA, paasValueA)       // victim maxpower secret
 	sealPlatformSecret(t, deps.KMS, "admin", "s3kr3t-of-admin") // admin org's own secret
-	victimPath := "/v1/kms/orgs/" + paasOrgA + paasEnvPath
+	victimPath := "/v1/kms" + paasEnvPath
 	adminPath := "/v1/kms/orgs/admin" + paasEnvPath
 	future := time.Now().Add(time.Hour)
 
@@ -210,7 +210,7 @@ func TestRed_TrimCollapseOwner_FailsClosed(t *testing.T) {
 	jwks := e2eJWKS(t, &key.PublicKey)
 	app, deps := newAppWithIdentity(t, e2eCfg(t, jwks.URL))
 	sealPlatformSecret(t, deps.KMS, paasOrgA, paasValueA) // maxpower
-	victimPath := "/v1/kms/orgs/" + paasOrgA + paasEnvPath
+	victimPath := "/v1/kms" + paasEnvPath
 	future := time.Now().Add(time.Hour)
 
 	for _, owner := range []string{"maxpower ", "maxpower​", " maxpower", "maxpower\t"} {

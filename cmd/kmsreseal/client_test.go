@@ -42,7 +42,7 @@ func TestClient_GetURLMapping(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getSecret: %v", err)
 	}
-	wantURL := "http://kms.hanzo.svc/v1/kms/orgs/hanzo/secrets/admin-guard-secrets/GUARD_HMAC_KEY?env=prod"
+	wantURL := "http://kms.hanzo.svc/v1/kms/secrets/admin-guard-secrets/GUARD_HMAC_KEY?env=prod"
 	if got := d.last.URL.String(); got != wantURL {
 		t.Errorf("GET url=\n  %q\nwant\n  %q", got, wantURL)
 	}
@@ -57,7 +57,7 @@ func TestClient_PutBodyMapping(t *testing.T) {
 	if err := c.putSecret(context.Background(), "tok", "hanzo", "admin-guard-secrets", "prod", "GUARD_HMAC_KEY", []byte("s3cr3t")); err != nil {
 		t.Fatalf("putSecret: %v", err)
 	}
-	wantURL := "http://cloud.hanzo.svc/v1/kms/orgs/hanzo/secrets"
+	wantURL := "http://cloud.hanzo.svc/v1/kms/secrets"
 	if got := d.last.URL.String(); got != wantURL {
 		t.Errorf("POST url=%q, want %q", got, wantURL)
 	}

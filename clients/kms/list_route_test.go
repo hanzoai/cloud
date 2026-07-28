@@ -15,13 +15,13 @@ func TestListSecretsBareRouteReachable(t *testing.T) {
 	// Seed two secrets in the org so the list has content.
 	for _, n := range []string{"API_KEY", "DB_URL"} {
 		body, _ := json.Marshal(map[string]string{"name": n, "value": "v-" + n, "env": "main"})
-		if resp := do(t, app, "POST", "/v1/kms/orgs/hanzo/secrets", "hanzo", string(body), false, nil); resp.StatusCode != 200 {
+		if resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, nil); resp.StatusCode != 200 {
 			t.Fatalf("POST %s = %d, want 200: %s", n, resp.StatusCode, readAll(resp.Body))
 		}
 	}
 
 	// The bare list path (no trailing name) must hit listSecrets, not getSecret.
-	resp := do(t, app, "GET", "/v1/kms/orgs/hanzo/secrets?env=main", "hanzo", "", false, nil)
+	resp := do(t, app, "GET", "/v1/kms/secrets?env=main", "hanzo", "", false, nil)
 	if resp.StatusCode != 200 {
 		t.Fatalf("GET bare /secrets (list) = %d, want 200 — the exact list route is shadowed by /secrets/* ; body: %s",
 			resp.StatusCode, readAll(resp.Body))
@@ -35,13 +35,13 @@ func TestListSecretsBareRouteReachable(t *testing.T) {
 	}
 
 	// Also confirm the trailing-slash form of the bare list still lists.
-	resp = do(t, app, "GET", "/v1/kms/orgs/hanzo/secrets/?env=main", "hanzo", "", false, nil)
+	resp = do(t, app, "GET", "/v1/kms/secrets/?env=main", "hanzo", "", false, nil)
 	if resp.StatusCode != 200 {
 		t.Fatalf("GET /secrets/ (trailing slash, list) = %d, want 200: %s", resp.StatusCode, readAll(resp.Body))
 	}
 
 	// And the value-read wildcard still works for a real name.
-	resp = do(t, app, "GET", "/v1/kms/orgs/hanzo/secrets/API_KEY?env=main", "hanzo", "", false, nil)
+	resp = do(t, app, "GET", "/v1/kms/secrets/API_KEY?env=main", "hanzo", "", false, nil)
 	if resp.StatusCode != 200 {
 		t.Fatalf("GET /secrets/API_KEY (value read) = %d, want 200: %s", resp.StatusCode, readAll(resp.Body))
 	}
