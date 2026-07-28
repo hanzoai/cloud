@@ -8,16 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	zaprpc "github.com/zap-proto/go/rpc"
-
-	"github.com/hanzoai/cloud/zapface"
 )
 
 // fakeGit serves ONE git reply over a Unix socket at the well-known path
 // cloud.Dial resolves for the "git" app, so a render exercises the real
-// transport it uses in production — frame encode, socket dial, frame decode —
-// rather than a stubbed function that would prove none of it.
+// transport it uses in production — socket resolution, dial, decode — rather
+// than a stubbed function that would prove none of it.
 func fakeGit(t *testing.T, reply any, status int) {
 	t.Helper()
 	run := t.TempDir()
@@ -30,12 +26,9 @@ func fakeGit(t *testing.T, reply any, status int) {
 	t.Cleanup(func() { _ = ln.Close() })
 
 	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := json.Marshal(reply)
-		frame := zaprpc.BuildResponse(uint32(status), 1, zapface.EncodeReply(zapface.Reply{
-			OK: status < 300, Status: uint32(status), Result: body,
-		}))
-		w.Header().Set("Content-Type", "application/zap")
-		_, _ = w.Write(frame)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(reply)
 	})}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() { _ = srv.Close() })
