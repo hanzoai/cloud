@@ -8,9 +8,12 @@
 package analytics
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/types"
 )
 
 // TestLLMWhereBindsOrgPositionally is THE tenant-isolation proof at the SQL
@@ -134,7 +137,7 @@ func TestBuildSeriesGapFill(t *testing.T) {
 	rows := []map[string]any{
 		{"bucket": time.Date(2026, 6, 29, 0, 0, 0, 0, time.UTC), "requests": uint64(5), "tokens": uint64(100), "cost_cents": uint64(10)},
 	}
-	series := buildSeries(start, end, "day", rows)
+	series := buildSeries(start, end, types.Day, rows)
 	if len(series) != 3 {
 		t.Fatalf("want 3 gap-filled daily points, got %d: %+v", len(series), series)
 	}
@@ -285,5 +288,42 @@ func TestBuildBreakdownHonestEmpty(t *testing.T) {
 	}
 	if b.Reason == "" || b.Source != "hanzo.events" {
 		t.Fatalf("must carry honest reason + source, got %+v", b)
+	}
+}
+
+// TestIntervalReachesTheWireAsItsLowercaseSelf pins the response contract now that
+// the bucket interval is carried as types.Interval rather than a bare string. The
+// type is a string type, so the JSON is the constant's own value — this asserts that
+// rather than trusting it, because a client charting the series switches on it.
+func TestIntervalReachesTheWireAsItsLowercaseSelf(t *testing.T) {
+	for _, tc := range []struct {
+		in   types.Interval
+		want string
+	}{
+		{types.Hour, `"interval":"hour"`},
+		{types.Day, `"interval":"day"`},
+	} {
+		ts, err := json.Marshal(Timeseries{Interval: tc.in})
+		if err != nil {
+			t.Fatalf("marshal Timeseries: %v", err)
+		}
+		if !strings.Contains(string(ts), tc.want) {
+			t.Errorf("Timeseries %q: want %s in %s", tc.in, tc.want, ts)
+		}
+		ov, err := json.Marshal(Overview{Interval: tc.in})
+		if err != nil {
+			t.Fatalf("marshal Overview: %v", err)
+		}
+		if !strings.Contains(string(ov), tc.want) {
+			t.Errorf("Overview %q: want %s in %s", tc.in, tc.want, ov)
+		}
+	}
+	// The step rule has ONE home now: types.Interval.Step(). Assert the two widths the
+	// series builder depends on, so a change upstream cannot silently re-bucket a chart.
+	if got := types.Hour.Step(); got != time.Hour {
+		t.Errorf("Hour.Step() = %v, want 1h", got)
+	}
+	if got := types.Day.Step(); got != 24*time.Hour {
+		t.Errorf("Day.Step() = %v, want 24h", got)
 	}
 }
