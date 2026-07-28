@@ -248,7 +248,7 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	if err := mountEventIngest(a, deps); err != nil { // POST /v1/o11y/ingestion
 		return err
 	}
-	mountScope(a) // GET logs/metrics/status + vm/{query,query_range} + flat builder query + sessions
+	mountScope(a)  // GET logs/metrics/status + vm/{query,query_range} + flat builder query + sessions
 	mountAlerts(a) // POST /v1/o11y/alerts/:receiver + GET /v1/o11y/alerts/last
 	// Native annotation-queues surface (SQLite metastore) — /v1/o11y/annotation-queues*.
 	if err := mountAnnotationQueues(a, deps); err != nil {
