@@ -378,6 +378,17 @@ type GitPushEvent struct {
 	CloneURL string
 }
 
+// IsBotActor reports whether a push actor is an automation identity rather than a
+// person. Every inbound push transport asks this BEFORE firing OnGitPush: our own
+// release and mirror automation push AS these identities, so without the guard a
+// release's own commit triggers the next release, forever. The two wires we ingest
+// spell a bot differently — GitHub suffixes App-authored logins with "[bot]", our
+// forge attributes workflow-made pushes to its Actions system user — so the ONE
+// predicate knows both.
+func IsBotActor(login string) bool {
+	return strings.HasSuffix(login, "[bot]") || strings.EqualFold(login, "hanzo-actions")
+}
+
 // pushBuilder is the registered git-push-to-deploy trigger. clients/platform
 // installs it in Mount; clients/git calls OnGitPush after a push lands. The
 // inversion keeps git⇄platform decoupled — git never imports platform — exactly

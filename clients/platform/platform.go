@@ -150,6 +150,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		ctx, cancel := context.WithCancel(context.Background())
 		s.State.cancel = cancel
 		go runBuildReconciler(s, ctx)
+		go runOrphanReaper(s, ctx)
 		// Meter running deployments' compute onto their org's ledger every interval —
 		// the last wire in the OSS compute-royalty loop (computemeter.go). Same cancel
 		// context as the reconciler, so Shutdown stops both; single-writer by the same
@@ -167,10 +168,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // client — hermetic, never touching a real cluster.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	// projects
+	// A project is IAM's resource, created and deleted at /v1/iam/projects. The
+	// platform makes APPS under one, never the project itself, so it exposes no
+	// project lifecycle — only this read, which is a PROJECTION IAM cannot serve:
+	// the project plus how many platform apps live under it.
 	app.Get("/v1/platform/projects", cloud.Handle(s, listProjects))
-	app.Post("/v1/platform/projects", cloud.Handle(s, createProject))
 	app.Get("/v1/platform/projects/:project", cloud.Handle(s, getProject))
-	app.Delete("/v1/platform/projects/:project", cloud.Handle(s, deleteProject))
 
 	// applications
 	app.Get("/v1/platform/projects/:project/apps", cloud.Handle(s, listApps))
@@ -296,6 +299,7 @@ type appView struct {
 	Env                 []EnvVarJSON `json:"env"`
 	Port                int          `json:"port"`
 	Replicas            int          `json:"replicas"`
+	StorageGB           int          `json:"storageGb,omitempty"` // GiB; absent means stateless
 	Domains             []string     `json:"domains"`
 	Status              string       `json:"status"`
 	Namespace           string       `json:"namespace,omitempty"`
@@ -329,7 +333,7 @@ func toAppView(a Application) appView {
 		Repo:      repoView{URL: a.RepoURL, Branch: a.RepoBranch, Provider: a.RepoProvider},
 		Image:     imageView{Repository: a.ImageRepo, Tag: a.ImageTag},
 		BuildType: a.BuildType, Dockerfile: a.Dockerfile, Env: env, Port: a.Port,
-		Replicas: a.Replicas, Domains: domains, Status: a.Status, Namespace: a.Namespace,
+		Replicas: a.Replicas, StorageGB: a.StorageGB, Domains: domains, Status: a.Status, Namespace: a.Namespace,
 		CurrentDeploymentID: a.CurrentDeploy, CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt,
 	}
 }
@@ -358,39 +362,6 @@ func toDeploymentView(d Deployment) deploymentView {
 }
 
 // ── project handlers ─────────────────────────────────────────────────────────
-
-type createProjectReq struct {
-	Name        string `json:"name"`
-	Slug        string `json:"slug"`
-	Description string `json:"description"`
-}
-
-func createProject(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	var body createProjectReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name := strings.TrimSpace(body.Name)
-	if name == "" {
-		return zip.ErrBadRequest("name is required")
-	}
-	slug := normalizeSlug(body.Slug, name)
-	if !slugRE.MatchString(slug) {
-		return zip.ErrBadRequest("slug must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
-	}
-	p, err := s.State.projects.Create(c.Context(), org, slug, name, strings.TrimSpace(body.Description))
-	if errors.Is(err, errConflict) {
-		return zip.ErrConflict("project slug already exists in this org")
-	}
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
-	}
-	return c.JSON(http.StatusCreated, toProjectView(p, 0))
-}
 
 func listProjects(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(s, c)
@@ -435,37 +406,6 @@ func getProject(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, toProjectView(p, len(apps)))
 }
 
-func deleteProject(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(s, c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	project := projectParam(c)
-	// Delete the project in IAM (the source of truth) first; a missing project is
-	// a clean 404. Then cascade-delete platform's own app tree under it.
-	deleted, err := s.State.projects.Delete(c.Context(), org, project)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
-	}
-	if !deleted {
-		return zip.ErrNotFound("project not found")
-	}
-	apps, err := s.State.store.DeleteProjectApps(c.Context(), org, project)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete apps: %v", err)
-	}
-	// Best-effort teardown of each app's Service CR + KMSSecret in the tenant ns.
-	for _, a := range apps {
-		if err := s.State.k8s.deleteService(c.Context(), org, a.Slug); err != nil {
-			s.Log.Warn("teardown service CR failed (continuing)", "org", org, "app", a.Slug, "err", err)
-		}
-		if err := s.State.k8s.deleteKMSSecret(c.Context(), org, a.Slug); err != nil {
-			s.Log.Warn("teardown KMSSecret failed (continuing)", "org", org, "app", a.Slug, "err", err)
-		}
-	}
-	return c.NoContent(http.StatusNoContent)
-}
-
 // ── application handlers ─────────────────────────────────────────────────────
 
 type createAppReq struct {
@@ -486,6 +426,7 @@ type createAppReq struct {
 	Dockerfile string       `json:"dockerfile"`
 	Port       int          `json:"port"`
 	Replicas   int          `json:"replicas"`
+	StorageGB  int          `json:"storageGb"`
 	Env        []EnvVarJSON `json:"env"`
 	Domains    []string     `json:"domains"`
 }
@@ -600,6 +541,7 @@ func createApp(s *cloud.Service[state], c *zip.Ctx) error {
 		RepoURL: strings.TrimSpace(body.Repo.URL), RepoBranch: firstNonEmpty(strings.TrimSpace(body.Repo.Branch), branchDefault(body.Repo.URL)),
 		RepoProvider: providerFromURL(body.Repo.URL), ImageRepo: strings.TrimSpace(body.Image.Repository), ImageTag: strings.TrimSpace(body.Image.Tag),
 		BuildType: buildType, Dockerfile: strings.TrimSpace(body.Dockerfile), Port: portOr(body.Port), Replicas: s.State.k8s.limits.clampReplicas(body.Replicas),
+		StorageGB: s.State.k8s.limits.clampStorage(body.StorageGB),
 		EnvJSON: string(envJSON), DomainsJSON: string(domainsJSON), Status: "draft", Namespace: tenantNamespace(org),
 		CreatedAt: now, UpdatedAt: now,
 	}
