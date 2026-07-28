@@ -8,7 +8,9 @@
 package analytics
 
 import (
+	"context"
 	"net/http"
+	"reflect"
 	"testing"
 )
 
@@ -27,17 +29,32 @@ import (
 // wantDoors, which is the contract itself — the anchor that makes a silent surface
 // change fail rather than pass.
 
-// wantDoors is the ingest surface as a CONTRACT: the exact set of paths that may
-// accept an event, written out by hand on purpose. Everything else in this package
-// derives from doors, so without one literal to compare against, deleting a door or
-// smuggling one in would keep every derived test green. Changing this list is
-// changing the public surface, and it should take an edit here to do it.
-var wantDoors = []string{
-	"/v1/event",
-	"/v1/insights/e",
-	"/v1/analytics",
-	"/v1/analytics/batch",
-	"/v1/tracker",
+// wantDoors is the ingest surface as a CONTRACT: the exact set of doors, each with
+// the WIRE and the ORIGIN TAG it is bound to, written out by hand on purpose.
+// Everything else in this package derives from doors, so without one literal to
+// compare against, deleting a door or smuggling one in would keep every derived test
+// green. Changing this list is changing the public surface, and it should take an
+// edit here to do it.
+//
+// It pins the whole TRIPLE, not just the path. A door is a path bound to a wire, and
+// rebinding one is as much a surface change as adding a path: swap /v1/analytics onto
+// decodeInsights and every canonical-wire beacon silently decodes to nothing, or
+// relabel a door's source and the $source column — which is the sunset signal, and
+// the only per-row record of which door a write came through — starts lying.
+var wantDoors = []door{
+	{path: "/v1/event", decode: decodeIngest, source: sourceEvent},
+	{path: "/v1/insights/e", decode: decodeInsights, source: sourcePostHog},
+	{path: "/v1/analytics", decode: decodeIngest, source: sourceCapture},
+	{path: "/v1/analytics/batch", decode: decodeIngest, source: sourceCapture},
+	{path: "/v1/tracker", decode: decodeIngest, source: sourceCapture},
+}
+
+// sameWire reports whether two decoders are the same function. Comparing the code
+// pointer is exact for the package-level decoders doors binds, which is what the
+// contract needs: not "behaves similarly on the bodies I thought to try", but "is
+// the same wire".
+func sameWire(a, b decode) bool {
+	return reflect.ValueOf(a).Pointer() == reflect.ValueOf(b).Pointer()
 }
 
 // retiredDoors are paths that WERE ingest doors and must now be gone from every
@@ -75,6 +92,84 @@ func doorPaths() []string {
 		p[i] = d.path
 	}
 	return p
+}
+
+// ── a warehouse a test can read back ────────────────────────────────────────
+
+// warehouse is a substituted datastore: it reports ready and records every batch
+// INSERT, so a test can read the TENANT and the $source a lane actually wrote.
+// Without it the pipeline stops at the readiness gate and every lane looks alike —
+// a site-host beacon filed under the public tenant, or a stranger's payload filed
+// under a customer's org, produce byte-identical responses.
+type warehouse struct{ rows [][]any }
+
+// fakeWarehouse substitutes the write path's two seams for this test and restores
+// them after. It also clears the DDL latch, which is process-global: a real earlier
+// test could otherwise leave it set and skip the CREATE, or this test could leave it
+// set and make a later one skip a real one.
+func fakeWarehouse(t *testing.T) *warehouse {
+	t.Helper()
+	w := &warehouse{}
+	origReady, origExec := warehouseReady, warehouseExec
+	eventsTableReady.Store(false)
+	warehouseReady = func() bool { return true }
+	warehouseExec = func(_ context.Context, stmt string, args ...any) error {
+		if len(args) > 0 { // the DDL carries none; only INSERTs land here
+			w.rows = append(w.rows, args)
+		}
+		_ = stmt
+		return nil
+	}
+	t.Cleanup(func() {
+		warehouseReady, warehouseExec = origReady, origExec
+		eventsTableReady.Store(false)
+	})
+	return w
+}
+
+// col reads one column of one written row by NAME, so these tests bind to the
+// schema's column list rather than to offsets that a new column would shift.
+func (w *warehouse) col(t *testing.T, row int, name string) any {
+	t.Helper()
+	idx := -1
+	for i, c := range eventColumns {
+		if c == name {
+			idx = i
+		}
+	}
+	if idx < 0 {
+		t.Fatalf("no column %q in eventColumns", name)
+	}
+	flat := w.rows[row]
+	if len(flat)%len(eventColumns) != 0 {
+		t.Fatalf("row %d has %d args, not a multiple of %d columns", row, len(flat), len(eventColumns))
+	}
+	return flat[idx]
+}
+
+// tenants returns the tenant_id of every row written — the fact the site-host lane
+// and the anonymous lane must disagree about, and the only place that disagreement
+// is visible.
+func (w *warehouse) tenants(t *testing.T) []string {
+	t.Helper()
+	out := make([]string, 0, len(w.rows))
+	for i := range w.rows {
+		s, _ := w.col(t, i, "tenant_id").(string)
+		out = append(out, s)
+	}
+	return out
+}
+
+// sources returns each written row's properties.$source — the door it arrived
+// through, and the signal the alias sunset is decided on.
+func (w *warehouse) sources(t *testing.T) []string {
+	t.Helper()
+	out := make([]string, 0, len(w.rows))
+	for i := range w.rows {
+		raw, _ := w.col(t, i, "properties").(string)
+		out = append(out, decodeProps(t, raw)["$source"].(string))
+	}
+	return out
 }
 
 func sameSet(a, b []string) bool {
@@ -155,14 +250,139 @@ func commerceFor(t *testing.T, d door) string {
 // they all derive their tables from doors, so they would happily stay green while
 // the surface changed underneath them.
 func TestIngestSurfaceIsExactlyTheContract(t *testing.T) {
-	if !sameSet(doorPaths(), wantDoors) {
-		t.Fatalf("ingest surface = %v, contract = %v — adding or removing a door is a\n"+
-			"public surface change; update wantDoors deliberately", doorPaths(), wantDoors)
+	want := make([]string, len(wantDoors))
+	for i, d := range wantDoors {
+		want[i] = d.path
 	}
+	if !sameSet(doorPaths(), want) {
+		t.Fatalf("ingest surface = %v, contract = %v — adding or removing a door is a\n"+
+			"public surface change; update wantDoors deliberately", doorPaths(), want)
+	}
+	// Same paths; now the BINDING behind each one. A door whose wire or origin tag
+	// moved is a changed door even though the path set is untouched.
+	byPath := make(map[string]door, len(doors))
 	for _, d := range doors {
-		if d.decode == nil || d.source == "" {
-			t.Errorf("door %s is incomplete (decode=%v source=%q): a door is a path bound to a wire",
-				d.path, d.decode != nil, d.source)
+		byPath[d.path] = d
+	}
+	for _, w := range wantDoors {
+		got := byPath[w.path]
+		if got.decode == nil {
+			t.Errorf("door %s has no wire: a door is a path BOUND to a decoder", w.path)
+			continue
+		}
+		if !sameWire(got.decode, w.decode) {
+			t.Errorf("door %s is bound to a different wire than the contract names — "+
+				"rebinding a door silently changes what every caller's body decodes to", w.path)
+		}
+		if got.source != w.source {
+			t.Errorf("door %s source = %q, contract = %q — $source is the per-row record of "+
+				"which door a write came through, and the alias sunset is decided on it",
+				w.path, got.source, w.source)
+		}
+	}
+}
+
+// TestEveryDoorStampsItsOwnSource is the behavioral half of the source binding: the
+// contract above pins the table, this pins that the value declared there is the value
+// that reaches the ROW. Without it, source could be pinned in the table and dropped on
+// the way to the warehouse and both halves would still look right.
+func TestEveryDoorStampsItsOwnSource(t *testing.T) {
+	tightenPublicRate(t, 1_000_000, 1_000_000)
+	for _, d := range doors {
+		w := fakeWarehouse(t)
+		app := mountApp(t)
+		if code, body := doBody(t, app, http.MethodPost, d.path, "user-dave", "acme", pageviewFor(t, d)); code != http.StatusOK {
+			t.Fatalf("door %s = %d (%s), want 200 (written to the fake warehouse)", d.path, code, body)
+		}
+		if got := w.sources(t); len(got) != 1 || got[0] != d.source {
+			t.Errorf("door %s wrote $source %v, want [%s]", d.path, got, d.source)
+		}
+	}
+}
+
+// ── the site-host lane, which is the one that derives a tenant from a Host ───
+
+// TestSiteHostLaneWritesTheResolvedSiteOrg is the tenant proof for the carve, and the
+// reason the warehouse seam exists. Every declared door, POSTed to a LIVE site host,
+// must write rows under the RESOLVED Site.Org — not the reserved public tenant, and
+// not the org the request claims in a header or body.
+//
+// Paired failures, all of which used to pass unnoticed because the pipeline stopped at
+// the readiness gate and every case answered 503: pass publicTenant instead of org and
+// a customer's own site analytics land in a partition they cannot read; honour the
+// caller's X-Org-Id and a stranger writes into any org they can name.
+func TestSiteHostLaneWritesTheResolvedSiteOrg(t *testing.T) {
+	tightenPublicRate(t, 1_000_000, 1_000_000)
+	for _, d := range doors {
+		w := fakeWarehouse(t)
+		app := carveApp(t, "hanzo")
+		if code := postHost(t, app, "yadota.hanzo.app", d.path, pageviewFor(t, d),
+			map[string]string{"X-Org-Id": "attacker", "X-User-Id": "attacker-user"}); code != http.StatusOK {
+			t.Fatalf("site-host door %s = %d, want 200 (admitted and written)", d.path, code)
+		}
+		got := w.tenants(t)
+		if len(got) != 1 || got[0] != "hanzo" {
+			t.Errorf("site-host door %s wrote tenants %v, want [hanzo] — the carve must file a "+
+				"beacon under the RESOLVED Site.Org", d.path, got)
+		}
+		for _, g := range got {
+			if g == publicTenant {
+				t.Errorf("site-host door %s filed the site's own beacon under %q, where its owner "+
+					"cannot read it", d.path, publicTenant)
+			}
+			if g == "attacker" {
+				t.Errorf("site-host door %s took the tenant from the caller's header", d.path)
+			}
+		}
+	}
+}
+
+// TestSiteHostLaneNeverConsultsHandle: on a site host the anonymous lane is reached
+// DIRECTLY, and it has to be. sites.Middleware runs before the identity boundary, so
+// X-User-Id / X-Org-Id there are still raw client headers that nothing has validated —
+// exactly the shape SanitizeIdentity would have minted for a real bearer.
+//
+// So a request carrying them must still be PROJECTED. If door.anon consulted handle,
+// those headers would resolve a principal and buy full capability, and the commerce
+// payload would become a row under whatever org the caller named. The assertion is on
+// the ROW, not the status: with a warehouse in place "admitted" is a 200 too, so a
+// status check alone cannot tell the two lanes apart.
+func TestSiteHostLaneNeverConsultsHandle(t *testing.T) {
+	tightenPublicRate(t, 1_000_000, 1_000_000)
+	for _, d := range doors {
+		w := fakeWarehouse(t)
+		app := carveApp(t, "hanzo")
+		code := postHost(t, app, "yadota.hanzo.app", d.path, commerceFor(t, d),
+			map[string]string{"X-User-Id": "user-dave", "X-Org-Id": "acme"})
+		if code != http.StatusOK {
+			t.Fatalf("site-host door %s with raw identity headers = %d, want 200", d.path, code)
+		}
+		if got := w.tenants(t); len(got) != 0 {
+			t.Errorf("site-host door %s STORED a commerce payload under %v — the site-host lane "+
+				"consulted handle, so unvalidated headers bought full capability", d.path, got)
+		}
+	}
+}
+
+// TestApiHostAnonymousLaneWritesThePublicTenant is the other half of the tenant pair:
+// on an API host a credential-less caller is the RESERVED public tenant, whatever Host
+// it used. Together with the site-host test above, this is what makes each lane's
+// tenant a checked fact rather than a comment — one must be $public and the other must
+// not, so a change that collapses them fails on one side or the other.
+func TestApiHostAnonymousLaneWritesThePublicTenant(t *testing.T) {
+	tightenPublicRate(t, 1_000_000, 1_000_000)
+	for _, d := range doors {
+		for _, host := range []string{"api.hanzo.ai", "hanzo.ai"} {
+			w := fakeWarehouse(t)
+			app := mountApp(t)
+			if code, body := doHost(t, app, d.path, "", "", host, pageviewFor(t, d)); code != http.StatusOK {
+				t.Fatalf("anonymous door %s on %q = %d (%s), want 200", d.path, host, code, body)
+			}
+			got := w.tenants(t)
+			if len(got) != 1 || got[0] != publicTenant {
+				t.Errorf("anonymous door %s on host %q wrote tenants %v, want [%s] — no Host names a tenant",
+					d.path, host, got, publicTenant)
+			}
 		}
 	}
 }

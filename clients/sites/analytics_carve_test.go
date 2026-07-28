@@ -332,6 +332,34 @@ func TestMiddlewareAnalyticsCarveNonLive405(t *testing.T) {
 	}
 }
 
+// TestMiddlewareNilHandlerIsNotADoor: a key present with a NIL handler is not a door.
+// The map crosses a package boundary, so "the key exists" and "there is something to
+// call" are two separate facts; treating the first as the second dispatches nil and
+// panics the request. A carve that cannot dispatch must fall to the static serve (405),
+// which is the same answer as no carve at all — it fails to the serve path, never open.
+func TestMiddlewareNilHandlerIsNotADoor(t *testing.T) {
+	fr := &fakeResolver{found: true, site: Site{Org: "hanzo", Slug: "yadota", Bucket: "b", Prefix: "hanzo/yadota", Status: "live"}}
+	SetResolver(fr)
+	defer SetResolver(nil)
+	nils := make(map[string]func(org string, c *zip.Ctx) error, len(carvePaths))
+	for _, p := range carvePaths {
+		nils[p] = nil
+	}
+	SetAnalyticsHost(nils)
+	defer SetAnalyticsHost(nil)
+	app := newTestApp(testServer())
+
+	for _, p := range carvePaths {
+		resp, err := app.Fiber().Test(postReq("yadota.hanzo.app", p, beaconBody))
+		if err != nil {
+			t.Fatalf("POST %s: %v", p, err)
+		}
+		if resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("nil-handler door %s -> %d, want 405 (static serve); a nil dispatch panics the request", p, resp.StatusCode)
+		}
+	}
+}
+
 // TestMiddlewareNoAnalyticsHandlerIs405: with NO handler installed (the default,
 // e.g. public capture disabled), a site host still 405s a beacon POST — the fix is
 // inert until analytics.Mount installs the carve.

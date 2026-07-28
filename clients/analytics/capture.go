@@ -34,7 +34,7 @@
 // email-shaped value before the row is built (scrubProps). Only user/org
 // identifiers (distinct_id, person_id, group_id, org) are retained as identity.
 //
-// ONE datastore client: writes ride ai/object.DatastoreExec — the SAME pooled,
+// ONE datastore client: writes ride clients/datastore — the SAME pooled,
 // KMS-credentialed connection the read side queries through — so there is no
 // second transport, pool, or credential path.
 package analytics
@@ -134,7 +134,7 @@ func EnsureEventsTable(ctx context.Context) error {
 	if eventsTableReady.Load() {
 		return nil
 	}
-	if err := datastore.Exec(ctx, eventsTableDDL); err != nil {
+	if err := warehouseExec(ctx, eventsTableDDL); err != nil {
 		return err
 	}
 	eventsTableReady.Store(true)
@@ -550,6 +550,21 @@ func publicCaptureEnabled() bool {
 // resolver without standing up IAM; production is always cloud.OrgForKey.
 var resolveKeyOrg = cloud.OrgForKey
 
+// warehouseReady and warehouseExec are the warehouse gate and the statement
+// executor, held as values for the SAME reason and on the SAME terms as
+// resolveKeyOrg: production is always the one datastore client, and a test
+// substitutes them to drive the write path without standing up a warehouse.
+//
+// They are what makes the TENANT observable. Without a warehouse the pipeline stops
+// at the readiness gate, so which org a lane resolved never reaches anything a test
+// can read — the site-host carve could file a customer's beacons under the public
+// tenant, or the reverse, and every status code would be identical. The row's
+// tenant_id is the fact that matters here, so it has to be reachable.
+var (
+	warehouseReady = datastore.Ready
+	warehouseExec  = datastore.Exec
+)
+
 // projectKey returns the project/API key a keyed SDK presents OUT-OF-BAND of the
 // Authorization header — the transports SanitizeIdentity does NOT mint identity
 // from, so they never reach tenant() as a principal. In priority order: the
@@ -659,7 +674,7 @@ func ingestEvents(ctx context.Context, org, source string, evs []CaptureEvent) (
 		return CaptureResult{Dropped: dropped}, nil
 	}
 	stmt, args := buildEventsInsert(rows)
-	if err := datastore.Exec(ctx, stmt, args...); err != nil {
+	if err := warehouseExec(ctx, stmt, args...); err != nil {
 		return CaptureResult{}, warehouseErr("capture", err)
 	}
 	// Fan the accepted batch out to the downstream sink (destinations), detached and
