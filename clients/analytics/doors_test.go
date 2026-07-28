@@ -50,6 +50,7 @@ var wantDoors = []door{
 	{path: "/v1/analytics", decode: decodeIngest, source: sourceCapture},
 	{path: "/v1/analytics/batch", decode: decodeIngest, source: sourceCapture},
 	{path: "/v1/tracker", decode: decodeIngest, source: sourceCapture},
+	{path: "/v1/event/collect", decode: decodeTeam, source: sourceTeam},
 }
 
 // samePtr reports whether two func values are the SAME function, by code pointer.
@@ -278,14 +279,41 @@ const (
 	posthogPage   = `{"event":"$pageview","distinct_id":"anon-1","properties":{"$pathname":"/pricing"}}`
 	canonCommerce = `{"batch":[{"type":"event","event":"order_completed","revenue":999,"groupId":"victim","personId":"victim-person"}]}`
 	posthogEvent  = `{"event":"order_completed","distinct_id":"d","properties":{"revenue":999}}`
+	// The Hanzo Team SPA wire: a BARE ARRAY, epoch-millis timestamp, snake_case
+	// distinct_id. navigation folds to the pageview kind (admitted anonymously);
+	// customEvent folds to the bare `event` kind (dropped), which is what makes the
+	// capability assertions on this door mean something rather than just reachability.
+	teamPageview = `[{"event":"navigation","properties":{"path":"/pricing"},"timestamp":1750000000000,"distinct_id":"u"}]`
+	teamCommerce = `[{"event":"customEvent","properties":{"event":"order_completed","revenue":999},"timestamp":1750000000000,"distinct_id":"u"}]`
+
+	// The person- and group-BINDING kinds, per wire. These are the two an anonymous
+	// caller must never store (publicKinds admits pageview and error only), and the
+	// kind is expressed differently in each wire — so the door's own wire has to be
+	// used, or the assertion tests the DECODER's tolerance instead of the projection.
+	canonIdentify   = `{"batch":[{"type":"identify","distinctId":"victim","personId":"victim-person"}]}`
+	canonGroup      = `{"batch":[{"type":"group","groupId":"victim-team"}]}`
+	posthogIdentify = `{"event":"$identify","distinct_id":"victim","properties":{}}`
+	posthogGroup    = `{"event":"$groupidentify","distinct_id":"victim","properties":{}}`
+	teamIdentify    = `[{"event":"setUser","properties":{},"timestamp":1750000000000,"distinct_id":"victim"}]`
+	teamGroup       = `[{"event":"setGroup","properties":{},"timestamp":1750000000000,"distinct_id":"victim"}]`
 )
 
+// identifyFor / groupFor give the door its OWN wire's person- / group-binding event,
+// picking whichever candidate that door's decoder accepts and the projection refuses.
+func identifyFor(t *testing.T, d door) string {
+	return droppedWire(t, d, canonIdentify, posthogIdentify, teamIdentify)
+}
+
+func groupFor(t *testing.T, d door) string {
+	return droppedWire(t, d, canonGroup, posthogGroup, teamGroup)
+}
+
 func pageviewFor(t *testing.T, d door) string {
-	return admittedWire(t, d, canonPageview, posthogPage)
+	return admittedWire(t, d, canonPageview, posthogPage, teamPageview)
 }
 
 func commerceFor(t *testing.T, d door) string {
-	return droppedWire(t, d, canonCommerce, posthogEvent)
+	return droppedWire(t, d, canonCommerce, posthogEvent, teamCommerce)
 }
 
 // ── the surface is one set ──────────────────────────────────────────────────

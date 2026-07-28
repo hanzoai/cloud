@@ -117,6 +117,7 @@ import (
 	"github.com/hanzoai/cloud/clients/link"
 	"github.com/hanzoai/cloud/clients/marketing"
 	"github.com/hanzoai/cloud/clients/marketplace"
+	"github.com/hanzoai/cloud/clients/meet"
 	"github.com/hanzoai/cloud/clients/ml"
 	"github.com/hanzoai/cloud/clients/notify"
 	// NOTE: clients/o11y is deliberately NOT imported. It is loaded at run time
@@ -438,6 +439,14 @@ func Wire() []cloud.MountSpec {
 		{Name: "cloudflare", Price: cloud.Metered, Mount: cloudflare.Mount},
 		{Name: "sbom", Price: cloud.Free, Mount: sbom.Mount, OwnsHealth: true},
 		{Name: "team", Price: cloud.Free, Mount: team.Mount, Shutdown: ctxShutdown(team.Shutdown)},
+		// The virtual office's control plane (/v1/meet): mints a per-room LiveKit
+		// join token for a verified team member. Free like `team`, whose product it is
+		// part of — a call places one token mint, not a metered API call. Mounts after
+		// team because it verifies the caller with the SAME SERVER_SECRET that
+		// subsystem signs sessions with, and reads the role that subsystem signs. Media
+		// stays a direct browser<->LiveKit WebRTC connection; only the admission
+		// decision is in this binary. This retired the standalone team-love pod.
+		{Name: "meet", Price: cloud.Free, Mount: meet.Mount, OwnsHealth: true},
 		{Name: "settings", Price: cloud.Free, Mount: settings.Mount, Shutdown: settings.Shutdown},
 		{Name: "prefs", Price: cloud.Free, Mount: prefs.Mount, Shutdown: prefs.Shutdown},
 		{Name: "notify", Price: cloud.Free, Mount: notify.Mount, OwnsHealth: true},
