@@ -520,16 +520,31 @@ owner, `clients/platform/release.go`: compute the next version → build → SMO
 pushed image → tag → roll out. The tag is a RECEIPT for a proven image, so a
 change that breaks boot never reaches production and leaves no phantom tag.
 
-The final step has ONE writer: patch the operator `hanzo.ai/v1` Service CR's
-`spec.image` and let the operator reconcile. It used to write twice — that patch plus
-a `repository_dispatch` mirror at `hanzoai/universe` — composed best-effort so the
-step passed if EITHER landed. Two writers for one fact, and the composition HID their
-disagreement: patch fails, mirror succeeds, cluster and git now describe different
-production states with nothing reporting a problem. The mirror was also never running
-— it read `UNIVERSE_DISPATCH_TOKEN`, never set on the deployment, so it failed closed
-on every release and the CR patch was already doing all the work. A rollout with
-nowhere to write is now an ERROR: the image is built, smoke-passed and tagged but NOT
-live, and a release that claims otherwise is worse than one that fails.
+The final step has ONE writer, and for a first-party service it is **universe git,
+not the cluster**. `clients/paas.releaseService` REFUSES to patch the operator
+`hanzo.ai/v1` App CR's `spec.image`: those CRs are declared in
+`infra/k8s/operator/crs/` and reconciled by Hanzo CD with selfHeal, so a patch is
+reverted on the next sync — the release would look applied and then silently roll
+back. It validates first (DNS-1123 name, clean-semver via `splitReleaseImage`,
+App exists in the namespace) so the refusal is specific rather than generic, and
+names the remedy: **commit the tag to that file.**
+
+So a green pipeline ends at `release tag minted (receipt for a pushed,
+smoke-passed image)` followed by `release failed … reached: tagged`. That pair is
+NOT a broken build — the image is real and proven, it simply has no declared state
+pointing at it. Production moves when someone bumps `tag:` in
+`universe/infra/k8s/operator/crs/cloud.yaml`. Four tags (`.267`–`.270`)
+accumulated behind that once, with prod healthy on `.266` the whole time.
+
+It used to write twice — a CR patch plus a `repository_dispatch` mirror at
+`hanzoai/universe` — composed best-effort so the step passed if EITHER landed. Two
+writers for one fact, and the composition HID their disagreement: patch fails,
+mirror succeeds, cluster and git now describe different production states with
+nothing reporting a problem. The mirror was also never running — it read
+`UNIVERSE_DISPATCH_TOKEN`, never set on the deployment, so it failed closed on every
+release. A rollout with nowhere to write is an ERROR: the image is built,
+smoke-passed and tagged but NOT live, and a release that claims otherwise is worse
+than one that fails.
 
 ### Site releases already have a lifecycle — do not build a second one
 
