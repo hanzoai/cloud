@@ -45,6 +45,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/provisioning"
+	"github.com/hanzoai/cloud/internal/fqdn"
 	"github.com/zap-proto/zip"
 )
 
@@ -81,7 +82,7 @@ type state struct {
 	sitesHost   string             // per-tenant apps host suffix; a custom domain must be under <org>.<sitesHost>
 	appLock     appMutex           // per-app serialization of apply-CR→finalize-live (applylive.go, RED LOW-1)
 	deployGate  inflightGate       // per-org in-flight synchronous-deploy cap (deploy.go, RED LOW L1)
-	resolver    dnsResolver        // custom-domain ownership verification (domains.go); nil ⇒ system resolver
+	resolver    fqdn.Resolver      // custom-domain ownership verification (domains.go); nil ⇒ system resolver
 }
 
 // mounted is the active service so Shutdown can release the store.
@@ -813,8 +814,6 @@ func providerFromURL(raw string) string {
 		return "gitlab"
 	case strings.Contains(r, "bitbucket"):
 		return "bitbucket"
-	case strings.Contains(r, "gitea"):
-		return "gitea"
 	default:
 		return "git"
 	}

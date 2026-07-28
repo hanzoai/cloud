@@ -30,6 +30,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -39,15 +40,13 @@ import (
 const (
 	// releaseImage is the ONE image cloud self-publishes; releaseRepoSlug/URL name
 	// its source; releaseFloor is the version floor for the first release ever
-	// (mirrors release.yml). universeRepo receives the image-update dispatch.
+	// (mirrors release.yml).
 	releaseImage    = "ghcr.io/hanzoai/cloud"
 	releaseRepoSlug = "hanzoai/cloud"
 	releaseRepoURL  = "https://github.com/hanzoai/cloud"
 	releaseFloor    = "1.786.0"
-	universeRepo    = "hanzoai/universe"
 	// releaseServiceName is the operator Service CR metadata.name for cloud's own
-	// self-publish (crs/cloud.yaml) — the target of both the native CR rollout and
-	// the image-update mirror, so the two never name different CRs.
+	// self-publish (crs/cloud.yaml) — the target of the CR rollout.
 	releaseServiceName = "cloud"
 )
 
@@ -194,39 +193,72 @@ func (p releasePlan) run(ctx context.Context) (releaseStep, error) {
 // build or smoke leaves NO tag and universe is never told of a phantom version.
 func startRelease(s *cloud.Service[state], c *zip.Ctx, req runnerBuildReq) error {
 	ref := firstNonEmpty(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
-	sha, err := resolveCommit(s, c.Context(), releaseRepoSlug, ref)
+	bldID, image, err := launchRelease(s, c.Context(), ref,
+		strings.TrimSpace(req.Repo), strings.TrimSpace(req.Dockerfile))
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "resolve %s: %v", ref, err)
+		return err
 	}
-	version, err := computeReleaseVersion(s, c.Context(), releaseRepoSlug)
+	return c.JSON(http.StatusAccepted, runnerBuildResp{
+		BuildJobID: bldID, Status: "releasing", RunnerPool: "32g", Image: image,
+	})
+}
+
+// releasing is the in-flight guard. A release is a fabric-wide operation that
+// mints the next version from the tags that already exist, so two overlapping
+// runs would compute the SAME version and race to publish it. Only one at a
+// time; a second trigger is refused rather than queued, because by the time the
+// first finishes its commit is already the newer one.
+var releasing atomic.Bool
+
+// launchRelease pins the commit, computes the next version, and starts the
+// DETACHED build → smoke → tag → notify pipeline, returning the build id and the
+// image it will publish. It is the ONE release entry point: the /v1/runner HTTP
+// path and the push trigger both come through here, so a release cut by either
+// is the same pipeline with the same guards. Errors are zip errors so the HTTP
+// caller can return them directly.
+func launchRelease(s *cloud.Service[state], ctx context.Context, ref, repo, dockerfile string) (string, string, error) {
+	if !releasing.CompareAndSwap(false, true) {
+		return "", "", zip.Errorf(http.StatusConflict, "a release is already in flight")
+	}
+	ok := false
+	defer func() {
+		// Hand the flag to the goroutine on success; clear it on every early exit.
+		if !ok {
+			releasing.Store(false)
+		}
+	}()
+
+	sha, err := resolveCommit(s, ctx, releaseRepoSlug, ref)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "compute release version: %v", err)
+		return "", "", zip.Errorf(http.StatusBadGateway, "resolve %s: %v", ref, err)
+	}
+	version, err := computeReleaseVersion(s, ctx, releaseRepoSlug)
+	if err != nil {
+		return "", "", zip.Errorf(http.StatusBadGateway, "compute release version: %v", err)
 	}
 	tag := "v" + version
 	image := releaseImage + ":" + tag
-	repoURL := firstNonEmpty(strings.TrimSpace(req.Repo), releaseRepoURL)
-	dockerfile := firstNonEmpty(strings.TrimSpace(req.Dockerfile), "Dockerfile")
-
 	bldID, err := genID("rel")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return "", "", zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	plan := releaseFor(s, repoURL, sha, image, tag, dockerfile, bldID)
+	repoURL := firstNonEmpty(repo, releaseRepoURL)
+	plan := releaseFor(s, repoURL, sha, image, tag, firstNonEmpty(dockerfile, "Dockerfile"), bldID)
 
-	ctx := context.WithoutCancel(c.Context())
+	detached := context.WithoutCancel(ctx)
 	go func() {
-		reached, rerr := plan.run(ctx)
+		defer releasing.Store(false)
+		reached, rerr := plan.run(detached)
 		if rerr != nil {
 			s.Log.Error("release failed", "version", version, "image", image, "reached", reached.String(), "err", rerr)
 			return
 		}
 		s.Log.Info("release published", "version", version, "image", image, "sha", sha)
 	}()
+	ok = true
 
 	s.Log.Info("release started", "version", version, "image", image, "repo", repoURL, "sha", sha)
-	return c.JSON(http.StatusAccepted, runnerBuildResp{
-		BuildJobID: bldID, Status: "releasing", RunnerPool: "32g", Image: image,
-	})
+	return bldID, image, nil
 }
 
 // releaseFor assembles the production pipeline for one version. Each seam is the REAL
@@ -256,38 +288,31 @@ func releaseFor(s *cloud.Service[state], repoURL, sha, image, tag, dockerfile, b
 // rolloutRelease rolls the proven image live. It is the release pipeline's final
 // step, reached only AFTER the tag receipt is minted (build + smoke passed).
 //
-// PRIMARY — native CR rollout: patch the operator hanzo.ai/v1 Service CR's
-// spec.image directly (cloud.OnServiceRelease → clients/paas releaseService), so
-// the operator reconciles the Deployment. No ArgoCD, no repository_dispatch, no
-// git round-trip — the direct-CR seam this closes.
+// ONE WRITER: patch the operator hanzo.ai/v1 Service CR's spec.image
+// (cloud.OnServiceRelease → clients/paas releaseService) and let the operator
+// reconcile the Deployment. No ArgoCD, no repository_dispatch, no git round-trip.
 //
-// MIRROR — GitOps: also fire the image-update dispatch at universe
-// (notifyUniverse) so any environment still reconciled by the git/ArgoCD pipeline
-// stays in sync during the cutover.
+// It used to write TWICE — the CR patch plus a repository_dispatch mirror at
+// hanzoai/universe — composed best-effort so the step passed if EITHER landed.
+// That made "what is live" a question with two answers that could disagree, and
+// the composition hid the disagreement: the patch fails, the mirror succeeds, and
+// the cluster and git now describe different production states with nothing
+// reporting a problem. The mirror was also never actually running — it reads
+// UNIVERSE_DISPATCH_TOKEN, which is not configured on the cloud deployment, so it
+// failed closed on every release and every rollout in production was already the
+// CR patch alone. Deleting it removes a phantom second writer, not a second path.
 //
-// Best-effort composition: the step succeeds if EITHER path rolled the image, so a
-// missing cloud-api CR-patch RBAC (native) or a missing dispatch token (GitOps)
-// alone never fails a release that already produced a proven, tagged image.
+// The remaining failure is therefore reported honestly rather than tolerated: if
+// the CR patch cannot happen, the image is built, smoke-passed and tagged but NOT
+// live, and a release that says otherwise is worse than one that fails.
 func rolloutRelease(s *cloud.Service[state], ctx context.Context, image, sha string) error {
-	var crErr error
-	if cloud.ServiceReleaserRegistered() {
-		crErr = cloud.OnServiceRelease(ctx, cloud.ServiceReleaseEvent{Service: releaseServiceName, Image: image, SHA: sha})
-		if crErr == nil {
-			s.Log.Info("release rolled out via operator CR patch (native)", "service", releaseServiceName, "image", image)
-		} else {
-			s.Log.Warn("native CR rollout failed; relying on the GitOps mirror", "service", releaseServiceName, "image", image, "err", crErr)
-		}
-	} else {
-		crErr = fmt.Errorf("paas control plane not co-resident (no native CR rollout)")
+	if !cloud.ServiceReleaserRegistered() {
+		return fmt.Errorf("paas control plane not co-resident: no CR releaser registered, image %s is tagged but NOT live", image)
 	}
-
-	nuErr := notifyUniverse(s, ctx, image, sha)
-	if nuErr != nil {
-		s.Log.Warn("universe image-update mirror failed", "image", image, "err", nuErr)
+	if err := cloud.OnServiceRelease(ctx, cloud.ServiceReleaseEvent{Service: releaseServiceName, Image: image, SHA: sha}); err != nil {
+		return fmt.Errorf("roll out %s via operator CR patch: %w", releaseServiceName, err)
 	}
-	if crErr != nil && nuErr != nil {
-		return fmt.Errorf("rollout failed on both paths: native=%v; gitops=%v", crErr, nuErr)
-	}
+	s.Log.Info("release rolled out via operator CR patch", "service", releaseServiceName, "image", image)
 	return nil
 }
 
@@ -534,36 +559,6 @@ func tagRelease(s *cloud.Service[state], ctx context.Context, repo, sha, tag str
 		return fmt.Errorf("create tag %s: status %d", tag, code)
 	}
 	s.Log.Info("release tag minted (receipt for a pushed, smoke-passed image)", "repo", repo, "tag", tag, "sha", sha)
-	return nil
-}
-
-// notifyUniverse fires the image-update repository_dispatch at hanzoai/universe so the
-// GitOps pipeline rolls the proven image — the SAME image-update contract every
-// service uses (release.yml's notify-universe). Runs ONLY after the tag is minted, so
-// universe is never asked to deploy a phantom tag. Token is UNIVERSE_DISPATCH_TOKEN
-// from env (KMS-provisioned); fail closed if unset.
-func notifyUniverse(s *cloud.Service[state], ctx context.Context, image, sha string) error {
-	tok := getenv("UNIVERSE_DISPATCH_TOKEN", "")
-	if tok == "" {
-		return fmt.Errorf("no UNIVERSE_DISPATCH_TOKEN configured")
-	}
-	body := map[string]any{
-		"event_type": "image-update",
-		"client_payload": map[string]string{
-			"service": "cloud",
-			"image":   image,
-			"sha":     sha,
-			"env":     "all",
-		},
-	}
-	code, err := githubJSON(s, ctx, http.MethodPost, "/repos/"+universeRepo+"/dispatches", tok, body, nil)
-	if err != nil {
-		return err
-	}
-	if code != http.StatusNoContent {
-		return fmt.Errorf("notify universe: status %d", code)
-	}
-	s.Log.Info("universe notified (image-update)", "image", image, "sha", sha)
 	return nil
 }
 
