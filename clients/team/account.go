@@ -188,6 +188,20 @@ type Status struct {
 func statusUnauthorized(msg string) Status {
 	return Status{Severity: "ERROR", Code: "account:status:Unauthorized", Params: map[string]any{"message": msg}}
 }
+
+// signInAtIssuer is the refusal every credential verb answers with. One string,
+// so the door's answer is a single fact a test can pin.
+const signInAtIssuer = "sign in at hanzo.id"
+
+// trunc bounds a caller-supplied string before it rides back in an error. The RPC
+// body is only capped by GATEWAY_BODY_LIMIT (16MB), so echoing a method name
+// verbatim lets a caller choose the size of our response.
+func trunc(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
+}
 func statusError(msg string) Status {
 	return Status{Severity: "ERROR", Code: "account:status:InternalServerError", Params: map[string]any{"message": msg}}
 }
@@ -208,14 +222,6 @@ func statusBadRequest(msg string) Status {
 // returns a clean error rather than picking one.
 func statusAmbiguous(url string) Status {
 	return Status{Severity: "ERROR", Code: "account:status:WorkspaceAmbiguous", Params: map[string]any{"workspace": url}}
-}
-
-// statusBadCredentials is the password-login refusal. The code is the platform
-// status the SPA already translates ("Account not found or the provided
-// credentials are incorrect") so the form renders a native message, and it
-// deliberately does not distinguish no-such-account from wrong-password.
-func statusBadCredentials() Status {
-	return Status{Severity: "ERROR", Code: "platform:status:AccountNotFound", Params: map[string]any{}}
 }
 
 // ── route registration ────────────────────────────────────────────────────────
@@ -532,10 +538,21 @@ func (g *api) rpc(c *zip.Ctx) error {
 		return g.getPerson(c)
 	case "isReadOnlyGuest":
 		return g.ok(c, false)
-	case "loginAsGuest":
-		return g.fail(c, statusUnauthorized("guest login disabled"))
+
+	// Every verb that would establish a session from a credential this service
+	// handled itself. Stating the policy beats falling through to UnknownMethod:
+	// that answer renders "Unknown method: login" to the user, tells a caller the
+	// parser did not recognise the verb rather than that the door is shut, and —
+	// because "no handler" and "handler refused" then produce the same envelope —
+	// makes a resurrected handler indistinguishable from a deleted one. A test can
+	// pin THIS answer; it cannot pin an absence.
+	case "login", "loginAsGuest", "loginOtp", "signUp", "signUpOtp", "signUpJoin",
+		"validateOtp", "join", "joinByToken", "exchangeGuestToken",
+		"changePassword", "restorePassword", "requestPasswordReset":
+		return g.fail(c, statusUnauthorized(signInAtIssuer))
+
 	default:
-		return g.fail(c, Status{Severity: "ERROR", Code: "account:status:UnknownMethod", Params: map[string]any{"method": req.Method}})
+		return g.fail(c, Status{Severity: "ERROR", Code: "account:status:UnknownMethod", Params: map[string]any{"method": trunc(req.Method, 64)}})
 	}
 }
 
