@@ -135,6 +135,29 @@ func validateImageRef(raw string) (string, error) {
 	return s, nil
 }
 
+// normalizeImageRef qualifies a PULL ref the way every container runtime does
+// before validateImageRef judges it: `golang:1.26` → `docker.io/library/golang:1.26`,
+// `curlimages/curl:8` → `docker.io/curlimages/curl:8`. ociRefRE requires a domain
+// (correctly — an output image with no registry has nowhere to push), but a
+// toolchain image a build PULLS is normally written the short way, and refusing
+// `node:22` would make the recipe lie about what docker accepts. A first
+// component containing '.' or ':' — or literally "localhost" — already IS a
+// domain and is left alone.
+func normalizeImageRef(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return s
+	}
+	head, _, hasPath := strings.Cut(s, "/")
+	if hasPath && (head == "localhost" || strings.ContainsAny(head, ".:")) {
+		return s
+	}
+	if hasPath {
+		return "docker.io/" + s
+	}
+	return "docker.io/library/" + s
+}
+
 // validateRepoURL enforces that a git repo URL is a real https URL to an
 // allowlisted host with no shell/flag metacharacters. The build context is
 // derived from this string, so this is the injection guard for CRIT-1. Returns
