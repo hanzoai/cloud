@@ -256,8 +256,14 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	// Hanzo Sentry product face /v1/sentry/* — the SIBLING of the /v1/o11y wildcard,
 	// delegating to the SAME gated runtime handler (which carries the clean /v1/sentry
 	// routes; the DSN-ingest routes are gate-exempt via isSentryIngestPath). One
-	// runtime, two path families. The runtime must be an o11y build that includes the
-	// /v1/sentry routes (see the report's dep-bump note); until then these 404, inert.
+	// runtime, two path families.
+	//
+	// Registering it here is necessary but NOT sufficient — the subtree has to be
+	// reachable at both hops above this one, and it silently was not at either:
+	// hanzoai/o11y had to carry the routes (the pinned v1.5.33 does —
+	// o11yapiserver/sentry.go registers them), and now that o11y runs out-of-process the HOST has
+	// to mount /v1/sentry as a second prefix or the request 404s before it ever
+	// reaches this process — see cloud.PluginSpec in apps.Wire().
 	mountSentry(a)
 	// WRITE plane — opt-in, order-independent (no /v1/o11y/* Fiber route).
 	if err := mountIngest(deps); err != nil { // ZAP ingest collector (:4317)
