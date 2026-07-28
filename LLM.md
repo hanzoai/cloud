@@ -694,6 +694,35 @@ project slug (`prism` + `react` → `prism-react`) so two shapes coexist in an o
 `TestVariantsAreOptionsNotSiblings` forbids the regression: no variant id may
 also be a catalog slug.
 
+### What a row has to carry (`catalog_test.go`)
+
+Shape is not enough — a well-formed row can still be useless or dishonest, and
+all three of these were true on live data:
+
+- **`description` is not decoration.** `fork.go` copies it onto the forked
+  project, so the 43 empty ones propagated into customers' project lists. Where a
+  template has a live deploy the line describes what that deploy renders; where
+  it has none it is written from the row's own `features`/`useCase`, so a
+  description is never a claim about a page nobody looked at.
+- **`source` names the REPOSITORY.** It used to be
+  `gallery.hanzo.ai/templates/<slug>` — a page that 404s — and `fork.go` assigns
+  it to `createReq.Repo.URL`, so a fork handed the builder an HTML error page as
+  a git remote (and `Repo.Provider` came out `git`, because the host was not a
+  forge). A variant resolves to its own repo where it has one (`prism-react`,
+  `cipher-html`, `cipher-react`) and to the template's otherwise: a PAGE of a kit
+  is not a repository.
+- **`demo` is the template's OWN deploy, `<slug>.hanzo.app`, or nothing.** Seven
+  rows advertised another template's deploy (Blocks → `forge.hanzo.app`, which
+  renders "Streamline"; Loop → `blocks.hanzo.app`, which renders Bento v.3), so
+  browsing a template showed a stranger's product. The one derived exception is
+  the one fork.go already derives: a slug that is a reserved subdomain
+  (`sites.IsReserved` — `metrics`) cannot BE a host, so its deploy carries the
+  same `-template` suffix. `TestDemoIsTheTemplatesOwnHost` reads that predicate
+  rather than listing labels, so the two cannot drift.
+
+`framework` is deliberately NOT derived from the deploy: it is fork.go's build
+hint and the repo is its source of truth.
+
 ### Two layers, not one visibility flag
 
 Same shape as the cross-org catalog above, for the same reason. A customer must be able to
