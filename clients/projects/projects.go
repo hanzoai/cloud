@@ -465,6 +465,9 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body createR
 	// only after a successful persist so a conflicting create provisions nothing;
 	// a Base hiccup is logged and swallowed — it never fails the create.
 	provisionSpace(s, c.Context(), &p)
+	// Give it a canonical repo at git.hanzo.ai, world-readable exactly when the
+	// project is.
+	publishCommunity(s, c.Context(), p)
 	return c.JSON(http.StatusCreated, toProjectView(p))
 }
 
@@ -648,6 +651,9 @@ func update(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		return zip.Errorf(http.StatusInternalServerError, "update: %v", err)
 	}
+	// Reconcile the repo to whatever this update settled on — including a
+	// moderation, which must reach the source and not just the listing.
+	publishCommunity(s, c.Context(), p)
 	return c.JSON(http.StatusOK, toProjectView(p))
 }
 
