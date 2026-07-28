@@ -44,6 +44,7 @@ package cloud
 import (
 	"errors"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"syscall"
@@ -264,6 +265,25 @@ func isPeerDialError(err error) bool {
 	return strings.Contains(s, "connection refused") ||
 		strings.Contains(s, "no such host") ||
 		strings.Contains(s, "dialing to the given TCP address timed out")
+}
+
+// Members is the writer set this process believes in: the LIVE set when the
+// durable plane elects one, else the static CLOUD_PEERS set the router falls
+// back to. Empty means a single-pod deployment, where this process is the whole
+// fleet.
+//
+// Exported because the plugin control plane fans out over the membership — and
+// it must be the SAME membership the shard router routes on. Two fleet views
+// that could disagree would be worse than one that is occasionally stale: an
+// operator would roll a version onto a set of hosts that is not the set serving
+// traffic.
+func Members(deps Deps) []ha.Member {
+	if deps.LiveMembers != nil {
+		if m := deps.LiveMembers(); len(m) > 0 {
+			return m
+		}
+	}
+	return parsePeers(os.Getenv("CLOUD_PEERS"))
 }
 
 // parsePeers parses a CLOUD_PEERS value ("id@addr,id2@addr2", or bare "id" with
