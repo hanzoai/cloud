@@ -158,6 +158,49 @@ func TestScrubProps_Empty(t *testing.T) {
 	}
 }
 
+// TestStoredPropertiesAreScrubbed pins the scrub's CALL SITE, not the scrub: every
+// test above calls scrubProps directly, so the privacy boundary was proven correct and
+// proven nowhere in particular. normalizeEvent is the ONE place a property bag becomes
+// a column value, and storing e.Properties raw there keeps the whole suite green while
+// every secret and every email a caller ever sent goes to rest in the warehouse.
+//
+// It runs on the VOUCHED-FOR lane on purpose: the anonymous lane never reaches this at
+// all (admitPublic REBUILDS the event without Properties, so its rows carry only what
+// the server put there). A bearer's properties are the only ones that reach the column,
+// which makes this lane the whole exposure.
+//
+// The legit key is asserted to SURVIVE. Without it the case also passes when the row
+// stores nothing at all, which is the cheapest way to make a privacy assertion vacuous.
+func TestStoredPropertiesAreScrubbed(t *testing.T) {
+	w := fakeWarehouse(t)
+	app := mountApp(t)
+	const body = `{"batch":[{"type":"event","event":"checkout_started","properties":{` +
+		`"plan":"pro","password":"hunter2","note":"reach me at z@hanzo.ai",` +
+		`"callback":"https://x.test/cb?access_token=abcdef0123456789"}}]}`
+	code, resp := doBody(t, app, http.MethodPost, "/v1/event", "user-dave", "acme", body)
+	if code != http.StatusOK {
+		t.Fatalf("bearer ingest = %d (%s), want 200 (written to the fake warehouse)", code, resp)
+	}
+	if len(w.rows) != 1 {
+		t.Fatalf("wrote %d rows, want 1", len(w.rows))
+	}
+	stored, _ := w.col(t, 0, "properties").(string)
+	props := decodeProps(t, stored)
+	if _, bad := props["password"]; bad {
+		t.Errorf("a credential-shaped KEY reached the row: %s", stored)
+	}
+	if strings.Contains(stored, "@hanzo.ai") {
+		t.Errorf("a PII-shaped VALUE reached the row unredacted: %s", stored)
+	}
+	if strings.Contains(stored, "abcdef0123456789") {
+		t.Errorf("a query-string secret reached the row unredacted: %s", stored)
+	}
+	if props["plan"] != "pro" {
+		t.Errorf("the legit property did not survive (%s) — a row that stores nothing "+
+			"passes every assertion above without scrubbing anything", stored)
+	}
+}
+
 func decodeProps(t *testing.T, s string) map[string]any {
 	t.Helper()
 	if s == "" {
