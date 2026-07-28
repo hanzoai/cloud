@@ -130,3 +130,47 @@ func Files(payload []byte) (rev string, files []File, err error) {
 	}
 	return rev, files, nil
 }
+
+// ---- finance.balance: (subject, currency) -> cents ----
+//
+// The prepaid ledger read. The per-org SQLite ledger has ONE writer, so only the
+// process that mounts commerce may open it; everyone else asks that process
+// here rather than importing it — which is what this codec is for. The reply is
+// a single scalar, so it rides the shared PutI64/I64 above rather than growing
+// a second one-field message.
+//
+// THERE IS NO ORG FIELD, DELIBERATELY. The org is the tenant whose books are
+// read, and it is taken from the CAPABILITY the envelope carries (Ident.Org) —
+// never from the payload. A request that could name its own org would be a
+// request to read another tenant's ledger, so the wire simply cannot express
+// it. The subject is a wallet WITHIN that org, which is the caller's to choose
+// and harmless to name; making the org unrepresentable is stronger than
+// validating it away, because there is no field left to get the check wrong on.
+
+const (
+	fbSubjectOff  = 0
+	fbCurrencyOff = 8
+	fbFixed       = 16
+)
+
+// PutBalanceReq packs a finance.balance request. The org is absent by design:
+// it rides the capability (see above).
+func PutBalanceReq(subject, currency string) []byte {
+	b := zap.NewBuilder(len(subject) + len(currency) + fbFixed + 64)
+	ob := b.StartObject(fbFixed)
+	ob.SetText(fbSubjectOff, subject)
+	ob.SetText(fbCurrencyOff, currency)
+	ob.FinishAsRoot()
+	return b.Finish()
+}
+
+// BalanceReq unpacks one. An absent currency reads as "" and the method applies
+// its own default, so an older caller keeps working.
+func BalanceReq(payload []byte) (subject, currency string, err error) {
+	m, err := zap.Parse(payload)
+	if err != nil {
+		return "", "", fmt.Errorf("balance: %w", err)
+	}
+	r := m.Root()
+	return r.Text(fbSubjectOff), r.Text(fbCurrencyOff), nil
+}
