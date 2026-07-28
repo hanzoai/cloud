@@ -1,0 +1,279 @@
+// Copyright 2023-2026 Hanzo AI Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Package meet is the CONTROL plane for the virtual office: it decides who may
+// join which room, and says so by minting a short-lived LiveKit access token.
+//
+//	POST /v1/meet/getToken  {roomName, _id, participantName}  ->  the token, as text
+//
+// The MEDIA plane is not here and never will be. Audio, video and screen share ride
+// a direct browser↔LiveKit WebRTC connection (LIVEKIT_WS = wss://live.hanzo.bot);
+// media is not a thing to proxy through an API binary. What moved into this binary
+// is the ONE decision a server has to make about a call — may this caller join this
+// room — which needs the team session secret and the LiveKit signing key, and needs
+// no pod of its own to hold them.
+//
+// TWO KEYS, TWO ROLES, and they never mix:
+//
+//   - SERVER_SECRET verifies the CALLER. It is the HS256 key clients/team signs
+//     session tokens with, so "is this a real member of this workspace" is answered
+//     against the same signature the rest of /v1/team trusts.
+//   - LIVEKIT_API_SECRET signs the ANSWER. It is the key the LiveKit server verifies
+//     with, so the token this package mints is exactly as trustworthy to LiveKit as
+//     one LiveKit minted itself.
+//
+// Both arrive as env from KMS-synced Secrets (never a literal, never a default).
+// Missing either one is a 503: with no team key we cannot tell members from
+// strangers, and with no LiveKit key we could only produce a token that fails
+// verification anyway.
+package meet
+
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/team/token"
+	"github.com/zap-proto/zip"
+)
+
+// ttl is how long a minted join token is good for. Ten minutes: long enough to
+// complete a join handshake on a bad connection, short enough that a leaked token
+// is worthless before anyone can use it. The client re-mints per join, so this is
+// not a session length — a call that has already started is a LiveKit connection
+// and does not re-check the token.
+const ttl = 10 * time.Minute
+
+// state is meet's own data: the caller-verifying key and the answer-signing pair.
+// An empty key means "not configured", which is a 503 and never a soft default.
+type state struct {
+	teamSecret string // SERVER_SECRET  — verifies the caller's team session
+	apiKey     string // LIVEKIT_API_KEY    — the `iss` LiveKit matches on
+	apiSecret  string // LIVEKIT_API_SECRET — signs the minted token
+}
+
+// ready reports whether both keys are present. Fail-closed: an unconfigured deploy
+// refuses every mint rather than issuing a token nobody can verify.
+func (s state) ready() bool {
+	return s.teamSecret != "" && s.apiKey != "" && s.apiSecret != ""
+}
+
+// load reads the three keys from env, where the KMS operator syncs them. It refuses
+// the upstream public default team secret for the reason clients/team's resolveSecret
+// does: a known signing key lets anyone mint a session naming any workspace, which
+// here would be a join token for a room they were never in.
+func load() state {
+	secret := os.Getenv("SERVER_SECRET")
+	if secret == "secret" {
+		secret = ""
+	}
+	return state{
+		teamSecret: secret,
+		apiKey:     os.Getenv("LIVEKIT_API_KEY"),
+		apiSecret:  os.Getenv("LIVEKIT_API_SECRET"),
+	}
+}
+
+// Mount wires /v1/meet/* onto app. The route is registered even when unconfigured so
+// the surface always answers under its OWN name with an honest 503, rather than
+// falling through to some other subsystem's catch-all and reporting a 404 for a
+// service that exists but has no keys.
+func Mount(app cloud.Router, deps cloud.Deps) error {
+	if app == nil {
+		return fmt.Errorf("meet.Mount: nil app")
+	}
+	if deps.Logger == nil {
+		return fmt.Errorf("meet.Mount: nil deps.Logger")
+	}
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "meet"), State: load()}
+
+	// The path suffix is the CALLER's, not ours. The office client POSTs
+	// concatLink(LOVE_ENDPOINT, '/getToken') from a published bundle, so with
+	// LOVE_ENDPOINT=/v1/meet the wire lands here. Renaming it means shipping a new
+	// front image, not editing a manifest.
+	app.Post("/v1/meet/getToken", cloud.Handle(s, mint))
+
+	if !s.State.ready() {
+		s.Log.Warn("meet subsystem mounted fail-closed: SERVER_SECRET / LIVEKIT_API_KEY / LIVEKIT_API_SECRET not all set (every mint 503)")
+		return nil
+	}
+	s.Log.Info("meet subsystem mounted", "prefix", "/v1/meet", "ttl", ttl.String())
+	return nil
+}
+
+// request is the office client's wire. `_id` is the person ref, which becomes the
+// LiveKit participant identity; participantName is the display name.
+type request struct {
+	RoomName        string `json:"roomName"`
+	ID              string `json:"_id"`
+	ParticipantName string `json:"participantName"`
+}
+
+// mint answers POST /v1/meet/getToken: verify the caller belongs to the room's
+// workspace, then hand back a join token for exactly that room.
+//
+// The response is the RAW token as text/plain, not JSON. That is the caller's
+// contract — the office client reads it with res.text() — and it is also the honest
+// shape: the body is one opaque string, so wrapping it in an object would add a
+// envelope neither side needs.
+func mint(s *cloud.Service[state], c *zip.Ctx) error {
+	st := s.State
+	if !st.ready() {
+		return zip.Errorf(http.StatusServiceUnavailable, "meet: signing keys not configured")
+	}
+	var req request
+	if err := json.Unmarshal(c.Body(), &req); err != nil {
+		return zip.ErrBadRequest("malformed request body")
+	}
+	room := strings.TrimSpace(req.RoomName)
+	if room == "" {
+		return zip.ErrBadRequest("roomName required")
+	}
+	// LiveKit requires an identity on a join grant; a token without one is refused
+	// at the media edge. Catch it here as a 400 rather than minting a token that
+	// cannot work.
+	identity := strings.TrimSpace(req.ID)
+	if identity == "" {
+		return zip.ErrBadRequest("_id required")
+	}
+	if !st.admits(room, c.Header("Authorization")) {
+		return zip.Errorf(http.StatusUnauthorized, "not a member of this room's workspace")
+	}
+	tok, err := st.grant(room, identity, strings.TrimSpace(req.ParticipantName), time.Now())
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "meet: mint failed")
+	}
+	return c.String(http.StatusOK, tok)
+}
+
+// workspace is the workspace a room belongs to. Room names are minted client-side as
+// "<workspaceUuid>_<roomName>_<roomId>", so the workspace is the leading segment.
+// This is the ONLY thing binding a room to a tenant, which is why admits compares it
+// against the SIGNED workspace claim and not against anything in the body.
+func workspace(room string) string {
+	ws, _, _ := strings.Cut(room, "_")
+	return ws
+}
+
+// admits decides whether the bearer may join room. Every clause is a refusal; there
+// is no branch that admits by default.
+//
+//   - the token must VERIFY against SERVER_SECRET (signature, exp, nbf) — so a forged
+//     or stale session is not a member;
+//   - its SIGNED workspace claim must equal the room's workspace prefix — this is the
+//     tenant boundary. Without it, any member of any workspace could mint a join token
+//     for any room in any other workspace by naming it;
+//   - an empty workspace claim is refused outright, so a session token that is not
+//     bound to a workspace cannot match a room that has no separator in its name;
+//   - a readonly or guest session is refused. Both are REDUCED sessions, and speaking
+//     in a colleague's meeting is not a reduced-session privilege.
+func (s state) admits(room, auth string) bool {
+	raw := bearer(auth)
+	if raw == "" {
+		return false
+	}
+	t, err := token.Decode(raw, s.teamSecret, true)
+	if err != nil {
+		return false
+	}
+	if t.Workspace == "" || t.Workspace != workspace(room) {
+		return false
+	}
+	if extraIs(t.Extra, "readonly", "true") || extraIs(t.Extra, "guest", "true") {
+		return false
+	}
+	return true
+}
+
+// extraIs reports whether a token's extra claim holds a given string value.
+func extraIs(extra map[string]any, key, want string) bool {
+	s, _ := extra[key].(string)
+	return s == want
+}
+
+// bearer extracts the token from an "Authorization: Bearer <t>" header (scheme
+// case-insensitive). Empty when absent or not a bearer.
+func bearer(h string) string {
+	h = strings.TrimSpace(h)
+	if len(h) > 7 && strings.EqualFold(h[:7], "Bearer ") {
+		return strings.TrimSpace(h[7:])
+	}
+	return ""
+}
+
+// video is LiveKit's VideoGrant, narrowed to the two fields a join token needs. The
+// grant is deliberately minimal: roomJoin into ONE named room. Every capability
+// LiveKit defaults on for a joiner (publish, subscribe) follows from that; every
+// capability it does not (roomAdmin, roomCreate, roomList, recorder, ingressAdmin)
+// stays off because it is not named here. A token that cannot express a privilege
+// cannot leak it.
+type video struct {
+	RoomJoin bool   `json:"roomJoin"`
+	Room     string `json:"room"`
+}
+
+// claims is the LiveKit access-token payload: RFC 7519 registered claims plus
+// LiveKit's grant object. The shape is LiveKit's, not ours — it must match what the
+// media server verifies, so the field set here mirrors livekit/protocol's
+// auth.tokenClaims (iss=apiKey, sub=identity, iat/nbf/exp, name, video).
+type claims struct {
+	Iss   string `json:"iss"`
+	Sub   string `json:"sub"`
+	Iat   int64  `json:"iat"`
+	Nbf   int64  `json:"nbf"`
+	Exp   int64  `json:"exp"`
+	Name  string `json:"name,omitempty"`
+	Video video  `json:"video"`
+}
+
+// header is the fixed JOSE header for every token this package mints. HS256 is not a
+// choice here — it is what LiveKit verifies a shared-secret token with. It is a
+// constant rather than a field precisely so no request can influence the algorithm:
+// there is no code path that could be talked into `alg: none`.
+var header = base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
+
+// grant mints the join token: a compact HS256 JWT over the claims above.
+//
+// This composes stdlib crypto/hmac + crypto/sha256 rather than taking a JWT library,
+// for two reasons. First, clients/team/token already establishes this exact idiom for
+// the platform's own HS256 tokens, and a second way to make a JWT in one binary is a
+// second way to get it wrong. Second, this side only ever SIGNS: the verifier is the
+// LiveKit server, so the whole class of bugs a JWT library earns its keep against —
+// alg confusion, `alg: none`, non-constant-time comparison — has no code path here.
+// The primitives themselves are stdlib; nothing cryptographic is hand-rolled.
+func (s state) grant(room, identity, name string, now time.Time) (string, error) {
+	payload, err := json.Marshal(claims{
+		Iss:   s.apiKey,
+		Sub:   identity,
+		Iat:   now.Unix(),
+		Nbf:   now.Unix(),
+		Exp:   now.Add(ttl).Unix(),
+		Name:  name,
+		Video: video{RoomJoin: true, Room: room},
+	})
+	if err != nil {
+		return "", err
+	}
+	signing := header + "." + base64.RawURLEncoding.EncodeToString(payload)
+	mac := hmac.New(sha256.New, []byte(s.apiSecret))
+	mac.Write([]byte(signing))
+	return signing + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
+}
