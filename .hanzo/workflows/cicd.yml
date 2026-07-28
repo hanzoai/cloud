@@ -43,7 +43,7 @@ concurrency:
   group: cicd-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  # Test gate + the decoupled native flags staticlib image, driven by hanzo.yml.
+  # The test gate, driven by hanzo.yml.
   gate:
     uses: hanzoai/ci/.hanzo/workflows/build.yml@v1
     with:
@@ -189,17 +189,12 @@ jobs:
 
           # Containment is an IMPORT-GRAPH property, so prove it with the import
           # graph. This step used to lead with `go build ./...`, which compiles
-          # AND LINKS every cmd/ main — and linking needs
-          # native/flags/target/release/libhanzo_flags.a, the Rust staticlib
-          # apps/flags pulls in under cgo (apps/flags/engine.go). Nothing
-          # in THIS job builds it: `make native` runs in the gate job, in that
-          # job's own workspace. It passed on GitHub only because the arc
-          # runners reuse a workspace and target/ is gitignored, so an earlier
-          # gate job's leftover .a was still sitting there; on a container
-          # runner with a fresh volume every cmd/ main died at
-          # `ld: cannot find .../libhanzo_flags.a`. The compile was never the
-          # proof anyway — `go list -deps` reads the same untagged file set
-          # without linking, and the gate job is the ONE place that builds.
+          # AND LINKS every cmd/ main — work this proof does not need and this
+          # job should not be doing: `go list -deps` reads the same untagged
+          # file set without linking, in seconds, and the gate job is the ONE
+          # place that builds. A green compile here would also have proved
+          # nothing extra; the containment claim is entirely about which
+          # packages are reachable, which is what the graph answers.
           for m in $(go list ./cmd/...); do
             if go list -deps "$m" | grep -qx 'github.com/hanzoai/cloud/apps/controlplane'; then
               echo "::error::$m links apps/controlplane into a real binary — containment breach"

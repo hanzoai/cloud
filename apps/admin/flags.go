@@ -3,8 +3,8 @@ package admin
 // The PLATFORM CONTROL PLANE board (/v1/admin/flags) — every runtime LAUNCH / RELEASE
 // switch (waitlist, public signup, subsystem activation, gateway limits, network ids)
 // with its LIVE value, evaluated through the embedded native flag engine
-// (clients/flags → native/flags, SQLite-per-project definitions + Rust FFI
-// evaluation). SuperAdmin only (core.Admit, like every /v1/admin/*).
+// (apps/flags — SQLite-per-project definitions, in-process pure-Go evaluation).
+// SuperAdmin only (core.Admit, like every /v1/admin/*).
 //
 // ONE flag engine, TWO verbs. GET reads the board; PUT writes a switch's definition
 // through flags.SetPlatformSwitch — the ONE write path, audited in the store's

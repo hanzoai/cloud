@@ -87,9 +87,6 @@ func TestEnvFallbackAndDefault(t *testing.T) {
 }
 
 func TestStoreBackedSwitchOverridesEnv(t *testing.T) {
-	if !engineAvailable {
-		t.Skip("native engine not built (cgo off)")
-	}
 	newTestClient(t)
 	t.Setenv("WAITLIST_OPEN", "true")
 
@@ -111,9 +108,6 @@ func TestStoreBackedSwitchOverridesEnv(t *testing.T) {
 }
 
 func TestIntSwitchRidesThePayload(t *testing.T) {
-	if !engineAvailable {
-		t.Skip("native engine not built (cgo off)")
-	}
 	newTestClient(t)
 	def := `{
 		"active": true,
@@ -131,9 +125,6 @@ func TestIntSwitchRidesThePayload(t *testing.T) {
 }
 
 func TestProjectEvaluationRolloutAndVariants(t *testing.T) {
-	if !engineAvailable {
-		t.Skip("native engine not built (cgo off)")
-	}
 	c := newTestClient(t)
 	st, err := c.stores.For("acme", "web")
 	if err != nil {
