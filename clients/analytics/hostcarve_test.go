@@ -22,53 +22,105 @@ import (
 )
 
 // liveResolver is a sites.Resolver that knows exactly ONE published site — the
-// slug key "yadota" and the bound custom host "yadota.tech" — and returns its live
-// Site whose Org the carve must force onto every ingested beacon. Any other key is
-// an honest miss (found=false), exactly as the real projects store behaves, so a
-// stray external host is NOT mistaken for a bound custom domain.
-type liveResolver struct{ org string }
+// slug key "yadota" and the bound custom host "yadota.tech". Any other key is an
+// honest miss (found=false), exactly as the real projects store behaves, so a stray
+// external host is NOT mistaken for a bound custom domain.
+//
+// It answers the TWO lookups a Site can be found by SEPARATELY, because they are two
+// different questions and the carve is required to ask the right one:
+//
+//   - unpinned (Resolve) — the bare key: an explicit custom-domain binding, or on the
+//     multi-tenant apex the unique-live-slug-across-orgs fallback. Whoever owns that
+//     slug answers.
+//   - pinned (ResolveOrg) — the slug WITHIN a named org, which is the only lookup
+//     allowed on our own first-party apex.
+//
+// Configuring the two with DIFFERENT orgs is the only thing that makes the pin
+// observable at all: with one field both lookups returned the same Site, so swapping
+// resolveLivePinned for resolveLive changed nothing any test could see.
+type liveResolver struct {
+	pinned   string // the org ResolveOrg answers for — the first-party owner
+	unpinned string // the org Resolve answers for — whoever holds the bare slug
+}
 
 func (r liveResolver) Resolve(_ context.Context, key string) (sites.Site, bool, error) {
 	switch key {
 	case "yadota", "yadota.tech":
-		return sites.Site{Org: r.org, Slug: "yadota", Bucket: "b", Prefix: r.org + "/yadota", Status: "live"}, true, nil
+		return sites.Site{Org: r.unpinned, Slug: "yadota", Bucket: "b", Prefix: r.unpinned + "/yadota", Status: "live"}, true, nil
 	default:
 		return sites.Site{}, false, nil
 	}
 }
 
-// ResolveOrg pins the slug to an org (first-party-host path). The carve resolves
-// via resolveLivePinned, so the analytics host-carve tests exercise this path.
+// ResolveOrg is the PINNED lookup: the slug within the named org, and nothing else.
+// It answers only for r.pinned, so a first-party host can reach exactly one org's
+// project — which is the property the pin exists for.
 func (r liveResolver) ResolveOrg(_ context.Context, org, slug string) (sites.Site, bool, error) {
-	if org == r.org && slug == "yadota" {
+	if org == r.pinned && slug == "yadota" {
 		return sites.Site{Org: org, Slug: "yadota", Bucket: "b", Prefix: org + "/yadota", Status: "live"}, true, nil
 	}
 	return sites.Site{}, false, nil
 }
 
-// carveApp mounts analytics (which installs the site-host ingest carve via
-// sites.SetAnalyticsHost) BEHIND the sites host-router middleware, then
-// points the resolver at one live Site. A POST to the site host is intercepted by
-// the middleware and forced to Site.Org; a POST to any other host falls through to
-// the normal /v1/analytics route.
-func carveApp(t *testing.T, org string) *zip.App {
-	t.Helper()
-	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
-	srv := sites.New(sites.Config{
+// siteHosts is the host policy every carve app here shares: the multi-tenant apex
+// (where sites are the default) plus our own domains. firstPartyApp adds the opt-in
+// first-party apex on top of it.
+func siteHosts() sites.Config {
+	return sites.Config{
 		Apex:        "hanzo.app",
 		Reserved:    []string{"app", "api", "admin"},
 		SelfDomains: []string{"hanzo.ai", "hanzo.app"},
-	}, luxlog.New("test"))
+	}
+}
+
+// carveOn mounts analytics (which installs the site-host ingest carve via
+// sites.SetAnalyticsHost) BEHIND the sites host-router middleware, under a given host
+// policy and resolver. Everything downstream of the middleware is identical for both
+// configurations below, so the host policy is the only variable under test.
+func carveOn(t *testing.T, cfg sites.Config, r sites.Resolver) *zip.App {
+	t.Helper()
+	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
+	srv := sites.New(cfg, luxlog.New("test"))
 	app.Use(srv.Middleware())
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
-	sites.SetResolver(liveResolver{org: org})
+	sites.SetResolver(r)
 	t.Cleanup(func() {
 		sites.SetResolver(nil)
 		sites.SetAnalyticsHost(nil)
 	})
 	return app
+}
+
+// carveApp is the MULTI-TENANT apex: `<slug>.hanzo.app` and bound custom domains,
+// where the bare-key lookup is the correct one, so both of the resolver's answers are
+// the site's own org. A POST to the site host is intercepted by the middleware and
+// forced to Site.Org; a POST to any other host falls through to the normal
+// /v1/analytics route.
+func carveApp(t *testing.T, org string) *zip.App {
+	t.Helper()
+	return carveOn(t, siteHosts(), liveResolver{pinned: org, unpinned: org})
+}
+
+// ownerOrg / squatterOrg are the two answers the first-party app's resolver gives for
+// the SAME slug: the org that owns our first-party sites, and a customer who published
+// a project under the same name. On the first-party apex only the first may ever be
+// reached.
+const (
+	ownerOrg    = "hanzo"
+	squatterOrg = "squatter"
+)
+
+// firstPartyApp is the FIRST-PARTY apex — our own opt-in sites on hanzo.ai — where the
+// two lookups disagree: the pin yields ownerOrg and the bare slug yields squatterOrg.
+func firstPartyApp(t *testing.T) *zip.App {
+	t.Helper()
+	cfg := siteHosts()
+	cfg.FirstPartyApex = "hanzo.ai"
+	cfg.FirstPartySites = []string{"yadota"}
+	cfg.FirstPartyOrg = ownerOrg
+	return carveOn(t, cfg, liveResolver{pinned: ownerOrg, unpinned: squatterOrg})
 }
 
 func postHost(t *testing.T, app *zip.App, host, path, body string, hdr map[string]string) int {
@@ -121,6 +173,39 @@ func TestMount_HostCarve_IngestsForSiteOrg(t *testing.T) {
 	}
 }
 
+// TestMount_HostCarve_FirstPartyHostResolvesPinned is the pin, and it is asserted on
+// the ROW because that is the only place the pin is visible.
+//
+// On our own apex a slug must resolve WITHIN our org (ResolveOrg over FirstPartyOrg),
+// never by the unique-live-slug-across-orgs fallback. Resolve unpinned and a customer
+// who published a project named `yadota` answers for `yadota.hanzo.ai`: their Site.Org
+// becomes the tenant, so our first-party pages' beacons land in THEIR partition —
+// readable by them, missing from ours. That is a cross-tenant attribution flip bought
+// with nothing but a project name, and every status code on both sides of it is 200.
+//
+// Every OTHER test in this file runs on the multi-tenant apex, where firstParty is
+// false and resolveLivePinned delegates straight to resolveLive — so before this test
+// liveResolver.ResolveOrg was never called by this package at all (an unconditional
+// panic in it left the whole suite green), and all three of the carve's
+// resolveLivePinned call sites could be swapped to resolveLive with nothing going red.
+func TestMount_HostCarve_FirstPartyHostResolvesPinned(t *testing.T) {
+	tightenPublicRate(t, 1_000_000, 1_000_000)
+	w := fakeWarehouse(t)
+	app := firstPartyApp(t)
+	if code := postHost(t, app, "yadota.hanzo.ai", "/v1/event", canonPageview,
+		map[string]string{"X-Org-Id": "attacker"}); code != http.StatusOK {
+		t.Fatalf("first-party site beacon = %d, want 200 (carved and written)", code)
+	}
+	got := w.tenants(t)
+	if len(got) != 1 || got[0] != ownerOrg {
+		t.Fatalf("first-party host wrote tenants %v, want [%s]", got, ownerOrg)
+	}
+	if got[0] == squatterOrg {
+		t.Errorf("the first-party host resolved UNPINNED: a customer's same-named project "+
+			"answered for %s and now owns our beacons", "yadota.hanzo.ai")
+	}
+}
+
 // TestMount_HostCarve_AnonymousCapabilityOnly is the other half, and the fix: the carve
 // authorizes a TENANT from the host, never a CAPABILITY. It used to call the
 // full-capability core with zero credential, so the same Host header that made a beacon
@@ -151,9 +236,18 @@ func TestMount_HostCarve_EmptyBatchOK(t *testing.T) {
 	}
 }
 
-// TestMount_HostCarve_CustomDomainForcesOrg: the carve fires for a bound custom
-// domain too, forcing that Site's Org.
-func TestMount_HostCarve_CustomDomainForcesOrg(t *testing.T) {
+// TestMount_HostCarve_CustomDomainCarves: the carve fires for a bound custom domain
+// too — REACHABILITY, which is all a status code can show. It does not prove WHOSE org
+// the beacon was filed under, and it used to be named as though it did.
+//
+// That fact is pinned where it is decided: sites.Middleware resolves the host, and
+// clients/sites' TestMiddlewareAnalyticsCarveCustomDomain asserts the org handed to
+// the carve handler is the resolved Site's and that the resolver saw the full host.
+// Everything after that argument — publicIngest → the write core → tenant_id — is the
+// same code for both host shapes and is pinned end-to-end on the slug host by
+// TestSiteHostLaneWritesTheResolvedSiteOrg, so asserting the row again here would be a
+// second place answering one question.
+func TestMount_HostCarve_CustomDomainCarves(t *testing.T) {
 	app := carveApp(t, "yadota")
 	code := postHost(t, app, "yadota.tech", "/v1/analytics",
 		`{"batch":[{"type":"pageview"}]}`, map[string]string{"X-Org-Id": "attacker"})

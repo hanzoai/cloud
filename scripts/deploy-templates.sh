@@ -27,6 +27,7 @@ LOG=$W/deploy.log
 CAP=${CAP:-4000000}
 
 mkdir -p "$W"
+: > "$W/live.txt"                            # hosts this run deployed, to verify
 log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*" | tee -a "$LOG"; }
 
 # ── auth ─────────────────────────────────────────────────────────────────────
@@ -71,15 +72,37 @@ while read -r slug; do
   r=$(python3 "$(dirname "$0")/prep.py" "$d" "$art" "$CAP" 2>/dev/null | tail -1)
   case "$r" in OK*) : ;; *) log "NO-SITE $slug"; skip=$((skip+1)); continue ;; esac
 
+  # prep.py packed the bytes, so prep.py names what they are. `static` was
+  # hardcoded here, which is wrong for exactly the templates that cannot survive
+  # it: framework drives crossOriginIsolated() in clients/projects/sites.go, and
+  # a Unity/Godot export served without COOP/COEP loses SharedArrayBuffer and
+  # hangs — behind a 200. One producer, one consumer, no second opinion.
+  fw=$(printf '%s' "$r" | sed -n 's/.*framework=\([a-z]*\).*/\1/p'); fw=${fw:-static}
   curl -s -o /dev/null -X POST "$API/v1/projects" "${HDR[@]}" -H 'Content-Type: application/json' \
-    -d "{\"slug\":\"$slug\",\"name\":\"$slug\",\"framework\":\"static\"}" --max-time 40
+    -d "{\"slug\":\"$slug\",\"name\":\"$slug\",\"framework\":\"$fw\"}" --max-time 40
+  # Create is a no-op on every run after the first (409 slug exists), so the
+  # framework has to be re-asserted or a project born before this fix keeps a
+  # stale one forever. PATCH is idempotent; this is the line that repairs them.
+  curl -s -o /dev/null -X PATCH "$API/v1/projects/$slug" "${HDR[@]}" \
+    -H 'Content-Type: application/json' -d "{\"framework\":\"$fw\"}" --max-time 40
   code=$(curl -s -o "$W/art/$slug.resp" -w '%{http_code}' -X POST "$API/v1/projects/$slug/deploy" \
     "${HDR[@]}" -H 'Content-Type: application/gzip' --data-binary @"$art" --max-time 300)
   if [ "$code" = "200" ]; then
-    log "OK $slug ${r#OK } -> https://$slug.hanzo.app"; ok=$((ok+1))
+    log "OK $slug ${r#OK } -> https://$slug.hanzo.app"; ok=$((ok+1)); echo "$slug" >> "$W/live.txt"
   else
     log "DEPLOY-FAIL $slug http=$code $(head -c 120 "$W/art/$slug.resp" | tr -d '\n')"; fail=$((fail+1))
   fi
 done < "$W/repos.txt"
 
 log "DONE ok=$ok fail=$fail skip=$skip"
+
+# A deploy that answered 200 has proved only that S3 accepted a tarball. Whether
+# the demo RUNS is a different question, and it is the one that matters: the
+# batch has already shipped an un-built CRA shell, a Flutter scaffold and a 404
+# screenshot, each of them a clean 200. prove-preview.py opens every host that
+# just deployed in a real browser and judges the rendered frame, so the run ends
+# with a verdict instead of a status code.
+if [ -s "$W/live.txt" ] && [ "${VERIFY:-1}" = 1 ]; then
+  python3 "$(dirname "$0")/prove-preview.py" $(sort -u "$W/live.txt") 2>&1 | tee -a "$LOG"
+fi
+rm -f "$W/live.txt"

@@ -296,8 +296,8 @@ func TestFoldGivesTypedOpsSchemaAndLeavesRawRoutesAlone(t *testing.T) {
 	if get.OperationID != "kmsListSecrets" || get.Summary != "List secret names" {
 		t.Errorf("typed op = %q/%q, want the registry's own identity", get.OperationID, get.Summary)
 	}
-	if get.Responses["200"] == nil {
-		t.Errorf("typed op has no 200 response; the Out type is evidence for one")
+	if r, ok := get.Responses.(map[string]any); !ok || r["200"] == nil {
+		t.Errorf("typed op has no 200 response; the Out type is evidence for one (got %T)", get.Responses)
 	}
 	if len(get.Tags) != 1 || get.Tags[0] != "kms" {
 		t.Errorf("tags = %v, want the router's product tag [kms]", get.Tags)
