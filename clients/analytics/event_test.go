@@ -234,29 +234,33 @@ func TestEvent_UnresolvableKeyFailsClosedEvenOnBrandHost(t *testing.T) {
 	}
 }
 
-// TestEvent_NoBrandHostFallback is THE distinguishing invariant, and it survives the
-// anonymous lane: the Host NEVER selects the tenant on the canonical door. The
-// deprecated /v1/analytics alias resolves anonymous traffic on a recognized brand host
-// to that BRAND's org (a real org, picked by a caller-settable header); the canonical
-// door ignores the Host entirely and attributes to the reserved public tenant. Both are
-// admitted — the difference is now WHICH tenant, which is the property that matters.
+// TestEvent_NoBrandHostFallback is THE invariant, and it now holds on EVERY door rather
+// than only the canonical one: the request Host NEVER selects a tenant. It used to be a
+// distinction — /v1/event ignored the Host while the deprecated aliases resolved
+// anonymous traffic on a recognized brand host to that BRAND's REAL org, a real tenant
+// picked by a caller-settable header. That was the hole; the aliases now take the same
+// anonymous lane, so the Host buys nothing anywhere.
+//
+// A pageview is admitted identically on a brand host and on an unrelated one, and the
+// commerce payload the brand fallback used to wave through is dropped on both.
 func TestEvent_NoBrandHostFallback(t *testing.T) {
+	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
-	// The same anonymous pageview on a brand host and on an unrelated host: the
-	// canonical door admits both identically, so the Host bought nothing.
 	pageview := `{"batch":[{"type":"pageview"}]}`
-	for _, host := range []string{"hanzo.ai", "zoo.ngo", "evil.example.com"} {
-		if code, body := doHost(t, app, "/v1/event", "", "", host, pageview); code != http.StatusServiceUnavailable {
-			t.Fatalf("anonymous /v1/event on host %q want 503 (admitted to the public tenant), got %d (%s)", host, code, body)
+	commerce := `{"batch":[{"type":"event","event":"order_completed","revenue":999}]}`
+	for _, path := range []string{"/v1/event", "/v1/analytics", "/v1/tracker"} {
+		for _, host := range []string{"hanzo.ai", "zoo.ngo", "evil.example.com"} {
+			if code, body := doHost(t, app, path, "", "", host, pageview); code != http.StatusServiceUnavailable {
+				t.Fatalf("anonymous pageview %s on host %q want 503 (admitted to the public tenant), got %d (%s)",
+					path, host, code, body)
+			}
+			code, body := doHost(t, app, path, "", "", host, commerce)
+			if code != http.StatusOK {
+				t.Fatalf("anonymous commerce %s on host %q want 200 all-dropped, got %d (%s)", path, host, code, body)
+			}
+			if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
+				t.Fatalf("anonymous commerce %s on host %q receipt = %+v, want accepted:0 dropped:1", path, host, r)
+			}
 		}
-	}
-	// The tenant the canonical door uses is the reserved constant, never the brand.
-	if org, _, _ := admitPublic([]CaptureEvent{{Type: "pageview"}}); org != publicTenant {
-		t.Fatalf("canonical anonymous tenant = %q, want %q (never a brand org)", org, publicTenant)
-	}
-	// Contrast: the deprecated alias still resolves the same traffic to the BRAND org
-	// (503 = admitted, datastore down), proving the two doors differ by design.
-	if code, _ := doHost(t, app, "/v1/analytics", "", "", "hanzo.ai", pageview); code != http.StatusServiceUnavailable {
-		t.Fatalf("deprecated alias still brand-admits (want 503), got %d", code)
 	}
 }

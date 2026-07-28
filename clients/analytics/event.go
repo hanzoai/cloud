@@ -23,34 +23,42 @@
 // (ingestEvents) consumes, into the SAME hanzo.events table. There is deliberately
 // no /v1/event/batch — a JSON array, or a batch envelope, IS the batch.
 //
-// AUTH is the orthogonal, PLUGGABLE concern on this one door (eventTenant), resolved
-// SERVER-SIDE and FAIL-CLOSED, in strict trust order:
+// CAPABILITY IS DECIDED BY TRUST LEVEL, ONCE, IN ONE PLACE (handle) — never per door.
+// A door supplies only its WIRE (a decode) and its origin tag. There is no argument by
+// which a door can ASK for full capability, so a door cannot forget the decision or
+// route around it: the alternative is not a check to skip, it is not expressible. handle
+// reads the credential itself, SERVER-SIDE and FAIL-CLOSED, in strict trust order
+// (eventTenant):
 //
 //  1. a validated IAM bearer principal — its owner org;
-//  2. a publishable key (pk-…) — IAM resolves it to its org; it can write but
-//     SAME key publishable.go mints; folded in here so a pk_ caller uses /v1/event
-//     directly);
+//  2. a publishable key (pk-…) — IAM resolves it to its org; it can write but not read
+//     (the SAME key publishable.go mints; folded in here so a pk- caller uses
+//     /v1/event directly);
 //  3. an out-of-band IAM access key (hk-/sk-…) — resolved through the ONE key seam
 //     (cloud.OrgForKey).
 //
-// A caller that PRESENTED one of those credentials and did not resolve ⇒ 403 (a
-// misconfigured key is refused, not downgraded). A caller that presented NOTHING falls
-// through to the ANONYMOUS lane (public.go): logged-out marketing traffic is admitted
-// and attributed to the reserved public tenant, under a restricted kind/field allowlist
-// and its own size + rate bounds. It rejoins this pipeline at ingestDecoded, so decode,
-// write core, and receipt are shared — only admission differs.
+// One of those resolves ⇒ FULL capability into that credential's org, and that branch of
+// handle is the ONLY unprojected write in this package. A caller that PRESENTED one and
+// did not resolve ⇒ 403 (a misconfigured key is refused, never downgraded). A caller
+// that presented NOTHING is CREDENTIAL-LESS and takes the ANONYMOUS lane (publicIngest,
+// public.go) — kind allowlist, field PROJECTION, its own size/rate bounds, DNT — no
+// matter which door it arrived at. It rejoins this pipeline at ingestDecoded, so decode,
+// write core, and receipt are shared; only capability differs.
 //
-// There is NO brand-host fallback on the canonical door (that path stays only on the
-// deprecated aliases), so /v1/event never writes an event into a REAL tenant IAM did
-// not vouch for. The org is NEVER read from the body — on either lane.
+// There is NO host fallback anywhere: no door turns a request Host into a REAL tenant
+// with full capability. The org is NEVER read from the body, on either lane.
 //
-// The site-host carve (eventWithOrg) is the ONE exception to in-handler auth: on a
-// published site host the tenant is FORCED from the resolved Site BEFORE the handler
-// — the same server-supplied, host-derived tenant the file/base carves trust.
+// The published-site host (installHostCarve, analytics.go) is the one door that does not
+// ask, because on it there is nothing to ask: sites.Middleware runs BEFORE the identity
+// boundary (serve.go — sites at 241, IdentityMiddleware at 267), so c.User()/c.Org() are
+// still RAW client headers there and no credential has been validated by anything. It
+// calls publicIngest DIRECTLY with the resolved Site's org as the anonymous tenant, so a
+// site beacon gets the projection and its pageviews still land where the site's owner
+// reads them.
 //
-// Every other ingest route (/v1/ingest, /v1/analytics{,/batch}, /v1/tracker,
-// /v1/insights/e) is a thin alias/shim that resolves org its own way and funnels
-// through the SAME decode + write core. One write path, many doors.
+// Every ingest route (/v1/event, /v1/ingest, /v1/analytics{,/batch}, /v1/tracker,
+// /v1/insights/e) is therefore one line: handle(c, <wire>, <origin tag>). One write
+// path, many doors, ONE admission decision.
 package analytics
 
 import (
@@ -96,10 +104,10 @@ func (e Event) toCapture() CaptureEvent {
 //  3. else a presented out-of-band IAM access key (hk-/sk-…) is resolved to its org
 //     through the ONE key seam (resolveKeyOrg → cloud.OrgForKey).
 //
-// None matches ⇒ ("", false), which eventHandle answers by refusing a presented-but-
+// None matches ⇒ ("", false), which handle answers by refusing a presented-but-
 // unresolvable credential and otherwise taking the anonymous lane. There is NO
-// brand-host fallback (that path stays only on the deprecated aliases), so a REAL
-// tenant here is only ever IAM or a signed/resolvable key, never the request Host.
+// host fallback on ANY door, so a full-capability tenant is only ever IAM or a
+// signed/resolvable key — never the request Host.
 func eventTenant(c *zip.Ctx) (string, bool) {
 	if org, ok := tenant(c); ok {
 		return org, true
@@ -211,20 +219,13 @@ func decodeIngest(body []byte) ([]CaptureEvent, error) {
 	return caps, nil
 }
 
-// ingestBody is the ONE ingest core given an already-resolved org: wire-tolerant
-// decode (decodeIngest) → fold type:'error' events (foldException) → the ONE write
-// core (ingestEvents) → the honest receipt. org is the SERVER-resolved tenant (never
-// client input); source tags the front door for the $source migration signal. Every
-// door — the canonical /v1/event (pluggable auth), the site-host carve (forced org),
-// and the deprecated aliases — resolves org its OWN way then calls THIS: auth is the
-// only thing that differs between doors, the decode + write path is identical.
-func ingestBody(c *zip.Ctx, org, source string) error {
-	evs, err := decodeIngest(c.Body())
-	if err != nil {
-		return zip.ErrBadRequest("malformed event payload")
-	}
-	return ingestDecoded(c, org, source, evs, 0)
-}
+// decode is a WIRE's decoder: raw request bytes → the canonical []CaptureEvent the ONE
+// write core consumes. Exactly two exist — decodeIngest (the canonical Event / Segment
+// beacon wire) and decodeInsights (the deprecated PostHog wire) — and the wire is the
+// ONLY thing that differs between doors. Handing the pipeline a decoder, rather than
+// forking the pipeline per wire, is what lets admission stay a single decision instead
+// of one copy per door (which is exactly how the credential-less doors drifted).
+type decode func([]byte) ([]CaptureEvent, error)
 
 // ingestDecoded is the TAIL of the ingest pipeline, and the ONE place it lives: fold
 // type:'error' events (foldException) → the ONE write core (ingestEvents) → the honest
@@ -244,44 +245,53 @@ func ingestDecoded(c *zip.Ctx, org, source string, evs []CaptureEvent, dropped i
 	return c.JSON(http.StatusOK, res)
 }
 
-// eventHandle is the canonical-door handler core: resolve WHO is calling (eventTenant),
-// then run the pipeline. source tags the door so the canonical /v1/event and the
-// /v1/ingest deprecated alias share ONE implementation, differing only in origin tag
-// (and the alias's deprecation log).
+// presented reports whether the request PRESENTED an ingest credential at all,
+// independent of whether it resolved. It is the discriminator between "misconfigured"
+// (refuse) and "anonymous" (project), and it names exactly the carriers eventTenant
+// consults for a key, so the two can never disagree about what "presented" means.
+func presented(c *zip.Ctx) bool {
+	return ingestKey(c) != "" || projectKey(c) != ""
+}
+
+// handle is THE ingest pipeline and the ONE place in this package where trust level is
+// decided. Every /v1 ingest door is one call to it; the door contributes its WIRE and
+// its origin tag and NOTHING ELSE — capability is not a parameter, so no door can grant
+// itself full capability, and a door added tomorrow inherits this decision by
+// construction rather than by remembering to copy it.
 //
-// A resolved tenant goes straight to ingestBody with full capability, exactly as
-// before. A caller with NOTHING to resolve takes the anonymous lane (publicIngest,
-// public.go), which resolves the tenant to the reserved public bucket and applies an
-// admission policy — then rejoins THIS pipeline at ingestDecoded. Decode, write core,
-// and receipt are shared; only admission differs.
-func eventHandle(c *zip.Ctx, source string) error {
+//	credential resolves     ⇒ FULL capability into THAT credential's org.
+//	credential presented,
+//	  does not resolve      ⇒ 403. Never downgraded: filing a misconfigured key's
+//	                          events under the public tenant would hide them in a
+//	                          partition its owner cannot read — a silent failure worse
+//	                          than the refusal.
+//	nothing presented       ⇒ the ANONYMOUS lane (publicIngest): the projection, the
+//	                          kind allowlist, the size/rate bounds, the DNT gate.
+//
+// The first branch below is the ONLY unprojected write in this package. It is reached
+// only from here, and only with an org eventTenant resolved from a credential — which
+// is the whole fix: a tenant derived from a request Host can no longer reach it,
+// because the functions that used to take an org and write at full capability
+// (ingestBody / eventWithOrg / captureWithOrg / insightsWithOrg) no longer exist.
+func handle(c *zip.Ctx, dec decode, source string) error {
 	if org, ok := eventTenant(c); ok {
-		return ingestBody(c, org, source)
+		evs, err := dec(c.Body())
+		if err != nil {
+			return zip.ErrBadRequest("malformed event payload")
+		}
+		return ingestDecoded(c, org, source, evs, 0)
 	}
-	// A caller that PRESENTED an ingest credential which did not resolve is refused,
-	// never downgraded: filing its events under the public tenant would hide a
-	// misconfigured key in a partition its owner cannot read — a silent failure worse
-	// than the 403. The anonymous lane is for a caller that presented nothing.
-	if ingestKey(c) != "" || projectKey(c) != "" {
+	if presented(c) {
 		return zip.ErrForbidden("valid bearer or a resolvable ingest key required")
 	}
-	return publicIngest(c, source)
+	return publicIngest(c, dec, publicTenant, source)
 }
 
 // eventIngest answers POST /v1/event — the ONE canonical ingestion front door.
-// Org is resolved fail-closed (eventTenant: bearer | pk_ | access key); the body is
-// Event | [Event] | {batch}; every event flows through the ONE write core into the
-// ONE hanzo.events table, tagged source=event.
+// Capability is resolved fail-closed by handle (bearer | pk- | access key ⇒ full;
+// nothing ⇒ the anonymous projection); the body is Event | [Event] | {batch}; every
+// admitted event flows through the ONE write core into the ONE hanzo.events table,
+// tagged source=event.
 func eventIngest(s *cloud.Service[state], c *zip.Ctx) error {
-	return eventHandle(c, sourceEvent)
-}
-
-// eventWithOrg is the canonical-door ingest with the tenant supplied EXPLICITLY by
-// the caller — the twin of captureWithOrg/insightsWithOrg for the site-host carve.
-// The carve FORCES org from the resolved Site (host-derived, never the caller/body)
-// and calls this, so a published-site beacon POSTing <host>/v1/event lands as that
-// site's Org regardless of any body/header claim. Tagged source=event: it is the
-// canonical wire, merely authorized by the host instead of a bearer/key.
-func eventWithOrg(org string, c *zip.Ctx) error {
-	return ingestBody(c, org, sourceEvent)
+	return handle(c, decodeIngest, sourceEvent)
 }
