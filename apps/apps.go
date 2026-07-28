@@ -255,11 +255,12 @@ func Wire() []cloud.MountSpec {
 		// otel-collector, prometheus and gonum are here and nowhere else — and it is
 		// imported by NOTHING but this line, so unlinking it is a pure subtraction.
 		//
-		// KNOWN GAP, see the branch report: o11y also owns /v1/sentry/* (mountSentry),
-		// which is a SECOND public prefix. zip.Load takes one, so /v1/sentry/* is not
-		// mounted on the host by this line and 404s until zip.Plugin can name more than
-		// one prefix. Do not merge this to main before that is closed.
-		cloud.PluginSpec("o11y", where("o11y"), "/v1/o11y"),
+		// TWO prefixes, because o11y owns two: the read plane at /v1/o11y/* and the
+		// Sentry ingest at /v1/sentry/* (mountSentry). They are one subsystem, so they
+		// are one plugin — Load has been variadic since v1.17.3 and its own doc names
+		// this case. Naming only the first is what made the gate log UNROUTED and let
+		// /v1/sentry/* 404 while the process that serves it was running.
+		cloud.PluginSpec("o11y", where("o11y"), "/v1/o11y", "/v1/sentry"),
 		{Name: "authz", App: authz.Mount},
 		// Embedded commerce plane /v1/commerce/*, /_/commerce/* — the hanzoai/commerce
 		// MODULE via the adapter in commerce.go (un-forked; the in-process
