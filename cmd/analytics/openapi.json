@@ -21,9 +21,6 @@
       "name": "event"
     },
     {
-      "name": "ingest"
-    },
-    {
       "name": "insights"
     },
     {
@@ -92,14 +89,6 @@
         "operationId": "post_v1_event",
         "tags": [
           "event"
-        ]
-      }
-    },
-    "/v1/ingest": {
-      "post": {
-        "operationId": "post_v1_ingest",
-        "tags": [
-          "ingest"
         ]
       }
     },
