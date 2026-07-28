@@ -1,8 +1,12 @@
 package cloud
 
 import (
+	"time"
+
 	"context"
 	"encoding/json"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
+	zaphttp "github.com/zap-proto/http"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -14,16 +18,35 @@ import (
 
 // serveSock stands an app up on its well-known socket and returns nothing —
 // Dial finds it by path, which is the whole point of the convention.
+// serveSock stands up a peer on its well-known socket speaking ZAP — the inner
+// wire. It takes an http.Handler because that is what the callee's routes are;
+// fasthttpadaptor bridges the two so the test exercises the real framing rather
+// than a stub that would pass whatever the client sent.
 func serveSock(t *testing.T, app string, h http.Handler) {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv(runDirEnv, dir)
-	ln, err := net.Listen("unix", filepath.Join(dir, app+".sock"))
-	if err != nil {
-		t.Fatalf("listen: %v", err)
+	srv := &zaphttp.Server{
+		Network: "unix",
+		Addr:    filepath.Join(dir, app+".sock"),
+		Handler: fasthttpadaptor.NewFastHTTPHandler(h),
 	}
-	srv := &http.Server{Handler: h}
-	go func() { _ = srv.Serve(ln) }()
+	ready := make(chan struct{})
+	go func() { close(ready); _ = srv.ListenAndServe() }()
+	<-ready
+	// ListenAndServe binds asynchronously; wait for the socket to accept so the
+	// first Dial does not race the listener into a spurious "not co-located".
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if c, err := net.Dial("unix", srv.Addr); err == nil {
+			_ = c.Close()
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("zap peer socket never accepted")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 	t.Cleanup(func() { _ = srv.Close() })
 }
 
