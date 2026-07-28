@@ -29,14 +29,19 @@ package catalog
 // three facts cannot drift, because they are the same facts the fork flow and
 // the sites edge already run on.
 //
-// # Orthogonal to Official
+// # Orthogonal to authorship
 //
-// Origin says which LANE a row belongs in. Official (projects.Project.Official,
-// admin-gated) says WHOSE work it is. They are deliberately two fields: our
-// seeded examples are community entries that carry Official, and folding that
-// into one "official-example" value would make the two unaskable separately —
-// while "show me community apps that are NOT ours" is the entire point of
-// having a community lane at all.
+// Origin says which LANE a row belongs in. Org says WHOSE work it is — the
+// account that paid for it, which the tenancy boundary enforces and no request
+// can forge. Keeping them separate is what makes "show me community apps that
+// are NOT ours" askable, which is the entire point of having a community lane.
+//
+// That question is answered by Org, not by a badge. An admin-gated `official`
+// boolean used to sit alongside this field trying to answer it, and it got the
+// answer backwards on our own apps: they were published by a script holding an
+// ordinary org token, so the gate refused them and the directory filed Hanzo's
+// work as somebody else's. Deriving authorship from the paying org cannot fail
+// that way, because there is no second copy of the fact to be stale.
 import (
 	"strings"
 
@@ -49,7 +54,7 @@ import (
 const (
 	// OriginTemplate is one of OUR curated starters — the thing you fork FROM.
 	OriginTemplate = "template"
-	// OriginCommunity is something somebody BUILT. Ours carry Official.
+	// OriginCommunity is something somebody BUILT — whose, is its Org.
 	OriginCommunity = "community"
 	// OriginThirdParty is somebody ELSE's work, shown only with its credit.
 	OriginThirdParty = "third-party"

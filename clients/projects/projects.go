@@ -155,12 +155,17 @@ type projectView struct {
 	Space     string `json:"space,omitempty"`
 	// ForkedFrom is the parent this project was forked from ("<org>/<slug>" of a
 	// published project, or a catalog template slug) — the attribution edge a
-	// gallery credits. Official marks a FIRST-PARTY Hanzo example rather than an
-	// independent community submission; it is the machine-readable half of the
-	// badge, and always present (never omitempty) so a consumer can tell "false"
-	// from "this API is too old to say".
+	// gallery credits.
 	ForkedFrom string `json:"forkedFrom,omitempty"`
-	Official   bool   `json:"official"`
+	// Visibility is "public" or "private", and Hidden reports platform
+	// moderation. Both are always present (never omitempty) so a consumer can
+	// tell a real answer from "this API is too old to say" — and so a console
+	// never renders a project as public because a field was missing.
+	//
+	// Authorship is deliberately absent: it is Org, above.
+	Visibility   string `json:"visibility"`
+	Hidden       bool   `json:"hidden"`
+	HiddenReason string `json:"hiddenReason,omitempty"`
 	// Upstream/License credit the third-party work this project was published
 	// from, and the terms it carries. Omitted when nothing is declared: an absent
 	// credit means "nobody has said", not "there is nothing to say".
@@ -177,7 +182,8 @@ func toProjectView(p Project) projectView {
 		Framework: p.Framework, Status: p.Status, LiveURL: p.LiveURL, Bucket: p.Bucket,
 		CurrentDeploymentID: p.CurrentDeploy, CacheControl: p.CacheControl, LastPurgeAt: p.LastPurgeAt,
 		Analytics: p.Analytics, Space: p.SpaceId,
-		ForkedFrom: p.ForkedFrom, Official: p.Official,
+		ForkedFrom: p.ForkedFrom,
+		Visibility: p.Visibility, Hidden: p.Hidden, HiddenReason: p.HiddenReason,
 		Upstream: p.Upstream, License: p.License,
 		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
@@ -361,10 +367,11 @@ type createReq struct {
 	// (nil) ⇒ ON (the default); explicit false ⇒ off. A pointer so "unset" is
 	// distinguishable from "false" — the only way to turn the default off.
 	Analytics *bool `json:"analytics"`
-	// Official requests the first-party-example badge. Honored ONLY for a
-	// SuperAdmin caller (createProject drops it otherwise), so a tenant can never
-	// pass its own app off as a Hanzo example.
-	Official bool `json:"official"`
+	// Visibility is "public" (the default when absent) or "private". Publishing
+	// publicly is ungated — that is the point of a community. Going PRIVATE is
+	// the paid feature, so an unfunded org asking for it is refused rather than
+	// silently downgraded (see visibilityFor).
+	Visibility string `json:"visibility"`
 	// Upstream/License credit the third-party work this project was published
 	// from. Taken from any caller: disclaiming authorship can only cost the
 	// publisher credit, so it needs no gate (see Project.Upstream).
@@ -419,6 +426,13 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body createR
 		return zip.ErrBadRequest("unsupported framework")
 	}
 
+	// Resolved BEFORE the row is built, so an unfunded org asking for private is
+	// refused without a half-created project left behind.
+	vis, err := visibilityFor(s, c, body.Visibility)
+	if err != nil {
+		return err
+	}
+
 	now := time.Now().Unix()
 	id, err := genID("proj")
 	if err != nil {
@@ -430,10 +444,8 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body createR
 		RepoProvider: providerFromURL(body.Repo.URL), Framework: framework,
 		Status: "draft", Bucket: s.State.blob.bucket, CreatedAt: now, UpdatedAt: now,
 		ForkedFrom: body.ForkedFrom,
-		// The badge is an assertion about WHO published, so only the platform may
-		// make it: a tenant asking for official:true simply gets false.
-		Official: body.Official && c.IsAdmin(),
-		Upstream: credit(body.Upstream), License: credit(body.License),
+		Visibility: vis,
+		Upstream:   credit(body.Upstream), License: credit(body.License),
 	}
 	if p.RepoBranch == "" && p.RepoURL != "" {
 		p.RepoBranch = "main"
@@ -527,10 +539,15 @@ type updateReq struct {
 		URL    string `json:"url"`
 		Branch string `json:"branch"`
 	} `json:"repo"`
-	// Official raises or clears the first-party-example badge on an app that
-	// already exists — the examples published before the badge did. Same ONE rule
-	// as at create: honored only for a SuperAdmin caller.
-	Official *bool `json:"official"`
+	// Visibility flips an existing project between "public" and "private". Same
+	// ONE rule as at create: public is free, private needs a paid plan.
+	Visibility *string `json:"visibility"`
+	// Hidden is MODERATION, and the only admin-gated field on this body: it pulls
+	// a public project out of the catalogue from admin.hanzo.ai without editing
+	// the publisher's own visibility choice, so un-hiding restores exactly what
+	// they asked for. A tenant sending it is ignored.
+	Hidden       *bool   `json:"hidden"`
+	HiddenReason *string `json:"hiddenReason"`
 	// Upstream/License credit the third-party work this app was published from —
 	// settable after the fact, because the demos that need crediting most are the
 	// ones already live. Pointers so "" clears a credit and absent leaves it.
@@ -601,8 +618,22 @@ func update(s *cloud.Service[state], c *zip.Ctx) error {
 			p.RepoBranch = "main"
 		}
 	}
-	if body.Official != nil && c.IsAdmin() {
-		p.Official = *body.Official
+	if body.Visibility != nil {
+		vis, err := visibilityFor(s, c, *body.Visibility)
+		if err != nil {
+			return err
+		}
+		p.Visibility = vis
+	}
+	// Moderation is admin-only and subtractive; a tenant sending it is ignored.
+	// Clearing Hidden clears the reason with it, so a lifted moderation leaves no
+	// stale explanation behind for the console to render.
+	if body.Hidden != nil && c.IsAdmin() {
+		p.Hidden = *body.Hidden
+		p.HiddenReason = ""
+		if p.Hidden && body.HiddenReason != nil {
+			p.HiddenReason = credit(*body.HiddenReason)
+		}
 	}
 	if body.Upstream != nil {
 		p.Upstream = credit(*body.Upstream)

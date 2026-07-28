@@ -1207,9 +1207,9 @@ no or it is a label rather than a filter. It was `true` on all 579 rows and read
 `?forkable=false` silently meant *no filter*. Now: a repo that is itself a fork of a
 third-party upstream is not ours to hand over, a live demo with no public source has
 nothing to hand over, and a declared `upstream` credit vetoes both. The query is
-tri-state (`boolQuery`/`strconv.ParseBool` — set-true, set-false, unasked; `official`
-rides the same helper) and `facet` counts both sides through the same loop as every
-other dimension. `Entry.Forkable` is NOT `omitempty`: false is an answer.
+tri-state (`boolQuery`/`strconv.ParseBool` — set-true, set-false, unasked) and
+`facet` counts both sides through the same loop as every other dimension.
+`Entry.Forkable` is NOT `omitempty`: false is an answer.
 
 **`origin` is what a row IS to you**, and it is the axis the two hanzo.app lanes
 are cut on. The corpus flattened 579 rows into one list in which a curated starter
@@ -1232,11 +1232,32 @@ DERIVED:
 - `fromRepo` lets GitHub's own `fork` bit override the address: a starter we
   vendored from somebody else is not a starter of ours.
 
-`origin` is deliberately NOT braided with `official`. Origin says which lane;
-`official` says whose work it is. One `official-example` value would make them
-unaskable separately, and *community apps that are NOT ours* is the whole point of
-a community lane. Both are faceted and both filter, plus `?template=<parent id>`
+`origin` is deliberately NOT braided with authorship. Origin says which lane;
+**`org` says whose work it is** — the account that pays for a project, which the
+tenancy boundary enforces and no request can forge. Keeping them separate is what
+makes *community apps that are NOT ours* askable, which is the whole point of a
+community lane. Both are faceted and both filter, plus `?template=<parent id>`
 for one lineage — a facet nobody can act on is a rail that lies.
+
+There used to be a third field here, an admin-gated `official` boolean, and it was
+**deleted** (not deprecated) because it restated `org` and then disagreed with it:
+the platform's own 74 demos were published by a script holding an ordinary org
+token, so the gate refused them and this directory filed Hanzo's own work as
+somebody else's. A patch had pinned the badge back on from an embedded 75-slug
+manifest, which drifted out of agreement with reality within days of the template
+rename. A second copy of an unforgeable fact can only ever be the wrong one.
+
+**Visibility, not authorship, decides who appears** (`clients/projects/visibility.go`).
+One axis owned by the publisher — `public` (default) or `private` — plus
+`hidden`, the platform's subtractive moderation from admin.hanzo.ai. A row is
+listed iff `public AND NOT hidden`, enforced in `LiveSites`' own query so a
+consumer that forgets to filter cannot leak anything. Publishing is **ungated**
+(a community you must be admitted to does not grow); going private is the paid
+feature and rides the same `cloud.ResourceMeter` funded-org gate as hosting,
+agents and functions, so an unfunded org asking for it gets a 402 rather than
+being silently published. Moderation is the one admin-only field, and it is safe
+to be one precisely because it only ever subtracts — the same shape as `Apex`'s
+reserved-host denylist, never an allowlist.
 
 **Third-party is attributed or NOT LISTED.** A fork holds somebody else's code
 under one of our org headers. GitHub's org listing omits `parent`, so `credit`

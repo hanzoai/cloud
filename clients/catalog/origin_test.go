@@ -20,8 +20,8 @@ func TestOriginSeparatesTheNouns(t *testing.T) {
 	restore(t, []projects.LiveSite{
 		// the curated starter's own demo
 		{Org: "hanzo", Slug: "folio", Name: "Folio", URL: "https://folio.hanzo.app"},
-		// one of our seeded examples: built ON the platform, badged ours
-		{Org: "hanzo", Slug: "ex-kanban", Name: "Kanban", URL: "https://ex-kanban.hanzo.app", Official: true},
+		// one of our seeded examples: built ON the platform, in our own org
+		{Org: "hanzo", Slug: "ex-kanban", Name: "Kanban", URL: "https://ex-kanban.hanzo.app"},
 		// somebody else's kit we host and credit
 		{Org: "hanzo", Slug: "kinetic", Name: "Fitness Pro", URL: "https://kinetic.hanzo.app",
 			Upstream: "UI8 — Fitness Pro", License: "UI8 commercial licence"},
@@ -103,8 +103,8 @@ func TestThirdPartyIsCreditedOrNotListed(t *testing.T) {
 	if e.Origin != OriginThirdParty || e.Upstream != "frappe/ui" || e.License != "MIT" {
 		t.Errorf("a credited fork must carry whose it is: %+v", e)
 	}
-	if e.Official || e.Forkable {
-		t.Errorf("somebody else's work is never ours to badge or hand out: %+v", e)
+	if e.Forkable {
+		t.Errorf("somebody else's work is never ours to hand out: %+v", e)
 	}
 
 	// GitHub could not be read, or names no parent: not listed.

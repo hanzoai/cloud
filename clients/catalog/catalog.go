@@ -92,8 +92,8 @@ type Entry struct {
 	Kind  string `json:"kind"` // repo | site
 	// Origin is WHAT THIS IS TO YOU: template | community | third-party | product
 	// (origin.go owns the four nouns and derives them). Not omitempty, for the
-	// same reason Forkable and Official are not: every row has an answer, and a
-	// missing one is exactly the flattening this field exists to end.
+	// same reason Forkable is not: every row has an answer, and a missing one is
+	// exactly the flattening this field exists to end.
 	Origin      string `json:"origin"`
 	Archetype   string `json:"archetype,omitempty"`
 	Language    string `json:"language,omitempty"`
@@ -106,16 +106,17 @@ type Entry struct {
 	Forkable bool   `json:"forkable"`
 	Stars    int    `json:"stars,omitempty"`
 	Updated  string `json:"updated,omitempty"`
-	// Official and Upstream/License are AUTHORSHIP. Official is the platform-gated
-	// first-party marker (projects.Project.Official, raised only by an admin);
-	// Upstream/License credit the third-party work an entry was published from.
-	// Together they are the difference between "we built this" and "somebody else
-	// built this and we are showing it to you" — which a directory titled with our
-	// own three orgs has no business leaving to the reader.
+	// Upstream/License credit the third-party work an entry was published from:
+	// the difference between "this org built it" and "somebody else built it and
+	// we are showing it to you".
 	//
-	// Official follows Forkable in NOT being omitempty, for the same reason: false
-	// is an answer, and omitted it could not be told from "nobody said".
-	Official bool   `json:"official"`
+	// WHO built it is Org, above — the account that paid for the project. There
+	// was once a separate admin-gated `official` boolean here claiming the same
+	// thing, and because it was gated it disagreed: apps Hanzo wrote and hosts
+	// were published by a script holding an ordinary org token, so it stayed
+	// false on all of them and this directory filed our own work as somebody
+	// else's. A field that restates an unforgeable fact can only ever be the
+	// wrong copy of it.
 	Upstream string `json:"upstream,omitempty"`
 	License  string `json:"license,omitempty"`
 	// Scope is provenance, not storage: "public" for a row from the published
@@ -237,7 +238,6 @@ func filter(in []Entry, c *zip.Ctx) []Entry {
 	// turns the community lane from a pile into something you can read.
 	orig, parent := strings.ToLower(c.Query("origin")), strings.ToLower(c.Query("template"))
 	fork, forkSet := boolQuery(c, "forkable")
-	first, firstSet := boolQuery(c, "official")
 	out := in[:0]
 	for _, e := range in {
 		switch {
@@ -247,8 +247,7 @@ func filter(in []Entry, c *zip.Ctx) []Entry {
 			kind != "" && strings.ToLower(e.Kind) != kind,
 			orig != "" && strings.ToLower(e.Origin) != orig,
 			parent != "" && strings.ToLower(e.Template) != parent,
-			forkSet && e.Forkable != fork,
-			firstSet && e.Official != first:
+			forkSet && e.Forkable != fork:
 			continue
 		}
 		out = append(out, e)
@@ -269,13 +268,12 @@ func boolQuery(c *zip.Ctx, name string) (v, ok bool) {
 // there was none.
 func facet(in []Entry) map[string]counts {
 	f := map[string]counts{"org": {}, "archetype": {}, "language": {}, "kind": {},
-		"origin": {}, "template": {}, "forkable": {}, "official": {}}
+		"origin": {}, "template": {}, "forkable": {}}
 	for _, e := range in {
 		for dim, v := range map[string]string{
 			"org": e.Org, "archetype": e.Archetype, "language": e.Language,
 			"kind": e.Kind, "origin": e.Origin, "template": e.Template,
 			"forkable": strconv.FormatBool(e.Forkable),
-			"official": strconv.FormatBool(e.Official),
 		} {
 			if v != "" {
 				f[dim][v]++
