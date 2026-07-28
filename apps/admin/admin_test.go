@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -666,6 +667,7 @@ func TestUsage_RealTotalsHonestEmptySeries(t *testing.T) {
 // TestProductsAndSync_HonestShapes verifies products returns the real empty
 // registry (no fabricated workloads) and sync acknowledges with {started:true}.
 func TestProductsAndSync_HonestShapes(t *testing.T) {
+	servePlatformEmpty(t)
 	do := mount(t, "", "", "")
 	admin := map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin"}
 
@@ -730,4 +732,24 @@ func TestMount_NilGuards(t *testing.T) {
 	if err := Mount(app, cloud.Deps{}); err == nil {
 		t.Error("Mount(nil logger) must error")
 	}
+}
+
+// servePlatformEmpty stands up the platform app answering an EMPTY fleet.
+//
+// The board reads the operator's view over the internal plane, so without a
+// platform to ask, /v1/admin/products reports that it could not reach one —
+// which is right, and is a different fact from "the estate is empty". This test
+// is about the second: an observer with nothing to report must render an empty
+// registry and never fabricate a row.
+func servePlatformEmpty(t *testing.T) {
+	t.Helper()
+	t.Setenv("CLOUD_RUN_DIR", t.TempDir())
+	cloud.Expose("platform.fleet", func(context.Context, cloud.Ident, []byte) ([]byte, error) {
+		return cloud.PutApps(nil), nil
+	})
+	c, err := cloud.Listen("platform", nil)
+	if err != nil {
+		t.Fatalf("platform stand-in: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
 }
