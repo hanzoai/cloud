@@ -19,6 +19,7 @@ import (
 func main() {
 	if err := cloud.Serve([]cloud.MountSpec{{
 		Name:       "dataroom",
+		Price:      cloud.Free,
 		Mount:      dataroom.Mount,
 		Shutdown:   dataroom.Shutdown,
 		OwnsHealth: true,

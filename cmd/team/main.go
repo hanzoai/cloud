@@ -19,9 +19,9 @@ import (
 func main() {
 	if err := cloud.Serve([]cloud.MountSpec{{
 		Name:     "team",
+		Price:    cloud.Free,
 		Mount:    team.Mount,
 		Shutdown: cloud.CtxShutdown(team.Shutdown),
-		Prefixes: []string{"/v1/team", "/collaborator"},
 	}}, []string{"team"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

@@ -19,6 +19,7 @@ import (
 func main() {
 	if err := cloud.Serve([]cloud.MountSpec{{
 		Name:  "domain",
+		Price: cloud.Free,
 		Mount: domain.Mount,
 	}}, []string{"domain"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
