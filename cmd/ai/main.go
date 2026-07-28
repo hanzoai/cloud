@@ -19,9 +19,8 @@ import (
 func main() {
 	if err := cloud.Serve([]cloud.MountSpec{{
 		Name:     "ai",
-		Mount:    cloud.Global(ai.Mount),
+		App:      ai.Mount,
 		Prefixes: []string{"/v1"},
-		Global:   true,
 	}}, []string{"ai"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

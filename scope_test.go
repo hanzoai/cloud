@@ -161,16 +161,16 @@ func TestScopeAllowsGroupInsideItsPrefixes(t *testing.T) {
 	}
 }
 
-// TestGlobalIsTheOnlyAppWideDoor pins the asymmetry that makes the whole thing
-// work: with Global the subsystem receives the bare *zip.App and its Use means what
+// TestAppIsTheOnlyAppWideDoor pins the asymmetry that makes the whole thing
+// work: with App the subsystem receives the bare *zip.App and its Use means what
 // it has always meant. That is the capability, and it is spelled out in Wire().
-func TestGlobalIsTheOnlyAppWideDoor(t *testing.T) {
+func TestAppIsTheOnlyAppWideDoor(t *testing.T) {
 	app := newApp()
 	err := mountAll(t, app, []cloud.MountSpec{
-		{Name: "edge", Global: true, Mount: cloud.Global(func(a *zip.App, _ cloud.Deps) error {
+		{Name: "edge", App: func(a *zip.App, _ cloud.Deps) error {
 			a.Use(deny)
 			return nil
-		})},
+		}},
 		{Name: "neighbour", Mount: func(r cloud.Router, _ cloud.Deps) error {
 			r.Get("/v1/neighbour/ping", pong)
 			return nil
@@ -180,19 +180,7 @@ func TestGlobalIsTheOnlyAppWideDoor(t *testing.T) {
 		t.Fatalf("MountAll: %v", err)
 	}
 	if got := get(t, app, "/v1/neighbour/ping"); got != http.StatusUnauthorized {
-		t.Errorf("neighbour = %d, want 401 — Global middleware must still reach every route", got)
+		t.Errorf("neighbour = %d, want 401 — App middleware must still reach every route", got)
 	}
 }
 
-// TestGlobalMountNeedsTheGlobalFlag proves the adapter cannot be smuggled in
-// without the declaration: a spec that takes the bare app but forgets Global: true
-// fails the mount instead of silently receiving a scope it cannot use.
-func TestGlobalMountNeedsTheGlobalFlag(t *testing.T) {
-	app := newApp()
-	err := mountAll(t, app, []cloud.MountSpec{
-		{Name: "edge", Mount: cloud.Global(func(*zip.App, cloud.Deps) error { return nil })},
-	})
-	if err == nil {
-		t.Fatal("MountAll succeeded — cloud.Global ran without Global: true")
-	}
-}

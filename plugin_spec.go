@@ -3,8 +3,6 @@
 package cloud
 
 import (
-	"fmt"
-
 	"github.com/zap-proto/zip"
 )
 
@@ -22,7 +20,7 @@ import (
 // private unix socket and mounts the routes onto it; the child is stopped when
 // Shutdown runs, so a plugin subsystem tears down with the rest.
 //
-// Global is set because zip.Load registers under the prefix it was given. Handing
+// App is set because zip.Load registers under the prefix it was given. Handing
 // it a scoped Router would nest that prefix under the subsystem name and the
 // routes would answer somewhere nobody is asking.
 //
@@ -38,14 +36,7 @@ func PluginSpec(name string, p zip.Plugin, prefixes ...string) MountSpec {
 		p.Name = name
 	}
 	return MountSpec{
-		Name:   name,
-		Global: true,
-		Mount: func(router Router, _ Deps) error {
-			app, ok := router.(*zip.App)
-			if !ok {
-				return fmt.Errorf("pluginspec %q: needs the root app, got %T — Global must stay set", name, router)
-			}
-			return zip.Load(p, prefixes...)(app)
-		},
+		Name: name,
+		App:  func(app *zip.App, _ Deps) error { return zip.Load(p, prefixes...)(app) },
 	}
 }
