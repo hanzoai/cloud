@@ -143,7 +143,13 @@ func buildRules() []Rule {
 			`\beyJ[A-Za-z0-9_\-]{10,}\.eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b`, 0, 0},
 		{"generic-secret", "Generic assigned secret", SeverityMedium,
 			"A high-entropy value assigned to a secret/password/token/apikey field.",
-			`(?i)\b(?:password|passwd|secret|api_?key|access_?token|auth_?token|client_?secret)\b["' ]*[:=]["' ]*["']?([A-Za-z0-9/+=_\-.]{16,})["']?`, 1, 3.5},
+			// The value class allows `=` ONLY as trailing base64 padding. Allowing it
+			// mid-value made the rule swallow a second `key=value` pair after the
+			// keyword — `--secret=id=GIT_AUTH_TOKEN` captured `id=GIT_AUTH_TOKEN`,
+			// which is the NAME of a credential, not one. Naming a secret instead of
+			// pasting it is the pattern we ask people for; flagging it taught them to
+			// ignore the scanner.
+			`(?i)\b(?:password|passwd|secret|api_?key|access_?token|auth_?token|client_?secret)\b["' ]*[:=]["' ]*["']?([A-Za-z0-9/+_\-.]{16,}={0,2})["']?`, 1, 3.5},
 	}
 	out := make([]Rule, 0, len(def))
 	for _, d := range def {

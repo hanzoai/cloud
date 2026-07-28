@@ -38,7 +38,9 @@ type BrandInfo struct {
 
 // brands is the brand→IAM registry. Keys are the canonical brand IDs accepted
 // by CLOUD_BRAND. Per HIP-0111 §Brands: hanzo→hanzo.id, lux→lux.id,
-// zoo→zoo.id, pars→pars.id, bootnode→id.bootno.de.
+// zoo→zoolabs.id (zoo.id does not resolve; the live IAM stamps iss=zoolabs.id
+// — verified against /.well-known/openid-configuration), pars→pars.id,
+// bootnode→id.bootno.de.
 //
 // IAMIssuer MUST equal the `iss` IAM actually stamps AND host the signing JWKS.
 // For hanzo the live .well-known/openid-configuration on BOTH hanzo.id and
@@ -51,7 +53,7 @@ type BrandInfo struct {
 var brands = map[string]BrandInfo{
 	"hanzo":    {ID: "hanzo", IAMIssuer: "https://hanzo.id", Domain: "hanzo.ai", AltDomains: []string{"hanzo.cloud", "hanzo.app"}},
 	"lux":      {ID: "lux", IAMIssuer: "https://lux.id", Domain: "lux.network", AltDomains: []string{"lux.cloud"}},
-	"zoo":      {ID: "zoo", IAMIssuer: "https://zoo.id", Domain: "zoo.ngo", AltDomains: []string{"zoo.network", "zoo.cloud"}},
+	"zoo":      {ID: "zoo", IAMIssuer: "https://zoolabs.id", Domain: "zoo.ngo", AltDomains: []string{"zoo.network", "zoo.cloud"}},
 	"pars":     {ID: "pars", IAMIssuer: "https://pars.id", Domain: "pars.network", AltDomains: []string{"pars.ai"}},
 	"bootnode": {ID: "bootnode", IAMIssuer: "https://id.bootno.de", Domain: "bootno.de"},
 }
