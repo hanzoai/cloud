@@ -298,9 +298,9 @@ func TestEnsureTenantKMSAuth_ProvisionFailureStaysPending(t *testing.T) {
 // fails closed (an error, never a fabricated credential) when it is not provisioned.
 func TestKMSOrgIdentity_ReadsProvisionedCredential(t *testing.T) {
 	kms := newFakeKMS()
-	id := newKMSOrgIdentity(kms)
+	id := newKMSOrgIdentity(kms, "", "hanzo")
 	if id == nil {
-		t.Fatal("newKMSOrgIdentity(kms) must return a provider when KMS is wired")
+		t.Fatal("newKMSOrgIdentity must return a provider when KMS is wired")
 	}
 	ctx := context.Background()
 
@@ -321,7 +321,7 @@ func TestKMSOrgIdentity_ReadsProvisionedCredential(t *testing.T) {
 	}
 
 	// A nil KMS plane yields a TRUE nil interface so the nil short-circuit still holds.
-	if newKMSOrgIdentity(nil) != nil {
+	if newKMSOrgIdentity(nil, "", "hanzo") != nil {
 		t.Fatal("newKMSOrgIdentity(nil) must be a nil interface, not a typed-nil box")
 	}
 }
@@ -338,7 +338,7 @@ func TestEnsureTenantKMSAuth_ProceedsWithKMSIdentity(t *testing.T) {
 	_ = kms.PutSecret(ctx, kmsAuthRef("maxpower", "clientId"), []byte("maxpower-platform-kms"))
 	_ = kms.PutSecret(ctx, kmsAuthRef("maxpower", "clientSecret"), []byte("s3cr3t"))
 
-	s := &cloud.Service[state]{Base: cloud.Base{KMS: kms, Log: luxlog.New("test")}, State: state{k8s: k, kmsIdentity: newKMSOrgIdentity(kms)}}
+	s := &cloud.Service[state]{Base: cloud.Base{KMS: kms, Log: luxlog.New("test")}, State: state{k8s: k, kmsIdentity: newKMSOrgIdentity(kms, "", "hanzo")}}
 	ensureTenantKMSAuth(s, ctx, "maxpower")
 
 	sec, err := k.dyn.Resource(secretsGVR).Namespace("tenant-maxpower").Get(ctx, "platform-kms-auth", metav1.GetOptions{})
@@ -357,7 +357,7 @@ func TestEnsureTenantKMSAuth_ProceedsWithKMSIdentity(t *testing.T) {
 func TestEnsureTenantKMSAuth_KMSIdentityUnprovisionedStaysPending(t *testing.T) {
 	k := fakeK8s()
 	kms := newFakeKMS() // no credential sealed for the org
-	s := &cloud.Service[state]{Base: cloud.Base{KMS: kms, Log: luxlog.New("test")}, State: state{k8s: k, kmsIdentity: newKMSOrgIdentity(kms)}}
+	s := &cloud.Service[state]{Base: cloud.Base{KMS: kms, Log: luxlog.New("test")}, State: state{k8s: k, kmsIdentity: newKMSOrgIdentity(kms, "", "hanzo")}}
 	ensureTenantKMSAuth(s, context.Background(), "maxpower")
 	if _, err := k.dyn.Resource(secretsGVR).Namespace("tenant-maxpower").Get(context.Background(), "platform-kms-auth", metav1.GetOptions{}); err == nil {
 		t.Fatal("unprovisioned KMS credential must leave no creds Secret (fail-closed pending)")
