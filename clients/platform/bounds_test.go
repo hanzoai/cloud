@@ -77,7 +77,7 @@ func TestValidateGitRef(t *testing.T) {
 // the boundary (400) before it is ever persisted.
 func TestHTTPGitAppRejectsUnsafeURL(t *testing.T) {
 	app := mountApp(t)
-	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
+	seedProject(t, app, "maxpower", "web")
 	code, _ := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
 		"name": "api", "source": "git",
 		"repo": map[string]any{"url": "https://github.com/x/y;cat /ghcr/config.json #"},
@@ -120,7 +120,7 @@ func TestClampReplicas(t *testing.T) {
 func TestHTTPReplicasClamped(t *testing.T) {
 	k := fakeK8s()
 	app := mountAppK8s(t, k)
-	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
+	seedProject(t, app, "maxpower", "web")
 	_, body := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
 		"name": "api", "source": "image", "image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1"},
 		"replicas": 1_000_000,

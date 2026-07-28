@@ -267,6 +267,7 @@ const (
 // the deploy/build path never re-reads env and tests are deterministic.
 type resourceLimits struct {
 	maxReplicas     int    // per-app replica ceiling
+	maxStorageGB    int    // per-app persistent volume ceiling, in GiB
 	maxBuilds       int    // concurrent build Jobs per org (shared build ns)
 	maxDeploys      int    // concurrent in-flight SYNCHRONOUS image deploys per org (L1)
 	quotaCPU        string // ResourceQuota: total requests.cpu / limits.cpu
@@ -287,6 +288,7 @@ type resourceLimits struct {
 func newResourceLimits() resourceLimits {
 	return resourceLimits{
 		maxReplicas:     atoiDefault(getenv("CLOUD_PLATFORM_MAX_REPLICAS", ""), defaultMaxReplicas),
+		maxStorageGB:    atoiDefault(getenv("CLOUD_PLATFORM_MAX_STORAGE_GB", ""), defaultMaxStorageGB),
 		maxBuilds:       atoiDefault(getenv("CLOUD_PLATFORM_MAX_CONCURRENT_BUILDS", ""), defaultMaxBuilds),
 		maxDeploys:      atoiDefault(getenv("CLOUD_PLATFORM_MAX_CONCURRENT_DEPLOYS", ""), defaultMaxDeploys),
 		quotaCPU:        getenv("CLOUD_PLATFORM_QUOTA_CPU", "20"),
@@ -314,7 +316,31 @@ const (
 	// otherwise let one org pile up in waitForTenantRBAC's ~45s wait. Fail-secure:
 	// an unset ceiling falls back here, never to zero or unlimited.
 	defaultMaxDeploys = 8
+	// defaultMaxStorageGB bounds one app's volume. Unlike replicas, storage is not
+	// reclaimed when the app stops — a claim keeps costing until someone deletes
+	// it — so the ceiling exists to bound spend, not just scheduling.
+	defaultMaxStorageGB = 100
 )
+
+// clampStorage bounds a requested volume size to [0, maxStorageGB] GiB. ZERO IS
+// MEANINGFUL and is the default: it says the app is stateless and gets no volume
+// at all, which is why this cannot reuse clampReplicas' "0 becomes 1" floor. A
+// request above the ceiling is capped rather than rejected, matching replicas: a
+// fat-fingered size degrades to the maximum allowed instead of failing a deploy.
+// An unset ceiling falls back to the safe default, never to unlimited.
+func (r resourceLimits) clampStorage(gb int) int {
+	max := r.maxStorageGB
+	if max <= 0 {
+		max = defaultMaxStorageGB
+	}
+	if gb < 1 {
+		return 0
+	}
+	if gb > max {
+		return max
+	}
+	return gb
+}
 
 // clampReplicas bounds a requested replica count to [1, maxReplicas]. A request
 // for 0 (or negative) becomes 1 (an app is at least one replica); a request

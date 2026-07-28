@@ -157,7 +157,8 @@ func TestDeploymentLogs_DegradesWithoutPod(t *testing.T) {
 func seedGitDeployment(t *testing.T, s *cloud.Service[state], org, jobName string) {
 	t.Helper()
 	ctx := context.Background()
-	if _, err := s.State.projects.Create(ctx, org, "web", "Web", ""); err != nil {
+	// ProjectStore is read-only (projects are IAM's), so seed through the fake itself.
+	if _, err := s.State.projects.(*fakeProjects).Create(ctx, org, "web", "Web", ""); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
 	if err := s.State.store.CreateApplication(ctx, Application{ID: "app_1", Org: org, ProjectID: "web", Slug: "api",

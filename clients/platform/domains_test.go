@@ -52,9 +52,11 @@ func mountDomains(t *testing.T) (*zip.App, *fakeDNS) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	dns := newFakeDNS()
-	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test"), Brand: "hanzo"}, State: state{store: store, projects: newFakeProjects(), k8s: fakeK8s(), sitesHost: "hanzo.app", resolver: dns}}
+	fp := newFakeProjects()
+	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test"), Brand: "hanzo"}, State: state{store: store, projects: fp, k8s: fakeK8s(), sitesHost: "hanzo.app", resolver: dns}}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	routes(app, s)
+	testProjects.Store(app, fp)
 	return app, dns
 }
 
@@ -89,7 +91,7 @@ func findDomain(views []domainView, host string) (domainView, bool) {
 // default host as an ingress host, so it has a working URL the moment it deploys.
 func TestCreateAppSeedsDefaultHost(t *testing.T) {
 	app, _ := mountDomains(t)
-	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
+	seedProject(t, app, "maxpower", "web")
 	_, body := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
 		"name": "api", "source": "image", "image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1"},
 	})
@@ -140,7 +142,7 @@ func TestValidateOrgDomainsAllowsVerifiedCustom(t *testing.T) {
 // verify it (DNS proof → verified + rendered), then remove it.
 func TestHTTPDomainLifecycle(t *testing.T) {
 	app, dns := mountDomains(t)
-	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
+	seedProject(t, app, "maxpower", "web")
 	do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
 		"name": "api", "source": "image", "image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1"},
 	})
@@ -236,7 +238,7 @@ func TestHTTPDomainLifecycle(t *testing.T) {
 func TestHTTPCustomDomainGlobalUniqueness(t *testing.T) {
 	app, _ := mountDomains(t)
 	// maxpower app A claims yourco.com.
-	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
+	seedProject(t, app, "maxpower", "web")
 	do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
 		"name": "api", "source": "image", "image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1"},
 	})
@@ -244,7 +246,7 @@ func TestHTTPCustomDomainGlobalUniqueness(t *testing.T) {
 		t.Fatalf("first claim want 201, got %d", code)
 	}
 	// A SECOND org cannot claim the same host.
-	do(t, app, http.MethodPost, "/v1/platform/projects", "acme", map[string]any{"name": "web"})
+	seedProject(t, app, "acme", "web")
 	do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "acme", map[string]any{
 		"name": "site", "source": "image", "image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1"},
 	})
@@ -265,7 +267,7 @@ func TestHTTPCustomDomainGlobalUniqueness(t *testing.T) {
 // another org's *.hanzo.app host through the custom path).
 func TestHTTPDomainApexRefused(t *testing.T) {
 	app, _ := mountDomains(t)
-	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
+	seedProject(t, app, "maxpower", "web")
 	do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
 		"name": "api", "source": "image", "image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1"},
 	})

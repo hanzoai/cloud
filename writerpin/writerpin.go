@@ -30,9 +30,6 @@ import (
 	"errors"
 	"os"
 	"strings"
-
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 )
 
 // ErrNotImplemented is returned by Pins that are not yet wired. It exists so the
@@ -158,6 +155,21 @@ func ResolveWithReason() (Pin, string) { return resolve(os.Getenv) }
 
 // resolve is the testable core: env in, pin + reason out, no I/O beyond building
 // the in-cluster client when the lease is actually requested.
+// Elector builds a cluster-backed pin. It exists so this package can DESCRIBE the
+// election without importing the thing that performs it: writerpin/lease is the
+// only code that needs client-go, and keeping it out of here keeps 400 k8s.io
+// packages out of github.com/hanzoai/cloud — and therefore out of every plugin
+// binary that imports cloud.Deps.
+type Elector func(namespace, lease, identity string) (Pin, string, error)
+
+// elector is registered by the composition root (cmd/cloud) via UseElector. No
+// init()-registry: the same rule apps.Wire follows — what is linked in is one
+// explicit line you can read, not a side effect of an import.
+var elector Elector
+
+// UseElector registers the cluster elector. Called once, before Serve.
+func UseElector(e Elector) { elector = e }
+
 func resolve(getenv func(string) string) (Pin, string) {
 	if !truthy(getenv("CLOUD_WRITER_LEASE")) {
 		return NewSingleWriter(), "single-writer: CLOUD_WRITER_LEASE unset (correct at replicas:1 — Kubernetes is the elector)"
@@ -166,23 +178,22 @@ func resolve(getenv func(string) string) (Pin, string) {
 	if ns == "" || name == "" {
 		return NewSingleWriter(), "single-writer: CLOUD_WRITER_LEASE set but POD_NAMESPACE/POD_NAME missing (downward API not wired) — refusing to half-configure an election"
 	}
-	cfg, err := rest.InClusterConfig()
-	if err != nil {
-		return NewSingleWriter(), "single-writer: CLOUD_WRITER_LEASE set but not running in-cluster (" + err.Error() + ")"
-	}
-	client, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return NewSingleWriter(), "single-writer: CLOUD_WRITER_LEASE set but the kubernetes client would not build (" + err.Error() + ")"
+	if elector == nil {
+		// A binary that did not register an elector cannot elect. Say so rather than
+		// pretending: this is the plugin case, where linking client-go was the cost
+		// we removed on purpose, and a silent SingleWriter in a multi-replica writer
+		// would be the exact corruption the pin exists to prevent.
+		return NewSingleWriter(), "single-writer: CLOUD_WRITER_LEASE set but this binary registered no elector (writerpin/lease not linked)"
 	}
 	lease := getenv("CLOUD_WRITER_LEASE_NAME")
 	if lease == "" {
 		lease = "cloud-writer"
 	}
-	pin, err := NewLeasePin(client, LeaseOptions{Namespace: ns, Name: lease, Identity: name})
+	pin, reason, err := elector(ns, lease, name)
 	if err != nil {
-		return NewSingleWriter(), "single-writer: lease pin rejected its own configuration (" + err.Error() + ")"
+		return NewSingleWriter(), "single-writer: " + err.Error()
 	}
-	return pin, "lease(k8s): electing on " + ns + "/" + lease + " as " + name
+	return pin, reason
 }
 
 func truthy(v string) bool {

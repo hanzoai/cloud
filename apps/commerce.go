@@ -190,7 +190,15 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 	// register it here, exactly as the standalone does. storeV1's IAMTokenRequired
 	// populates the claims each handler's requireSuperAdmin reads (anon → 403, a
 	// platform admin edits); it is cross-tenant data, never org-scoped.
-	catalogapi.AdminRoute(storeV1)
+	//
+	// TokenRequired is passed for the same reason the standalone passes it
+	// (api.Route hands AdminRoute its adminRequired): IAMTokenRequired resolves a
+	// USER, and only TokenRequired's service-token branch stamps the marker
+	// IsServiceToken reads. Without it no scheduled run can ever authenticate
+	// here — the model sync 403'd on every attempt and the model catalog sat
+	// empty in production. Same reason the auto-recharge poke below is wired with
+	// its own TokenRequired rather than relying on this group's chain.
+	catalogapi.AdminRoute(storeV1, commercemid.TokenRequired())
 
 	// Platform-admin subscription/DNS plan authority CRUD on the SAME /v1 bundle:
 	// GET/POST/PUT/DELETE /v1/plans/entries + POST /v1/plans/seed (increment 3a).

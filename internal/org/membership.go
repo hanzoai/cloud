@@ -46,11 +46,26 @@ func NewMembership(selfID string, src Source, interval time.Duration) *Membershi
 // the first request) then refreshes on the interval until Stop or ctx cancel.
 // Returns the initial refresh error, if any; callers may serve with a stale or
 // self-only set regardless.
+//
+// The FIRST refresh is bounded and the loop is NOT, and they cannot share one
+// deadline. Start runs on the boot path, so an unreachable membership source
+// (the k8s API, for the LIVE selector) must not hold the process short of its
+// listener — the caller already treats the error as advisory. But a deadline on
+// the ctx the loop receives would stop membership refresh for the rest of the
+// process's life, which is far worse than a slow start: a drained pod would stay
+// elected owner forever. So the bound wraps only the synchronous call.
 func (m *Membership) Start(ctx context.Context) error {
-	err := m.refresh(ctx)
-	go m.loop(ctx)
+	first, cancel := context.WithTimeout(ctx, firstRefreshTimeout)
+	err := m.refresh(first)
+	cancel()
+	go m.loop(ctx) // lifetime ctx, deliberately undeadlined
 	return err
 }
+
+// firstRefreshTimeout bounds only the boot-path refresh. Generous relative to a
+// healthy source and short relative to a liveness budget, because the fallback —
+// serving the self-only set until the loop's first tick lands — is cheap.
+const firstRefreshTimeout = 5 * time.Second
 
 func (m *Membership) loop(ctx context.Context) {
 	t := time.NewTicker(m.interval)

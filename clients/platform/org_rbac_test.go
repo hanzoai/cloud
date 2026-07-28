@@ -160,7 +160,7 @@ func TestFreshOrgDeployFailsClosedOn503NotCreate502(t *testing.T) {
 	allowSSAR(fake, func() bool { return false }) // RBAC never lands
 	app := mountAppK8s(t, k)
 
-	do(t, app, http.MethodPost, "/v1/platform/projects", "freshco", map[string]any{"name": "web"})
+	seedProject(t, app, "freshco", "web")
 	do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "freshco", map[string]any{
 		"name": "api", "source": "image",
 		"image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1.27"},
