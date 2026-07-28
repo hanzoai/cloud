@@ -141,6 +141,59 @@ func TestCrossOrgSearch(t *testing.T) {
 	}
 }
 
+// TestForkableIsAskableBothWays is the wire half of gap (a). A boolean axis that
+// can only ever narrow to "all of them" is a label; this pins that the negative
+// case is expressible and that the facet reports BOTH sides, so a rail can show
+// the split instead of a pill that filters nothing.
+func TestForkableIsAskableBothWays(t *testing.T) {
+	app := mount(t)
+	seed(t) // console forkable, node and zips not
+
+	all := decode(t, mustGet(t, app, "/v1/catalog"))
+	if got := all.Facets["forkable"]; got["true"] != 1 || got["false"] != 2 {
+		t.Fatalf("forkable facet must count both sides, got %v", got)
+	}
+	yes := decode(t, mustGet(t, app, "/v1/catalog?forkable=true"))
+	no := decode(t, mustGet(t, app, "/v1/catalog?forkable=false"))
+	if yes.Total != 1 || yes.Data[0].ID != "hanzo/console" {
+		t.Errorf("forkable=true: %+v", yes.Data)
+	}
+	if no.Total != 2 {
+		t.Errorf("forkable=false must select the complement, got %d: %+v", no.Total, no.Data)
+	}
+	if yes.Total+no.Total != all.Total {
+		t.Errorf("the two sides must partition the corpus: %d + %d != %d", yes.Total, no.Total, all.Total)
+	}
+	for _, e := range no.Data {
+		if e.Forkable {
+			t.Errorf("%s answered the wrong side", e.ID)
+		}
+	}
+	// false must reach the client as a value, not as an absent field: omitted, a
+	// caller cannot tell "you cannot fork this" from "nobody said".
+	if body := mustGet(t, app, "/v1/catalog?forkable=false"); !strings.Contains(body, `"forkable":false`) {
+		t.Errorf("forkable:false must be on the wire: %s", body)
+	}
+}
+
+// TestSourceSurvivesTheIndex is the wire half of gap (b): repo and template are
+// not just built in sync.go, they round-trip the store and reach the caller.
+func TestSourceSurvivesTheIndex(t *testing.T) {
+	app := mount(t)
+	seed(t, Entry{
+		ID: "hanzo/kanban", Org: "hanzo", Name: "kanban", Kind: "site", Archetype: "site",
+		URL: "https://kanban.hanzo.app", Repo: "https://github.com/hanzo-apps/kanban-lane",
+		Template: "hanzo/example-kanban", Forkable: true, Updated: "2026-07-05",
+	})
+	got := decode(t, mustGet(t, app, "/v1/catalog?q=kanban"))
+	if got.Total != 1 {
+		t.Fatalf("want the one row, got %d", got.Total)
+	}
+	if e := got.Data[0]; e.Repo != "https://github.com/hanzo-apps/kanban-lane" || e.Template != "hanzo/example-kanban" {
+		t.Fatalf("a demo must be traceable to its source and its parent: %+v", e)
+	}
+}
+
 // TestPrivateProjectNeverLeaks is the tenancy boundary. acme's own catalog row
 // is visible to acme and to NOBODY else — not another tenant, not an anonymous
 // caller — while the published corpus is visible to all three.
