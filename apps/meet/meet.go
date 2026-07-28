@@ -211,8 +211,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// /v1/meet/health makes "the office is unconfigured" a SIGNAL rather than a grep.
 	// A boot log line is invisible to a dashboard and rotates away; this is the same
 	// contract every other subsystem exposes, so the existing probe/alerting surface
-	// picks it up with no new machinery. It carries the reason because /v1/*/health is
-	// an operator surface, not the unauthenticated mint path.
+	// picks it up with no new machinery.
+	//
+	// It carries ready:false and NOT the reason. This route takes no credential and is
+	// reachable on five public hosts, so it is not an operator surface — a health path
+	// under /v1/* is only as private as the edge in front of it, and this edge makes it
+	// public. ready:false is the whole dashboard fact; the reason, which names the key
+	// file and the Secret, stays in the boot log where the operator already is. Same
+	// posture as the getToken 503 (see health, below) — one file, one answer.
 	app.Get("/v1/meet/health", cloud.Handle(s, health))
 
 	if !s.State.ready() {

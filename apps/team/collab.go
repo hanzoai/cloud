@@ -149,8 +149,8 @@ func (s *collabService) rpc(c *zip.Ctx) error {
 	if err != nil {
 		return zip.ErrUnauthorized("invalid session token")
 	}
-	org, _ := t.Extra["org"].(string)
-	if strings.TrimSpace(org) == "" {
+	org := t.Org()
+	if org == "" {
 		return zip.ErrUnauthorized("invalid session token")
 	}
 	doc, err := decodeCollabDoc(c.Param("documentId"))
