@@ -29,6 +29,12 @@ var Deployments = schema.GroupVersionResource{Group: "apps", Version: "v1", Reso
 // fleet is found, rather than hardcoding a list that goes stale on the next tenant.
 var Namespaces = schema.GroupVersionResource{Version: "v1", Resource: "namespaces"}
 
+// Volumes is the PersistentVolumeClaim an app declares storage against. A claim
+// is a DIFFERENT lifetime from the workload that mounts it: the App CR is desired
+// state and can be deleted and recreated freely, while the claim holds the only
+// copy of the tenant's data. Nothing here deletes one.
+var Volumes = schema.GroupVersionResource{Version: "v1", Resource: "persistentvolumeclaims"}
+
 // CDApplications is Hanzo CD's Application CR (apps.hanzo.ai/v1alpha1) — the
 // GitOps plane's own record of a tracked git source: the revision it last applied,
 // its sync verdict, and its deploy history. A different fact from Apps: an App is

@@ -296,6 +296,7 @@ type appView struct {
 	Env                 []EnvVarJSON `json:"env"`
 	Port                int          `json:"port"`
 	Replicas            int          `json:"replicas"`
+	StorageGB           int          `json:"storageGb,omitempty"` // GiB; absent means stateless
 	Domains             []string     `json:"domains"`
 	Status              string       `json:"status"`
 	Namespace           string       `json:"namespace,omitempty"`
@@ -329,7 +330,7 @@ func toAppView(a Application) appView {
 		Repo:      repoView{URL: a.RepoURL, Branch: a.RepoBranch, Provider: a.RepoProvider},
 		Image:     imageView{Repository: a.ImageRepo, Tag: a.ImageTag},
 		BuildType: a.BuildType, Dockerfile: a.Dockerfile, Env: env, Port: a.Port,
-		Replicas: a.Replicas, Domains: domains, Status: a.Status, Namespace: a.Namespace,
+		Replicas: a.Replicas, StorageGB: a.StorageGB, Domains: domains, Status: a.Status, Namespace: a.Namespace,
 		CurrentDeploymentID: a.CurrentDeploy, CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt,
 	}
 }
@@ -486,6 +487,7 @@ type createAppReq struct {
 	Dockerfile string       `json:"dockerfile"`
 	Port       int          `json:"port"`
 	Replicas   int          `json:"replicas"`
+	StorageGB  int          `json:"storageGb"`
 	Env        []EnvVarJSON `json:"env"`
 	Domains    []string     `json:"domains"`
 }
@@ -600,6 +602,7 @@ func createApp(s *cloud.Service[state], c *zip.Ctx) error {
 		RepoURL: strings.TrimSpace(body.Repo.URL), RepoBranch: firstNonEmpty(strings.TrimSpace(body.Repo.Branch), branchDefault(body.Repo.URL)),
 		RepoProvider: providerFromURL(body.Repo.URL), ImageRepo: strings.TrimSpace(body.Image.Repository), ImageTag: strings.TrimSpace(body.Image.Tag),
 		BuildType: buildType, Dockerfile: strings.TrimSpace(body.Dockerfile), Port: portOr(body.Port), Replicas: s.State.k8s.limits.clampReplicas(body.Replicas),
+		StorageGB: s.State.k8s.limits.clampStorage(body.StorageGB),
 		EnvJSON: string(envJSON), DomainsJSON: string(domainsJSON), Status: "draft", Namespace: tenantNamespace(org),
 		CreatedAt: now, UpdatedAt: now,
 	}
