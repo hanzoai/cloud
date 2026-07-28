@@ -21,7 +21,7 @@ require (
 	github.com/hanzoai/iam v1.33.26
 	github.com/hanzoai/kafka v1.2.1
 	github.com/hanzoai/money v0.2.1
-	github.com/hanzoai/notify v1.6.18
+	github.com/hanzoai/notify v1.7.2
 	github.com/hanzoai/otel-collector v1.2.0
 	github.com/hanzoai/plans v1.4.4
 	github.com/hanzoai/pricing v1.3.0
@@ -469,7 +469,7 @@ require (
 	github.com/hanzoai/pubsub-go v1.53.0 // indirect
 	github.com/hanzoai/search-go v0.36.0 // indirect
 	github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible // indirect
-	github.com/hanzoai/tasks v1.51.4
+	github.com/hanzoai/tasks v1.52.0
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/go-metrics v0.5.4 // indirect
@@ -725,7 +725,7 @@ require (
 	github.com/hanzoai/agent v0.1.3
 	github.com/hanzoai/ai v1.832.2
 	github.com/hanzoai/authz v1.10.7
-	github.com/hanzoai/base v1.5.7
+	github.com/hanzoai/base v1.5.8
 	github.com/hanzoai/licensing v0.1.5
 	github.com/hanzoai/metrics v1.110.2
 	github.com/hanzoai/o11y v1.5.34
