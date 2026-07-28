@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -68,30 +69,74 @@ func TestPaaSSecretSealReadAlignment(t *testing.T) {
 }
 
 // TestPaaSSecretCrossTenantDenied is the NON-NEGOTIABLE proof: tenant-B, presenting
-// a validated principal for its OWN org, cannot read tenant-A's platform secret —
-// the guard denies 403 before the store is touched. The denial is the ORG boundary
-// (B reading its own absent scope is 404, not 403), not a blanket failure.
+// a validated principal for its OWN org, never obtains tenant-A's platform secret.
+//
+// ONE PATH, TWO TENANTS. The KMSSecret CR points every operator at the SAME URL —
+// /v1/kms/secrets/platform/<app>/<KEY> — because the org is no longer in it; each
+// operator's own token supplies the tenant. So "B reading A's path" and "B reading
+// its own path" are now the SAME REQUEST, distinguished only by the credential and
+// answered only in the body. That is why this test asserts VALUES, not just codes:
+// a status-only check cannot tell a refusal from B being served B's own record, and
+// the earlier `want 403` was in fact firing on exactly that.
+//
+// The signal is 404, not 403, and it is stronger: B cannot express a request for
+// A's record at all (the org is unspellable), so what B gets is the honest answer
+// for B's own namespace — absent, or B's own secret — and A's existence is never
+// confirmed. 403 is reserved for the case that really is a refusal: no principal.
 func TestPaaSSecretCrossTenantDenied(t *testing.T) {
 	app, deps := newApp(t, baseCfg(t, masterKeyB64(t)))
 	sealPlatformSecret(t, deps.KMS, paasOrgA, paasValueA) // only A's secret exists
 
-	aPath := "/v1/kms" + paasEnvPath
-	if resp := do(t, app, "GET", aPath, paasOrgB, "", false, nil); resp.StatusCode != 403 {
-		t.Fatalf("cross-tenant read (B→A) = %d, want 403 DENIED", resp.StatusCode)
+	path := "/v1/kms" + paasEnvPath
+
+	// B, at the operator's URL, with nothing of its own there: not-found, and — the
+	// actual isolation assertion — A's plaintext is nowhere in the response.
+	resp := do(t, app, "GET", path, paasOrgB, "", false, nil)
+	if resp.StatusCode != 404 {
+		t.Fatalf("cross-tenant read (B at A's URL) = %d, want 404 (B's token resolves the "+
+			"path inside B's own namespace, where the record is absent)", resp.StatusCode)
 	}
-	// Same request from A itself succeeds — the credential, not the path, is the gate.
-	if resp := do(t, app, "GET", aPath, paasOrgA, "", false, nil); resp.StatusCode != 200 {
+	if b := readAll(resp.Body); strings.Contains(b, paasValueA) {
+		t.Fatalf("LEAK: tenant B received tenant A's platform secret: %s", b)
+	}
+
+	// Same request from A itself succeeds and returns A's value — the credential,
+	// not the path, selects the tenant.
+	resp = do(t, app, "GET", path, paasOrgA, "", false, nil)
+	if resp.StatusCode != 200 {
 		t.Fatalf("A→A = %d, want 200 (the boundary is the caller's org, not the path)", resp.StatusCode)
 	}
-	// B reading its OWN (absent) scope is 404, not 403 — the denial is org-scoped.
-	bPath := "/v1/kms" + paasEnvPath
-	if resp := do(t, app, "GET", bPath, paasOrgB, "", false, nil); resp.StatusCode != 404 {
-		t.Fatalf("B→B (absent) = %d, want 404 (boundary is org, not blanket-deny)", resp.StatusCode)
+	if got := decode(t, resp.Body)["value"]; got != paasValueA {
+		t.Fatalf("A read value=%v, want its own sealed secret", got)
 	}
-	// A forged X-Org-Id is irrelevant here because the guard also requires a
-	// VALIDATED principal (X-User-Id); an org with no principal is refused.
-	if resp := do(t, app, "GET", aPath, "", "", false, nil); resp.StatusCode != 403 {
+
+	// Now give B a secret of its own at the IDENTICAL coordinate. Both tenants
+	// issue byte-identical requests; each must receive its own plaintext. This is
+	// the case a status-only test is blind to, and the one that would actually
+	// catch a partition break.
+	const valueB = "s3kr3t-of-acme"
+	sealPlatformSecret(t, deps.KMS, paasOrgB, valueB)
+	resp = do(t, app, "GET", path, paasOrgB, "", false, nil)
+	if resp.StatusCode != 200 {
+		t.Fatalf("B→B = %d, want 200 once B has its own record", resp.StatusCode)
+	}
+	if got := decode(t, resp.Body)["value"]; got != valueB {
+		t.Fatalf("PARTITION BREAK: B read value=%v, want %q (B must never see A's record)", got, valueB)
+	}
+	// …and A is unaffected by B's record existing at the same coordinate.
+	if got := decode(t, do(t, app, "GET", path, paasOrgA, "", false, nil).Body)["value"]; got != paasValueA {
+		t.Fatalf("PARTITION BREAK: A read value=%v, want %q", got, paasValueA)
+	}
+
+	// A forged X-Org-Id is irrelevant because the guard also requires a VALIDATED
+	// principal (X-User-Id); an org with no principal is refused 403 — the one
+	// genuine FORBIDDEN on this surface, and it never reaches the store.
+	resp = do(t, app, "GET", path, "", "", false, nil)
+	if resp.StatusCode != 403 {
 		t.Fatalf("unauthenticated read = %d, want 403", resp.StatusCode)
+	}
+	if b := readAll(resp.Body); strings.Contains(b, paasValueA) {
+		t.Fatalf("LEAK: unauthenticated read returned A's secret: %s", b)
 	}
 }
 
