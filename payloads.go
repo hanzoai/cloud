@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/hanzoai/money"
 	zap "github.com/zap-proto/go"
 )
 
@@ -284,4 +285,292 @@ func Apps(payload []byte) ([]App, error) {
 		})
 	}
 	return out, nil
+}
+
+// ---- iam.mailable: () -> recipients ----
+//
+// The org is not in the payload: it rides the capability, so a caller cannot ask
+// for a tenant it is not acting for by naming one here.
+//
+// Four fields, and deliberately not model.User. A caller needs to address a person
+// and to match them against a warehouse cohort — which may name them by opaque id,
+// by "owner/name", by bare username, or by email — and nothing else. Putting the
+// identity record on the wire would ship credential columns to answer an audience
+// count.
+
+const (
+	rcCountOff = 0
+	rcHdrFixed = 4
+)
+
+const (
+	rIDOff    = 0
+	rOwnerOff = 8
+	rNameOff  = 16
+	rEmailOff = 24
+	rFixed    = 32
+)
+
+// Recipient is one mailable person.
+type Recipient struct {
+	ID    string
+	Owner string
+	Name  string
+	Email string
+}
+
+// PutRecipients packs an iam.mailable reply: a count header, then one frame each.
+func PutRecipients(rs []Recipient) []byte {
+	var out bytes.Buffer
+	h := zap.NewBuilder(rcHdrFixed + 16)
+	hb := h.StartObject(rcHdrFixed)
+	hb.SetUint32(rcCountOff, uint32(len(rs)))
+	hb.FinishAsRoot()
+	_ = writeFrame(&out, h.Finish())
+	for _, r := range rs {
+		b := zap.NewBuilder(len(r.ID) + len(r.Owner) + len(r.Name) + len(r.Email) + rFixed + 64)
+		rb := b.StartObject(rFixed)
+		rb.SetText(rIDOff, r.ID)
+		rb.SetText(rOwnerOff, r.Owner)
+		rb.SetText(rNameOff, r.Name)
+		rb.SetText(rEmailOff, r.Email)
+		rb.FinishAsRoot()
+		_ = writeFrame(&out, b.Finish())
+	}
+	return out.Bytes()
+}
+
+// Recipients unpacks one. The count is the header's promise and the frames are the
+// delivery: a short payload is an error, never a shorter roster. A silently
+// truncated audience is one that mails some of the people it was asked to.
+func Recipients(payload []byte) ([]Recipient, error) {
+	r := bytes.NewReader(payload)
+	hb, err := readFrame(r)
+	if err != nil {
+		return nil, fmt.Errorf("recipients: header: %w", err)
+	}
+	hm, err := zap.Parse(hb)
+	if err != nil {
+		return nil, fmt.Errorf("recipients: header: %w", err)
+	}
+	n := int(hm.Root().Uint32(rcCountOff))
+	out := make([]Recipient, 0, n)
+	for i := 0; i < n; i++ {
+		fb, err := readFrame(r)
+		if err != nil {
+			return nil, fmt.Errorf("recipients: %d of %d: %w", i+1, n, err)
+		}
+		fm, err := zap.Parse(fb)
+		if err != nil {
+			return nil, fmt.Errorf("recipients: %d of %d: %w", i+1, n, err)
+		}
+		rr := fm.Root()
+		out = append(out, Recipient{
+			ID:    rr.Text(rIDOff),
+			Owner: rr.Text(rOwnerOff),
+			Name:  rr.Text(rNameOff),
+			Email: rr.Text(rEmailOff),
+		})
+	}
+	return out, nil
+}
+
+// ---- kms.get / kms.put / kms.sign: (ref, value) -> value ----
+//
+// Secret material travels AS BYTES. The base64 a JSON shape would force is not a
+// safety measure, it is an encoding tax paid because JSON cannot carry binary —
+// and paying it here would put every secret through two extra copies on a path
+// whose whole point is that it does not leave the machine.
+
+const (
+	skRefOff   = 0
+	skValueOff = 8
+	skFixed    = 16
+)
+
+// PutSecretMsg packs a kms request (ref alone for a read; ref + value for a write
+// or a signature).
+func PutSecretMsg(ref string, value []byte) []byte {
+	b := zap.NewBuilder(len(ref) + len(value) + skFixed + 64)
+	ob := b.StartObject(skFixed)
+	ob.SetText(skRefOff, ref)
+	ob.SetBytes(skValueOff, value)
+	ob.FinishAsRoot()
+	return b.Finish()
+}
+
+// SecretMsg unpacks one. It serves both directions: a reply carries the value with
+// an empty ref.
+func SecretMsg(payload []byte) (ref string, value []byte, err error) {
+	m, err := zap.Parse(payload)
+	if err != nil {
+		return "", nil, fmt.Errorf("secret: %w", err)
+	}
+	r := m.Root()
+	return r.Text(skRefOff), r.Bytes(skValueOff), nil
+}
+
+// ---- finance.authorize: (subject, currency, cents, scope) -> verdict ----
+//
+// The GATE. It extends the balance read's shape with the amount to authorize and
+// the scope a spend cap is resolved on, and it keeps that read's rule: THERE IS NO
+// ORG FIELD. The org is the tenant being billed and it rides the capability, so a
+// request cannot express billing someone else.
+//
+// projectValidated travels because the caller is the only one who knows whether the
+// project came from a claim or from a header a client could forge. A forgeable
+// project must not be able to hard-stop OR to evade a cap, so the bit is carried
+// rather than inferred.
+
+// MONEY IS AN EXACT DECIMAL, not a count of cents. hanzoai/money.Amount is a
+// decimal.Decimal plus a Currency, and it exists because a minor-unit integer
+// cannot represent every currency this platform books in — HUSD carries 18
+// decimals, so "cents" is not even the smallest unit there. The wire therefore
+// carries the amount as its exact decimal text and the currency beside it, which
+// is what Amount.String and money.ParseAmount round-trip without loss.
+//
+// int64 cents would be the third representation of one value and the only lossy
+// one, which is precisely the kind of near-miss that reconciles to a rounding
+// difference nobody can find later.
+const (
+	faSubjectOff   = 0
+	faAmountOff    = 8
+	faCurrencyOff  = 16
+	faProjectOff   = 24
+	faServiceOff   = 32
+	faValidatedOff = 40
+	faFixed        = 41
+)
+
+// PutAuthorizeReq packs a gate request. The amount carries its own currency, so
+// the two cannot be separated in transit.
+func PutAuthorizeReq(subject string, amount money.Amount, project, service string, projectValidated bool) []byte {
+	dec, code := amount.String(), amount.Currency().Code
+	b := zap.NewBuilder(len(subject) + len(dec) + len(code) + len(project) + len(service) + faFixed + 64)
+	ob := b.StartObject(faFixed)
+	ob.SetText(faSubjectOff, subject)
+	ob.SetText(faAmountOff, dec)
+	ob.SetText(faCurrencyOff, code)
+	ob.SetText(faProjectOff, project)
+	ob.SetText(faServiceOff, service)
+	ob.SetBool(faValidatedOff, projectValidated)
+	ob.FinishAsRoot()
+	return b.Finish()
+}
+
+// AuthorizeReq unpacks one. A malformed amount is an error rather than a zero: a
+// gate that reads an unparseable charge as "nothing to authorize" would let the
+// work through free.
+func AuthorizeReq(payload []byte) (subject string, amount money.Amount, project, service string, projectValidated bool, err error) {
+	m, perr := zap.Parse(payload)
+	if perr != nil {
+		return "", money.Amount{}, "", "", false, fmt.Errorf("authorize: %w", perr)
+	}
+	r := m.Root()
+	amt, perr := money.ParseAmount(r.Text(faAmountOff), r.Text(faCurrencyOff))
+	if perr != nil {
+		return "", money.Amount{}, "", "", false, fmt.Errorf("authorize: amount: %w", perr)
+	}
+	return r.Text(faSubjectOff), amt, r.Text(faProjectOff), r.Text(faServiceOff), r.Bool(faValidatedOff), nil
+}
+
+// The gate's verdict. Out-of-funds and a spend cap are DIFFERENT refusals with
+// different remedies — one says add money, the other says the period has to roll
+// over — so they are separate bits rather than one string the caller matches on.
+const (
+	gvOKOff      = 0
+	gvNoFundsOff = 1
+	gvCapOff     = 2
+	gvReasonOff  = 8
+	gvFixed      = 16
+)
+
+// Verdict is the answer to a gate.
+type Verdict struct {
+	OK       bool
+	NoFunds  bool
+	CapSpent bool
+	// Reason is anything that is neither refusal — an upstream failure the caller
+	// must treat as UNKNOWN and fail closed on, never as permission.
+	Reason string
+}
+
+// PutVerdict packs one.
+func PutVerdict(v Verdict) []byte {
+	b := zap.NewBuilder(len(v.Reason) + gvFixed + 64)
+	ob := b.StartObject(gvFixed)
+	ob.SetBool(gvOKOff, v.OK)
+	ob.SetBool(gvNoFundsOff, v.NoFunds)
+	ob.SetBool(gvCapOff, v.CapSpent)
+	ob.SetText(gvReasonOff, v.Reason)
+	ob.FinishAsRoot()
+	return b.Finish()
+}
+
+// GateVerdict unpacks one.
+func GateVerdict(payload []byte) (Verdict, error) {
+	m, err := zap.Parse(payload)
+	if err != nil {
+		return Verdict{}, fmt.Errorf("verdict: %w", err)
+	}
+	r := m.Root()
+	return Verdict{
+		OK:       r.Bool(gvOKOff),
+		NoFunds:  r.Bool(gvNoFundsOff),
+		CapSpent: r.Bool(gvCapOff),
+		Reason:   r.Text(gvReasonOff),
+	}, nil
+}
+
+// ---- usage: what a debit records beyond its amount ----
+
+const (
+	uModelOff     = 0
+	uProjectOff   = 8
+	uProviderOff  = 16
+	uServiceOff   = 24
+	uRequestIDOff = 32
+	uClientIPOff  = 40
+	uFixed        = 48
+)
+
+// Usage is the attribution a debit carries.
+type Usage struct {
+	Model     string
+	Project   string
+	Provider  string
+	Service   string
+	RequestID string
+	ClientIP  string
+}
+
+// PutUsage packs the attribution frame that follows a money request.
+func PutUsage(u Usage) []byte {
+	b := zap.NewBuilder(len(u.Model) + len(u.Project) + len(u.Provider) + len(u.Service) + len(u.RequestID) + len(u.ClientIP) + uFixed) //nolint:lll
+	ob := b.StartObject(uFixed)
+	ob.SetText(uModelOff, u.Model)
+	ob.SetText(uProjectOff, u.Project)
+	ob.SetText(uProviderOff, u.Provider)
+	ob.SetText(uServiceOff, u.Service)
+	ob.SetText(uRequestIDOff, u.RequestID)
+	ob.SetText(uClientIPOff, u.ClientIP)
+	ob.FinishAsRoot()
+	return b.Finish()
+}
+
+// UsageOf unpacks one.
+func UsageOf(payload []byte) (Usage, error) {
+	m, err := zap.Parse(payload)
+	if err != nil {
+		return Usage{}, fmt.Errorf("usage: %w", err)
+	}
+	r := m.Root()
+	return Usage{
+		Model:     r.Text(uModelOff),
+		Project:   r.Text(uProjectOff),
+		Provider:  r.Text(uProviderOff),
+		Service:   r.Text(uServiceOff),
+		RequestID: r.Text(uRequestIDOff),
+		ClientIP:  r.Text(uClientIPOff),
+	}, nil
 }

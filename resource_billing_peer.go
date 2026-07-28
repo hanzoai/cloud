@@ -4,8 +4,8 @@ package cloud
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/money"
 	"time"
 
 	"github.com/hanzoai/cloud/apps/metering"
@@ -35,34 +35,6 @@ const (
 	peerCallTimeout = 10 * time.Second
 )
 
-type peerAuthorizeRequest struct {
-	Subject          string `json:"subject"`
-	AmountCents      int64  `json:"amountCents"`
-	Project          string `json:"project"`
-	ProjectValidated bool   `json:"projectValidated"`
-	Service          string `json:"service"`
-	Currency         string `json:"currency"`
-}
-
-type peerAuthorizeReply struct {
-	OK       bool   `json:"ok"`
-	NoFunds  bool   `json:"noFunds"`
-	CapSpent bool   `json:"capSpent"`
-	Reason   string `json:"reason,omitempty"`
-}
-
-type peerRecordRequest struct {
-	Subject     string `json:"subject"`
-	AmountCents int64  `json:"amountCents"`
-	Model       string `json:"model"`
-	Project     string `json:"project"`
-	Provider    string `json:"provider"`
-	Service     string `json:"service"`
-	RequestID   string `json:"requestId"`
-	ClientIP    string `json:"clientIp"`
-	Currency    string `json:"currency"`
-}
-
 // gatePeer asks the process that owns the ledger whether this act may run.
 //
 // It returns the SAME errors the local gate does, so DenyResource renders one
@@ -70,14 +42,7 @@ type peerRecordRequest struct {
 // cap is 402 spend_cap_exceeded, and anything else is unknown — which the
 // fail-closed caller turns into 503 rather than free work.
 func (rm *ResourceMeter) gatePeer(ctx context.Context, org, project string, projectValidated bool, costCents int64) error {
-	body, err := json.Marshal(peerAuthorizeRequest{
-		Subject: org, AmountCents: costCents,
-		Project: project, ProjectValidated: projectValidated,
-		Service: rm.provider, Currency: "usd",
-	})
-	if err != nil {
-		return err
-	}
+	body := PutAuthorizeReq(org, money.FromUSD(costCents), project, rm.provider, projectValidated)
 	ctx, cancel := context.WithTimeout(ctx, peerCallTimeout)
 	defer cancel()
 
@@ -86,19 +51,19 @@ func (rm *ResourceMeter) gatePeer(ctx context.Context, org, project string, proj
 		// The biller is unreachable. Unknown, never allowed.
 		return fmt.Errorf("gate: commerce unreachable: %w", err)
 	}
-	var reply peerAuthorizeReply
-	if err := json.Unmarshal(out, &reply); err != nil {
-		return fmt.Errorf("gate: decode: %w", err)
+	v, err := GateVerdict(out)
+	if err != nil {
+		return fmt.Errorf("gate: %w", err)
 	}
 	switch {
-	case reply.OK:
+	case v.OK:
 		return nil
-	case reply.NoFunds:
+	case v.NoFunds:
 		return metering.ErrInsufficientBalance
-	case reply.CapSpent:
+	case v.CapSpent:
 		return metering.ErrSpendCapExceeded
 	default:
-		return fmt.Errorf("gate: %s", reply.Reason)
+		return fmt.Errorf("gate: %s", v.Reason)
 	}
 }
 
@@ -110,17 +75,8 @@ func (rm *ResourceMeter) gatePeer(ctx context.Context, org, project string, proj
 // logged for reconciliation rather than swallowed — an unbilled create is a number
 // somebody has to find later, so it says so now.
 func (rm *ResourceMeter) meterPeer(org, kind string, u metering.Usage) {
-	body, err := json.Marshal(peerRecordRequest{
-		Subject: org, AmountCents: u.AmountCents,
-		Model: u.Model, Project: u.Project,
-		Provider:  firstNonEmpty(u.Provider, rm.provider),
-		Service:   firstNonEmpty(u.Service, rm.provider),
-		RequestID: u.RequestID, ClientIP: u.ClientIP,
-		Currency: firstNonEmpty(u.Currency, "usd"),
-	})
-	if err != nil {
-		return
-	}
+	body := PutAuthorizeReq(org, money.FromUSD(u.AmountCents), u.Project,
+		firstNonEmpty(u.Service, rm.provider), false)
 	log := rm.log
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), peerCallTimeout)
