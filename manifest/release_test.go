@@ -155,36 +155,32 @@ func TestPlugin_AddrBeatsRelease(t *testing.T) {
 	}
 }
 
-// One published binary answers all 108: no dedicated entry, so the app resolves
-// to the multi-call artifact with --enable.
-func TestRemote_MultiCallServesEveryApp(t *testing.T) {
+// No multi-call fallback: an app absent from the index does NOT borrow another
+// artifact. A stale `cloud` entry sitting in the index must not make dns resolve —
+// every subsystem publishes its OWN binary, keyed by its own name, or it does not
+// resolve at all (and the on-disk failure names the binary that is missing).
+func TestRemote_NoMultiCallFallback(t *testing.T) {
 	reset()
-	t.Setenv(Plugins, serveIndex(t, indexFor(MultiCall), nil))
+	body := fmt.Sprintf(`{"binaries":[{"name":"cloud","os":%q,"arch":%q,"url":"u/cloud","sha256":"d2"}]}`,
+		runtime.GOOS, runtime.GOARCH)
+	t.Setenv(Plugins, serveIndex(t, body, nil))
 
-	p, ok := App{Name: "dns"}.remote()
-	if !ok {
-		t.Fatal("dns did not fall through to the multi-call artifact")
-	}
-	if len(p.Args) != 1 || p.Args[0] != "--enable=dns" {
-		t.Fatalf("args = %v, want [--enable=dns]", p.Args)
-	}
-	if p.URL != "https://s3.hanzo.ai/p/"+MultiCall || p.Sum == "" {
-		t.Fatalf("url/sum = %q/%q", p.URL, p.Sum)
+	if p, ok := (App{Name: "dns"}).remote(); ok {
+		t.Fatalf("dns resolved to %q — a non-dns artifact; the multi-call fallback should be gone", p.URL)
 	}
 }
 
-// A dedicated artifact still wins, and must not carry --enable.
-func TestRemote_DedicatedBeatsMultiCall(t *testing.T) {
+// A dedicated artifact resolves for this platform, and carries no --enable args:
+// the binary IS the app, not a multi-call told which one to be.
+func TestRemote_DedicatedCarriesNoArgs(t *testing.T) {
 	reset()
-	body := fmt.Sprintf(`{"binaries":[
-	  {"name":"dns","os":%q,"arch":%q,"url":"u/dns","sha256":"d1"},
-	  {"name":%q,"os":%q,"arch":%q,"url":"u/cloud","sha256":"d2"}]}`,
-		runtime.GOOS, runtime.GOARCH, MultiCall, runtime.GOOS, runtime.GOARCH)
+	body := fmt.Sprintf(`{"binaries":[{"name":"dns","os":%q,"arch":%q,"url":"u/dns","sha256":"d1"}]}`,
+		runtime.GOOS, runtime.GOARCH)
 	t.Setenv(Plugins, serveIndex(t, body, nil))
 
-	p, _ := App{Name: "dns"}.remote()
-	if p.URL != "u/dns" || len(p.Args) != 0 {
-		t.Fatalf("url=%q args=%v", p.URL, p.Args)
+	p, ok := (App{Name: "dns"}).remote()
+	if !ok || p.URL != "u/dns" || len(p.Args) != 0 {
+		t.Fatalf("url=%q args=%v ok=%v, want u/dns, no args", p.URL, p.Args, ok)
 	}
 }
 
