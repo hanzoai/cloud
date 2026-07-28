@@ -282,7 +282,7 @@ func TestSelectWorkspaceCore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode workspace token: %v", err)
 	}
-	if dec.Account != acct || dec.Workspace != ws.UUID || dec.Extra["org"] != org {
+	if dec.Account != acct || dec.Workspace != ws.UUID || dec.Org() != org {
 		t.Fatalf("workspace token claims = %+v, want acct=%s ws=%s org=%s", dec, acct, ws.UUID, org)
 	}
 }

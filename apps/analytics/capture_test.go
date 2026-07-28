@@ -84,6 +84,78 @@ func TestClampTS(t *testing.T) {
 	}
 }
 
+// TestBackdatedTimestampIsClamped is the PAST bound, and it guards a warehouse property
+// rather than a data-quality one. `timestamp` is caller-chosen and leads ORDER BY, so an
+// unbounded past lets one small batch produce a part whose key range spans years — and a
+// MergeTree part is skippable only when its range misses the query's, so that one part is
+// scanned for every window every tenant asks for. O(1) to write, O(table) to read, and
+// the reader is not the attacker.
+//
+// The boundary cases are the test: `maxBackdate` exactly is INSIDE (a late beacon flush
+// is real traffic and must survive), one second past it is not.
+func TestBackdatedTimestampIsClamped(t *testing.T) {
+	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name string
+		at   time.Time
+		want time.Time
+	}{
+		{"a late beacon flush is kept", now.Add(-6 * 24 * time.Hour), now.Add(-6 * 24 * time.Hour)},
+		{"the floor itself is kept", now.Add(-maxBackdate), now.Add(-maxBackdate)},
+		{"one second past the floor is clamped", now.Add(-maxBackdate - time.Second), now},
+		{"the unix epoch is clamped", time.Unix(0, 0).UTC(), now},
+		{"a year of key range is clamped", now.AddDate(-1, 0, 0), now},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := clampTS(tc.at.Format(time.RFC3339), now); !got.Equal(tc.want) {
+				t.Errorf("clampTS(%s) = %s, want %s", tc.at.Format(time.RFC3339), got, tc.want)
+			}
+		})
+	}
+}
+
+// TestRetentionIsNotARequestParameter: the TTL clause and the INSERT column list are two
+// halves of ONE property — a row expires on a clock the wire cannot reach. Either half
+// alone proves nothing: a TTL over ingested_at is worthless once ingested_at becomes
+// settable, and keeping it unsettable is worthless while the TTL reads the caller's
+// timestamp. Over `timestamp` the failure is a write that answers 200, fans out to every
+// destination in forward.go, and is expirable before the reply lands.
+func TestRetentionIsNotARequestParameter(t *testing.T) {
+	if !strings.Contains(eventsTableDDL, "TTL ingested_at + INTERVAL 2 YEAR") {
+		t.Errorf("retention is not measured from the server-stamped ingested_at:\n%s", eventsTableDDL)
+	}
+	if strings.Contains(eventsTableDDL, "TTL timestamp") {
+		t.Error("retention is measured from the CALLER's timestamp — a back-dated row inserts, fans out, and is immediately TTL-eligible")
+	}
+	if !strings.Contains(eventsTableDDL, "ingested_at DateTime DEFAULT now()") {
+		t.Errorf("ingested_at is not server-stamped, so the TTL column has no value of its own:\n%s", eventsTableDDL)
+	}
+	for _, c := range eventColumns {
+		if c == "ingested_at" {
+			t.Error("ingested_at is in the INSERT column list, so the caller can set the column retention is measured from")
+		}
+	}
+}
+
+// TestTenantIsThePartitionBoundary: unpartitioned, every tenant shares one "all"
+// partition, so ONE tenant's part range is compared against EVERY tenant's query and a
+// wide-ranged part defeats primary-index pruning for all of them. Partitioning on
+// (tenant, month) makes that impossible by layout rather than by key range — a part
+// cannot be scanned for a tenant it does not belong to — and both halves of the key are
+// exactly the read lens's own predicate (query.go filters a timestamp window AND
+// tenant_id), so pruning happens before the primary index is consulted.
+func TestTenantIsThePartitionBoundary(t *testing.T) {
+	if !strings.Contains(eventsTableDDL, "PARTITION BY (tenant_id, toYYYYMM(timestamp))") {
+		t.Errorf("hanzo.events is not partitioned on (tenant, month):\n%s", eventsTableDDL)
+	}
+	// The partition key is only bounded because the clamp bounds its time half. Without
+	// the floor, a caller-chosen month is a caller-chosen partition, and the same batch
+	// that used to widen one part's key range instead proliferates partitions.
+	if maxBackdate <= 0 || maxBackdate > 90*24*time.Hour {
+		t.Errorf("maxBackdate = %s: the month half of the partition key is caller-chosen and only this bounds it", maxBackdate)
+	}
+}
+
 func TestNormalizeEvent_MintsIDWhenAbsent(t *testing.T) {
 	row, _ := normalizeEvent("acme", time.Now(), CaptureEvent{Type: "pageview"})
 	if row.id == "" {

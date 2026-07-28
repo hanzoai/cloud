@@ -39,7 +39,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -587,8 +586,8 @@ func (cc *collabConn) auth(ctx context.Context, docName string, r *lreader) {
 		deny("invalid session token")
 		return
 	}
-	org, _ := t.Extra["org"].(string)
-	if strings.TrimSpace(org) == "" {
+	org := t.Org()
+	if org == "" {
 		deny("invalid session token")
 		return
 	}
