@@ -63,6 +63,7 @@ func fakeK8s(objs ...runtime.Object) *k8sClient {
 		resourceQuotasGVR: "ResourceQuotaList",
 		limitRangesGVR:    "LimitRangeList",
 		kmsSecretsGVR:     "KMSSecretList",
+		k8s.Volumes:       "PersistentVolumeClaimList",
 	}, objs...)
 	// Model a cluster where cloud-api's per-tenant RBAC is already present: the
 	// SelfSubjectAccessReview readiness probe (waitForTenantRBAC) resolves
@@ -91,6 +92,7 @@ func allowSSAR(dyn *dynamicfake.FakeDynamicClient, allow func() bool) {
 func testLimits() resourceLimits {
 	return resourceLimits{
 		maxReplicas:     20,
+		maxStorageGB:    100,
 		maxBuilds:       3,
 		maxDeploys:      8,
 		quotaCPU:        "20",
