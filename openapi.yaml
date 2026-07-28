@@ -18611,6 +18611,106 @@ paths:
           type: string
       tags:
       - security
+  /v1/sentry:
+    delete:
+      operationId: delete_v1_sentry
+      tags:
+      - sentry
+    get:
+      operationId: get_v1_sentry
+      tags:
+      - sentry
+    options:
+      operationId: options_v1_sentry
+      tags:
+      - sentry
+    patch:
+      operationId: patch_v1_sentry
+      tags:
+      - sentry
+    post:
+      operationId: post_v1_sentry
+      tags:
+      - sentry
+    put:
+      operationId: put_v1_sentry
+      tags:
+      - sentry
+    trace:
+      operationId: trace_v1_sentry
+      tags:
+      - sentry
+  /v1/sentry/{wildcard1}:
+    delete:
+      operationId: delete_v1_sentry_by_wildcard1
+      parameters:
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      tags:
+      - sentry
+    get:
+      operationId: get_v1_sentry_by_wildcard1
+      parameters:
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      tags:
+      - sentry
+    options:
+      operationId: options_v1_sentry_by_wildcard1
+      parameters:
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      tags:
+      - sentry
+    patch:
+      operationId: patch_v1_sentry_by_wildcard1
+      parameters:
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      tags:
+      - sentry
+    post:
+      operationId: post_v1_sentry_by_wildcard1
+      parameters:
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      tags:
+      - sentry
+    put:
+      operationId: put_v1_sentry_by_wildcard1
+      parameters:
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      tags:
+      - sentry
+    trace:
+      operationId: trace_v1_sentry_by_wildcard1
+      parameters:
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      tags:
+      - sentry
   /v1/settings/{product}:
     get:
       operationId: get_v1_settings_by_product
@@ -20387,6 +20487,7 @@ tags:
 - name: search
 - name: search-docs
 - name: security
+- name: sentry
 - name: settings
 - name: share
 - name: sites
