@@ -66,16 +66,73 @@ const maxBatch = 500
 // traffic. Set to a falsey value to require a validated principal on every event.
 const publicCaptureEnv = "CLOUD_ANALYTICS_PUBLIC_CAPTURE"
 
-// maxClockSkew clamps a client timestamp: a ts more than this into the FUTURE (or
-// unparseable/absent) falls back to server-now, so a skewed or hostile clock can
-// never park rows outside the queryable window. Past timestamps are allowed (late
-// beacon flush) up to the table TTL.
-const maxClockSkew = 5 * time.Minute
+// maxClockSkew and maxBackdate are the TWO bounds on the one caller-chosen value
+// that reaches a key column, and they exist for different reasons.
+//
+// maxClockSkew (FUTURE) keeps a skewed or hostile clock from parking rows outside
+// the queryable window.
+//
+// maxBackdate (PAST) bounds the DOMAIN of `timestamp`, which is the leading column
+// of ORDER BY and half the partition key. A MergeTree part is skippable only when
+// its key range misses the query's, so ONE small batch spanning 2019..now yields a
+// part whose range intersects every window any tenant will ever ask for — O(1) to
+// write, O(table) to read, for everyone. Bounding the domain is what makes that
+// unbuildable; the partition key then keeps a wide batch inside its own tenant's
+// partitions rather than the shared "all".
+//
+// Seven days is a late-beacon flush (localStorage/service-worker queues survive a
+// weekend, not a quarter). Backfilling real history is a different job than a public
+// beacon door and does not get to arrive here.
+//
+// Both CLAMP rather than refuse, which is the pre-existing choice for the future
+// side: an out-of-window beacon is still a real event, and dropping analytics data
+// to protect a key range trades one loss for another. Retention no longer depends on
+// this value at all — TTL is measured from the server-stamped ingested_at.
+const (
+	maxClockSkew = 5 * time.Minute
+	maxBackdate  = 7 * 24 * time.Hour
+)
 
 // eventsTableDDL is the ONE definition of the hanzo.events schema — owned here by
 // the WRITER. The read lenses (query.go) SELECT a subset of these columns; keep the
 // two in lockstep. MergeTree ordered for the read side's (window, tenant, event)
-// predicate; 2-year TTL mirrors cloud_usage.
+// predicate; 2-year retention mirrors cloud_usage.
+//
+// TTL IS MEASURED FROM ingested_at, NOT timestamp. `timestamp` is the CALLER's, so a
+// TTL over it made retention a request parameter: a back-dated event inserted, fanned
+// out to every configured destination (forward.go), and was TTL-eligible the moment it
+// landed — a write that answers 200 and vanishes. `ingested_at DateTime DEFAULT now()`
+// is stamped by the server and is not in eventColumns, so nothing on the wire can
+// influence when a row expires. It is the only column that can carry a retention
+// clause honestly.
+//
+// PARTITION BY (tenant_id, toYYYYMM(timestamp)) — the shape every other tenant-scoped
+// table in this database uses (observations, persons, scores, sessions, traces,
+// usage_records, and this table's own rollups events_hourly/events_daily). It is not
+// decoration:
+//   - it is the TENANT BOUNDARY in the storage layer. Unpartitioned, all tenants share
+//     one "all" partition, so one part's key range is compared against every tenant's
+//     query. Partitioned by tenant, a part physically cannot appear in another
+//     tenant's scan — the isolation stops being a property of the key range and
+//     becomes a property of the layout.
+//   - it matches the read lens exactly. query.go filters
+//     `timestamp >= ? AND timestamp < ? AND tenant_id = ?`, which is both halves of
+//     this key, so pruning happens before the primary index is consulted.
+//   - it makes retention a partition DROP instead of a merge that rewrites parts.
+//   - it makes the part key range VISIBLE: system.parts.min_time/max_time are only
+//     populated for a time-based partition key, so unpartitioned an operator cannot
+//     even see a part that spans years (measured: every live part reports 1970/1970).
+//
+// Partition count is bounded because a batch carries ONE tenant (the server owns
+// tenant_id) and `timestamp` is clamped to [now-maxBackdate, now] — so an insert
+// touches at most two months of one tenant, far under max_partitions_per_insert_block.
+//
+// THIS IS THE DEFINITION, NOT A MIGRATION. `CREATE TABLE IF NOT EXISTS` is a NO-OP
+// against a table that already exists, and hanzo.events does exist on hanzo-k8s
+// (unpartitioned, `TTL timestamp + toIntervalYear(2)`). Existing deployments need the
+// one-time reconcile in LLM.md ("hanzo.events: retention and partitioning"); the TTL
+// half is a metadata ALTER, the partition half is not expressible as an ALTER at all
+// and needs a table swap. Fresh deployments get this schema and need nothing.
 const eventsTableDDL = `
 	CREATE TABLE IF NOT EXISTS hanzo.events (
 		id String,
@@ -110,8 +167,9 @@ const eventsTableDDL = `
 		library_version String,
 		ingested_at DateTime DEFAULT now()
 	) ENGINE = MergeTree()
+	PARTITION BY (tenant_id, toYYYYMM(timestamp))
 	ORDER BY (timestamp, tenant_id, event)
-	TTL timestamp + INTERVAL 2 YEAR`
+	TTL ingested_at + INTERVAL 2 YEAR`
 
 // eventColumns is the INSERT column list — ingested_at is omitted (server DEFAULT
 // now()). eventRow.args returns values in EXACTLY this order.
@@ -130,6 +188,15 @@ var eventsTableReady atomic.Bool
 // EnsureEventsTable creates hanzo.events if absent. Idempotent; only latches on
 // success so a transient datastore outage at first-write does not poison retries.
 // The writer owns this DDL (the read side deliberately never creates the table).
+//
+// CREATES — it does not RECONCILE. `IF NOT EXISTS` returns success without looking at
+// the existing table, so an schema change in eventsTableDDL reaches fresh deployments
+// only. That is deliberate: the partition key cannot be ALTERed in ClickHouse at all
+// (the ALTER grammar has no such command), so a self-migrating boot path could deliver
+// only half a reconcile and a human would still be needed for the other half — two
+// mechanisms for one migration. There is one: the reconcile in LLM.md, run once per
+// deployment. A boot latch on the ingest path is also the wrong place to start an
+// unbounded table rewrite.
 func EnsureEventsTable(ctx context.Context) error {
 	if eventsTableReady.Load() {
 		return nil
@@ -322,8 +389,17 @@ func canonicalType(t string) string {
 	}
 }
 
-// clampTS parses an RFC3339 timestamp and clamps a future value (> now+skew) or an
-// unparseable/absent value to now. Both anchored UTC.
+// clampTS parses an RFC3339 timestamp and clamps anything outside
+// [now-maxBackdate, now+maxClockSkew] — and anything unparseable or absent — to now.
+// Both anchored UTC.
+//
+// The PAST bound is the one that matters for the warehouse: this value leads ORDER BY
+// and is half the partition key, so an unbounded past is an unbounded key range (see
+// maxBackdate). It is also the ONE place that bound belongs. Every wire funnels through
+// here, and the ways to reach 1970 are per-wire and easy to miss: the team SPA posts
+// epoch MILLIS, so `"timestamp":1` decodes to 1970-01-01 through a decoder that is
+// correct about zero (teamTime returns "" so this function anchors it) and has no
+// opinion about one. A bound in each decoder would be several chances to forget.
 func clampTS(s string, now time.Time) time.Time {
 	now = now.UTC()
 	ts, err := time.Parse(time.RFC3339, strings.TrimSpace(s))
@@ -331,7 +407,7 @@ func clampTS(s string, now time.Time) time.Time {
 		return now
 	}
 	ts = ts.UTC()
-	if ts.After(now.Add(maxClockSkew)) {
+	if ts.After(now.Add(maxClockSkew)) || ts.Before(now.Add(-maxBackdate)) {
 		return now
 	}
 	return ts
