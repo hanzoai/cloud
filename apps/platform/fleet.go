@@ -263,10 +263,13 @@ func fleetRoutes(app cloud.Router, s *cloud.Service[fleetState]) {
 	// GitOps hop (rollout.go).
 	registerReleaser(s)
 
-	// In-process fleet seam: publish THIS board's observer so the admin god-view
-	// (/v1/admin/products + the overview drift KPIs) reuses the SAME App-CR + drift
-	// observation instead of forking a second k8s client (observer.go).
-	PublishFleet(fleetObserver{s: s})
+	// Internal plane: platform.fleet answers THIS board's observation, bound to THIS
+	// service, so the admin god-view (/v1/admin/products + the overview drift KPIs)
+	// gets the same scan and the same tenant confinement listFleet applies (rpc.go).
+	// Registering here rather than in Mount is what lets the method hold s: an
+	// exposure with no service has only the package global to read, and that global
+	// is the in-process seam this whole move exists to delete.
+	exposeFleet(s)
 }
 
 // guard authorizes the PaaS fleet board off ONE IAM identity, exactly like the
@@ -285,13 +288,14 @@ func fleetRoutes(app cloud.Router, s *cloud.Service[fleetState]) {
 // platform operator drive the board off a plain `hanzo login` with no shared token.
 func fleetGuard(s *cloud.Service[fleetState], h zip.Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
-		if !principal.Validated(c) {
+		p := requestPrincipal(c)
+		if !p.validated {
 			return zip.ErrForbidden("authentication required (run `hanzo login`)")
 		}
-		if principal.IsSuperAdmin(c) || principal.IsOrgAdmin(c) {
-			return h(c)
+		if !p.mayObserve() {
+			return zip.ErrForbidden("admin required")
 		}
-		return zip.ErrForbidden("admin required")
+		return h(c)
 	}
 }
 
@@ -315,30 +319,89 @@ func fleetOperatorGuard(s *cloud.Service[fleetState], h zip.Handler) zip.Handler
 	}
 }
 
-// scopedNamespaces returns the platform namespaces the caller may observe/act on —
-// the TENANT confinement for the fleet board. A SuperAdmin sees every scanned
-// namespace (the whole fleet). A non-super OrgAdmin sees ONLY the namespaces its
-// own validated org owns (nsOrg(ns) == principal.Org), so it is bounded to its own
-// tenant exactly as /v1/runner bounds a build to the caller's org. The org is taken
-// from the validated principal — never a client header — so it cannot be widened by
-// a forged X-Org-Id. An OrgAdmin whose org owns no scanned namespace gets an empty
-// set (an empty board / a clean 404), never another org's data.
-func scopedNamespaces(s *cloud.Service[fleetState], ctx context.Context, c *zip.Ctx) []string {
-	all := discoverNamespaces(s, ctx)
-	if principal.IsSuperAdmin(c) {
+// fleetPrincipal is WHO is asking, reduced to the only facts the fleet surface
+// authorizes on: whether a validated principal is present at all, platform sudo,
+// admin-of-one's-own-org, and the validated tenant key. It is a VALUE rather than a
+// place, because the SAME caller now arrives two ways — as an HTTP request on
+// /v1/platform/fleet, and as a delegated capability on the internal plane
+// (rpc.go) — and the two must reach the identical verdict. Extraction differs;
+// the rule below does not.
+//
+// The two admin bits stay APART (apps/principal: conflating them is a privilege
+// escalation). super is cross-tenant platform sudo; orgAdmin administers only its
+// own org and is never platform-privileged — it opens the door, and the tenant
+// boundary below is what confines it.
+type fleetPrincipal struct {
+	validated bool   // a credential was verified (X-User-Id was minted, not restored)
+	super     bool   // platform sudo: a member of the reserved admin org
+	orgAdmin  bool   // admin OF ITS OWN org — org-scoped, not platform-privileged
+	org       string // the VALIDATED tenant key; "" when the caller carries none
+}
+
+// requestPrincipal reads one off an HTTP request — the authority headers
+// SanitizeIdentity strips on ingress and re-mints only from validated claims.
+func requestPrincipal(c *zip.Ctx) fleetPrincipal {
+	org, _ := principal.Org(c)
+	return fleetPrincipal{
+		validated: principal.Validated(c),
+		super:     principal.IsSuperAdmin(c),
+		orgAdmin:  principal.IsOrgAdmin(c),
+		org:       org,
+	}
+}
+
+// capPrincipal reads one off a capability delegated over the internal plane. It
+// carries the SAME headers requestPrincipal reads, packed into the envelope by the
+// caller's Dial(...).As(c) — a peer can only pass on authority it already held, and
+// the org key goes through principal.OrgOf, the same decision Org applies to a
+// request. So a caller cannot widen itself by crossing the socket.
+func capPrincipal(who cloud.Ident) fleetPrincipal {
+	org, _ := principal.OrgOf(who.User, who.Org)
+	return fleetPrincipal{
+		validated: strings.TrimSpace(who.User) != "",
+		super:     who.Admin,
+		orgAdmin:  who.OrgAdmin,
+		org:       org,
+	}
+}
+
+// mayObserve is the ROLE gate — the whole door, in one expression: a validated
+// principal that is a SuperAdmin OR an admin of its own org. It only opens the
+// door; scopeNamespaces is what confines whoever walks through.
+func (p fleetPrincipal) mayObserve() bool { return p.validated && (p.super || p.orgAdmin) }
+
+// scopeNamespaces is the TENANT boundary — the one confinement rule, applied to the
+// scanned set. A SuperAdmin sees every scanned namespace (the whole fleet). A
+// non-super caller sees ONLY the namespaces its own validated org owns
+// (nsOrg(ns) == org), bounded to its own tenant exactly as /v1/runner bounds a build
+// to the caller's org. The org comes from the validated principal — never a client
+// header, never a request or payload field — so it cannot be widened by a forged
+// X-Org-Id or by anything a peer puts on the wire. A caller whose org owns no
+// scanned namespace gets an EMPTY set (an empty board / a clean 404), never another
+// org's data.
+//
+// It is applied AT THE SCAN, before any CR is read, so a confined caller never even
+// lists another org's apps — the boundary is not a filter over rows already fetched.
+func scopeNamespaces(all []string, p fleetPrincipal) []string {
+	if p.super {
 		return all
 	}
-	org, ok := principal.Org(c)
-	if !ok {
+	if p.org == "" {
 		return nil
 	}
 	out := make([]string, 0, len(all))
 	for _, ns := range all {
-		if nsOrg(ns) == org {
+		if nsOrg(ns) == p.org {
 			out = append(out, ns)
 		}
 	}
 	return out
+}
+
+// scopedNamespaces is scopeNamespaces over an HTTP request: discover the scanned
+// set, then confine it to what this caller may observe.
+func scopedNamespaces(s *cloud.Service[fleetState], ctx context.Context, c *zip.Ctx) []string {
+	return scopeNamespaces(discoverNamespaces(s, ctx), requestPrincipal(c))
 }
 
 // targetNamespaces narrows the caller's authorized namespaces (scopedNamespaces)

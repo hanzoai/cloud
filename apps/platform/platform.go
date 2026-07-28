@@ -132,9 +132,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// <org>-platform-kms identity the KMS sync uses — one identity per tenant.
 	s.State.projects = newProjectStore(deps.IAMIssuer, s.State.kmsIdentity)
 	mounted = s
-	// The fleet board on the internal plane (rpc.go): admin renders the operator's
-	// view without linking the k8s client that produced it.
-	exposeFleet()
 	// UNIFIED PAYWALL (server-side enforcement). To gate the /v1/platform surface
 	// behind the caller's plan, wrap it with entitlements.RequireProduct(deps.Commerce,
 	// "platform") — note routes() registers FLAT app.Get paths (not a group), so

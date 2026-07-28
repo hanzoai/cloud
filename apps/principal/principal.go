@@ -116,11 +116,20 @@ func IsOrgAdmin(c *zip.Ctx) bool { return c.Header("X-User-IsOrgAdmin") == "true
 // operates on per-org data carries an explicit org, so an empty org is a true
 // 403. Subsystems that DO want an admin bucket (S3, provisioning) gate on
 // Validated and add that fallback themselves.
-func Org(c *zip.Ctx) (string, bool) {
-	if !Validated(c) {
-		return "", false // no validated principal — the restored X-Org-Id is untrusted
+func Org(c *zip.Ctx) (string, bool) { return OrgOf(c.User(), c.Org()) }
+
+// OrgOf is the org-isolation decision ITSELF, over the only two facts it turns
+// on: the validated user claim (empty ⇒ no validated principal, so the org that
+// rode along is untrusted) and the org claim. Org reads those off a request; the
+// internal plane (cloud.Ident, delegated in the envelope's capability slot) reads
+// the SAME two headers off a capability. One rule, two readers — so a call that
+// crosses the plane can never be granted an org key the HTTP boundary would have
+// refused, which is the drift a second hand-rolled check would eventually be.
+func OrgOf(user, org string) (string, bool) {
+	if strings.TrimSpace(user) == "" {
+		return "", false // no validated principal — the org claim is untrusted
 	}
-	org := strings.TrimSpace(c.Org())
+	org = strings.TrimSpace(org)
 	if org == "" || len(org) > MaxOrgLen {
 		return "", false
 	}
