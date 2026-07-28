@@ -237,21 +237,16 @@ func parseManifestDir(dir string) ([]*unstructured.Unstructured, error) {
 		if d.IsDir() {
 			return nil
 		}
-		name := d.Name()
-		if name == "kustomization.yaml" || name == "kustomization.yml" {
-			return nil
-		}
-		ext := strings.ToLower(filepath.Ext(name))
-		if ext != ".yaml" && ext != ".yml" && ext != ".json" {
+		if !isManifestPath(path) {
 			return nil
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("read %s: %w", path, err)
 		}
-		items, err := kube.SplitYAML(data)
+		items, err := parseManifest(path, data)
 		if err != nil {
-			return fmt.Errorf("parse %s: %w", path, err)
+			return err
 		}
 		objs = append(objs, items...)
 		return nil
@@ -260,6 +255,35 @@ func parseManifestDir(dir string) ([]*unstructured.Unstructured, error) {
 		return nil, fmt.Errorf("walk manifest dir %s: %w", dir, err)
 	}
 	return objs, nil
+}
+
+// isManifestPath reports whether a file is part of a desired set. Kustomize
+// inputs are skipped because they are ingredients, not objects — applying one
+// would declare a Kustomization the cluster has no controller for.
+//
+// Shared by BOTH sources. What counts as a manifest decides what a prune sees
+// as absent, so the clone path and the tree path must answer it identically or
+// the same commit means two different desired sets.
+func isManifestPath(path string) bool {
+	name := filepath.Base(path)
+	if name == "kustomization.yaml" || name == "kustomization.yml" {
+		return false
+	}
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".yaml", ".yml", ".json":
+		return true
+	}
+	return false
+}
+
+// parseManifest splits one file into typed objects, naming the file on failure —
+// a parse error deep in a fleet is only actionable if it says which file.
+func parseManifest(path string, data []byte) ([]*unstructured.Unstructured, error) {
+	items, err := kube.SplitYAML(data)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return items, nil
 }
 
 // hardenedGitEnv is the minimal, credential-free git environment: no interactive
