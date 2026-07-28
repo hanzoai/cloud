@@ -469,6 +469,57 @@ func (k *k8sClient) canGetResourceQuotas(ctx context.Context, ns string) (bool, 
 // CR name is the app slug; it lives in tenant-<org>; labels stamp the org for
 // defense-in-depth (the namespace is already the boundary). `image` is the
 // resolved ref to run (the app's image for image-source, or the build output).
+// volumeName is the claim an app's storage lives under, and volumeMount is where
+// it appears in the container. Both are DERIVED, never configurable: one app, one
+// volume, one path. A per-app mount path would be a second way to say the same
+// thing and would let two deploys of the same app disagree about where its data is.
+func volumeName(slug string) string { return slug + "-data" }
+
+const volumeMount = "/data"
+
+// ensureVolume creates the app's PersistentVolumeClaim if it is absent, and
+// otherwise leaves it EXACTLY as it is.
+//
+// It never patches and never deletes. A claim is the only copy of the tenant's
+// data, so the two edits that look reasonable here are the two that lose it: a
+// shrink is rejected by the CSI driver and leaves the app wedged, and a delete on
+// app-removal would destroy data on what a user experiences as "undeploy". Growing
+// a volume is a separate, explicit operation for the same reason.
+func (k *k8sClient) ensureVolume(ctx context.Context, ns, org string, a Application) error {
+	name := volumeName(a.Slug)
+	_, err := k.dyn.Resource(k8s.Volumes).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err == nil {
+		return nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("get volume %s: %w", name, err)
+	}
+	claim := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "v1",
+		"kind":       "PersistentVolumeClaim",
+		"metadata": map[string]any{
+			"name":      name,
+			"namespace": ns,
+			"labels": map[string]any{
+				"hanzo.ai/org":               org,
+				"hanzo.ai/managed-by":        "platform",
+				"app.kubernetes.io/instance": a.Slug,
+			},
+		},
+		"spec": map[string]any{
+			"accessModes": []any{"ReadWriteOnce"},
+			"resources": map[string]any{
+				"requests": map[string]any{"storage": fmt.Sprintf("%dGi", a.StorageGB)},
+			},
+		},
+	}}
+	_, err = k.dyn.Resource(k8s.Volumes).Namespace(ns).Create(ctx, claim, metav1.CreateOptions{})
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		return fmt.Errorf("create volume %s: %w", name, err)
+	}
+	return nil
+}
+
 func serviceCR(ns, org, project string, a Application, image string) *unstructured.Unstructured {
 	repo, tag := splitImageRef(image)
 	spec := map[string]any{
@@ -493,6 +544,24 @@ func serviceCR(ns, org, project string, a Application, image string) *unstructur
 	}
 	if env := renderEnv(managedSecretName(a.Slug), a.EnvJSON); len(env) > 0 {
 		spec["env"] = env
+	}
+	// Declaring storage also decides the update strategy, because the two are one
+	// fact: a ReadWriteOnce volume can be attached to a single node, so a rolling
+	// update asks the new pod to mount what the old pod has not released yet and
+	// the CSI driver deadlocks on Multi-Attach — the new pod sits in
+	// ContainerCreating indefinitely. Recreate tears the old pod down first. That
+	// is downtime, and it is the honest cost of one volume.
+	if a.StorageGB > 0 {
+		spec["strategy"] = "Recreate"
+		spec["volumes"] = []any{
+			map[string]any{
+				"name":                  "data",
+				"persistentVolumeClaim": map[string]any{"claimName": volumeName(a.Slug)},
+			},
+		}
+		spec["volumeMounts"] = []any{
+			map[string]any{"name": "data", "mountPath": volumeMount},
+		}
 	}
 	if ing := ingressSpec(domainList(a.DomainsJSON)); ing != nil {
 		spec["ingress"] = ing
@@ -541,6 +610,14 @@ func (k *k8sClient) applyService(ctx context.Context, org, project string, a App
 	// Final replica clamp at the write boundary (defense in depth for MED-3: even
 	// a row that somehow carried an out-of-bounds replica count is bounded here).
 	a.Replicas = k.limits.clampReplicas(a.Replicas)
+	a.StorageGB = k.limits.clampStorage(a.StorageGB)
+	// The claim must exist before the CR that mounts it, or the first pod is
+	// unschedulable until the next reconcile.
+	if a.StorageGB > 0 {
+		if err := k.ensureVolume(ctx, ns, org, a); err != nil {
+			return err
+		}
+	}
 	desired := serviceCR(ns, org, project, a, image)
 	gvr, found, err := k.resolveCR(ctx, ns, a.Slug)
 	if err != nil {
@@ -589,6 +666,11 @@ func (k *k8sClient) scaleService(ctx context.Context, org, name string, replicas
 
 // deleteService removes an app's App CR (best-effort teardown on app/project
 // delete). A NotFound is success (already gone).
+// deleteService removes the App CR and NOT the app's volume. Deleting an app is a
+// statement about a workload; the claim outlives it so that removing and
+// redeploying an app under the same slug finds its data where it left it, and so
+// that no misclick destroys a database. Reclaiming the storage is deliberate and
+// separate.
 func (k *k8sClient) deleteService(ctx context.Context, org, name string) error {
 	if err := k.ready(); err != nil {
 		return err

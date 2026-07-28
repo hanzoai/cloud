@@ -137,9 +137,29 @@ func (e *edge) forward(c *zip.Ctx) error {
 	// NO service credential. X-Org-Id carries the server-validated org for a
 	// trusted-proxy DNS mode. Both are the caller's own identity, so org A can never
 	// reach org B. Because this is a fresh request, no other inbound header crosses.
-	if bearer := cloud.CallerBearer(c); bearer != "" {
-		req.Header.Set("Authorization", "Bearer "+bearer)
+	//
+	// REFUSE HERE when there is no relayable bearer, rather than forwarding without
+	// one. CallerBearer returns "" for an API KEY (middleware_identity: `tok == "" ||
+	// isAPIKey(tok)`), because an hk-/sk- key is not a JWT and the OIDC-gated DNS
+	// plane cannot validate it. This head was written for the console, which carries
+	// a session bearer, so that case went unhandled: the request was forwarded with
+	// NO Authorization at all and the caller got the DNS plane's own
+	// {"code":"unauthorized","message":"missing Authorization header"} -- an upstream
+	// error that reads like the DNS plane is broken, when the real answer is that
+	// this credential type cannot reach it. Measured against the live plane
+	// (ghcr.io/hanzoai/dns:0.11.1) with an API key: exactly that 401.
+	//
+	// Failing closed here also keeps the tenant story honest. X-Org-Id is set below
+	// from the server-validated org, so a headerless forward would arrive carrying an
+	// org claim and no proof of identity -- safe only for as long as the DNS plane
+	// keeps rejecting it. Cloud should not depend on an upstream to refuse what it
+	// can refuse itself.
+	bearer := cloud.CallerBearer(c)
+	if bearer == "" {
+		return c.JSON(http.StatusUnauthorized, fail("unauthorized",
+			"the DNS plane requires a session bearer; an API key cannot be relayed to it"))
 	}
+	req.Header.Set("Authorization", "Bearer "+bearer)
 	req.Header.Set("X-Org-Id", org)
 	if ct := c.Header("Content-Type"); ct != "" {
 		req.Header.Set("Content-Type", ct)

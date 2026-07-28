@@ -983,6 +983,128 @@ components:
         status:
           type: string
       type: object
+    MoneyOut:
+      properties:
+        data:
+          properties:
+            byOrg:
+              items:
+                properties:
+                  balanceCents:
+                    type: integer
+                  display:
+                    type: string
+                  grantedCents:
+                    type: integer
+                  grants:
+                    type: integer
+                  mrrCents:
+                    type: integer
+                  org:
+                    type: string
+                  plan:
+                    type: string
+                  spendCents:
+                    type: integer
+                type: object
+              type: array
+            credits:
+              properties:
+                consumedCents:
+                  type: integer
+                grantedCents:
+                  type: integer
+                grantedPrepaidCents:
+                  description: real money added
+                  type: integer
+                grantedTrialCents:
+                  description: non-cash comps/promos
+                  type: integer
+                grants:
+                  type: integer
+                outstandingCents:
+                  type: integer
+              type: object
+            generatedAt:
+              type: string
+            infrastructure:
+              properties:
+                doAvgDailyBurnCents:
+                  type: integer
+                doCreditRemainingCents:
+                  type: integer
+                doMonthToDateCents:
+                  type: integer
+                period:
+                  type: string
+                treasuryReserveCents:
+                  type: integer
+                vendorCogsCents:
+                  type: integer
+                vendors:
+                  items:
+                    properties:
+                      amountCents:
+                        type: integer
+                      note:
+                        type: string
+                      service:
+                        type: string
+                      source:
+                        type: string
+                      vendor:
+                        type: string
+                    type: object
+                  type: array
+              type: object
+            margin:
+              properties:
+                grossCents:
+                  type: integer
+                grossPct:
+                  type: number
+                profitable:
+                  type: boolean
+                runwayDays:
+                  type: number
+              type: object
+            revenue:
+              properties:
+                arpuCents:
+                  type: integer
+                arrCents:
+                  type: integer
+                customers:
+                  type: integer
+                mrrCents:
+                  type: integer
+                paying:
+                  type: integer
+                realizedCents:
+                  description: consumed spend, fleet-wide
+                  type: integer
+              type: object
+            sources:
+              items:
+                properties:
+                  at:
+                    type: string
+                  error:
+                    type: string
+                  name:
+                    type: string
+                  ok:
+                    type: boolean
+                  rows:
+                    type: integer
+                type: object
+              type: array
+          type: object
+        msg:
+          type: string
+        status:
+          type: string
+      type: object
     MutationOut:
       properties:
         data:
@@ -1242,6 +1364,19 @@ components:
                   type: integer
                 volumesMonthly:
                   type: integer
+                wastedMonthly:
+                  description: |-
+                    WastedMonthly is what the fleet pays every month for provisioned-but-empty space on
+                    the volumes a kubelet actually measured.
+
+                    It is NOT ReclaimableMonthly and must never be added to it. Reclaimable is money a
+                    button on this board collects, by deleting volumes proven to belong to no one.
+                    Wasted is money locked inside volumes that are IN USE and holding live data:
+                    DigitalOcean can only ever grow a volume, so collecting it means copying a database
+                    onto a smaller one. See shrinkRecipe.
+
+                    It is also a LOWER BOUND — unmeasured volumes contribute nothing.
+                  type: integer
               type: object
             findings:
               items:
@@ -1384,15 +1519,32 @@ components:
                   type: integer
                 localDiskGiB:
                   type: integer
+                measuredGiB:
+                  type: integer
+                measuredVolumes:
+                  description: |-
+                    Fill. MeasuredVolumes/UnmeasuredVolumes are the honesty denominator: UsedGiB and
+                    WastedGiB describe the measured set ONLY, so a board showing waste must show how
+                    much of the fleet the figure was computed from. Unmeasured capacity contributes
+                    nothing to either — it is not assumed empty, and it is not assumed full.
+                  type: integer
                 nodes:
+                  type: integer
+                unmeasuredGiB:
+                  type: integer
+                unmeasuredVolumes:
                   type: integer
                 unreferencedGiB:
                   type: integer
                 unreferencedVolumes:
                   type: integer
+                usedGiB:
+                  type: integer
                 volumeGiB:
                   type: integer
                 volumes:
+                  type: integer
+                wastedGiB:
                   type: integer
               type: object
             volumes:
@@ -1407,6 +1559,11 @@ components:
                     type: string
                   clusterId:
                     type: string
+                  controller:
+                    description: |-
+                      Controller is the workload owning the pod that mounts this volume
+                      ("StatefulSet/luxd"), or "" when nothing mounts it. It names who has to act.
+                    type: string
                   createdAt:
                     type: string
                   deletable:
@@ -1415,6 +1572,25 @@ components:
                     items:
                       type: integer
                     type: array
+                  expandBlockedReason:
+                    type: string
+                  expandable:
+                    description: |-
+                      Expandable/ExpandBlockedReason are the GROW verdict, kept separate from Deletable
+                      because the two ask opposite questions: a volume is deletable when nothing uses it,
+                      and expandable when something uses it in a way this board can grow completely.
+                    type: boolean
+                  hasUsage:
+                    description: |-
+                      HasUsage reports whether a kubelet actually MEASURED this volume's filesystem.
+
+                      False means NOT MEASURED. It does NOT mean empty, and the three fields below are
+                      meaningless — not zero — when it is false. A reading exists only while a running pod
+                      has the volume mounted on a node that answered; a detached, idle or unreferenced
+                      volume has none. Rendering an unmeasured volume as "0 used / 100% wasted" would
+                      invent the single most expensive lie this board could tell, so every consumer must
+                      branch on this flag and show unknown.
+                    type: boolean
                   id:
                     type: string
                   idle:
@@ -1448,6 +1624,20 @@ components:
                       TagCluster is the `k8s:<uuid>` tag. ADVISORY ONLY: it outlives the cluster that
                       set it. Shown so the operator can see tag-vs-truth disagree, never acted on.
                     type: string
+                  usedBytes:
+                    description: |-
+                      UsedBytes is the measured filesystem usage. BYTES, not GiB: the volumes this exists
+                      to catch hold a fraction of a GiB in 200, and rounding that to an integer GiB would
+                      print the very 0 the flag above exists to prevent.
+                    type: integer
+                  wastedGiB:
+                    description: |-
+                      WastedGiB is provisioned minus measured, in the unit DigitalOcean BILLS: whole GiB
+                      of the volume's own size, never the filesystem's capacity — a 200 GiB volume carries
+                      a 196 GiB filesystem after format overhead, and the invoice says 200.
+                    type: integer
+                  wastedMonthlyCents:
+                    type: integer
                 type: object
               type: array
           type: object
@@ -1910,6 +2100,92 @@ components:
         status:
           type: string
       type: object
+    SubsystemsOut:
+      properties:
+        data:
+          properties:
+            end:
+              type: string
+            range:
+              type: string
+            rows:
+              items:
+                properties:
+                  enabled:
+                    type: boolean
+                  errorRate:
+                    description: percent (0..100)
+                    type: number
+                  errors:
+                    type: integer
+                  lastErrorAt:
+                    type: string
+                  lastErrorMessage:
+                    type: string
+                  lastErrorRoute:
+                    type: string
+                  lastErrorStatus:
+                    type: string
+                  latencyP50Ms:
+                    type: number
+                  latencyP95Ms:
+                    type: number
+                  latencyP99Ms:
+                    type: number
+                  name:
+                    type: string
+                  prefixes:
+                    items:
+                      type: string
+                    type: array
+                  requests:
+                    type: integer
+                  requestsPerMin:
+                    type: number
+                type: object
+              type: array
+            sources:
+              items:
+                properties:
+                  at:
+                    type: string
+                  error:
+                    type: string
+                  name:
+                    type: string
+                  ok:
+                    type: boolean
+                  rows:
+                    type: integer
+                type: object
+              type: array
+            start:
+              type: string
+            totals:
+              properties:
+                disabled:
+                  type: integer
+                enabled:
+                  type: integer
+                errorRate:
+                  description: percent (0..100)
+                  type: number
+                errors:
+                  type: integer
+                reporting:
+                  description: enabled AND served ≥1 traced request in the window
+                  type: integer
+                requests:
+                  type: integer
+                subsystems:
+                  type: integer
+              type: object
+          type: object
+        msg:
+          type: string
+        status:
+          type: string
+      type: object
     Summary:
       properties:
         active:
@@ -2036,6 +2312,11 @@ components:
             Name is the snapshot name on the snapshot action. Blank gets a deterministic
             "<volume>-predelete-<unix>" so the undo is findable in the DO console.
           type: string
+        sizeGiB:
+          description: |-
+            SizeGiB is the target size on the resize action. A volume only ever grows —
+            ExpandTo is the verdict that refuses a shrink, so this is not validated here.
+          type: integer
         snapshot:
           description: |-
             Snapshot is the snapshot-first switch on DELETE. Anything other than the literal
@@ -7002,6 +7283,14 @@ paths:
         required: false
         schema:
           type: string
+      - description: |-
+          SizeGiB is the target size on the resize action. A volume only ever grows —
+          ExpandTo is the verdict that refuses a shrink, so this is not validated here.
+        in: query
+        name: sizeGiB
+        required: false
+        schema:
+          type: integer
       responses:
         "200":
           content:
@@ -7021,6 +7310,42 @@ paths:
       summary: |-
         deleteVolume destroys a volume the board has just proven no PersistentVolume in any
         cluster references.
+      tags:
+      - admin
+  /v1/admin/infra/volumes/{id}/resize:
+    post:
+      description: |-
+        expandVolume grows a volume. GROW ONLY — see Volume.ExpandTo for why the other
+        direction is a data migration this board deliberately refuses to run.
+
+        The MECHANISM follows the volume's owner, because there is exactly one way to grow each
+        kind completely. A volume a PVC claims is grown by patching the claim: the CSI driver
+        then resizes the DigitalOcean device AND grows the filesystem on it, leaving claim, PV,
+        device and filesystem all agreeing. Calling DigitalOcean directly for that volume would
+        grow the device while the PV kept declaring the old capacity and the filesystem never
+        grew at all. One operation, one correct mechanism per owner — not two ways to do it.
+      operationId: adminResizeVolume
+      parameters:
+      - description: ID is the DO volume id, from the path.
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VolumeIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MutationOut'
+          description: ok
+      summary: expandVolume grows a volume.
       tags:
       - admin
   /v1/admin/infra/volumes/{id}/snapshot:
@@ -7162,6 +7487,20 @@ paths:
       summary: |-
         Metrics answers GET /v1/admin/metrics by aggregating commerce.events directly
         (fleet-wide, no per-org fan-out).
+      tags:
+      - admin
+  /v1/admin/money:
+    get:
+      description: moneyBoardHandler answers GET /v1/admin/money.
+      operationId: adminMoney
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoneyOut'
+          description: ok
+      summary: moneyBoardHandler answers GET /v1/admin/money.
       tags:
       - admin
   /v1/admin/o11y:
@@ -7986,6 +8325,31 @@ paths:
                 $ref: '#/components/schemas/SubscriptionsOut'
           description: ok
       summary: Subscriptions answers GET /v1/admin/subscriptions.
+      tags:
+      - admin
+  /v1/admin/subsystems:
+    get:
+      description: |-
+        subsystems answers GET /v1/admin/subsystems. ?range=24h|7d|30d bounds the telemetry
+        window (default 30d) — the same enum, and the same helpers, as the o11y board.
+      operationId: adminSubsystems
+      parameters:
+      - description: |-
+          Range bounds the telemetry window: 24h, 7d or 30d. Anything else, including
+          empty, resolves to the default through the same o11yRange the o11y board uses.
+        in: query
+        name: range
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubsystemsOut'
+          description: ok
+      summary: subsystems answers GET /v1/admin/subsystems.
       tags:
       - admin
   /v1/admin/sync:
@@ -9411,6 +9775,32 @@ paths:
           type: string
       tags:
       - bot
+  /v1/bot/connect:
+    get:
+      operationId: get_v1_bot_connect
+      tags:
+      - bot
+  /v1/bot/nodes:
+    get:
+      operationId: get_v1_bot_nodes
+      tags:
+      - bot
+  /v1/bot/nodes/{id}/invoke:
+    post:
+      operationId: post_v1_bot_nodes_by_id_invoke
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      tags:
+      - bot
+  /v1/bot/peer/invoke:
+    post:
+      operationId: post_v1_bot_peer_invoke
+      tags:
+      - bot
   /v1/bots:
     get:
       operationId: get_v1_bots
@@ -9747,6 +10137,11 @@ paths:
       operationId: get_v1_captable_summary
       tags:
       - captable
+  /v1/catalog:
+    get:
+      operationId: get_v1_catalog
+      tags:
+      - catalog
   /v1/catalog/entries:
     get:
       operationId: get_v1_catalog_entries
@@ -11387,6 +11782,11 @@ paths:
       operationId: post_v1_content_publish
       tags:
       - content
+  /v1/crawl/:
+    post:
+      operationId: post_v1_crawl
+      tags:
+      - crawl
   /v1/crm/applications:
     get:
       operationId: get_v1_crm_applications
@@ -14114,6 +14514,11 @@ paths:
         queryable, per-tenant number commerce and o11y meter on.
       tags:
       - git
+  /v1/git/webhook:
+    post:
+      operationId: post_v1_git_webhook
+      tags:
+      - git
   /v1/git/zap/createRepo:
     post:
       operationId: post_v1_git_zap_createrepo
@@ -15473,36 +15878,19 @@ paths:
       operationId: get_v1_kms_health
       tags:
       - kms
-  /v1/kms/orgs/{org}/secrets:
+  /v1/kms/secrets:
     get:
-      operationId: get_v1_kms_orgs_by_org_secrets
-      parameters:
-      - in: path
-        name: org
-        required: true
-        schema:
-          type: string
+      operationId: get_v1_kms_secrets
       tags:
       - kms
     post:
-      operationId: post_v1_kms_orgs_by_org_secrets
-      parameters:
-      - in: path
-        name: org
-        required: true
-        schema:
-          type: string
+      operationId: post_v1_kms_secrets
       tags:
       - kms
-  /v1/kms/orgs/{org}/secrets/{wildcard1}:
+  /v1/kms/secrets/{wildcard1}:
     delete:
-      operationId: delete_v1_kms_orgs_by_org_secrets_by_wildcard1
+      operationId: delete_v1_kms_secrets_by_wildcard1
       parameters:
-      - in: path
-        name: org
-        required: true
-        schema:
-          type: string
       - in: path
         name: wildcard1
         required: true
@@ -15511,13 +15899,8 @@ paths:
       tags:
       - kms
     get:
-      operationId: get_v1_kms_orgs_by_org_secrets_by_wildcard1
+      operationId: get_v1_kms_secrets_by_wildcard1
       parameters:
-      - in: path
-        name: org
-        required: true
-        schema:
-          type: string
       - in: path
         name: wildcard1
         required: true
@@ -17544,21 +17927,7 @@ paths:
       operationId: get_v1_platform_projects
       tags:
       - platform
-    post:
-      operationId: post_v1_platform_projects
-      tags:
-      - platform
   /v1/platform/projects/{project}:
-    delete:
-      operationId: delete_v1_platform_projects_by_project
-      parameters:
-      - in: path
-        name: project
-        required: true
-        schema:
-          type: string
-      tags:
-      - platform
     get:
       operationId: get_v1_platform_projects_by_project
       parameters:
@@ -17963,6 +18332,38 @@ paths:
           type: string
       tags:
       - platform
+  /v1/platform/sites/{slug}/domains/{host}:
+    delete:
+      operationId: delete_v1_platform_sites_by_slug_domains_by_host
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: host
+        required: true
+        schema:
+          type: string
+      tags:
+      - platform
+  /v1/platform/sites/{slug}/domains/{host}/verify:
+    post:
+      operationId: post_v1_platform_sites_by_slug_domains_by_host_verify
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: host
+        required: true
+        schema:
+          type: string
+      tags:
+      - platform
   /v1/platform/sites/{slug}/publish:
     post:
       operationId: post_v1_platform_sites_by_slug_publish
@@ -18267,6 +18668,38 @@ paths:
       parameters:
       - in: path
         name: slug
+        required: true
+        schema:
+          type: string
+      tags:
+      - projects
+  /v1/projects/{slug}/domains/{host}:
+    delete:
+      operationId: delete_v1_projects_by_slug_domains_by_host
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: host
+        required: true
+        schema:
+          type: string
+      tags:
+      - projects
+  /v1/projects/{slug}/domains/{host}/verify:
+    post:
+      operationId: post_v1_projects_by_slug_domains_by_host_verify
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: host
         required: true
         schema:
           type: string
@@ -19641,9 +20074,33 @@ paths:
       operationId: get_v1_templates
       tags:
       - templates
+    post:
+      operationId: post_v1_templates
+      tags:
+      - templates
   /v1/templates/{slug}:
+    delete:
+      operationId: delete_v1_templates_by_slug
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      tags:
+      - templates
     get:
       operationId: get_v1_templates_by_slug
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          type: string
+      tags:
+      - templates
+    put:
+      operationId: put_v1_templates_by_slug
       parameters:
       - in: path
         name: slug
@@ -20410,6 +20867,7 @@ tags:
 - name: connector
 - name: connectors
 - name: content
+- name: crawl
 - name: crm
 - name: csrf
 - name: dataroom

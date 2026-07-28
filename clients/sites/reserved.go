@@ -1,7 +1,6 @@
 package sites
 
 import (
-	"sort"
 	"strings"
 	"sync"
 )
@@ -94,24 +93,46 @@ func IsReserved(label string) bool {
 	return ok
 }
 
-// ReservedLabels returns the sorted union of baked-in and operator-configured
-// reserved labels (the empty apex label omitted). Exposed for diagnostics / tests.
-func ReservedLabels() []string {
-	reservedMu.RLock()
-	defer reservedMu.RUnlock()
-	set := make(map[string]bool, len(baseReserved)+len(extraReserved))
-	for l := range baseReserved {
-		if l != "" {
-			set[l] = true
+// selfDomains is the registrable domains WE run — the sites apex (hanzo.app), the
+// brand domain (hanzo.ai), and any operator-supplied SelfDomains. Same shared-source
+// shape as the reserved labels above, for the same reason: the SERVE gate
+// (Server.customCandidate) and the CLAIM gate (projects setDomains) must read ONE set
+// or they drift. They did drift — serve excluded every self domain while claim
+// excluded only the sites apex, so a customer could claim `api.hanzo.ai`, our
+// production API host. It could never SERVE (the serve gate held), but the claim row
+// is first-come, so the claim permanently DENIED the host to its real owner. A gate
+// that runs only at read time cannot keep a table clean.
+var selfDomains []string
+
+// SetSelfDomains registers the domains we operate, from the same list the serve gate
+// is built with. Called once at startup by New, beside SetReservedExtra.
+func SetSelfDomains(domains []string) {
+	out := make([]string, 0, len(domains))
+	for _, d := range domains {
+		if d = strings.ToLower(strings.TrimSpace(d)); d != "" {
+			out = append(out, d)
 		}
 	}
-	for l := range extraReserved {
-		set[l] = true
+	reservedMu.Lock()
+	selfDomains = out
+	reservedMu.Unlock()
+}
+
+// IsSelfHost reports whether host is one of OUR registrable domains or anything
+// beneath it. Those names are ours to assign and no DNS proof is even possible for
+// them (a customer cannot publish a TXT record in a zone we run), so they are never
+// claimable. The ONE self-domain predicate; serve and claim both call it.
+func IsSelfHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return false
 	}
-	out := make([]string, 0, len(set))
-	for l := range set {
-		out = append(out, l)
+	reservedMu.RLock()
+	defer reservedMu.RUnlock()
+	for _, d := range selfDomains {
+		if host == d || strings.HasSuffix(host, "."+d) {
+			return true
+		}
 	}
-	sort.Strings(out)
-	return out
+	return false
 }

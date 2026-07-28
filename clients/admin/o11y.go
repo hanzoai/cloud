@@ -59,6 +59,16 @@ const (
 	o11yAIObs        = "o11y_ai.observations"
 	o11yTopN         = 10
 	o11yServiceLimit = 12
+
+	// o11yServiceCol is the v3 index's materialized service-name column, and
+	// o11yDurationCol its span duration. The v3 schema is snake_case and spells
+	// resource attributes with a $$ separator — it is NOT `serviceName`/`durationNano`
+	// (that was the v2 index). Naming the v2 columns does not error loudly here: the
+	// query fails, the caller's `if err == nil` swallows it, and the whole trace half of
+	// the board renders honest-looking zeros forever. Pinned as constants so the two
+	// queries below and the per-subsystem board all spell them once.
+	o11yServiceCol  = "resource_string_service$$name"
+	o11yDurationCol = "duration_nano"
 )
 
 // o11yGlobal is the whole fleet o11y board payload.
@@ -246,11 +256,11 @@ func o11yUsageTotalsSQL() string {
 
 func o11yTraceTotalsSQL() string {
 	return "SELECT count() AS traces, " +
-		"round(quantile(0.5)(durationNano) / 1e6, 2) AS p50, " +
-		"round(quantile(0.95)(durationNano) / 1e6, 2) AS p95, " +
-		"round(quantile(0.99)(durationNano) / 1e6, 2) AS p99, " +
+		"round(quantile(0.5)(" + o11yDurationCol + ") / 1e6, 2) AS p50, " +
+		"round(quantile(0.95)(" + o11yDurationCol + ") / 1e6, 2) AS p95, " +
+		"round(quantile(0.99)(" + o11yDurationCol + ") / 1e6, 2) AS p99, " +
 		"round(100 * countIf(has_error) / greatest(count(), 1), 3) AS err_rate, " +
-		"uniqExact(serviceName) AS services " +
+		"uniqExact(" + o11yServiceCol + ") AS services " +
 		"FROM " + o11yTraceTable + " WHERE timestamp >= ?"
 }
 
@@ -283,10 +293,10 @@ func o11yTopModelsSQL() string {
 }
 
 func o11yTopServicesSQL() string {
-	return "SELECT serviceName AS service, count() AS requests, " +
+	return "SELECT " + o11yServiceCol + " AS service, count() AS requests, " +
 		"round(100 * countIf(has_error) / greatest(count(), 1), 3) AS error_rate, " +
-		"round(quantile(0.95)(durationNano) / 1e6, 2) AS p95 " +
-		"FROM " + o11yTraceTable + " WHERE timestamp >= ? AND serviceName != '' " +
+		"round(quantile(0.95)(" + o11yDurationCol + ") / 1e6, 2) AS p95 " +
+		"FROM " + o11yTraceTable + " WHERE timestamp >= ? AND " + o11yServiceCol + " != '' " +
 		"GROUP BY service ORDER BY requests DESC LIMIT " + strconv.Itoa(o11yServiceLimit)
 }
 

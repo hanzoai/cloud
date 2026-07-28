@@ -182,6 +182,58 @@
         ]
       }
     },
+    "/v1/platform/sites/{slug}/domains/{host}": {
+      "delete": {
+        "operationId": "delete_v1_platform_sites_by_slug_domains_by_host",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "host",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/sites/{slug}/domains/{host}/verify": {
+      "post": {
+        "operationId": "post_v1_platform_sites_by_slug_domains_by_host_verify",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "host",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/v1/platform/sites/{slug}/publish": {
       "post": {
         "operationId": "post_v1_platform_sites_by_slug_publish",
@@ -463,6 +515,58 @@
         "parameters": [
           {
             "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/projects/{slug}/domains/{host}": {
+      "delete": {
+        "operationId": "delete_v1_projects_by_slug_domains_by_host",
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "host",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/projects/{slug}/domains/{host}/verify": {
+      "post": {
+        "operationId": "post_v1_projects_by_slug_domains_by_host_verify",
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "host",
             "in": "path",
             "required": true,
             "schema": {

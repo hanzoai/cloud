@@ -60,6 +60,7 @@ import (
 	"github.com/hanzoai/cloud/clients/base"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/sites"
+	"github.com/hanzoai/cloud/internal/fqdn"
 	"github.com/zap-proto/zip"
 )
 
@@ -87,13 +88,16 @@ type state struct {
 	store *Store
 	blob  *blobStore
 	cf    *sites.Purger
-	// operatorOrgs may bind CUSTOM domains to their sites in addition to a global
-	// admin — the platform operator (the deployment's own brand org) manages
-	// customer domains until per-org DNS-ownership verification is wired here.
+	// operatorOrgs may bind a CUSTOM domain to their sites WITHOUT proving they
+	// own it, in addition to a global admin — the platform operator (the
+	// deployment's own brand org) manages customer DNS, so its bind is the vouch.
 	// Env CLOUD_PLATFORM_OPERATOR_ORGS (comma-separated) overrides; default is the
-	// brand org (hanzo). A bound domain only SERVES once its owner points DNS at
-	// this edge, so binding without DNS control is inert — the real gate is DNS.
+	// brand org (hanzo). Every OTHER org self-serves: it claims the host pending
+	// and proves control with the DNS challenge (domains.go).
 	operatorOrgs map[string]bool
+	// resolver reads the custom-domain ownership challenge (domains.go); nil ⇒ the
+	// system resolver. Tests inject a fake so verification is deterministic.
+	resolver fqdn.Resolver
 	// ai generates static sites from a natural-language brief for POST /v1/sites.
 	// It is the SAME shared inference client the agents surface uses (deps.AI) and
 	// may be nil when no gateway is configured — buildSite then answers 503 honestly.
@@ -149,8 +153,16 @@ type projectView struct {
 	// site posts form/forum/data submissions to under /v1/base.
 	Analytics bool   `json:"analytics"`
 	Space     string `json:"space,omitempty"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	// ForkedFrom is the parent this project was forked from ("<org>/<slug>" of a
+	// published project, or a catalog template slug) — the attribution edge a
+	// gallery credits. Official marks a FIRST-PARTY Hanzo example rather than an
+	// independent community submission; it is the machine-readable half of the
+	// badge, and always present (never omitempty) so a consumer can tell "false"
+	// from "this API is too old to say".
+	ForkedFrom string `json:"forkedFrom,omitempty"`
+	Official   bool   `json:"official"`
+	CreatedAt  int64  `json:"createdAt"`
+	UpdatedAt  int64  `json:"updatedAt"`
 }
 
 func toProjectView(p Project) projectView {
@@ -160,6 +172,7 @@ func toProjectView(p Project) projectView {
 		Framework: p.Framework, Status: p.Status, LiveURL: p.LiveURL, Bucket: p.Bucket,
 		CurrentDeploymentID: p.CurrentDeploy, CacheControl: p.CacheControl, LastPurgeAt: p.LastPurgeAt,
 		Analytics: p.Analytics, Space: p.SpaceId,
+		ForkedFrom: p.ForkedFrom, Official: p.Official,
 		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 }
@@ -179,6 +192,12 @@ type deploymentView struct {
 	Message   string `json:"message,omitempty"`
 	CreatedAt int64  `json:"createdAt"`
 	UpdatedAt int64  `json:"updatedAt"`
+	// Upload is the prefix-scoped, short-lived S3 write grant handed to CI with a
+	// queued git deployment, so it needs no bucket credential (grant.go). Present
+	// ONLY on the 202 that creates the deployment — it is never stored and never
+	// replayed on a later read, so a grant cannot outlive the build it was minted
+	// for by being fetched again.
+	Upload *uploadGrant `json:"upload,omitempty"`
 }
 
 func toDeploymentView(d Deployment) deploymentView {
@@ -259,6 +278,8 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Post("/v1/projects/:slug/deployments/:id/complete", cloud.Handle(s, completeDeployment))
 	app.Get("/v1/projects/:slug/domains", cloud.Handle(s, listDomains))
 	app.Post("/v1/projects/:slug/domains", cloud.Handle(s, setDomains))
+	app.Post("/v1/projects/:slug/domains/:host/verify", cloud.Handle(s, verifyDomain))
+	app.Delete("/v1/projects/:slug/domains/:host", cloud.Handle(s, releaseDomain))
 
 	// /v1/sites — the surface-agnostic deploy_site capability, shared with agents.
 	// /v1/sites builds a responsive static site from a brief and deploys it;
@@ -296,6 +317,8 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/platform/sites/:slug/deployments/:id", cloud.Handle(s, getDeployment))
 	app.Get("/v1/platform/sites/:slug/domains", cloud.Handle(s, listDomains))
 	app.Post("/v1/platform/sites/:slug/domains", cloud.Handle(s, setDomains))
+	app.Post("/v1/platform/sites/:slug/domains/:host/verify", cloud.Handle(s, verifyDomain))
+	app.Delete("/v1/platform/sites/:slug/domains/:host", cloud.Handle(s, releaseDomain))
 	siteReleases(app, s, "/v1/platform/sites")
 }
 
@@ -325,6 +348,14 @@ type createReq struct {
 	// (nil) ⇒ ON (the default); explicit false ⇒ off. A pointer so "unset" is
 	// distinguishable from "false" — the only way to turn the default off.
 	Analytics *bool `json:"analytics"`
+	// Official requests the first-party-example badge. Honored ONLY for a
+	// SuperAdmin caller (createProject drops it otherwise), so a tenant can never
+	// pass its own app off as a Hanzo example.
+	Official bool `json:"official"`
+	// ForkedFrom is the lineage stamp. json:"-": it is set by the fork path from
+	// the parent it actually resolved, never by the caller, so an attribution edge
+	// always names a real ancestor.
+	ForkedFrom string `json:"-"`
 }
 
 func create(s *cloud.Service[state], c *zip.Ctx) error {
@@ -380,6 +411,10 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body createR
 		RepoURL: strings.TrimSpace(body.Repo.URL), RepoBranch: strings.TrimSpace(body.Repo.Branch),
 		RepoProvider: providerFromURL(body.Repo.URL), Framework: framework,
 		Status: "draft", Bucket: s.State.blob.bucket, CreatedAt: now, UpdatedAt: now,
+		ForkedFrom: body.ForkedFrom,
+		// The badge is an assertion about WHO published, so only the platform may
+		// make it: a tenant asking for official:true simply gets false.
+		Official: body.Official && c.IsAdmin(),
 	}
 	if p.RepoBranch == "" && p.RepoURL != "" {
 		p.RepoBranch = "main"
@@ -473,6 +508,10 @@ type updateReq struct {
 		URL    string `json:"url"`
 		Branch string `json:"branch"`
 	} `json:"repo"`
+	// Official raises or clears the first-party-example badge on an app that
+	// already exists — the examples published before the badge did. Same ONE rule
+	// as at create: honored only for a SuperAdmin caller.
+	Official *bool `json:"official"`
 }
 
 func update(s *cloud.Service[state], c *zip.Ctx) error {
@@ -525,6 +564,9 @@ func update(s *cloud.Service[state], c *zip.Ctx) error {
 		if p.RepoBranch == "" && p.RepoURL != "" {
 			p.RepoBranch = "main"
 		}
+	}
+	if body.Official != nil && c.IsAdmin() {
+		p.Official = *body.Official
 	}
 	p.UpdatedAt = time.Now().Unix()
 	if err := s.State.store.UpdateProject(c.Context(), p); err != nil {

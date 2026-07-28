@@ -1466,6 +1466,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "sizeGiB",
+            "in": "query",
+            "required": false,
+            "description": "SizeGiB is the target size on the resize action. A volume only ever grows —\nExpandTo is the verdict that refuses a shrink, so this is not validated here.",
+            "schema": {
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -1483,6 +1492,49 @@
                   "msg": "",
                   "status": "ok"
                 },
+                "schema": {
+                  "$ref": "#/components/schemas/MutationOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/admin/infra/volumes/{id}/resize": {
+      "post": {
+        "operationId": "adminResizeVolume",
+        "summary": "expandVolume grows a volume.",
+        "description": "expandVolume grows a volume. GROW ONLY — see Volume.ExpandTo for why the other\ndirection is a data migration this board deliberately refuses to run.\n\nThe MECHANISM follows the volume's owner, because there is exactly one way to grow each\nkind completely. A volume a PVC claims is grown by patching the claim: the CSI driver\nthen resizes the DigitalOcean device AND grows the filesystem on it, leaving claim, PV,\ndevice and filesystem all agreeing. Calling DigitalOcean directly for that volume would\ngrow the device while the PV kept declaring the old capacity and the filesystem never\ngrew at all. One operation, one correct mechanism per owner — not two ways to do it.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the DO volume id, from the path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VolumeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MutationOut"
                 }
@@ -1668,6 +1720,28 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MetricsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/admin/money": {
+      "get": {
+        "operationId": "adminMoney",
+        "summary": "moneyBoardHandler answers GET /v1/admin/money.",
+        "description": "moneyBoardHandler answers GET /v1/admin/money.",
+        "tags": [
+          "admin"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneyOut"
                 }
               }
             },
@@ -2517,6 +2591,39 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SubscriptionsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/admin/subsystems": {
+      "get": {
+        "operationId": "adminSubsystems",
+        "summary": "subsystems answers GET /v1/admin/subsystems.",
+        "description": "subsystems answers GET /v1/admin/subsystems. ?range=24h|7d|30d bounds the telemetry\nwindow (default 30d) — the same enum, and the same helpers, as the o11y board.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range bounds the telemetry window: 24h, 7d or 30d. Anything else, including\nempty, resolves to the default through the same o11yRange the o11y board uses.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubsystemsOut"
                 }
               }
             },
@@ -3685,6 +3792,192 @@
         },
         "type": "object"
       },
+      "MoneyOut": {
+        "properties": {
+          "data": {
+            "properties": {
+              "byOrg": {
+                "items": {
+                  "properties": {
+                    "balanceCents": {
+                      "type": "integer"
+                    },
+                    "display": {
+                      "type": "string"
+                    },
+                    "grantedCents": {
+                      "type": "integer"
+                    },
+                    "grants": {
+                      "type": "integer"
+                    },
+                    "mrrCents": {
+                      "type": "integer"
+                    },
+                    "org": {
+                      "type": "string"
+                    },
+                    "plan": {
+                      "type": "string"
+                    },
+                    "spendCents": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "credits": {
+                "properties": {
+                  "consumedCents": {
+                    "type": "integer"
+                  },
+                  "grantedCents": {
+                    "type": "integer"
+                  },
+                  "grantedPrepaidCents": {
+                    "description": "real money added",
+                    "type": "integer"
+                  },
+                  "grantedTrialCents": {
+                    "description": "non-cash comps/promos",
+                    "type": "integer"
+                  },
+                  "grants": {
+                    "type": "integer"
+                  },
+                  "outstandingCents": {
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              },
+              "generatedAt": {
+                "type": "string"
+              },
+              "infrastructure": {
+                "properties": {
+                  "doAvgDailyBurnCents": {
+                    "type": "integer"
+                  },
+                  "doCreditRemainingCents": {
+                    "type": "integer"
+                  },
+                  "doMonthToDateCents": {
+                    "type": "integer"
+                  },
+                  "period": {
+                    "type": "string"
+                  },
+                  "treasuryReserveCents": {
+                    "type": "integer"
+                  },
+                  "vendorCogsCents": {
+                    "type": "integer"
+                  },
+                  "vendors": {
+                    "items": {
+                      "properties": {
+                        "amountCents": {
+                          "type": "integer"
+                        },
+                        "note": {
+                          "type": "string"
+                        },
+                        "service": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "string"
+                        },
+                        "vendor": {
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              },
+              "margin": {
+                "properties": {
+                  "grossCents": {
+                    "type": "integer"
+                  },
+                  "grossPct": {
+                    "type": "number"
+                  },
+                  "profitable": {
+                    "type": "boolean"
+                  },
+                  "runwayDays": {
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              },
+              "revenue": {
+                "properties": {
+                  "arpuCents": {
+                    "type": "integer"
+                  },
+                  "arrCents": {
+                    "type": "integer"
+                  },
+                  "customers": {
+                    "type": "integer"
+                  },
+                  "mrrCents": {
+                    "type": "integer"
+                  },
+                  "paying": {
+                    "type": "integer"
+                  },
+                  "realizedCents": {
+                    "description": "consumed spend, fleet-wide",
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              },
+              "sources": {
+                "items": {
+                  "properties": {
+                    "at": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "rows": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "MutationOut": {
         "properties": {
           "data": {
@@ -3863,6 +4156,10 @@
                     "type": "integer"
                   },
                   "volumesMonthly": {
+                    "type": "integer"
+                  },
+                  "wastedMonthly": {
+                    "description": "WastedMonthly is what the fleet pays every month for provisioned-but-empty space on\nthe volumes a kubelet actually measured.\n\nIt is NOT ReclaimableMonthly and must never be added to it. Reclaimable is money a\nbutton on this board collects, by deleting volumes proven to belong to no one.\nWasted is money locked inside volumes that are IN USE and holding live data:\nDigitalOcean can only ever grow a volume, so collecting it means copying a database\nonto a smaller one. See shrinkRecipe.\n\nIt is also a LOWER BOUND — unmeasured volumes contribute nothing.",
                     "type": "integer"
                   }
                 },
@@ -4072,7 +4369,20 @@
                   "localDiskGiB": {
                     "type": "integer"
                   },
+                  "measuredGiB": {
+                    "type": "integer"
+                  },
+                  "measuredVolumes": {
+                    "description": "Fill. MeasuredVolumes/UnmeasuredVolumes are the honesty denominator: UsedGiB and\nWastedGiB describe the measured set ONLY, so a board showing waste must show how\nmuch of the fleet the figure was computed from. Unmeasured capacity contributes\nnothing to either — it is not assumed empty, and it is not assumed full.",
+                    "type": "integer"
+                  },
                   "nodes": {
+                    "type": "integer"
+                  },
+                  "unmeasuredGiB": {
+                    "type": "integer"
+                  },
+                  "unmeasuredVolumes": {
                     "type": "integer"
                   },
                   "unreferencedGiB": {
@@ -4081,10 +4391,16 @@
                   "unreferencedVolumes": {
                     "type": "integer"
                   },
+                  "usedGiB": {
+                    "type": "integer"
+                  },
                   "volumeGiB": {
                     "type": "integer"
                   },
                   "volumes": {
+                    "type": "integer"
+                  },
+                  "wastedGiB": {
                     "type": "integer"
                   }
                 },
@@ -4103,6 +4419,10 @@
                     "clusterId": {
                       "type": "string"
                     },
+                    "controller": {
+                      "description": "Controller is the workload owning the pod that mounts this volume\n(\"StatefulSet/luxd\"), or \"\" when nothing mounts it. It names who has to act.",
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string"
                     },
@@ -4114,6 +4434,17 @@
                         "type": "integer"
                       },
                       "type": "array"
+                    },
+                    "expandBlockedReason": {
+                      "type": "string"
+                    },
+                    "expandable": {
+                      "description": "Expandable/ExpandBlockedReason are the GROW verdict, kept separate from Deletable\nbecause the two ask opposite questions: a volume is deletable when nothing uses it,\nand expandable when something uses it in a way this board can grow completely.",
+                      "type": "boolean"
+                    },
+                    "hasUsage": {
+                      "description": "HasUsage reports whether a kubelet actually MEASURED this volume's filesystem.\n\nFalse means NOT MEASURED. It does NOT mean empty, and the three fields below are\nmeaningless — not zero — when it is false. A reading exists only while a running pod\nhas the volume mounted on a node that answered; a detached, idle or unreferenced\nvolume has none. Rendering an unmeasured volume as \"0 used / 100% wasted\" would\ninvent the single most expensive lie this board could tell, so every consumer must\nbranch on this flag and show unknown.",
+                      "type": "boolean"
                     },
                     "id": {
                       "type": "string"
@@ -4160,6 +4491,17 @@
                     "tagCluster": {
                       "description": "TagCluster is the `k8s:\u003cuuid\u003e` tag. ADVISORY ONLY: it outlives the cluster that\nset it. Shown so the operator can see tag-vs-truth disagree, never acted on.",
                       "type": "string"
+                    },
+                    "usedBytes": {
+                      "description": "UsedBytes is the measured filesystem usage. BYTES, not GiB: the volumes this exists\nto catch hold a fraction of a GiB in 200, and rounding that to an integer GiB would\nprint the very 0 the flag above exists to prevent.",
+                      "type": "integer"
+                    },
+                    "wastedGiB": {
+                      "description": "WastedGiB is provisioned minus measured, in the unit DigitalOcean BILLS: whole GiB\nof the volume's own size, never the filesystem's capacity — a 200 GiB volume carries\na 196 GiB filesystem after format overhead, and the invoice says 200.",
+                      "type": "integer"
+                    },
+                    "wastedMonthlyCents": {
+                      "type": "integer"
                     }
                   },
                   "type": "object"
@@ -4404,6 +4746,136 @@
         },
         "type": "object"
       },
+      "SubsystemsOut": {
+        "properties": {
+          "data": {
+            "properties": {
+              "end": {
+                "type": "string"
+              },
+              "range": {
+                "type": "string"
+              },
+              "rows": {
+                "items": {
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "errorRate": {
+                      "description": "percent (0..100)",
+                      "type": "number"
+                    },
+                    "errors": {
+                      "type": "integer"
+                    },
+                    "lastErrorAt": {
+                      "type": "string"
+                    },
+                    "lastErrorMessage": {
+                      "type": "string"
+                    },
+                    "lastErrorRoute": {
+                      "type": "string"
+                    },
+                    "lastErrorStatus": {
+                      "type": "string"
+                    },
+                    "latencyP50Ms": {
+                      "type": "number"
+                    },
+                    "latencyP95Ms": {
+                      "type": "number"
+                    },
+                    "latencyP99Ms": {
+                      "type": "number"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "prefixes": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "requests": {
+                      "type": "integer"
+                    },
+                    "requestsPerMin": {
+                      "type": "number"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "sources": {
+                "items": {
+                  "properties": {
+                    "at": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "rows": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "start": {
+                "type": "string"
+              },
+              "totals": {
+                "properties": {
+                  "disabled": {
+                    "type": "integer"
+                  },
+                  "enabled": {
+                    "type": "integer"
+                  },
+                  "errorRate": {
+                    "description": "percent (0..100)",
+                    "type": "number"
+                  },
+                  "errors": {
+                    "type": "integer"
+                  },
+                  "reporting": {
+                    "description": "enabled AND served ≥1 traced request in the window",
+                    "type": "integer"
+                  },
+                  "requests": {
+                    "type": "integer"
+                  },
+                  "subsystems": {
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "UsageFundingOut": {
         "properties": {
           "data": {
@@ -4482,6 +4954,10 @@
           "name": {
             "description": "Name is the snapshot name on the snapshot action. Blank gets a deterministic\n\"\u003cvolume\u003e-predelete-\u003cunix\u003e\" so the undo is findable in the DO console.",
             "type": "string"
+          },
+          "sizeGiB": {
+            "description": "SizeGiB is the target size on the resize action. A volume only ever grows —\nExpandTo is the verdict that refuses a shrink, so this is not validated here.",
+            "type": "integer"
           },
           "snapshot": {
             "description": "Snapshot is the snapshot-first switch on DELETE. Anything other than the literal\n\"false\" snapshots before destroying — the snapshot IS the undo, so waiving it is\ndeliberate and explicit.",

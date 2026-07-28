@@ -39,7 +39,7 @@ import (
 // allowlist — not a denylist — is the safe default: an unknown host is refused,
 // never fetched. An exact apex OR a subdomain of one is accepted (so
 // codeload.github.com under github.com is allowed).
-var defaultGitProviderHosts = []string{"github.com", "gitlab.com", "bitbucket.org", "gitea.com", "codeberg.org"}
+var defaultGitProviderHosts = []string{"github.com", "gitlab.com", "bitbucket.org", "codeberg.org"}
 
 // gitProviderHosts is the effective allowlist, resolved ONCE at package init:
 // the operator may REPLACE it via CLOUD_PLATFORM_GIT_HOSTS (comma-separated
@@ -133,6 +133,29 @@ func validateImageRef(raw string) (string, error) {
 		return "", fmt.Errorf("image must be a single valid OCI reference")
 	}
 	return s, nil
+}
+
+// normalizeImageRef qualifies a PULL ref the way every container runtime does
+// before validateImageRef judges it: `golang:1.26` → `docker.io/library/golang:1.26`,
+// `curlimages/curl:8` → `docker.io/curlimages/curl:8`. ociRefRE requires a domain
+// (correctly — an output image with no registry has nowhere to push), but a
+// toolchain image a build PULLS is normally written the short way, and refusing
+// `node:22` would make the recipe lie about what docker accepts. A first
+// component containing '.' or ':' — or literally "localhost" — already IS a
+// domain and is left alone.
+func normalizeImageRef(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return s
+	}
+	head, _, hasPath := strings.Cut(s, "/")
+	if hasPath && (head == "localhost" || strings.ContainsAny(head, ".:")) {
+		return s
+	}
+	if hasPath {
+		return "docker.io/" + s
+	}
+	return "docker.io/library/" + s
 }
 
 // validateRepoURL enforces that a git repo URL is a real https URL to an
@@ -267,6 +290,7 @@ const (
 // the deploy/build path never re-reads env and tests are deterministic.
 type resourceLimits struct {
 	maxReplicas     int    // per-app replica ceiling
+	maxStorageGB    int    // per-app persistent volume ceiling, in GiB
 	maxBuilds       int    // concurrent build Jobs per org (shared build ns)
 	maxDeploys      int    // concurrent in-flight SYNCHRONOUS image deploys per org (L1)
 	quotaCPU        string // ResourceQuota: total requests.cpu / limits.cpu
@@ -287,6 +311,7 @@ type resourceLimits struct {
 func newResourceLimits() resourceLimits {
 	return resourceLimits{
 		maxReplicas:     atoiDefault(getenv("CLOUD_PLATFORM_MAX_REPLICAS", ""), defaultMaxReplicas),
+		maxStorageGB:    atoiDefault(getenv("CLOUD_PLATFORM_MAX_STORAGE_GB", ""), defaultMaxStorageGB),
 		maxBuilds:       atoiDefault(getenv("CLOUD_PLATFORM_MAX_CONCURRENT_BUILDS", ""), defaultMaxBuilds),
 		maxDeploys:      atoiDefault(getenv("CLOUD_PLATFORM_MAX_CONCURRENT_DEPLOYS", ""), defaultMaxDeploys),
 		quotaCPU:        getenv("CLOUD_PLATFORM_QUOTA_CPU", "20"),
@@ -314,7 +339,31 @@ const (
 	// otherwise let one org pile up in waitForTenantRBAC's ~45s wait. Fail-secure:
 	// an unset ceiling falls back here, never to zero or unlimited.
 	defaultMaxDeploys = 8
+	// defaultMaxStorageGB bounds one app's volume. Unlike replicas, storage is not
+	// reclaimed when the app stops — a claim keeps costing until someone deletes
+	// it — so the ceiling exists to bound spend, not just scheduling.
+	defaultMaxStorageGB = 100
 )
+
+// clampStorage bounds a requested volume size to [0, maxStorageGB] GiB. ZERO IS
+// MEANINGFUL and is the default: it says the app is stateless and gets no volume
+// at all, which is why this cannot reuse clampReplicas' "0 becomes 1" floor. A
+// request above the ceiling is capped rather than rejected, matching replicas: a
+// fat-fingered size degrades to the maximum allowed instead of failing a deploy.
+// An unset ceiling falls back to the safe default, never to unlimited.
+func (r resourceLimits) clampStorage(gb int) int {
+	max := r.maxStorageGB
+	if max <= 0 {
+		max = defaultMaxStorageGB
+	}
+	if gb < 1 {
+		return 0
+	}
+	if gb > max {
+		return max
+	}
+	return gb
+}
 
 // clampReplicas bounds a requested replica count to [1, maxReplicas]. A request
 // for 0 (or negative) becomes 1 (an app is at least one replica); a request
