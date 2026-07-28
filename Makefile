@@ -49,7 +49,11 @@ CGO_ENABLED     ?= 0
 # list cmd/cloud links and the multi-call binary serves.
 APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
 
-.PHONY: help webui deploy-ui agentskills build cloud ship plugin generate openapi run smoke test test-cgo test-codec vet tidy docker docker-push clean e2e
+# The binary each app builds to. Named targets (not a loop) so make can schedule
+# them in parallel and build exactly the one you ask for.
+APP_BINS := $(addprefix bin/,$(APPS))
+
+.PHONY: help webui deploy-ui agentskills build cloud ship apps $(APP_BINS) plugin generate openapi run smoke test test-cgo test-codec vet tidy docker docker-push clean e2e
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -115,15 +119,29 @@ cloud: ## Build the light host into ./bin/cloud (links zip + the manifest, none 
 # binary at all. Each per-app link is its OWN graph (the one subsystem, not the
 # fleet), so this is $(words $(APPS)) independent lean builds and not the mega
 # link that used to dominate a release. Slow by count, never by any single link.
-ship: cloud ## Build the release layout into ./bin: the light host + one binary per app.
-	@for a in $(APPS); do $(MAKE) --no-print-directory plugin APP=$$a; done
+ship: cloud apps ## Build the release layout into ./bin: the light host + one binary per app.
 	@echo ">> ship: cloud + $(words $(APPS)) per-app plugins in ./bin ($$(du -sh bin | cut -f1))"
+
+# EVERY app, as $(words $(APPS)) independent targets rather than one loop, so make
+# schedules them: `make -j apps` runs as many links at once as you allow, and a
+# single app named on the command line builds only itself. The recipe is stated
+# once and `plugin` calls it, so there is one way to build an app binary.
+#
+# Each link keeps GOFLAGS=-p=2: N concurrent builds each spawning NPROC compilers
+# is how a parallel build turns into a thrash. Two per link, N links, is the shape
+# that actually finishes.
+apps: $(APP_BINS) ## Build every app binary into ./bin. Parallelise: make -j apps.
+	@echo ">> apps: $(words $(APPS)) binaries in ./bin ($$(du -sh bin | cut -f1))"
+
+$(APP_BINS): bin/%:
+	@test -d plugin/$* || { echo "no plugin/$* — run 'make generate', or check the name against 'make plugin' with no APP"; exit 1; }
+	@mkdir -p bin
+	GOFLAGS=-p=2 CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o $@ ./plugin/$*
 
 plugin: ## Build ONE app into ./bin: make plugin APP=wallets.
 	@test -n "$(APP)" || { echo "usage: make plugin APP=<name>"; echo "apps: $(APPS)"; exit 1; }
-	@test -d plugin/$(APP) || { echo "no plugin/$(APP) — run 'make generate', or check the name against 'make plugin' with no APP"; exit 1; }
-	@mkdir -p bin
-	GOFLAGS=-p=2 CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$(APP) ./plugin/$(APP)
+	@echo "$(APPS)" | tr ' ' '\n' | grep -qx "$(APP)" || { echo "no app named $(APP) — the manifest is the list; run 'make generate' after adding a row, or check the name against 'make plugin' with no APP"; exit 1; }
+	@$(MAKE) --no-print-directory bin/$(APP)
 
 # manifest/apps.go is the hand-authored source of truth for the subsystem set.
 # This scaffolds a plugin/<app>/main.go for any manifest app that lacks one and
