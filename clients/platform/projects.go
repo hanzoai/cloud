@@ -25,7 +25,6 @@ import (
 	"github.com/zap-proto/zip"
 
 	iamclient "github.com/hanzoai/cloud/clients/iam"
-	"github.com/hanzoai/cloud/clients/principal"
 	model "github.com/hanzoai/iam/pkg/model"
 	iamstore "github.com/hanzoai/iam/pkg/store"
 )
@@ -58,12 +57,14 @@ func iamStore[T any](db orm.DB, fn func(db orm.DB) (T, error)) (out T, err error
 // and that name is the app-scope key AND the operator CR `part-of` label. The
 // value type is IAM's canonical *model.Project, so there is exactly ONE project
 // model across the binary.
+// ProjectStore is READ-ONLY on purpose. A project is created and deleted at
+// /v1/iam/projects, so platform has no Create or Delete to call — the constraint
+// lives in the type rather than in a convention someone can forget. What platform
+// needs of a project is only ever: does it exist, and what is under it.
 type ProjectStore interface {
 	List(ctx context.Context, org string) ([]*model.Project, error)
 	// Get returns nil (no error) when the project does not exist — IAM's convention.
 	Get(ctx context.Context, org, name string) (*model.Project, error)
-	Create(ctx context.Context, org, name, display, description string) (*model.Project, error)
-	Delete(ctx context.Context, org, name string) (bool, error)
 	Exists(ctx context.Context, org, name string) (bool, error)
 }
 
@@ -78,37 +79,6 @@ func (iamProjects) List(_ context.Context, org string) ([]*model.Project, error)
 
 func (iamProjects) Get(_ context.Context, org, name string) (*model.Project, error) {
 	return iamStore(iamclient.DB(), func(db orm.DB) (*model.Project, error) { return iamstore.GetProject(db, org+"/"+name) })
-}
-
-func (p iamProjects) Create(ctx context.Context, org, name, display, description string) (*model.Project, error) {
-	// Pre-check existence so a duplicate name is a clean 409 (errConflict) rather
-	// than a driver-specific unique-constraint error surfacing as a 500.
-	existing, err := p.Get(ctx, org, name)
-	if err != nil {
-		return nil, err
-	}
-	if existing != nil {
-		return nil, errConflict
-	}
-	proj := &model.Project{
-		Owner: org, Name: name, Organization: org,
-		DisplayName: display, Description: description,
-		IsDefault: principal.IsDefaultProject(name),
-	}
-	ok, err := iamStore(iamclient.DB(), func(db orm.DB) (bool, error) { return iamstore.AddProject(db, proj) })
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return nil, errConflict
-	}
-	return proj, nil
-}
-
-func (iamProjects) Delete(_ context.Context, org, name string) (bool, error) {
-	return iamStore(iamclient.DB(), func(db orm.DB) (bool, error) {
-		return iamstore.DeleteProject(db, &model.Project{Owner: org, Name: name})
-	})
 }
 
 func (p iamProjects) Exists(ctx context.Context, org, name string) (bool, error) {

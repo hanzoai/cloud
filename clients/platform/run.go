@@ -191,23 +191,23 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
-// ensureRunProject ensures the org's default project exists in IAM (the project
-// lifecycle owner) and returns its name, so a run needs no explicit project and
-// still lands in the normal app hierarchy. Idempotent and race-tolerant.
+// ensureRunProject resolves the org's default project so a run needs no explicit
+// one. It RESOLVES; it does not create.
+//
+// It used to create the project when absent, which made a container run the thing
+// that minted an org's project — a project is IAM's resource, and the platform's
+// nouns are apps and sites. A default project is part of what an org IS, so it is
+// seeded when the org is provisioned, not by whoever happens to run first.
 func ensureRunProject(s *cloud.Service[state], ctx context.Context, org string) (string, error) {
 	name := principal.DefaultProject
 	ok, err := s.State.projects.Exists(ctx, org, name)
 	if err != nil {
 		return "", zip.Errorf(http.StatusInternalServerError, "get project: %v", err)
 	}
-	if ok {
-		return name, nil
-	}
-	if _, err := s.State.projects.Create(ctx, org, name, "Default", "Container-serverless runs"); err != nil {
-		if errors.Is(err, errConflict) {
-			return name, nil // lost a create race — the winner's default project is fine
-		}
-		return "", zip.Errorf(http.StatusInternalServerError, "persist project: %v", err)
+	if !ok {
+		return "", zip.Errorf(http.StatusFailedDependency,
+			"org %q has no %q project — create it at POST /v1/iam/projects; the platform deploys into a project, it does not create one",
+			org, name)
 	}
 	return name, nil
 }

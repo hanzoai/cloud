@@ -462,6 +462,28 @@ func (s *Store) RunningApps(ctx context.Context) ([]RunningApp, error) {
 	return out, rows.Err()
 }
 
+// AllApplications returns every app across ALL orgs — the orphan reaper's sweep
+// set (orphans.go). Unscoped by org for the same reason RunningApps is: the
+// reaper runs cluster-wide, then acts on each row against that row's OWN org.
+// Every other read in this file carries `org=?`; this one is deliberate and is
+// used only by a cluster-wide sweep that never serves a request.
+func (s *Store) AllApplications(ctx context.Context) ([]Application, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+appCols+` FROM platform_apps ORDER BY id ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("list all apps: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Application
+	for rows.Next() {
+		a, err := scanApp(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan app: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
 // AdvanceComputeMeter moves an app's compute watermark from prev to now, but ONLY
 // if it still equals prev (compare-and-set). Returns true when THIS call advanced
 // it — the caller then, and only then, meters the (now−prev) span. The CAS makes a
