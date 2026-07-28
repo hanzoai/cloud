@@ -124,6 +124,22 @@ func init() {
 		Example:  json.RawMessage(`{"name":"widgets","ref":"main","limit":2}`),
 		Response: json.RawMessage(`{"commits":[{"sha":"a1b2c3d4e5f6","shortSha":"a1b2c3d","message":"add the widget service","authorName":"Ada","authorEmail":"ada@hanzo.ai","date":"2026-07-01T10:00:00Z"}]}`),
 	})
+	zip.Describe("GET /v1/git/repos/:name/files", zip.Doc{
+		Description: "browseFiles returns every file a glob selects at one revision, WITH its bytes\nand the revision they came from. It is the read a delivery generator makes:\none call answers \"what is the inventory at this commit, and what does it say\",\nwhere listing and then fetching would be a request per file.\n\nReturning the resolved revision matters as much as the bytes. A generator that\nlists at `main` and then reads at `main` can straddle a push and assemble half\nits inventory from one commit and half from the next; resolving once makes the\nwhole read consistent by construction.\n\nA file past the read cap comes back Truncated with no content rather than\nbeing dropped. A caller building a desired set has to know the difference\nbetween \"this file is empty\" and \"this file was not read\" — silently omitting\nit is how a pruning reconcile deletes what the missing file declared.",
+		Fields: map[string]string{
+			"fileJSON.content":   "Content is the file's bytes, empty when Truncated.",
+			"fileJSON.encoding":  "Encoding is how Content is carried: \"utf8\" verbatim, or \"base64\".",
+			"fileJSON.path":      "Path is the file's repo-relative path.",
+			"fileJSON.size":      "Size is the file's byte length in the repo.",
+			"fileJSON.truncated": "Truncated marks a file past the read cap; no content is sent. A caller\nassembling a desired set must treat this as INCOMPLETE, never as empty.",
+			"filesJSON.files":    "Files are the selected files, sorted by path. Directories are never\nreturned.",
+			"filesJSON.rev":      "Rev is the full revision the ref resolved to — pin follow-up reads to it.",
+			"globRef.glob":       "Glob selects files, matched segment by segment so `*` never crosses a `/`.\n`**` matches zero or more whole segments.",
+			"globRef.name":       "Name is the repo to read, from the :name path segment.",
+			"globRef.ref":        "Ref is a branch, tag or commit; empty means the repo's HEAD.",
+		},
+		Example: json.RawMessage(`{"name":"universe","ref":"main","glob":"charts/app/values/*/*.yaml"}`),
+	})
 	zip.Describe("GET /v1/git/repos/:name/mirrors", zip.Doc{
 		Description: "listMirrors returns a repo's outbound mirror targets — the downstream remotes\nthe mirror reactor pushes to whenever a push lands here.",
 		Fields: map[string]string{
@@ -137,17 +153,6 @@ func init() {
 		},
 		Example:  json.RawMessage(`{"name":"widgets"}`),
 		Response: json.RawMessage(`{"data":[{"id":"mir_2d90","repo":"widgets","host":"github.com","url":"https://github.com/acme/widgets.git","createdAt":"2026-07-01T10:00:00Z"}]}`),
-	})
-	zip.Describe("GET /v1/git/repos/:name/paths", zip.Doc{
-		Description: "browsePaths lists every file a glob selects at one revision, plus the revision\nit resolved to. It is the read a delivery generator makes: one call answers\n\"what is the inventory at this commit\", where walking the tree a level at a\ntime would be a request per directory.\n\nReturning the resolved revision matters as much as the paths. A generator that\nlists at `main` and then reads files at `main` can straddle a push and build\nfrom two different commits; pinning the returned rev makes the whole read\nconsistent.",
-		Fields: map[string]string{
-			"globRef.glob":    "Glob selects files, matched segment by segment so `*` never crosses a `/`.\n`**` matches zero or more whole segments.",
-			"globRef.name":    "Name is the repo to read, from the :name path segment.",
-			"globRef.ref":     "Ref is a branch, tag or commit; empty means the repo's HEAD.",
-			"pathsJSON.paths": "Paths are repo-relative file paths, sorted. Directories are never returned.",
-			"pathsJSON.rev":   "Rev is the full revision the ref resolved to — pin follow-up reads to it.",
-		},
-		Example: json.RawMessage(`{"name":"universe","ref":"main","glob":"charts/app/values/*/*.yaml"}`),
 	})
 	zip.Describe("GET /v1/git/repos/:name/readme", zip.Doc{
 		Description: "browseReadme returns the README at the tree root as plain text — unrendered, so\nthe caller decides how to present it. A repo with no README is not found.",
