@@ -74,7 +74,7 @@ while read -r slug; do
 
   # prep.py packed the bytes, so prep.py names what they are. `static` was
   # hardcoded here, which is wrong for exactly the templates that cannot survive
-  # it: framework drives crossOriginIsolated() in clients/projects/sites.go, and
+  # it: framework drives crossOriginIsolated() in apps/projects/sites.go, and
   # a Unity/Godot export served without COOP/COEP loses SharedArrayBuffer and
   # hangs — behind a 200. One producer, one consumer, no second opinion.
   fw=$(printf '%s' "$r" | sed -n 's/.*framework=\([a-z]*\).*/\1/p'); fw=${fw:-static}

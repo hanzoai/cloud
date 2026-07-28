@@ -46,7 +46,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 

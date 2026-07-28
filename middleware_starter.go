@@ -35,8 +35,8 @@ import (
 	"sync"
 
 	"github.com/hanzoai/account"
-	"github.com/hanzoai/cloud/clients/finance"
-	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/commerce/billing/credit"
 	"github.com/hanzoai/commerce/billing/creditledger"
 	"github.com/zap-proto/zip"

@@ -22,7 +22,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hanzoai/cloud/clients/kms"
+	"github.com/hanzoai/cloud/apps/kms"
 )
 
 // defaultEnv mirrors the standalone's REST default: a secret whose CR omits

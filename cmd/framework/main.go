@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/framework"
+	"github.com/hanzoai/cloud/apps/framework"
 )
 
 // Standalone entry for the framework app.

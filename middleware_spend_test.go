@@ -16,9 +16,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hanzoai/cloud/clients/finance"
-	"github.com/hanzoai/cloud/clients/money"
-	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/apps/money"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 )
