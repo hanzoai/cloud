@@ -1,0 +1,82 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "tools"
+    }
+  ],
+  "paths": {
+    "/v1/tools": {
+      "get": {
+        "operationId": "get_v1_tools",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/tools/activation": {
+      "get": {
+        "operationId": "get_v1_tools_activation",
+        "tags": [
+          "tools"
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_tools_activation",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/tools/mcp": {
+      "post": {
+        "operationId": "post_v1_tools_mcp",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/tools/servers": {
+      "get": {
+        "operationId": "get_v1_tools_servers",
+        "tags": [
+          "tools"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_tools_servers",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/tools/servers/{id}": {
+      "delete": {
+        "operationId": "delete_v1_tools_servers_by_id",
+        "tags": [
+          "tools"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,210 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "compliance"
+    }
+  ],
+  "paths": {
+    "/v1/compliance/accreditation": {
+      "get": {
+        "operationId": "get_v1_compliance_accreditation",
+        "tags": [
+          "compliance"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_compliance_accreditation",
+        "tags": [
+          "compliance"
+        ]
+      }
+    },
+    "/v1/compliance/accreditation/{id}": {
+      "get": {
+        "operationId": "get_v1_compliance_accreditation_by_id",
+        "tags": [
+          "compliance"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/compliance/accreditation/{id}/decision": {
+      "post": {
+        "operationId": "post_v1_compliance_accreditation_by_id_decision",
+        "tags": [
+          "compliance"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/compliance/audit": {
+      "get": {
+        "operationId": "get_v1_compliance_audit",
+        "tags": [
+          "compliance"
+        ]
+      }
+    },
+    "/v1/compliance/health": {
+      "get": {
+        "operationId": "get_v1_compliance_health",
+        "tags": [
+          "compliance"
+        ]
+      }
+    },
+    "/v1/compliance/records": {
+      "get": {
+        "operationId": "get_v1_compliance_records",
+        "tags": [
+          "compliance"
+        ]
+      }
+    },
+    "/v1/compliance/status": {
+      "get": {
+        "operationId": "get_v1_compliance_status",
+        "tags": [
+          "compliance"
+        ]
+      }
+    },
+    "/v1/compliance/subjects": {
+      "get": {
+        "operationId": "get_v1_compliance_subjects",
+        "tags": [
+          "compliance"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_compliance_subjects",
+        "tags": [
+          "compliance"
+        ]
+      }
+    },
+    "/v1/compliance/subjects/{id}": {
+      "get": {
+        "operationId": "get_v1_compliance_subjects_by_id",
+        "tags": [
+          "compliance"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/compliance/verifications": {
+      "get": {
+        "operationId": "get_v1_compliance_verifications",
+        "tags": [
+          "compliance"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_compliance_verifications",
+        "tags": [
+          "compliance"
+        ]
+      }
+    },
+    "/v1/compliance/verifications/webhook": {
+      "post": {
+        "operationId": "post_v1_compliance_verifications_webhook",
+        "tags": [
+          "compliance"
+        ]
+      }
+    },
+    "/v1/compliance/verifications/{id}": {
+      "get": {
+        "operationId": "get_v1_compliance_verifications_by_id",
+        "tags": [
+          "compliance"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/compliance/verifications/{id}/decision": {
+      "post": {
+        "operationId": "post_v1_compliance_verifications_by_id_decision",
+        "tags": [
+          "compliance"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/compliance/verifications/{id}/refresh": {
+      "post": {
+        "operationId": "post_v1_compliance_verifications_by_id_refresh",
+        "tags": [
+          "compliance"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

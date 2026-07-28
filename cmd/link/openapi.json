@@ -1,0 +1,142 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "links"
+    }
+  ],
+  "paths": {
+    "/v1/links": {
+      "get": {
+        "operationId": "get_v1_links",
+        "tags": [
+          "links"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_links",
+        "tags": [
+          "links"
+        ]
+      }
+    },
+    "/v1/links/devices/{machine}": {
+      "get": {
+        "operationId": "get_v1_links_devices_by_machine",
+        "tags": [
+          "links"
+        ],
+        "parameters": [
+          {
+            "name": "machine",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/links/devices/{machine}/revoke": {
+      "post": {
+        "operationId": "post_v1_links_devices_by_machine_revoke",
+        "tags": [
+          "links"
+        ],
+        "parameters": [
+          {
+            "name": "machine",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/links/route": {
+      "get": {
+        "operationId": "get_v1_links_route",
+        "tags": [
+          "links"
+        ]
+      }
+    },
+    "/v1/links/usage": {
+      "get": {
+        "operationId": "get_v1_links_usage",
+        "tags": [
+          "links"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_links_usage",
+        "tags": [
+          "links"
+        ]
+      }
+    },
+    "/v1/links/usage/accounts": {
+      "get": {
+        "operationId": "get_v1_links_usage_accounts",
+        "tags": [
+          "links"
+        ]
+      }
+    },
+    "/v1/links/usage/summary": {
+      "get": {
+        "operationId": "get_v1_links_usage_summary",
+        "tags": [
+          "links"
+        ]
+      }
+    },
+    "/v1/links/{id}": {
+      "delete": {
+        "operationId": "delete_v1_links_by_id",
+        "tags": [
+          "links"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_links_by_id",
+        "tags": [
+          "links"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

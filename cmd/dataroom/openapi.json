@@ -1,0 +1,258 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "dataroom"
+    }
+  ],
+  "paths": {
+    "/v1/dataroom/analytics/dataroom/{dataroomId}": {
+      "get": {
+        "operationId": "get_v1_dataroom_analytics_dataroom_by_dataroomid",
+        "tags": [
+          "dataroom"
+        ],
+        "parameters": [
+          {
+            "name": "dataroomId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/dataroom/analytics/link/{linkId}": {
+      "get": {
+        "operationId": "get_v1_dataroom_analytics_link_by_linkid",
+        "tags": [
+          "dataroom"
+        ],
+        "parameters": [
+          {
+            "name": "linkId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/dataroom/datarooms": {
+      "get": {
+        "operationId": "get_v1_dataroom_datarooms",
+        "tags": [
+          "dataroom"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_dataroom_datarooms",
+        "tags": [
+          "dataroom"
+        ]
+      }
+    },
+    "/v1/dataroom/datarooms/{id}": {
+      "get": {
+        "operationId": "get_v1_dataroom_datarooms_by_id",
+        "tags": [
+          "dataroom"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/dataroom/datarooms/{id}/documents": {
+      "post": {
+        "operationId": "post_v1_dataroom_datarooms_by_id_documents",
+        "tags": [
+          "dataroom"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/dataroom/documents": {
+      "get": {
+        "operationId": "get_v1_dataroom_documents",
+        "tags": [
+          "dataroom"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_dataroom_documents",
+        "tags": [
+          "dataroom"
+        ]
+      }
+    },
+    "/v1/dataroom/documents/{id}": {
+      "get": {
+        "operationId": "get_v1_dataroom_documents_by_id",
+        "tags": [
+          "dataroom"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/dataroom/documents/{id}/file": {
+      "get": {
+        "operationId": "get_v1_dataroom_documents_by_id_file",
+        "tags": [
+          "dataroom"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/dataroom/health": {
+      "get": {
+        "operationId": "get_v1_dataroom_health",
+        "tags": [
+          "dataroom"
+        ]
+      }
+    },
+    "/v1/dataroom/links": {
+      "get": {
+        "operationId": "get_v1_dataroom_links",
+        "tags": [
+          "dataroom"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_dataroom_links",
+        "tags": [
+          "dataroom"
+        ]
+      }
+    },
+    "/v1/dataroom/view/{linkId}": {
+      "get": {
+        "operationId": "get_v1_dataroom_view_by_linkid",
+        "tags": [
+          "dataroom"
+        ],
+        "parameters": [
+          {
+            "name": "linkId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/dataroom/view/{linkId}/authenticate": {
+      "post": {
+        "operationId": "post_v1_dataroom_view_by_linkid_authenticate",
+        "tags": [
+          "dataroom"
+        ],
+        "parameters": [
+          {
+            "name": "linkId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/dataroom/view/{linkId}/document/{documentId}/file": {
+      "get": {
+        "operationId": "get_v1_dataroom_view_by_linkid_document_by_documentid_file",
+        "tags": [
+          "dataroom"
+        ],
+        "parameters": [
+          {
+            "name": "linkId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "documentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/dataroom/view/{linkId}/pageview": {
+      "post": {
+        "operationId": "post_v1_dataroom_view_by_linkid_pageview",
+        "tags": [
+          "dataroom"
+        ],
+        "parameters": [
+          {
+            "name": "linkId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

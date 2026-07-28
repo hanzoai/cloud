@@ -1,0 +1,89 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "commerce"
+    },
+    {
+      "name": "csrf"
+    },
+    {
+      "name": "embed-status"
+    },
+    {
+      "name": "iam"
+    }
+  ],
+  "paths": {
+    "/v1/commerce/topup/rails": {
+      "get": {
+        "operationId": "get_v1_commerce_topup_rails",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/topup/wallet": {
+      "post": {
+        "operationId": "post_v1_commerce_topup_wallet",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/csrf": {
+      "get": {
+        "operationId": "get_v1_csrf",
+        "tags": [
+          "csrf"
+        ]
+      }
+    },
+    "/v1/embed-status": {
+      "get": {
+        "operationId": "get_v1_embed-status",
+        "tags": [
+          "embed-status"
+        ]
+      }
+    },
+    "/v1/iam/keys": {
+      "delete": {
+        "operationId": "delete_v1_iam_keys",
+        "tags": [
+          "iam"
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_iam_keys",
+        "tags": [
+          "iam"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_iam_keys",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/v1/iam/onboard": {
+      "post": {
+        "operationId": "post_v1_iam_onboard",
+        "tags": [
+          "iam"
+        ]
+      }
+    }
+  }
+}

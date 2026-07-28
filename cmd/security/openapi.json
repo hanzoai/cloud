@@ -1,0 +1,94 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "security"
+    }
+  ],
+  "paths": {
+    "/v1/security/findings": {
+      "get": {
+        "operationId": "get_v1_security_findings",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/v1/security/findings/{id}": {
+      "get": {
+        "operationId": "get_v1_security_findings_by_id",
+        "tags": [
+          "security"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/security/health": {
+      "get": {
+        "operationId": "get_v1_security_health",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/v1/security/rules": {
+      "get": {
+        "operationId": "get_v1_security_rules",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/v1/security/scans": {
+      "get": {
+        "operationId": "get_v1_security_scans",
+        "tags": [
+          "security"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_security_scans",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/v1/security/scans/{id}": {
+      "get": {
+        "operationId": "get_v1_security_scans_by_id",
+        "tags": [
+          "security"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

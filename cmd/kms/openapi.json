@@ -1,0 +1,128 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "kms"
+    }
+  ],
+  "paths": {
+    "/v1/kms/auth/login": {
+      "post": {
+        "operationId": "post_v1_kms_auth_login",
+        "tags": [
+          "kms"
+        ]
+      }
+    },
+    "/v1/kms/config": {
+      "get": {
+        "operationId": "get_v1_kms_config",
+        "tags": [
+          "kms"
+        ]
+      }
+    },
+    "/v1/kms/health": {
+      "get": {
+        "operationId": "get_v1_kms_health",
+        "tags": [
+          "kms"
+        ]
+      }
+    },
+    "/v1/kms/orgs/{org}/secrets": {
+      "get": {
+        "operationId": "get_v1_kms_orgs_by_org_secrets",
+        "tags": [
+          "kms"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_kms_orgs_by_org_secrets",
+        "tags": [
+          "kms"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/kms/orgs/{org}/secrets/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_v1_kms_orgs_by_org_secrets_by_wildcard1",
+        "tags": [
+          "kms"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_kms_orgs_by_org_secrets_by_wildcard1",
+        "tags": [
+          "kms"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,276 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "deploy"
+    }
+  ],
+  "paths": {
+    "/v1/deploy/account/can-i/{wildcard1}": {
+      "get": {
+        "operationId": "get_v1_deploy_account_can-i_by_wildcard1",
+        "tags": [
+          "deploy"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/deploy/applications": {
+      "get": {
+        "operationId": "get_v1_deploy_applications",
+        "tags": [
+          "deploy"
+        ]
+      }
+    },
+    "/v1/deploy/applications/{name}": {
+      "get": {
+        "operationId": "get_v1_deploy_applications_by_name",
+        "tags": [
+          "deploy"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/deploy/applications/{name}/resource-tree": {
+      "get": {
+        "operationId": "get_v1_deploy_applications_by_name_resource-tree",
+        "tags": [
+          "deploy"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/deploy/applications/{name}/revisions/{revision}/metadata": {
+      "get": {
+        "operationId": "get_v1_deploy_applications_by_name_revisions_by_revision_metadata",
+        "tags": [
+          "deploy"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/deploy/applications/{name}/rollback": {
+      "post": {
+        "operationId": "post_v1_deploy_applications_by_name_rollback",
+        "tags": [
+          "deploy"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/deploy/applications/{name}/sync": {
+      "post": {
+        "operationId": "post_v1_deploy_applications_by_name_sync",
+        "tags": [
+          "deploy"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/deploy/applications/{name}/syncwindows": {
+      "get": {
+        "operationId": "get_v1_deploy_applications_by_name_syncwindows",
+        "tags": [
+          "deploy"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/deploy/callback": {
+      "get": {
+        "operationId": "get_v1_deploy_callback",
+        "tags": [
+          "deploy"
+        ]
+      }
+    },
+    "/v1/deploy/clusters": {
+      "get": {
+        "operationId": "get_v1_deploy_clusters",
+        "tags": [
+          "deploy"
+        ]
+      }
+    },
+    "/v1/deploy/gitops": {
+      "get": {
+        "operationId": "get_v1_deploy_gitops",
+        "tags": [
+          "deploy"
+        ]
+      }
+    },
+    "/v1/deploy/health": {
+      "get": {
+        "operationId": "get_v1_deploy_health",
+        "tags": [
+          "deploy"
+        ]
+      }
+    },
+    "/v1/deploy/login": {
+      "get": {
+        "operationId": "get_v1_deploy_login",
+        "tags": [
+          "deploy"
+        ]
+      }
+    },
+    "/v1/deploy/logout": {
+      "post": {
+        "operationId": "post_v1_deploy_logout",
+        "tags": [
+          "deploy"
+        ]
+      }
+    },
+    "/v1/deploy/projects": {
+      "get": {
+        "operationId": "get_v1_deploy_projects",
+        "tags": [
+          "deploy"
+        ]
+      }
+    },
+    "/v1/deploy/reconcile": {
+      "post": {
+        "operationId": "post_v1_deploy_reconcile",
+        "tags": [
+          "deploy"
+        ]
+      }
+    },
+    "/v1/deploy/session/userinfo": {
+      "get": {
+        "operationId": "get_v1_deploy_session_userinfo",
+        "tags": [
+          "deploy"
+        ]
+      }
+    },
+    "/v1/deploy/settings": {
+      "get": {
+        "operationId": "get_v1_deploy_settings",
+        "tags": [
+          "deploy"
+        ]
+      }
+    },
+    "/v1/deploy/stream/applications": {
+      "get": {
+        "operationId": "get_v1_deploy_stream_applications",
+        "tags": [
+          "deploy"
+        ]
+      }
+    },
+    "/v1/deploy/stream/applications/{name}/resource-tree": {
+      "get": {
+        "operationId": "get_v1_deploy_stream_applications_by_name_resource-tree",
+        "tags": [
+          "deploy"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/deploy/version": {
+      "get": {
+        "operationId": "get_v1_deploy_version",
+        "tags": [
+          "deploy"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,262 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "esign"
+    }
+  ],
+  "paths": {
+    "/v1/esign/documents": {
+      "get": {
+        "operationId": "get_v1_esign_documents",
+        "tags": [
+          "esign"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_esign_documents",
+        "tags": [
+          "esign"
+        ]
+      }
+    },
+    "/v1/esign/documents/{id}": {
+      "get": {
+        "operationId": "get_v1_esign_documents_by_id",
+        "tags": [
+          "esign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/esign/documents/{id}/audit": {
+      "get": {
+        "operationId": "get_v1_esign_documents_by_id_audit",
+        "tags": [
+          "esign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/esign/documents/{id}/download": {
+      "get": {
+        "operationId": "get_v1_esign_documents_by_id_download",
+        "tags": [
+          "esign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/esign/documents/{id}/fields": {
+      "post": {
+        "operationId": "post_v1_esign_documents_by_id_fields",
+        "tags": [
+          "esign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/esign/documents/{id}/recipients": {
+      "post": {
+        "operationId": "post_v1_esign_documents_by_id_recipients",
+        "tags": [
+          "esign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/esign/documents/{id}/send": {
+      "post": {
+        "operationId": "post_v1_esign_documents_by_id_send",
+        "tags": [
+          "esign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/esign/health": {
+      "get": {
+        "operationId": "get_v1_esign_health",
+        "tags": [
+          "esign"
+        ]
+      }
+    },
+    "/v1/esign/o/{org}/sign/{token}": {
+      "get": {
+        "operationId": "get_v1_esign_o_by_org_sign_by_token",
+        "tags": [
+          "esign"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/esign/o/{org}/sign/{token}/complete": {
+      "post": {
+        "operationId": "post_v1_esign_o_by_org_sign_by_token_complete",
+        "tags": [
+          "esign"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/esign/o/{org}/sign/{token}/fields/{fieldId}": {
+      "post": {
+        "operationId": "post_v1_esign_o_by_org_sign_by_token_fields_by_fieldid",
+        "tags": [
+          "esign"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fieldId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/esign/o/{org}/sign/{token}/reject": {
+      "post": {
+        "operationId": "post_v1_esign_o_by_org_sign_by_token_reject",
+        "tags": [
+          "esign"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

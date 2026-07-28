@@ -1,0 +1,68 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "edge"
+    },
+    {
+      "name": "mesh"
+    },
+    {
+      "name": "networks"
+    }
+  ],
+  "paths": {
+    "/v1/edge/nodes": {
+      "get": {
+        "operationId": "get_v1_edge_nodes",
+        "tags": [
+          "edge"
+        ]
+      }
+    },
+    "/v1/mesh/services": {
+      "get": {
+        "operationId": "get_v1_mesh_services",
+        "tags": [
+          "mesh"
+        ]
+      }
+    },
+    "/v1/networks": {
+      "get": {
+        "operationId": "get_v1_networks",
+        "tags": [
+          "networks"
+        ]
+      }
+    },
+    "/v1/networks/{id}": {
+      "get": {
+        "operationId": "get_v1_networks_by_id",
+        "tags": [
+          "networks"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,508 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "cloudflare"
+    }
+  ],
+  "paths": {
+    "/v1/cloudflare/ai/run/{wildcard1}": {
+      "post": {
+        "operationId": "post_v1_cloudflare_ai_run_by_wildcard1",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/cloudflare/d1/databases": {
+      "get": {
+        "operationId": "get_v1_cloudflare_d1_databases",
+        "tags": [
+          "cloudflare"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_cloudflare_d1_databases",
+        "tags": [
+          "cloudflare"
+        ]
+      }
+    },
+    "/v1/cloudflare/d1/databases/{database}": {
+      "delete": {
+        "operationId": "delete_v1_cloudflare_d1_databases_by_database",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "database",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/cloudflare/d1/databases/{database}/query": {
+      "post": {
+        "operationId": "post_v1_cloudflare_d1_databases_by_database_query",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "database",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/cloudflare/kv/namespaces": {
+      "get": {
+        "operationId": "get_v1_cloudflare_kv_namespaces",
+        "tags": [
+          "cloudflare"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_cloudflare_kv_namespaces",
+        "tags": [
+          "cloudflare"
+        ]
+      }
+    },
+    "/v1/cloudflare/kv/namespaces/{namespace}": {
+      "delete": {
+        "operationId": "delete_v1_cloudflare_kv_namespaces_by_namespace",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/cloudflare/kv/namespaces/{namespace}/values/{key}": {
+      "delete": {
+        "operationId": "delete_v1_cloudflare_kv_namespaces_by_namespace_values_by_key",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_cloudflare_kv_namespaces_by_namespace_values_by_key",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_cloudflare_kv_namespaces_by_namespace_values_by_key",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "namespace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/cloudflare/pages/projects": {
+      "get": {
+        "operationId": "get_v1_cloudflare_pages_projects",
+        "tags": [
+          "cloudflare"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_cloudflare_pages_projects",
+        "tags": [
+          "cloudflare"
+        ]
+      }
+    },
+    "/v1/cloudflare/pages/projects/{project}": {
+      "delete": {
+        "operationId": "delete_v1_cloudflare_pages_projects_by_project",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_cloudflare_pages_projects_by_project",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/cloudflare/pages/projects/{project}/deployments": {
+      "post": {
+        "operationId": "post_v1_cloudflare_pages_projects_by_project_deployments",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/cloudflare/pages/projects/{project}/domains": {
+      "post": {
+        "operationId": "post_v1_cloudflare_pages_projects_by_project_domains",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/cloudflare/pages/projects/{project}/domains/{domain}": {
+      "delete": {
+        "operationId": "delete_v1_cloudflare_pages_projects_by_project_domains_by_domain",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/cloudflare/r2/buckets": {
+      "get": {
+        "operationId": "get_v1_cloudflare_r2_buckets",
+        "tags": [
+          "cloudflare"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_cloudflare_r2_buckets",
+        "tags": [
+          "cloudflare"
+        ]
+      }
+    },
+    "/v1/cloudflare/r2/buckets/{bucket}": {
+      "delete": {
+        "operationId": "delete_v1_cloudflare_r2_buckets_by_bucket",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/cloudflare/workers/scripts": {
+      "get": {
+        "operationId": "get_v1_cloudflare_workers_scripts",
+        "tags": [
+          "cloudflare"
+        ]
+      }
+    },
+    "/v1/cloudflare/workers/scripts/{script}": {
+      "delete": {
+        "operationId": "delete_v1_cloudflare_workers_scripts_by_script",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "script",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_cloudflare_workers_scripts_by_script",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "script",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/cloudflare/workers/scripts/{script}/subdomain": {
+      "post": {
+        "operationId": "post_v1_cloudflare_workers_scripts_by_script_subdomain",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "script",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/cloudflare/workers/subdomain": {
+      "get": {
+        "operationId": "get_v1_cloudflare_workers_subdomain",
+        "tags": [
+          "cloudflare"
+        ]
+      }
+    },
+    "/v1/cloudflare/workers/zones/{zone}/routes": {
+      "get": {
+        "operationId": "get_v1_cloudflare_workers_zones_by_zone_routes",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "zone",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_cloudflare_workers_zones_by_zone_routes",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "zone",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/cloudflare/workers/zones/{zone}/routes/{route}": {
+      "delete": {
+        "operationId": "delete_v1_cloudflare_workers_zones_by_zone_routes_by_route",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "zone",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "route",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/cloudflare/zones": {
+      "get": {
+        "operationId": "get_v1_cloudflare_zones",
+        "tags": [
+          "cloudflare"
+        ]
+      }
+    },
+    "/v1/cloudflare/zones/{zone}": {
+      "get": {
+        "operationId": "get_v1_cloudflare_zones_by_zone",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "zone",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/cloudflare/zones/{zone}/analytics": {
+      "get": {
+        "operationId": "get_v1_cloudflare_zones_by_zone_analytics",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "zone",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

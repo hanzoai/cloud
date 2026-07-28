@@ -1,0 +1,197 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "admin"
+    },
+    {
+      "name": "affiliates"
+    }
+  ],
+  "paths": {
+    "/v1/admin/affiliates": {
+      "get": {
+        "operationId": "get_v1_admin_affiliates",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/affiliates/sweep": {
+      "post": {
+        "operationId": "post_v1_admin_affiliates_sweep",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/affiliates/{id}/approve": {
+      "post": {
+        "operationId": "post_v1_admin_affiliates_by_id_approve",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/admin/affiliates/{id}/payout": {
+      "post": {
+        "operationId": "post_v1_admin_affiliates_by_id_payout",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/admin/affiliates/{id}/rate": {
+      "post": {
+        "operationId": "post_v1_admin_affiliates_by_id_rate",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/admin/affiliates/{id}/suspend": {
+      "post": {
+        "operationId": "post_v1_admin_affiliates_by_id_suspend",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/admin/referrals": {
+      "get": {
+        "operationId": "get_v1_admin_referrals",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/affiliates": {
+      "get": {
+        "operationId": "get_v1_affiliates",
+        "tags": [
+          "affiliates"
+        ]
+      }
+    },
+    "/v1/affiliates/apply": {
+      "post": {
+        "operationId": "post_v1_affiliates_apply",
+        "tags": [
+          "affiliates"
+        ]
+      }
+    },
+    "/v1/affiliates/attribute": {
+      "post": {
+        "operationId": "post_v1_affiliates_attribute",
+        "tags": [
+          "affiliates"
+        ]
+      }
+    },
+    "/v1/affiliates/click": {
+      "post": {
+        "operationId": "post_v1_affiliates_click",
+        "tags": [
+          "affiliates"
+        ]
+      }
+    },
+    "/v1/affiliates/leaderboard": {
+      "get": {
+        "operationId": "get_v1_affiliates_leaderboard",
+        "tags": [
+          "affiliates"
+        ]
+      }
+    },
+    "/v1/affiliates/me": {
+      "get": {
+        "operationId": "get_v1_affiliates_me",
+        "tags": [
+          "affiliates"
+        ]
+      }
+    },
+    "/v1/affiliates/me/earnings": {
+      "get": {
+        "operationId": "get_v1_affiliates_me_earnings",
+        "tags": [
+          "affiliates"
+        ]
+      }
+    },
+    "/v1/affiliates/me/handle": {
+      "post": {
+        "operationId": "post_v1_affiliates_me_handle",
+        "tags": [
+          "affiliates"
+        ]
+      }
+    },
+    "/v1/affiliates/me/links": {
+      "get": {
+        "operationId": "get_v1_affiliates_me_links",
+        "tags": [
+          "affiliates"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_affiliates_me_links",
+        "tags": [
+          "affiliates"
+        ]
+      }
+    }
+  }
+}

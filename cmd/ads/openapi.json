@@ -1,0 +1,110 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "ads"
+    }
+  ],
+  "paths": {
+    "/v1/ads/campaigns": {
+      "get": {
+        "operationId": "get_v1_ads_campaigns",
+        "tags": [
+          "ads"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_ads_campaigns",
+        "tags": [
+          "ads"
+        ]
+      }
+    },
+    "/v1/ads/campaigns/{id}": {
+      "delete": {
+        "operationId": "delete_v1_ads_campaigns_by_id",
+        "tags": [
+          "ads"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_ads_campaigns_by_id",
+        "tags": [
+          "ads"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_ads_campaigns_by_id",
+        "tags": [
+          "ads"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/ads/campaigns/{id}/launch": {
+      "post": {
+        "operationId": "post_v1_ads_campaigns_by_id_launch",
+        "tags": [
+          "ads"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/ads/summary": {
+      "get": {
+        "operationId": "get_v1_ads_summary",
+        "tags": [
+          "ads"
+        ]
+      }
+    }
+  }
+}

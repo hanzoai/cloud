@@ -1,0 +1,132 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "kb"
+    }
+  ],
+  "paths": {
+    "/v1/kb/connectors": {
+      "get": {
+        "operationId": "get_v1_kb_connectors",
+        "tags": [
+          "kb"
+        ]
+      }
+    },
+    "/v1/kb/connectors/catalog": {
+      "get": {
+        "operationId": "get_v1_kb_connectors_catalog",
+        "tags": [
+          "kb"
+        ]
+      }
+    },
+    "/v1/kb/connectors/{provider}": {
+      "delete": {
+        "operationId": "delete_v1_kb_connectors_by_provider",
+        "tags": [
+          "kb"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/kb/connectors/{provider}/callback": {
+      "get": {
+        "operationId": "get_v1_kb_connectors_by_provider_callback",
+        "tags": [
+          "kb"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/kb/connectors/{provider}/connect": {
+      "get": {
+        "operationId": "get_v1_kb_connectors_by_provider_connect",
+        "tags": [
+          "kb"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/kb/connectors/{provider}/sync": {
+      "post": {
+        "operationId": "post_v1_kb_connectors_by_provider_sync",
+        "tags": [
+          "kb"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/kb/graph": {
+      "get": {
+        "operationId": "get_v1_kb_graph",
+        "tags": [
+          "kb"
+        ]
+      }
+    },
+    "/v1/kb/import": {
+      "post": {
+        "operationId": "post_v1_kb_import",
+        "tags": [
+          "kb"
+        ]
+      }
+    },
+    "/v1/kb/search": {
+      "post": {
+        "operationId": "post_v1_kb_search",
+        "tags": [
+          "kb"
+        ]
+      }
+    }
+  }
+}

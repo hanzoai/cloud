@@ -1,0 +1,39 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "indexers"
+    },
+    {
+      "name": "oracles"
+    }
+  ],
+  "paths": {
+    "/v1/indexers": {
+      "get": {
+        "operationId": "get_v1_indexers",
+        "tags": [
+          "indexers"
+        ]
+      }
+    },
+    "/v1/oracles": {
+      "get": {
+        "operationId": "get_v1_oracles",
+        "tags": [
+          "oracles"
+        ]
+      }
+    }
+  }
+}

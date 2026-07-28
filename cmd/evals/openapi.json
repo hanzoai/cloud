@@ -1,0 +1,154 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "evals"
+    }
+  ],
+  "paths": {
+    "/v1/evals/dataset-items": {
+      "get": {
+        "operationId": "get_v1_evals_dataset-items",
+        "tags": [
+          "evals"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_evals_dataset-items",
+        "tags": [
+          "evals"
+        ]
+      }
+    },
+    "/v1/evals/datasets": {
+      "get": {
+        "operationId": "get_v1_evals_datasets",
+        "tags": [
+          "evals"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_evals_datasets",
+        "tags": [
+          "evals"
+        ]
+      }
+    },
+    "/v1/evals/datasets/{name}": {
+      "delete": {
+        "operationId": "delete_v1_evals_datasets_by_name",
+        "tags": [
+          "evals"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_evals_datasets_by_name",
+        "tags": [
+          "evals"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/evals/evaluators": {
+      "get": {
+        "operationId": "get_v1_evals_evaluators",
+        "tags": [
+          "evals"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_evals_evaluators",
+        "tags": [
+          "evals"
+        ]
+      }
+    },
+    "/v1/evals/metrics": {
+      "get": {
+        "operationId": "get_v1_evals_metrics",
+        "tags": [
+          "evals"
+        ]
+      }
+    },
+    "/v1/evals/runs": {
+      "get": {
+        "operationId": "get_v1_evals_runs",
+        "tags": [
+          "evals"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_evals_runs",
+        "tags": [
+          "evals"
+        ]
+      }
+    },
+    "/v1/evals/score-configs": {
+      "get": {
+        "operationId": "get_v1_evals_score-configs",
+        "tags": [
+          "evals"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_evals_score-configs",
+        "tags": [
+          "evals"
+        ]
+      }
+    },
+    "/v1/evals/scores": {
+      "get": {
+        "operationId": "get_v1_evals_scores",
+        "tags": [
+          "evals"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_evals_scores",
+        "tags": [
+          "evals"
+        ]
+      }
+    },
+    "/v1/evals/traces": {
+      "get": {
+        "operationId": "get_v1_evals_traces",
+        "tags": [
+          "evals"
+        ]
+      }
+    }
+  }
+}

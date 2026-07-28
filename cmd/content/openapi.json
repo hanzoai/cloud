@@ -1,0 +1,86 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "content"
+    }
+  ],
+  "paths": {
+    "/v1/content/board": {
+      "get": {
+        "operationId": "get_v1_content_board",
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/v1/content/channels": {
+      "get": {
+        "operationId": "get_v1_content_channels",
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/v1/content/generate": {
+      "post": {
+        "operationId": "post_v1_content_generate",
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/v1/content/lifecycle": {
+      "get": {
+        "operationId": "get_v1_content_lifecycle",
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/v1/content/publish": {
+      "post": {
+        "operationId": "post_v1_content_publish",
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/v1/content/{doctype}/{name}/transition": {
+      "post": {
+        "operationId": "post_v1_content_by_doctype_by_name_transition",
+        "tags": [
+          "content"
+        ],
+        "parameters": [
+          {
+            "name": "doctype",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
