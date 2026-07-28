@@ -1,6 +1,7 @@
 package projects
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -80,4 +81,27 @@ func visibilityFor(s *cloud.Service[state], c *zip.Ctx, want string) (string, er
 // for a second copy of it to drift.
 func (p Project) listed() bool {
 	return p.Visibility == VisibilityPublic && !p.Hidden
+}
+
+// publishCommunity pushes a project's resolved visibility to the canonical git
+// plane, which gives it a repo at git.hanzo.ai/<org>/<slug>, world-readable
+// exactly when the project is.
+//
+// Fired on every create and every update rather than only on a transition: the
+// subscriber is idempotent, and a transition this side failed to notice would
+// leave a private project's source world-readable. It is also BEST-EFFORT —
+// logged, never returned — because the project row is the source of truth and a
+// git plane that is down (or simply not co-resident in this binary) must not
+// fail a publish. The next update reconciles it.
+func publishCommunity(s *cloud.Service[state], ctx context.Context, p Project) {
+	if !cloud.CommunityPublisherRegistered() {
+		return
+	}
+	if err := cloud.OnCommunityPublish(ctx, cloud.CommunityEvent{
+		Org: p.Org, Slug: p.Slug, Name: p.Name, Description: p.Description,
+		Listed: p.listed(),
+	}); err != nil {
+		s.Log.Warn("community publish", "org", p.Org, "slug", p.Slug,
+			"listed", p.listed(), "err", err)
+	}
 }
