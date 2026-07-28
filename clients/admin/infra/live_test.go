@@ -3,6 +3,7 @@ package infra
 import (
 	"context"
 	"os"
+	"sort"
 	"testing"
 	"time"
 
@@ -54,6 +55,22 @@ func TestLiveCollect(t *testing.T) {
 		t.Logf("  %-16s nodes=%-3d pods=%-4d pvs=%-4d pvcs=%-4d idle=%-3d scanned=%v %s",
 			c.Name, c.Nodes, c.Pods, c.PVs, c.PVCs, c.IdlePVCs, c.Scanned, c.ScanError)
 	}
+	t.Logf("fill: %d of %d volumes measured (%d GiB); %d NOT measured (%d GiB — unknown, not empty)",
+		snap.Totals.MeasuredVolumes, snap.Totals.Volumes, snap.Totals.MeasuredGiB,
+		snap.Totals.UnmeasuredVolumes, snap.Totals.UnmeasuredGiB)
+	t.Logf("WASTE: %d GiB provisioned-but-empty on the measured set = $%.2f/mo (a LOWER BOUND)",
+		snap.Totals.WastedGiB, float64(snap.Cost.WastedMonthly)/100)
+	worst := append([]Volume(nil), snap.Volumes...)
+	sort.Slice(worst, func(i, j int) bool { return worst[i].WastedGiB > worst[j].WastedGiB })
+	for i, v := range worst {
+		if i == 10 || !v.HasUsage {
+			break
+		}
+		t.Logf("  %5d GiB waste  $%6.2f/mo  %4d GiB prov  %9s used  %s/%s  %s",
+			v.WastedGiB, float64(v.WastedMonthlyCents)/100, v.SizeGiB, gibLabel(v.UsedBytes),
+			v.PVCNamespace, v.PVCName, v.Controller)
+	}
+
 	var deletable []Volume
 	for _, v := range snap.Volumes {
 		if v.Deletable {
@@ -102,6 +119,49 @@ func TestLiveCollect(t *testing.T) {
 	}
 	if int64(snap.Cost.ReclaimableMonthly) != sumCents(deletable) {
 		t.Errorf("reclaimable %d != sum of deletable volumes %d", snap.Cost.ReclaimableMonthly, sumCents(deletable))
+	}
+
+	// ---- fill invariants ---------------------------------------------------------
+	// The one that matters: an unmeasured volume must contribute NOTHING. On a live fleet
+	// this is the difference between a real $600 and a fabricated $760.
+	var wastedGiBSum int
+	var wastedCents, measured, unmeasured int64
+	for _, v := range snap.Volumes {
+		if !v.HasUsage {
+			unmeasured++
+			if v.UsedBytes != 0 || v.WastedGiB != 0 || v.WastedMonthlyCents != 0 {
+				t.Errorf("volume %s (%s) was never measured yet reports used=%d waste=%d GiB/%d cents",
+					v.ID, v.Name, v.UsedBytes, v.WastedGiB, v.WastedMonthlyCents)
+			}
+			continue
+		}
+		measured++
+		if v.WastedGiB > v.SizeGiB {
+			t.Errorf("volume %s wastes %d GiB of a %d GiB volume", v.ID, v.WastedGiB, v.SizeGiB)
+		}
+		if v.WastedMonthlyCents > v.MonthlyCents {
+			t.Errorf("volume %s wastes $%.2f of a $%.2f bill", v.ID,
+				float64(v.WastedMonthlyCents)/100, float64(v.MonthlyCents)/100)
+		}
+		wastedGiBSum += v.WastedGiB
+		wastedCents += int64(v.WastedMonthlyCents)
+	}
+	if int64(snap.Totals.MeasuredVolumes) != measured || int64(snap.Totals.UnmeasuredVolumes) != unmeasured {
+		t.Errorf("measured/unmeasured tallies %d/%d disagree with the rows %d/%d",
+			snap.Totals.MeasuredVolumes, snap.Totals.UnmeasuredVolumes, measured, unmeasured)
+	}
+	if snap.Totals.MeasuredVolumes+snap.Totals.UnmeasuredVolumes != snap.Totals.Volumes {
+		t.Errorf("measured %d + unmeasured %d != %d volumes — every volume must be in exactly one bucket",
+			snap.Totals.MeasuredVolumes, snap.Totals.UnmeasuredVolumes, snap.Totals.Volumes)
+	}
+	if snap.Totals.WastedGiB != wastedGiBSum || int64(snap.Cost.WastedMonthly) != wastedCents {
+		t.Errorf("fleet waste %d GiB/%d cents != sum of rows %d GiB/%d cents",
+			snap.Totals.WastedGiB, snap.Cost.WastedMonthly, wastedGiBSum, wastedCents)
+	}
+	// Waste is money already inside VolumesMonthly, never on top of it.
+	if snap.Cost.WastedMonthly > snap.Cost.VolumesMonthly {
+		t.Errorf("waste $%.2f exceeds the whole block-storage bill $%.2f",
+			float64(snap.Cost.WastedMonthly)/100, float64(snap.Cost.VolumesMonthly)/100)
 	}
 }
 
