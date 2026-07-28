@@ -51,11 +51,11 @@ const (
 	DTTicket        = "hd-ticket"
 	DTCommunication = "hd-communication"
 	DTArticle       = "hd-article"
-	DTCategory      = "hd-article-category"
+	DTCategory      = "hd-category"
 
 	dtAgent          = "hd-agent"
 	dtTeam           = "hd-team"
-	dtCannedResponse = "hd-canned-response"
+	dtCannedResponse = "hd-response"
 	dtSLA            = "hd-sla"
 )
 
