@@ -66,12 +66,14 @@ package credz
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/hanzoai/cloud/cek"
@@ -219,6 +221,15 @@ func resolve(dataDir string) Posture {
 	// one for the credentials of the app I am.
 	sock := filepath.Join(dataDir, SockName)
 	b, err := pull(sock, tok)
+	if err != nil && tok != "" {
+		// A LAUNCH TOKEN means a host spawned me, which means a broker is the
+		// authority for my key — so a broker that is not answering YET is a race to
+		// wait out, not a reason to invent one. The broker is itself an app the host
+		// starts, and an app that boots faster than it will otherwise pick the dev
+		// key, open a shared store with it, and leave the real broker unable to read
+		// its own data. That is how a keyed deployment ends up with two keys.
+		b, err = pullUntil(sock, tok, brokerWait)
+	}
 	if err == nil {
 		if k, ok := decode(b.Key); ok {
 			root = k
@@ -240,6 +251,15 @@ func resolve(dataDir string) Posture {
 	// production code path against a well-known key so a developer needs no
 	// configuration at all; on a production build, hold nothing and let the first
 	// store open refuse to write plaintext.
+	// A child the host launched may NOT fall back. It has a token, so a broker was
+	// promised; if one never came, the honest outcome is to hold nothing and let
+	// the first store open refuse — one deployment, one key, or no key at all.
+	// Inventing a second key here is worse than not starting, because it succeeds.
+	if tok != "" {
+		bootErr = fmt.Errorf("credz: launched with a token but no broker at %s: %w", sock, err)
+		return Unkeyed
+	}
+
 	if cek.EnsureDevKey() {
 		// Hold the dev key like any other: a keyless dev deployment still has ONE
 		// data-plane key, and its broker has to be able to hand that same key to a
@@ -249,6 +269,34 @@ func resolve(dataDir string) Posture {
 		return Dev
 	}
 	return Unkeyed
+}
+
+// brokerWait bounds how long a launched child waits for the broker to answer. The
+// broker is an app like any other and the host starts them concurrently, so a
+// child can easily reach this before the broker has listened. Waiting costs a
+// slow boot; not waiting costs a second key.
+const brokerWait = 60 * time.Second
+
+// pullUntil retries the handshake until the broker answers or the budget runs
+// out. It retries the DIAL, not a failed handshake: a broker that answered and
+// refused this token is a decision, and repeating the question will not change it.
+func pullUntil(sock, tok string, budget time.Duration) (bundle, error) {
+	deadline := time.Now().Add(budget)
+	var b bundle
+	var err error
+	for {
+		b, err = pull(sock, tok)
+		if err == nil {
+			return b, nil
+		}
+		if !errors.Is(err, syscall.ENOENT) && !errors.Is(err, syscall.ECONNREFUSED) {
+			return b, err // answered and refused, or a real protocol failure
+		}
+		if time.Now().After(deadline) {
+			return b, err
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 // bundle is what the broker hands one app: the data-plane key it needs to open

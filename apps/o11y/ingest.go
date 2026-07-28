@@ -113,7 +113,7 @@ func mountIngest(deps cloud.Deps) error {
 		}
 	}()
 	embeddedIngest = col
-	log.Info("ZAP ingest collector running", "zap", ":4317", "sink", "datastore traces+logs")
+	log.Info("OTLZ ingest collector running", "traces", ":4317", "logs", ":4318", "sink", "datastore traces+logs")
 	return nil
 }
 
@@ -214,6 +214,7 @@ func writeIngestConfig(deps cloud.Deps) (string, error) {
 		"receivers:\n" +
 		"  zap:\n" +
 		"    endpoint: 0.0.0.0:4317\n" +
+		"    logs_endpoint: 0.0.0.0:4318\n" +
 		"processors:\n" +
 		"  memory_limiter:\n" +
 		"    check_interval: 5s\n" +

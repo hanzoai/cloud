@@ -533,7 +533,7 @@ func Serve(specs []MountSpec, enable []string) error {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	addrs, ops := listenOn(cfg, specs)
+	addrs, ops := listenOn(cfg)
 
 	listenErr := make(chan error, 1)
 	if ops == "" {
@@ -616,26 +616,22 @@ func Serve(specs []MountSpec, enable []string) error {
 // already in use". zip.Addr is the whole plugin side of that contract and this
 // is the one place cloud honours it, which is what makes every generated
 // cmd/<app> binary a valid plugin without a line of its own.
-func listenOn(cfg *Config, _ []MountSpec) (addrs []string, ops string) {
+func listenOn(cfg *Config) (addrs []string, ops string) {
 	if sock := zip.Addr(""); sock != "" {
-		// The host's private socket only. The peer plane's {run}/<app>.sock is
-		// bound by rpc.go's Listen in Serve — handing it to app.Listen too
-		// double-binds the path (see the note at the return below).
 		return []string{sock}, ""
 	}
-	// ONE app, MANY transports, all serving the identical route surface, so /v1/*
-	// answers over any of them and WS/SSE keep working on the HTTP one:
+	// ONE app, TWO transports here, both serving the identical route surface so
+	// /v1/* answers over either and WS/SSE keep working on the HTTP one:
 	//
-	//	peer sockets — ZAP over UDS, how a co-located app is called (dial.go)
-	//	:9653        — ZAP over TCP, the machine transport across hosts
-	//	:8080        — HTTP, the edge/browser leg (and WS + SSE)
-	// Peer sockets are NOT in this list: rpc.go's Listen already binds
-	// {run}/<app>.sock (Serve, above), and handing the same paths to app.Listen
-	// double-binds them — peerSockets removed each path first, which unlinked
-	// the LIVE rpc listener and left zip's framing answering rpc's callers. One
-	// socket, one server, one wire. Folding the peer plane into zip's transport
-	// is a designed change (zip.Mount is built for it), not a boot-order race.
-	return append([]string{}, cfg.ZAPListenAddr, "http://"+cfg.ListenAddr), cfg.HealthListenAddr
+	//	:9653  — ZAP over TCP, the machine transport across hosts
+	//	:8080  — HTTP, the edge/browser leg (and WS + SSE)
+	//
+	// The app's UNIX socket is deliberately absent. It carries the internal plane's
+	// own protocol (zaprpc: method id, promise, capability) and rpc.Listen serves
+	// it — handing the same path to zip as well means two servers on one socket,
+	// and whichever binds first answers the other's callers in a framing they
+	// cannot parse. That surfaced as "promise 0 for 1" on a balance read.
+	return []string{cfg.ZAPListenAddr, "http://" + cfg.ListenAddr}, cfg.HealthListenAddr
 }
 
 // healthMux is the liveness/readiness + metrics contract on the ops port
