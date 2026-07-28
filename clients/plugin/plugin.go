@@ -1,210 +1,357 @@
-// Package plugin is the runtime plugin loader for the unified cloud binary.
+// Package plugin is the control plane for the host's zip-native plugins: what
+// each host is running, and the operations that change it — enable, disable,
+// reload, and pin to (or roll back to) a named version.
 //
-// cloud is a thin host: its native Go subsystems are compiled in, but
-// everything else mounts at RUNTIME from a manifest — no cloud rebuild to add
-// or update a service. Two plugin kinds, both reduced to "produce an
-// http.Handler, then app.All(prefix+"/*", zip.AdaptNetHTTP(h))":
+// A plugin here is a service that ships as its OWN binary and is composed in at
+// run time by zip.Load, one child process per app on a private unix socket. The
+// authoritative app->prefixes table is the generated manifest.Apps; the
+// authoritative VERSION is the artifact's SHA-256, because that is the only
+// identifier that cannot drift from the bits actually serving. This package
+// invents neither — it reports the first and moves the second.
 //
-//   - wasm  — a polyglot service (Rust/WASM, or Python/TS via goa) loaded
-//     in-process through github.com/hanzoai/goa (wazero/gpython/goja,
-//     pure Go, CGO_ENABLED=0). Drop a .wasm + manifest entry → mounted.
-//   - proxy — a standalone server (e.g. the beego apps ai, vm) reached over a
-//     pluggable transport. The "zap" transport is registered by the ZAP
-//     client when available; until then proxying uses plain HTTP. Either
-//     way cloud never recompiles to point at a service.
+// It used to be something else: a second plugin registry read from a
+// CLOUD_PLUGINS JSON manifest, mounting wasm/goa modules and reverse proxies.
+// Nothing in this repo, in universe, or in any chart ever set CLOUD_PLUGINS, so
+// that lane mounted nothing in production while publishing an untyped
+// GET /v1/plugins that reported the empty set — a second source of truth for
+// "what is a plugin here" that was always empty, and invisible to OpenAPI, MCP
+// and the CLI because it was untyped. It is gone; this is the one way.
 //
-// The manifest path comes from CLOUD_PLUGINS (a JSON file); if unset, plugin
-// mounts nothing. Adding a service = edit the manifest + drop a .wasm or
-// redeploy the standalone — cloud is unchanged unless its own core changes.
+// Every route below can take production down, so every one of them is
+// SuperAdmin-gated and every mutation is written to the hash-chained audit
+// trail BEFORE it is reported as done. A deployment with no audit store refuses
+// to mutate at all, the same way a credit grant does.
 package plugin
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
-	"path/filepath"
-	"sync"
+	"runtime"
+	"sort"
+	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/goa"
+	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/clients/admin/core"
+	"github.com/hanzoai/cloud/manifest"
+	"github.com/hanzoai/ha"
 	"github.com/zap-proto/zip"
 )
 
-// Plugin is one manifest entry. Kind selects which fields apply.
-type Plugin struct {
-	Name   string `json:"name"`
-	Kind   string `json:"kind"`   // "wasm" | "proxy" | "native"
-	Prefix string `json:"prefix"` // mount point, e.g. /v1/pricing
-
-	// kind=wasm (goa): a polyglot module + its route table.
-	Lang   string            `json:"lang,omitempty"`   // "rust"/"wasm", "python", "javascript"…
-	Source string            `json:"source,omitempty"` // path to .wasm/.py/.ts, relative to the manifest
-	Pool   int               `json:"pool,omitempty"`   // pooled interpreters (default 8)
-	Routes []goa.Route       `json:"routes,omitempty"`
-	Env    map[string]string `json:"env,omitempty"`
-
-	// kind=proxy: a standalone server reached over a transport.
-	Target      string `json:"target,omitempty"`      // e.g. http://ai.internal:8080
-	Via         string `json:"via,omitempty"`         // transport: "http" (default) | "zap"
-	StripPrefix bool   `json:"stripPrefix,omitempty"` // strip Prefix before forwarding
+// ops holds what the control plane needs and nothing else: the app whose
+// plugins these are, the audit chain, and the live peer set.
+type ops struct {
+	z       *zip.App
+	audit   *audit.Recorder
+	members func() []ha.Member
+	self    string
+	origin  string
+	log     interface{ Error(string, ...any) }
 }
 
-// Manifest is the runtime plugin set.
-type Manifest struct {
-	Plugins []Plugin `json:"plugins"`
-}
-
-// --- transport seam ------------------------------------------------------
-//
-// The proxy kind dials its target through an http.RoundTripper chosen by
-// Plugin.Via. "http" is built in; "zap" (and any future transport) is
-// registered here by its client package, so plugin has no hard dependency
-// on the ZAP wire code and works today over HTTP.
-
-var (
-	transportsMu sync.RWMutex
-	transports   = map[string]http.RoundTripper{}
-)
-
-// RegisterTransport makes rt selectable as Plugin.Via == name. Called from the
-// transport client's init() (e.g. the ZAP client registers "zap").
-func RegisterTransport(name string, rt http.RoundTripper) {
-	transportsMu.Lock()
-	defer transportsMu.Unlock()
-	transports[name] = rt
-}
-
-func transportFor(via string) (http.RoundTripper, error) {
-	if via == "" || via == "http" {
-		return http.DefaultTransport, nil
-	}
-	transportsMu.RLock()
-	defer transportsMu.RUnlock()
-	if rt, ok := transports[via]; ok {
-		return rt, nil
-	}
-	return nil, fmt.Errorf("transport %q not registered (its client package must call plugin.RegisterTransport)", via)
-}
-
-// --- mounting ------------------------------------------------------------
-
-// mounted tracks goa services so Shutdown can release their pools.
-var (
-	mu      sync.Mutex
-	mounted []*goa.Service
-)
-
-// Mount reads the plugin manifest and mounts every plugin onto app. Missing or
-// unset manifest is a no-op (cloud runs fine with zero plugins).
+// Mount registers the control plane. It needs the concrete *zip.App rather than
+// the Router interface, because the plugin set is app state — Plugins, Reload
+// and Unload are the app's, and no interface should widen to carry them.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	if app == nil {
-		return fmt.Errorf("plugin.Mount: nil app")
+	z := cloud.ZipApp(app)
+	if z == nil {
+		return fmt.Errorf("plugin.Mount: router carries no typed-op registry")
 	}
-	log := deps.Logger.New("subsystem", "plugins")
+	o := &ops{
+		z:       z,
+		audit:   deps.Audit,
+		members: liveMembers(deps),
+		self:    self(),
+		origin:  strings.TrimRight(os.Getenv(OriginEnv), "/"),
+		log:     deps.Logger.New("subsystem", "plugins"),
+	}
+	Routes(z, o)
+	return nil
+}
 
-	path := os.Getenv("CLOUD_PLUGINS")
-	if path == "" {
-		log.Debug("no plugin manifest (CLOUD_PLUGINS unset); mounting none")
-		return nil
-	}
-	man, err := load(path)
+// Routes is separate from Mount so the surface can be registered against a bare
+// app in a test without a full Deps.
+func Routes(z *zip.App, o *ops) {
+	zip.Get(z, "/v1/admin/plugins", o.list, zip.WithOperationID("adminPlugins"), zip.WithTags("plugins"))
+	zip.Post(z, "/v1/admin/plugins/:name/reload", o.reload, zip.WithOperationID("adminReloadPlugin"), zip.WithTags("plugins"))
+	zip.Post(z, "/v1/admin/plugins/:name/enable", o.enable, zip.WithOperationID("adminEnablePlugin"), zip.WithTags("plugins"))
+	zip.Post(z, "/v1/admin/plugins/:name/disable", o.disable, zip.WithOperationID("adminDisablePlugin"), zip.WithTags("plugins"))
+}
+
+// --- the wire ------------------------------------------------------------
+
+// Host is one host's own account of what it is running. Reported per host
+// rather than merged, because during a rollout the hosts disagree BY DESIGN and
+// a merged view hides exactly the state an operator is watching for.
+type Host struct {
+	// Host is the pod's stable id, and Addr where it was reached. Self is true
+	// for the host that answered the request.
+	Host string `json:"host"`
+	Addr string `json:"addr,omitempty"`
+	Self bool   `json:"self,omitempty"`
+	// Err is set when a peer could not be reached. Its plugins are then
+	// unknown, which is NOT the same as none, so the list stays empty and the
+	// drift below refuses to conclude anything from it.
+	Err     string             `json:"error,omitempty"`
+	Plugins []zip.PluginStatus `json:"plugins"`
+}
+
+// Drift is one plugin's agreement across the fleet. Versions holds every
+// distinct digest seen running; more than one means a rollout is incomplete or
+// stuck, which is the single question this whole view exists to answer.
+type Drift struct {
+	Name     string   `json:"name"`
+	Versions []string `json:"versions,omitempty"`
+	Running  int      `json:"running"`
+	Down     int      `json:"down"`
+	Disabled int      `json:"disabled"`
+	Drifted  bool     `json:"drifted"`
+}
+
+// ListIn is the GET /v1/admin/plugins query.
+type ListIn struct {
+	// Scope "host" answers for THIS host only. Default "fleet" fans out to every
+	// live peer. A peer answers a host-scoped read, which is what stops the
+	// fan-out recursing.
+	Scope string `json:"scope"`
+}
+
+// ListOut is the fleet board.
+type ListOut struct {
+	Status string  `json:"status"`
+	Msg    string  `json:"msg"`
+	Data   []Host  `json:"data"`
+	Drift  []Drift `json:"drift,omitempty"`
+	Data2  *int    `json:"data2,omitempty"`
+}
+
+// ReloadIn names an artifact to run. Exactly one of Version or URL+Sum, or
+// neither to restart the artifact already loaded — which is how a wedged plugin
+// is bounced without changing what it runs.
+type ReloadIn struct {
+	// Name is the app, from the path. It must be one the manifest declares.
+	Name string `json:"name"`
+	// Version is a release tag, resolved to a URL and digest through the
+	// origin's binaries.json index — the same index CI publishes, so there is
+	// no second table mapping versions to digests.
+	Version string `json:"version"`
+	// URL is the artifact directly, for an origin with no index. Sum is its hex
+	// SHA-256 and is REQUIRED with it: zip refuses an unverified download, and
+	// so does this.
+	URL string `json:"url"`
+	Sum string `json:"sum"`
+	// Scope "host" applies here only. Default "fleet" rolls it out one host at
+	// a time, halting on the first host that fails to come up.
+	Scope string `json:"scope"`
+}
+
+// Result is one host's outcome for one action.
+type Result struct {
+	Host    string `json:"host"`
+	OK      bool   `json:"ok"`
+	Version string `json:"version,omitempty"`
+	Msg     string `json:"msg,omitempty"`
+}
+
+// ActionOut is the envelope every mutation answers with. Data is per host and
+// in the order applied, so a halted rollout reads as the prefix that succeeded
+// followed by the one that did not.
+type ActionOut struct {
+	Status string   `json:"status"`
+	Msg    string   `json:"msg"`
+	Data   []Result `json:"data"`
+}
+
+// NameIn addresses one plugin by name, for the operations that take nothing else.
+type NameIn struct {
+	// Name is the app, from the path.
+	Name string `json:"name"`
+	// Scope "host" applies here only; default "fleet" applies everywhere.
+	Scope string `json:"scope"`
+}
+
+// --- reads ---------------------------------------------------------------
+
+// list reports what each host is actually running: every loaded plugin with its
+// version, pid, uptime, reload and restart counts, and its measured CPU, RSS,
+// thread and fd cost — read from the kernel, which is only answerable at all
+// because a plugin is a process.
+//
+// Reading this from deployment config would answer what was INTENDED. Only the
+// process knows what is TRUE, and during a rolling upgrade the two disagree on
+// purpose.
+//
+// Example: {"scope":"fleet"}
+// Response: {"status":"ok","msg":"","data":[{"host":"cloud-0","self":true,
+// "plugins":[{"name":"billing","prefix":"/v1/billing","source":"url",
+// "version":"9f2c…","running":true,"reloads":1,"restarts":0}]}],
+// "drift":[{"name":"billing","versions":["9f2c…"],"running":1,"drifted":false}]}
+func (o *ops) list(ctx context.Context, in *ListIn) (*ListOut, error) {
+	c, err := core.Admit(ctx)
 	if err != nil {
-		return fmt.Errorf("plugin.Mount: %w", err)
+		return nil, err
 	}
-	baseDir := filepath.Dir(path)
-
-	for _, p := range man.Plugins {
-		h, err := build(context.Background(), p, baseDir)
-		if err != nil {
-			return fmt.Errorf("plugin.Mount: plugin %q: %w", p.Name, err)
-		}
-		app.All(p.Prefix+"/*", zip.AdaptNetHTTP(h))
-		log.Info("plugin mounted", "name", p.Name, "kind", p.Kind, "prefix", p.Prefix)
+	if in.Scope == scopeHost {
+		return &ListOut{Status: core.OK, Data: []Host{o.here()}, Data2: core.Total(1)}, nil
 	}
+	hosts := o.fleet(ctx, c)
+	return &ListOut{Status: core.OK, Data: hosts, Drift: drift(hosts), Data2: core.Total(len(hosts))}, nil
+}
 
-	// Introspection: list what is mounted.
-	plugins := man.Plugins
-	app.Get("/v1/plugins", func(c *zip.Ctx) error {
-		out := make([]map[string]string, 0, len(plugins))
-		for _, p := range plugins {
-			out = append(out, map[string]string{"name": p.Name, "kind": p.Kind, "prefix": p.Prefix})
+// here is this host's own account, the only one it can answer without a hop.
+func (o *ops) here() Host {
+	return Host{Host: o.self, Self: true, Plugins: o.z.Plugins()}
+}
+
+// drift folds the per-host truth into one row per plugin. A host that could not
+// be reached contributes nothing rather than a zero, so an unreachable peer
+// never reads as a plugin being down.
+func drift(hosts []Host) []Drift {
+	by := map[string]*Drift{}
+	for _, h := range hosts {
+		if h.Err != "" {
+			continue
 		}
-		return c.JSON(http.StatusOK, map[string]any{"plugins": out})
+		for _, p := range h.Plugins {
+			d := by[p.Name]
+			if d == nil {
+				d = &Drift{Name: p.Name}
+				by[p.Name] = d
+			}
+			switch {
+			case p.Running:
+				d.Running++
+			case p.Disabled:
+				d.Disabled++
+			default:
+				d.Down++
+			}
+			if p.Running && p.Version != "" && !contains(d.Versions, p.Version) {
+				d.Versions = append(d.Versions, p.Version)
+			}
+		}
+	}
+	out := make([]Drift, 0, len(by))
+	for _, d := range by {
+		d.Drifted = len(d.Versions) > 1
+		sort.Strings(d.Versions)
+		out = append(out, *d)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+func contains(s []string, v string) bool {
+	for _, x := range s {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+// --- mutations -----------------------------------------------------------
+
+// reload swaps a plugin for another build without dropping a request. The
+// replacement is started and proven to be LISTENING before any traffic moves to
+// it, so a bad build leaves the old one serving and returns an error rather
+// than a hole; the old process then drains before it is killed.
+//
+// With a version or url+sum it pins; naming a digest this host has run before is
+// the rollback, and costs no network because the digest IS the cache key. With
+// neither it restarts what is already loaded.
+//
+// Fleet scope applies it to one host at a time and STOPS at the first failure,
+// so a build that cannot come up reaches exactly one host.
+//
+// Example: {"name":"billing","version":"v1.2.3"}
+// Response: {"status":"ok","msg":"billing -> 9f2c…","data":[{"host":"cloud-0",
+// "ok":true,"version":"9f2c…"}]}
+func (o *ops) reload(ctx context.Context, in *ReloadIn) (*ActionOut, error) {
+	c, err := core.Admit(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := o.known(in.Name); err != nil {
+		return &ActionOut{Status: core.Err, Msg: err.Error()}, nil
+	}
+	spec, err := o.artifact(ctx, in)
+	if err != nil {
+		return &ActionOut{Status: core.Err, Msg: err.Error()}, nil
+	}
+	return o.run(ctx, c, act{
+		name: in.Name, action: "plugin.reload", scope: in.Scope, version: spec.Sum,
+		body: map[string]string{"url": spec.URL, "sum": spec.Sum, "scope": scopeHost},
+		here: func() error { return o.z.ReloadTo(in.Name, spec) },
 	})
-
-	log.Info("plugins loaded", "count", len(man.Plugins), "brand", deps.Brand)
-	return nil
 }
 
-func load(path string) (*Manifest, error) {
-	b, err := os.ReadFile(path)
+// enable brings a stopped or disabled plugin back on the artifact it already
+// has. It is Reload with no new bits, named for what an operator means by it.
+//
+// Example: {"name":"billing"}
+// Response: {"status":"ok","msg":"billing enabled","data":[{"host":"cloud-0","ok":true}]}
+func (o *ops) enable(ctx context.Context, in *NameIn) (*ActionOut, error) {
+	return o.simple(ctx, in, "plugin.enable", func() error { return o.z.Reload(in.Name, nil) })
+}
+
+// disable stops the plugin. Its routes STAY REGISTERED and answer 503 — not 404.
+//
+// That is zip's choice and this keeps it. Removing the routes would mutate the
+// route table, and re-adding them on enable would grow it without bound across
+// repeated cycles, which is the invariant that makes reloads flat in memory. It
+// is also the better answer: 404 says "no such API" and a client may cache it
+// and stop retrying, while 503 says "this API exists and is down right now",
+// which is true and retryable. Which of the two 503s this is — deliberate stop
+// or crash — is what the status's disabled flag reports.
+//
+// Example: {"name":"billing"}
+// Response: {"status":"ok","msg":"billing disabled","data":[{"host":"cloud-0","ok":true}]}
+func (o *ops) disable(ctx context.Context, in *NameIn) (*ActionOut, error) {
+	return o.simple(ctx, in, "plugin.disable", func() error { return o.z.Unload(in.Name) })
+}
+
+func (o *ops) simple(ctx context.Context, in *NameIn, action string, here func() error) (*ActionOut, error) {
+	c, err := core.Admit(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var m Manifest
-	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, fmt.Errorf("manifest %s: %w", path, err)
+	if err := o.known(in.Name); err != nil {
+		return &ActionOut{Status: core.Err, Msg: err.Error()}, nil
 	}
-	return &m, nil
+	return o.run(ctx, c, act{
+		name: in.Name, action: action, scope: in.Scope,
+		body: map[string]string{"scope": scopeHost},
+		here: here,
+	})
 }
 
-// build turns a plugin into a mountable http.Handler.
-func build(ctx context.Context, p Plugin, baseDir string) (http.Handler, error) {
-	switch p.Kind {
-	case "wasm", "goa", "": // polyglot via goa (default)
-		man := goa.Manifest{
-			Name: p.Name, Lang: p.Lang, Source: p.Source,
-			Pool: p.Pool, Prefix: p.Prefix, Routes: p.Routes, Env: p.Env,
+// known refuses a name the generated manifest does not declare. The manifest is
+// the authority on which apps exist, so a typo is a 400 here rather than a
+// confusing "no plugin named" from three layers down.
+func (o *ops) known(name string) error {
+	for _, a := range manifest.Apps {
+		if a.Name == name {
+			return nil
 		}
-		svc, err := man.Build(ctx, os.DirFS(baseDir))
-		if err != nil {
-			return nil, err
-		}
-		mu.Lock()
-		mounted = append(mounted, svc)
-		mu.Unlock()
-		return svc.Handler(), nil
-	case "proxy":
-		return buildProxy(p)
-	default:
-		return nil, fmt.Errorf("unknown kind %q (want wasm|proxy)", p.Kind)
 	}
+	return fmt.Errorf("no app named %q in the manifest", name)
 }
 
-func buildProxy(p Plugin) (http.Handler, error) {
-	if p.Target == "" {
-		return nil, fmt.Errorf("proxy plugin needs a target")
-	}
-	u, err := url.Parse(p.Target)
-	if err != nil {
-		return nil, fmt.Errorf("bad target %q: %w", p.Target, err)
-	}
-	rt, err := transportFor(p.Via)
-	if err != nil {
-		return nil, err
-	}
-	rp := httputil.NewSingleHostReverseProxy(u)
-	rp.Transport = rt
-	var h http.Handler = rp
-	if p.StripPrefix {
-		h = http.StripPrefix(p.Prefix, rp)
-	}
-	return h, nil
-}
-
-// Shutdown releases every mounted goa service pool. Idempotent.
-func Shutdown(context.Context) error {
-	mu.Lock()
-	defer mu.Unlock()
-	for _, s := range mounted {
-		if s != nil && s.Pool != nil {
-			_ = s.Pool.Close()
+// self is this pod's stable id, from the same downward-API variables the shard
+// router reads, so a host names itself the same way everywhere.
+func self() string {
+	for _, k := range []string{"CLOUD_POD_NAME", "POD_NAME"} {
+		if v := os.Getenv(k); v != "" {
+			return v
 		}
 	}
-	mounted = nil
-	return nil
+	h, _ := os.Hostname()
+	return h
 }
+
+// platform is the os/arch this host needs an artifact for. A control plane that
+// pinned a version without it would happily install a darwin binary on a linux
+// pod and report success until the process failed to exec.
+func platform() (string, string) { return runtime.GOOS, runtime.GOARCH }
