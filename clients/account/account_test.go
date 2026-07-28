@@ -40,6 +40,9 @@ type fakeIAM struct {
 	createdOrgs []map[string]any
 	failAddOrg  bool // when true, add-organization answers status!=ok
 	failMintKey bool
+	// ignoreKeyType models an IAM that predates the type field: it drops the
+	// parameter and mints the secret key it always did.
+	ignoreKeyType bool
 }
 
 // keyRef identifies one key row the way IAM does: whose it is, and which class.
@@ -124,6 +127,9 @@ func (f *fakeIAM) server(t *testing.T) *httptest.Server {
 		id, typ := r.URL.Query().Get("id"), fakeKeyType(r)
 		f.mu.Lock()
 		defer f.mu.Unlock()
+		if f.ignoreKeyType {
+			typ = "secret"
+		}
 		f.mintedFor = append(f.mintedFor, id)
 		f.mintedTypes = append(f.mintedTypes, typ)
 		if f.failMintKey {
@@ -740,5 +746,32 @@ func mustJSON(t *testing.T, body []byte, v any) {
 	t.Helper()
 	if err := json.Unmarshal(body, v); err != nil {
 		t.Fatalf("decode %T: %v (%s)", v, err, body)
+	}
+}
+
+// An IAM that predates the `type` field ignores it and answers with the sk- it has
+// always minted. Cloud must NOT hand that back as a publishable key: a caller asking
+// for something to embed in a browser bundle would receive a session-equivalent
+// secret, because a key's prefix is what every downstream reader dispatches on.
+//
+// This makes the deploy order safe instead of assumed — cloud can ship before IAM and
+// the worst case is an honest 502, never a credential in the wrong place.
+func TestKeys_RefusesAKeyWhosePrefixContradictsItsType(t *testing.T) {
+	f := newFakeIAM()
+	f.ignoreKeyType = true // an IAM that has never heard of ?type=
+	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
+
+	code, body := call(t, app, http.MethodPost, "/v1/keys?type=publishable", "alice", "acme", "")
+	if code != http.StatusBadGateway {
+		t.Fatalf("want 502 when IAM answers with the wrong key class, got %d (%s)", code, body)
+	}
+	if strings.Contains(string(body), "sk-") {
+		t.Fatalf("the refusal must not carry the mis-minted secret: %s", body)
+	}
+
+	// A SECRET mint against that same IAM is unaffected — it is what the old IAM
+	// already does correctly, so nothing regresses for the existing caller.
+	if code, body = call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", ""); code != http.StatusOK {
+		t.Fatalf("secret mint against a pre-type IAM must still work, got %d (%s)", code, body)
 	}
 }
