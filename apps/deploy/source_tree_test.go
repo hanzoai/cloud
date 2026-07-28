@@ -2,56 +2,74 @@ package deploy
 
 import (
 	"context"
+	"encoding/json"
+	"net"
+	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud"
+	zaprpc "github.com/zap-proto/go/rpc"
+
+	"github.com/hanzoai/cloud/zapface"
 )
 
-// stubTree registers a tree reader for one test and restores the previous one.
-// Testing through the seam is the point: delivery must render without importing
-// the git plane, so the test does not either.
-func stubTree(t *testing.T, fn cloud.TreeFunc) {
+// fakeGit serves ONE git reply over a Unix socket at the well-known path
+// cloud.Dial resolves for the "git" app, so a render exercises the real
+// transport it uses in production — frame encode, socket dial, frame decode —
+// rather than a stubbed function that would prove none of it.
+func fakeGit(t *testing.T, reply any, status int) {
 	t.Helper()
-	cloud.RegisterTreeFunc(fn)
-	t.Cleanup(func() { cloud.RegisterTreeFunc(nil) })
+	run := t.TempDir()
+	t.Setenv("CLOUD_RUN_DIR", run)
+
+	ln, err := net.Listen("unix", filepath.Join(run, "git.sock"))
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := json.Marshal(reply)
+		frame := zaprpc.BuildResponse(uint32(status), 1, zapface.EncodeReply(zapface.Reply{
+			OK: status < 300, Status: uint32(status), Result: body,
+		}))
+		w.Header().Set("Content-Type", "application/zap")
+		_, _ = w.Write(frame)
+	})}
+	go func() { _ = srv.Serve(ln) }()
+	t.Cleanup(func() { _ = srv.Close() })
 }
 
-// TestTreeSourceRender proves the no-clone source: bytes in, objects plus the
-// revision they came from out, with the revision the SEAM resolved rather than
-// the ref that was asked for.
+// TestTreeSourceRender proves the no-clone source over the real socket
+// transport: bytes in, objects plus the revision they came from out, with the
+// revision GIT resolved rather than the ref that was asked for.
 func TestTreeSourceRender(t *testing.T) {
-	stubTree(t, func(_ context.Context, q cloud.TreeQuery) (cloud.Tree, error) {
-		if q.Glob != "infra/k8s/**" {
-			t.Fatalf("glob = %q, want the path's subtree", q.Glob)
-		}
-		return cloud.Tree{
-			Rev:   "9c955a4710000000000000000000000000000000",
-			Paths: []string{"infra/k8s/a.yaml", "infra/k8s/nested/b.yaml", "infra/k8s/kustomization.yaml", "infra/k8s/README.md"},
-			Files: map[string][]byte{
-				"infra/k8s/a.yaml":             []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a\n"),
-				"infra/k8s/nested/b.yaml":      []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: b\n"),
-				"infra/k8s/kustomization.yaml": []byte("resources:\n  - a.yaml\n"),
-				"infra/k8s/README.md":          []byte("# not a manifest\n"),
-			},
-		}, nil
-	})
+	fakeGit(t, map[string]any{
+		"rev": "9c955a4710000000000000000000000000000000",
+		"files": []map[string]any{
+			{"path": "infra/k8s/a.yaml", "encoding": "utf8", "content": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a\n"},
+			{"path": "infra/k8s/nested/b.yaml", "encoding": "utf8", "content": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: b\n"},
+			{"path": "infra/k8s/kustomization.yaml", "encoding": "utf8", "content": "resources:\n  - a.yaml\n"},
+			{"path": "infra/k8s/README.md", "encoding": "utf8", "content": "# not a manifest\n"},
+		},
+	}, http.StatusOK)
 
 	objs, rev, err := treeSource{org: "hanzo", repo: "universe", ref: "main", path: "infra/k8s"}.render(context.Background())
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	if rev != "9c955a4710000000000000000000000000000000" {
-		t.Fatalf("rev = %q, want the revision the seam resolved", rev)
+		t.Fatalf("rev = %q, want the revision git resolved", rev)
 	}
 	// Nested manifests are included — a non-recursive read plus prune deletes
 	// whatever the subdirectories declared.
 	if len(objs) != 2 {
-		names := []string{}
+		got := []string{}
 		for _, o := range objs {
-			names = append(names, o.GetName())
+			got = append(got, o.GetName())
 		}
-		t.Fatalf("objects = %v, want a and b only", names)
+		t.Fatalf("objects = %v, want a and b only", got)
 	}
 	for _, o := range objs {
 		if o.GetName() != "a" && o.GetName() != "b" {
@@ -60,17 +78,17 @@ func TestTreeSourceRender(t *testing.T) {
 	}
 }
 
-// TestTreeSourceRefusesIncompleteSet pins the prune-safety property: a manifest
-// listed but not returned means the desired set is missing objects, and handing
-// that to a pruning reconcile deletes whatever the missing file declared.
-func TestTreeSourceRefusesIncompleteSet(t *testing.T) {
-	stubTree(t, func(_ context.Context, _ cloud.TreeQuery) (cloud.Tree, error) {
-		return cloud.Tree{
-			Rev:   "abc",
-			Paths: []string{"k8s/small.yaml", "k8s/huge.yaml"},
-			Files: map[string][]byte{"k8s/small.yaml": []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: s\n")},
-		}, nil
-	})
+// TestTreeSourceRefusesTruncated pins the prune-safety property: a manifest
+// listed but not read means the desired set is missing objects, and handing that
+// to a pruning reconcile deletes whatever the missing file declared.
+func TestTreeSourceRefusesTruncated(t *testing.T) {
+	fakeGit(t, map[string]any{
+		"rev": "abc",
+		"files": []map[string]any{
+			{"path": "k8s/small.yaml", "encoding": "utf8", "content": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: s\n"},
+			{"path": "k8s/huge.yaml", "encoding": "utf8", "truncated": true},
+		},
+	}, http.StatusOK)
 
 	_, _, err := treeSource{org: "hanzo", repo: "universe", ref: "main", path: "k8s"}.render(context.Background())
 	if err == nil {
@@ -81,13 +99,23 @@ func TestTreeSourceRefusesIncompleteSet(t *testing.T) {
 	}
 }
 
-// TestTreeSourceUnavailableIsNotEmpty proves an unregistered reader surfaces as
-// an error. "The git plane is not mounted" and "the inventory is empty" must
-// never look alike to a reconcile that prunes.
-func TestTreeSourceUnavailableIsNotEmpty(t *testing.T) {
-	stubTree(t, nil)
+// TestTreeSourceNoRevisionIsError proves a reply with no resolved revision is a
+// failure, not "nothing to deploy". An empty desired set reaching a pruning
+// reconcile sweeps the fleet, so the two must never look alike.
+func TestTreeSourceNoRevisionIsError(t *testing.T) {
+	fakeGit(t, map[string]any{"rev": "", "files": []map[string]any{}}, http.StatusOK)
+	if _, _, err := (treeSource{org: "hanzo", repo: "universe", ref: "main"}).render(context.Background()); err == nil {
+		t.Fatal("render succeeded with no revision resolved")
+	}
+}
+
+// TestTreeSourceUnreachableGitIsError proves an absent git plane surfaces as an
+// error. "git is not running" and "the inventory is empty" must not look alike.
+func TestTreeSourceUnreachableGitIsError(t *testing.T) {
+	t.Setenv("CLOUD_RUN_DIR", t.TempDir())           // no git.sock
+	t.Setenv("CLOUD_PEER_URL", "http://127.0.0.1:1") // and nothing listening remotely
 	if _, _, err := (treeSource{org: "hanzo", repo: "universe"}).render(context.Background()); err == nil {
-		t.Fatal("render succeeded with no tree reader registered")
+		t.Fatal("render succeeded with no git plane reachable")
 	}
 }
 
