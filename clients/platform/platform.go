@@ -6,7 +6,7 @@
 //
 // Relationship to the sibling subsystems:
 //
-//   - clients/paas  (/v1/paas)     — the ADMIN fleet drift board: observes +
+//   - fleet.go       (/v1/platform/fleet) — the ADMIN fleet drift board: observes +
 //     deploys SYSTEM Service CRs across the platform namespaces, SuperAdmin
 //     only. It answers "what is the fleet running, and roll a tag."
 //   - clients/projects (/v1/projects) — per-org STATIC sites (S3 hosting).
@@ -137,6 +137,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// licensing.product_ids (v1.4.4), so enforcing now would 402 every org. Flip on
 	// once the catalog licenses "platform" to a tier. See clients/entitlements.
 	routes(app, s)
+
+	// The fleet board (/v1/platform/fleet) — the platform's view of its OWN service
+	// tier, folded in from what used to be the separate /v1/paas product. It carries
+	// its own dynamic client because it observes the whole platform tier, not one
+	// tenant namespace; the routes are siblings under the one /v1/platform prefix.
+	fb := cloud.NewBase(deps, "platform")
+	fleetRoutes(app, &cloud.Service[fleetState]{Base: fb, State: buildFleet(fb)})
 
 	// The cloud's own embedded-git apex is a trusted build source (clients/git
 	// serves repos at this host), so a self-hosted-git app builds with no env.
@@ -725,6 +732,13 @@ func setEnv(s *cloud.Service[state], c *zip.Ctx) error {
 // health is a REAL probe: 200 when the metadata store is open AND the cluster is
 // reachable; 503 + the real reason otherwise (never status-theater). Not
 // admin-gated — liveness must be probe-able without a JWT.
+// health probes the cluster for real. A constructed client proves nothing — it is
+// built from a kubeconfig, not from a reachable apiserver — so this asks the one
+// question the deploy path depends on: can we LIST the operator App CRD? That
+// answers reachability AND CRD presence in a single bounded call (Limit 1). The
+// probe came from the folded /v1/paas/health, which is why it survived the fold and
+// the nil-check it replaced did not: two health routes cannot both be the truth,
+// and a nil-check reports "ok" while every deploy 502s.
 func health(s *cloud.Service[state], c *zip.Ctx) error {
 	res := map[string]any{"service": "platform", "status": "ok", "k8s": s.State.k8s.dyn != nil}
 	if s.State.k8s.dyn == nil {
@@ -732,6 +746,12 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 		res["error"] = s.State.k8s.initErr
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
+	if _, err := s.State.k8s.dyn.Resource(k8s.Apps).Namespace(scanOrder()[0]).
+		List(c.Context(), metav1.ListOptions{Limit: 1}); err != nil {
+		res["status"], res["crd"], res["error"] = "degraded", false, err.Error()
+		return c.JSON(http.StatusServiceUnavailable, res)
+	}
+	res["crd"] = true
 	return c.JSON(http.StatusOK, res)
 }
 
@@ -855,7 +875,7 @@ func getenv(key, dflt string) string {
 	return dflt
 }
 
-// Shutdown closes the platform store. Idempotent. Mirrors the projects/paas
+// Shutdown closes the platform store. Idempotent. Mirrors the projects
 // Shutdown contract so the serve layer releases subsystem resources uniformly.
 func Shutdown() error {
 	if mounted == nil || mounted.State.store == nil {

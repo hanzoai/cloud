@@ -10,7 +10,7 @@
 //     (client-go, the arcd model) to build the repo and push the per-tenant
 //     image; the deployment lands "building". The build watcher that flips
 //     "building"→"live" by applying the CR with the built image is phase 2
-//     (paas-in-cloud.md §4) — until then the git path stops honestly at
+//     (platform-in-cloud §4) — until then the git path stops honestly at
 //     "building" with the real Job reference, never a fabricated "live".
 //
 // Every handler is org-scoped (s.tenant) and every cluster write targets

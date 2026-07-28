@@ -1,4 +1,4 @@
-package paas
+package platform
 
 // authz_test.go — the IAM authorization + tenant-confinement contract for the
 // /v1/paas fleet board, the twin of clients/platform/runner_test.go. Every route
@@ -50,17 +50,17 @@ func deploymentObj(name, ns, image string) *unstructured.Unstructured {
 
 // paasApp builds a paas Service over a fake cluster seeded with objs, mounts the
 // real routes (so the live guard runs), and returns the app to drive.
-func paasApp(t *testing.T, objs ...runtime.Object) (*zip.App, *cloud.Service[state]) {
+func paasApp(t *testing.T, objs ...runtime.Object) (*zip.App, *cloud.Service[fleetState]) {
 	t.Helper()
 	s := fakeService(objs...)
 	s.Base.Log = luxlog.New("test")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	routes(app, s)
+	fleetRoutes(app, s)
 	return app, s
 }
 
 // doAs drives a request as a validated IAM principal with the given role headers.
-func doAs(t *testing.T, app *zip.App, method, path, user, org string, orgAdmin, superAdmin bool) (int, []byte) {
+func fleetDoAs(t *testing.T, app *zip.App, method, path, user, org string, orgAdmin, superAdmin bool) (int, []byte) {
 	t.Helper()
 	req := httptest.NewRequest(method, path, nil)
 	if user != "" {
@@ -116,7 +116,7 @@ func appsTotal(t *testing.T, body []byte) int {
 // serves an anonymous caller, exactly as before the broadening.
 func TestGuard_Unauthenticated_403(t *testing.T) {
 	app, _ := paasApp(t, fleet()...)
-	if code, _ := doAs(t, app, http.MethodGet, "/v1/paas/apps", "", "", false, false); code != http.StatusForbidden {
+	if code, _ := fleetDoAs(t, app, http.MethodGet, "/v1/paas/apps", "", "", false, false); code != http.StatusForbidden {
 		t.Fatalf("anonymous: want 403, got %d", code)
 	}
 }
@@ -125,7 +125,7 @@ func TestGuard_Unauthenticated_403(t *testing.T) {
 // necessary but not sufficient — the board is an operator surface.
 func TestGuard_NonAdminMember_403(t *testing.T) {
 	app, _ := paasApp(t, fleet()...)
-	if code, _ := doAs(t, app, http.MethodGet, "/v1/paas/apps", "u-plain", "hanzo", false, false); code != http.StatusForbidden {
+	if code, _ := fleetDoAs(t, app, http.MethodGet, "/v1/paas/apps", "u-plain", "hanzo", false, false); code != http.StatusForbidden {
 		t.Fatalf("plain member: want 403, got %d", code)
 	}
 }
@@ -135,7 +135,7 @@ func TestGuard_NonAdminMember_403(t *testing.T) {
 // An OrgAdmin of the platform org sees its own org's whole board (all hanzo* ns).
 func TestListApps_OrgAdmin_SeesOwnOrg(t *testing.T) {
 	app, _ := paasApp(t, fleet()...)
-	code, body := doAs(t, app, http.MethodGet, "/v1/paas/apps", "z-uuid", "hanzo", true, false)
+	code, body := fleetDoAs(t, app, http.MethodGet, "/v1/paas/apps", "z-uuid", "hanzo", true, false)
 	if code != http.StatusOK {
 		t.Fatalf("hanzo org-admin: want 200, got %d (%s)", code, body)
 	}
@@ -148,7 +148,7 @@ func TestListApps_OrgAdmin_SeesOwnOrg(t *testing.T) {
 // platform fleet. This is the cross-tenant-leak guard.
 func TestListApps_ForeignOrgAdmin_EmptyBoard(t *testing.T) {
 	app, _ := paasApp(t, fleet()...)
-	code, body := doAs(t, app, http.MethodGet, "/v1/paas/apps", "acme-admin", "acme", true, false)
+	code, body := fleetDoAs(t, app, http.MethodGet, "/v1/paas/apps", "acme-admin", "acme", true, false)
 	if code != http.StatusOK {
 		t.Fatalf("acme org-admin: want 200, got %d (%s)", code, body)
 	}
@@ -162,7 +162,7 @@ func TestListApps_ForeignOrgAdmin_EmptyBoard(t *testing.T) {
 // keyed on the validated org, before the query filter runs.
 func TestListApps_ForeignOrgAdmin_QueryCannotWiden(t *testing.T) {
 	app, _ := paasApp(t, fleet()...)
-	code, body := doAs(t, app, http.MethodGet, "/v1/paas/apps?org=hanzoai", "acme-admin", "acme", true, false)
+	code, body := fleetDoAs(t, app, http.MethodGet, "/v1/paas/apps?org=hanzoai", "acme-admin", "acme", true, false)
 	if code != http.StatusOK {
 		t.Fatalf("want 200, got %d (%s)", code, body)
 	}
@@ -174,7 +174,7 @@ func TestListApps_ForeignOrgAdmin_QueryCannotWiden(t *testing.T) {
 // A SuperAdmin sees the whole fleet regardless of its own org.
 func TestListApps_SuperAdmin_SeesFleet(t *testing.T) {
 	app, _ := paasApp(t, fleet()...)
-	code, body := doAs(t, app, http.MethodGet, "/v1/paas/apps", "root", "admin", false, true)
+	code, body := fleetDoAs(t, app, http.MethodGet, "/v1/paas/apps", "root", "admin", false, true)
 	if code != http.StatusOK {
 		t.Fatalf("superadmin: want 200, got %d (%s)", code, body)
 	}
@@ -189,7 +189,7 @@ func TestListApps_SuperAdmin_SeesFleet(t *testing.T) {
 // existence leak.
 func TestGetApp_ForeignOrgAdmin_404(t *testing.T) {
 	app, _ := paasApp(t, fleet()...)
-	if code, _ := doAs(t, app, http.MethodGet, "/v1/paas/apps/iam", "acme-admin", "acme", true, false); code != http.StatusNotFound {
+	if code, _ := fleetDoAs(t, app, http.MethodGet, "/v1/paas/apps/iam", "acme-admin", "acme", true, false); code != http.StatusNotFound {
 		t.Fatalf("acme admin reading hanzo/iam: want 404, got %d", code)
 	}
 }
@@ -197,7 +197,7 @@ func TestGetApp_ForeignOrgAdmin_404(t *testing.T) {
 // The platform OrgAdmin reads its own app row.
 func TestGetApp_OrgAdmin_200(t *testing.T) {
 	app, _ := paasApp(t, fleet()...)
-	code, body := doAs(t, app, http.MethodGet, "/v1/paas/apps/iam", "z-uuid", "hanzo", true, false)
+	code, body := fleetDoAs(t, app, http.MethodGet, "/v1/paas/apps/iam", "z-uuid", "hanzo", true, false)
 	if code != http.StatusOK {
 		t.Fatalf("hanzo admin reading iam: want 200, got %d (%s)", code, body)
 	}
@@ -207,7 +207,7 @@ func TestGetApp_OrgAdmin_200(t *testing.T) {
 
 // restartedAt reads the pod-template restart annotation off the live Deployment in
 // the fake, "" when absent.
-func restartedAt(t *testing.T, s *cloud.Service[state], ns, name string) string {
+func restartedAt(t *testing.T, s *cloud.Service[fleetState], ns, name string) string {
 	t.Helper()
 	obj, err := s.State.dyn.Resource(k8s.Deployments).Namespace(ns).Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
@@ -224,7 +224,7 @@ func restartedAt(t *testing.T, s *cloud.Service[state], ns, name string) string 
 // closed: no hanzo-org-admin JWT can loop-restart prod iam/kms/gateway.
 func TestDeploy_OrgAdmin_403_Platform(t *testing.T) {
 	app, s := paasApp(t, fleet()...)
-	code, _ := doAs(t, app, http.MethodPost, "/v1/paas/apps/iam/deploy?env=main", "z-uuid", "hanzo", true, false)
+	code, _ := fleetDoAs(t, app, http.MethodPost, "/v1/paas/apps/iam/deploy?env=main", "z-uuid", "hanzo", true, false)
 	if code != http.StatusForbidden {
 		t.Fatalf("hanzo ORG-admin (not superadmin) deploy iam: want 403, got %d", code)
 	}
@@ -236,7 +236,7 @@ func TestDeploy_OrgAdmin_403_Platform(t *testing.T) {
 // A plain member is refused the mutate too (necessary-but-not-sufficient login).
 func TestDeploy_NonAdmin_403(t *testing.T) {
 	app, _ := paasApp(t, fleet()...)
-	if code, _ := doAs(t, app, http.MethodPost, "/v1/paas/apps/iam/deploy?env=main", "u", "hanzo", false, false); code != http.StatusForbidden {
+	if code, _ := fleetDoAs(t, app, http.MethodPost, "/v1/paas/apps/iam/deploy?env=main", "u", "hanzo", false, false); code != http.StatusForbidden {
 		t.Fatalf("plain member deploy: want 403, got %d", code)
 	}
 }
@@ -248,7 +248,7 @@ func TestDeploy_SuperAdmin_RollingRestart(t *testing.T) {
 	if got := restartedAt(t, s, "hanzo", "iam"); got != "" {
 		t.Fatalf("precondition: iam should have no restart stamp, got %q", got)
 	}
-	code, body := doAs(t, app, http.MethodPost, "/v1/paas/apps/iam/deploy?env=main", "root", "admin", false, true)
+	code, body := fleetDoAs(t, app, http.MethodPost, "/v1/paas/apps/iam/deploy?env=main", "root", "admin", false, true)
 	if code != http.StatusAccepted {
 		t.Fatalf("superadmin deploy iam: want 202, got %d (%s)", code, body)
 	}
@@ -272,7 +272,7 @@ func TestDeploy_SuperAdmin_RollingRestart(t *testing.T) {
 // RED L1: a deploy with NO ?env is refused 400 — it never silently targets prod.
 func TestDeploy_RequiresExplicitEnv(t *testing.T) {
 	app, s := paasApp(t, fleet()...)
-	code, _ := doAs(t, app, http.MethodPost, "/v1/paas/apps/iam/deploy", "root", "admin", false, true)
+	code, _ := fleetDoAs(t, app, http.MethodPost, "/v1/paas/apps/iam/deploy", "root", "admin", false, true)
 	if code != http.StatusBadRequest {
 		t.Fatalf("deploy with no env: want 400, got %d", code)
 	}
@@ -284,7 +284,7 @@ func TestDeploy_RequiresExplicitEnv(t *testing.T) {
 // ?env selects the namespace: a superadmin restarts the test-env app by naming it.
 func TestDeploy_SuperAdmin_EnvSelectsNamespace(t *testing.T) {
 	app, s := paasApp(t, fleet()...)
-	code, body := doAs(t, app, http.MethodPost, "/v1/paas/apps/chat/deploy?env=test", "root", "admin", false, true)
+	code, body := fleetDoAs(t, app, http.MethodPost, "/v1/paas/apps/chat/deploy?env=test", "root", "admin", false, true)
 	if code != http.StatusAccepted {
 		t.Fatalf("deploy chat @test: want 202, got %d (%s)", code, body)
 	}

@@ -3,7 +3,7 @@
 // A user application is deployed by writing an operator hanzo.ai/v1 `App`
 // CR into the caller's OWN tenant namespace; the Hanzo operator reconciles it
 // into a Deployment + Service + Ingress (+ HPA/PDB) on DOKS. cloud never
-// reimplements a deployer — it writes one CR, exactly like clients/paas
+// reimplements a deployer — it writes one CR, exactly like the fleet board
 // reads system CRs, but here every object lives in `tenant-<org>` where the
 // org is the gateway-minted, IAM-VALIDATED tenant (c.Org()), never a value from
 // the request body or path. That derivation is the whole cross-tenant isolation
@@ -13,7 +13,7 @@
 // Builds (git-source apps) launch an in-cluster BuildKit Job (the arcd model,
 // buildkit-job.ts) via client-go — no GitHub builders. When the cluster / CI
 // prerequisites are absent the subsystem fails CLOSED with the real reason
-// (never status-theater), matching paas.
+// (never status-theater), matching the fleet board.
 package platform
 
 import (
@@ -176,7 +176,7 @@ type k8sClient struct {
 }
 
 // newK8sClient builds the dynamic client from the in-cluster service account,
-// falling back to KUBECONFIG for local/dev — identical to paas.newDynamic.
+// falling back to KUBECONFIG for local/dev — identical to newFleetDynamic.
 func newK8sClient(imagePrefix, buildNS string) *k8sClient {
 	c := &k8sClient{imagePrefix: imagePrefix, buildNS: buildNS, limits: newResourceLimits(), kmsSync: newKMSSyncConfig()}
 	cfg, err := rest.InClusterConfig()
