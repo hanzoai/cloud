@@ -76,6 +76,7 @@ import (
 	"github.com/hanzoai/cloud/clients/bots"
 	"github.com/hanzoai/cloud/clients/campaign"
 	"github.com/hanzoai/cloud/clients/captable"
+	"github.com/hanzoai/cloud/clients/catalog"
 	"github.com/hanzoai/cloud/clients/catalogsync"
 	"github.com/hanzoai/cloud/clients/channels"
 	"github.com/hanzoai/cloud/clients/cloudflare"
@@ -446,6 +447,12 @@ func Wire() []cloud.MountSpec {
 		// this one indexes ours. NOT /v1/search — that path belongs to the
 		// hanzoai/ai RAG plane, and the collision silently ate two routes.
 		{Name: "index", Mount: index.Mount, Shutdown: ctxShutdown(index.Shutdown), OwnsHealth: true},
+		// The cross-org discovery lens (/v1/catalog): every project, app and site the
+		// fleet has built, whichever org built it. Mounts AFTER index because the
+		// corpus IS an index corpus — catalog owns no store, it owns the one thing a
+		// per-org index cannot express: a published corpus under an org no principal
+		// can mint, read alongside (never instead of) the caller's own.
+		{Name: "catalog", Mount: catalog.Mount},
 		{Name: "world", Mount: world.Mount, Shutdown: ctxShutdown(world.Shutdown)},
 		// The NODE control plane: /v1/bot/connect (the socket a node dials and holds
 		// open), /v1/bot/nodes, /v1/bot/nodes/{id}/invoke, and the replica-to-replica
