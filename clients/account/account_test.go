@@ -23,28 +23,44 @@ import (
 type fakeIAM struct {
 	mu sync.Mutex
 
-	// state
-	keys map[string]string         // id → current hk- key ("" = none)
+	// state — key rows, as IAM stores them: (id, type) → the presented credential.
+	// Two rows per user at most (one secret, one publishable), exactly like IAM's
+	// (Owner, NameFor(scope)) identity.
+	keys map[keyRef]string
 	orgs map[string]map[string]any // slug → org row (nil map = absent)
 	user map[string]map[string]any // id → full user row (for the move)
 
 	// captured
 	gotAuth     string   // Authorization header on the last request
 	mintedFor   []string // ids mint-user-keys was called with
+	mintedTypes []string // the `type` field each mint carried
 	revokedFor  []string
+	revokedType []string
 	movedTo     map[string]string // id → new owner (from update-user)
 	createdOrgs []map[string]any
 	failAddOrg  bool // when true, add-organization answers status!=ok
 	failMintKey bool
 }
 
+// keyRef identifies one key row the way IAM does: whose it is, and which class.
+type keyRef struct{ id, typ string }
+
 func newFakeIAM() *fakeIAM {
 	return &fakeIAM{
-		keys:    map[string]string{},
+		keys:    map[keyRef]string{},
 		orgs:    map[string]map[string]any{},
 		user:    map[string]map[string]any{},
 		movedTo: map[string]string{},
 	}
+}
+
+// keyType normalizes the mint/revoke `type` field the way IAM does: absent means
+// secret. A fake that defaulted differently would hide the very bug under test.
+func fakeKeyType(r *http.Request) string {
+	if t := r.URL.Query().Get("type"); t != "" {
+		return t
+	}
+	return "secret"
 }
 
 func (f *fakeIAM) server(t *testing.T) *httptest.Server {
@@ -71,38 +87,67 @@ func (f *fakeIAM) server(t *testing.T) *httptest.Server {
 			for k, v := range row {
 				out[k] = v
 			}
-			if key, has := f.keys[id]; has {
-				out["accessKey"] = key
-			}
 			ok(w, out)
 			return
 		}
-		// Otherwise synthesize a thin row carrying just the key state.
-		ok(w, map[string]any{"accessKey": f.keys[id], "updatedTime": "2026-01-02T03:04:05Z"})
+		ok(w, map[string]any{"updatedTime": "2026-01-02T03:04:05Z"})
+	})
+
+	// The key LIST — IAM's owner-scoped key rows, MASKED (schema.Key.Mask blanks the
+	// confidential half). The rows are what cloud must read: a mint writes a key row,
+	// so a read of the USER row reports "no key" right after a successful mint.
+	mux.HandleFunc("/v1/iam/keys", func(w http.ResponseWriter, r *http.Request) {
+		f.capture(r)
+		owner := r.URL.Query().Get("owner")
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		rows := []map[string]any{}
+		for ref, key := range f.keys {
+			gotOwner, user, _ := strings.Cut(ref.id, "/")
+			if gotOwner != owner || key == "" {
+				continue
+			}
+			row := map[string]any{
+				"owner": owner, "name": "cloud-api", "user": user,
+				"accessKey": key, "updatedTime": "2026-01-02T03:04:05Z",
+			}
+			if ref.typ == "publishable" {
+				row["name"], row["scope"] = "publishable", "publish"
+			}
+			rows = append(rows, row)
+		}
+		ok(w, map[string]any{"keys": rows})
 	})
 
 	mux.HandleFunc("/v1/iam/mint-user-keys", func(w http.ResponseWriter, r *http.Request) {
 		f.capture(r)
-		id := r.URL.Query().Get("id")
+		id, typ := r.URL.Query().Get("id"), fakeKeyType(r)
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.mintedFor = append(f.mintedFor, id)
+		f.mintedTypes = append(f.mintedTypes, typ)
 		if f.failMintKey {
 			bad(w, "mint failed")
 			return
 		}
-		key := "hk-" + strings.ReplaceAll(id, "/", "-") + "-SECRET"
-		f.keys[id] = key
+		// The prefix IS the type: a publishable key is a pk-, a secret one an sk-.
+		// Nothing downstream may have to ask which it got.
+		key := "sk-" + strings.ReplaceAll(id, "/", "-") + "-SECRET"
+		if typ == "publishable" {
+			key = "pk-" + strings.ReplaceAll(id, "/", "-") + "-PUBLIC"
+		}
+		f.keys[keyRef{id, typ}] = key
 		ok(w, map[string]any{"accessKey": key})
 	})
 
 	mux.HandleFunc("/v1/iam/revoke-user-keys", func(w http.ResponseWriter, r *http.Request) {
 		f.capture(r)
-		id := r.URL.Query().Get("id")
+		id, typ := r.URL.Query().Get("id"), fakeKeyType(r)
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.revokedFor = append(f.revokedFor, id)
-		f.keys[id] = ""
+		f.revokedType = append(f.revokedType, typ)
+		delete(f.keys, keyRef{id, typ})
 		ok(w, map[string]any{})
 	})
 
@@ -256,9 +301,11 @@ func TestKeys_RequireValidatedPrincipal(t *testing.T) {
 	// No X-User-Id → no validated principal → 403, and IAM is never touched, even if
 	// a forged X-Org-Id is present (the bearer-less data path must not mint a key).
 	for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodDelete} {
-		code, _ := call(t, app, m, "/v1/iam/keys", "", "victim", "")
-		if code != http.StatusForbidden {
-			t.Fatalf("%s /keys with forged org but no principal: want 403, got %d", m, code)
+		for _, path := range []string{"/v1/keys", "/v1/iam/keys"} {
+			code, _ := call(t, app, m, path, "", "victim", "")
+			if code != http.StatusForbidden {
+				t.Fatalf("%s %s with forged org but no principal: want 403, got %d", m, path, code)
+			}
 		}
 	}
 	if len(f.mintedFor) != 0 || len(f.revokedFor) != 0 {
@@ -270,29 +317,34 @@ func TestKeys_MintGetRevoke_ScopedToCaller(t *testing.T) {
 	f := newFakeIAM()
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
-	// GET before mint → hasKey:false (authoritative IAM read, not the claim).
-	code, body := call(t, app, http.MethodGet, "/v1/iam/keys", "alice", "acme", "")
+	// GET before mint → an empty set (authoritative IAM read, not the claim).
+	code, body := call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", "")
 	if code != http.StatusOK {
 		t.Fatalf("get pre-mint: want 200, got %d (%s)", code, body)
 	}
-	var st keyStatus
+	var st keyList
 	mustJSON(t, body, &st)
-	if st.HasKey {
-		t.Fatalf("pre-mint hasKey should be false: %s", body)
+	if len(st.Keys) != 0 {
+		t.Fatalf("pre-mint key set should be empty: %s", body)
 	}
 
 	// POST → mint; the key is returned ONCE, and IAM was targeted with the DERIVED
 	// `<owner>/<name>` id — never a request value.
-	code, body = call(t, app, http.MethodPost, "/v1/iam/keys", "alice", "acme", "")
+	code, body = call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", "")
 	if code != http.StatusOK {
 		t.Fatalf("mint: want 200, got %d (%s)", code, body)
 	}
 	var minted struct {
+		Type      string `json:"type"`
+		Key       string `json:"key"`
 		AccessKey string `json:"accessKey"`
 	}
 	mustJSON(t, body, &minted)
-	if minted.AccessKey != "hk-acme-alice-SECRET" {
-		t.Fatalf("mint returned wrong key: %q", minted.AccessKey)
+	if minted.Key != "sk-acme-alice-SECRET" || minted.AccessKey != minted.Key {
+		t.Fatalf("mint returned wrong key: %+v", minted)
+	}
+	if minted.Type != "secret" {
+		t.Fatalf("an unqualified mint must be a SECRET key, got %q", minted.Type)
 	}
 	if len(f.mintedFor) != 1 || f.mintedFor[0] != "acme/alice" {
 		t.Fatalf("mint should target the derived id acme/alice, got %v", f.mintedFor)
@@ -305,20 +357,157 @@ func TestKeys_MintGetRevoke_ScopedToCaller(t *testing.T) {
 		t.Fatalf("IAM auth: want confidential-client Basic, got %q", f.gotAuth)
 	}
 
-	// GET after mint → hasKey:true with the public prefix only (no secret material).
-	code, body = call(t, app, http.MethodGet, "/v1/iam/keys", "alice", "acme", "")
+	// GET after mint → the key is LISTED, by prefix only, with no secret material.
+	// This is the round trip that was broken: the mint writes a key ROW and the read
+	// looked at the USER row, so a freshly minted key never appeared.
+	code, body = call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", "")
 	mustJSON(t, body, &st)
-	if code != http.StatusOK || !st.HasKey || st.KeyPrefix != "hk-acme-ali" {
-		t.Fatalf("get post-mint: want hasKey + 11-char prefix, got %d %s", code, body)
+	if code != http.StatusOK || len(st.Keys) != 1 {
+		t.Fatalf("get post-mint: want the minted key listed, got %d %s", code, body)
+	}
+	if st.Keys[0].Type != "secret" || st.Keys[0].Prefix != "sk-acme-ali" {
+		t.Fatalf("get post-mint: want a secret key by prefix, got %+v", st.Keys[0])
 	}
 	if strings.Contains(string(body), "SECRET") {
-		t.Fatalf("GET /keys leaked the secret: %s", body)
+		t.Fatalf("GET /v1/keys leaked the secret: %s", body)
 	}
 
-	// DELETE → revoke, targeting the same derived id.
-	code, _ = call(t, app, http.MethodDelete, "/v1/iam/keys", "alice", "acme", "")
+	// DELETE → revoke, targeting the same derived id, and the key stops being listed.
+	code, _ = call(t, app, http.MethodDelete, "/v1/keys", "alice", "acme", "")
 	if code != http.StatusOK || len(f.revokedFor) != 1 || f.revokedFor[0] != "acme/alice" {
 		t.Fatalf("revoke: want 200 targeting acme/alice, got %d %v", code, f.revokedFor)
+	}
+	_, body = call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", "")
+	mustJSON(t, body, &st)
+	if len(st.Keys) != 0 {
+		t.Fatalf("a revoked key is still listed: %s", body)
+	}
+}
+
+// The pk- fix at the door a caller actually uses: a publishable key is `type:
+// publishable` on the ONE endpoint. Nothing minted one before — cloud had no pk-
+// mint surface at all — so every product configured its own ingest credential and
+// error reporting stayed on a separate DSN.
+func TestKeys_PublishableTypeIsAFieldNotAnEndpoint(t *testing.T) {
+	f := newFakeIAM()
+	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
+
+	code, body := call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", `{"type":"publishable"}`)
+	if code != http.StatusOK {
+		t.Fatalf("publishable mint: want 200, got %d (%s)", code, body)
+	}
+	var minted struct {
+		Type string `json:"type"`
+		Key  string `json:"key"`
+	}
+	mustJSON(t, body, &minted)
+	if minted.Type != "publishable" || !strings.HasPrefix(minted.Key, "pk-") {
+		t.Fatalf("want a pk- publishable key, got %+v", minted)
+	}
+	if len(f.mintedTypes) != 1 || f.mintedTypes[0] != "publishable" {
+		t.Fatalf("the type must reach IAM as a field, got %v", f.mintedTypes)
+	}
+
+	// The type also rides as a query field — one contract, either spelling.
+	if code, _ = call(t, app, http.MethodPost, "/v1/keys?type=publishable", "bob", "acme", ""); code != http.StatusOK {
+		t.Fatalf("?type=publishable: want 200, got %d", code)
+	}
+
+	// A publishable key is LISTED WITH ITS FULL VALUE — it is public by construction
+	// and useless to its holder if it cannot be read back.
+	_, body = call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", "")
+	var st keyList
+	mustJSON(t, body, &st)
+	if len(st.Keys) != 1 || st.Keys[0].Type != "publishable" {
+		t.Fatalf("want one publishable key listed, got %s", body)
+	}
+	if st.Keys[0].Key != "pk-acme-alice-PUBLIC" {
+		t.Fatalf("a publishable key must list its full value, got %q", st.Keys[0].Key)
+	}
+}
+
+// The two types are independent credentials: minting or revoking one must not touch
+// the other. Rotating the key in a browser bundle cannot be allowed to sign the
+// holder out of their own API.
+func TestKeys_TypesAreIndependent(t *testing.T) {
+	f := newFakeIAM()
+	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
+
+	call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", `{"type":"secret"}`)
+	call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", `{"type":"publishable"}`)
+
+	var st keyList
+	_, body := call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", "")
+	mustJSON(t, body, &st)
+	if len(st.Keys) != 2 {
+		t.Fatalf("a user holds one key per type; want 2 listed, got %s", body)
+	}
+
+	// Revoke ONLY the publishable one.
+	if code, _ := call(t, app, http.MethodDelete, "/v1/keys?type=publishable", "alice", "acme", ""); code != http.StatusOK {
+		t.Fatalf("scoped revoke: want 200, got %d", code)
+	}
+	if len(f.revokedType) != 1 || f.revokedType[0] != "publishable" {
+		t.Fatalf("the revoke type must reach IAM, got %v", f.revokedType)
+	}
+	_, body = call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", "")
+	mustJSON(t, body, &st)
+	if len(st.Keys) != 1 || st.Keys[0].Type != "secret" {
+		t.Fatalf("revoking the publishable key must leave the secret key working, got %s", body)
+	}
+}
+
+// An unrecognized type is REFUSED, never defaulted. Defaulting would hand a caller
+// who asked for a browser-safe key a session-equivalent secret instead — the failure
+// mode is a credential in the wrong place, so it has to be loud.
+func TestKeys_UnknownTypeRefused(t *testing.T) {
+	f := newFakeIAM()
+	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
+
+	for _, typ := range []string{"public", "publishible", "sk", "SECRET"} {
+		code, _ := call(t, app, http.MethodPost, "/v1/keys?type="+typ, "alice", "acme", "")
+		if code != http.StatusBadRequest {
+			t.Fatalf("POST type=%q: want 400, got %d", typ, code)
+		}
+		code, _ = call(t, app, http.MethodDelete, "/v1/keys?type="+typ, "alice", "acme", "")
+		if code != http.StatusBadRequest {
+			t.Fatalf("DELETE type=%q: want 400, got %d", typ, code)
+		}
+	}
+	if len(f.mintedFor) != 0 || len(f.revokedFor) != 0 {
+		t.Fatalf("a refused type must never reach IAM: minted=%v revoked=%v", f.mintedFor, f.revokedFor)
+	}
+}
+
+// /v1/iam/keys is an ALIAS, not a second implementation: it answers identically and
+// says on the wire that it is superseded (RFC 8594), naming /v1/keys.
+func TestKeys_LegacyPathIsAThinDeprecatedAlias(t *testing.T) {
+	f := newFakeIAM()
+	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/iam/keys", nil)
+	req.Header.Set("X-User-Id", "alice")
+	req.Header.Set("X-Org-Id", "acme")
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("alias GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("alias GET: want 200, got %d", resp.StatusCode)
+	}
+	if resp.Header.Get("Deprecation") != "true" {
+		t.Fatal("the superseded path must announce itself deprecated")
+	}
+	if !strings.Contains(resp.Header.Get("Link"), "/v1/keys") {
+		t.Fatalf("the deprecation must NAME its replacement, got Link: %q", resp.Header.Get("Link"))
+	}
+
+	// And it is the SAME handler — a mint through the alias is a mint, with the type
+	// field honored exactly as on the canonical path.
+	code, body := call(t, app, http.MethodPost, "/v1/iam/keys?type=publishable", "alice", "acme", "")
+	if code != http.StatusOK || !strings.Contains(string(body), "pk-") {
+		t.Fatalf("alias POST must behave identically: %d %s", code, body)
 	}
 }
 
@@ -354,7 +543,7 @@ func TestKeys_DirectBearerPath_MintsByUsernameNotUUID(t *testing.T) {
 		AccessKey string `json:"accessKey"`
 	}
 	mustJSON(t, b, &minted)
-	if minted.AccessKey != "hk-hanzo-z-SECRET" {
+	if minted.AccessKey != "sk-hanzo-z-SECRET" {
 		t.Fatalf("direct-path mint returned wrong key: %q", minted.AccessKey)
 	}
 }
@@ -521,7 +710,7 @@ func TestIAMKeysBeatsWildcard(t *testing.T) {
 	if strings.Contains(string(body), "iam-wildcard") {
 		t.Fatalf("/v1/iam/keys reached the wildcard, not the native handler: %s", body)
 	}
-	var st keyStatus
+	var st keyList
 	mustJSON(t, body, &st) // native response shape
 
 	// POST /v1/iam/keys (mint) must ALSO hit the native handler and target the derived id.
