@@ -10,13 +10,14 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/templates"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
 // mountApp mounts the projects surface on a fresh in-memory app with a temp
 // store, exactly as the unified binary does. The fork route reads the embedded
-// templates catalog (templates.Get) — no template fixture needed.
+// templates catalog (templates.Lookup) — no template fixture needed.
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
@@ -326,6 +327,43 @@ func TestForkTemplateRecordsLineage(t *testing.T) {
 	_ = json.Unmarshal(body, &p)
 	if p.ForkedFrom != "synapse" {
 		t.Fatalf("template lineage = %q, want synapse", p.ForkedFrom)
+	}
+}
+
+// TestForkPrivateTemplateIsOwnerOnly is the per-org template loop end to end:
+// acme publishes a template PRIVATE to acme, forks it, and gets a project seeded
+// from it with owner-qualified lineage — while globex, asking for the exact same
+// slug, gets a 404. templates.Lookup binds the caller's org, so another org's
+// template is not merely filtered out of the fork, it is unreachable from it.
+func TestForkPrivateTemplateIsOwnerOnly(t *testing.T) {
+	app := mountApp(t)
+	if err := templates.Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("templates.Mount: %v", err)
+	}
+	t.Cleanup(func() { _ = templates.Shutdown(t.Context()) })
+
+	if code, body := do(t, app, http.MethodPost, "/v1/templates", "acme", map[string]any{
+		"slug": "acme-portal", "title": "Acme Portal", "framework": "React 18 + Vite",
+		"source": "https://git.acme.example/portal",
+	}); code != http.StatusCreated {
+		t.Fatalf("publish private template want 201, got %d (%s)", code, body)
+	}
+
+	code, body := do(t, app, http.MethodPost, "/v1/projects/fork", "acme", map[string]any{"slug": "acme-portal"})
+	if code != http.StatusCreated {
+		t.Fatalf("owner fork of own template want 201, got %d (%s)", code, body)
+	}
+	var p projectView
+	_ = json.Unmarshal(body, &p)
+	if p.Org != "acme" || p.Framework != "vite" || p.Repo.URL != "https://git.acme.example/portal" {
+		t.Fatalf("fork did not seed from the private template: org=%s framework=%s repo=%s", p.Org, p.Framework, p.Repo.URL)
+	}
+	if p.ForkedFrom != "acme/acme-portal" {
+		t.Fatalf("private-template lineage = %q, want acme/acme-portal", p.ForkedFrom)
+	}
+
+	if code, body := do(t, app, http.MethodPost, "/v1/projects/fork", "globex", map[string]any{"slug": "acme-portal"}); code != http.StatusNotFound {
+		t.Fatalf("cross-org fork of a private template want 404, got %d (%s)", code, body)
 	}
 }
 

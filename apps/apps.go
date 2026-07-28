@@ -315,7 +315,7 @@ func Wire() []cloud.MountSpec {
 		{Name: "deploy", Mount: deploy.Mount, OwnsHealth: true},
 		{Name: "functions", Mount: functions.Mount},
 		{Name: "tracker", Mount: tracker.Mount},
-		{Name: "templates", Mount: templates.Mount},
+		{Name: "templates", Mount: templates.Mount, Shutdown: templates.Shutdown},
 		// OSS-template compute-cost basis /v1/blueprint/* — parses a blueprint's
 		// docker-compose into its SBOM (bill of container images) and prices the
 		// stack's CPU/memory footprint through a documented rate card. The per-hour
