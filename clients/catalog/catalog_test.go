@@ -283,3 +283,42 @@ func mustGetH(t *testing.T, app *zip.App, url string, hdr map[string]string) str
 	}
 	return body
 }
+
+// TestProvenanceReachesTheAPI is the surface half of the fix: a marker the store
+// gates but the API never emits protects nothing a reader can see. It also pins
+// official as a tri-state browse axis, because "show me what is NOT ours" is the
+// very next question a person asks once they learn the catalog carries other
+// people's work.
+func TestProvenanceReachesTheAPI(t *testing.T) {
+	app := mount(t)
+	seed(t,
+		Entry{ID: "hanzo/ex-kanban", Org: "hanzo", Name: "ex-kanban", Kind: "site",
+			Official: true, Forkable: true, Updated: "2026-07-01"},
+		Entry{ID: "hanzo/kinetic", Org: "hanzo", Name: "kinetic", Kind: "site",
+			Upstream: "UI8 \u2014 Fitness Pro: Website UI Kit", License: "UI8 commercial licence",
+			Updated: "2026-07-02"},
+	)
+
+	all := decode(t, mustGet(t, app, "/v1/catalog"))
+	got := map[string]Entry{}
+	for _, e := range all.Data {
+		got[e.Name] = e
+	}
+	if !got["ex-kanban"].Official {
+		t.Error("the first-party marker never reached the API")
+	}
+	if e := got["kinetic"]; e.Official || e.Upstream == "" || e.License == "" {
+		t.Errorf("a third-party kit must read as credited, not first-party: %+v", e)
+	}
+	if all.Facets["official"]["true"] != 1 || all.Facets["official"]["false"] != 1 {
+		t.Errorf("official must be faceted both ways, got %v", all.Facets["official"])
+	}
+	for q, want := range map[string]string{
+		"official=true": "hanzo/ex-kanban", "official=false": "hanzo/kinetic",
+	} {
+		r := decode(t, mustGet(t, app, "/v1/catalog?"+q))
+		if r.Total != 1 || r.Data[0].ID != want {
+			t.Errorf("%s: want [%s], got %+v", q, want, r.Data)
+		}
+	}
+}
