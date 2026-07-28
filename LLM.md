@@ -128,6 +128,49 @@ cross-subsystem harness (`clients/guide/drivehome_e2e_test.go`) in under a secon
 Prefer one package per `go test` invocation regardless: `./...` links every main
 package at once (`cmd/cloud` alone links >6GB).
 
+## Two hosts: `cmd/cloud` links every app, `cmd/host` links none
+
+`cmd/cloud` imports `apps` and therefore links all ~103 subsystem graphs into one
+binary — **3105 packages**, ~570 MB, minutes to link, and a relink for every app
+that changes. `cmd/host` is the same API served a different way: it links `zip`
+and `manifest` and stops (**316 packages**, 19 MB, sub-second link, 14 MB RSS),
+mounts each app as a `zip.Plugin`, and starts a child on the FIRST REQUEST that
+reaches its prefix. An app nobody calls costs a route entry, not a process; a
+woken one costs ~27 MB. Both entry points stay — `make build` and `make host`.
+
+The host knows three facts per app and no more — name, prefixes, eager-or-lazy —
+and they are DERIVED from `apps.Wire()`, never hand-maintained. `make generate`
+runs `cmd/gen-app-cmds`, which reads Wire ONCE and emits both `cmd/<app>/main.go`
+and `manifest/apps.go`, so an app cannot exist in one and not the other. Prefixes
+come from, in order: the `PluginSpec` call's own arguments, a declared
+`Prefixes:` field, then the absolute paths the app's package registers — read by
+walking the call graph from the entry's Mount function (per FUNCTION, because
+`clients/account` serves two Wire entries and a package-wide scan gives each the
+other's paths). Both registration forms are read: `app.Get("/v1/x", h)` and the
+typed `zip.Get(reg, "/v1/x", h)`. The walk resolves consts, `[]string` ranges and
+concatenation, and tracks which values are Groups so `g.Get("/health")` never
+becomes the prefix `/health`.
+
+Two rules make a wrong prefix impossible rather than merely unlikely. A prefix is
+never widened to a shorter ancestor (`/v1/iam/keys` stays that deep — folding it
+to `/v1/iam` would hand `account` the whole identity plane), and a prefix must
+start with a literal segment (git's `/:org/:repo` matches every two-segment
+request in the fleet; in one binary its handler inspects the Host and falls
+through, but once a request is proxied to a child there is no falling through).
+An app the walk cannot reduce to prefixes gets no row and says why on stderr —
+`make generate` names them. The fix for an under-reported app is one line in its
+Wire entry: `Prefixes:` outranks the walk.
+
+`cloud.Serve` honours the plugin side of the contract in ONE place, `listenOn`:
+with `ZIP_ADDR` set the process serves that socket and binds no ops port, so
+every generated `cmd/<app>` is a valid plugin with no code of its own. Without
+that, each child binds cfg's fixed `:8080/:9653/:9090`, the host never sees it
+listen, and all but the first die on "address already in use".
+
+CI pins both properties from `hanzo.yml`: `generated-current` re-runs the
+generator and fails on a dirty tree; `host-is-light` fails if `cmd/host`'s import
+graph reaches `apps` or any `clients/*`.
+
 ## Framework doctrine
 
 One way to do everything. Composable, orthogonal, DRY. A new subsystem is a
