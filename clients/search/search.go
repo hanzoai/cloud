@@ -25,6 +25,7 @@
 // silent empty. This is not a nicety: a silent empty is exactly how a vector-store
 // credential drift went unnoticed for five days behind a fail-empty
 // /v1/kb/search.
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 package search
 
 import (
