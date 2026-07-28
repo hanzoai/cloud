@@ -28,7 +28,7 @@ import (
 // This is the ONE place the cloud-server body lives — every per-app plugin main
 // (plugin/<app>/main.go) calls it, so no boot logic is duplicated per subsystem.
 //
-// specs is the composition root's subsystem list (apps.Wire()), threaded
+// plugins is the composition root's subsystem list (apps.Wire()), threaded
 // in by the caller so cloud never imports subsystems (which would cycle). Serve
 // mounts it in slice order and tears it down in reverse.
 //
@@ -40,13 +40,13 @@ import (
 // every enabled subsystem) before MountAll, runs the canonical middleware
 // pipeline (Recover → RequestID → Logger), and shuts down gracefully on
 // SIGINT/SIGTERM.
-func Serve(specs []MountSpec, enable []string) error {
+func Serve(plugins []Plugin, enable []string) error {
 	// `<binary> openapi <file>` describes instead of serving. Before LoadConfig
 	// AND before credz.Boot because the document must be a function of the code
 	// alone: both read the environment, and a route set that moved with a
 	// developer's shell is a spec that cannot be a golden — see openapi_dump.go.
 	if dest, ok := SpecRequested(); ok {
-		return dumpSpec(specs, dest)
+		return dumpSpec(plugins, dest)
 	}
 
 	// Credentials FIRST — before config is read, before any store opens. A child
@@ -411,11 +411,11 @@ func Serve(specs []MountSpec, enable []string) error {
 	// A subsystem that owns its health (OwnsHealth, e.g. kms/paas/s3) serves its
 	// OWN fail-closed /v1/<name>/health in Mount; skip it here so this always-ok
 	// route never shadows the real probe.
-	for _, spec := range specs {
-		if !cfg.Enabled(spec.Name) || spec.OwnsHealth {
+	for _, p := range plugins {
+		if !cfg.Enabled(p.Name) || p.OwnsHealth {
 			continue
 		}
-		name := spec.Name
+		name := p.Name
 		app.Get("/v1/"+name+"/health", func(c *zip.Ctx) error {
 			return c.JSON(200, map[string]string{"service": name, "status": "ok"})
 		})
@@ -441,7 +441,7 @@ func Serve(specs []MountSpec, enable []string) error {
 		return c.JSON(200, map[string]any{"status": "ok"})
 	})
 
-	if err := MountAll(app, specs, cfg, deps); err != nil {
+	if err := MountAll(app, plugins, cfg, deps); err != nil {
 		return fmt.Errorf("mount: %w", err)
 	}
 
@@ -501,12 +501,12 @@ func Serve(specs []MountSpec, enable []string) error {
 	// for every mounted app name — methods Exposed during Mount are live by now —
 	// so Dial(app) resolving a socket always means "the app is up", and an up app
 	// answering 404 means version skew: two different, diagnosable facts.
-	for _, sp := range specs {
-		if sp.Name == "" {
+	for _, p := range plugins {
+		if p.Name == "" {
 			continue
 		}
-		if c, err := Listen(sp.Name, deps.Logger); err != nil {
-			deps.Logger.Warn("rpc: socket not served", "app", sp.Name, "err", err)
+		if c, err := Listen(p.Name, deps.Logger); err != nil {
+			deps.Logger.Warn("rpc: socket not served", "app", p.Name, "err", err)
 		} else {
 			defer func() { _ = c.Close() }()
 		}
@@ -518,7 +518,7 @@ func Serve(specs []MountSpec, enable []string) error {
 	// Durable ingest: embed the ONE tasks engine in-process + inject the per-org dialer
 	// into ai (long github/crawl/s3 ingests run as durable workflows; upload stays
 	// inline). Fail-soft — inline fallback if the engine can't start. See durable.go.
-	wireDurableIngest(ctx, deps, procName(specs))
+	wireDurableIngest(ctx, deps, procName(plugins))
 
 	// Health/metrics listener (HealthListenAddr, default :9090). Serves the
 	// liveness/readiness contract the platform probes hit (/healthz, /readyz)
@@ -634,13 +634,14 @@ func listenOn(cfg *Config) (addrs []string, ops string) {
 	return []string{cfg.ZAPListenAddr, "http://" + cfg.ListenAddr}, cfg.HealthListenAddr
 }
 
+// healthMux is the liveness/readiness + metrics contract on the ops port
 // procName names the process by what it serves. A single-app binary is that app; a
 // host that mounts several is "cloud". It exists so per-process resources (the
 // durable engine's port and store) can say whose they are instead of contending for
 // one global name.
-func procName(specs []MountSpec) string {
-	if len(specs) == 1 {
-		return specs[0].Name
+func procName(plugins []Plugin) string {
+	if len(plugins) == 1 {
+		return plugins[0].Name
 	}
 	return "cloud"
 }

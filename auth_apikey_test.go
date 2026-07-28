@@ -154,7 +154,7 @@ func TestOrgForKey_EachPrefixUsesItsOwnDoor(t *testing.T) {
 	if org, ok := OrgForKey(context.Background(), "pk-live-abc"); !ok || org != "pub-org" {
 		t.Fatalf("publishable key resolved to (%q,%v), want pub-org — this is the pk- ingest path", org, ok)
 	}
-	want := []string{"/v1/iam/get-user", "/v1/iam/resolve-key"}
+	want := []string{"/v1/iam/users/get", "/v1/iam/resolve-key"}
 	if len(paths) != 2 || paths[0] != want[0] || paths[1] != want[1] {
 		t.Fatalf("doors used = %v, want %v (one question each, never interchangeable)", paths, want)
 	}

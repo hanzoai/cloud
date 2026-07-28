@@ -16,7 +16,7 @@ import (
 // as a plugin; run directly it serves standalone. Its OpenAPI subset comes from
 // `exec openapi`. Hand-owned — edit the spec below directly.
 func main() {
-	if err := cloud.Serve([]cloud.MountSpec{{
+	if err := cloud.Serve([]cloud.Plugin{{
 		Name:  "exec",
 		Price: cloud.Free,
 		Mount: exec.Mount,

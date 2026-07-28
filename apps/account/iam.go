@@ -354,7 +354,7 @@ type iamOrg struct {
 // propagates so onboarding never mistakes "unreachable" for "available" and creates
 // a duplicate.
 func (c *iamClient) getOrganization(ctx context.Context, slug string) (*iamOrg, error) {
-	env, err := c.do(ctx, http.MethodGet, "/v1/iam/get-organization", url.Values{"id": {adminOrg + "/" + slug}}, nil)
+	env, err := c.do(ctx, http.MethodGet, "/v1/iam/organizations/get", url.Values{"id": {adminOrg + "/" + slug}}, nil)
 	if err != nil {
 		// IAM returns status!=ok / empty data for a missing org; do() maps a not-ok
 		// envelope to an "iam:" error — that means the org does not exist. A transport
@@ -389,7 +389,7 @@ func (c *iamClient) createOrganization(ctx context.Context, o iamOrg) error {
 
 // getUser reads a full user row (for the move: update-user re-submits it whole).
 func (c *iamClient) getUser(ctx context.Context, id string) (json.RawMessage, error) {
-	env, err := c.do(ctx, http.MethodGet, "/v1/iam/get-user", url.Values{"id": {id}}, nil)
+	env, err := c.do(ctx, http.MethodGet, "/v1/iam/users/get", url.Values{"id": {id}}, nil)
 	if err != nil {
 		return nil, err
 	}

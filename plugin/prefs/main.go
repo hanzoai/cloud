@@ -16,7 +16,7 @@ import (
 // as a plugin; run directly it serves standalone. Its OpenAPI subset comes from
 // `prefs openapi`. Hand-owned — edit the spec below directly.
 func main() {
-	if err := cloud.Serve([]cloud.MountSpec{{
+	if err := cloud.Serve([]cloud.Plugin{{
 		Name:     "prefs",
 		Price:    cloud.Free,
 		Mount:    prefs.Mount,

@@ -50,3 +50,9 @@ Thumbs.db
 :memory:
 :memory:.*
 __pycache__/
+
+# Never commit dependency trees or build output — a 116 MB next-swc binary in
+# clients/team/wallet/app/node_modules got a push rejected by the size limit.
+node_modules/
+**/node_modules/
+native/flags/target/

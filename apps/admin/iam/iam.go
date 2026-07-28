@@ -1,5 +1,5 @@
 // Package iam is the admin cockpit's typed reader for the Hanzo IAM management
-// surface (/v1/iam/get-*). IAM runs as its own deployment (not fused into this
+// surface (/v1/iam/ native routes). IAM runs as its own deployment (not fused into this
 // binary), so these are HTTP calls, not Go method dispatch. Every call REPLAYS
 // THE CALLER'S OWN credential (session cookie + Authorization), so IAM authorizes
 // the read as the same principal the gateway already validated as a SuperAdmin.
@@ -27,7 +27,7 @@ import (
 	"time"
 )
 
-// Client reads the IAM management surface (/v1/iam/get-*) on behalf of a verified
+// Client reads the IAM management surface (/v1/iam/ native routes) on behalf of a verified
 // SuperAdmin caller.
 type Client struct {
 	base string // e.g. http://iam.hanzo.svc.cluster.local:8000
@@ -97,17 +97,17 @@ func (c *Client) List(ctx context.Context, cr Creds, path string, q url.Values) 
 	return List{Rows: env.Data, Total: total}, nil
 }
 
-// Orgs lists organizations (GET /v1/iam/get-organizations).
+// Orgs lists organizations (GET /v1/iam/organizations).
 func (c *Client) Orgs(ctx context.Context, cr Creds, q url.Values) (List, error) {
-	return c.List(ctx, cr, "/v1/iam/get-organizations", q)
+	return c.List(ctx, cr, "/v1/iam/organizations", q)
 }
 
-// Users lists users (GET /v1/iam/get-users).
+// Users lists users (GET /v1/iam/users).
 func (c *Client) Users(ctx context.Context, cr Creds, q url.Values) (List, error) {
-	return c.List(ctx, cr, "/v1/iam/get-users", q)
+	return c.List(ctx, cr, "/v1/iam/users", q)
 }
 
-// Org fetches ONE organization row (GET /v1/iam/get-organization?id=owner/name)
+// Org fetches ONE organization row (GET /v1/iam/organizations/get?owner=&name=)
 // as the typed Org subset the scoped read panels fold over. Replays the caller's
 // own credential, so IAM authorizes the read as the same validated principal — a
 // non-super caller can only ever read their OWN org this way (the second line of the
@@ -115,7 +115,7 @@ func (c *Client) Users(ctx context.Context, cr Creds, q url.Values) (List, error
 // error and falls back to a name-only row.
 func (c *Client) Org(ctx context.Context, cr Creds, id string) (Org, error) {
 	q := url.Values{"id": {id}}
-	env, err := c.get(ctx, cr, "/v1/iam/get-organization", q)
+	env, err := c.get(ctx, cr, "/v1/iam/organizations/get", q)
 	if err != nil {
 		return Org{}, err
 	}
@@ -126,7 +126,7 @@ func (c *Client) Org(ctx context.Context, cr Creds, id string) (Org, error) {
 	return org, nil
 }
 
-// User fetches ONE user as its FULL wire object (GET /v1/iam/get-user?id=
+// User fetches ONE user as its FULL wire object (GET /v1/iam/users/get?owner=&name= ; was get-user?id=
 // owner/name), preserving every field. The suspend/reactivate action reads the
 // whole object, flips isForbidden, and writes it back — update-user REPLACES the
 // row, so operating on the full object (not a typed subset) is what keeps every
@@ -134,7 +134,7 @@ func (c *Client) Org(ctx context.Context, cr Creds, id string) (Org, error) {
 // read as the same validated SuperAdmin.
 func (c *Client) User(ctx context.Context, cr Creds, id string) (map[string]any, error) {
 	q := url.Values{"id": {id}}
-	env, err := c.get(ctx, cr, "/v1/iam/get-user", q)
+	env, err := c.get(ctx, cr, "/v1/iam/users/get", q)
 	if err != nil {
 		return nil, err
 	}

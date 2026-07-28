@@ -94,12 +94,12 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 		w.Header().Set("Content-Type", "application/json")
 		q := r.URL.Query()
 		switch {
-		case strings.HasSuffix(r.URL.Path, "/get-organizations"):
+		case strings.HasSuffix(r.URL.Path, "/organizations"):
 			fmt.Fprintf(w, `{"status":"ok","msg":"","data":[
 				{"owner":"admin","name":"acme","displayName":"Acme Inc","createdTime":%q},
 				{"owner":"admin","name":"globex","displayName":"Globex","createdTime":%q}
 			],"data2":2}`, acmeCreated, globexCreated)
-		case strings.HasSuffix(r.URL.Path, "/get-users"):
+		case strings.HasSuffix(r.URL.Path, "/users"):
 			owner := q.Get("owner")
 			rows := []string{}
 			for _, us := range users[owner] {
@@ -114,7 +114,7 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 					us.owner, us.name, us.email, us.admin, forb, us.key, created, now.AddDate(0, 0, -2).Format(time.RFC3339)))
 			}
 			fmt.Fprintf(w, `{"status":"ok","msg":"","data":[%s],"data2":%d}`, strings.Join(rows, ","), len(rows))
-		case strings.HasSuffix(r.URL.Path, "/get-user"):
+		case strings.HasSuffix(r.URL.Path, "/users/get"):
 			id := q.Get("id")
 			parts := strings.SplitN(id, "/", 2)
 			owner := ""

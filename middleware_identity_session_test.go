@@ -12,7 +12,7 @@ import (
 // never a principal, never a panic — so the session bridge can never widen auth.
 //
 // This used to be conditional on Beego's global session manager being nil, which
-// is how the retired Casdoor iam-v1 embed stored sessions. That embed is gone and
+// is how the retired iam-v1 embed stored sessions. That embed is gone and
 // IAM v2 is zip-native, so nothing populates that global and sessionAccessToken is
 // now unconditionally "". The property under test is unchanged and is now
 // unconditional too: no skip, no framework global, just the guarantee.

@@ -16,7 +16,7 @@ import (
 // as a plugin; run directly it serves standalone. Its OpenAPI subset comes from
 // `share openapi`. Hand-owned — edit the spec below directly.
 func main() {
-	if err := cloud.Serve([]cloud.MountSpec{{
+	if err := cloud.Serve([]cloud.Plugin{{
 		Name:  "share",
 		Price: cloud.Free,
 		Mount: share.Mount,

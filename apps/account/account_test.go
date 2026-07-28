@@ -79,7 +79,7 @@ func (f *fakeIAM) server(t *testing.T) *httptest.Server {
 		_ = json.NewEncoder(w).Encode(map[string]any{"status": "error", "msg": msg, "data": nil})
 	}
 
-	mux.HandleFunc("/v1/iam/get-user", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/iam/users/get", func(w http.ResponseWriter, r *http.Request) {
 		f.capture(r)
 		id := r.URL.Query().Get("id")
 		f.mu.Lock()
@@ -157,7 +157,7 @@ func (f *fakeIAM) server(t *testing.T) *httptest.Server {
 		ok(w, map[string]any{})
 	})
 
-	mux.HandleFunc("/v1/iam/get-organization", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/iam/organizations/get", func(w http.ResponseWriter, r *http.Request) {
 		f.capture(r)
 		id := r.URL.Query().Get("id") // admin/<slug>
 		slug := id
