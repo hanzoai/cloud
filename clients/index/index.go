@@ -1,4 +1,4 @@
-// Package search mounts the Hanzo Cloud /v1/search/* surface: a native-Go,
+// Package index mounts the Hanzo Cloud /v1/index/* surface: a native-Go,
 // multi-tenant full-text index on Base/SQLite that speaks the Meilisearch REST
 // dialect.
 //
@@ -14,20 +14,20 @@
 // mongoMeili Mongoose plugin. Speaking that dialect means chat points MEILI_HOST
 // at this surface and needs no client change:
 //
-//	GET    /v1/search/health                              {"status":"available"}
-//	GET    /v1/search/version
-//	POST   /v1/search/indexes                             {uid, primaryKey}
-//	GET    /v1/search/indexes/:uid
-//	GET    /v1/search/indexes/:uid/settings
-//	PATCH  /v1/search/indexes/:uid/settings               {filterableAttributes}
-//	POST   /v1/search/indexes/:uid/documents              [doc,…]  add/replace
-//	PUT    /v1/search/indexes/:uid/documents              [doc,…]  update/upsert
-//	GET    /v1/search/indexes/:uid/documents              ?limit&offset
-//	GET    /v1/search/indexes/:uid/documents/:id
-//	DELETE /v1/search/indexes/:uid/documents/:id
-//	POST   /v1/search/indexes/:uid/documents/delete-batch [id,…]
-//	POST   /v1/search/indexes/:uid/search                 {q, filter, limit, offset}
-//	GET    /v1/search/tasks/:uid
+//	GET    /v1/index/health                              {"status":"available"}
+//	GET    /v1/index/version
+//	POST   /v1/index/indexes                             {uid, primaryKey}
+//	GET    /v1/index/indexes/:uid
+//	GET    /v1/index/indexes/:uid/settings
+//	PATCH  /v1/index/indexes/:uid/settings               {filterableAttributes}
+//	POST   /v1/index/indexes/:uid/documents              [doc,…]  add/replace
+//	PUT    /v1/index/indexes/:uid/documents              [doc,…]  update/upsert
+//	GET    /v1/index/indexes/:uid/documents              ?limit&offset
+//	GET    /v1/index/indexes/:uid/documents/:id
+//	DELETE /v1/index/indexes/:uid/documents/:id
+//	POST   /v1/index/indexes/:uid/documents/delete-batch [id,…]
+//	POST   /v1/index/indexes/:uid/search                 {q, filter, limit, offset}
+//	GET    /v1/index/tasks/:uid
 //
 // Error bodies use Meilisearch's {message, code, type, link} shape rather than
 // cloud's, because the JS client branches on those codes — index_not_found is
@@ -139,7 +139,7 @@ func Shutdown() error {
 	return err
 }
 
-// routes registers the Meilisearch dialect under /v1/search.
+// routes registers the Meilisearch dialect under /v1/index.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	// health and version are registered as ABSOLUTE paths on app, the same idiom
 	// every other OwnsHealth subsystem uses (clients/esign, clients/kms). Declared
