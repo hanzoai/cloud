@@ -61,6 +61,9 @@ type state struct {
 // deps.IAMIssuer and the conditional (health-only) route set make this a direct
 // construction (cloud.NewBase), not cloud.Mount.
 func Mount(app cloud.Router, deps cloud.Deps) error {
+	// The sealed store lives here, so the reads and writes are published here.
+	exposeSecrets(deps.KMS)
+
 	if app == nil {
 		return fmt.Errorf("kms.Mount: nil app")
 	}
@@ -136,7 +139,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	g.Get("/secrets/+", guard(s, cloud.Handle(s, getSecret)))
 	g.Post("/secrets", guard(s, cloud.Handle(s, putSecret)))
 	g.Delete("/secrets/+", guard(s, cloud.Handle(s, deleteSecret)))
-
 
 	s.Log.Info(
 		"kms subsystem mounted",
