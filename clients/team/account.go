@@ -643,10 +643,19 @@ func (g *api) selectWorkspace(c *zip.Ctx, params map[string]any) error {
 	if st := g.entitle(c.Context(), org, role, ws.ID, account); st != nil {
 		return c.JSON(http.StatusPaymentRequired, map[string]any{"error": *st, "upgradeUrl": upgradeURL})
 	}
-	// Carry the tenant into the workspace token so the transactor routes to
-	// orgs/<org>/ws/<workspace>.db. Short-lived (workspaceTokenTTL) — it rides in
+	// Carry the tenant AND the caller's role into the workspace token so the
+	// transactor routes to orgs/<org>/ws/<workspace>.db and every downstream holder
+	// can tell a member from a guest. Short-lived (workspaceTokenTTL) — it rides in
 	// the transactor URL path, so a bounded lifetime caps replay on capture.
-	wsTok, err := token.Generate(account, ws.UUID, map[string]any{"org": org}, expUnix(workspaceTokenTTL), g.cfg.serverSecret)
+	//
+	// extra.role is the ONLY place a reduced principal is expressible on the wire.
+	// resolveWorkspace already returned it and this mint used to DROP it, so every
+	// consumer of a workspace token saw an owner and a guest as identical — and
+	// entitle() cannot help, being a billing gate that returns nil on every branch by
+	// design (observe mode). Signing it means clients/analytics and clients/meet
+	// decide capability from a verified claim, with no DB hop and no reach into this
+	// package's store. token.Privileged() is the one predicate that reads it.
+	wsTok, err := token.Generate(account, ws.UUID, map[string]any{"org": org, "role": role}, expUnix(workspaceTokenTTL), g.cfg.serverSecret)
 	if err != nil {
 		return g.fail(c, statusError("mint workspace token: "+err.Error()))
 	}

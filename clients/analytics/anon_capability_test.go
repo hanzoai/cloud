@@ -150,18 +150,24 @@ func TestAnonCommerce_RefusedOnBoundCustomDomain(t *testing.T) {
 func TestAnonIdentity_RefusedAtEveryDoor(t *testing.T) {
 	roomyRate(t)
 	app := mountApp(t)
-	for _, body := range []string{
-		`{"batch":[{"type":"identify","distinctId":"victim","personId":"victim-person"}]}`,
-		`{"batch":[{"type":"group","groupId":"victim-team"}]}`,
-	} {
-		for _, path := range doorPaths() {
-			code, got := doHost(t, app, path, "", "", "hanzo.ai", body)
+	// Each door is probed in ITS OWN wire (identifyFor/groupFor, doors_test.go). The
+	// bodies used to be two canonical-wire literals applied to every door, which only
+	// worked while every door spoke that wire: the team door accepts a bare ARRAY and
+	// answers an object body 400, so a shared literal measured decoder tolerance rather
+	// than the projection. 400 would satisfy this test's INTENT even more strictly than
+	// 200-all-dropped — nothing is stored either way — but "refused because the kind is
+	// not writable anonymously" and "refused because the body is the wrong shape" are
+	// different facts, and this test is about the first one.
+	for _, pick := range []func(*testing.T, door) string{identifyFor, groupFor} {
+		for _, d := range doors {
+			body := pick(t, d)
+			code, got := doHost(t, app, d.path, "", "", "hanzo.ai", body)
 			if code != http.StatusOK {
-				t.Errorf("anonymous %s on %s = %d (%s), want 200 all-dropped", body, path, code, got)
+				t.Errorf("anonymous %s on %s = %d (%s), want 200 all-dropped", body, d.path, code, got)
 				continue
 			}
 			if r := receipt(t, got); r.Accepted != 0 || r.Dropped != 1 {
-				t.Errorf("anonymous %s on %s receipt = %+v, want accepted:0 dropped:1", body, path, r)
+				t.Errorf("anonymous %s on %s receipt = %+v, want accepted:0 dropped:1", body, d.path, r)
 			}
 		}
 	}

@@ -269,6 +269,28 @@ func admitPublic(evs []CaptureEvent) ([]CaptureEvent, int) {
 	return out, dropped
 }
 
+// attribute stamps the SIGNED identity onto every admitted row, replacing whatever the
+// caller sent. It runs AFTER admitPublic so the projection still decides which rows
+// exist; this only decides who they belong to.
+//
+// DistinctID is the join key every person-level lens groups by, and AnonymousID is the
+// pre-login alias that stitches to it — both are caller-supplied, so on a lane where a
+// real org will read the rows, both have to come from the token instead. AnonymousID is
+// CLEARED rather than overwritten: it exists to link an anonymous session to a person
+// later, and there is nothing to link when the person is already known.
+//
+// Not addressed here, and named rather than hidden: Timestamp is still the caller's.
+// clampTS only pulls the FUTURE back to now, so a reduced principal can back-date its
+// own events within its own org. Clamping the past would break the SPA's legitimate
+// batching and its retry queue, which is why it is left alone.
+func attribute(evs []CaptureEvent, subject string) []CaptureEvent {
+	for i := range evs {
+		evs[i].DistinctID = subject
+		evs[i].AnonymousID = ""
+	}
+	return evs
+}
+
 // publicIngest answers a CREDENTIAL-LESS POST on any door: the request-scoped gates
 // (capture flag, rate, size, opt-out) then the pure decision (admitPublic) then the ONE
 // write core. dec is the door's wire; source stays the door's origin tag.
@@ -282,7 +304,12 @@ func admitPublic(evs []CaptureEvent) ([]CaptureEvent, int) {
 //     presented-but-unresolvable key is refused there rather than downgraded.
 //   - the site-host carve reaches here unconditionally, because it runs BEFORE the
 //     identity boundary and so has no credential it could trust (see event.go).
-func publicIngest(c *zip.Ctx, dec decode, org, source string) error {
+//
+// subject, when non-empty, is the credential's OWN signed identity and REPLACES the
+// caller-supplied one on every admitted row (see handle). It is variadic so the two
+// genuinely anonymous callers — the credential-less lane and the site-host carve — stay
+// exactly as they were: nobody signed for them, so there is no identity to substitute.
+func publicIngest(c *zip.Ctx, dec decode, org, source string, subject ...string) error {
 	// CLOUD_ANALYTICS_PUBLIC_CAPTURE is the ONE existing anonymous-capture switch
 	// (it also gates the site-host carve). Off ⇒ the canonical door keeps its
 	// strict, principal-only contract.
@@ -309,5 +336,8 @@ func publicIngest(c *zip.Ctx, dec decode, org, source string) error {
 	// Rejoin the ONE pipeline: admission decided the projection, the door decided the
 	// tenant, and ingestDecoded (event.go) does the rest exactly as it does for a bearer.
 	admitted, dropped := admitPublic(evs)
+	if len(subject) > 0 && subject[0] != "" {
+		admitted = attribute(admitted, subject[0])
+	}
 	return ingestDecoded(c, org, source, admitted, dropped)
 }

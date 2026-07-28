@@ -2,7 +2,9 @@
 // document. The spec is not a description of the router — it IS the router,
 // read through app.Fiber().GetRoutes() at request time. There is no checked-in
 // spec file and no second route registry, so the document cannot drift: the only
-// way to change it is to change the routes it is read from.
+// way to change it is to change the routes it is read from. (Register adds a
+// registry of BODIES, never of routes: a declared schema renders only on a route
+// the router carries, so the paths remain the router's alone.)
 //
 // This mirrors the rule zapface/wire.go states for transports — two transports,
 // ONE dispatch path. ZAP and OpenAPI are two PROJECTIONS of one route table.
@@ -162,6 +164,21 @@ type Tag struct {
 	Name string `json:"name"`
 }
 
+// Schema is the sliver of JSON Schema this generator can honestly assert as a
+// CLOSED struct: primitive types for path parameters, and — for routes whose
+// subsystem declared its bodies via Register — objects, arrays, and $refs
+// derived by reflection from the handler's own binding structs. Typed-op
+// schemas do NOT pass through it: zip already derives arbitrary JSON Schema
+// from the In/Out Go types, and restating that open vocabulary here would be a
+// second, lossier copy — they travel as `any` (see Fold).
+type Schema struct {
+	Type                 string             `json:"type,omitempty"`
+	Ref                  string             `json:"$ref,omitempty"`
+	Items                *Schema            `json:"items,omitempty"`
+	Properties           map[string]*Schema `json:"properties,omitempty"`
+	AdditionalProperties *Schema            `json:"additionalProperties,omitempty"`
+}
+
 // Parameter is an OpenAPI parameter object.
 //
 // From the ROUTER only path parameters are emitted: they are structural — the
@@ -180,25 +197,37 @@ type Parameter struct {
 
 // Operation is one operation.
 //
-// Everything past Tags is omitempty and comes ONLY from the typed registry. A
-// route the registry does not know keeps exactly the four structural facts the
-// router can prove, and asserts no status code, content type or prose it has no
-// evidence for — OpenAPI 3.1 makes `responses` optional (3.0 required it), so
-// absent stays valid and absent beats invented.
+// Everything past Parameters is omitempty and comes from exactly two seams, both
+// anchored in the handler's own Go types so neither can drift:
+//
+//   - Register (register.go): a subsystem declares its binding structs for a
+//     route it already serves — schema by reflection, attached only when the
+//     router carries the route.
+//   - zip's typed ops, folded in from the registry (Fold): Summary/Description
+//     from the lifted godoc, query parameters and bodies from the In/Out types.
+//
+// A route neither seam knows keeps exactly the structural facts the router can
+// prove, and asserts no status code, content type or prose it has no evidence
+// for — OpenAPI 3.1 makes `responses` OPTIONAL (3.0 required it), so absent
+// stays valid and absent beats invented.
+//
+// RequestBody and Responses are `any` because the two seams produce different
+// (JSON-identical) shapes: Register builds the closed *RequestBody /
+// map[string]*Response, the fold reuses zip's open maps verbatim.
 type Operation struct {
-	OperationID string         `json:"operationId"`
-	Summary     string         `json:"summary,omitempty"`
-	Description string         `json:"description,omitempty"`
-	Tags        []string       `json:"tags,omitempty"`
-	Parameters  []Parameter    `json:"parameters,omitempty"`
-	RequestBody map[string]any `json:"requestBody,omitempty"`
-	Responses   map[string]any `json:"responses,omitempty"`
+	OperationID string      `json:"operationId"`
+	Summary     string      `json:"summary,omitempty"`
+	Description string      `json:"description,omitempty"`
+	Tags        []string    `json:"tags,omitempty"`
+	Parameters  []Parameter `json:"parameters,omitempty"`
+	RequestBody any         `json:"requestBody,omitempty"`
+	Responses   any         `json:"responses,omitempty"`
 }
 
-// Components holds the schemas typed ops reference. Reused verbatim from zip's
-// projection: they are JSON Schema derived from the Go types, and restating them
-// in a Go struct here would be a second, lossier copy of a vocabulary that is
-// open by design.
+// Components holds the named schemas operations reference by $ref, so an SDK
+// generator mints one named type per Go struct instead of an anonymous shape per
+// operation. Open-typed: Register contributes *Schema values, the typed fold
+// contributes zip's JSON Schema verbatim — both marshal to the same vocabulary.
 type Components struct {
 	Schemas map[string]any `json:"schemas,omitempty"`
 }
@@ -234,7 +263,12 @@ type PathItem map[string]*Operation
 //     types it unmarshals internally. cloud.Handle[S] does not help: its type
 //     parameter S is the SERVICE (service.go:90), not the payload. cloud.Typed
 //     does not help either: it is an any→*zip.App mount adapter.
-//   - response body schema / status codes — same dead end, at the far end.
+//     What cannot be DERIVED can still be DECLARED: Register (register.go) is
+//     the seam a subsystem uses to state its binding structs once, next to its
+//     route table, and the schema is reflected from those structs.
+//   - response body schema / status codes — same dead end, at the far end,
+//     with the same declaration seam (the success shape under a "2XX" range,
+//     because the exact code lives in the handler body).
 //   - query and header parameters — read positionally via c.Query("k") at
 //     runtime; not part of the match, so the router has never heard of them.
 //   - auth requirements — enforced by middleware and by guards wrapped around
@@ -257,12 +291,20 @@ type PathItem map[string]*Operation
 // pretty-print a response only for a typed op, and behind a catch-all it cannot
 // enumerate subcommands at all.
 //
-// The path to more schema is not a better reader; it is zip's typed ops
-// (zip.Get[In, Out]) which carry the In/Out Go types. Every handler migrated to a
-// typed op earns real schema — and an MCP tool and a CLI command, from the same
-// registry entry. That is a per-handler refactor of business logic, not a
-// generator change: GetRoutes() already includes typed ops, so migration adds
-// detail through the fold that is already running.
+// The path to more schema is not a better reader. Two seams exist, both
+// anchored in the handler's own Go types so neither can drift:
+//
+//   - Register (register.go): a subsystem declares its binding structs for a
+//     route it already serves — no handler change, schema by reflection. A
+//     registration renders ONLY when the router carries the route, so the
+//     document still cannot disagree with the router; schemas are additive
+//     metadata on routes that exist.
+//   - zip's typed ops (zip.Get[In,Out]), which carry the In/Out types in the
+//     handler signature itself and also earn an MCP tool and a CLI command from
+//     the same registry entry (zip's third projection, zip/mcp.go). That is a
+//     per-handler refactor of business logic, and it composes with this:
+//     GetRoutes() already includes typed ops, so migration adds detail through
+//     the fold that is already running.
 //
 // # Chained handlers are not collisions
 //
@@ -299,12 +341,17 @@ type Document struct {
 	Components *Components         `json:"components,omitempty"`
 }
 
-// From builds the document from route data. Pure — no router, no I/O.
+// From builds the document from route data. No router, no I/O — its inputs are
+// the routes, plus the package registry of declared bodies (Register), which is
+// written only at init time and is therefore fixed by the time any document is
+// built.
 //
 // It refuses on a duplicate operationId rather than emit a document a generator
 // would mis-consume. That check subsumes the only ambiguity the spec can suffer:
 // two routes sharing a (method, path) derive the same id, so an injective
-// (method, path) → operation map is exactly what uniqueness buys.
+// (method, path) → operation map is exactly what uniqueness buys. It refuses
+// equally when two DIFFERENT Go types claim one component name — a silent merge
+// would hand an SDK generator a lie.
 func From(rs []Route, info Info, servers ...Server) (*Document, error) {
 	doc := &Document{
 		OpenAPI: "3.1.0",
@@ -314,6 +361,7 @@ func From(rs []Route, info Info, servers ...Server) (*Document, error) {
 	}
 
 	products := map[string]bool{}
+	comp := newComponents()
 
 	for _, r := range rs {
 		path, params := translate(r.Path)
@@ -329,10 +377,22 @@ func From(rs []Route, info Info, servers ...Server) (*Document, error) {
 			})
 		}
 
+		// Declared bodies attach ONLY here — to a route the router carries. A
+		// registration without a live route never renders, which is what keeps
+		// the registry unable to contradict the router.
+		if reg := registered(r.Method, r.Path); reg != nil {
+			if err := reg.apply(op, comp); err != nil {
+				return nil, err
+			}
+		}
+
 		if doc.Paths[path] == nil {
 			doc.Paths[path] = PathItem{}
 		}
 		doc.Paths[path][strings.ToLower(r.Method)] = op
+	}
+	if len(comp.schemas) > 0 {
+		doc.Components = &Components{Schemas: comp.schemas}
 	}
 
 	for p := range products {
@@ -409,8 +469,17 @@ func Fold(doc *Document, reg Registry) error {
 		op.Tags = shape.Tags
 		doc.Paths[path][strings.ToLower(method)] = op
 	}
+	// MERGE, never replace: From may already have named schemas from Register.
+	// On a name both seams claim, the typed op wins — its schema is derived from
+	// the handler signature itself, the strongest evidence there is — and the
+	// override is deterministic (sorted key order above, single writer here).
 	if len(reg.Schemas) > 0 {
-		doc.Components = &Components{Schemas: reg.Schemas}
+		if doc.Components == nil {
+			doc.Components = &Components{Schemas: map[string]any{}}
+		}
+		for _, name := range sortedKeys(reg.Schemas) {
+			doc.Components.Schemas[name] = reg.Schemas[name]
+		}
 	}
 	return uniqueOperationIDs(doc)
 }
