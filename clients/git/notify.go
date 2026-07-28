@@ -5,9 +5,12 @@ import (
 	"context"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/integrations"
+	"github.com/hanzoai/tasks/pkg/sdk/temporal"
+	"github.com/hanzoai/tasks/pkg/sdk/workflow"
 )
 
 // notify.go is the Slack-notify git-lifecycle subscriber: on a push landing or a
@@ -24,41 +27,169 @@ import (
 // without mounting integrations + KMS; production never reassigns it.
 var slackNotify = integrations.NotifySlack
 
-// notifyLifecycle delivers a lifecycle event to every channel subscribed to its
-// repo. Best-effort: a store or Slack error is logged (never a token) and never
-// affects the git path or the other subscriptions. Only the kinds a channel opted
-// into (or all, by default) are delivered; BuildStarted is not a notify kind.
-func notifyLifecycle(s *cloud.Service[state], ctx context.Context, ev cloud.LifecycleEvent) {
-	switch ev.Kind {
+// notifyQ is this reactor's durable queue on the ONE engine (see reactor.go).
+var notifyQ = &queue{
+	name: "git-notify",
+	wf:   NotifyWorkflow,
+	acts: []any{NotifyTargetsActivity, NotifyPostActivity},
+}
+
+// notifiable reports whether a lifecycle kind is delivered to Slack at all.
+// BuildStarted is not a notify kind.
+func notifiable(kind cloud.LifecycleKind) bool {
+	switch kind {
 	case cloud.LifecyclePushLanded, cloud.LifecycleDeployLive, cloud.LifecycleDeployFailed:
-		// deliverable
-	default:
+		return true
+	}
+	return false
+}
+
+// notifyLifecycle ENQUEUES durable delivery of a lifecycle event to every channel
+// subscribed to its repo, and delivers inline when the engine is not ready.
+//
+// Delivery is durable because it used to be inline: a deploy landing during a rolling
+// upgrade lost its Slack notice with nothing to retry it. Now a worker drains the
+// queue with retry/backoff, so the notice survives the producer's restart.
+//
+// Fail-soft (the ai durable-ingest contract): before the engine is wired — or for a
+// fact carrying no discriminator to key idempotently on — delivery happens inline on
+// this goroutine. Notify is therefore never dark; the engine only upgrades it from
+// best-effort-inline to durable-retryable.
+func notifyLifecycle(s *cloud.Service[state], ctx context.Context, ev cloud.LifecycleEvent) {
+	if !notifiable(ev.Kind) || ev.Repo == "" {
 		return
 	}
-	if ev.Repo == "" {
+	id := notifyID(ev)
+	if id == "" {
+		deliverInline(s, ctx, ev)
 		return
+	}
+	if err := notifyQ.start(ctx, id, ev); err != nil {
+		deliverInline(s, ctx, ev)
+	}
+}
+
+// notifyID keys one delivery on the FACT — org, repo, kind, and the fact's own
+// discriminator (the pushed commit, else the deployment id). ExecuteWorkflow is
+// idempotent on the id, so a redelivered event is delivered once, not twice.
+//
+// Empty when the event carries neither: such a fact cannot be deduped, and reusing a
+// discriminator-free id would collapse two DISTINCT events into one execution and drop
+// a notice. The caller delivers those inline instead.
+func notifyID(ev cloud.LifecycleEvent) string {
+	d := strings.TrimSpace(ev.After)
+	if d == "" {
+		d = strings.TrimSpace(ev.DeployID)
+	}
+	if d == "" {
+		return ""
+	}
+	return "git.notify:" + ev.Org + ":" + ev.Repo + ":" + string(ev.Kind) + ":" + d
+}
+
+// NotifyWorkflow delivers one lifecycle fact to every subscribed channel: one activity
+// resolves the targets, then ONE activity per channel.
+//
+// Per-channel activities are what make retry safe. Durable execution replays a
+// completed activity from history instead of re-running it, so a retry never re-posts
+// to a channel that already received the message — the duplicate-delivery hazard of
+// retrying one activity that loops over every channel.
+//
+// A channel whose retries are exhausted does not withhold the others: the pre-durable
+// behaviour was that a failed post is logged and never fatal, and that is preserved.
+// Exported for worker registration; not called directly.
+func NotifyWorkflow(ctx workflow.Context, ev cloud.LifecycleEvent) error {
+	actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    2 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    time.Minute,
+			MaximumAttempts:    4,
+		},
+	})
+	var targets []string
+	if err := workflow.ExecuteActivity(actCtx, NotifyTargetsActivity, ev).Get(actCtx, &targets); err != nil {
+		return err
+	}
+	for _, channel := range targets {
+		// Sequential: a repo's channel list is small, and one channel's failure is
+		// isolated by its own retry policy. The activity logs the cause.
+		_ = workflow.ExecuteActivity(actCtx, NotifyPostActivity,
+			notifyPost{Event: ev, Channel: channel}).Get(actCtx, nil)
+	}
+	return nil
+}
+
+// notifyPost is one durable delivery: the fact, and the single channel it goes to.
+type notifyPost struct {
+	Event   cloud.LifecycleEvent `json:"event"`
+	Channel string               `json:"channel"`
+}
+
+// NotifyTargetsActivity resolves the channels subscribed to the event's repo that opted
+// into its kind. It is an activity because it reads a store — a workflow must stay
+// deterministic on replay, so the resolved list is recorded in history instead.
+// Exported for worker registration; not called directly.
+func NotifyTargetsActivity(ctx context.Context, ev cloud.LifecycleEvent) ([]string, error) {
+	return notifyTargets(mounted.Load(), ctx, ev)
+}
+
+// NotifyPostActivity renders and posts one message to one channel. Exported for worker
+// registration; not called directly.
+func NotifyPostActivity(ctx context.Context, in notifyPost) error {
+	s := mounted.Load()
+	if s == nil {
+		return nil
+	}
+	summary, blocks := lifecycleMessage(s, ctx, in.Event)
+	if err := slackNotify(ctx, in.Event.Org, in.Channel, summary, blocks); err != nil {
+		s.Log.Warn("git notify: slack post failed", "org", in.Event.Org, "repo", in.Event.Repo,
+			"channel", in.Channel, "kind", in.Event.Kind, "err", err)
+		return err
+	}
+	return nil
+}
+
+// notifyTargets lists the channels subscribed to ev's repo that opted into ev.Kind.
+// The ONE place the subscription read + kind filter live, shared by the durable
+// activity and the inline fallback.
+func notifyTargets(s *cloud.Service[state], ctx context.Context, ev cloud.LifecycleEvent) ([]string, error) {
+	if s == nil {
+		return nil, nil
 	}
 	store, err := storeFor(s, ev.Org)
 	if err != nil {
 		s.Log.Warn("git notify: open store", "org", ev.Org, "err", err)
-		return
+		return nil, err
 	}
 	subs, err := store.ListSubscriptions(ctx, ev.Org, ev.Project, ev.Repo)
 	if err != nil {
 		s.Log.Warn("git notify: list subscriptions", "org", ev.Org, "repo", ev.Repo, "err", err)
-		return
+		return nil, err
 	}
-	if len(subs) == 0 {
+	out := make([]string, 0, len(subs))
+	for _, sub := range subs {
+		if subscribedTo(sub.Events, ev.Kind) {
+			out = append(out, sub.Channel)
+		}
+	}
+	return out, nil
+}
+
+// deliverInline posts to every subscribed channel on the caller's goroutine — the
+// fail-soft path when the engine is not wired. Best-effort per channel, exactly as
+// delivery behaved before it became durable.
+func deliverInline(s *cloud.Service[state], ctx context.Context, ev cloud.LifecycleEvent) {
+	targets, err := notifyTargets(s, ctx, ev)
+	if err != nil || len(targets) == 0 {
 		return
 	}
 	summary, blocks := lifecycleMessage(s, ctx, ev)
-	for _, sub := range subs {
-		if !subscribedTo(sub.Events, ev.Kind) {
-			continue
-		}
-		if err := slackNotify(ctx, ev.Org, sub.Channel, summary, blocks); err != nil {
+	for _, channel := range targets {
+		if err := slackNotify(ctx, ev.Org, channel, summary, blocks); err != nil {
 			s.Log.Warn("git notify: slack post failed",
-				"org", ev.Org, "repo", ev.Repo, "channel", sub.Channel, "kind", ev.Kind, "err", err)
+				"org", ev.Org, "repo", ev.Repo, "channel", channel, "kind", ev.Kind, "err", err)
 		}
 	}
 }
