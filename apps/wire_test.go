@@ -24,16 +24,16 @@ var frozen = []struct {
 	hasShutdown bool
 	global      bool // receives the bare *zip.App — see MountSpec.App
 }{
-	{"pubsub", false, true, false},          // was order 5
-	{"kafka", false, true, false},           // was order 6
-	{"agentskills", false, false, false},    // was order 8
-	{"flags", true, true, false},            // was order 9; native engine: /v1/flags health + store shutdown
-	{"kms", true, false, false},             // was order 10
-	{"metrics", false, false, true},         // was order 40
-	{"ingress", false, true, false},         // was order 42
-	{"account", false, false, false},        // was order 48
-	{"iam", false, false, false},            // was order 50
-	{"base", true, true, false},             // was order 60; per-org embed added Shutdown (#298)
+	{"pubsub", false, true, false},       // was order 5
+	{"kafka", false, true, false},        // was order 6
+	{"agentskills", false, false, false}, // was order 8
+	{"flags", true, true, false},         // was order 9; native engine: /v1/flags health + store shutdown
+	{"kms", true, false, false},          // was order 10
+	{"metrics", false, false, true},      // was order 40
+	{"ingress", false, true, false},      // was order 42
+	{"account", false, false, false},     // was order 48
+	{"iam", false, false, false},         // was order 50
+	{"base", true, true, false},          // was order 60; per-org embed added Shutdown (#298)
 	// hasShutdown flipped true->false when o11y became a PLUGIN (cloud.PluginSpec,
 	// its own cmd/o11y binary). Deliberate and load-bearing, not drift: the host no
 	// longer owns any o11y resource to close. The collector/sink/Datastore moved into
@@ -61,8 +61,7 @@ var frozen = []struct {
 	{"agents", false, true, false},          // was order 127
 	{"link", false, true, false},            // new: unified AI login manager (/v1/links), after agents
 	{"wallets", false, true, false},         // was order 127
-	{"x402", false, true, false},            // new: x402 pay-per-use settlement (after wallets)
-	{"paas", true, false, false},            // was order 128
+	{"x402", false, true, false},            // new: x402 pay-per-use settlement (after wallets)            // was order 128
 	{"deploy", true, false, false},          // after paas (release seam), before functions
 	{"functions", false, false, false},      // was order 128
 	{"tracker", false, false, false},        // was order 129

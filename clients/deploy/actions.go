@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/paas"
+	"github.com/hanzoai/cloud/clients/platform"
 	"github.com/zap-proto/zip"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -45,7 +45,7 @@ func rollback(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusBadRequest, "invalid JSON body: %v", err)
 	}
 	tag := strings.TrimSpace(body.Tag)
-	if !paas.IsSemverTag(tag) {
+	if !platform.IsSemverTag(tag) {
 		return zip.ErrBadRequest("'tag' must be a clean semver (vX.Y.Z) — the prior release to pin")
 	}
 	// The release seam owns the CR patch (one way). It requires the paas control

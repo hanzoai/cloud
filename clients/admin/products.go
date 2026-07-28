@@ -6,9 +6,9 @@ package admin
 // the drift verdict.
 //
 // SOURCE — reuse, never fork. The inventory is the SAME observation the native PaaS control
-// plane already computes for /v1/paas/apps (clients/paas: observeFleet → observeCR →
+// plane already computes for /v1/platform/fleet (clients/platform: observeFleet → observeCR →
 // drift.go, one k8s dynamic client, one drift model). paas publishes it as an in-process
-// seam (paas.CurrentFleet, fleet.go); admin RESOLVES that seam and projects each AppView
+// seam (platform.CurrentFleet, fleet.go); admin RESOLVES that seam and projects each AppView
 // onto the productRow the SPA decodes. There is no second k8s client and no second drift
 // definition — the admin board and the PaaS board can never disagree about what the fleet is
 // or what "drift" means. When the PaaS plane is not co-resident, or its k8s client did not
@@ -19,15 +19,15 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/clients/admin/core"
-	"github.com/hanzoai/cloud/clients/paas"
+	"github.com/hanzoai/cloud/clients/platform"
 )
 
 // products lists the fleet workload registry: every operator App CR across the platform
 // namespaces with its declared vs running image tag, reconciled health/phase and drift
 // verdict. Optionally narrowed by kind, tier or env, each an exact match.
 //
-// The rows are the SAME observation /v1/paas/apps renders — read through the in-process
-// paas seam, not a second k8s client — so the two boards can never disagree about what
+// The rows are the SAME observation /v1/platform/fleet renders — read through the in-process
+// platform seam, not a second k8s client — so the two boards can never disagree about what
 // the fleet is. A PaaS plane that is not co-resident yields an honestly empty registry,
 // never a fabricated row.
 //
@@ -67,13 +67,13 @@ func products(ctx context.Context, in *productsIn) (*productsOut, error) {
 // are healthy (green), and how many are drifting.
 type productRollup struct{ Total, Active, Drift int }
 
-// fleetProducts observes the platform fleet through the paas seam and projects it onto the
+// fleetProducts observes the platform fleet through the platform seam and projects it onto the
 // productRow board shape, returning the rows plus the rollup the overview KPIs read. A nil
 // seam (PaaS not co-resident) or an unready k8s client yields an honest-empty registry with a
 // nil error, so both the board and the KPIs degrade to empty rather than failing; only a hard
 // observation error (e.g. an RBAC denial listing apps.hanzo.ai) surfaces as an error.
 func fleetProducts(ctx context.Context) ([]productRow, productRollup, error) {
-	fleet := paas.CurrentFleet()
+	fleet := platform.CurrentFleet()
 	if fleet == nil {
 		return []productRow{}, productRollup{}, nil
 	}
@@ -103,7 +103,7 @@ func fleetProducts(ctx context.Context) ([]productRow, productRollup, error) {
 // productFromView projects a paas fleet AppView onto a productRow: the declared/running tags
 // + operator-reconciled health/phase verbatim, the drift verdict rolled to a boolean +
 // severity, and the derived infra tier for the board's grouping.
-func productFromView(v paas.AppView) productRow {
+func productFromView(v platform.AppView) productRow {
 	return productRow{
 		Name:          v.App,
 		Kind:          v.Role, // the operator's OWN declared class (sql|kv|generic|ingress) or ""
@@ -118,7 +118,7 @@ func productFromView(v paas.AppView) productRow {
 		RunningTag:    v.RunningTag,
 		LatestTag:     v.LatestTag,
 		Health:        healthLabel(v.Health),
-		Drift:         v.Drift.Severity != paas.SeverityOK,
+		Drift:         v.Drift.Severity != platform.SeverityOK,
 		DriftSeverity: string(v.Drift.Severity),
 		Updated:       "", // the CR carries no per-row reconcile timestamp; observation is live
 	}
@@ -133,7 +133,7 @@ func productFromView(v paas.AppView) productRow {
 // for sql/kv/generic/ingress), so the board groups on this derivation. A declarative
 // `hanzo.ai/tier` label on the App CRs would make it authoritative — a universe/operator
 // follow-up; until then this stays the single, documented classifier (one place, no fork).
-func tierOf(v paas.AppView) string {
+func tierOf(v platform.AppView) string {
 	// A workload in a tenant namespace is a customer / PaaS deployment, not platform infra.
 	// (Today the paas observer scans only the platform namespaces, so this is future-proofing
 	// for when the scan federates tenant/other clusters.)

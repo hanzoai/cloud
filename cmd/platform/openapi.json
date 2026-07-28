@@ -58,6 +58,50 @@
         ]
       }
     },
+    "/v1/platform/fleet/": {
+      "get": {
+        "operationId": "get_v1_platform_fleet",
+        "tags": [
+          "platform"
+        ]
+      }
+    },
+    "/v1/platform/fleet/{app}": {
+      "get": {
+        "operationId": "get_v1_platform_fleet_by_app",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/fleet/{app}/deploy": {
+      "post": {
+        "operationId": "post_v1_platform_fleet_by_app_deploy",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/v1/platform/health": {
       "get": {
         "operationId": "get_v1_platform_health",
@@ -71,7 +115,22 @@
         "operationId": "get_v1_platform_projects",
         "tags": [
           "platform"
-        ]
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/projectView"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/platform/projects/{project}": {
@@ -89,7 +148,19 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/projectView"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/platform/projects/{project}/apps": {
@@ -107,7 +178,22 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/appView"
+                  }
+                }
+              }
+            }
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_platform_projects_by_project_apps",
@@ -123,7 +209,28 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/createAppReq"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/appView"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/platform/projects/{project}/apps/{app}": {
@@ -173,7 +280,19 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/appView"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/deploy": {
@@ -437,7 +556,28 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/setEnvReq"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/appView"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/platform/projects/{project}/apps/{app}/preview": {
@@ -583,7 +723,28 @@
         "operationId": "post_v1_run",
         "tags": [
           "run"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/runReq"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/runView"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/runner": {
@@ -592,6 +753,296 @@
         "tags": [
           "runner"
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "EnvVarJSON": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "boolean"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "appView": {
+        "type": "object",
+        "properties": {
+          "buildType": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "currentDeploymentId": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "dockerfile": {
+            "type": "string"
+          },
+          "domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "env": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EnvVarJSON"
+            }
+          },
+          "environment": {
+            "type": "string"
+          },
+          "health": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image": {
+            "$ref": "#/components/schemas/imageView"
+          },
+          "name": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "replicas": {
+            "type": "integer"
+          },
+          "repo": {
+            "$ref": "#/components/schemas/gitSource"
+          },
+          "secretSync": {
+            "type": "string"
+          },
+          "secretSyncDetail": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "storageGb": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        }
+      },
+      "createAppReq": {
+        "type": "object",
+        "properties": {
+          "buildType": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "dockerfile": {
+            "type": "string"
+          },
+          "domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "env": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EnvVarJSON"
+            }
+          },
+          "environment": {
+            "type": "string"
+          },
+          "image": {
+            "type": "object",
+            "properties": {
+              "repository": {
+                "type": "string"
+              },
+              "tag": {
+                "type": "string"
+              }
+            }
+          },
+          "name": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "replicas": {
+            "type": "integer"
+          },
+          "repo": {
+            "type": "object",
+            "properties": {
+              "branch": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            }
+          },
+          "slug": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "storageGb": {
+            "type": "integer"
+          }
+        }
+      },
+      "gitSource": {
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "imageView": {
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        }
+      },
+      "projectView": {
+        "type": "object",
+        "properties": {
+          "applications": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          }
+        }
+      },
+      "runReq": {
+        "type": "object",
+        "properties": {
+          "env": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EnvVarJSON"
+            }
+          },
+          "gpu": {
+            "type": "integer"
+          },
+          "image": {
+            "type": "string"
+          },
+          "maxScale": {
+            "type": "integer"
+          },
+          "minScale": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "runtime": {
+            "type": "string"
+          },
+          "shape": {
+            "type": "string"
+          }
+        }
+      },
+      "runView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "shape": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "setEnvReq": {
+        "type": "object",
+        "properties": {
+          "env": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EnvVarJSON"
+            }
+          }
+        }
       }
     }
   }

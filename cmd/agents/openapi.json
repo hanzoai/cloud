@@ -38,6 +38,40 @@
         ]
       }
     },
+    "/v1/agents/builds": {
+      "get": {
+        "operationId": "get_v1_agents_builds",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/v1/agents/builds/{org}/{project}": {
+      "get": {
+        "operationId": "get_v1_agents_builds_by_org_by_project",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/v1/agents/metrics": {
       "get": {
         "operationId": "get_v1_agents_metrics",
