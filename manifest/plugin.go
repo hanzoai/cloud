@@ -41,27 +41,65 @@ type App struct {
 	Eager bool
 }
 
+// MultiCall is the unified binary's name. Serving ONE app is not a second mode
+// of it — `cloud --enable=<name>` is the mode `cloud.Serve` has always had, and
+// a child started that way is byte-for-byte the same process a dedicated
+// cmd/<name> binary would be: same Serve, same middleware, same ZIP_ADDR
+// contract. The host cannot tell them apart and does not try.
+const MultiCall = "cloud"
+
 // Plugin says where this app's binary is, without naming it twice:
 //
 //	CLOUD_<NAME>_ADDR — already listening there; start nothing, just mount it.
 //	CLOUD_<NAME>_BIN  — the binary's path on disk.
-//	neither           — a file named <name> beside the running host.
+//	neither           — a file named <name> beside the running host,
+//	                    else the multi-call binary beside it, serving that app.
 //
-// The default is the shipped container layout — host and plugins in one
-// directory, still one artifact — so a deployment needs no configuration at all.
-// Resolving from os.Executable rather than $PATH means a host always loads the
-// binaries it was built and shipped with, not whichever ones a PATH finds.
+// The default is the shipped container layout — still one directory, still no
+// configuration. Resolving from os.Executable rather than $PATH means a host
+// always loads the binaries it was built and shipped with, not whichever ones a
+// PATH finds.
+//
+// The last rung is what makes shipping all 108 affordable. A dedicated plugin is
+// ~40MB of which ~35MB is the core every other plugin also links, so 108 of them
+// weigh 4.5GB — 108 copies of the same code. The multi-call binary is that core
+// ONCE (212MB) plus the 19MB host, and it serves every app. Both rungs stay,
+// because they are the two link modes of one contract: a developer builds the
+// single lean plugin they are editing and the host prefers it (1.3s rebuild), a
+// release ships the unified binary and the host falls through to it. Preference
+// order is deliberate — a dedicated binary present on disk is someone's explicit
+// intent, so it wins.
 func (a App) Plugin() zip.Plugin {
 	env := "CLOUD_" + strings.ToUpper(strings.NewReplacer("-", "_").Replace(a.Name))
 	if addr := strings.TrimSpace(os.Getenv(env + "_ADDR")); addr != "" {
 		return zip.Plugin{Name: a.Name, Addr: addr}
 	}
-	path := strings.TrimSpace(os.Getenv(env + "_BIN"))
-	if path == "" {
-		path = a.Name
-		if self, err := os.Executable(); err == nil {
-			path = filepath.Join(filepath.Dir(self), a.Name)
-		}
+	// An explicit path is honoured as given: the operator named this file, so
+	// silently running something else instead would be a lie.
+	if path := strings.TrimSpace(os.Getenv(env + "_BIN")); path != "" {
+		return zip.Plugin{Name: a.Name, Path: path, Lazy: !a.Eager}
 	}
+	dir := ""
+	if self, err := os.Executable(); err == nil {
+		dir = filepath.Dir(self)
+	}
+	return a.pluginIn(dir)
+}
+
+// pluginIn is the sibling-directory half of the ladder, split out because the
+// choice it makes depends on what is ON DISK next to the host — and a test whose
+// answer comes from os.Executable() can only ever see the test binary's own
+// directory.
+func (a App) pluginIn(dir string) zip.Plugin {
+	path := filepath.Join(dir, a.Name)
+	if _, err := os.Stat(path); err == nil {
+		return zip.Plugin{Name: a.Name, Path: path, Lazy: !a.Eager}
+	}
+	multi := filepath.Join(dir, MultiCall)
+	if _, err := os.Stat(multi); err == nil {
+		return zip.Plugin{Name: a.Name, Path: multi, Args: []string{"--enable=" + a.Name}, Lazy: !a.Eager}
+	}
+	// Neither shipped. Name the dedicated path in the failure, because that is
+	// the one a developer is expecting to have built.
 	return zip.Plugin{Name: a.Name, Path: path, Lazy: !a.Eager}
 }
