@@ -308,6 +308,7 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// repo op; the JSON twin of the HTML browser in ui.go (one set of read helpers).
 	zip.Get(zapp, "/v1/git/repos/:name/refs", o.browseRefs)
 	zip.Get(zapp, "/v1/git/repos/:name/tree", o.browseTree)
+	zip.Get(zapp, "/v1/git/repos/:name/paths", o.browsePaths)
 	zip.Get(zapp, "/v1/git/repos/:name/blob", o.browseBlob)
 	zip.Get(zapp, "/v1/git/repos/:name/commits", o.browseCommits)
 	zip.Get(zapp, "/v1/git/repos/:name/readme", o.browseReadme)
