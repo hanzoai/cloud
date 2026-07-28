@@ -44,7 +44,7 @@ func TestTrustedIssuers_WhiteLabel(t *testing.T) {
 	want := map[string]bool{
 		"https://hanzo.id":     true,
 		"https://lux.id":       true,
-		"https://zoo.id":       true, // per cloud brand.go registry
+		"https://zoolabs.id":       true, // per cloud brand.go registry
 		"https://pars.id":      true,
 		"https://id.bootno.de": true, // bootnode brand also in the registry
 	}
@@ -89,7 +89,7 @@ func TestIssuerAllowed(t *testing.T) {
 // covers every configured brand (one source of truth).
 func TestBrandIssuers(t *testing.T) {
 	got := BrandIssuers()
-	for _, want := range []string{"https://hanzo.id", "https://lux.id", "https://zoo.id", "https://pars.id", "https://id.bootno.de"} {
+	for _, want := range []string{"https://hanzo.id", "https://lux.id", "https://zoolabs.id", "https://pars.id", "https://id.bootno.de"} {
 		found := false
 		for _, g := range got {
 			if g == want {
