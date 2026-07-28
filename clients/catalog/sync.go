@@ -270,10 +270,10 @@ func fromSite(s projects.LiveSite, starter map[string]bool) Entry {
 		// from the fact that we happen to be the ones hosting it (origin.go).
 		Origin:  siteOrigin(s, starter),
 		Updated: time.Unix(s.UpdatedAt, 0).UTC().Format(time.RFC3339),
-		// Authorship is CARRIED, never re-derived: the store already gates Official
-		// behind an admin, so the corpus repeats that answer instead of forming an
-		// opinion of its own.
-		Official: s.Official, Upstream: s.Upstream, License: s.License,
+		// Credit is CARRIED, never re-derived: the publisher declared it, and the
+		// corpus repeats that answer instead of forming an opinion of its own.
+		// Authorship needs no field at all — it is Org, above.
+		Upstream: s.Upstream, License: s.License,
 	}
 	// You may fork it if there is a source to fork AND nobody has declared the
 	// work somebody else's. "Fork this" is an invitation, and a credited kit is
@@ -324,7 +324,6 @@ func fold(repo, site Entry) Entry {
 	if site.Upstream != "" {
 		out.Upstream, out.License = site.Upstream, site.License
 	}
-	out.Official = (repo.Official || site.Official) && site.Upstream == ""
 	// Forkable stays the REPO's answer, minus the same veto: hosting a demo of
 	// someone else's fork does not make it ours to hand over.
 	out.Forkable = repo.Forkable && out.Repo != "" && site.Upstream == ""
@@ -362,11 +361,6 @@ func fromRepo(r ghRepo, src source) Entry {
 		// of a third-party upstream is not: its license and its lineage belong
 		// to that upstream, and the honest fork button for it points there.
 		Forkable: !r.Fork, Stars: r.Stars, Updated: r.PushedAt,
-		// Authorship rests on the same one fact, for the same reason: a repo in an
-		// org we own is ours, unless GitHub itself says it is a fork — in which
-		// case the code is upstream's and the badge would be a lie. Derived from a
-		// fact GitHub already asserts, never a guess about what is inside.
-		Official: !r.Fork,
 	}
 }
 

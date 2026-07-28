@@ -284,16 +284,18 @@ func mustGetH(t *testing.T, app *zip.App, url string, hdr map[string]string) str
 	return body
 }
 
-// TestProvenanceReachesTheAPI is the surface half of the fix: a marker the store
-// gates but the API never emits protects nothing a reader can see. It also pins
-// official as a tri-state browse axis, because "show me what is NOT ours" is the
-// very next question a person asks once they learn the catalog carries other
-// people's work.
+// TestProvenanceReachesTheAPI is the surface half: a credit the store carries but
+// the API never emits protects nothing a reader can see. It also pins that "show
+// me what is NOT ours" \u2014 the very next question a person asks once they learn the
+// catalog carries other people's work \u2014 is answered by ORG, the account that paid
+// for a project, and not by a badge that could disagree with it.
 func TestProvenanceReachesTheAPI(t *testing.T) {
 	app := mount(t)
 	seed(t,
 		Entry{ID: "hanzo/ex-kanban", Org: "hanzo", Name: "ex-kanban", Kind: "site",
-			Official: true, Forkable: true, Updated: "2026-07-01"},
+			Forkable: true, Updated: "2026-07-01"},
+		Entry{ID: "acme/board", Org: "acme", Name: "board", Kind: "site",
+			Forkable: true, Updated: "2026-07-03"},
 		Entry{ID: "hanzo/kinetic", Org: "hanzo", Name: "kinetic", Kind: "site",
 			Upstream: "UI8 \u2014 Fitness Pro: Website UI Kit", License: "UI8 commercial licence",
 			Updated: "2026-07-02"},
@@ -304,22 +306,22 @@ func TestProvenanceReachesTheAPI(t *testing.T) {
 	for _, e := range all.Data {
 		got[e.Name] = e
 	}
-	if !got["ex-kanban"].Official {
-		t.Error("the first-party marker never reached the API")
+	if e := got["kinetic"]; e.Upstream == "" || e.License == "" {
+		t.Errorf("a third-party kit must read as credited: %+v", e)
 	}
-	if e := got["kinetic"]; e.Official || e.Upstream == "" || e.License == "" {
-		t.Errorf("a third-party kit must read as credited, not first-party: %+v", e)
+	// Ours vs somebody else's, off the one unforgeable fact.
+	if all.Facets["org"]["hanzo"] != 2 || all.Facets["org"]["acme"] != 1 {
+		t.Errorf("authorship must be countable from the org rail, got %v", all.Facets["org"])
 	}
-	if all.Facets["official"]["true"] != 1 || all.Facets["official"]["false"] != 1 {
-		t.Errorf("official must be faceted both ways, got %v", all.Facets["official"])
-	}
-	for q, want := range map[string]string{
-		"official=true": "hanzo/ex-kanban", "official=false": "hanzo/kinetic",
-	} {
-		r := decode(t, mustGet(t, app, "/v1/catalog?"+q))
-		if r.Total != 1 || r.Data[0].ID != want {
-			t.Errorf("%s: want [%s], got %+v", q, want, r.Data)
+	for q, want := range map[string]int{"org=hanzo": 2, "org=acme": 1} {
+		if r := decode(t, mustGet(t, app, "/v1/catalog?"+q)); r.Total != want {
+			t.Errorf("%s: want %d, got %d (%+v)", q, want, r.Total, r.Data)
 		}
+	}
+	// And the deleted badge is not merely unset \u2014 it is gone from the wire, so no
+	// client can revive a field the platform no longer stands behind.
+	if strings.Contains(string(mustGet(t, app, "/v1/catalog")), `"official"`) {
+		t.Error("the removed authorship badge is still on the wire")
 	}
 }
 
@@ -334,7 +336,7 @@ func TestTwoLanesOneCorpus(t *testing.T) {
 		Entry{ID: "hanzo/folio", Org: "hanzo", Name: "folio", Kind: "site", Origin: OriginTemplate,
 			URL: "https://folio.hanzo.app", Forkable: true, Updated: "2026-07-01"},
 		Entry{ID: "hanzo/ex-kanban", Org: "hanzo", Name: "ex-kanban", Kind: "site", Origin: OriginCommunity,
-			URL: "https://ex-kanban.hanzo.app", Template: "folio", Official: true, Updated: "2026-07-02"},
+			URL: "https://ex-kanban.hanzo.app", Template: "folio", Updated: "2026-07-02"},
 		Entry{ID: "acme/board", Org: "acme", Name: "board", Kind: "site", Origin: OriginCommunity,
 			URL: "https://board.hanzo.app", Template: "folio", Updated: "2026-07-03"},
 		Entry{ID: "hanzo/ui", Org: "hanzo", Name: "ui", Kind: "repo", Origin: OriginThirdParty,
@@ -356,9 +358,9 @@ func TestTwoLanesOneCorpus(t *testing.T) {
 	if com.Total != 2 {
 		t.Fatalf("/community browses what people built, got %d: %+v", com.Total, com.Data)
 	}
-	// Ours in the community lane are the ones carrying the marker — that is the
-	// whole reason origin and official are two fields and not one value.
-	mine := decode(t, mustGet(t, app, "/v1/catalog?origin=community&official=true"))
+	// Ours in the community lane are the ones in our org — that is the whole
+	// reason origin and authorship stay two separate axes rather than one value.
+	mine := decode(t, mustGet(t, app, "/v1/catalog?origin=community&org=hanzo"))
 	if mine.Total != 1 || mine.Data[0].ID != "hanzo/ex-kanban" {
 		t.Errorf("a seeded example is community AND ours: %+v", mine.Data)
 	}

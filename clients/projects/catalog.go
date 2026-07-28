@@ -35,11 +35,12 @@ type LiveSite struct {
 	Org, Slug, Name, URL string
 	Repo, ForkedFrom     string
 	UpdatedAt            int64
-	// Official is the platform-gated first-party marker; Upstream/License credit
-	// the third-party work a demo was published from. Reported exactly as stored —
-	// this function never infers provenance, because a guessed badge is worse than
-	// no badge at all.
-	Official          bool
+	// Upstream/License credit the third-party work a demo was published from.
+	// Reported exactly as stored — this function never infers provenance, because
+	// a guessed credit is worse than no credit at all.
+	//
+	// There is no authorship field: who published a site is Org, the account that
+	// paid for it, which the tenancy boundary enforces and no request can forge.
 	Upstream, License string
 }
 
@@ -50,9 +51,14 @@ func LiveSites(ctx context.Context) ([]LiveSite, error) {
 	if s == nil || s.State.store == nil {
 		return nil, nil
 	}
+	// The visibility rule is applied HERE, in the query, not by the caller: this
+	// is the only cross-org read in the package, so a private or moderated
+	// project that never leaves it cannot be leaked by a consumer that forgot to
+	// filter. `status='live'` says it is serving; visibility says who may know.
 	rows, err := s.State.store.db.QueryContext(ctx,
-		`SELECT org, slug, name, live_url, repo_url, forked_from, updated_at, official, upstream, license
-		 FROM projects WHERE status='live' ORDER BY updated_at DESC, id ASC`)
+		`SELECT org, slug, name, live_url, repo_url, forked_from, updated_at, upstream, license
+		 FROM projects WHERE status='live' AND visibility='public' AND hidden=0
+		 ORDER BY updated_at DESC, id ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("catalog: list live sites: %w", err)
 	}
@@ -61,7 +67,7 @@ func LiveSites(ctx context.Context) ([]LiveSite, error) {
 	for rows.Next() {
 		var v LiveSite
 		if err := rows.Scan(&v.Org, &v.Slug, &v.Name, &v.URL, &v.Repo, &v.ForkedFrom, &v.UpdatedAt,
-			&v.Official, &v.Upstream, &v.License); err != nil {
+			&v.Upstream, &v.License); err != nil {
 			return nil, err
 		}
 		if v.URL == "" {

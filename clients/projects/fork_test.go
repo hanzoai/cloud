@@ -272,13 +272,14 @@ func TestForkOrgScopingAndErrors(t *testing.T) {
 // first-party example published as a LIVE project is forkable BY SLUG (the same
 // name it serves under at <slug>.hanzo.app), the fork lands in the forker's own
 // org under their own slug carrying the parent's source, and the parent is
-// recorded on the child as forkedFrom so the attribution survives the rename. The
-// badge is NOT inherited — a fork of a Hanzo example is the forker's app.
+// recorded on the child as forkedFrom so the attribution survives the rename.
+// Authorship moves with the org: a fork of a Hanzo example IS the forker's app,
+// because the forker's org is the one paying for it.
 func TestForkPublishedProjectRecordsLineage(t *testing.T) {
 	app := mountApp(t)
 
 	ex := mkProject("hanzo", "example-kanban", "Example Kanban")
-	ex.Status, ex.Framework, ex.Official = "live", "vite", true
+	ex.Status, ex.Framework = "live", "vite"
 	ex.RepoURL, ex.RepoBranch = "https://github.com/hanzo-templates/kanban-board", "main"
 	if err := mounted.State.store.CreateProject(context.Background(), ex); err != nil {
 		t.Fatalf("seed example: %v", err)
@@ -302,8 +303,10 @@ func TestForkPublishedProjectRecordsLineage(t *testing.T) {
 	if p.Repo.URL != ex.RepoURL || p.Framework != "vite" {
 		t.Fatalf("fork did not inherit buildable source: repo=%q framework=%q", p.Repo.URL, p.Framework)
 	}
-	if p.Official {
-		t.Fatalf("a fork of a first-party example must not inherit the official badge")
+	// Whose app this is now is its Org, and the fork moved it: acme's. There is no
+	// authorship field to inherit or fail to clear.
+	if p.Visibility != VisibilityPublic {
+		t.Fatalf("a fork must land public by default, got %q", p.Visibility)
 	}
 
 	// A DRAFT example is not published, so it is not forkable — you can only fork
@@ -370,68 +373,77 @@ func TestForkPrivateTemplateIsOwnerOnly(t *testing.T) {
 	}
 }
 
-// TestOfficialBadgeIsPlatformOnly proves the first-party marker cannot be
-// self-asserted: an ordinary tenant asking for official:true gets false, and only
-// a SuperAdmin caller (the seeding path) can raise it.
-func TestOfficialBadgeIsPlatformOnly(t *testing.T) {
+// TestPublishingIsUngated is the rule the community runs on: an ordinary tenant,
+// with no admin and no funding, publishes PUBLIC — at create and after the fact.
+// Nothing has to be granted to it, because a community you must be admitted to
+// does not grow. This is the exact inverse of the admin-gated `official` badge it
+// replaced, which gated the way IN and so filed the platform's own script-published
+// apps as somebody else's work.
+func TestPublishingIsUngated(t *testing.T) {
 	app := mountApp(t)
 
 	code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
-		map[string]any{"name": "Impostor", "slug": "impostor", "official": true})
+		map[string]any{"name": "Newcomer", "slug": "newcomer"})
 	if code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d (%s)", code, body)
 	}
 	var p projectView
 	_ = json.Unmarshal(body, &p)
-	if p.Official {
-		t.Fatalf("a tenant must not be able to badge its own app as a Hanzo example")
+	if p.Visibility != VisibilityPublic {
+		t.Fatalf("a project must default to public, got %q (%s)", p.Visibility, body)
+	}
+	if p.Hidden {
+		t.Fatal("a new project must not be born moderated")
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/projects",
-		bytes.NewReader([]byte(`{"name":"Example","slug":"example-app","official":true}`)))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Org-Id", "hanzo")
-	req.Header.Set("X-User-Id", "u_hanzo")
-	req.Header.Set("X-User-IsAdmin", "true")
-	resp, err := app.Fiber().Test(req)
-	if err != nil {
-		t.Fatalf("admin create: %v", err)
+	// Asking for it explicitly is the same answer, not a different code path.
+	code, body = do(t, app, http.MethodPatch, "/v1/projects/newcomer", "acme",
+		map[string]any{"visibility": "public"})
+	if code != http.StatusOK {
+		t.Fatalf("patch public want 200, got %d (%s)", code, body)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	b, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("admin create want 201, got %d (%s)", resp.StatusCode, b)
+	_ = json.Unmarshal(body, &p)
+	if p.Visibility != VisibilityPublic {
+		t.Fatalf("visibility = %q, want public", p.Visibility)
 	}
-	_ = json.Unmarshal(b, &p)
-	if !p.Official {
-		t.Fatalf("the platform must be able to badge its own examples: %s", b)
+
+	// Anything that is neither is refused rather than quietly coerced: a caller
+	// that misspells "private" must not be handed a public project.
+	if code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
+		map[string]any{"name": "Typo", "slug": "typo", "visibility": "secret"}); code != http.StatusBadRequest {
+		t.Fatalf("unknown visibility want 400, got %d (%s)", code, body)
 	}
 }
 
-// TestOfficialBadgeOnUpdate: the badge must also reach the examples published
-// BEFORE it existed, under the same one rule — a tenant PATCHing official:true
-// on its own app is ignored; a SuperAdmin can badge, and un-badge.
-func TestOfficialBadgeOnUpdate(t *testing.T) {
+// TestModerationIsAdminOnlyAndSubtractive pins the one admin-gated field. A
+// tenant sending hidden:true is ignored; an admin can hide with a reason and lift
+// it again. Hiding must NOT rewrite the publisher's own visibility, so lifting
+// restores exactly what they asked for with no second write to get wrong.
+func TestModerationIsAdminOnlyAndSubtractive(t *testing.T) {
 	app := mountApp(t)
-	if code, body := do(t, app, http.MethodPost, "/v1/projects", "hanzo",
-		map[string]any{"name": "Legacy Example", "slug": "legacy-example"}); code != http.StatusCreated {
+	if code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
+		map[string]any{"name": "Spam", "slug": "spam"}); code != http.StatusCreated {
 		t.Fatalf("create want 201, got %d (%s)", code, body)
 	}
-	code, body := do(t, app, http.MethodPatch, "/v1/projects/legacy-example", "hanzo", map[string]any{"official": true})
+
+	code, body := do(t, app, http.MethodPatch, "/v1/projects/spam", "acme",
+		map[string]any{"hidden": true, "hiddenReason": "self-moderated"})
 	if code != http.StatusOK {
 		t.Fatalf("tenant patch want 200, got %d (%s)", code, body)
 	}
 	var p projectView
 	_ = json.Unmarshal(body, &p)
-	if p.Official {
-		t.Fatalf("a tenant self-badged via update")
+	if p.Hidden {
+		t.Fatalf("a tenant must not be able to set moderation state: %s", body)
 	}
-	for _, want := range []bool{true, false} {
-		b, _ := json.Marshal(map[string]any{"official": want})
-		req := httptest.NewRequest(http.MethodPatch, "/v1/projects/legacy-example", bytes.NewReader(b))
+
+	adminPatch := func(t *testing.T, in map[string]any) projectView {
+		t.Helper()
+		b, _ := json.Marshal(in)
+		req := httptest.NewRequest(http.MethodPatch, "/v1/projects/spam", bytes.NewReader(b))
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-Org-Id", "hanzo")
-		req.Header.Set("X-User-Id", "u_hanzo")
+		req.Header.Set("X-Org-Id", "acme")
+		req.Header.Set("X-User-Id", "u_admin")
 		req.Header.Set("X-User-IsAdmin", "true")
 		resp, err := app.Fiber().Test(req)
 		if err != nil {
@@ -439,23 +451,79 @@ func TestOfficialBadgeOnUpdate(t *testing.T) {
 		}
 		rb, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
-		_ = json.Unmarshal(rb, &p)
-		if p.Official != want {
-			t.Fatalf("admin patch official=%v, want %v (%s)", p.Official, want, rb)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("admin patch want 200, got %d (%s)", resp.StatusCode, rb)
+		}
+		var out projectView
+		_ = json.Unmarshal(rb, &out)
+		return out
+	}
+
+	hid := adminPatch(t, map[string]any{"hidden": true, "hiddenReason": "spam"})
+	if !hid.Hidden || hid.HiddenReason != "spam" {
+		t.Fatalf("admin hide = %v/%q, want true/spam", hid.Hidden, hid.HiddenReason)
+	}
+	if hid.Visibility != VisibilityPublic {
+		t.Fatalf("moderation must not rewrite the publisher's choice, got %q", hid.Visibility)
+	}
+
+	lifted := adminPatch(t, map[string]any{"hidden": false})
+	if lifted.Hidden {
+		t.Fatal("admin must be able to lift a moderation")
+	}
+	if lifted.HiddenReason != "" {
+		t.Fatalf("a lifted moderation must leave no stale reason, got %q", lifted.HiddenReason)
+	}
+	if lifted.Visibility != VisibilityPublic {
+		t.Fatalf("lifting must restore exactly what the publisher asked for, got %q", lifted.Visibility)
+	}
+}
+
+// TestPrivateAndModeratedProjectsLeaveNoCatalogRow is the whole point of the two
+// fields: LiveSites is the ONE cross-org read, so the rule is enforced in its
+// query and a consumer that forgets to filter cannot leak anything. A live site
+// that is private, or public-but-moderated, must not appear.
+func TestPrivateAndModeratedProjectsLeaveNoCatalogRow(t *testing.T) {
+	mountApp(t)
+	ctx := context.Background()
+
+	seed := func(slug, vis string, hidden bool) {
+		p := mkProject("acme", slug, slug)
+		p.Status, p.Visibility, p.Hidden = "live", vis, hidden
+		if err := mounted.State.store.CreateProject(ctx, p); err != nil {
+			t.Fatalf("seed %s: %v", slug, err)
+		}
+	}
+	seed("shown", VisibilityPublic, false)
+	seed("privately", VisibilityPrivate, false)
+	seed("moderated", VisibilityPublic, true)
+
+	sites, err := LiveSites(ctx)
+	if err != nil {
+		t.Fatalf("LiveSites: %v", err)
+	}
+	got := map[string]bool{}
+	for _, s := range sites {
+		got[s.Slug] = true
+	}
+	if !got["shown"] {
+		t.Fatal("a live public project must appear in the catalogue")
+	}
+	for _, slug := range []string{"privately", "moderated"} {
+		if got[slug] {
+			t.Fatalf("%q reached the cross-org catalogue", slug)
 		}
 	}
 }
 
-// TestCreditIsUngatedWhileTheBadgeIsNot pins the asymmetry the two halves of
-// provenance deliberately have. Official says "Hanzo made this", so only Hanzo
-// may say it. Upstream/License say "somebody ELSE made this", which can only cost
-// the publisher credit — so anyone may say it, about their own project, without
-// an admin. A platform where claiming authorship is easier than disclaiming it is
-// a platform that launders provenance.
-func TestCreditIsUngatedWhileTheBadgeIsNot(t *testing.T) {
+// TestCreditIsUngated pins the remaining half of provenance. Upstream/License say
+// "somebody ELSE made this", which can only cost the publisher credit — so anyone
+// may say it about their own project, with no admin. Authorship needs no
+// counterpart field: it is the org that pays, which no request can forge.
+func TestCreditIsUngated(t *testing.T) {
 	app := mountApp(t)
 	code, body := do(t, app, http.MethodPost, "/v1/projects", "acme", map[string]any{
-		"name": "Fitness Pro", "slug": "kinetic", "official": true,
+		"name": "Fitness Pro", "slug": "kinetic",
 		"upstream": "UI8 — Fitness Pro: Website UI Kit", "license": "UI8 commercial licence",
 	})
 	if code != http.StatusCreated {
@@ -463,9 +531,6 @@ func TestCreditIsUngatedWhileTheBadgeIsNot(t *testing.T) {
 	}
 	var p projectView
 	_ = json.Unmarshal(body, &p)
-	if p.Official {
-		t.Fatal("official is still admin-only")
-	}
 	if p.Upstream != "UI8 — Fitness Pro: Website UI Kit" || p.License != "UI8 commercial licence" {
 		t.Fatalf("a publisher must be able to credit its upstream: %s", body)
 	}
