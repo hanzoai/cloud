@@ -115,22 +115,40 @@ type Project struct {
 	// lineage cannot be forged) and immutable after create; it is the attribution
 	// edge the gallery credits back to the author.
 	ForkedFrom string
-	// Official marks a FIRST-PARTY example app published by Hanzo itself, not an
-	// independent community submission. It is the machine-readable half of the
-	// badge the gallery renders; the human-visible half reads this field. Raised
-	// only for a SuperAdmin caller, so a tenant can never self-badge.
-	Official bool
-	// Upstream and License are the OTHER half of provenance: the third-party work
-	// this project was published FROM, and the terms it carries. Official answers
-	// "did we make it"; these answer "then who did, and under what licence".
+	// Visibility is the PUBLISHER's choice, and the only thing that decides
+	// whether a project appears in the community catalogue: "public" (the
+	// default) or "private". Public means the world can see it, fork it, and
+	// find its source mirrored into hanzo-community. There is no application to
+	// approve and no badge to be granted — a community that makes you ask
+	// permission to appear in it does not grow.
 	//
-	// They are deliberately NOT admin-gated the way Official is, because the two
-	// claims point in opposite directions. Official is a claim about US — that
-	// Hanzo vouches for this app — so only we may make it. Upstream/License is a
-	// claim that the work is SOMEONE ELSE'S, which can only ever subtract credit
-	// from the publisher, so the publisher must always be free to make it. A
-	// platform that lets you claim authorship more easily than you can disclaim it
-	// is a platform that launders provenance.
+	// Authorship is NOT stored here. Who published a project is its Org, which
+	// the tenancy boundary already enforces and which no request can forge; a
+	// second field restating it could only ever disagree with it. (It did: an
+	// admin-gated `official` flag meant the platform's own apps, published by a
+	// script holding an ordinary org token, were filed as somebody else's work.)
+	Visibility string
+	// Hidden is the platform's MODERATION action, taken from admin.hanzo.ai: it
+	// removes a public project from the catalogue without touching the
+	// publisher's own visibility choice, so lifting the moderation restores
+	// exactly what they asked for.
+	//
+	// This is the one admin-only field in this struct, and it is safe to be one
+	// precisely because it only ever SUBTRACTS. An allowlist an admin must add
+	// you to gates growth and rots the moment nobody tends it; a denylist costs
+	// nothing until it is used. It is the same shape as Apex's reserved-host
+	// list: everyone is in, except what we took out.
+	Hidden bool
+	// HiddenReason records WHY, so moderation is reviewable rather than a silent
+	// disappearance. Empty whenever Hidden is false.
+	HiddenReason string
+	// Upstream and License are provenance: the third-party work this project was
+	// published FROM, and the terms it carries.
+	//
+	// They are free for the publisher to set, because they can only ever
+	// SUBTRACT credit from the publisher — a claim that the work is somebody
+	// else's. A platform that lets you claim authorship more easily than you can
+	// disclaim it is a platform that launders provenance.
 	Upstream string
 	License  string
 }
@@ -299,10 +317,17 @@ CREATE INDEX IF NOT EXISTS ix_releases_org_slug_created ON releases(org, slug, c
 		`ALTER TABLE projects ADD COLUMN analytics INTEGER NOT NULL DEFAULT 1`,
 		`ALTER TABLE projects ADD COLUMN space_id TEXT NOT NULL DEFAULT ''`,
 		// forked_from is the attribution edge (parent "<org>/<slug>" or template
-		// slug); official is the first-party-example badge. Both backfill to the
-		// honest default for every pre-existing row: unknown lineage, not official.
+		// slug). It backfills to the honest default for every pre-existing row:
+		// unknown lineage.
 		`ALTER TABLE projects ADD COLUMN forked_from TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE projects ADD COLUMN official INTEGER NOT NULL DEFAULT 0`,
+		// visibility backfills to 'public' because every row that exists when this
+		// runs is already serving on the public internet — defaulting to 'private'
+		// would silently retract a catalogue the world can already reach, which is
+		// a lie in the other direction. hidden backfills to 0: nothing has been
+		// moderated yet, and moderation is an act, never an initial condition.
+		`ALTER TABLE projects ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public'`,
+		`ALTER TABLE projects ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE projects ADD COLUMN hidden_reason TEXT NOT NULL DEFAULT ''`,
 		// upstream/license credit the third-party work a project was published
 		// from. Empty backfills to "no third party declared", which is the honest
 		// default: it says nothing, rather than asserting the work is ours.
@@ -320,13 +345,15 @@ CREATE INDEX IF NOT EXISTS ix_releases_org_slug_created ON releases(org, slug, c
 			return fmt.Errorf("migrate alter: %w", err)
 		}
 	}
-	// The platform's OWN examples carry the first-party badge. It is declared in
-	// source (firstparty.json), not requested — createProject's SuperAdmin gate on
-	// Official stays exactly as strict as it was, and stays unreachable by the
-	// script that publishes the catalogue. See firstparty.go for why this is a
-	// projection rather than a one-shot data fix.
-	if _, err := backfillOfficial(context.Background(), s.db); err != nil {
-		return fmt.Errorf("migrate: %w", err)
+	// `official` was an admin-gated boolean restating what the org column already
+	// says, and it disagreed with it: the platform's own apps, published by a
+	// script holding an ordinary org token, could never raise it. Authorship is
+	// the org that paid for the project, so the column is dropped rather than
+	// migrated. Tolerated if already absent (a converged database) or if the
+	// SQLite build predates DROP COLUMN.
+	if _, err := s.db.Exec(`ALTER TABLE projects DROP COLUMN official`); err != nil &&
+		!strings.Contains(err.Error(), "no such column") {
+		return fmt.Errorf("migrate drop official: %w", err)
 	}
 	return nil
 }
@@ -334,7 +361,7 @@ CREATE INDEX IF NOT EXISTS ix_releases_org_slug_created ON releases(org, slug, c
 // Close closes the underlying database.
 func (s *Store) Close() error { return s.db.Close() }
 
-const projectCols = `id,org,slug,name,description,repo_url,repo_branch,repo_provider,framework,status,live_url,bucket,current_deploy,current_release,cache_control,last_purge_at,created_at,updated_at,analytics,space_id,forked_from,official,upstream,license`
+const projectCols = `id,org,slug,name,description,repo_url,repo_branch,repo_provider,framework,status,live_url,bucket,current_deploy,current_release,cache_control,last_purge_at,created_at,updated_at,analytics,space_id,forked_from,visibility,hidden,hidden_reason,upstream,license`
 
 func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 	var p Project
@@ -342,7 +369,8 @@ func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 		&p.RepoURL, &p.RepoBranch, &p.RepoProvider, &p.Framework,
 		&p.Status, &p.LiveURL, &p.Bucket, &p.CurrentDeploy, &p.CurrentRelease,
 		&p.CacheControl, &p.LastPurgeAt, &p.CreatedAt, &p.UpdatedAt,
-		&p.Analytics, &p.SpaceId, &p.ForkedFrom, &p.Official, &p.Upstream, &p.License)
+		&p.Analytics, &p.SpaceId, &p.ForkedFrom, &p.Visibility, &p.Hidden, &p.HiddenReason,
+		&p.Upstream, &p.License)
 	return p, err
 }
 
@@ -350,12 +378,13 @@ func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 // errConflict.
 func (s *Store) CreateProject(ctx context.Context, p Project) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		p.ID, p.Org, p.Slug, p.Name, p.Description,
 		p.RepoURL, p.RepoBranch, p.RepoProvider, p.Framework,
 		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CurrentRelease,
 		p.CacheControl, p.LastPurgeAt, p.CreatedAt, p.UpdatedAt,
-		p.Analytics, p.SpaceId, p.ForkedFrom, p.Official, p.Upstream, p.License)
+		p.Analytics, p.SpaceId, p.ForkedFrom, p.Visibility, p.Hidden, p.HiddenReason,
+		p.Upstream, p.License)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return errConflict
@@ -402,10 +431,11 @@ func (s *Store) ListProjects(ctx context.Context, org string) ([]Project, error)
 // reads-modifies-writes the whole Project; org+slug+id+created_at are immutable.
 func (s *Store) UpdateProject(ctx context.Context, p Project) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE projects SET name=?,description=?,repo_url=?,repo_branch=?,repo_provider=?,framework=?,status=?,live_url=?,bucket=?,current_deploy=?,current_release=?,cache_control=?,last_purge_at=?,analytics=?,official=?,upstream=?,license=?,updated_at=?
+		`UPDATE projects SET name=?,description=?,repo_url=?,repo_branch=?,repo_provider=?,framework=?,status=?,live_url=?,bucket=?,current_deploy=?,current_release=?,cache_control=?,last_purge_at=?,analytics=?,visibility=?,hidden=?,hidden_reason=?,upstream=?,license=?,updated_at=?
 		 WHERE org=? AND slug=?`,
 		p.Name, p.Description, p.RepoURL, p.RepoBranch, p.RepoProvider, p.Framework,
-		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CurrentRelease, p.CacheControl, p.LastPurgeAt, p.Analytics, p.Official, p.Upstream, p.License, p.UpdatedAt, p.Org, p.Slug)
+		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CurrentRelease, p.CacheControl, p.LastPurgeAt,
+		p.Analytics, p.Visibility, p.Hidden, p.HiddenReason, p.Upstream, p.License, p.UpdatedAt, p.Org, p.Slug)
 	if err != nil {
 		return fmt.Errorf("update project: %w", err)
 	}
