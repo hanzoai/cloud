@@ -10,12 +10,12 @@
 package cloud
 
 import (
-	"github.com/hanzoai/cloud/clients/metering"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/ha"
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud/audit"
-	"github.com/hanzoai/cloud/clients/gateway/edge"
+	"github.com/hanzoai/cloud/apps/gateway/edge"
 	"github.com/hanzoai/cloud/types"
 )
 

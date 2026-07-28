@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/share"
+	"github.com/hanzoai/cloud/apps/share"
 )
 
 // Standalone entry for the share app.

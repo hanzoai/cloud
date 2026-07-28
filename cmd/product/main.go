@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/product"
+	"github.com/hanzoai/cloud/apps/product"
 )
 
 // Standalone entry for the product app.

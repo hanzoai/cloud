@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/cek"
-	"github.com/hanzoai/cloud/clients/commerce/transport"
-	"github.com/hanzoai/cloud/clients/metering"
+	"github.com/hanzoai/cloud/apps/commerce/transport"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/org"
 	"github.com/hanzoai/ha"
@@ -22,10 +22,10 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/clients"
-	"github.com/hanzoai/cloud/clients/finance"
-	"github.com/hanzoai/cloud/clients/gateway/edge"
-	"github.com/hanzoai/cloud/clients/money"
-	"github.com/hanzoai/cloud/clients/s3admin"
+	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/apps/gateway/edge"
+	"github.com/hanzoai/cloud/apps/money"
+	"github.com/hanzoai/cloud/apps/s3admin"
 	"github.com/hanzoai/cloud/types"
 )
 

@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/index"
+	"github.com/hanzoai/cloud/apps/index"
 )
 
 // Standalone entry for the index app.

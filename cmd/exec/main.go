@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/exec"
+	"github.com/hanzoai/cloud/apps/exec"
 )
 
 // Standalone entry for the exec app.
