@@ -18,9 +18,9 @@ import (
 // link. The same app still mounts into the unified cloud binary via apps.Wire().
 func main() {
 	if err := cloud.Serve([]cloud.MountSpec{{
-		Name:     "ai",
-		App:      ai.Mount,
-		Prefixes: []string{"/v1"},
+		Name:  "ai",
+		Price: cloud.Metered,
+		App:   ai.Mount,
 	}}, []string{"ai"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

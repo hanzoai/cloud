@@ -19,6 +19,7 @@ import (
 func main() {
 	if err := cloud.Serve([]cloud.MountSpec{{
 		Name:     "prefs",
+		Price:    cloud.Free,
 		Mount:    prefs.Mount,
 		Shutdown: prefs.Shutdown,
 	}}, []string{"prefs"}); err != nil {
