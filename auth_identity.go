@@ -215,6 +215,13 @@ func kmsMachineAudience(owner string) string {
 	return owner + kmsMachineAudSuffix
 }
 
+// KMSMachineClientID is the clientId an org's dedicated PaaS-KMS sync
+// application carries — which is also, by the contract above, the audience its
+// tokens are stamped with. Exported for the provisioner (clients/platform), so
+// "<org>-platform-kms" is derived in exactly one place: here, where the
+// recognition side (isKMSMachinePrincipal) reads it back.
+func KMSMachineClientID(org string) string { return kmsMachineAudience(org) }
+
 // homeOrg returns the USER's own organization — the tenant whose ledger pays and
 // whose membership decides platform authority. It reads the FIRST entry of the
 // signed `orgs` claim, which IAM builds home-first by construction from the
