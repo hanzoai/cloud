@@ -20,20 +20,11 @@ func TestOperatorOrgsFromEnv(t *testing.T) {
 	}
 }
 
-func TestHostnameRE(t *testing.T) {
-	valid := []string{"yadota.tech", "www.yadota.tech", "example.com", "a.b.c.example.org", "my-site.co.uk"}
-	for _, h := range valid {
-		if !hostnameRE.MatchString(h) {
-			t.Errorf("hostnameRE(%q) = false, want true", h)
-		}
-	}
-	invalid := []string{"", "localhost", "no-tld", "http://x.com", "x.com/path", "x.com:443", "-bad.com", "bad-.com", "UPPER.com"}
-	for _, h := range invalid {
-		if hostnameRE.MatchString(h) {
-			t.Errorf("hostnameRE(%q) = true, want false", h)
-		}
-	}
-}
+// Hostname syntax is internal/fqdn's contract now, and fqdn_test.go pins every
+// case this file used to assert (plus the trailing root dot and the 253-byte
+// bound, neither of which this path used to handle). Re-asserting them here would
+// be a second copy of the same expectation — exactly the duplication that let the
+// two paths drift in the first place.
 
 // TestListHostsForProject: a site's own subdomain plus bound custom domains are
 // all reported, scoped to (org, slug); another org's binding is never leaked.
