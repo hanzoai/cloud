@@ -42,6 +42,16 @@ func runDir() string {
 // sock is the well-known socket path for one app.
 func sock(app string) string { return filepath.Join(runDir(), app+".sock") }
 
+// PeerSocket is the canonical path an app SERVES on, and it is the same path
+// Call resolves — one definition, so a server and its callers cannot disagree
+// about where an app lives. serve.go binds it for every app a process mounts;
+// without that nothing creates the file and every peer call is the error "that
+// app is not running here".
+//
+// A ZAP listener takes a PATH, not a port: nothing to allocate, no clash between
+// co-located apps, and nothing bound to a network interface.
+func PeerSocket(app string) string { return sock(app) }
+
 // Headers is the sliver of a request Dial needs to delegate its principal —
 // satisfied by *zip.Ctx, and by any test stub. Taking the sliver instead of the
 // concrete context keeps the transport free of the router.
