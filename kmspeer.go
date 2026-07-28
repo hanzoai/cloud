@@ -4,8 +4,6 @@ package cloud
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -32,65 +30,44 @@ import (
 // so here keeps the check honest about what it is.
 type KMSPeer struct{}
 
-// secret is the wire shape shared with the KMS app's methods. Values are base64
-// because a secret is bytes and a JSON string is not a safe carrier for them.
-type secret struct {
-	Ref   string `json:"ref"`
-	Value string `json:"value,omitempty"`
-}
-
 const kmsPeerTimeout = 10 * time.Second
 
-func (k KMSPeer) call(ctx context.Context, method string, in secret) (string, error) {
+func (k KMSPeer) call(ctx context.Context, method, ref string, value []byte) ([]byte, error) {
 	// A ref names its tenant ("orgs/<org>/…") or it names none, which makes it the
 	// DEPLOYMENT's own material — the marketing unsubscribe HMAC, for one. Both are
 	// legitimate, so the org is echoed when there is one and left empty when there
 	// is not, rather than a platform identity being invented to fill the slot.
-	org := orgOf(in.Ref)
-	body, err := json.Marshal(in)
-	if err != nil {
-		return "", err
-	}
+	org := orgOf(ref)
 	ctx, cancel := context.WithTimeout(ctx, kmsPeerTimeout)
 	defer cancel()
-	out, err := Dial("kms").For(org).Call(ctx, method, body)
+	out, err := Dial("kms").For(org).Call(ctx, method, PutSecretMsg(ref, value))
 	if err != nil {
-		return "", fmt.Errorf("kms %s: %w", method, err)
+		return nil, fmt.Errorf("kms %s: %w", method, err)
 	}
-	var reply struct {
-		Value string `json:"value"`
+	_, got, err := SecretMsg(out)
+	if err != nil {
+		return nil, fmt.Errorf("kms %s: %w", method, err)
 	}
-	if err := json.Unmarshal(out, &reply); err != nil {
-		return "", fmt.Errorf("kms %s: decode: %w", method, err)
-	}
-	return reply.Value, nil
+	return got, nil
 }
 
 // GetSecret reads one secret. A missing secret is an error, never empty bytes:
 // callers treat empty as "not configured" and fail closed on it, so returning
 // empty for a transport failure would read as a deliberate absence.
 func (k KMSPeer) GetSecret(ctx context.Context, ref string) ([]byte, error) {
-	v, err := k.call(ctx, "kms.get", secret{Ref: ref})
-	if err != nil {
-		return nil, err
-	}
-	return base64.StdEncoding.DecodeString(v)
+	return k.call(ctx, "kms.get", ref, nil)
 }
 
 // PutSecret writes one secret.
 func (k KMSPeer) PutSecret(ctx context.Context, ref string, value []byte) error {
-	_, err := k.call(ctx, "kms.put", secret{Ref: ref, Value: base64.StdEncoding.EncodeToString(value)})
+	_, err := k.call(ctx, "kms.put", ref, value)
 	return err
 }
 
 // Sign signs a payload with a key that never leaves the store's process — which is
 // the reason signing is a method here rather than a key fetch.
 func (k KMSPeer) Sign(ctx context.Context, keyRef string, payload []byte) ([]byte, error) {
-	v, err := k.call(ctx, "kms.sign", secret{Ref: keyRef, Value: base64.StdEncoding.EncodeToString(payload)})
-	if err != nil {
-		return nil, err
-	}
-	return base64.StdEncoding.DecodeString(v)
+	return k.call(ctx, "kms.sign", keyRef, payload)
 }
 
 // orgOf reads the tenant out of a fully-qualified ref. Refs are "orgs/<org>/…";

@@ -4,8 +4,6 @@ package kms
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -30,19 +28,6 @@ const (
 	putMethod  = "kms.put"
 	signMethod = "kms.sign"
 )
-
-// secretRef names one secret. The ORG is never in this payload: it rides the
-// capability, so a caller cannot read another tenant's material by naming it.
-type secretRef struct {
-	Ref string `json:"ref"`
-	// Value is base64 because a secret is bytes, not text, and JSON strings are
-	// not a safe carrier for arbitrary bytes.
-	Value string `json:"value,omitempty"`
-}
-
-type secretReply struct {
-	Value string `json:"value,omitempty"`
-}
 
 // exposeSecrets publishes the store's reads and writes. Mount calls it.
 func exposeSecrets(c cloud.KMSClient) {
@@ -70,57 +55,49 @@ func exposeSecrets(c cloud.KMSClient) {
 		}
 		return nil
 	}
-	decodeRef := func(who cloud.Ident, req []byte) (secretRef, error) {
-		var in secretRef
-		if err := json.Unmarshal(req, &in); err != nil {
-			return in, fmt.Errorf("kms: decode: %w", err)
+	decodeRef := func(who cloud.Ident, req []byte) (string, []byte, error) {
+		ref, value, err := cloud.SecretMsg(req)
+		if err != nil {
+			return "", nil, err
 		}
-		if in.Ref == "" {
-			return in, fmt.Errorf("kms: empty ref")
+		if ref == "" {
+			return "", nil, fmt.Errorf("kms: empty ref")
 		}
-		return in, authorize(who, in.Ref)
+		return ref, value, authorize(who, ref)
 	}
 	cloud.Expose(getMethod, func(ctx context.Context, who cloud.Ident, req []byte) ([]byte, error) {
-		in, err := decodeRef(who, req)
+		ref, _, err := decodeRef(who, req)
 		if err != nil {
 			return nil, err
 		}
-		v, err := c.GetSecret(ctx, in.Ref)
+		v, err := c.GetSecret(ctx, ref)
 		if err != nil {
 			return nil, fmt.Errorf("kms.get: %w", err)
 		}
-		return json.Marshal(secretReply{Value: base64.StdEncoding.EncodeToString(v)})
+		return cloud.PutSecretMsg("", v), nil
 	})
 
 	cloud.Expose(putMethod, func(ctx context.Context, who cloud.Ident, req []byte) ([]byte, error) {
-		in, err := decodeRef(who, req)
+		ref, raw, err := decodeRef(who, req)
 		if err != nil {
 			return nil, err
 		}
-		raw, err := base64.StdEncoding.DecodeString(in.Value)
-		if err != nil {
-			return nil, fmt.Errorf("kms.put: value must be base64: %w", err)
-		}
-		if err := c.PutSecret(ctx, in.Ref, raw); err != nil {
+		if err := c.PutSecret(ctx, ref, raw); err != nil {
 			return nil, fmt.Errorf("kms.put: %w", err)
 		}
-		return []byte(`{"stored":true}`), nil
+		return cloud.PutSecretMsg("", nil), nil
 	})
 
 	cloud.Expose(signMethod, func(ctx context.Context, who cloud.Ident, req []byte) ([]byte, error) {
-		in, err := decodeRef(who, req)
+		ref, payload, err := decodeRef(who, req)
 		if err != nil {
 			return nil, err
 		}
-		payload, err := base64.StdEncoding.DecodeString(in.Value)
-		if err != nil {
-			return nil, fmt.Errorf("kms.sign: payload must be base64: %w", err)
-		}
-		sig, err := c.Sign(ctx, in.Ref, payload)
+		sig, err := c.Sign(ctx, ref, payload)
 		if err != nil {
 			return nil, fmt.Errorf("kms.sign: %w", err)
 		}
-		return json.Marshal(secretReply{Value: base64.StdEncoding.EncodeToString(sig)})
+		return cloud.PutSecretMsg("", sig), nil
 	})
 }
 

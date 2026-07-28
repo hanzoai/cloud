@@ -2,6 +2,7 @@ package marketing
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -25,7 +26,11 @@ import (
 // silently dependent on running first.
 func TestRosterReadsTheRealEmbeddedIAM(t *testing.T) {
 	// Before any mount: no store published → the roster REFUSES.
-	if _, err := iamRoster("hanzo"); err != errIAMUnavailable {
+	// errors.Is, not ==: with iam in its own process the roster asks it over the
+	// socket, so an unavailable store now arrives WRAPPED in the dial failure that
+	// explains which one. The sentinel is still the answer; it is no longer the
+	// whole of it.
+	if _, err := iamRoster("hanzo"); !errors.Is(err, errIAMUnavailable) {
 		t.Fatalf("unmounted iam must fail closed, got %v", err)
 	}
 
