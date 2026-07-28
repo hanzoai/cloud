@@ -42,15 +42,28 @@ type runnerBuildReq struct {
 	// the next version, build+push ghcr.io/hanzoai/cloud, smoke it, then tag (the
 	// receipt) and notify universe. It owns its output image (release.go).
 	Release bool `json:"release,omitempty"`
+
+	// Binaries selects the ARTIFACT lane (artifact.go): build what the repo's
+	// hanzo.yml `binaries:` block declares — a Go binary, an npm tarball, a Rust
+	// binary — and publish it to hanzoai/s3 instead of pushing an image. It is the
+	// same recipe hanzoai/ci reads, sent verbatim, so `image` is meaningless here
+	// and must be absent. Bucket/Tag mirror hanzo.yml's `bucket:` and the tag the
+	// GitHub lane publishes under, so both front doors write ONE index at ONE URL.
+	Binaries []binarySpec `json:"binaries,omitempty"`
+	Bucket   string       `json:"bucket,omitempty"`
+	Tag      string       `json:"tag,omitempty"`
 }
 
-// runnerBuildResp is the 202 acceptance (matches the CLI BuildJob).
+// runnerBuildResp is the 202 acceptance (matches the CLI BuildJob). Index is the
+// artifact lane's output — the binaries.json a host reads — where Image is the
+// image lane's; a build produces exactly one of the two.
 type runnerBuildResp struct {
 	BuildJobID string `json:"buildJobId"`
 	Status     string `json:"status"`
 	RunnerPool string `json:"runnerPool"`
-	Image      string `json:"image"`
+	Image      string `json:"image,omitempty"`
 	Target     string `json:"target,omitempty"`
+	Index      string `json:"index,omitempty"`
 }
 
 // ownedRegistryHosts are the registry hosts the fabric operates. An image on any
@@ -132,6 +145,26 @@ func imageInOrgRegistry(image, org string) bool {
 	}
 	for _, owned := range orgRegistryNamespaces[strings.ToLower(strings.TrimSpace(org))] {
 		if ns == owned {
+			return true
+		}
+	}
+	return false
+}
+
+// repoOwnerInOrg is imageInOrgRegistry for the ARTIFACT lane: it reports whether
+// the repo being built belongs to a forge owner the caller's org owns. It reads
+// the SAME orgRegistryNamespaces map because a brand's registry namespace and its
+// forge owner are one name (hanzo→hanzoai owns both ghcr.io/hanzoai/* and
+// github.com/hanzoai/*) — so a hanzo admin publishes artifacts for hanzoai repos
+// and never for luxfi's, exactly as it can never push a luxfi image.
+func repoOwnerInOrg(repoURL, org string) bool {
+	slug := repoSlug(repoURL)
+	owner, _, ok := strings.Cut(slug, "/")
+	if !ok || owner == "" {
+		return false
+	}
+	for _, owned := range orgRegistryNamespaces[strings.ToLower(strings.TrimSpace(org))] {
+		if strings.EqualFold(owner, owned) {
 			return true
 		}
 	}
@@ -222,6 +255,9 @@ func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 
 	ref := firstNonEmpty(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
+	if len(req.Binaries) > 0 {
+		return runnerArtifactBuild(s, c, req, ref, viaIAM)
+	}
 	if req.Repo == "" || req.Image == "" {
 		return zip.ErrBadRequest("repo and image are required")
 	}
@@ -287,5 +323,77 @@ func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
 
 	return c.JSON(http.StatusAccepted, runnerBuildResp{
 		BuildJobID: bldID, Status: "queued", RunnerPool: "32g", Image: req.Image, Target: strings.TrimSpace(req.DockerTarget),
+	})
+}
+
+// runnerArtifactBuild serves the ARTIFACT lane of POST /v1/runner: build what the
+// repo's hanzo.yml `binaries:` declares and publish it, rather than push an image.
+// Auth is already settled by the caller; the bounds this lane adds are its own:
+// the repo URL (the same allowlisted-git-host validator the image lane uses), the
+// recipe (binarySpec.validate), and — on the IAM path — the forge owner, which
+// must be one the caller's org owns.
+func runnerArtifactBuild(s *cloud.Service[state], c *zip.Ctx, req runnerBuildReq, ref string, viaIAM bool) error {
+	if strings.TrimSpace(req.Image) != "" {
+		return zip.ErrBadRequest("a build produces binaries or an image, never both")
+	}
+	if len(req.Binaries) > maxArtifactBinaries {
+		return zip.Errorf(http.StatusBadRequest, "at most %d binaries per build", maxArtifactBinaries)
+	}
+	repoURL, err := validateRepoURL(req.Repo)
+	if err != nil {
+		return zip.ErrBadRequest(err.Error())
+	}
+	if _, err := validateGitRef(ref); err != nil {
+		return zip.ErrBadRequest(err.Error())
+	}
+	for i := range req.Binaries {
+		if err := req.Binaries[i].validate(); err != nil {
+			return zip.ErrBadRequest(err.Error())
+		}
+	}
+	// The publish path segment. Defaults to the pinned ref (a tag publishes at
+	// its tag, a commit at its sha — both immutable); a branch ref carries a '/'
+	// and would nest the layout, so it must be named explicitly.
+	tag := firstNonEmpty(strings.TrimSpace(req.Tag), ref)
+	if !artifactNameRE.MatchString(tag) {
+		return zip.ErrBadRequest("tag must be a flat version/commit segment (set `tag` when building a branch)")
+	}
+	bucket := firstNonEmpty(strings.TrimSpace(req.Bucket), defaultArtifactBucket)
+	if !bucketRE.MatchString(bucket) {
+		return zip.ErrBadRequest("bucket must be a valid object-store bucket name")
+	}
+	// Same H1 confinement the image lane applies to a registry namespace: an IAM
+	// org-admin publishes only its own brand's repos. The machine token is
+	// fabric-trusted (it is how a native push and cloud's own release publish).
+	if viaIAM && !principal.IsSuperAdmin(c) {
+		callerOrg, _ := principal.Org(c)
+		if !repoOwnerInOrg(repoURL, callerOrg) {
+			return zip.ErrForbidden("repo owner must match your organization")
+		}
+	}
+
+	bldID, err := genID("bld")
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+	}
+	slug := repoSlug(repoURL)
+	base := artifactBase(bucket, slug, tag)
+	jobName, err := s.State.k8s.launchArtifactBuild(c.Context(), repoURL, ref, tag, base, artifactPutBase(bucket, slug, tag), req.Binaries, bldID)
+	if err != nil {
+		return zip.Errorf(deployErrStatus(err), "launch build: %v", err)
+	}
+
+	// The build row records the INDEX as the output, the way the image lane
+	// records the pushed ref: it is the one URL the artifact is reached by.
+	index := base + "/binaries.json"
+	now := time.Now().Unix()
+	b := Build{ID: bldID, Org: platformBuildOrg, Status: "queued", Image: index, JobName: jobName, CreatedAt: now, UpdatedAt: now}
+	if err := s.State.store.InsertBuild(c.Context(), b); err != nil {
+		s.Log.Warn("runner artifact build record insert failed (build already launched)", "job", jobName, "err", err)
+	}
+	s.Log.Info("runner artifact build launched", "job", jobName, "index", index, "ref", ref, "repo", repoURL, "binaries", len(req.Binaries))
+
+	return c.JSON(http.StatusAccepted, runnerBuildResp{
+		BuildJobID: bldID, Status: "queued", RunnerPool: "32g", Index: index,
 	})
 }

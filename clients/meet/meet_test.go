@@ -167,8 +167,8 @@ func TestMintProducesVerifiableJoinToken(t *testing.T) {
 	if claims["iss"] != apiKey {
 		t.Errorf("iss = %v, want the api key %q", claims["iss"], apiKey)
 	}
-	if claims["sub"] != "person-42" {
-		t.Errorf("sub = %v, want the participant identity", claims["sub"])
+	if claims["sub"] != account {
+		t.Errorf("sub = %v, want the SIGNED account %q (never the body's _id)", claims["sub"], account)
 	}
 	if claims["name"] != "Ada" {
 		t.Errorf("name = %v, want Ada", claims["name"])
@@ -326,8 +326,10 @@ func TestMintRequiresRoomAndIdentity(t *testing.T) {
 	if code, _ := ask(t, app, "", "person-42", bearer); code != http.StatusBadRequest {
 		t.Errorf("empty roomName = %d, want 400", code)
 	}
-	if code, _ := ask(t, app, roomIn(workspaceA), "", bearer); code != http.StatusBadRequest {
-		t.Errorf("empty _id = %d, want 400", code)
+	// An empty _id is NO LONGER an error: the identity comes from the token, so the
+	// body's person ref is ignored entirely (see TestIdentityComesFromTheToken).
+	if code, _ := ask(t, app, roomIn(workspaceA), "", bearer); code != http.StatusOK {
+		t.Errorf("empty _id = %d, want 200 — the body's _id is not load-bearing", code)
 	}
 	req := httptest.NewRequest(http.MethodPost, "/v1/meet/getToken", strings.NewReader("not json"))
 	req.Header.Set("Authorization", "Bearer "+bearer)
@@ -583,20 +585,20 @@ func TestAdmitsBindsRoomToTheSignedWorkspace(t *testing.T) {
 	// uuid.Validate, so both are 36 chars), but the room's segment 0 is arbitrary
 	// client text. A PREFIX comparison would admit all of these; exact-segment does not.
 	for _, room := range []string{
-		workspaceA + "x_standup_1",              // one extra char before the separator
-		workspaceA + "-evil_standup_1",          // suffixed segment
-		workspaceA + workspaceA + "_standup_1",  // segment 0 starts with the real uuid
+		workspaceA + "x_standup_1",             // one extra char before the separator
+		workspaceA + "-evil_standup_1",         // suffixed segment
+		workspaceA + workspaceA + "_standup_1", // segment 0 starts with the real uuid
 	} {
-		if st.admits(room, member(workspaceA)) {
+		if _, ok := st.admits(room, member(workspaceA)); ok {
 			t.Errorf("admitted room %q for workspace %q — segment 0 is not an exact match", room, workspaceA)
 		}
 	}
 	// The exact segment is admitted, so the test discriminates rather than always failing.
-	if !st.admits(roomIn(workspaceA), member(workspaceA)) {
+	if _, ok := st.admits(roomIn(workspaceA), member(workspaceA)); !ok {
 		t.Fatal("refused the exact-workspace room; the check is not discriminating")
 	}
 	// And the converse direction: a member of A cannot enter B's room.
-	if st.admits(roomIn(workspaceB), member(workspaceA)) {
+	if _, ok := st.admits(roomIn(workspaceB), member(workspaceA)); ok {
 		t.Error("a member of workspace A was admitted to a workspace B room")
 	}
 }
@@ -610,16 +612,16 @@ func TestAdmitsRefusesUnboundSession(t *testing.T) {
 	st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret}
 	unbound := "Bearer " + session(t, "", teamSecret, nil, hour)
 	for _, room := range []string{"_standup_1", "_", "_anything"} {
-		if st.admits(room, unbound) {
+		if _, ok := st.admits(room, unbound); ok {
 			t.Errorf("an unbound session was admitted to %q", room)
 		}
 	}
 	// It is also refused for a normal room, and a BOUND session is admitted — so the
 	// refusal is about the empty claim, not about rooms in general.
-	if st.admits(roomIn(workspaceA), unbound) {
+	if _, ok := st.admits(roomIn(workspaceA), unbound); ok {
 		t.Error("an unbound session was admitted to a real workspace room")
 	}
-	if !st.admits(roomIn(workspaceA), "Bearer "+session(t, workspaceA, teamSecret, nil, hour)) {
+	if _, ok := st.admits(roomIn(workspaceA), "Bearer "+session(t, workspaceA, teamSecret, nil, hour)); !ok {
 		t.Fatal("a bound member was refused; the test is not discriminating")
 	}
 }
@@ -680,10 +682,13 @@ func TestMultipleApiKeysSelectByName(t *testing.T) {
 	}
 }
 
-// TestHealthSurfacesTheReason: "meet is unconfigured" has to be a dashboard fact, not
-// a grep of a rotated boot log. The operator surface carries the reason; the
-// unauthenticated mint path still does not.
-func TestHealthSurfacesTheReason(t *testing.T) {
+// TestHealthSurfacesDegradation: "meet is unconfigured" has to be a dashboard fact, not
+// a grep of a rotated boot log — and ready:false IS that fact. This test asserted the
+// health body also carried state.reason, which named the key-file path and the Secret on
+// an endpoint that takes no credential and answers on five public hosts. That was a leak
+// and a second posture in a file that deliberately keeps the reason out of the getToken
+// 503; the reason belongs in the boot log, which Mount writes at ERROR.
+func TestHealthSurfacesDegradation(t *testing.T) {
 	app := mount(t, teamSecret, "", "")
 	req := httptest.NewRequest(http.MethodGet, "/v1/meet/health", nil)
 	resp, err := app.Fiber().Test(req)
@@ -702,8 +707,10 @@ func TestHealthSurfacesTheReason(t *testing.T) {
 	if got["ready"] != false || got["status"] != "degraded" {
 		t.Errorf("health = %v, want ready:false status:degraded", got)
 	}
-	if s, _ := got["error"].(string); !strings.Contains(s, "livekit-keys") {
-		t.Errorf("health error %q does not name the Secret to fix", s)
+	// The reason must NOT be here (TestHealthLeaksNothingUnauthenticated covers the
+	// full leak set); ready:false is the whole signal a probe or dashboard needs.
+	if _, present := got["error"]; present {
+		t.Errorf("health body carries the internal reason on an unauthenticated endpoint: %v", got)
 	}
 	// Configured ⇒ 200 + ready, so the probe distinguishes.
 	ok := mount(t, teamSecret, apiKey, apiSecret)
@@ -712,5 +719,84 @@ func TestHealthSurfacesTheReason(t *testing.T) {
 	defer func() { _ = resp2.Body.Close() }()
 	if resp2.StatusCode != http.StatusOK {
 		t.Errorf("configured health = %d, want 200", resp2.StatusCode)
+	}
+}
+
+// TestIdentityComesFromTheToken: LiveKit uses `sub` as the participant identity and
+// EJECTS an existing participant on a duplicate. So a caller-supplied identity let any
+// member of a workspace kick a colleague out of a call and impersonate them to the room.
+// The signed account is the one identity the caller cannot choose.
+func TestIdentityComesFromTheToken(t *testing.T) {
+	app := mount(t, teamSecret, apiKey, apiSecret)
+	bearer := session(t, workspaceA, teamSecret, nil, time.Now().Add(time.Hour).Unix())
+	room := roomIn(workspaceA)
+
+	// Claim a colleague's person ref in the body. It must not reach the token.
+	const victim = "person-victim-0001"
+	body, _ := json.Marshal(request{RoomName: room, ID: victim, ParticipantName: "Impostor"})
+	req := httptest.NewRequest(http.MethodPost, "/v1/meet/getToken", strings.NewReader(string(body)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("mint = %d %s, want 200", resp.StatusCode, raw)
+	}
+	claims := verify(t, string(raw), apiSecret)
+	if claims["sub"] == victim {
+		t.Fatal("the body's _id became the LiveKit identity — a member can eject and impersonate a colleague")
+	}
+	if claims["sub"] != account {
+		t.Fatalf("sub = %v, want the signed account %q", claims["sub"], account)
+	}
+	// Two different accounts in the same room get DIFFERENT identities, so a legitimate
+	// second participant is not ejected as a duplicate.
+	const other = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+	tok2, err := token.Generate(other, workspaceA, map[string]any{"role": token.RoleMember}, time.Now().Add(time.Hour).Unix(), teamSecret)
+	if err != nil {
+		t.Fatalf("token.Generate: %v", err)
+	}
+	_, body2 := ask(t, app, room, victim, tok2)
+	if c2 := verify(t, body2, apiSecret); c2["sub"] != other {
+		t.Errorf("second participant sub = %v, want %q", c2["sub"], other)
+	}
+}
+
+// TestHealthLeaksNothingUnauthenticated: /v1/meet/health takes no credential and is
+// reachable on five public hosts, so ready:false is the whole signal. The reason — which
+// names the key file and the Secret — belongs in the boot log. Keeping it here while
+// deliberately withholding it from the getToken 503 would have been two postures in one
+// file.
+func TestHealthLeaksNothingUnauthenticated(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		team, key, given string
+		wantCode         int
+	}{
+		{"unconfigured", teamSecret, "", "", http.StatusServiceUnavailable},
+		{"configured", teamSecret, apiKey, apiSecret, http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app := mount(t, tc.team, tc.key, tc.given)
+			req := httptest.NewRequest(http.MethodGet, "/v1/meet/health", nil)
+			resp, err := app.Fiber().Test(req)
+			if err != nil {
+				t.Fatalf("GET: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			b, _ := io.ReadAll(resp.Body)
+			if resp.StatusCode != tc.wantCode {
+				t.Errorf("health = %d, want %d", resp.StatusCode, tc.wantCode)
+			}
+			for _, leak := range []string{"livekit-keys", "keys.yaml", "/etc/", "SERVER_SECRET", apiKey, apiSecret, t.TempDir()} {
+				if strings.Contains(string(b), leak) {
+					t.Errorf("health body leaks %q: %s", leak, b)
+				}
+			}
+		})
 	}
 }

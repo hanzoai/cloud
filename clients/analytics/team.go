@@ -47,7 +47,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/team/token"
 	"github.com/zap-proto/zip"
 )
@@ -250,7 +249,10 @@ func teamTenant(c *zip.Ctx) (admission, bool) {
 		// tenant column and fanOut would forward under an empty org.
 		return admission{}, false
 	}
-	return admission{org: org, full: t.Privileged()}, true
+	// subject is the SIGNED account uuid. On the reduced lane it replaces whatever
+	// distinct_id the body carried, so a guest attributes its own activity and cannot
+	// attribute it to a colleague.
+	return admission{org: org, full: t.Privileged(), subject: t.Account}, true
 }
 
 // verifyTeam VERIFIES the request's bearer as a team token and returns it. The one
@@ -302,17 +304,4 @@ func teamBearer(h string) string {
 		return strings.TrimSpace(h[7:])
 	}
 	return ""
-}
-
-// teamCollect answers POST /v1/event/collect — the team SPA's door. One line, like
-// every other door: its WIRE and its origin tag, and nothing else. handle decides
-// capability (a verified team token ⇒ full into that org; nothing ⇒ the anonymous
-// projection, where the error and navigation kinds still land).
-//
-// The path ends in /collect because the SPA appends it to the configured base URL
-// (`${ANALYTICS_COLLECTOR_URL}/collect`) and that bundle is published, so the suffix
-// is the caller's, not ours: ANALYTICS_COLLECTOR_URL=/v1/event puts the team pipe on
-// the event plane under the one /v1/event prefix.
-func teamCollect(s *cloud.Service[state], c *zip.Ctx) error {
-	return handle(c, decodeTeam, sourceTeam)
 }

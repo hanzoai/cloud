@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -258,5 +260,47 @@ func TestConfigSetGetCommand(t *testing.T) {
 	}
 	if strings.TrimSpace(out) != "acme" {
 		t.Fatalf("config get = %q", out)
+	}
+}
+
+// `hanzo build` with no --image reads the repo's OWN hanzo.yml — the same file
+// and the same two keys hanzoai/ci reads — so nothing about the recipe is
+// restated on the command line and a project with no Dockerfile still builds.
+func TestBuildReqLoadRecipe(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hanzo.yml")
+	if err := os.WriteFile(path, []byte(`binaries:
+  - name: hanzo-demo
+    main: ./cmd/demo
+    platforms: [linux/amd64, darwin/arm64]
+  - name: hanzo-demo-sdk
+    image: node:22-bookworm
+    run: npm install && npm run build && npm pack --pack-destination .
+    out: "*.tgz"
+bucket: plugins
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var br BuildReq
+	if err := br.loadRecipe(path); err != nil {
+		t.Fatalf("loadRecipe: %v", err)
+	}
+	if len(br.Binaries) != 2 || br.Bucket != "plugins" {
+		t.Fatalf("got %d binaries bucket=%q", len(br.Binaries), br.Bucket)
+	}
+	if br.Binaries[0].Main != "./cmd/demo" || len(br.Binaries[0].Platforms) != 2 {
+		t.Errorf("go lane: %+v", br.Binaries[0])
+	}
+	if br.Binaries[1].Image != "node:22-bookworm" || br.Binaries[1].Out != "*.tgz" || br.Binaries[1].Run == "" {
+		t.Errorf("run lane: %+v", br.Binaries[1])
+	}
+	// A hanzo.yml with no binaries: is an error naming the alternative, not a
+	// silent empty build.
+	empty := filepath.Join(dir, "empty.yml")
+	if err := os.WriteFile(empty, []byte("images:\n  - {name: api}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := (&BuildReq{}).loadRecipe(empty); err == nil {
+		t.Error("a hanzo.yml declaring no binaries: must be refused")
 	}
 }
