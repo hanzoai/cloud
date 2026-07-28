@@ -124,8 +124,18 @@ func TestVisibilityStaysInStepOnBothHosts(t *testing.T) {
 			if c.Method != http.MethodPatch {
 				t.Fatalf("existing repo must be patched, not %s", c.Method)
 			}
-			if c.Body["private"] != tc.wantPrivate {
-				t.Fatalf("private = %v, want %v", c.Body["private"], tc.wantPrivate)
+			// `visibility`, not `private`: GitHub rejects {"private":bool} on an org
+			// repo with a 422 and an EMPTY error list, so a wrong field here fails
+			// silently in exactly the retraction direction that must not fail.
+			if _, wrong := c.Body["private"]; wrong {
+				t.Fatal(`PATCH must send "visibility", not "private" — GitHub 422s the latter`)
+			}
+			want := "public"
+			if tc.wantPrivate {
+				want = "private"
+			}
+			if c.Body["visibility"] != want {
+				t.Fatalf("visibility = %v, want %v", c.Body["visibility"], want)
 			}
 			if _, sent := c.Body["description"]; sent {
 				t.Fatal("description must not be re-imposed: an author's own edit has to survive")
