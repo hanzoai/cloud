@@ -141,6 +141,59 @@ func TestCrossOrgSearch(t *testing.T) {
 	}
 }
 
+// TestForkableIsAskableBothWays is the wire half of gap (a). A boolean axis that
+// can only ever narrow to "all of them" is a label; this pins that the negative
+// case is expressible and that the facet reports BOTH sides, so a rail can show
+// the split instead of a pill that filters nothing.
+func TestForkableIsAskableBothWays(t *testing.T) {
+	app := mount(t)
+	seed(t) // console forkable, node and zips not
+
+	all := decode(t, mustGet(t, app, "/v1/catalog"))
+	if got := all.Facets["forkable"]; got["true"] != 1 || got["false"] != 2 {
+		t.Fatalf("forkable facet must count both sides, got %v", got)
+	}
+	yes := decode(t, mustGet(t, app, "/v1/catalog?forkable=true"))
+	no := decode(t, mustGet(t, app, "/v1/catalog?forkable=false"))
+	if yes.Total != 1 || yes.Data[0].ID != "hanzo/console" {
+		t.Errorf("forkable=true: %+v", yes.Data)
+	}
+	if no.Total != 2 {
+		t.Errorf("forkable=false must select the complement, got %d: %+v", no.Total, no.Data)
+	}
+	if yes.Total+no.Total != all.Total {
+		t.Errorf("the two sides must partition the corpus: %d + %d != %d", yes.Total, no.Total, all.Total)
+	}
+	for _, e := range no.Data {
+		if e.Forkable {
+			t.Errorf("%s answered the wrong side", e.ID)
+		}
+	}
+	// false must reach the client as a value, not as an absent field: omitted, a
+	// caller cannot tell "you cannot fork this" from "nobody said".
+	if body := mustGet(t, app, "/v1/catalog?forkable=false"); !strings.Contains(body, `"forkable":false`) {
+		t.Errorf("forkable:false must be on the wire: %s", body)
+	}
+}
+
+// TestSourceSurvivesTheIndex is the wire half of gap (b): repo and template are
+// not just built in sync.go, they round-trip the store and reach the caller.
+func TestSourceSurvivesTheIndex(t *testing.T) {
+	app := mount(t)
+	seed(t, Entry{
+		ID: "hanzo/kanban", Org: "hanzo", Name: "kanban", Kind: "site", Archetype: "site",
+		URL: "https://kanban.hanzo.app", Repo: "https://github.com/hanzo-apps/kanban-lane",
+		Template: "hanzo/example-kanban", Forkable: true, Updated: "2026-07-05",
+	})
+	got := decode(t, mustGet(t, app, "/v1/catalog?q=kanban"))
+	if got.Total != 1 {
+		t.Fatalf("want the one row, got %d", got.Total)
+	}
+	if e := got.Data[0]; e.Repo != "https://github.com/hanzo-apps/kanban-lane" || e.Template != "hanzo/example-kanban" {
+		t.Fatalf("a demo must be traceable to its source and its parent: %+v", e)
+	}
+}
+
 // TestPrivateProjectNeverLeaks is the tenancy boundary. acme's own catalog row
 // is visible to acme and to NOBODY else — not another tenant, not an anonymous
 // caller — while the published corpus is visible to all three.
@@ -229,4 +282,102 @@ func mustGetH(t *testing.T, app *zip.App, url string, hdr map[string]string) str
 		t.Fatalf("GET %s: %d %s", url, code, body)
 	}
 	return body
+}
+
+// TestProvenanceReachesTheAPI is the surface half of the fix: a marker the store
+// gates but the API never emits protects nothing a reader can see. It also pins
+// official as a tri-state browse axis, because "show me what is NOT ours" is the
+// very next question a person asks once they learn the catalog carries other
+// people's work.
+func TestProvenanceReachesTheAPI(t *testing.T) {
+	app := mount(t)
+	seed(t,
+		Entry{ID: "hanzo/ex-kanban", Org: "hanzo", Name: "ex-kanban", Kind: "site",
+			Official: true, Forkable: true, Updated: "2026-07-01"},
+		Entry{ID: "hanzo/kinetic", Org: "hanzo", Name: "kinetic", Kind: "site",
+			Upstream: "UI8 \u2014 Fitness Pro: Website UI Kit", License: "UI8 commercial licence",
+			Updated: "2026-07-02"},
+	)
+
+	all := decode(t, mustGet(t, app, "/v1/catalog"))
+	got := map[string]Entry{}
+	for _, e := range all.Data {
+		got[e.Name] = e
+	}
+	if !got["ex-kanban"].Official {
+		t.Error("the first-party marker never reached the API")
+	}
+	if e := got["kinetic"]; e.Official || e.Upstream == "" || e.License == "" {
+		t.Errorf("a third-party kit must read as credited, not first-party: %+v", e)
+	}
+	if all.Facets["official"]["true"] != 1 || all.Facets["official"]["false"] != 1 {
+		t.Errorf("official must be faceted both ways, got %v", all.Facets["official"])
+	}
+	for q, want := range map[string]string{
+		"official=true": "hanzo/ex-kanban", "official=false": "hanzo/kinetic",
+	} {
+		r := decode(t, mustGet(t, app, "/v1/catalog?"+q))
+		if r.Total != 1 || r.Data[0].ID != want {
+			t.Errorf("%s: want [%s], got %+v", q, want, r.Data)
+		}
+	}
+}
+
+// TestTwoLanesOneCorpus is the information-architecture bug this axis fixes:
+// /templates and /community are two VIEWS of this one corpus, cut on origin, so
+// they can never disagree the way a second hand-kept catalog does. It asserts
+// what each lane returns AND that the lanes partition — a row in no lane is a row
+// no surface can show.
+func TestTwoLanesOneCorpus(t *testing.T) {
+	app := mount(t)
+	seed(t,
+		Entry{ID: "hanzo/folio", Org: "hanzo", Name: "folio", Kind: "site", Origin: OriginTemplate,
+			URL: "https://folio.hanzo.app", Forkable: true, Updated: "2026-07-01"},
+		Entry{ID: "hanzo/ex-kanban", Org: "hanzo", Name: "ex-kanban", Kind: "site", Origin: OriginCommunity,
+			URL: "https://ex-kanban.hanzo.app", Template: "folio", Official: true, Updated: "2026-07-02"},
+		Entry{ID: "acme/board", Org: "acme", Name: "board", Kind: "site", Origin: OriginCommunity,
+			URL: "https://board.hanzo.app", Template: "folio", Updated: "2026-07-03"},
+		Entry{ID: "hanzo/ui", Org: "hanzo", Name: "ui", Kind: "repo", Origin: OriginThirdParty,
+			Upstream: "frappe/ui", License: "MIT", Updated: "2026-07-04"},
+		Entry{ID: "lux/node", Org: "lux", Name: "node", Kind: "repo", Origin: OriginProduct,
+			Updated: "2026-07-05"},
+	)
+
+	all := decode(t, mustGet(t, app, "/v1/catalog"))
+	if got := all.Facets["origin"]; got[OriginTemplate] != 1 || got[OriginCommunity] != 2 ||
+		got[OriginThirdParty] != 1 || got[OriginProduct] != 1 {
+		t.Fatalf("every lane must be countable from the rail: %v", got)
+	}
+	tpl := decode(t, mustGet(t, app, "/v1/catalog?origin=template"))
+	if tpl.Total != 1 || tpl.Data[0].ID != "hanzo/folio" {
+		t.Errorf("/templates browses our starters: %+v", tpl.Data)
+	}
+	com := decode(t, mustGet(t, app, "/v1/catalog?origin=community"))
+	if com.Total != 2 {
+		t.Fatalf("/community browses what people built, got %d: %+v", com.Total, com.Data)
+	}
+	// Ours in the community lane are the ones carrying the marker — that is the
+	// whole reason origin and official are two fields and not one value.
+	mine := decode(t, mustGet(t, app, "/v1/catalog?origin=community&official=true"))
+	if mine.Total != 1 || mine.Data[0].ID != "hanzo/ex-kanban" {
+		t.Errorf("a seeded example is community AND ours: %+v", mine.Data)
+	}
+	// Lineage is browsable, which is what makes the lane readable rather than a
+	// pile: everything built from folio, in one ask.
+	from := decode(t, mustGet(t, app, "/v1/catalog?template=folio"))
+	if from.Total != 2 {
+		t.Errorf("the lineage axis must select every child of folio, got %d: %+v", from.Total, from.Data)
+	}
+	sum := 0
+	for _, lane := range []string{OriginTemplate, OriginCommunity, OriginThirdParty, OriginProduct} {
+		sum += decode(t, mustGet(t, app, "/v1/catalog?origin="+lane)).Total
+	}
+	if sum != all.Total {
+		t.Errorf("the lanes must partition the corpus: %d != %d", sum, all.Total)
+	}
+	// origin must reach the wire on every row: an absent lane is the flattening
+	// this field was added to end.
+	if body := mustGet(t, app, "/v1/catalog?q=node"); !strings.Contains(body, `"origin":"product"`) {
+		t.Errorf("origin must be on the wire: %s", body)
+	}
 }

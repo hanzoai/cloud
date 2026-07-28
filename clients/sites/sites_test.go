@@ -573,3 +573,34 @@ func TestFirstPartyDropsReserved(t *testing.T) {
 		}
 	}
 }
+
+// TestNotFoundAnswersDataRequestsInType pins the decision notFound makes: a
+// missing DATA asset is answered as JSON, a missing document as HTML. Both
+// hanzo-team (/config.json) and edge (/presets/wigglewobble.json) shipped without
+// a file their bundle fetches at runtime; the plane answered an honest 404 whose
+// BODY was an HTML page, so both apps died inside minified vendor code on
+//
+//	Unexpected token '<', "<!doctype "... is not valid JSON
+//
+// with no path in the message. Answering in-type means .json() parses and the app
+// receives the missing path.
+func TestNotFoundAnswersDataRequestsInType(t *testing.T) {
+	for _, tc := range []struct {
+		path string
+		json bool
+	}{
+		{"/config.json", true},
+		{"/presets/wigglewobble.json", true},
+		{"/", false},
+		{"/about", false},
+		{"/index.html", false},
+		{"/assets/main.js", false},
+		{"/logo.png", false},
+		{"/model.wasm", false},
+	} {
+		if got := isJSON(contentType(resolveKey(tc.path))); got != tc.json {
+			t.Errorf("%s: json body = %v, want %v (type %q)",
+				tc.path, got, tc.json, contentType(resolveKey(tc.path)))
+		}
+	}
+}

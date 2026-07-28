@@ -28,7 +28,15 @@
 //
 // Surface:
 //
-//	GET /v1/catalog   search + browse: ?q= &org= &kind= &archetype= &language= &forkable=
+//	GET /v1/catalog   search + browse: ?q= &org= &kind= &archetype= &language=
+//	                  &origin=template|community|third-party|product
+//	                  &template=<parent id>   (lineage: what was forked from it)
+//	                  &forkable=true|false &official=true|false
+//	                  (absent = both; see filter)
+//
+// origin is the axis the two hanzo.app lanes are cut on — /templates browses
+// origin=template, /community browses origin=community — so they are TWO VIEWS
+// of this one corpus and not two catalogs that can disagree.
 //
 // There is no write route. The corpus reconciles itself (sync.go), which is why
 // there is no credential that could publish into the published catalog at all.
@@ -77,24 +85,48 @@ const (
 // discovery is done along (org, archetype, language, forkable) plus the two links
 // that make a hit actionable (URL to see it, Repo to read it).
 type Entry struct {
-	ID          string `json:"id"`
-	Org         string `json:"org"` // hanzo | lux | zoo
-	Name        string `json:"name"`
-	Title       string `json:"title,omitempty"`
-	Kind        string `json:"kind"` // repo | site
+	ID    string `json:"id"`
+	Org   string `json:"org"` // hanzo | lux | zoo
+	Name  string `json:"name"`
+	Title string `json:"title,omitempty"`
+	Kind  string `json:"kind"` // repo | site
+	// Origin is WHAT THIS IS TO YOU: template | community | third-party | product
+	// (origin.go owns the four nouns and derives them). Not omitempty, for the
+	// same reason Forkable and Official are not: every row has an answer, and a
+	// missing one is exactly the flattening this field exists to end.
+	Origin      string `json:"origin"`
 	Archetype   string `json:"archetype,omitempty"`
 	Language    string `json:"language,omitempty"`
 	Description string `json:"description,omitempty"`
 	URL         string `json:"url,omitempty"`      // live, if it is deployed
 	Repo        string `json:"repo,omitempty"`     // source
 	Template    string `json:"template,omitempty"` // lineage, if forked from one
-	Forkable    bool   `json:"forkable,omitempty"`
-	Stars       int    `json:"stars,omitempty"`
-	Updated     string `json:"updated,omitempty"`
+	// Forkable is NOT omitempty: false is an answer here, not a missing field.
+	// Omitted, a client could not tell "you cannot fork this" from "nobody said".
+	Forkable bool   `json:"forkable"`
+	Stars    int    `json:"stars,omitempty"`
+	Updated  string `json:"updated,omitempty"`
+	// Official and Upstream/License are AUTHORSHIP. Official is the platform-gated
+	// first-party marker (projects.Project.Official, raised only by an admin);
+	// Upstream/License credit the third-party work an entry was published from.
+	// Together they are the difference between "we built this" and "somebody else
+	// built this and we are showing it to you" — which a directory titled with our
+	// own three orgs has no business leaving to the reader.
+	//
+	// Official follows Forkable in NOT being omitempty, for the same reason: false
+	// is an answer, and omitted it could not be told from "nobody said".
+	Official bool   `json:"official"`
+	Upstream string `json:"upstream,omitempty"`
+	License  string `json:"license,omitempty"`
 	// Scope is provenance, not storage: "public" for a row from the published
 	// corpus, "org" for one only this caller can see. A UI that cannot tell them
 	// apart cannot warn before sharing a link.
 	Scope string `json:"scope"`
+	// Note is why a row is NOT in the published catalog, set by the admission gate
+	// (gate.go) on the sites it holds back. It is the difference between a demo
+	// that silently vanished from the public lens and one whose owner can read the
+	// reason and fix it. A published row never carries one.
+	Note string `json:"note,omitempty"`
 }
 
 // Response is the ONE result shape. Facets ship with every response because
@@ -192,10 +224,20 @@ func read(c *zip.Ctx, org, q, scope string) ([]Entry, error) {
 // filter applies the exact-match browse axes. An absent param is not a filter.
 // Every dimension `facet` counts is filterable here and vice versa: a facet a
 // caller can see but cannot act on is a rail that lies about being clickable.
+//
+// forkable is TRI-state for that reason. Read as `== "true"` it could only ever
+// narrow, never select the complement, so `?forkable=false` silently meant "no
+// filter" — a boolean axis whose negative case is unaskable is a label, not a
+// filter.
 func filter(in []Entry, c *zip.Ctx) []Entry {
 	org, arch := strings.ToLower(c.Query("org")), strings.ToLower(c.Query("archetype"))
 	lang, kind := strings.ToLower(c.Query("language")), strings.ToLower(c.Query("kind"))
-	fork := c.Query("forkable") == "true"
+	// origin cuts the corpus into the lanes a person actually browses; parent
+	// narrows a lane to one lineage ("everything built from folio"), which is what
+	// turns the community lane from a pile into something you can read.
+	orig, parent := strings.ToLower(c.Query("origin")), strings.ToLower(c.Query("template"))
+	fork, forkSet := boolQuery(c, "forkable")
+	first, firstSet := boolQuery(c, "official")
 	out := in[:0]
 	for _, e := range in {
 		switch {
@@ -203,7 +245,10 @@ func filter(in []Entry, c *zip.Ctx) []Entry {
 			arch != "" && strings.ToLower(e.Archetype) != arch,
 			lang != "" && strings.ToLower(e.Language) != lang,
 			kind != "" && strings.ToLower(e.Kind) != kind,
-			fork && !e.Forkable:
+			orig != "" && strings.ToLower(e.Origin) != orig,
+			parent != "" && strings.ToLower(e.Template) != parent,
+			forkSet && e.Forkable != fork,
+			firstSet && e.Official != first:
 			continue
 		}
 		out = append(out, e)
@@ -211,20 +256,30 @@ func filter(in []Entry, c *zip.Ctx) []Entry {
 	return out
 }
 
+// boolQuery reads a flag that has three answers, not two: yes, no, and unasked.
+func boolQuery(c *zip.Ctx, name string) (v, ok bool) {
+	b, err := strconv.ParseBool(strings.TrimSpace(c.Query(name)))
+	return b, err == nil
+}
+
 // facet counts the matching set along every browse axis, so the rail a client
-// renders is the rail that actually has results behind it.
+// renders is the rail that actually has results behind it. forkable is counted
+// on BOTH sides by the same rule as every other dimension — counting only the
+// trues rendered {true: everything} and told a caller there was a choice where
+// there was none.
 func facet(in []Entry) map[string]counts {
-	f := map[string]counts{"org": {}, "archetype": {}, "language": {}, "kind": {}}
+	f := map[string]counts{"org": {}, "archetype": {}, "language": {}, "kind": {},
+		"origin": {}, "template": {}, "forkable": {}, "official": {}}
 	for _, e := range in {
 		for dim, v := range map[string]string{
-			"org": e.Org, "archetype": e.Archetype, "language": e.Language, "kind": e.Kind,
+			"org": e.Org, "archetype": e.Archetype, "language": e.Language,
+			"kind": e.Kind, "origin": e.Origin, "template": e.Template,
+			"forkable": strconv.FormatBool(e.Forkable),
+			"official": strconv.FormatBool(e.Official),
 		} {
 			if v != "" {
 				f[dim][v]++
 			}
-		}
-		if e.Forkable {
-			f["forkable"] = counts{"true": f["forkable"]["true"] + 1}
 		}
 	}
 	return f
@@ -269,5 +324,7 @@ var (
 		}
 		return index.Reconcile(ctx, org, uid, pk, docs)
 	}
+	// The corpus's two sources, one seam each: what we BUILT and what is LIVE.
+	fromOrgs  = orgRepos
 	liveSites = projects.LiveSites
 )
