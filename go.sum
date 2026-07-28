@@ -1023,6 +1023,10 @@ github.com/hanzoai/deploy/gitops-engine v0.7.2 h1:+c7zwlp/ykA28PL/N9YNZoglf5a/bI
 github.com/hanzoai/deploy/gitops-engine v0.7.2/go.mod h1:c67nIJzxnhdgY9Lvjb7rSk9ImGNXASPMWAKmGH5N0dE=
 github.com/hanzoai/doctype v0.1.0 h1:xDj9a8jR2VFYw/IonSu2q1NerxscFSC6+DruywuSuDw=
 github.com/hanzoai/doctype v0.1.0/go.mod h1:DmN5to9CcSI0a1PvSeowD70UgFPzsT80BFPKWlrU3Oc=
+github.com/hanzoai/flags/go v0.1.0 h1:96I+/6eC1jKVAMuq0KLthpOLM+UoqoliNqsSV/qOI4Y=
+github.com/hanzoai/flags/go v0.1.0/go.mod h1:Lsw7fsdbEcgOmymLbmvCX/f9jr9+Kg0pTae45CydxE0=
+github.com/hanzoai/flags/go v0.1.1 h1:WgooJT1Ucz3+kkegHuODcc2S9kAIC14h1cah/r+nbBM=
+github.com/hanzoai/flags/go v0.1.1/go.mod h1:Lsw7fsdbEcgOmymLbmvCX/f9jr9+Kg0pTae45CydxE0=
 github.com/hanzoai/framework v0.1.0 h1:ZN6Agrl0Lm4PizkQe8KHde/EgVYPoXo0+eHRCuGDHvk=
 github.com/hanzoai/framework v0.1.0/go.mod h1:WKgWR/ta2CK48n5wOo7TuEPewqUwK5BHRXtz3uH67r0=
 github.com/hanzoai/go-cosyvoice v1.0.0 h1:XS68KB2VMCmHdAMpcdbkZhK20ZOTPAYm2N1Gx67yJpE=

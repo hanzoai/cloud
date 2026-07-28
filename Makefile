@@ -49,7 +49,7 @@ CGO_ENABLED     ?= 0
 # list cmd/host links and the multi-call binary serves.
 APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
 
-.PHONY: help native webui deploy-ui agentskills build host ship plugin generate openapi run smoke test test-cgo test-codec vet tidy docker docker-push clean e2e
+.PHONY: help webui deploy-ui agentskills build host ship plugin generate openapi run smoke test test-cgo test-codec vet tidy docker docker-push clean e2e
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -262,6 +262,3 @@ docker-push: docker ## Push the Docker image to ghcr.io. Requires docker login.
 
 clean: ## Remove built artifacts.
 	rm -rf bin
-
-native: ## Build the native flags evaluator staticlib (required for CGO=1 builds/tests).
-	cargo build --release --manifest-path native/flags/Cargo.toml
