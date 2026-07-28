@@ -20,9 +20,10 @@ import (
 // driverName, DO_API_TOKEN. So provisioning is "put the value where the name
 // says", the broker needs to know nothing about what any app wants, and the set
 // of credentials is data in the store rather than a table in code that drifts
-// from it. The billing plugin cannot read /svc/ai because it cannot ask for a
-// path it is not: the path is built from the peer's identity, never from the
-// request.
+// from it. The path is built from the peer's identity rather than from the
+// request — but see the identity caveat in credz.go: that identity is derived
+// from argv, which the peer controls, so this partitions credentials against
+// accident and not against a peer that runs code of its own.
 //
 // The paths sit under the admin org rather than the reserved platform partition
 // so they are reachable through the KMS surface that already exists
