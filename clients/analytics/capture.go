@@ -18,15 +18,11 @@
 // (the ONE native front door) instead of talking to the insights capture service
 // directly — cloud owns the tenant boundary and the warehouse schema.
 //
-// Routes (all POST; org resolved SERVER-SIDE from the validated principal):
-//
-//	POST /v1/analytics        capture one batch of events        -> {accepted,dropped}
-//	POST /v1/analytics/batch  alias of the above (Segment-style)
-//	POST /v1/tracker          beacon alias — navigator.sendBeacon / fetch(keepalive)
-//	                          on page-unload posts here; SAME handler, SAME tenant
-//	                          gate. It is a bare route: the /v1/tracker/* issue
-//	                          tracker (clients/tracker) owns only /v1/tracker/projects*,
-//	                          so bare POST /v1/tracker never collides with it.
+// This file holds the WIRE TYPES and the ONE WRITE CORE (ingestEvents) every door
+// funnels into. It owns no route: which paths accept an event is doors (event.go),
+// and admission is handle (event.go). CaptureEvent below is the shape all wires
+// normalize onto, which is why the canonical and PostHog decoders can share one
+// pipeline instead of forking it.
 //
 // TENANCY: the row's tenant_id is ALWAYS principal.Org (the validated IAM owner
 // slug), never a client-supplied field — a caller can only ever write into its
@@ -38,7 +34,7 @@
 // email-shaped value before the row is built (scrubProps). Only user/org
 // identifiers (distinct_id, person_id, group_id, org) are retained as identity.
 //
-// ONE datastore client: writes ride ai/object.DatastoreExec — the SAME pooled,
+// ONE datastore client: writes ride clients/datastore — the SAME pooled,
 // KMS-credentialed connection the read side queries through — so there is no
 // second transport, pool, or credential path.
 package analytics
@@ -52,7 +48,6 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -139,7 +134,7 @@ func EnsureEventsTable(ctx context.Context) error {
 	if eventsTableReady.Load() {
 		return nil
 	}
-	if err := datastore.Exec(ctx, eventsTableDDL); err != nil {
+	if err := warehouseExec(ctx, eventsTableDDL); err != nil {
 		return err
 	}
 	eventsTableReady.Store(true)
@@ -555,6 +550,21 @@ func publicCaptureEnabled() bool {
 // resolver without standing up IAM; production is always cloud.OrgForKey.
 var resolveKeyOrg = cloud.OrgForKey
 
+// warehouseReady and warehouseExec are the warehouse gate and the statement
+// executor, held as values for the SAME reason and on the SAME terms as
+// resolveKeyOrg: production is always the one datastore client, and a test
+// substitutes them to drive the write path without standing up a warehouse.
+//
+// They are what makes the TENANT observable. Without a warehouse the pipeline stops
+// at the readiness gate, so which org a lane resolved never reaches anything a test
+// can read — the site-host carve could file a customer's beacons under the public
+// tenant, or the reverse, and every status code would be identical. The row's
+// tenant_id is the fact that matters here, so it has to be reachable.
+var (
+	warehouseReady = datastore.Ready
+	warehouseExec  = datastore.Exec
+)
+
 // projectKey returns the project/API key a keyed SDK presents OUT-OF-BAND of the
 // Authorization header — the transports SanitizeIdentity does NOT mint identity
 // from, so they never reach tenant() as a principal. In priority order: the
@@ -609,9 +619,9 @@ func projectKey(c *zip.Ctx) string {
 // migration: the read lenses are unchanged and $source is queryable in the
 // properties JSON, which is exactly the migration signal for the alias sunset.
 const (
-	sourceEvent   = "event"   // canonical POST /v1/event (native Event wire)
-	sourcePostHog = "posthog" // POST /v1/insights/e (PostHog wire adapter, deprecated)
-	sourceCapture = "capture" // POST /v1/analytics{,/batch}, /v1/tracker (Segment/beacon, deprecated)
+	sourceEvent   = "event"   // canonical POST /v1/event (canonical wire)
+	sourcePostHog = "posthog" // POST /v1/insights/e (PostHog wire)
+	sourceCapture = "capture" // POST /v1/analytics{,/batch}, /v1/tracker (@hanzo/capture, sunsetting)
 )
 
 // withSource returns a copy of p carrying $source=source (the ingest adapter), so
@@ -627,36 +637,6 @@ func withSource(p map[string]any, source string) map[string]any {
 	}
 	out["$source"] = source
 	return out
-}
-
-// deprecatedOnce records one deprecation log per alias path per process, so a
-// high-volume ingest alias signals its sunset exactly once instead of flooding.
-// A plain mutex-guarded map (the alias set is tiny — /v1/analytics, /batch,
-// /tracker) rather than sync.Map: the latter (Go's HashTrieMap) was panicking
-// "ran out of hash bits" under the hot ingest path, 500-ing EVERY capture. A
-// bounded map+mutex has no trie state to corrupt and cannot panic here.
-var (
-	deprecatedMu   sync.Mutex
-	deprecatedSeen = make(map[string]struct{}, 8)
-)
-
-// deprecated logs (once per path) that a superseded ingest alias was hit, pointing
-// callers at the canonical front door. It NEVER changes behavior — the alias keeps
-// working — it only records the migration signal (also visible as $source in the
-// warehouse).
-func deprecated(s *cloud.Service[state], c *zip.Ctx, canonical string) {
-	p := c.Path()
-	deprecatedMu.Lock()
-	_, seen := deprecatedSeen[p]
-	if !seen {
-		deprecatedSeen[p] = struct{}{}
-	}
-	deprecatedMu.Unlock()
-	if seen {
-		return
-	}
-	s.Log.Warn("deprecated analytics ingest endpoint; migrate to the canonical event front door",
-		"path", p, "canonical", canonical)
 }
 
 // ingestEvents is the ONE write core: normalize → scrub → batch INSERT into the
@@ -694,22 +674,11 @@ func ingestEvents(ctx context.Context, org, source string, evs []CaptureEvent) (
 		return CaptureResult{Dropped: dropped}, nil
 	}
 	stmt, args := buildEventsInsert(rows)
-	if err := datastore.Exec(ctx, stmt, args...); err != nil {
+	if err := warehouseExec(ctx, stmt, args...); err != nil {
 		return CaptureResult{}, warehouseErr("capture", err)
 	}
 	// Fan the accepted batch out to the downstream sink (destinations), detached and
 	// fail-soft — never blocks or fails an ingest (forward.go). No-op when unset.
 	fanOut(org, evs)
 	return CaptureResult{Accepted: len(rows), Dropped: dropped}, nil
-}
-
-// capture ingests a Segment/beacon batch into hanzo.events. It is a DEPRECATED
-// foreign-protocol shim behind /v1/analytics, /v1/analytics/batch, and /v1/tracker —
-// external-SDK compat ONLY; no Hanzo surface uses these (Hanzo surfaces POST
-// /v1/event). It speaks the SAME wire as the canonical door (the CaptureBatch envelope
-// decodeIngest already accepts), so the alias is literally the canonical pipeline with
-// a different origin tag: ONE admission decision, ONE write core, no room to drift.
-func capture(s *cloud.Service[state], c *zip.Ctx) error {
-	deprecated(s, c, "/v1/event")
-	return handle(c, decodeIngest, sourceCapture)
 }
