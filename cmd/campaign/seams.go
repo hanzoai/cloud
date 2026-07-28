@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/hanzoai/cloud/clients/ads"
-	"github.com/hanzoai/cloud/clients/campaign"
-	"github.com/hanzoai/cloud/clients/experiments"
-	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/apps/ads"
+	"github.com/hanzoai/cloud/apps/campaign"
+	"github.com/hanzoai/cloud/apps/experiments"
+	"github.com/hanzoai/cloud/apps/principal"
 )
 
 // The cross-subsystem seams campaign owns, wired in ITS OWN composition root.
