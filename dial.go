@@ -78,6 +78,16 @@ func (p *Peer) As(h Headers) *Peer {
 	return &cp
 }
 
+// For names the tenant a call acts FOR when there is no request to delegate —
+// the background reconcile case. A loop acting for org X has no user attached,
+// but it must still name X so the callee scopes the answer; applied after As,
+// the explicit tenant wins, which is also the old internal-call contract.
+func (p *Peer) For(org string) *Peer {
+	cp := *p
+	cp.who.Org = strings.TrimSpace(org)
+	return &cp
+}
+
 // Call invokes one method on the peer and returns its reply payload, verbatim.
 // The request payload is opaque to the transport: bytes in, bytes out, nothing
 // re-encoded in between.
