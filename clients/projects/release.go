@@ -460,9 +460,12 @@ func activate(s *cloud.Service[state], ctx context.Context, org string, p Projec
 		return Release{}, err
 	}
 	// Claim the public host + purge the edge, exactly as a deploy does — a release
-	// that is live must be reachable and must not serve a cached predecessor.
-	onPublish(s, ctx, org, &p)
-	if err := s.State.store.MarkLive(ctx, org, p.Slug, siteURL(s, org, p.Slug),
+	// that is live must be reachable and must not serve a cached predecessor. The
+	// URL it goes live at is the one the bind proves we own, never the one the slug
+	// suggests: the bare-slug namespace is global, so a slug we lost belongs to
+	// another tenant and advertising it would point this tenant's customers there.
+	live, _ := onPublish(s, ctx, org, &p)
+	if err := s.State.store.MarkLive(ctx, org, p.Slug, live,
 		s.State.blob.bucket, p.LastPurgeAt, time.Now().Unix()); err != nil {
 		s.Log.Warn("release activated but project metadata update failed",
 			"org", org, "slug", p.Slug, "release", id, "err", err)
