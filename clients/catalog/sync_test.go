@@ -191,7 +191,7 @@ func TestProvenanceSurvivesTheSync(t *testing.T) {
 	t.Setenv(platformOrgEnv, "hanzo")
 	t.Setenv(sourceOrgsEnv, "-")
 	restore(t, []projects.LiveSite{
-		{Org: "hanzo", Slug: "ex-kanban", Name: "Kanban", Official: true,
+		{Org: "hanzo", Slug: "ex-kanban", Name: "Kanban",
 			Repo: "https://github.com/hanzo-templates/ex-kanban"},
 		{Org: "hanzo", Slug: "kinetic", Name: "Fitness Pro",
 			Repo:     "https://github.com/hanzo-templates/kinetic",
@@ -205,11 +205,8 @@ func TestProvenanceSurvivesTheSync(t *testing.T) {
 	for _, e := range publish(t, []Entry{kitRepo}) {
 		got[e.ID] = e
 	}
-	if e := got["hanzo/ex-kanban"]; !e.Official || !e.Forkable {
-		t.Errorf("a first-party example must keep its marker and its fork invite: %+v", e)
-	}
-	if e := got["hanzo/kinetic"]; e.Official {
-		t.Errorf("a credited third-party kit must never read as first-party: %+v", e)
+	if e := got["hanzo/ex-kanban"]; !e.Forkable {
+		t.Errorf("our own example must keep its fork invite: %+v", e)
 	}
 	if e := got["hanzo/kinetic"]; e.Upstream == "" || e.License == "" {
 		t.Errorf("a third-party kit must carry its credit: %+v", e)
@@ -219,14 +216,16 @@ func TestProvenanceSurvivesTheSync(t *testing.T) {
 	}
 }
 
-// TestRepoOfficialFollowsGitHubsOwnFork keeps the repo half honest with one fact
-// GitHub already asserts: our org's repo is ours, a fork holds upstream's code.
-func TestRepoOfficialFollowsGitHubsOwnFork(t *testing.T) {
-	if e := fromRepo(ghRepo{Name: "node"}, lx); !e.Official {
-		t.Error("a repo we authored in our own org is first-party")
+// TestRepoForkableFollowsGitHubsOwnFork keeps the repo half honest with one fact
+// GitHub already asserts. Forkable is the axis with teeth — "this is yours to
+// take" — so a repo that is itself a fork of somebody else's upstream must say
+// no: its licence and its lineage belong to that upstream.
+func TestRepoForkableFollowsGitHubsOwnFork(t *testing.T) {
+	if e := fromRepo(ghRepo{Name: "node"}, lx); !e.Forkable {
+		t.Error("a repo we authored in our own org is yours to take")
 	}
-	if e := fromRepo(ghRepo{Name: "go-ethereum", Fork: true}, lx); e.Official {
-		t.Error("a fork is upstream's work; badging it first-party is the lie")
+	if e := fromRepo(ghRepo{Name: "go-ethereum", Fork: true}, lx); e.Forkable {
+		t.Error("a fork is upstream's work; handing it out is the lie")
 	}
 }
 
