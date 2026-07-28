@@ -100,6 +100,7 @@ var frozen = []struct {
 	{"cloudflare", false, false, false},     // new: /v1/cloudflare edge plane (after integrations)
 	{"sbom", true, false, false},            // was order 137
 	{"team", false, true, false},            // was order 138
+	{"meet", true, false, false},            // new: /v1/meet LiveKit admission (after team; verifies with team's SERVER_SECRET)
 	{"settings", false, true, false},        // was order 138
 	{"prefs", false, true, false},           // new: per-user preference plane (after settings); Shutdown closes the store
 	{"notify", true, false, false},          // was order 139

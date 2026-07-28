@@ -426,6 +426,27 @@ def inject(root):
     return n
 
 
+# The serve-time isolation policy is keyed off the project's `framework`
+# (clients/projects/sites.go: crossOriginIsolated), and the ONE thing that knows
+# what an artifact IS is the code that just packed it. Saying "static" for a
+# Unity or Godot web export costs the page COOP/COEP, so SharedArrayBuffer is
+# gone and a multithreaded WASM build hangs forever behind a 200 — the exact
+# failure a status check cannot see. Detect from the exporter's own filenames:
+# they are fixed by the engine, not by us, so this needs no per-template config.
+ENGINE = (("unity", ".loader.js"),   # Build/<name>.loader.js beside <name>.wasm
+          ("godot", ".pck"),         # <name>.pck beside <name>.wasm
+          ("unreal", ".utoc"))       # <name>.utoc (IoStore container)
+
+
+def framework(root):
+    names = {f for _, fs in walk(root) for f in fs}
+    if any(f.endswith(".wasm") for f in names):
+        for name, mark in ENGINE:
+            if any(f.endswith(mark) for f in names):
+                return name
+    return "static"
+
+
 def pack(root, out):
     n = size = 0
     with tarfile.open(out, "w:gz") as tf:
@@ -547,8 +568,9 @@ def main():
     landed = pick_index(root)
     inject(root)
     files, size = fit(root, out, cap) if cap else pack(root, out)
-    print("OK %s %d %d%s" % (os.path.relpath(root, d), files, size,
-                             " index=" + landed if landed else ""))
+    print("OK %s %d %d framework=%s%s" % (os.path.relpath(root, d), files, size,
+                                          framework(root),
+                                          " index=" + landed if landed else ""))
     return 0
 
 
