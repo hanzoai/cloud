@@ -23,8 +23,10 @@ package kms_test
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,6 +104,15 @@ func getBearerHdr(t *testing.T, app *zip.App, path, token string, hdr map[string
 // aud)]. The token validates (audience is not a gate). The attack: the presence of the
 // victim-bound machine aud in the set must NOT let acme reach maxpower. Owner (=acme,
 // signed) governs.
+//
+// THE ORACLE MOVED FROM STATUS TO VALUE. This vector used to read the victim by
+// naming it in the URL, so "denied" was observable as a 403. There is no such URL:
+// both tenants spell one path and the org comes from the signed claim, so the
+// request ALWAYS succeeds — the only question is WHOSE record it returns. Both orgs
+// are seeded at the identical coordinate with distinct plaintexts, and the
+// assertion is that acme's token yields acme's bytes. That is a strictly sharper
+// test of "owner governs, not aud": the old 403 could have come from any refusal,
+// while a returned plaintext names exactly which tenant the boundary selected.
 func TestRed_MultiValueAud_OwnerStillGoverns(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -110,22 +121,40 @@ func TestRed_MultiValueAud_OwnerStillGoverns(t *testing.T) {
 	jwks := e2eJWKS(t, &key.PublicKey)
 	app, deps := newAppWithIdentity(t, e2eCfg(t, jwks.URL)) // allowlist = ["hanzo-console"]
 
-	sealPlatformSecret(t, deps.KMS, paasOrgA, paasValueA)       // maxpower's secret
-	sealPlatformSecret(t, deps.KMS, paasOrgB, "s3kr3t-of-acme") // acme's own secret
-	maxpowerPath := "/v1/kms" + paasEnvPath
-	acmePath := "/v1/kms" + paasEnvPath
+	const acmeValue = "s3kr3t-of-acme"
+	sealPlatformSecret(t, deps.KMS, paasOrgA, paasValueA) // maxpower's secret
+	sealPlatformSecret(t, deps.KMS, paasOrgB, acmeValue)  // acme's own, SAME coordinate
+	path := "/v1/kms" + paasEnvPath                       // the ONE path both tenants use
 	future := time.Now().Add(time.Hour)
 
 	multi := mintRed(t, key, paasOrgB, []string{"hanzo-console", paasOrgA + "-platform-kms"}, false, future)
 
-	// Cross-tenant: acme (with maxpower's machine aud in its aud SET) must NOT read maxpower.
-	if resp := getWithBearer(t, app, maxpowerPath, multi); resp.StatusCode != 403 {
-		t.Fatalf("multi-value aud [hanzo-console, maxpower-platform-kms] owner=acme → maxpower = %d, want 403", resp.StatusCode)
+	// acme, carrying maxpower's machine aud, is served ACME's record.
+	resp := getWithBearer(t, app, path, multi)
+	if resp.StatusCode != 200 {
+		t.Fatalf("multi-value aud owner=acme = %d, want 200 (the token must validate; aud is not a gate)", resp.StatusCode)
 	}
-	// Proves the token DID validate (so the 403 above is the org boundary, not a
-	// validation reject): the same token reads ACME's own secret → 200.
-	if resp := getWithBearer(t, app, acmePath, multi); resp.StatusCode != 200 {
-		t.Fatalf("multi-value aud owner=acme → acme (own) = %d, want 200 (token must have validated)", resp.StatusCode)
+	if got := decode(t, resp.Body)["value"]; got != acmeValue {
+		t.Fatalf("AUD WIDENED REACH: aud [hanzo-console, maxpower-platform-kms] owner=acme read %v, "+
+			"want %q — the victim's machine aud must not select the victim's record", got, acmeValue)
+	}
+
+	// Order-independence: the victim's machine aud FIRST changes nothing.
+	rev := mintRed(t, key, paasOrgB, []string{paasOrgA + "-platform-kms", "hanzo-console"}, false, future)
+	if got := decode(t, getWithBearer(t, app, path, rev).Body)["value"]; got != acmeValue {
+		t.Fatalf("AUD WIDENED REACH (reversed aud order): read %v, want %q", got, acmeValue)
+	}
+
+	// Nor can the aud be combined with an org SELECTION: acme is not a member of
+	// maxpower, so SanitizeIdentity discards the switch and acme stays in acme.
+	if got := decode(t, getBearerHdr(t, app, path, multi, map[string]string{"X-Org-Id": paasOrgA}).Body)["value"]; got != acmeValue {
+		t.Fatalf("AUD WIDENED REACH (aud + X-Org-Id switch): read %v, want %q", got, acmeValue)
+	}
+
+	// The converse pins that this is about the owner and not about acme being
+	// somehow special: maxpower's token still reads maxpower.
+	if got := decode(t, getWithBearer(t, app, path, mintRed(t, key, paasOrgA, []string{"hanzo-console"}, false, future)).Body)["value"]; got != paasValueA {
+		t.Fatalf("owner=maxpower read %v, want %q", got, paasValueA)
 	}
 }
 
@@ -143,6 +172,14 @@ func TestRed_MultiValueAud_OwnerStillGoverns(t *testing.T) {
 //	principal — identified by its OWN <owner>-platform-kms aud — is DENIED SuperAdmin
 //	by isKMSMachinePrincipal and pinned to its own org. A client_credentials machine
 //	identity must never wield platform-admin.
+//
+// THE ORACLE FOR "GOT SUPERADMIN" IS THE ORG-SWITCH, NOT A URL. Reaching a foreign
+// org used to mean naming it in the path; that route is gone. What SuperAdmin
+// actually confers now is the CLAIM-BOUND org-switch — SanitizeIdentity's admin arm
+// alone honors X-Org-Id as the effective org (middleware_identity.go `effOrg =
+// cliOrg`). So the test presents the switch header and reads the VALUE: maxpower's
+// plaintext means the token got platform sudo, admin's own means it did not. Same
+// question, an oracle that still exists, and a sharper answer than a status.
 func TestRed_AdminOrgMachineToken(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -151,49 +188,53 @@ func TestRed_AdminOrgMachineToken(t *testing.T) {
 	jwks := e2eJWKS(t, &key.PublicKey)
 	app, deps := newAppWithIdentity(t, e2eCfg(t, jwks.URL)) // AdminOrg="admin", allowlist=["hanzo-console"]
 
-	sealPlatformSecret(t, deps.KMS, paasOrgA, paasValueA)       // victim maxpower secret
-	sealPlatformSecret(t, deps.KMS, "admin", "s3kr3t-of-admin") // admin org's own secret
-	victimPath := "/v1/kms" + paasEnvPath
-	adminPath := "/v1/kms/orgs/admin" + paasEnvPath
+	const adminValue = "s3kr3t-of-admin"
+	sealPlatformSecret(t, deps.KMS, paasOrgA, paasValueA) // victim maxpower secret
+	sealPlatformSecret(t, deps.KMS, "admin", adminValue)  // admin org's own, SAME coordinate
+	path := "/v1/kms" + paasEnvPath                       // the ONE path; the token picks the tenant
+	switchToVictim := map[string]string{"X-Org-Id": paasOrgA}
 	future := time.Now().Add(time.Hour)
+
+	// value reads one probe's plaintext — the observable that says which tenant the
+	// boundary selected.
+	value := func(resp *http.Response) any { return decode(t, resp.Body)["value"] }
 
 	// (a) isAdmin=FALSE — the real client_credentials machine token.
 	ccAdmin := mintRed(t, key, "admin", []string{"admin-platform-kms"}, false, future)
 
 	// It CAN read the admin org's OWN secrets (legit principal for its own org).
-	if resp := getWithBearer(t, app, adminPath, ccAdmin); resp.StatusCode != 200 {
-		t.Fatalf("admin-org machine token → admin-org own secret = %d, want 200", resp.StatusCode)
+	if got := value(getWithBearer(t, app, path, ccAdmin)); got != adminValue {
+		t.Fatalf("admin-org machine token → own org read %v, want %q", got, adminValue)
 	}
-	// It must NOT read a DIFFERENT tenant — owner==adminOrg without isAdmin is not SuperAdmin.
-	if resp := getWithBearer(t, app, victimPath, ccAdmin); resp.StatusCode != 403 {
-		t.Fatalf("admin-org MACHINE token (isAdmin=false) → victim = %d, want 403 (no SuperAdmin from owner alone)", resp.StatusCode)
-	}
-	// Not even with an explicit org-switch header (admin org-switch is honored ONLY for isAdmin=true).
-	if resp := getBearerHdr(t, app, victimPath, ccAdmin, map[string]string{"X-Org-Id": paasOrgA}); resp.StatusCode != 403 {
-		t.Fatalf("admin-org machine token + X-Org-Id:maxpower switch = %d, want 403", resp.StatusCode)
+	// It must NOT reach a DIFFERENT tenant — owner==adminOrg without isAdmin is not
+	// SuperAdmin, so the switch is not offered to it and it stays in the admin org.
+	if got := value(getBearerHdr(t, app, path, ccAdmin, switchToVictim)); got != adminValue {
+		t.Fatalf("admin-org MACHINE token (isAdmin=false) + X-Org-Id:maxpower read %v, want %q "+
+			"(no SuperAdmin from owner alone ⇒ no org-switch)", got, adminValue)
 	}
 
-	// (b) The DISCRIMINATOR is isKMSMachinePrincipal, not the audience. A REAL admin
+	// (b) The DISCRIMINATOR is isMachinePrincipal, not the audience. A REAL admin
 	//     (isAdmin=true) gets SuperAdmin whatever app minted the token — audience is not a
-	//     gate, owner==adminOrg + isAdmin is the authority — so an admin token with an
-	//     arbitrary aud reads the victim cross-org → 200.
+	//     gate, admin-org membership + human is the authority — so an admin token with an
+	//     arbitrary aud CAN switch into the victim and read it.
 	arbAdminTrue := mintRed(t, key, "admin", []string{"some-random-app"}, true, future)
-	if resp := getWithBearer(t, app, victimPath, arbAdminTrue); resp.StatusCode != 200 {
-		t.Fatalf("isAdmin=true + arbitrary aud → victim = %d, want 200 (a real admin is admin from any app)", resp.StatusCode)
+	if got := value(getBearerHdr(t, app, path, arbAdminTrue, switchToVictim)); got != paasValueA {
+		t.Fatalf("isAdmin=true + arbitrary aud + org-switch read %v, want %q "+
+			"(a real admin is admin from any app)", got, paasValueA)
 	}
 	//     The ONE exception: a MACHINE principal (its OWN <owner>-platform-kms aud present)
-	//     is DENIED SuperAdmin by isKMSMachinePrincipal even with isAdmin=true, so it is
-	//     pinned to owner=admin and CANNOT read the victim → 403 (a machine identity must
-	//     never wield platform-admin).
+	//     is DENIED SuperAdmin by isKMSMachinePrincipal even with isAdmin=true, so the
+	//     switch is inert and it stays pinned to owner=admin — a machine identity must
+	//     never wield platform-admin.
 	machAdminTrue := mintRed(t, key, "admin", []string{"admin-platform-kms"}, true, future)
-	if resp := getWithBearer(t, app, victimPath, machAdminTrue); resp.StatusCode != 403 {
-		t.Fatalf("machine principal (isAdmin=true + own machine aud) → victim = %d, want 403 "+
-			"(a machine principal must NEVER receive SuperAdmin)", resp.StatusCode)
+	if got := value(getBearerHdr(t, app, path, machAdminTrue, switchToVictim)); got != adminValue {
+		t.Fatalf("machine principal (isAdmin=true + own machine aud) + org-switch read %v, want %q "+
+			"(a machine principal must NEVER receive SuperAdmin)", got, adminValue)
 	}
-	//     The fix gates ONLY the admin grant: the machine principal still reads its OWN
-	//     org (admin), so data-plane access is intact.
-	if resp := getWithBearer(t, app, adminPath, machAdminTrue); resp.StatusCode != 200 {
-		t.Fatalf("admin-org machine principal → admin-org own secret = %d, want 200 (data access intact)", resp.StatusCode)
+	//     The gate covers ONLY the admin grant: the machine principal still reads its OWN
+	//     org, so data-plane access is intact.
+	if got := value(getWithBearer(t, app, path, machAdminTrue)); got != adminValue {
+		t.Fatalf("admin-org machine principal → own org read %v, want %q (data access intact)", got, adminValue)
 	}
 }
 
@@ -201,7 +242,16 @@ func TestRed_AdminOrgMachineToken(t *testing.T) {
 //
 // owner "maxpower " (trailing space) with a matching machine aud so validate()
 // passes. SanitizeIdentity must REFUSE to fold "maxpower " onto tenant "maxpower":
-// OrgHasUnsafeRune zeroes the owner → org-less → the guard 403s the victim read.
+// OrgHasUnsafeRune zeroes the owner → the request is org-less → the guard refuses.
+//
+// THE REFUSAL CODE IS NOW 400, NOT 403, AND BOTH ARE THE SAME FAIL-CLOSED. An
+// org-less request no longer reaches the old `ctx.Org() != :org` comparison (403,
+// "you are not that org"); it reaches the edge validator first, which rejects the
+// zeroed org as not a DNS-1123 label (400) before any store access. The test
+// therefore accepts either refusal and — the part that actually matters and was
+// never asserted before — requires the VICTIM'S PLAINTEXT to be absent from the
+// response. A collapse onto "maxpower" would show up as a 200 carrying
+// paasValueA, which no status assertion alone would have caught.
 func TestRed_TrimCollapseOwner_FailsClosed(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -210,22 +260,41 @@ func TestRed_TrimCollapseOwner_FailsClosed(t *testing.T) {
 	jwks := e2eJWKS(t, &key.PublicKey)
 	app, deps := newAppWithIdentity(t, e2eCfg(t, jwks.URL))
 	sealPlatformSecret(t, deps.KMS, paasOrgA, paasValueA) // maxpower
-	victimPath := "/v1/kms" + paasEnvPath
+	path := "/v1/kms" + paasEnvPath
 	future := time.Now().Add(time.Hour)
+
+	// refused asserts the one property both codes share: no tenancy was granted, so
+	// no tenant's bytes came back.
+	refused := func(what string, resp *http.Response) {
+		t.Helper()
+		body := readAll(resp.Body)
+		if strings.Contains(body, paasValueA) {
+			t.Fatalf("FOLD BREACH: %s received maxpower's secret: %s", what, body)
+		}
+		if resp.StatusCode != 400 && resp.StatusCode != 403 {
+			t.Fatalf("%s = %d, want 400 or 403 (org-less fail-closed): %s", what, resp.StatusCode, body)
+		}
+	}
 
 	for _, owner := range []string{"maxpower ", "maxpower​", " maxpower", "maxpower\t"} {
 		// aud is bound to the RAW owner so validate()'s machine-aud check passes; the
 		// defense must be SanitizeIdentity refusing tenancy for the unsafe owner.
 		tok := mintRed(t, key, owner, []string{owner + "-platform-kms"}, false, future)
-		if resp := getWithBearer(t, app, victimPath, tok); resp.StatusCode != 403 {
-			t.Fatalf("unsafe/trim owner %q reading maxpower = %d, want 403 (no fold onto victim)", owner, resp.StatusCode)
-		}
+		refused(fmt.Sprintf("unsafe/trim owner %q", owner), getWithBearer(t, app, path, tok))
+		// …and it cannot recover tenancy by SELECTING the victim either: an org-less
+		// principal never enters an arm of SanitizeIdentity that honors X-Org-Id.
+		refused(fmt.Sprintf("unsafe/trim owner %q + X-Org-Id:maxpower", owner),
+			getBearerHdr(t, app, path, tok, map[string]string{"X-Org-Id": paasOrgA}))
 	}
 
-	// Empty owner with the bare-suffix aud: the token validates (audience is not a gate)
-	// but owner is empty → no org scope → the guard 403s the victim read (fail closed).
+	// Empty owner with the bare-suffix aud: the token validates (audience is not a
+	// gate) but owner is empty → no org scope → fail closed.
 	empty := mintRed(t, key, "", []string{"-platform-kms"}, false, future)
-	if resp := getWithBearer(t, app, victimPath, empty); resp.StatusCode != 403 {
-		t.Fatalf("empty-owner bare-suffix aud = %d, want 403 (fail closed)", resp.StatusCode)
+	refused("empty-owner bare-suffix aud", getWithBearer(t, app, path, empty))
+
+	// The victim is untouched throughout — proof the refusals above are the fold
+	// being rejected, not the endpoint being broken.
+	if got := decode(t, getWithBearer(t, app, path, mintRed(t, key, paasOrgA, []string{"hanzo-console"}, false, future)).Body)["value"]; got != paasValueA {
+		t.Fatalf("maxpower read %v, want %q", got, paasValueA)
 	}
 }
