@@ -50,6 +50,7 @@ import (
 	"github.com/hanzoai/cloud/apps/admin/finance"
 	"github.com/hanzoai/cloud/apps/admin/money"
 	"github.com/hanzoai/cloud/apps/admin/revenue"
+	"github.com/zap-proto/zip"
 )
 
 // moneyGrantScan bounds the audit scan behind the grant totals. Grants are staff-issued
@@ -151,7 +152,8 @@ func (o ops) Money(ctx context.Context, _ *core.None) (*MoneyOut, error) {
 	fin := finance.Compute(s, ctx, core.CallerCreds(c))
 	grants, _, grantErr := customer.GrantRows(s, ctx, customer.GrantFilter("", "success", moneyGrantScan))
 
-	board := foldMoney(rev, fin, grants, reserveCents(ctx), at)
+	held, reserveErr := reserve(ctx, c)
+	board := foldMoney(rev, fin, grants, held, at)
 
 	// Freshness, namespaced by the domain that read it.
 	board.Sources = []core.SourceStatus{}
@@ -162,15 +164,40 @@ func (o ops) Money(ctx context.Context, _ *core.None) (*MoneyOut, error) {
 	}
 	board.Sources = mergeSources(board.Sources, "finance", fin.Sources)
 	board.Sources = append(board.Sources, grantSource(s, grants, grantErr, at))
+	// The reserve is READ FROM ANOTHER APP, so it gets a freshness row like every
+	// other remote read. Before this it silently rendered 0 whenever treasury was
+	// not in the binary — which, since admin is its own binary, was always.
+	board.Sources = append(board.Sources, core.SrcOf("treasury", reserveErr, 1, at))
 
 	return &MoneyOut{Status: core.OK, Data: &board}, nil
 }
 
-// reserveCents reads the platform reserve fund. Not mounted ⇒ 0, which is the truth:
-// there is no reserve on this deployment.
-func reserveCents(ctx context.Context) money.Cents {
-	cents, _ := cloud.Reserve(ctx)
-	return money.Cents(cents)
+// reserve reads the platform reserve fund FROM THE TREASURY APP, over the socket
+// when it is co-located and over the network when it is not (cloud.Dial).
+//
+// It used to be an import — `treasury.ReserveCents(ctx)` — which resolved against
+// treasury's `mounted` package global. admin is its own binary, so treasury never
+// mounted there and that call returned 0 every single time. The board printed a
+// zero balance and called it the truth, at a cost of ~691 packages linked into
+// admin to produce it.
+//
+// The error is RETURNED, not swallowed, so the board can say "could not reach the
+// treasury" instead of "you have no money" — the distinction the old code could
+// not make, because a failed import and an empty fund look identical.
+//
+// c carries the SuperAdmin principal core.Admit already validated; the treasury
+// re-checks it on its own admin route, so this delegates authority rather than
+// assuming it.
+func reserve(ctx context.Context, c *zip.Ctx) (money.Cents, error) {
+	var out struct {
+		Report struct {
+			ReserveCents int64 `json:"reserveCents"`
+		} `json:"report"`
+	}
+	if err := cloud.Dial("treasury").As(c).Get(ctx, "", "/v1/admin/treasury", &out); err != nil {
+		return 0, err
+	}
+	return money.Cents(out.Report.ReserveCents), nil
 }
 
 // grantSource reports grant freshness, including the two ways the total can be less
