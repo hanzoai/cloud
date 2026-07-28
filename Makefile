@@ -58,7 +58,7 @@ APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
 # disk by default; override for a box where /tmp is real.
 export TMPDIR ?= $(HOME)/.cache/go-tmp
 
-.PHONY: help native webui deploy-ui agentskills build build-standalone host plugins plugin generate run smoke test test-cgo test-codec vet tidy docker docker-push clean
+.PHONY: help native webui deploy-ui agentskills build host plugins plugin generate openapi run smoke test test-cgo test-codec vet tidy docker docker-push clean monolith monolith-standalone
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -92,18 +92,28 @@ agentskills: ## Regenerate the FULL agent-skills catalog into clients/agentskill
 	python3 "$(OPENAPI_DIR)/skills.py" --no-services --out clients/agentskills/catalog
 	@echo ">> embedded FULL agent-skills catalog ($$(jq -r .skill_count clients/agentskills/catalog/hanzo/index.json) skills/brand)"
 
-build: ## Build the unified cloud binary into ./bin/cloud (embeds whatever webui/dist holds — run `webui` first for the real console).
-	@mkdir -p bin
-	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$(BIN) $(PKG)
+# THE DEFAULT BUILD IS THE HOST, and that is the whole point of the plugin model:
+# nothing compiles together. `build` used to link all 103 subsystems into one
+# 3108-package binary, so changing one line in one app relinked every other app
+# with it. Measured on this tree with a fully warm cache, that relink is 9.5s and
+# 3.8GiB of peak RSS — from cold it is minutes — for a change that touched one
+# app. It is still available as `monolith` (last target in this file), which says
+# why it survives. It is no longer what you get by typing `make build`.
+#
+# The loop this replaces it with is two commands, and neither grows as the fleet
+# does. Measured here:
+#
+#   make build              # the router — 316 packages, 0.6s
+#   make plugin APP=wallets # the ONE app you edited — 1.3s, recompile + relink
+#
+# then restart the host. `plugin` declares no prerequisites, so the second
+# command never drags the first — or the monolith — along behind it.
+build: host ## FAST PATH (default): build the light host into ./bin/host. Then `make plugin APP=<x>` for the app you are editing.
 
-build-standalone: webui build ## Build the REAL 1-binary console: console build:embed → webui/dist → go build.
-
-# THE LIGHT HOST. `build` above links every subsystem into one binary (3105
-# packages, ~570MB, minutes to link). This one links zip and the generated
-# manifest — 316 packages, under a second — because it knows only where each app
-# lives and which paths it answers. The apps run as their own processes, started
-# on the first request that reaches them, so the host's build does not grow when
-# a subsystem does.
+# THE LIGHT HOST links zip and the generated manifest and stops, because it knows
+# only where each app lives and which paths it answers — never what the app does.
+# The apps run as their own processes, started on the first request that reaches
+# them, so the host's build does not grow when a subsystem does.
 host: ## Build the light host into ./bin/host (links zip + the manifest, none of the apps).
 	@mkdir -p bin $(TMPDIR)
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$@ ./cmd/$@
@@ -140,8 +150,15 @@ generate: ## Regenerate cmd/<app>/main.go + manifest/apps.go from apps.Wire().
 # reference for the still-to-port client-side tools (GPU fleet worker `link`,
 # `runner`, `engine`, `security`) and are no longer built here.
 
-run: build ## Run with iam,base,kms,gateway,o11y enabled (matches README quickstart).
-	./bin/$(BIN) --enable=iam,base,kms,gateway,o11y --brand=hanzo --domain=api.hanzo.ai
+# Builds the host plus EXACTLY the plugins it is told to mount — not all 106.
+# The host resolves a plugin as a file beside itself (manifest.App.Plugin), so a
+# name in RUN_ENABLE with no binary in ./bin is the one way this fails; building
+# that same list here is what keeps the two in step.
+RUN_ENABLE ?= iam,base,kms,gateway,o11y
+
+run: host ## Run the host with iam,base,kms,gateway,o11y (matches README quickstart); builds just those plugins.
+	@for a in $$(echo $(RUN_ENABLE) | tr ',' ' '); do $(MAKE) --no-print-directory plugin APP=$$a; done
+	./bin/host --enable=$(RUN_ENABLE)
 
 smoke: ## Build and run cmd/cloud-smoke (mount-time integration check).
 	$(GO) run ./cmd/cloud-smoke
@@ -201,3 +218,24 @@ clean: ## Remove built artifacts.
 
 native: ## Build the native flags evaluator staticlib (required for CGO=1 builds/tests).
 	cargo build --release --manifest-path native/flags/Cargo.toml
+
+# ---------------------------------------------------------------------------
+# SLOW FALLBACK — everything linked together. Deliberately last, in the file and
+# in `make help`, because typing it is a choice and it should look like one.
+#
+# Two reasons it still exists:
+#   1. It is the SHIPPED artifact today. The Dockerfile builds ./cmd/cloud, and
+#      the host+plugins layout cannot replace it until a plugin stops linking the
+#      whole core: the 106 plugins weigh 5.3GB in ./bin against this one binary's
+#      212MB, because each statically re-links the same ~650-package root. The
+#      image gets ~25x bigger before the model pays off, so flipping the
+#      Dockerfile waits on cutting that floor, not on this target.
+#   2. It is the reference the plugin set is checked against: every app mounted
+#      here through apps.Wire() is the same app cmd/<name> serves standalone, and
+#      when the two disagree this is the one that is right.
+# Delete it when neither is true — not before.
+monolith: ## SLOW FALLBACK: link every subsystem into one ./bin/cloud (3108 packages, 212MB, 9.5s warm / minutes cold). Prefer `make build`.
+	@mkdir -p bin $(TMPDIR)
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$(BIN) $(PKG)
+
+monolith-standalone: webui monolith ## SLOW FALLBACK: the REAL 1-binary console — console build:embed → webui/dist → monolith.
