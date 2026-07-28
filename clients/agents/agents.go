@@ -332,6 +332,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// as a tool via RunOnBehalf, activation-gated by the plane.
 	tools.Register(agentToolProvider{})
 
+	// Close the deploy seam clients/projects left open: a site going live becomes
+	// the last turn of the session that built it, so the story a visitor reads
+	// ends where the product starts (provenance.go).
+	mountProvenance(s)
+
 	log.Info("agents mounted", "ai", s.State.ai != nil, "billing", s.State.bill.Enabled(),
 		"scheduler", s.State.sched != nil, "brand", deps.Brand)
 	return nil
