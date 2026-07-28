@@ -10,6 +10,7 @@ package analytics
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -30,6 +31,10 @@ const teamAccount = "550e8400-e29b-41d4-a716-446655440000"
 // id under the snake_case `distinct_id`. Every assertion below runs against this exact
 // shape, so a test passing here is a statement about the real caller and not about a
 // payload invented to fit the decoder.
+// Its captured millis (June 2025) are older than maxBackdate, so the write core anchors
+// these rows to server-now. That is correct and it is why no test below asserts the
+// stored instant from this fixture — a verbatim capture ages, and the bound is measured
+// against now. TestTeamWireKeepsIdentityOnFullLane computes a fresh value for that.
 const teamWire = `[
   {"event":"error","properties":{"error_message":"boom","error_type":"TypeError","error_stack":"at f (app.js:1)\nBearer sk-live-DEADBEEF","analytics_collector":true,"$anonymous_id":"anon_1"},"timestamp":1750000000000,"distinct_id":"user@hanzo.ai"},
   {"event":"navigation","properties":{"path":"/tracker"},"timestamp":1750000001000,"distinct_id":"user@hanzo.ai"}
@@ -121,8 +126,18 @@ func TestTeamWireLands(t *testing.T) {
 // TestTeamWireKeepsIdentityOnFullLane: on the vouched-for lane there is no projection,
 // so the two fields the canonical wire lost must both survive — the snake_case person
 // id and the epoch-millis timestamp converted to the instant the SPA meant.
+//
+// The millis here are COMPUTED from now, not taken from the teamWire capture, and that
+// is load-bearing: the capture's fixed 1750000000000 is June 2025, which is outside
+// maxBackdate, so asserting it survived verbatim would have been asserting that no past
+// bound exists. Real SPA traffic is minutes old; a fresh value is the fixture that
+// actually exercises millis→instant.
 func TestTeamWireKeepsIdentityOnFullLane(t *testing.T) {
-	evs, err := decodeTeam([]byte(teamWire))
+	want := time.Now().UTC().Add(-90 * time.Second).Truncate(time.Second)
+	wire := fmt.Sprintf(
+		`[{"event":"error","properties":{"error_message":"boom","$anonymous_id":"anon_1"},"timestamp":%d,"distinct_id":"user@hanzo.ai"}]`,
+		want.UnixMilli())
+	evs, err := decodeTeam([]byte(wire))
 	if err != nil {
 		t.Fatalf("decodeTeam: %v", err)
 	}
@@ -136,8 +151,8 @@ func TestTeamWireKeepsIdentityOnFullLane(t *testing.T) {
 	if row.anonymousID != "anon_1" {
 		t.Errorf("anonymousID = %q, want anon_1", row.anonymousID)
 	}
-	if got := row.timestamp.UTC(); !got.Equal(time.UnixMilli(1750000000000).UTC()) {
-		t.Errorf("timestamp = %s, want %s", got, time.UnixMilli(1750000000000).UTC())
+	if got := row.timestamp.UTC(); !got.Equal(want) {
+		t.Errorf("timestamp = %s, want %s", got, want)
 	}
 }
 
@@ -233,6 +248,33 @@ func TestTeamTimestampAbsentClampsToNow(t *testing.T) {
 	row, _ := normalizeEvent("acme", now, foldException(evs[0]))
 	if row.timestamp.Before(now.Add(-time.Minute)) {
 		t.Errorf("absent timestamp stored as %s, want ~now", row.timestamp)
+	}
+}
+
+// TestTeamEpochMillisCannotReach1970 is the same 1970 hazard from the other side, and it
+// is the reason the past bound lives in clampTS rather than in each decoder. teamTime is
+// correct about ZERO (it returns "" so the write core anchors to server-now) and has no
+// opinion about ONE: `"timestamp":1` is a well-formed epoch-millis that decodes to
+// 1970-01-01, which the write core used to accept verbatim into the leading column of
+// ORDER BY. That is the widest possible key range from the smallest possible request, on
+// a door reachable at /v1/event/collect.
+func TestTeamEpochMillisCannotReach1970(t *testing.T) {
+	evs, err := decodeTeam([]byte(`[{"event":"error","properties":{"error_message":"x"},"timestamp":1,"distinct_id":"u"}]`))
+	if err != nil {
+		t.Fatalf("decodeTeam: %v", err)
+	}
+	// The decoder is not where this is fixed: it faithfully renders the millis it was
+	// given, and that is its job.
+	if evs[0].Timestamp != "1970-01-01T00:00:00Z" {
+		t.Fatalf("decodeTeam rendered %q, want the epoch — this test no longer exercises the hazard it names", evs[0].Timestamp)
+	}
+	now := time.Now().UTC()
+	row, ok := normalizeEvent("acme", now, foldException(evs[0]))
+	if !ok {
+		t.Fatal("did not normalize")
+	}
+	if row.timestamp.Before(now.Add(-maxBackdate)) {
+		t.Errorf("the stored row sits at %s — a 1-byte timestamp bought a key range back to the epoch", row.timestamp)
 	}
 }
 
