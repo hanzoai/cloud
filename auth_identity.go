@@ -339,6 +339,36 @@ func isMachinePrincipal(claims *idClaims) bool {
 // selection leaves the caller in their home org. An empty set (a legacy token, an
 // opaque key, a machine principal — IAM never mints `orgs` for a client_credentials
 // token) admits nothing, which is exactly the pre-claim behavior.
+// isOrgAdmin reports whether the token's signed membership set names the caller an
+// ADMIN of org — the role side of the same `orgs` claim isMember reads for the org
+// side. One claim, one parser, two questions.
+//
+// It exists because the top-level `isAdmin` claim is NOT the org-admin fact. IAM
+// mints `isAdmin` for the platform's own super-users; a normal org's admin carries
+// their adminness in `orgs[].role`, and nowhere else. Minting X-User-IsOrgAdmin from
+// `isAdmin` alone therefore demoted EVERY org admin to a plain member — the whole
+// org-scoped admin surface (the platform fleet board, the org admin panels) refused
+// its own owner with "admin required". Verified against production: z@hanzo.ai's
+// token carries orgs:[{org:hanzo,role:admin}] and no isAdmin, and
+// GET /v1/paas/apps answered 403.
+//
+// VERBATIM org comparison for isMember's reason (a fold would let a member of
+// "acme" claim "ACME"); the ROLE is folded, because a role is a closed vocabulary
+// IAM controls, not a tenant-chosen identifier. An empty set — a legacy token, an
+// opaque hk-/sk- key, a machine principal — admits nothing, so this can only ever
+// restate a membership IAM already signed.
+func isOrgAdmin(orgs []model.OrgRef, org string) bool {
+	if org == "" {
+		return false
+	}
+	for _, o := range orgs {
+		if o.Org == org && strings.EqualFold(strings.TrimSpace(o.Role), "admin") {
+			return true
+		}
+	}
+	return false
+}
+
 func isMember(orgs []model.OrgRef, org string) bool {
 	if org == "" {
 		return false
