@@ -74,7 +74,8 @@
   "tier": 1,
   "rating": 5,
   "source": "https://gallery.hanzo.ai/templates/kinetic",
-  "preview": "https://gallery.hanzo.ai/screenshots/kinetic.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/kinetic.png",
+  "demo": "https://canvas.hanzo.app"
  },
  {
   "slug": "quantum",
@@ -110,7 +111,8 @@
   "tier": 1,
   "rating": 5,
   "source": "https://gallery.hanzo.ai/templates/blocks",
-  "preview": "https://gallery.hanzo.ai/screenshots/blocks.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/blocks.png",
+  "demo": "https://forge.hanzo.app"
  },
  {
   "slug": "savor",
@@ -256,7 +258,8 @@
     "framework": "React 18 + Vite",
     "source": "https://gallery.hanzo.ai/templates/prism-react"
    }
-  ]
+  ],
+  "demo": "https://edge.hanzo.app"
  },
  {
   "slug": "soar",
@@ -424,7 +427,8 @@
     "framework": "HTML/Gulp",
     "source": "https://gallery.hanzo.ai/templates/loop-html"
    }
-  ]
+  ],
+  "demo": "https://blocks.hanzo.app"
  },
  {
   "slug": "unfixed",
@@ -460,7 +464,8 @@
   "tier": 2,
   "rating": 4,
   "source": "https://gallery.hanzo.ai/templates/unity",
-  "preview": "https://gallery.hanzo.ai/screenshots/unity.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/unity.png",
+  "demo": "https://loop.hanzo.app"
  },
  {
   "slug": "canvas",
@@ -478,7 +483,8 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/canvas",
-  "preview": "https://gallery.hanzo.ai/screenshots/canvas.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/canvas.png",
+  "demo": "https://studio.hanzo.app"
  },
  {
   "slug": "vault",
@@ -515,7 +521,8 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/studio",
-  "preview": "https://gallery.hanzo.ai/screenshots/studio.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/studio.png",
+  "demo": "https://pixel.hanzo.app"
  },
  {
   "slug": "kalli",
@@ -551,7 +558,8 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/innovise",
-  "preview": "https://gallery.hanzo.ai/screenshots/innovise.png"
+  "preview": "",
+  "demo": "https://catalyst.hanzo.app"
  },
  {
   "slug": "drive",
