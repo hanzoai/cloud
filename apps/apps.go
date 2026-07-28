@@ -433,7 +433,7 @@ func Wire() []cloud.MountSpec {
 		// sessions with. Media stays a direct browser↔LiveKit WebRTC connection —
 		// only the admission decision is in this binary. This retired the
 		// standalone team-love pod.
-		{Name: "meet", Mount: meet.Mount},
+		{Name: "meet", Mount: meet.Mount, OwnsHealth: true},
 		{Name: "settings", Mount: settings.Mount, Shutdown: settings.Shutdown},
 		{Name: "prefs", Mount: prefs.Mount, Shutdown: prefs.Shutdown},
 		{Name: "notify", Mount: notify.Mount, OwnsHealth: true},

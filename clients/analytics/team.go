@@ -220,39 +220,78 @@ func teamSecret() string {
 	return s
 }
 
-// teamTenant resolves a Hanzo Team session token to the org it names. It is the fourth
-// entry in eventTenant's trust order and behaves like the other three: verified
-// SERVER-SIDE, fail-closed, and the org comes from the SIGNED claim — never the body,
-// never the Host.
+// teamTenant resolves a Hanzo Team workspace token to the org it names AND the
+// capability it carries. It is the fourth entry in eventTenant's trust order and
+// behaves like the other three: verified SERVER-SIDE, fail-closed, and the org comes
+// from the SIGNED claim — never the body, never the Host.
 //
 // token.Decode with verify=true checks the HMAC, exp and nbf, so an expired or forged
-// token resolves to nothing. Beyond that, two claims are refused even when the
-// signature is good, mirroring the posture the team surface already enforces
-// (hasWorkspaceAccess): a `readonly` or `guest` token is a REDUCED session, and full
-// unprojected write capability into the org's partition is not a reduced-session
-// privilege. Those callers fall through to the anonymous lane rather than 403 — see
-// the note in eventTenant on why a bearer degrades where a KEY refuses.
-func teamTenant(c *zip.Ctx) (string, bool) {
+// token resolves to nothing (and, because teamPresented names it, is REFUSED rather
+// than downgraded).
+//
+// CAPABILITY comes from the signed extra.role via the ONE predicate that reads it,
+// token.Privileged: a member writes unprojected, a guest writes PROJECTED into the
+// same org. This replaced a pair of string comparisons against extra.guest /
+// extra.readonly that were ported from upstream's hasWorkspaceAccess and were INERT
+// here — nothing in this repo has ever minted those claims, because upstream sets them
+// on guest-LINK tokens, a path this port does not have. The real reduced principal is
+// the workspace role, which selectWorkspace now signs. A guard that cannot fire is
+// worse than no guard: it reads as protection while a guest holds an owner-shaped
+// token.
+func teamTenant(c *zip.Ctx) (admission, bool) {
+	t, ok := verifyTeam(c)
+	if !ok {
+		return admission{}, false
+	}
+	org := t.Org()
+	if org == "" {
+		// A verified token with no tenant names nothing to write into. Refused rather
+		// than admitted with org="", which normalizeEvent would happily store as the
+		// tenant column and fanOut would forward under an empty org.
+		return admission{}, false
+	}
+	return admission{org: org, full: t.Privileged()}, true
+}
+
+// verifyTeam VERIFIES the request's bearer as a team token and returns it. The one
+// place this package validates a team credential, so "verified" cannot drift from
+// "used".
+func verifyTeam(c *zip.Ctx) (*token.Token, bool) {
 	secret := teamSecret()
 	if secret == "" {
-		return "", false
+		return nil, false
 	}
 	raw := teamBearer(c.Header("Authorization"))
 	if raw == "" {
-		return "", false
+		return nil, false
 	}
 	t, err := token.Decode(raw, secret, true)
 	if err != nil {
-		return "", false
+		return nil, false
 	}
-	if anyString(t.Extra["readonly"]) == "true" || anyString(t.Extra["guest"]) == "true" {
-		return "", false
+	return t, true
+}
+
+// teamPresented reports whether the caller presented something SHAPED like a team
+// token, without verifying it and without trusting a byte of it. It is what lets
+// presented() (event.go) refuse an expired or forged team token with 403 instead of
+// silently filing its rows under $public.
+//
+// The discriminator is the `account` claim: token.Generate requires it and an IAM
+// access token does not carry it, so this identifies the credential FAMILY without
+// deciding anything about its validity. Decoding with verify=false is safe precisely
+// because the answer is never used as authorization — only to choose between "refuse"
+// and "project".
+func teamPresented(c *zip.Ctx) bool {
+	raw := teamBearer(c.Header("Authorization"))
+	if raw == "" {
+		return false
 	}
-	org := anyString(t.Extra["org"])
-	if org == "" {
-		return "", false
+	t, err := token.Decode(raw, "", false)
+	if err != nil {
+		return false
 	}
-	return org, true
+	return strings.TrimSpace(t.Account) != ""
 }
 
 // teamBearer extracts the token from an "Authorization: Bearer <t>" header (scheme
