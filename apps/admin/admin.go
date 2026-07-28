@@ -561,7 +561,7 @@ func (o ops) overview(ctx context.Context, _ *core.None) (*overviewOut, error) {
 	// Fleet workload registry — the operator App-CR + drift observation via the paas seam
 	// (products.go). A nil/unready seam degrades to an honest-empty rollup (zeros, no error);
 	// a hard observation error marks the "fleet" source degraded without failing the overview.
-	fleetRows, fleetRoll, fleetErr := fleetProducts(ctx)
+	fleetRows, fleetRoll, fleetErr := fleetProducts(ctx, c)
 	sources = append(sources, core.SrcOf("fleet", fleetErr, len(fleetRows), now))
 
 	return &overviewOut{Status: core.OK, Data: &overviewData{

@@ -18,8 +18,9 @@ import (
 	"context"
 	"strings"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/core"
-	"github.com/hanzoai/cloud/apps/platform"
+	"github.com/zap-proto/zip"
 )
 
 // products lists the fleet workload registry: every operator App CR across the platform
@@ -37,10 +38,11 @@ import (
 // "phase":"Running","declaredTag":"v1.4.2","runningTag":"v1.4.2","latestTag":"","health":"green",
 // "drift":false,"driftSeverity":"ok","updated":""}],"data2":1}
 func products(ctx context.Context, in *productsIn) (*productsOut, error) {
-	if _, err := core.Admit(ctx); err != nil {
+	c, err := core.Admit(ctx)
+	if err != nil {
 		return nil, err
 	}
-	rows, _, err := fleetProducts(ctx)
+	rows, _, err := fleetProducts(ctx, c)
 	if err != nil {
 		return &productsOut{Status: core.Err, Msg: err.Error()}, nil
 	}
@@ -67,26 +69,32 @@ func products(ctx context.Context, in *productsIn) (*productsOut, error) {
 // are healthy (green), and how many are drifting.
 type productRollup struct{ Total, Active, Drift int }
 
-// fleetProducts observes the platform fleet through the platform seam and projects it onto the
-// productRow board shape, returning the rows plus the rollup the overview KPIs read. A nil
-// seam (PaaS not co-resident) or an unready k8s client yields an honest-empty registry with a
-// nil error, so both the board and the KPIs degrade to empty rather than failing; only a hard
-// observation error (e.g. an RBAC denial listing apps.hanzo.ai) surfaces as an error.
-func fleetProducts(ctx context.Context) ([]productRow, productRollup, error) {
-	fleet := platform.CurrentFleet()
-	if fleet == nil {
-		return []productRow{}, productRollup{}, nil
-	}
-	if ok, _ := fleet.Ready(); !ok {
-		return []productRow{}, productRollup{}, nil
-	}
-	views, err := fleet.Observe(ctx)
+// fleetProducts ASKS the platform app for the operator's fleet view and projects
+// it onto the productRow board, returning the rows plus the rollup the overview
+// KPIs read.
+//
+// It used to import apps/platform and call CurrentFleet(), which resolves a
+// package global — nil in any binary that does not mount platform, and admin is
+// its own binary. So the board rendered empty while linking client-go,
+// apimachinery and their applyconfigurations to do it: about 160 packages to
+// print strings it never received.
+//
+// An unmounted or unready observer still yields honest-empty with a nil error —
+// "the operator has not observed yet" is a real state, decided on platform's
+// side where the observer lives. A platform that cannot be REACHED is an error,
+// because an unreachable estate and an empty estate must never look alike.
+func fleetProducts(ctx context.Context, c *zip.Ctx) ([]productRow, productRollup, error) {
+	reply, err := cloud.Dial("platform").As(c).Call(ctx, "platform.fleet", nil)
 	if err != nil {
 		return nil, productRollup{}, err
 	}
-	rows := make([]productRow, 0, len(views))
+	apps, err := cloud.Apps(reply)
+	if err != nil {
+		return nil, productRollup{}, err
+	}
+	rows := make([]productRow, 0, len(apps))
 	var roll productRollup
-	for _, v := range views {
+	for _, v := range apps {
 		r := productFromView(v)
 		rows = append(rows, r)
 		roll.Total++
@@ -103,9 +111,9 @@ func fleetProducts(ctx context.Context) ([]productRow, productRollup, error) {
 // productFromView projects a paas fleet AppView onto a productRow: the declared/running tags
 // + operator-reconciled health/phase verbatim, the drift verdict rolled to a boolean +
 // severity, and the derived infra tier for the board's grouping.
-func productFromView(v platform.AppView) productRow {
+func productFromView(v cloud.App) productRow {
 	return productRow{
-		Name:          v.App,
+		Name:          v.Name,
 		Kind:          v.Role, // the operator's OWN declared class (sql|kv|generic|ingress) or ""
 		Tier:          tierOf(v),
 		Org:           v.Org,
@@ -118,8 +126,8 @@ func productFromView(v platform.AppView) productRow {
 		RunningTag:    v.RunningTag,
 		LatestTag:     v.LatestTag,
 		Health:        healthLabel(v.Health),
-		Drift:         v.Drift.Severity != platform.SeverityOK,
-		DriftSeverity: string(v.Drift.Severity),
+		Drift:         v.DriftSeverity != driftOK,
+		DriftSeverity: v.DriftSeverity,
 		Updated:       "", // the CR carries no per-row reconcile timestamp; observation is live
 	}
 }
@@ -133,7 +141,7 @@ func productFromView(v platform.AppView) productRow {
 // for sql/kv/generic/ingress), so the board groups on this derivation. A declarative
 // `hanzo.ai/tier` label on the App CRs would make it authoritative — a universe/operator
 // follow-up; until then this stays the single, documented classifier (one place, no fork).
-func tierOf(v platform.AppView) string {
+func tierOf(v cloud.App) string {
 	// A workload in a tenant namespace is a customer / PaaS deployment, not platform infra.
 	// (Today the paas observer scans only the platform namespaces, so this is future-proofing
 	// for when the scan federates tenant/other clusters.)
@@ -160,6 +168,12 @@ func tierOf(v platform.AppView) string {
 	}
 	return "app" // a general platform service (chat, iam, console, engine, …)
 }
+
+// driftOK is the operator's "no drift" severity. It is compared as the string it
+// arrives as: the board's only question is whether the operator flagged
+// anything, so carrying the enum's type across the wire would buy nothing and
+// cost the caller the package that declares it.
+const driftOK = "ok"
 
 // healthLabel maps the paas health vocabulary ("" ⇒ unknown) onto the ProductHealth the SPA
 // decodes (green|yellow|red|unknown) — an unknown health is honest, never a fabricated green.

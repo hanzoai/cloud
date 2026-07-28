@@ -174,3 +174,114 @@ func BalanceReq(payload []byte) (subject, currency string, err error) {
 	r := m.Root()
 	return r.Text(fbSubjectOff), r.Text(fbCurrencyOff), nil
 }
+
+// ---- platform.fleet: () -> []App ----
+//
+// The operator's view of every deployed app. admin's product board renders it
+// and nothing more, so what crosses is the projection, not the k8s machinery
+// that produced it: reading this by import pulled client-go, apimachinery and
+// their applyconfigurations — about 160 packages — into a console that only
+// prints strings, and still rendered empty, because CurrentFleet reads a
+// package global that is nil in any binary platform does not mount.
+
+// App is one deployed app as the platform observer sees it. Every field is a
+// value the board prints; Drift is pre-rolled to the severity string the
+// operator computed, because the board's only question is whether it is "ok".
+type App struct {
+	Org, Name, Env, Repo, Role         string
+	Cluster, Namespace, Phase, Health  string
+	DeclaredTag, RunningTag, LatestTag string
+	// Registry is the image repository the workload actually runs, which is what
+	// the board's tier classification reads — a real property of the deployment,
+	// never an operator-typed label.
+	Registry      string
+	DriftSeverity string
+}
+
+const (
+	aOrgOff     = 0
+	aNameOff    = 8
+	aEnvOff     = 16
+	aRepoOff    = 24
+	aRoleOff    = 32
+	aClusterOff = 40
+	aNsOff      = 48
+	aPhaseOff   = 56
+	aHealthOff  = 64
+	aDeclOff    = 72
+	aRunOff     = 80
+	aLatestOff  = 88
+	aDriftOff   = 96
+	aRegOff     = 104
+	aFixed      = 112
+)
+
+// PutApps packs a platform.fleet reply: a count frame, then one frame per app.
+func PutApps(apps []App) []byte {
+	var out bytes.Buffer
+	h := zap.NewBuilder(8 + 64)
+	hb := h.StartObject(8)
+	hb.SetUint32(0, uint32(len(apps)))
+	hb.FinishAsRoot()
+	_ = writeFrame(&out, h.Finish())
+	for _, a := range apps {
+		b := zap.NewBuilder(len(a.Org) + len(a.Name) + len(a.Repo) + len(a.Namespace) + aFixed + 256)
+		ob := b.StartObject(aFixed)
+		ob.SetText(aOrgOff, a.Org)
+		ob.SetText(aNameOff, a.Name)
+		ob.SetText(aEnvOff, a.Env)
+		ob.SetText(aRepoOff, a.Repo)
+		ob.SetText(aRoleOff, a.Role)
+		ob.SetText(aClusterOff, a.Cluster)
+		ob.SetText(aNsOff, a.Namespace)
+		ob.SetText(aPhaseOff, a.Phase)
+		ob.SetText(aHealthOff, a.Health)
+		ob.SetText(aDeclOff, a.DeclaredTag)
+		ob.SetText(aRunOff, a.RunningTag)
+		ob.SetText(aLatestOff, a.LatestTag)
+		ob.SetText(aDriftOff, a.DriftSeverity)
+		ob.SetText(aRegOff, a.Registry)
+		ob.SetText(aRegOff, a.Registry)
+		ob.FinishAsRoot()
+		_ = writeFrame(&out, b.Finish())
+	}
+	return out.Bytes()
+}
+
+// Apps unpacks one. The count is the header's promise and the frames are the
+// delivery: a short payload is an error, never a shorter list, so a board can
+// never quietly render a partial fleet as the whole fleet.
+func Apps(payload []byte) ([]App, error) {
+	r := bytes.NewReader(payload)
+	hb, err := readFrame(r)
+	if err != nil {
+		return nil, fmt.Errorf("apps: header: %w", err)
+	}
+	hm, err := zap.Parse(hb)
+	if err != nil {
+		return nil, fmt.Errorf("apps: header: %w", err)
+	}
+	n := int(hm.Root().Uint32(0))
+	out := make([]App, 0, n)
+	for i := 0; i < n; i++ {
+		fb, err := readFrame(r)
+		if err != nil {
+			return nil, fmt.Errorf("apps: %d of %d: %w", i+1, n, err)
+		}
+		m, err := zap.Parse(fb)
+		if err != nil {
+			return nil, fmt.Errorf("apps: %d of %d: %w", i+1, n, err)
+		}
+		v := m.Root()
+		out = append(out, App{
+			Org: v.Text(aOrgOff), Name: v.Text(aNameOff), Env: v.Text(aEnvOff),
+			Repo: v.Text(aRepoOff), Role: v.Text(aRoleOff),
+			Cluster: v.Text(aClusterOff), Namespace: v.Text(aNsOff),
+			Phase: v.Text(aPhaseOff), Health: v.Text(aHealthOff),
+			DeclaredTag: v.Text(aDeclOff), RunningTag: v.Text(aRunOff),
+			LatestTag: v.Text(aLatestOff), DriftSeverity: v.Text(aDriftOff),
+			Registry: v.Text(aRegOff),
+		})
+	}
+	return out, nil
+}
