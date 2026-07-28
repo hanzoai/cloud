@@ -490,6 +490,47 @@ HIP-0026); never read a raw request header for scope.
   identity vocabulary is org-native regardless; only the on-cluster string waits on
   an infrastructure migration.
 
+## API keys are ONE noun (`/v1/keys`), and the type is a FIELD
+
+`POST` creates, `DELETE` revokes, `GET` lists. `clients/account/account.go`.
+`mint`, `issue` and `revoke` are HTTP methods, never path segments — the concept
+previously had four names (`/v1/iam/mint-user-keys`, `/v1/iam/revoke-user-keys`,
+`/v1/iam/keys`, `/v1/ingest/keys`) and the only honest one 404'd.
+
+```
+GET    /v1/keys                          -> {keys:[{type,prefix,key?,createdAt}]}   no secret
+POST   /v1/keys   {"type":"publishable"} -> {type,key}    the key, ONCE
+DELETE /v1/keys?type=publishable         -> {ok,type}
+```
+
+**Two types, and the type is the only thing that differs.** `secret` (`sk-`)
+resolves to the USER, so it is session-equivalent and belongs on a server.
+`publishable` (`pk-`) resolves to just the ORG, so it is safe in a browser bundle
+and covers analytics, product insights and error capture as ONE key. They are two
+IAM rows, so a user holds both and rotating the browser key does not revoke the API
+key. An unrecognized type is REFUSED, never defaulted — handing an `sk-` to someone
+who asked for a browser key is a credential in the wrong place.
+
+**Do NOT spell a public resource under `/v1/iam`.** api.hanzo.ai routes `/v1/iam/*`
+to the IAM service (ingress router `api-hanzo-ai-iam-api`), so anything cloud mounts
+there is unreachable at the only host callers use: the request lands on IAM's Guard
+and 401s. The tell is the body — `{"status":401,"error":"authentication required"}`
+is IAM's Guard; cloud's own refusal is a 403. `/v1/iam/keys` survives ONLY as a thin
+deprecated alias (same handlers, RFC 8594 `Deprecation` + `Link`) for the go:embed
+console, which addresses cloud's own origin.
+
+**A publishable key has its own resolve door.** `OrgForKey` (`auth_apikey.go`) sends
+a `pk-` to IAM's `resolve-key` (org only, never a principal) and a secret key to
+`get-user?accessKey` (the principal). IAM refuses a `pk-` at `get-user` BY DESIGN,
+so routing every prefix to that one door — which is what cloud used to do — meant a
+publishable key resolved to nobody and could not attribute a beacon. Separate
+caches, because the two answers are different types and must not be confusable.
+Requires `IAM_PUBLISHABLE_RESOLVE_APPS`, which is fail-closed.
+
+**GET reads the KEY ROWS, never the user row.** The mint writes a key row; a read of
+`schema.User.AccessKey` reports "no key" immediately after a successful POST. That is
+the "key never listed" bug and it has recurred twice.
+
 ## Hanzo Company (`clients/company`, `/v1/company`)
 
 The Stripe-Atlas-class incorporation + fundraising product: ONE formation state
