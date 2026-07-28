@@ -161,6 +161,14 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// (ingestEvents). Every other route below is a thin alias/shim delegating to it.
 	app.Post("/v1/event", cloud.Handle(s, eventIngest))
 
+	// /v1/event/collect — the Hanzo Team SPA's door (team.go). A second WIRE, in the
+	// same sense /v1/insights/e is one: the SPA is a published bundle that POSTs a
+	// bare array of {event, properties, timestamp(ms), distinct_id}, which the
+	// canonical decoder would accept and then drop whole. Not an alias — decodeTeam
+	// is the only thing that differs, and the /collect suffix is the SPA's, appended
+	// to ANALYTICS_COLLECTOR_URL. This retired the standalone team-analytics pod.
+	app.Post("/v1/event/collect", cloud.Handle(s, teamCollect))
+
 	// /v1/ingest — a THIN DEPRECATED ALIAS of /v1/event (delegates to the exact
 	// eventHandle logic: pk_ auth now lives on the canonical door). /v1/ingest/keys
 	// mints a pk_ for the caller's org (minting is a distinct concern, not ingest);

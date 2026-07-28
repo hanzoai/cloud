@@ -116,6 +116,7 @@ import (
 	"github.com/hanzoai/cloud/clients/legal"
 	"github.com/hanzoai/cloud/clients/link"
 	"github.com/hanzoai/cloud/clients/marketing"
+	"github.com/hanzoai/cloud/clients/meet"
 	"github.com/hanzoai/cloud/clients/marketplace"
 	"github.com/hanzoai/cloud/clients/ml"
 	"github.com/hanzoai/cloud/clients/notify"
@@ -426,6 +427,13 @@ func Wire() []cloud.MountSpec {
 		{Name: "cloudflare", Mount: cloudflare.Mount},
 		{Name: "sbom", Mount: sbom.Mount, OwnsHealth: true},
 		{Name: "team", Mount: team.Mount, Shutdown: ctxShutdown(team.Shutdown)},
+		// The virtual office's control plane (/v1/meet): mints a per-room LiveKit
+		// join token for a verified team member. Mounts after team because it
+		// verifies the caller with the SAME SERVER_SECRET that subsystem signs
+		// sessions with. Media stays a direct browser↔LiveKit WebRTC connection —
+		// only the admission decision is in this binary. This retired the
+		// standalone team-love pod.
+		{Name: "meet", Mount: meet.Mount},
 		{Name: "settings", Mount: settings.Mount, Shutdown: settings.Shutdown},
 		{Name: "prefs", Mount: prefs.Mount, Shutdown: prefs.Shutdown},
 		{Name: "notify", Mount: notify.Mount, OwnsHealth: true},

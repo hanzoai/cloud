@@ -131,6 +131,18 @@ func eventTenant(c *zip.Ctx) (string, bool) {
 			return org, true
 		}
 	}
+	// A Hanzo Team session token (HS256 over SERVER_SECRET, org in the signed
+	// extra.org) — the credential the team SPA already holds. It is a PLATFORM
+	// credential, so it belongs in the trust order rather than on the door that
+	// happens to need it, and it therefore works on every door (team.go).
+	//
+	// It is LAST because it is the narrowest: the other three are issued to be
+	// API credentials, while this one is a browser session that a user's tab
+	// carries. Ordering it after them means a request holding both is attributed
+	// to the deliberate API credential, never to whatever tab it came from.
+	if org, ok := teamTenant(c); ok {
+		return org, true
+	}
 	return "", false
 }
 
