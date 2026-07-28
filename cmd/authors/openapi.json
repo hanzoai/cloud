@@ -1,0 +1,151 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "admin"
+    },
+    {
+      "name": "authors"
+    }
+  ],
+  "paths": {
+    "/v1/admin/authors": {
+      "get": {
+        "operationId": "get_v1_admin_authors",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/authors/sweep": {
+      "post": {
+        "operationId": "post_v1_admin_authors_sweep",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/authors/{id}/approve": {
+      "post": {
+        "operationId": "post_v1_admin_authors_by_id_approve",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/admin/authors/{id}/basis": {
+      "get": {
+        "operationId": "get_v1_admin_authors_by_id_basis",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/admin/authors/{id}/payout": {
+      "post": {
+        "operationId": "post_v1_admin_authors_by_id_payout",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/admin/authors/{id}/suspend": {
+      "post": {
+        "operationId": "post_v1_admin_authors_by_id_suspend",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/authors": {
+      "get": {
+        "operationId": "get_v1_authors",
+        "tags": [
+          "authors"
+        ]
+      }
+    },
+    "/v1/authors/basis": {
+      "get": {
+        "operationId": "get_v1_authors_basis",
+        "tags": [
+          "authors"
+        ]
+      }
+    },
+    "/v1/authors/connect": {
+      "post": {
+        "operationId": "post_v1_authors_connect",
+        "tags": [
+          "authors"
+        ]
+      }
+    },
+    "/v1/authors/deploys/record": {
+      "post": {
+        "operationId": "post_v1_authors_deploys_record",
+        "tags": [
+          "authors"
+        ]
+      }
+    },
+    "/v1/authors/repos/verify": {
+      "post": {
+        "operationId": "post_v1_authors_repos_verify",
+        "tags": [
+          "authors"
+        ]
+      }
+    }
+  }
+}

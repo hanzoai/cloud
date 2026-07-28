@@ -1,0 +1,594 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "platform"
+    },
+    {
+      "name": "projects"
+    },
+    {
+      "name": "sites"
+    }
+  ],
+  "paths": {
+    "/v1/platform/sites": {
+      "get": {
+        "operationId": "get_v1_platform_sites",
+        "tags": [
+          "platform"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_platform_sites",
+        "tags": [
+          "platform"
+        ]
+      }
+    },
+    "/v1/platform/sites/{slug}": {
+      "delete": {
+        "operationId": "delete_v1_platform_sites_by_slug",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_platform_sites_by_slug",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_platform_sites_by_slug",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/sites/{slug}/deploy": {
+      "post": {
+        "operationId": "post_v1_platform_sites_by_slug_deploy",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/sites/{slug}/deployments": {
+      "get": {
+        "operationId": "get_v1_platform_sites_by_slug_deployments",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/sites/{slug}/deployments/{id}": {
+      "get": {
+        "operationId": "get_v1_platform_sites_by_slug_deployments_by_id",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/sites/{slug}/domains": {
+      "get": {
+        "operationId": "get_v1_platform_sites_by_slug_domains",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_platform_sites_by_slug_domains",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/sites/{slug}/publish": {
+      "post": {
+        "operationId": "post_v1_platform_sites_by_slug_publish",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/sites/{slug}/purge": {
+      "post": {
+        "operationId": "post_v1_platform_sites_by_slug_purge",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/sites/{slug}/releases": {
+      "get": {
+        "operationId": "get_v1_platform_sites_by_slug_releases",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_platform_sites_by_slug_releases",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/sites/{slug}/releases/{release}/activate": {
+      "post": {
+        "operationId": "post_v1_platform_sites_by_slug_releases_by_release_activate",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "release",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/projects": {
+      "get": {
+        "operationId": "get_v1_projects",
+        "tags": [
+          "projects"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_projects",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/v1/projects/fork": {
+      "post": {
+        "operationId": "post_v1_projects_fork",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/v1/projects/{slug}": {
+      "delete": {
+        "operationId": "delete_v1_projects_by_slug",
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_projects_by_slug",
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_projects_by_slug",
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/projects/{slug}/deploy": {
+      "post": {
+        "operationId": "post_v1_projects_by_slug_deploy",
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/projects/{slug}/deployments": {
+      "get": {
+        "operationId": "get_v1_projects_by_slug_deployments",
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/projects/{slug}/deployments/{id}": {
+      "get": {
+        "operationId": "get_v1_projects_by_slug_deployments_by_id",
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/projects/{slug}/deployments/{id}/complete": {
+      "post": {
+        "operationId": "post_v1_projects_by_slug_deployments_by_id_complete",
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/projects/{slug}/domains": {
+      "get": {
+        "operationId": "get_v1_projects_by_slug_domains",
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_projects_by_slug_domains",
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/projects/{slug}/purge": {
+      "post": {
+        "operationId": "post_v1_projects_by_slug_purge",
+        "tags": [
+          "projects"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sites": {
+      "get": {
+        "operationId": "get_v1_sites",
+        "tags": [
+          "sites"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_sites",
+        "tags": [
+          "sites"
+        ]
+      }
+    },
+    "/v1/sites/deploy": {
+      "post": {
+        "operationId": "post_v1_sites_deploy",
+        "tags": [
+          "sites"
+        ]
+      }
+    },
+    "/v1/sites/{slug}/publish": {
+      "post": {
+        "operationId": "post_v1_sites_by_slug_publish",
+        "tags": [
+          "sites"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sites/{slug}/releases": {
+      "get": {
+        "operationId": "get_v1_sites_by_slug_releases",
+        "tags": [
+          "sites"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_sites_by_slug_releases",
+        "tags": [
+          "sites"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sites/{slug}/releases/{release}/activate": {
+      "post": {
+        "operationId": "post_v1_sites_by_slug_releases_by_release_activate",
+        "tags": [
+          "sites"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "release",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,234 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "guide"
+    }
+  ],
+  "paths": {
+    "/v1/guide": {
+      "get": {
+        "operationId": "get_v1_guide",
+        "tags": [
+          "guide"
+        ]
+      }
+    },
+    "/v1/guide/actions": {
+      "get": {
+        "operationId": "get_v1_guide_actions",
+        "tags": [
+          "guide"
+        ]
+      }
+    },
+    "/v1/guide/analytics": {
+      "get": {
+        "operationId": "get_v1_guide_analytics",
+        "tags": [
+          "guide"
+        ]
+      }
+    },
+    "/v1/guide/blueprint/": {
+      "get": {
+        "operationId": "get_v1_guide_blueprint",
+        "tags": [
+          "guide"
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_guide_blueprint",
+        "tags": [
+          "guide"
+        ]
+      }
+    },
+    "/v1/guide/blueprint/versions": {
+      "get": {
+        "operationId": "get_v1_guide_blueprint_versions",
+        "tags": [
+          "guide"
+        ]
+      }
+    },
+    "/v1/guide/blueprint/{collection}/{id}": {
+      "patch": {
+        "operationId": "patch_v1_guide_blueprint_by_collection_by_id",
+        "tags": [
+          "guide"
+        ],
+        "parameters": [
+          {
+            "name": "collection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/guide/chat": {
+      "post": {
+        "operationId": "post_v1_guide_chat",
+        "tags": [
+          "guide"
+        ]
+      }
+    },
+    "/v1/guide/curriculum": {
+      "delete": {
+        "operationId": "delete_v1_guide_curriculum",
+        "tags": [
+          "guide"
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_guide_curriculum",
+        "tags": [
+          "guide"
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_guide_curriculum",
+        "tags": [
+          "guide"
+        ]
+      }
+    },
+    "/v1/guide/profile": {
+      "get": {
+        "operationId": "get_v1_guide_profile",
+        "tags": [
+          "guide"
+        ]
+      }
+    },
+    "/v1/guide/steps/{id}/do": {
+      "post": {
+        "operationId": "post_v1_guide_steps_by_id_do",
+        "tags": [
+          "guide"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/guide/steps/{id}/done": {
+      "post": {
+        "operationId": "post_v1_guide_steps_by_id_done",
+        "tags": [
+          "guide"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/guide/steps/{id}/reset": {
+      "post": {
+        "operationId": "post_v1_guide_steps_by_id_reset",
+        "tags": [
+          "guide"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/guide/steps/{id}/skip": {
+      "post": {
+        "operationId": "post_v1_guide_steps_by_id_skip",
+        "tags": [
+          "guide"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/guide/steps/{id}/start": {
+      "post": {
+        "operationId": "post_v1_guide_steps_by_id_start",
+        "tags": [
+          "guide"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/guide/strategies": {
+      "get": {
+        "operationId": "get_v1_guide_strategies",
+        "tags": [
+          "guide"
+        ]
+      }
+    },
+    "/v1/guide/suggest": {
+      "get": {
+        "operationId": "get_v1_guide_suggest",
+        "tags": [
+          "guide"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "websearch"
+    }
+  ],
+  "paths": {
+    "/v1/websearch/scrape": {
+      "post": {
+        "operationId": "post_v1_websearch_scrape",
+        "tags": [
+          "websearch"
+        ]
+      }
+    },
+    "/v1/websearch/search": {
+      "delete": {
+        "operationId": "delete_v1_websearch_search",
+        "tags": [
+          "websearch"
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_websearch_search",
+        "tags": [
+          "websearch"
+        ]
+      },
+      "options": {
+        "operationId": "options_v1_websearch_search",
+        "tags": [
+          "websearch"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_websearch_search",
+        "tags": [
+          "websearch"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_websearch_search",
+        "tags": [
+          "websearch"
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_websearch_search",
+        "tags": [
+          "websearch"
+        ]
+      },
+      "trace": {
+        "operationId": "trace_v1_websearch_search",
+        "tags": [
+          "websearch"
+        ]
+      }
+    },
+    "/v1/websearch/v1/scrape": {
+      "post": {
+        "operationId": "post_v1_websearch_v1_scrape",
+        "tags": [
+          "websearch"
+        ]
+      }
+    }
+  }
+}

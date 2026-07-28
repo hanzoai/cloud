@@ -1,0 +1,463 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "o11y"
+    },
+    {
+      "name": "sentry"
+    }
+  ],
+  "paths": {
+    "/v1/o11y/annotation-queues": {
+      "get": {
+        "operationId": "get_v1_o11y_annotation-queues",
+        "tags": [
+          "o11y"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_o11y_annotation-queues",
+        "tags": [
+          "o11y"
+        ]
+      }
+    },
+    "/v1/o11y/annotation-queues/{id}": {
+      "delete": {
+        "operationId": "delete_v1_o11y_annotation-queues_by_id",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_o11y_annotation-queues_by_id",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_o11y_annotation-queues_by_id",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/o11y/annotation-queues/{id}/items": {
+      "get": {
+        "operationId": "get_v1_o11y_annotation-queues_by_id_items",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_o11y_annotation-queues_by_id_items",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/o11y/annotation-queues/{id}/items/{itemId}": {
+      "patch": {
+        "operationId": "patch_v1_o11y_annotation-queues_by_id_items_by_itemid",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "itemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/o11y/api/v2/healthz": {
+      "get": {
+        "operationId": "get_v1_o11y_api_v2_healthz",
+        "tags": [
+          "o11y"
+        ]
+      }
+    },
+    "/v1/o11y/api/v2/livez": {
+      "get": {
+        "operationId": "get_v1_o11y_api_v2_livez",
+        "tags": [
+          "o11y"
+        ]
+      }
+    },
+    "/v1/o11y/api/v2/readyz": {
+      "get": {
+        "operationId": "get_v1_o11y_api_v2_readyz",
+        "tags": [
+          "o11y"
+        ]
+      }
+    },
+    "/v1/o11y/logs": {
+      "get": {
+        "operationId": "get_v1_o11y_logs",
+        "tags": [
+          "o11y"
+        ]
+      }
+    },
+    "/v1/o11y/metrics": {
+      "get": {
+        "operationId": "get_v1_o11y_metrics",
+        "tags": [
+          "o11y"
+        ]
+      }
+    },
+    "/v1/o11y/query": {
+      "post": {
+        "operationId": "post_v1_o11y_query",
+        "tags": [
+          "o11y"
+        ]
+      }
+    },
+    "/v1/o11y/query_range": {
+      "post": {
+        "operationId": "post_v1_o11y_query_range",
+        "tags": [
+          "o11y"
+        ]
+      }
+    },
+    "/v1/o11y/sessions": {
+      "get": {
+        "operationId": "get_v1_o11y_sessions",
+        "tags": [
+          "o11y"
+        ]
+      }
+    },
+    "/v1/o11y/status": {
+      "get": {
+        "operationId": "get_v1_o11y_status",
+        "tags": [
+          "o11y"
+        ]
+      }
+    },
+    "/v1/o11y/vm/query": {
+      "get": {
+        "operationId": "get_v1_o11y_vm_query",
+        "tags": [
+          "o11y"
+        ]
+      }
+    },
+    "/v1/o11y/vm/query_range": {
+      "get": {
+        "operationId": "get_v1_o11y_vm_query_range",
+        "tags": [
+          "o11y"
+        ]
+      }
+    },
+    "/v1/o11y/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_v1_o11y_by_wildcard1",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_o11y_by_wildcard1",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "options": {
+        "operationId": "options_v1_o11y_by_wildcard1",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_o11y_by_wildcard1",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_o11y_by_wildcard1",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_o11y_by_wildcard1",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "trace": {
+        "operationId": "trace_v1_o11y_by_wildcard1",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sentry/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_v1_sentry_by_wildcard1",
+        "tags": [
+          "sentry"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_sentry_by_wildcard1",
+        "tags": [
+          "sentry"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "options": {
+        "operationId": "options_v1_sentry_by_wildcard1",
+        "tags": [
+          "sentry"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_sentry_by_wildcard1",
+        "tags": [
+          "sentry"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_sentry_by_wildcard1",
+        "tags": [
+          "sentry"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_sentry_by_wildcard1",
+        "tags": [
+          "sentry"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "trace": {
+        "operationId": "trace_v1_sentry_by_wildcard1",
+        "tags": [
+          "sentry"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

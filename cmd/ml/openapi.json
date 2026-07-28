@@ -1,0 +1,235 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "ml"
+    },
+    {
+      "name": "train"
+    }
+  ],
+  "paths": {
+    "/v1/ml/health": {
+      "get": {
+        "operationId": "get_v1_ml_health",
+        "tags": [
+          "ml"
+        ]
+      }
+    },
+    "/v1/ml/models": {
+      "get": {
+        "operationId": "get_v1_ml_models",
+        "tags": [
+          "ml"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_ml_models",
+        "tags": [
+          "ml"
+        ]
+      }
+    },
+    "/v1/ml/models/{name}": {
+      "delete": {
+        "operationId": "delete_v1_ml_models_by_name",
+        "tags": [
+          "ml"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_ml_models_by_name",
+        "tags": [
+          "ml"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_ml_models_by_name",
+        "tags": [
+          "ml"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/ml/models/{name}/predict": {
+      "post": {
+        "operationId": "post_v1_ml_models_by_name_predict",
+        "tags": [
+          "ml"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/train/experiments": {
+      "get": {
+        "operationId": "get_v1_train_experiments",
+        "tags": [
+          "train"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_train_experiments",
+        "tags": [
+          "train"
+        ]
+      }
+    },
+    "/v1/train/experiments/{name}": {
+      "delete": {
+        "operationId": "delete_v1_train_experiments_by_name",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_train_experiments_by_name",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/train/experiments/{name}/trials": {
+      "get": {
+        "operationId": "get_v1_train_experiments_by_name_trials",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/train/health": {
+      "get": {
+        "operationId": "get_v1_train_health",
+        "tags": [
+          "train"
+        ]
+      }
+    },
+    "/v1/train/jobs": {
+      "get": {
+        "operationId": "get_v1_train_jobs",
+        "tags": [
+          "train"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_train_jobs",
+        "tags": [
+          "train"
+        ]
+      }
+    },
+    "/v1/train/jobs/{name}": {
+      "delete": {
+        "operationId": "delete_v1_train_jobs_by_name",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_train_jobs_by_name",
+        "tags": [
+          "train"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

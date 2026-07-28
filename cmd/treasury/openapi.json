@@ -1,0 +1,87 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "admin"
+    },
+    {
+      "name": "finance"
+    }
+  ],
+  "paths": {
+    "/v1/admin/treasury": {
+      "get": {
+        "operationId": "get_v1_admin_treasury",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/treasury/anchor": {
+      "post": {
+        "operationId": "post_v1_admin_treasury_anchor",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/treasury/bind-anchor": {
+      "post": {
+        "operationId": "post_v1_admin_treasury_bind-anchor",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/treasury/policy": {
+      "post": {
+        "operationId": "post_v1_admin_treasury_policy",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/treasury/seed": {
+      "post": {
+        "operationId": "post_v1_admin_treasury_seed",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/treasury/sweep": {
+      "post": {
+        "operationId": "post_v1_admin_treasury_sweep",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/finance/accounts": {
+      "get": {
+        "operationId": "get_v1_finance_accounts",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/v1/finance/treasury": {
+      "get": {
+        "operationId": "get_v1_finance_treasury",
+        "tags": [
+          "finance"
+        ]
+      }
+    }
+  }
+}

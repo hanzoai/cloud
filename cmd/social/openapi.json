@@ -1,0 +1,182 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "social"
+    }
+  ],
+  "paths": {
+    "/v1/social/accounts": {
+      "get": {
+        "operationId": "get_v1_social_accounts",
+        "tags": [
+          "social"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_social_accounts",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/v1/social/accounts/{id}": {
+      "delete": {
+        "operationId": "delete_v1_social_accounts_by_id",
+        "tags": [
+          "social"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_social_accounts_by_id",
+        "tags": [
+          "social"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_social_accounts_by_id",
+        "tags": [
+          "social"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/social/posts": {
+      "get": {
+        "operationId": "get_v1_social_posts",
+        "tags": [
+          "social"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_social_posts",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/v1/social/posts/{id}": {
+      "delete": {
+        "operationId": "delete_v1_social_posts_by_id",
+        "tags": [
+          "social"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_social_posts_by_id",
+        "tags": [
+          "social"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_social_posts_by_id",
+        "tags": [
+          "social"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/social/posts/{id}/publish": {
+      "post": {
+        "operationId": "post_v1_social_posts_by_id_publish",
+        "tags": [
+          "social"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/social/providers": {
+      "get": {
+        "operationId": "get_v1_social_providers",
+        "tags": [
+          "social"
+        ]
+      }
+    },
+    "/v1/social/summary": {
+      "get": {
+        "operationId": "get_v1_social_summary",
+        "tags": [
+          "social"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,661 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "download"
+    },
+    {
+      "name": "exec"
+    },
+    {
+      "name": "files"
+    },
+    {
+      "name": "upload"
+    }
+  ],
+  "paths": {
+    "/v1/download": {
+      "delete": {
+        "operationId": "delete_v1_download",
+        "tags": [
+          "download"
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_download",
+        "tags": [
+          "download"
+        ]
+      },
+      "options": {
+        "operationId": "options_v1_download",
+        "tags": [
+          "download"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_download",
+        "tags": [
+          "download"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_download",
+        "tags": [
+          "download"
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_download",
+        "tags": [
+          "download"
+        ]
+      },
+      "trace": {
+        "operationId": "trace_v1_download",
+        "tags": [
+          "download"
+        ]
+      }
+    },
+    "/v1/download/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_v1_download_by_wildcard1",
+        "tags": [
+          "download"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_download_by_wildcard1",
+        "tags": [
+          "download"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "options": {
+        "operationId": "options_v1_download_by_wildcard1",
+        "tags": [
+          "download"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_download_by_wildcard1",
+        "tags": [
+          "download"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_download_by_wildcard1",
+        "tags": [
+          "download"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_download_by_wildcard1",
+        "tags": [
+          "download"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "trace": {
+        "operationId": "trace_v1_download_by_wildcard1",
+        "tags": [
+          "download"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/exec": {
+      "delete": {
+        "operationId": "delete_v1_exec",
+        "tags": [
+          "exec"
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_exec",
+        "tags": [
+          "exec"
+        ]
+      },
+      "options": {
+        "operationId": "options_v1_exec",
+        "tags": [
+          "exec"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_exec",
+        "tags": [
+          "exec"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_exec",
+        "tags": [
+          "exec"
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_exec",
+        "tags": [
+          "exec"
+        ]
+      },
+      "trace": {
+        "operationId": "trace_v1_exec",
+        "tags": [
+          "exec"
+        ]
+      }
+    },
+    "/v1/exec/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_v1_exec_by_wildcard1",
+        "tags": [
+          "exec"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_exec_by_wildcard1",
+        "tags": [
+          "exec"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "options": {
+        "operationId": "options_v1_exec_by_wildcard1",
+        "tags": [
+          "exec"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_exec_by_wildcard1",
+        "tags": [
+          "exec"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_exec_by_wildcard1",
+        "tags": [
+          "exec"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_exec_by_wildcard1",
+        "tags": [
+          "exec"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "trace": {
+        "operationId": "trace_v1_exec_by_wildcard1",
+        "tags": [
+          "exec"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/files": {
+      "delete": {
+        "operationId": "delete_v1_files",
+        "tags": [
+          "files"
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_files",
+        "tags": [
+          "files"
+        ]
+      },
+      "options": {
+        "operationId": "options_v1_files",
+        "tags": [
+          "files"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_files",
+        "tags": [
+          "files"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_files",
+        "tags": [
+          "files"
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_files",
+        "tags": [
+          "files"
+        ]
+      },
+      "trace": {
+        "operationId": "trace_v1_files",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/v1/files/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_v1_files_by_wildcard1",
+        "tags": [
+          "files"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_files_by_wildcard1",
+        "tags": [
+          "files"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "options": {
+        "operationId": "options_v1_files_by_wildcard1",
+        "tags": [
+          "files"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_files_by_wildcard1",
+        "tags": [
+          "files"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_files_by_wildcard1",
+        "tags": [
+          "files"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_files_by_wildcard1",
+        "tags": [
+          "files"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "trace": {
+        "operationId": "trace_v1_files_by_wildcard1",
+        "tags": [
+          "files"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/upload": {
+      "delete": {
+        "operationId": "delete_v1_upload",
+        "tags": [
+          "upload"
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_upload",
+        "tags": [
+          "upload"
+        ]
+      },
+      "options": {
+        "operationId": "options_v1_upload",
+        "tags": [
+          "upload"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_upload",
+        "tags": [
+          "upload"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_upload",
+        "tags": [
+          "upload"
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_upload",
+        "tags": [
+          "upload"
+        ]
+      },
+      "trace": {
+        "operationId": "trace_v1_upload",
+        "tags": [
+          "upload"
+        ]
+      }
+    },
+    "/v1/upload/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_v1_upload_by_wildcard1",
+        "tags": [
+          "upload"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_upload_by_wildcard1",
+        "tags": [
+          "upload"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "options": {
+        "operationId": "options_v1_upload_by_wildcard1",
+        "tags": [
+          "upload"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_upload_by_wildcard1",
+        "tags": [
+          "upload"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_upload_by_wildcard1",
+        "tags": [
+          "upload"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_upload_by_wildcard1",
+        "tags": [
+          "upload"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "trace": {
+        "operationId": "trace_v1_upload_by_wildcard1",
+        "tags": [
+          "upload"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

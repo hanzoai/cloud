@@ -1,0 +1,302 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "automations"
+    }
+  ],
+  "paths": {
+    "/v1/automations/connectors": {
+      "get": {
+        "operationId": "get_v1_automations_connectors",
+        "tags": [
+          "automations"
+        ]
+      }
+    },
+    "/v1/automations/connectors/{id}/run": {
+      "post": {
+        "operationId": "post_v1_automations_connectors_by_id_run",
+        "tags": [
+          "automations"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/automations/flows": {
+      "get": {
+        "operationId": "get_v1_automations_flows",
+        "tags": [
+          "automations"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_automations_flows",
+        "tags": [
+          "automations"
+        ]
+      }
+    },
+    "/v1/automations/flows/{id}": {
+      "delete": {
+        "operationId": "delete_v1_automations_flows_by_id",
+        "tags": [
+          "automations"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_automations_flows_by_id",
+        "tags": [
+          "automations"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_automations_flows_by_id",
+        "tags": [
+          "automations"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/automations/flows/{id}/disable": {
+      "post": {
+        "operationId": "post_v1_automations_flows_by_id_disable",
+        "tags": [
+          "automations"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/automations/flows/{id}/enable": {
+      "post": {
+        "operationId": "post_v1_automations_flows_by_id_enable",
+        "tags": [
+          "automations"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/automations/flows/{id}/operations": {
+      "post": {
+        "operationId": "post_v1_automations_flows_by_id_operations",
+        "tags": [
+          "automations"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/automations/flows/{id}/run": {
+      "post": {
+        "operationId": "post_v1_automations_flows_by_id_run",
+        "tags": [
+          "automations"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/automations/flows/{id}/versions": {
+      "get": {
+        "operationId": "get_v1_automations_flows_by_id_versions",
+        "tags": [
+          "automations"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_automations_flows_by_id_versions",
+        "tags": [
+          "automations"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/automations/hooks/{source}/{event}": {
+      "post": {
+        "operationId": "post_v1_automations_hooks_by_source_by_event",
+        "tags": [
+          "automations"
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "event",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/automations/mcp": {
+      "post": {
+        "operationId": "post_v1_automations_mcp",
+        "tags": [
+          "automations"
+        ]
+      }
+    },
+    "/v1/automations/pieces": {
+      "get": {
+        "operationId": "get_v1_automations_pieces",
+        "tags": [
+          "automations"
+        ]
+      }
+    },
+    "/v1/automations/runs": {
+      "get": {
+        "operationId": "get_v1_automations_runs",
+        "tags": [
+          "automations"
+        ]
+      }
+    },
+    "/v1/automations/runs/{id}": {
+      "get": {
+        "operationId": "get_v1_automations_runs_by_id",
+        "tags": [
+          "automations"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/automations/runs/{id}/resume": {
+      "post": {
+        "operationId": "post_v1_automations_runs_by_id_resume",
+        "tags": [
+          "automations"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,2468 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "agent-bindings"
+    },
+    {
+      "name": "clusters"
+    },
+    {
+      "name": "compute"
+    },
+    {
+      "name": "fleet"
+    },
+    {
+      "name": "gpus"
+    },
+    {
+      "name": "k8s"
+    },
+    {
+      "name": "machines"
+    }
+  ],
+  "paths": {
+    "/v1/agent-bindings": {
+      "get": {
+        "operationId": "listAgentBindings",
+        "summary": "listAgentBindings returns every agent↔machine binding in the caller's org — which",
+        "description": "listAgentBindings returns every agent↔machine binding in the caller's org — which\nmachines are running which cloud Agent, with vm's own reconciled status.",
+        "tags": [
+          "agent-bindings"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "agentBindings": [
+                    {
+                      "agentName": "bot-a",
+                      "machineId": "drop-a",
+                      "publicIp": "1.2.3.4",
+                      "status": "running"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/bindingList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/clusters": {
+      "get": {
+        "operationId": "listClusters",
+        "summary": "listClusters returns the caller org's clusters from both sources: the managed\nclusters projected from Visor's node pools, and the BYO clusters attached to the\ncaller's project.",
+        "description": "listClusters returns the caller org's clusters from both sources: the managed\nclusters projected from Visor's node pools, and the BYO clusters attached to the\ncaller's project. A Visor outage costs the managed half only — the BYO half\nstill lists, because a page that 502s on an optional provider is worse than a\npage that shows what it can.",
+        "tags": [
+          "clusters"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "clusters": [
+                    {
+                      "doksClusterId": "cl-1",
+                      "kind": "managed",
+                      "name": "prod",
+                      "nodeCount": 2,
+                      "nodePools": [
+                        {
+                          "count": 2,
+                          "name": "gpu",
+                          "poolId": "p-1",
+                          "size": "gpu-h100x8-640gb"
+                        }
+                      ],
+                      "nodeSize": "gpu-h100x8-640gb",
+                      "status": "running"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/clusterList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "attachCluster",
+        "summary": "attachCluster attaches a BYO cluster to the caller's org — the kubeconfig is\nvalidated, KMS-sealed and added to the fleet — and answers 201 with the cluster\nas it now appears on GET /v1/clusters.",
+        "description": "attachCluster attaches a BYO cluster to the caller's org — the kubeconfig is\nvalidated, KMS-sealed and added to the fleet — and answers 201 with the cluster\nas it now appears on GET /v1/clusters. Billed the nominal management fee: the\ncustomer brings the compute, Hanzo meters the management plane.",
+        "tags": [
+          "clusters"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "default": false,
+                "kubeconfig": "apiVersion: v1\nkind: Config\n...",
+                "name": "lab",
+                "provider": "on-prem"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/clusterAttach"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "kind": "byo",
+                  "name": "lab",
+                  "nodeCount": 3,
+                  "nodePools": [],
+                  "nvidiaGpu": 2,
+                  "region": "on-prem",
+                  "status": "attached"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/clusterView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/clusters/{clusterId}/pools": {
+      "post": {
+        "operationId": "createNodePool",
+        "summary": "createPool adds a node pool to one of the caller org's clusters and answers 201\nwith the created pool.",
+        "description": "createPool adds a node pool to one of the caller org's clusters and answers 201\nwith the created pool. Only the CreateNodePoolSpec fields are forwarded;\nowner/provider/clusterId ride in the query exactly as Visor expects them.",
+        "tags": [
+          "clusters"
+        ],
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "description": "ClusterID is the cluster to add the pool to, from the URL path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "autoScale": false,
+                "count": 2,
+                "name": "gpu",
+                "provider": "digitalocean",
+                "size": "gpu-h100x8-640gb"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/poolCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "count": 2,
+                  "name": "gpu",
+                  "poolId": "p-1",
+                  "size": "gpu-h100x8-640gb"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/nodePoolView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/clusters/{clusterId}/pools/{poolId}": {
+      "delete": {
+        "operationId": "deleteNodePool",
+        "summary": "deletePool removes a node pool from one of the caller org's clusters.",
+        "description": "deletePool removes a node pool from one of the caller org's clusters. The owner\nscopes the delete to the caller's tenant; provider+clusterId drive the\nprovider-side removal. Answers 204.",
+        "tags": [
+          "clusters"
+        ],
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "description": "ClusterID and PoolID address the pool, from the URL path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "poolId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "description": "Provider is the cloud the cluster lives on, from ?provider=. Required.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
+      }
+    },
+    "/v1/clusters/{clusterId}/pools/{poolId}/scale": {
+      "post": {
+        "operationId": "scaleNodePool",
+        "summary": "scalePool resizes a node pool to an absolute node count and returns the pool as",
+        "description": "scalePool resizes a node pool to an absolute node count and returns the pool as\nVisor reports it after the change.",
+        "tags": [
+          "clusters"
+        ],
+        "parameters": [
+          {
+            "name": "clusterId",
+            "in": "path",
+            "required": true,
+            "description": "ClusterID and PoolID address the pool, from the URL path.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "poolId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "count": 4,
+                "provider": "digitalocean"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/poolScale"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "count": 4,
+                  "name": "gpu",
+                  "poolId": "p-1",
+                  "size": "gpu-h100x8-640gb"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/nodePoolView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/clusters/{id}": {
+      "delete": {
+        "operationId": "detachCluster",
+        "summary": "detachCluster removes a BYO cluster from the caller org's fleet.",
+        "description": "detachCluster removes a BYO cluster from the caller org's fleet. It only ever\ntouches BYO clusters — a managed cluster's nodes are removed through the node-pool\nroutes — and answers 404 when the name is not in this org's fleet.",
+        "tags": [
+          "clusters"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the cluster's fleet name (the `name` it was attached under), matched\nlower-cased.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "detached": "lab"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/clusterDetached"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/compute/bots": {
+      "get": {
+        "operationId": "listBots",
+        "summary": "listBots returns the caller org's bot machines — the kind=bot machines — each\njoined with the agent binding that says which cloud Agent it runs.\n\nThe bindings are read ONCE and joined by machine id, so the list is O(1) upstream\ncalls, not N+1.",
+        "description": "listBots returns the caller org's bot machines — the kind=bot machines — each\njoined with the agent binding that says which cloud Agent it runs.\n\nThe bindings are read ONCE and joined by machine id, so the list is O(1) upstream\ncalls, not N+1. A bindings read that fails only costs the reconciled status: a bot\nstill lists without it.",
+        "tags": [
+          "compute"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "bots": [
+                    {
+                      "agent": "bot-a",
+                      "binding": {
+                        "agentName": "bot-a",
+                        "machineId": "drop-a",
+                        "status": "running"
+                      },
+                      "id": "drop-a",
+                      "name": "bot-a",
+                      "status": "running"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/botList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/compute/bots/launch": {
+      "post": {
+        "operationId": "post_v1_compute_bots_launch",
+        "tags": [
+          "compute"
+        ]
+      }
+    },
+    "/v1/compute/bots/{id}": {
+      "delete": {
+        "operationId": "deleteBot",
+        "summary": "deleteBot tears down both halves of a bot: it unbinds the agent (best-effort — a\nbot with no binding still deletes), then terminates the machine.",
+        "description": "deleteBot tears down both halves of a bot: it unbinds the agent (best-effort — a\nbot with no binding still deletes), then terminates the machine. Answers 204.",
+        "tags": [
+          "compute"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the bot machine's id — the same id the machines surface addresses it\nby. Scoped to the caller's org upstream, so another tenant's id is 404.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
+      },
+      "get": {
+        "operationId": "getBot",
+        "summary": "getBot returns one of the caller org's bot machines with its agent binding.\n\nA machine counts as a Bot if it carries the hanzo-kind:bot tag OR has an agent\nbinding — either signal is authoritative, so a bot resolves even before its\ncloud-init has stamped every tag.",
+        "description": "getBot returns one of the caller org's bot machines with its agent binding.\n\nA machine counts as a Bot if it carries the hanzo-kind:bot tag OR has an agent\nbinding — either signal is authoritative, so a bot resolves even before its\ncloud-init has stamped every tag. A machine that is neither is 404: this route\nanswers for bots, not for machines.",
+        "tags": [
+          "compute"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the bot machine's id — the same id the machines surface addresses it\nby. Scoped to the caller's org upstream, so another tenant's id is 404.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "agent": "bot-a",
+                  "binding": {
+                    "agentName": "bot-a",
+                    "machineId": "drop-a",
+                    "status": "running"
+                  },
+                  "id": "drop-a",
+                  "name": "bot-a",
+                  "status": "running"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/botView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/compute/bots/{id}/{action}": {
+      "post": {
+        "operationId": "post_v1_compute_bots_by_id_by_action",
+        "tags": [
+          "compute"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/compute/regions": {
+      "get": {
+        "operationId": "get_v1_compute_regions",
+        "tags": [
+          "compute"
+        ]
+      }
+    },
+    "/v1/compute/sizes": {
+      "get": {
+        "operationId": "get_v1_compute_sizes",
+        "tags": [
+          "compute"
+        ]
+      }
+    },
+    "/v1/fleet": {
+      "get": {
+        "operationId": "listFleet",
+        "summary": "listFleet returns every compute unit the caller's org has, from every source, each\ncarrying its latest utilization: agent run-targets, the BYO machines that dialed\nin, attached BYO clusters and Visor-provisioned machines.\n\nA unit with a live snapshot of its own keeps it; the rest are overlaid from the\nutilization series, and only when the sample agrees about the SOURCE — two planes\ncould mint the same unit id, and a board must never show one machine's load on\nanother's row.",
+        "description": "listFleet returns every compute unit the caller's org has, from every source, each\ncarrying its latest utilization: agent run-targets, the BYO machines that dialed\nin, attached BYO clusters and Visor-provisioned machines.\n\nA unit with a live snapshot of its own keeps it; the rest are overlaid from the\nutilization series, and only when the sample agrees about the SOURCE — two planes\ncould mint the same unit id, and a board must never show one machine's load on\nanother's row. BYO GPU units also carry their gpu-jobs queue depth. Every source\nis folded in independently: a broken one costs its own rows and nothing else.",
+        "tags": [
+          "fleet"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "units": [
+                    {
+                      "host": "spark",
+                      "kind": "worker",
+                      "label": "spark",
+                      "metrics": {
+                        "at": "2026-07-27T09:00:00Z",
+                        "gpuUtil": 0.42
+                      },
+                      "queued": 2,
+                      "running": 1,
+                      "sessions": 0,
+                      "source": "byo",
+                      "spec": {
+                        "arch": "arm64",
+                        "cpus": 20,
+                        "gpuModel": "NVIDIA GB10",
+                        "gpus": 1,
+                        "os": "linux"
+                      },
+                      "status": "online",
+                      "unit": "spark"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/fleetBoard"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/fleet/jobs": {
+      "get": {
+        "operationId": "listFleetJobs",
+        "summary": "listFleetJobs returns the caller org's gpu-jobs render queue, each row tagged with\nthe GPU it targets (empty = the shared any-GPU lane) and the node claiming it,\noptionally narrowed to one GPU's queue and/or one status.\n\nA job whose worker died — STARTED with an elapsed lease and not yet reclaimed —\nreads \"stalled\", not \"running\".",
+        "description": "listFleetJobs returns the caller org's gpu-jobs render queue, each row tagged with\nthe GPU it targets (empty = the shared any-GPU lane) and the node claiming it,\noptionally narrowed to one GPU's queue and/or one status.\n\nA job whose worker died — STARTED with an elapsed lease and not yet reclaimed —\nreads \"stalled\", not \"running\". Fail-soft: an unavailable tasks engine yields an\nempty queue rather than an error.",
+        "tags": [
+          "fleet"
+        ],
+        "parameters": [
+          {
+            "name": "gpu",
+            "in": "query",
+            "required": false,
+            "description": "GPU selects one node's lane: jobs TARGETED at it (gpu:\u003cnode\u003e) or CLAIMED by\nit. The literal \"shared\" selects the any-GPU lane — no target, no claimant.\nMatched case-insensitively.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status selects one lifecycle state: queued, running, stalled, completed,\nfailed or canceled.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "jobs": [
+                    {
+                      "attempt": 1,
+                      "gpu": "spark",
+                      "id": "job-1",
+                      "label": "hero",
+                      "runId": "job-1",
+                      "status": "running",
+                      "type": "studio.render",
+                      "worker": "spark"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/jobList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/fleet/jobs/{id}/cancel": {
+      "post": {
+        "operationId": "cancelFleetJob",
+        "summary": "cancelFleetJob cancels a queued or running render in the caller's org.",
+        "description": "cancelFleetJob cancels a queued or running render in the caller's org. The engine\ncancel is org-scoped, so a tenant can only ever cancel its OWN job: a job in\nanother tenant's shard is 404, exactly like one that never existed. An\nalready-finished job is 409.",
+        "tags": [
+          "fleet"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the job (activity) id, from the URL path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "reason": "superseded"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/jobCancel"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "canceled": "job-1",
+                  "run": "job-1"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/jobCanceled"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/fleet/samples": {
+      "get": {
+        "operationId": "listFleetSamples",
+        "summary": "listFleetSamples returns the caller org's utilization series, oldest first.\n\nA rejected narrower is a 400 carrying its own reason (the vocabulary is ours and\nsafe to echo); a warehouse failure is logged and answered 503 \"unavailable\",\nbecause a chart that silently reads \"no load\" when the truth is \"we cannot tell\"\nis worse than one that says so.",
+        "description": "listFleetSamples returns the caller org's utilization series, oldest first.\n\nA rejected narrower is a 400 carrying its own reason (the vocabulary is ours and\nsafe to echo); a warehouse failure is logged and answered 503 \"unavailable\",\nbecause a chart that silently reads \"no load\" when the truth is \"we cannot tell\"\nis worse than one that says so. An ABSENT warehouse is different again: it returns\nan empty series, which renders honestly as \"no samples yet\".",
+        "tags": [
+          "fleet"
+        ],
+        "parameters": [
+          {
+            "name": "unit",
+            "in": "query",
+            "required": false,
+            "description": "Unit selects one compute unit's series by its source-local id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "description": "Source selects one plane: \"agent\", \"byo\" or \"visor\".",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is the lookback window (e.g. \"1h\", \"24h\", \"7d\"); empty takes the\nwarehouse default.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "samples": [
+                    {
+                      "at": "2026-07-27T09:00:00Z",
+                      "gpuModel": "GB10",
+                      "gpuUtil": 0.42,
+                      "gpus": 1,
+                      "host": "spark",
+                      "kind": "worker",
+                      "source": "byo",
+                      "unit": "spark"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/sampleList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "recordFleetSample",
+        "summary": "ingestSample records a BYO worker's live GPU utilization into the SAME series the\nfleet board overlays.",
+        "description": "ingestSample records a BYO worker's live GPU utilization into the SAME series the\nfleet board overlays. The org is the validated principal and source/kind are fixed\nserver-side, so a worker names only its own metrics — never another tenant or\nanother source. Answers 202: the warehouse write is DETACHED (its own bounded\ncontext, never in the response path), so a slow or absent warehouse cannot stall a\nheartbeat.",
+        "tags": [
+          "fleet"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "gpuModel": "GB10",
+                "gpuUtil": 0.42,
+                "gpus": 1,
+                "host": "spark",
+                "memFree": 200,
+                "memUsed": 100,
+                "unit": "spark"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/sampleIngest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "recorded": true
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/sampleAccepted"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/fleet/workers": {
+      "get": {
+        "operationId": "listFleetWorkers",
+        "summary": "listFleetWorkers returns the caller org's BYO machines — the ones that dialed in\nvia `hanzo link` — with everything each host reported about itself.",
+        "description": "listFleetWorkers returns the caller org's BYO machines — the ones that dialed in\nvia `hanzo link` — with everything each host reported about itself. The Machines\nand GPUs pages fold the same data into their normalized shapes; this is the\ncanonical raw list a fleet view (or the CLI's `status`) reads.",
+        "tags": [
+          "fleet"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "workers": [
+                    {
+                      "arch": "arm64",
+                      "cpus": 20,
+                      "gpus": [
+                        {
+                          "memoryTotal": "122880 MiB",
+                          "name": "NVIDIA GB10"
+                        }
+                      ],
+                      "hostname": "spark",
+                      "id": "spark",
+                      "location": "on-prem",
+                      "provider": "byo",
+                      "status": "online"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/workerList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/gpus": {
+      "get": {
+        "operationId": "listGpus",
+        "summary": "listGPUs returns one row per physical accelerator the caller's org has, derived",
+        "description": "listGPUs returns one row per physical accelerator the caller's org has, derived\nfrom its real GPU machines (the size slug says how many cards a node holds) and\nfrom the accelerators BYO workers report through nvidia-smi.\n\nLive telemetry is absent on Visor rows because Visor's machine object carries\nnone — an honest omission the console renders as \"—\", never a fabricated 0.",
+        "tags": [
+          "gpus"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "gpus": [
+                    {
+                      "id": "gpu-1#0",
+                      "machine": "gpu-1",
+                      "model": "H100",
+                      "name": "gpu-1",
+                      "provider": "digitalocean",
+                      "region": "nyc2",
+                      "status": "running"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/gpuList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/gpus/alerts": {
+      "get": {
+        "operationId": "listGpuAlerts",
+        "summary": "gpuAlerts is an HONEST empty surface: Visor exposes no GPU alert inventory, so\nthis returns [] rather than fabricating alerts.",
+        "description": "gpuAlerts is an HONEST empty surface: Visor exposes no GPU alert inventory, so\nthis returns [] rather than fabricating alerts. It stays a real, tenant-gated\nroute so the console's alerts fetch resolves (200 [], not a 404) — an honest\n\"no alerts\", the same discipline the rest of the surface follows.",
+        "tags": [
+          "gpus"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "alerts": []
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/gpuAlertList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/k8s/clusters": {
+      "get": {
+        "operationId": "listKubernetesClusters",
+        "summary": "listK8sClusters lists the org's DOKS clusters (Visor, house account) folded with\nthe org's BYO clusters — ONE fleet cluster view under the unified k8s noun.",
+        "description": "listK8sClusters lists the org's DOKS clusters (Visor, house account) folded with\nthe org's BYO clusters — ONE fleet cluster view under the unified k8s noun. A Visor\noutage is logged and skipped so a down optional provider never hides the BYO list.",
+        "tags": [
+          "k8s"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "clusters": [
+                    {
+                      "doClusterId": "cl-1",
+                      "doksClusterId": "cl-1",
+                      "kind": "managed",
+                      "name": "prod",
+                      "nodeCount": 0,
+                      "nodePools": [],
+                      "region": "nyc3",
+                      "status": "running"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/clusterList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createKubernetesCluster",
+        "summary": "createK8sCluster provisions a DOKS cluster for the caller's org and answers 201.\nADMIN-GATED — a SuperAdmin, or an OrgAdmin of the caller's own org — because\nprovisioning spends real infrastructure on the house account.",
+        "description": "createK8sCluster provisions a DOKS cluster for the caller's org and answers 201.\nADMIN-GATED — a SuperAdmin, or an OrgAdmin of the caller's own org — because\nprovisioning spends real infrastructure on the house account. The request is\nvalidated at this boundary, then Visor owns provisioning and the hanzo-org\nownership tag.",
+        "tags": [
+          "k8s"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "prod",
+                "nodePool": {
+                  "count": 2,
+                  "name": "gpu",
+                  "size": "gpu-h100x8-640gb"
+                },
+                "region": "nyc3"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createClusterReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "doClusterId": "cl-1",
+                  "doksClusterId": "cl-1",
+                  "kind": "managed",
+                  "name": "prod",
+                  "nodeCount": 0,
+                  "nodePools": [],
+                  "region": "nyc3",
+                  "status": "provisioning"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/clusterView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/k8s/clusters/{id}": {
+      "delete": {
+        "operationId": "deleteKubernetesCluster",
+        "summary": "deleteK8sCluster destroys a DOKS cluster by id and answers 204.",
+        "description": "deleteK8sCluster destroys a DOKS cluster by id and answers 204. ADMIN-GATED, like\ncreate. Visor scopes the delete to the org (refuses a foreign id), so this can\nonly ever remove the caller org's own cluster.",
+        "tags": [
+          "k8s"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the provider's DOKS cluster id. Visor scopes the lookup to the caller's\norg, so another tenant's id resolves to not-found rather than their cluster.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
+      },
+      "get": {
+        "operationId": "getKubernetesCluster",
+        "summary": "getK8sCluster returns one cluster's detail: node pools + worker nodes.",
+        "description": "getK8sCluster returns one cluster's detail: node pools + worker nodes. Visor scopes\nthe lookup to the org (a foreign or missing id resolves to not-found), so a tenant\ncan never read another tenant's cluster by guessing an id.",
+        "tags": [
+          "k8s"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the provider's DOKS cluster id. Visor scopes the lookup to the caller's\norg, so another tenant's id resolves to not-found rather than their cluster.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "doksClusterId": "cl-1",
+                  "kind": "managed",
+                  "name": "prod",
+                  "nodeCount": 1,
+                  "nodePools": [
+                    {
+                      "count": 1,
+                      "name": "gpu",
+                      "poolId": "p-1",
+                      "size": "gpu-h100x8-640gb"
+                    }
+                  ],
+                  "nodeSize": "gpu-h100x8-640gb",
+                  "nodes": [
+                    {
+                      "id": "node-1",
+                      "name": "node-1",
+                      "status": "active"
+                    }
+                  ],
+                  "region": "nyc3",
+                  "status": "running"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/clusterDetailView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/k8s/nodes": {
+      "get": {
+        "operationId": "listKubernetesNodes",
+        "summary": "listK8sNodes returns every DOKS worker node in the org's clusters as a machine —\nthe SAME set the fleet folds in (managedMachines), exposed directly under the k8s\nnoun.",
+        "description": "listK8sNodes returns every DOKS worker node in the org's clusters as a machine —\nthe SAME set the fleet folds in (managedMachines), exposed directly under the k8s\nnoun. House account (hanzo-org cluster tag) + BYOC, deduped by Visor.",
+        "tags": [
+          "k8s"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "nodes": [
+                    {
+                      "id": "node-1",
+                      "name": "node-1",
+                      "region": "nyc3",
+                      "status": "active",
+                      "type": "s-4vcpu-8gb",
+                      "vcpu": 4
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/nodeList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/machines": {
+      "get": {
+        "operationId": "listMachines",
+        "summary": "listMachines returns every machine the caller's org has — Visor's registry, the",
+        "description": "listMachines returns every machine the caller's org has — Visor's registry, the\nlive DigitalOcean droplets and the DOKS worker nodes (deduped into one union),\nplus the BYO machines that dialed in via `hanzo link` (provider \"byo\").\n\nA source Visor cannot answer for is logged and skipped, never an error: one\nwedged upstream must not hide the machines the other sources can see.",
+        "tags": [
+          "machines"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "machines": [
+                    {
+                      "id": "web-1",
+                      "mem": "4 GB",
+                      "name": "Web 1",
+                      "provider": "digitalocean",
+                      "publicIp": "1.2.3.4",
+                      "region": "sfo3",
+                      "status": "running",
+                      "type": "s-2vcpu-4gb",
+                      "vcpu": 2
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/machineList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_v1_machines",
+        "tags": [
+          "machines"
+        ]
+      }
+    },
+    "/v1/machines/{id}": {
+      "delete": {
+        "operationId": "deleteMachine",
+        "summary": "deleteMachine terminates one of the caller org's machines.",
+        "description": "deleteMachine terminates one of the caller org's machines. Visor takes the\nmachine identity as owner+name, and the owner is the validated principal, so a\ncaller can only ever terminate its own tenant's machine. Answers 204.",
+        "tags": [
+          "machines"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the machine's org-scoped NAME — the stable key Visor addresses a\nmachine by (owner/name), not the ephemeral provider id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
+      },
+      "get": {
+        "operationId": "getMachine",
+        "summary": "getMachine returns one of the caller org's machines by its org-scoped name.",
+        "description": "getMachine returns one of the caller org's machines by its org-scoped name.\nVisor keys the lookup by owner/name, so an id belonging to another tenant\nresolves to not-found rather than another org's machine.",
+        "tags": [
+          "machines"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the machine's org-scoped NAME — the stable key Visor addresses a\nmachine by (owner/name), not the ephemeral provider id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": "web-1",
+                  "name": "Web 1",
+                  "publicIp": "1.2.3.4",
+                  "region": "sfo3",
+                  "status": "running",
+                  "type": "s-2vcpu-4gb",
+                  "vcpu": 2
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/machineView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/machines/{id}/agent-binding": {
+      "delete": {
+        "operationId": "unbindMachineAgent",
+        "summary": "unbindMachineAgent detaches the agent runtime from one of the caller org's\nmachines.",
+        "description": "unbindMachineAgent detaches the agent runtime from one of the caller org's\nmachines. The machine stays — this halts the bot, it does not terminate the\ncompute. Answers 204.",
+        "tags": [
+          "machines"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the machine's org-scoped NAME — the stable key Visor addresses a\nmachine by (owner/name), not the ephemeral provider id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
+      },
+      "get": {
+        "operationId": "getMachineAgentBinding",
+        "summary": "getMachineAgentBinding returns the agent binding of one of the caller org's",
+        "description": "getMachineAgentBinding returns the agent binding of one of the caller org's\nmachines, or 404 when the machine runs no bot runtime.",
+        "tags": [
+          "machines"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the machine's org-scoped NAME — the stable key Visor addresses a\nmachine by (owner/name), not the ephemeral provider id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "agentName": "bot-a",
+                  "botVersion": "1.4.0",
+                  "machineId": "drop-a",
+                  "status": "running"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/agentBinding"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/machines/{id}/bind-agent": {
+      "post": {
+        "operationId": "bindMachineAgent",
+        "summary": "bindMachineAgent binds a cloud Agent to one of the caller org's machines: the\nmachine is recorded as running that Agent's @hanzo/bot runtime.",
+        "description": "bindMachineAgent binds a cloud Agent to one of the caller org's machines: the\nmachine is recorded as running that Agent's @hanzo/bot runtime. The owning org is\nthe validated tenant, never a client field.",
+        "tags": [
+          "machines"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the machine to bind, from the URL path.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "agentName": "bot-a",
+                "botVersion": "1.4.0"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/bindAgentReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "agentName": "bot-a",
+                  "machineId": "drop-a",
+                  "status": "binding"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/agentBinding"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "agentBinding": {
+        "properties": {
+          "agentName": {
+            "type": "string"
+          },
+          "botVersion": {
+            "type": "string"
+          },
+          "createdTime": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "publicIp": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updatedTime": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "bindAgentReq": {
+        "properties": {
+          "agentName": {
+            "description": "AgentName is the cloud Agent (/v1/agents) the machine will run. Required.",
+            "type": "string"
+          },
+          "botVersion": {
+            "description": "BotVersion pins the @hanzo/bot runtime version; empty takes the default.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the machine to bind, from the URL path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "bindingList": {
+        "properties": {
+          "agentBindings": {
+            "description": "AgentBindings is one row per bound machine, emitted verbatim as vm reports\nit so vm stays the single source of truth for the binding shape.",
+            "items": {
+              "properties": {
+                "agentName": {
+                  "type": "string"
+                },
+                "botVersion": {
+                  "type": "string"
+                },
+                "createdTime": {
+                  "type": "string"
+                },
+                "machineId": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "org": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                },
+                "publicIp": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "updatedTime": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "botList": {
+        "properties": {
+          "bots": {
+            "description": "Bots is one row per kind=bot machine, each joined with its agent binding\nwhen it has one.",
+            "items": {
+              "properties": {
+                "agent": {
+                  "type": "string"
+                },
+                "binding": {
+                  "properties": {
+                    "agentName": {
+                      "type": "string"
+                    },
+                    "botVersion": {
+                      "type": "string"
+                    },
+                    "createdTime": {
+                      "type": "string"
+                    },
+                    "machineId": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "org": {
+                      "type": "string"
+                    },
+                    "owner": {
+                      "type": "string"
+                    },
+                    "provider": {
+                      "type": "string"
+                    },
+                    "publicIp": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "updatedTime": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "botView": {
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "binding": {
+            "properties": {
+              "agentName": {
+                "type": "string"
+              },
+              "botVersion": {
+                "type": "string"
+              },
+              "createdTime": {
+                "type": "string"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "org": {
+                "type": "string"
+              },
+              "owner": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "publicIp": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "updatedTime": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "clusterAttach": {
+        "properties": {
+          "default": {
+            "description": "Default marks this the org's default cluster for scheduling.",
+            "type": "boolean"
+          },
+          "kubeconfig": {
+            "description": "Kubeconfig is the cluster's kubeconfig, verbatim. Required — a body without\none is not an attach.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the fleet-local name for the cluster; lower-cased, and the key the\ndetach route addresses it by. Required.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is a free-form label for where the cluster runs (\"gke\", \"on-prem\");\nit is display only, not a routing key.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "clusterDetached": {
+        "properties": {
+          "detached": {
+            "description": "Detached is the lower-cased fleet name that was removed.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "clusterDetailView": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "properties": {
+                "createdTime": {
+                  "type": "string"
+                },
+                "gpu": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "image": {
+                  "type": "string"
+                },
+                "mem": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "os": {
+                  "type": "string"
+                },
+                "privateIp": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                },
+                "publicIp": {
+                  "type": "string"
+                },
+                "region": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "vcpu": {
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "clusterList": {
+        "properties": {
+          "clusters": {
+            "description": "Clusters is the merged fleet — kind \"managed\" for Visor-provisioned, \"byo\"\nfor an attached kubeconfig.",
+            "items": {
+              "properties": {
+                "amdGpu": {
+                  "type": "integer"
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "doClusterId": {
+                  "type": "string"
+                },
+                "doksClusterId": {
+                  "type": "string"
+                },
+                "kind": {
+                  "description": "Fleet fields (additive): \"managed\" (Visor-provisioned) vs \"byo\" (attached\nkubeconfig), and the live GPU inventory a BYO cluster reports.",
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "nodeCount": {
+                  "type": "integer"
+                },
+                "nodePools": {
+                  "items": {
+                    "properties": {
+                      "autoScale": {
+                        "type": "boolean"
+                      },
+                      "count": {
+                        "type": "integer"
+                      },
+                      "maxNodes": {
+                        "type": "integer"
+                      },
+                      "minNodes": {
+                        "type": "integer"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "poolId": {
+                        "type": "string"
+                      },
+                      "size": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "nodeSize": {
+                  "type": "string"
+                },
+                "nvidiaGpu": {
+                  "type": "integer"
+                },
+                "region": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "clusterView": {
+        "properties": {
+          "amdGpu": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "doClusterId": {
+            "type": "string"
+          },
+          "doksClusterId": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "Fleet fields (additive): \"managed\" (Visor-provisioned) vs \"byo\" (attached\nkubeconfig), and the live GPU inventory a BYO cluster reports.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nodeCount": {
+            "type": "integer"
+          },
+          "nodePools": {
+            "items": {
+              "properties": {
+                "autoScale": {
+                  "type": "boolean"
+                },
+                "count": {
+                  "type": "integer"
+                },
+                "maxNodes": {
+                  "type": "integer"
+                },
+                "minNodes": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "poolId": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "nodeSize": {
+            "type": "string"
+          },
+          "nvidiaGpu": {
+            "type": "integer"
+          },
+          "region": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "createClusterReq": {
+        "properties": {
+          "name": {
+            "description": "Name is the cluster's name. Required.",
+            "type": "string"
+          },
+          "nodePool": {
+            "properties": {
+              "count": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "size": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "region": {
+            "description": "Region is the provider region slug (e.g. \"nyc3\"). Required.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Version is the Kubernetes version slug; empty takes the provider default.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "fleetBoard": {
+        "properties": {
+          "units": {
+            "description": "Units is the union across sources — agent run-targets, BYO workers, BYO\nclusters and Visor machines — each row naming the source it came from.",
+            "items": {
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "metrics": {
+                  "properties": {
+                    "at": {
+                      "type": "string"
+                    },
+                    "gpuUtil": {
+                      "type": "number"
+                    },
+                    "load1": {
+                      "type": "number"
+                    },
+                    "memFree": {
+                      "type": "integer"
+                    },
+                    "memUsed": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                },
+                "queued": {
+                  "type": "integer"
+                },
+                "running": {
+                  "description": "Running is what the unit is actively executing: agent sessions for a run-target,\nin-flight renders for a BYO GPU. Queued is the gpu-jobs backlog on this GPU's\nlane (BYO units only; an agent unit does not queue). Both come from the org's\ngpu-jobs queue for BYO units, overlaid in listFleet.",
+                  "type": "integer"
+                },
+                "sessions": {
+                  "type": "integer"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "spec": {
+                  "properties": {
+                    "arch": {
+                      "type": "string"
+                    },
+                    "cpus": {
+                      "type": "integer"
+                    },
+                    "gpuModel": {
+                      "type": "string"
+                    },
+                    "gpus": {
+                      "type": "integer"
+                    },
+                    "memory": {
+                      "type": "integer"
+                    },
+                    "os": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "unit": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "gpuAlertList": {
+        "properties": {
+          "alerts": {
+            "description": "Alerts is always empty, and typed as a raw list because Visor exposes no\nalert inventory for this surface to shape: there is nothing to describe\nuntil there is something to return.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "gpuList": {
+        "properties": {
+          "gpus": {
+            "description": "GPUs is every accelerator the org has, from Visor GPU droplets and from BYO\nworkers alike.",
+            "items": {
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "machine": {
+                  "type": "string"
+                },
+                "memory": {
+                  "type": "string"
+                },
+                "model": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "provider": {
+                  "description": "Provider distinguishes a BYO accelerator (\"byo\") from a Visor-provisioned\none (the machine's real provider). Memory is VRAM when known (BYO reports it\nfrom nvidia-smi; Visor's machine object carries none, so it stays empty and\nthe UI renders \"—\"). Both are additive + omitempty: existing rows are\nunaffected and the console normalizer ignores fields it does not read.",
+                  "type": "string"
+                },
+                "region": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "jobCancel": {
+        "properties": {
+          "id": {
+            "description": "ID is the job (activity) id, from the URL path.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason is recorded on the cancellation; empty records \"canceled from console\".",
+            "type": "string"
+          },
+          "run": {
+            "description": "Run is the run id; empty defaults to the job id, which is what the dispatcher\nsets (runId == activityId == prompt_id), so the common case sends no body.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "jobCanceled": {
+        "properties": {
+          "canceled": {
+            "description": "Canceled is the job id that was canceled.",
+            "type": "string"
+          },
+          "run": {
+            "description": "Run is the run id the cancel was applied to.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "jobList": {
+        "properties": {
+          "jobs": {
+            "description": "Jobs is the queue, most-recent-first. Every LIVE job is present; terminal\nhistory is capped, so a busy org's running work is never crowded out.",
+            "items": {
+              "properties": {
+                "attempt": {
+                  "type": "integer"
+                },
+                "closeTime": {
+                  "type": "string"
+                },
+                "failureCause": {
+                  "type": "string"
+                },
+                "gpu": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "lastHeartbeat": {
+                  "type": "string"
+                },
+                "leaseExpiry": {
+                  "type": "string"
+                },
+                "runId": {
+                  "type": "string"
+                },
+                "startTime": {
+                  "type": "string"
+                },
+                "status": {
+                  "description": "queued|running|completed|failed|canceled",
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "worker": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "machineList": {
+        "properties": {
+          "machines": {
+            "description": "Machines is every machine the org has: Visor-provisioned and BYO together.",
+            "items": {
+              "properties": {
+                "createdTime": {
+                  "type": "string"
+                },
+                "gpu": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "image": {
+                  "type": "string"
+                },
+                "mem": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "os": {
+                  "type": "string"
+                },
+                "privateIp": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                },
+                "publicIp": {
+                  "type": "string"
+                },
+                "region": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "vcpu": {
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "machineView": {
+        "properties": {
+          "createdTime": {
+            "type": "string"
+          },
+          "gpu": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "mem": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
+          },
+          "privateIp": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "publicIp": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "vcpu": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "nodeList": {
+        "properties": {
+          "nodes": {
+            "description": "Nodes is one row per worker node, in the SAME machineView shape the machines\nsurface emits — a node IS a machine.",
+            "items": {
+              "properties": {
+                "createdTime": {
+                  "type": "string"
+                },
+                "gpu": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "image": {
+                  "type": "string"
+                },
+                "mem": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "os": {
+                  "type": "string"
+                },
+                "privateIp": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                },
+                "publicIp": {
+                  "type": "string"
+                },
+                "region": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "vcpu": {
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "nodePoolView": {
+        "properties": {
+          "autoScale": {
+            "type": "boolean"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "maxNodes": {
+            "type": "integer"
+          },
+          "minNodes": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "poolId": {
+            "type": "string"
+          },
+          "size": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "poolCreate": {
+        "properties": {
+          "autoScale": {
+            "description": "AutoScale turns the provider's cluster autoscaler on for this pool.",
+            "type": "boolean"
+          },
+          "clusterId": {
+            "description": "ClusterID is the cluster to add the pool to, from the URL path.",
+            "type": "string"
+          },
+          "count": {
+            "description": "Count is how many nodes the pool starts with.",
+            "type": "integer"
+          },
+          "maxNodes": {
+            "type": "integer"
+          },
+          "minNodes": {
+            "description": "MinNodes and MaxNodes bound the autoscaler; they are ignored unless\nAutoScale is set.",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Name is the pool's name.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the cloud the cluster lives on (e.g. \"digitalocean\"). Required —\nVisor routes the create by it. Accepted from the body or ?provider=.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Size is the provider size slug for each node (e.g. \"s-4vcpu-8gb\").",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "poolScale": {
+        "properties": {
+          "clusterId": {
+            "description": "ClusterID and PoolID address the pool, from the URL path.",
+            "type": "string"
+          },
+          "count": {
+            "description": "Count is the node count to scale TO — an absolute target, not a delta, and\nnever negative.",
+            "type": "integer"
+          },
+          "poolId": {
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the cloud the cluster lives on. Required; body or ?provider=.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sampleAccepted": {
+        "properties": {
+          "recorded": {
+            "description": "Recorded is always true: the response is an acknowledgement, and the\nwarehouse write is detached, so it reports acceptance, not durability.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "sampleIngest": {
+        "properties": {
+          "gpuModel": {
+            "type": "string"
+          },
+          "gpuUtil": {
+            "description": "GPUUtil is accelerator utilization as a fraction 0..1; the warehouse clamps\nanything outside that.",
+            "type": "number"
+          },
+          "gpus": {
+            "description": "GPUs is how many accelerators the reading covers, GPUModel the representative\nmodel name.",
+            "type": "integer"
+          },
+          "host": {
+            "description": "Host is the node's hostname, for display.",
+            "type": "string"
+          },
+          "memFree": {
+            "type": "integer"
+          },
+          "memUsed": {
+            "description": "MemUsed and MemFree are host memory in bytes.",
+            "type": "integer"
+          },
+          "unit": {
+            "description": "Unit is the reporting node's own id — the same id it registered under, and\nthe key the board joins this series onto. Required.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sampleList": {
+        "properties": {
+          "samples": {
+            "description": "Samples are the readings, OLDEST first — the order a chart plots.",
+            "items": {
+              "properties": {
+                "at": {
+                  "type": "string"
+                },
+                "costCents": {
+                  "type": "integer"
+                },
+                "cpus": {
+                  "type": "integer"
+                },
+                "gpuModel": {
+                  "type": "string"
+                },
+                "gpuUtil": {
+                  "type": "number"
+                },
+                "gpus": {
+                  "type": "integer"
+                },
+                "host": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "load1": {
+                  "type": "number"
+                },
+                "load15": {
+                  "type": "number"
+                },
+                "load5": {
+                  "type": "number"
+                },
+                "memFree": {
+                  "type": "integer"
+                },
+                "memUsed": {
+                  "type": "integer"
+                },
+                "memory": {
+                  "type": "integer"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "unit": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "workerList": {
+        "properties": {
+          "workers": {
+            "description": "Workers is one row per connected BYO machine, each carrying the host's own\nreport (GPUs, driver versions, capabilities) rather than a normalized view.",
+            "items": {
+              "properties": {
+                "arch": {
+                  "description": "Arch/CPUs/Memory are the connecting host's static CPU spec, mirrored from the\nregistration: Arch is runtime.GOARCH (amd64 | arm64), Memory is total RAM in\nBYTES — the same fields a code-linked run-target carries, so the /v1/fleet\nboard renders a linked node's arch + cores + RAM like any other unit.",
+                  "type": "string"
+                },
+                "capabilities": {
+                  "description": "Capabilities the worker advertises (\"studio.render\", \"engine.serve\"); Engine\nis present when it runs a hanzo-engine model server. Both additive + omitempty.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "cpuModel": {
+                  "type": "string"
+                },
+                "cpus": {
+                  "type": "integer"
+                },
+                "cuda": {
+                  "type": "string"
+                },
+                "driver": {
+                  "type": "string"
+                },
+                "engine": {
+                  "properties": {
+                    "apis": {
+                      "description": "[\"openai\",\"anthropic\"]",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "models": {
+                      "description": "ids from the node's GET /v1/models",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "status": {
+                      "description": "\"ready\" | \"unreachable\"",
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "firstSeen": {
+                  "type": "string"
+                },
+                "gpus": {
+                  "items": {
+                    "properties": {
+                      "arch": {
+                        "description": "native target, e.g. \"gfx1151\"",
+                        "type": "string"
+                      },
+                      "memoryTotal": {
+                        "description": "VRAM (or unified pool), e.g. \"122880 MiB\"",
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "unified": {
+                        "description": "unified CPU/GPU memory pool (APU / SoC)",
+                        "type": "boolean"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "hip": {
+                  "type": "string"
+                },
+                "hostname": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "jobQueue": {
+                  "type": "string"
+                },
+                "lastHeartbeat": {
+                  "type": "string"
+                },
+                "location": {
+                  "description": "\"on-prem\" (BYO has no cloud region)",
+                  "type": "string"
+                },
+                "memory": {
+                  "type": "integer"
+                },
+                "os": {
+                  "type": "string"
+                },
+                "provider": {
+                  "description": "always \"byo\"",
+                  "type": "string"
+                },
+                "rocm": {
+                  "type": "string"
+                },
+                "status": {
+                  "description": "online | offline",
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    }
+  }
+}

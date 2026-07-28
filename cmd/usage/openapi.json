@@ -1,0 +1,60 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "usage"
+    }
+  ],
+  "paths": {
+    "/v1/usage": {
+      "post": {
+        "operationId": "post_v1_usage",
+        "tags": [
+          "usage"
+        ]
+      }
+    },
+    "/v1/usage/analytics": {
+      "get": {
+        "operationId": "get_v1_usage_analytics",
+        "tags": [
+          "usage"
+        ]
+      }
+    },
+    "/v1/usage/analytics/access": {
+      "get": {
+        "operationId": "get_v1_usage_analytics_access",
+        "tags": [
+          "usage"
+        ]
+      }
+    },
+    "/v1/usage/samples": {
+      "get": {
+        "operationId": "get_v1_usage_samples",
+        "tags": [
+          "usage"
+        ]
+      }
+    },
+    "/v1/usage/summary": {
+      "get": {
+        "operationId": "get_v1_usage_summary",
+        "tags": [
+          "usage"
+        ]
+      }
+    }
+  }
+}

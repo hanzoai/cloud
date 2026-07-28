@@ -48,7 +48,22 @@ func run() error {
 	// The same config and the same Deps the unified binary builds — o11y reads
 	// only Logger and DataDir out of it, but building it the one canonical way
 	// keeps this entrypoint honest about what a subsystem may reach for.
-	deps := cloud.BuildDeps(cloud.LoadConfig())
+	//
+	// `o11y openapi` is the exception, and for the same reason cloud.Serve makes
+	// it one: a document is a projection of routes, so describing must be a
+	// function of the code alone and must not open the deployment's real stores
+	// (the default data dir is /var/lib/cloud, which a describe run cannot write).
+	specDest, describing := cloud.SpecRequested()
+	cfg := cloud.LoadConfig()
+	if describing {
+		spec, done, err := cloud.SpecConfig()
+		if err != nil {
+			return err
+		}
+		defer done()
+		cfg = spec
+	}
+	deps := cloud.BuildDeps(cfg)
 
 	// A plugin is a host for its own requests, so it owns its own providers —
 	// the SAME bootstrap cloud.Serve runs, not a second one. Before the mount, so
@@ -61,6 +76,13 @@ func run() error {
 
 	if err := o11y.MountO11y(app, deps); err != nil {
 		return fmt.Errorf("mount: %w", err)
+	}
+
+	// The same self-description every generated app binary gets from cloud.Serve.
+	// This main is hand-written (it is a plugin, not a Wire stub), so it asks for
+	// the mode itself — through the same one producer.
+	if describing {
+		return cloud.WriteSpec(specDest, app)
 	}
 
 	// Teardown belongs to the process that owns the resources. The OTLP

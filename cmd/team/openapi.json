@@ -1,0 +1,258 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "team"
+    }
+  ],
+  "paths": {
+    "/collaborator": {
+      "get": {
+        "operationId": "get_collaborator"
+      }
+    },
+    "/collaborator/rpc/{documentId}": {
+      "post": {
+        "operationId": "post_collaborator_rpc_by_documentid",
+        "parameters": [
+          {
+            "name": "documentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/team/account": {
+      "post": {
+        "operationId": "post_v1_team_account",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/v1/team/account/auth/{provider}": {
+      "get": {
+        "operationId": "get_v1_team_account_auth_by_provider",
+        "tags": [
+          "team"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/team/account/auth/{provider}/callback": {
+      "get": {
+        "operationId": "get_v1_team_account_auth_by_provider_callback",
+        "tags": [
+          "team"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/team/account/cookie": {
+      "delete": {
+        "operationId": "delete_v1_team_account_cookie",
+        "tags": [
+          "team"
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_team_account_cookie",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/v1/team/account/providers": {
+      "get": {
+        "operationId": "get_v1_team_account_providers",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/v1/team/billing/plan": {
+      "get": {
+        "operationId": "get_v1_team_billing_plan",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/v1/team/billing/ui": {
+      "get": {
+        "operationId": "get_v1_team_billing_ui",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/v1/team/billing/ui/{wildcard1}": {
+      "get": {
+        "operationId": "get_v1_team_billing_ui_by_wildcard1",
+        "tags": [
+          "team"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/team/bots": {
+      "get": {
+        "operationId": "get_v1_team_bots",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/v1/team/bots/sync": {
+      "post": {
+        "operationId": "post_v1_team_bots_sync",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/v1/team/files/{workspace}": {
+      "post": {
+        "operationId": "post_v1_team_files_by_workspace",
+        "tags": [
+          "team"
+        ],
+        "parameters": [
+          {
+            "name": "workspace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/team/files/{workspace}/{filename}": {
+      "delete": {
+        "operationId": "delete_v1_team_files_by_workspace_by_filename",
+        "tags": [
+          "team"
+        ],
+        "parameters": [
+          {
+            "name": "workspace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_team_files_by_workspace_by_filename",
+        "tags": [
+          "team"
+        ],
+        "parameters": [
+          {
+            "name": "workspace",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/team/transactor/api/v1/statistics": {
+      "get": {
+        "operationId": "get_v1_team_transactor_api_v1_statistics",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/v1/team/transactor/statistics": {
+      "get": {
+        "operationId": "get_v1_team_transactor_statistics",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/v1/team/transactor/{token}": {
+      "get": {
+        "operationId": "get_v1_team_transactor_by_token",
+        "tags": [
+          "team"
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

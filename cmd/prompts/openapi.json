@@ -1,0 +1,84 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "prompts"
+    }
+  ],
+  "paths": {
+    "/v1/prompts": {
+      "get": {
+        "operationId": "get_v1_prompts",
+        "tags": [
+          "prompts"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_prompts",
+        "tags": [
+          "prompts"
+        ]
+      }
+    },
+    "/v1/prompts/catalog": {
+      "get": {
+        "operationId": "get_v1_prompts_catalog",
+        "tags": [
+          "prompts"
+        ]
+      }
+    },
+    "/v1/prompts/metrics": {
+      "get": {
+        "operationId": "get_v1_prompts_metrics",
+        "tags": [
+          "prompts"
+        ]
+      }
+    },
+    "/v1/prompts/{name}": {
+      "delete": {
+        "operationId": "delete_v1_prompts_by_name",
+        "tags": [
+          "prompts"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_prompts_by_name",
+        "tags": [
+          "prompts"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

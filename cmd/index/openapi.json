@@ -1,0 +1,280 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "index"
+    }
+  ],
+  "paths": {
+    "/v1/index/health": {
+      "get": {
+        "operationId": "get_v1_index_health",
+        "tags": [
+          "index"
+        ]
+      }
+    },
+    "/v1/index/indexes": {
+      "get": {
+        "operationId": "get_v1_index_indexes",
+        "tags": [
+          "index"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_index_indexes",
+        "tags": [
+          "index"
+        ]
+      }
+    },
+    "/v1/index/indexes/{uid}": {
+      "delete": {
+        "operationId": "delete_v1_index_indexes_by_uid",
+        "tags": [
+          "index"
+        ],
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_index_indexes_by_uid",
+        "tags": [
+          "index"
+        ],
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/index/indexes/{uid}/documents": {
+      "get": {
+        "operationId": "get_v1_index_indexes_by_uid_documents",
+        "tags": [
+          "index"
+        ],
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_index_indexes_by_uid_documents",
+        "tags": [
+          "index"
+        ],
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_index_indexes_by_uid_documents",
+        "tags": [
+          "index"
+        ],
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/index/indexes/{uid}/documents/delete-batch": {
+      "post": {
+        "operationId": "post_v1_index_indexes_by_uid_documents_delete-batch",
+        "tags": [
+          "index"
+        ],
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/index/indexes/{uid}/documents/{id}": {
+      "delete": {
+        "operationId": "delete_v1_index_indexes_by_uid_documents_by_id",
+        "tags": [
+          "index"
+        ],
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_index_indexes_by_uid_documents_by_id",
+        "tags": [
+          "index"
+        ],
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/index/indexes/{uid}/search": {
+      "post": {
+        "operationId": "post_v1_index_indexes_by_uid_search",
+        "tags": [
+          "index"
+        ],
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/index/indexes/{uid}/settings": {
+      "get": {
+        "operationId": "get_v1_index_indexes_by_uid_settings",
+        "tags": [
+          "index"
+        ],
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_index_indexes_by_uid_settings",
+        "tags": [
+          "index"
+        ],
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/index/stats": {
+      "get": {
+        "operationId": "get_v1_index_stats",
+        "tags": [
+          "index"
+        ]
+      }
+    },
+    "/v1/index/tasks/{uid}": {
+      "get": {
+        "operationId": "get_v1_index_tasks_by_uid",
+        "tags": [
+          "index"
+        ],
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/index/version": {
+      "get": {
+        "operationId": "get_v1_index_version",
+        "tags": [
+          "index"
+        ]
+      }
+    }
+  }
+}

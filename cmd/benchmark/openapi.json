@@ -1,0 +1,66 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "benchmark"
+    }
+  ],
+  "paths": {
+    "/v1/benchmark/catalog": {
+      "get": {
+        "operationId": "get_v1_benchmark_catalog",
+        "tags": [
+          "benchmark"
+        ]
+      }
+    },
+    "/v1/benchmark/compare": {
+      "get": {
+        "operationId": "get_v1_benchmark_compare",
+        "tags": [
+          "benchmark"
+        ]
+      }
+    },
+    "/v1/benchmark/leaderboard": {
+      "get": {
+        "operationId": "get_v1_benchmark_leaderboard",
+        "tags": [
+          "benchmark"
+        ]
+      }
+    },
+    "/v1/benchmark/presets": {
+      "get": {
+        "operationId": "get_v1_benchmark_presets",
+        "tags": [
+          "benchmark"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_benchmark_presets",
+        "tags": [
+          "benchmark"
+        ]
+      }
+    },
+    "/v1/benchmark/runs": {
+      "post": {
+        "operationId": "post_v1_benchmark_runs",
+        "tags": [
+          "benchmark"
+        ]
+      }
+    }
+  }
+}

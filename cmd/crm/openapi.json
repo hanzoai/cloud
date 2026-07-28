@@ -1,0 +1,268 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "crm"
+    }
+  ],
+  "paths": {
+    "/v1/crm/applications": {
+      "get": {
+        "operationId": "get_v1_crm_applications",
+        "tags": [
+          "crm"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_crm_applications",
+        "tags": [
+          "crm"
+        ]
+      }
+    },
+    "/v1/crm/applications/{id}": {
+      "get": {
+        "operationId": "get_v1_crm_applications_by_id",
+        "tags": [
+          "crm"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_crm_applications_by_id",
+        "tags": [
+          "crm"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/crm/companies": {
+      "get": {
+        "operationId": "get_v1_crm_companies",
+        "tags": [
+          "crm"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_crm_companies",
+        "tags": [
+          "crm"
+        ]
+      }
+    },
+    "/v1/crm/companies/{id}": {
+      "delete": {
+        "operationId": "delete_v1_crm_companies_by_id",
+        "tags": [
+          "crm"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_crm_companies_by_id",
+        "tags": [
+          "crm"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_crm_companies_by_id",
+        "tags": [
+          "crm"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/crm/contacts": {
+      "get": {
+        "operationId": "get_v1_crm_contacts",
+        "tags": [
+          "crm"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_crm_contacts",
+        "tags": [
+          "crm"
+        ]
+      }
+    },
+    "/v1/crm/contacts/{id}": {
+      "delete": {
+        "operationId": "delete_v1_crm_contacts_by_id",
+        "tags": [
+          "crm"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_crm_contacts_by_id",
+        "tags": [
+          "crm"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_crm_contacts_by_id",
+        "tags": [
+          "crm"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/crm/opportunities": {
+      "get": {
+        "operationId": "get_v1_crm_opportunities",
+        "tags": [
+          "crm"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_crm_opportunities",
+        "tags": [
+          "crm"
+        ]
+      }
+    },
+    "/v1/crm/opportunities/{id}": {
+      "delete": {
+        "operationId": "delete_v1_crm_opportunities_by_id",
+        "tags": [
+          "crm"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_crm_opportunities_by_id",
+        "tags": [
+          "crm"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_crm_opportunities_by_id",
+        "tags": [
+          "crm"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/crm/summary": {
+      "get": {
+        "operationId": "get_v1_crm_summary",
+        "tags": [
+          "crm"
+        ]
+      }
+    }
+  }
+}

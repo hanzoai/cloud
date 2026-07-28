@@ -1,0 +1,152 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "legal"
+    }
+  ],
+  "paths": {
+    "/v1/legal/documents": {
+      "get": {
+        "operationId": "get_v1_legal_documents",
+        "tags": [
+          "legal"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_legal_documents",
+        "tags": [
+          "legal"
+        ]
+      }
+    },
+    "/v1/legal/documents/{id}": {
+      "get": {
+        "operationId": "get_v1_legal_documents_by_id",
+        "tags": [
+          "legal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/legal/documents/{id}/sign": {
+      "post": {
+        "operationId": "post_v1_legal_documents_by_id_sign",
+        "tags": [
+          "legal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/legal/documents/{id}/sign/complete": {
+      "post": {
+        "operationId": "post_v1_legal_documents_by_id_sign_complete",
+        "tags": [
+          "legal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/legal/filings": {
+      "get": {
+        "operationId": "get_v1_legal_filings",
+        "tags": [
+          "legal"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_legal_filings",
+        "tags": [
+          "legal"
+        ]
+      }
+    },
+    "/v1/legal/health": {
+      "get": {
+        "operationId": "get_v1_legal_health",
+        "tags": [
+          "legal"
+        ]
+      }
+    },
+    "/v1/legal/templates": {
+      "get": {
+        "operationId": "get_v1_legal_templates",
+        "tags": [
+          "legal"
+        ]
+      }
+    },
+    "/v1/legal/templates/{id}": {
+      "get": {
+        "operationId": "get_v1_legal_templates_by_id",
+        "tags": [
+          "legal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_legal_templates_by_id",
+        "tags": [
+          "legal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

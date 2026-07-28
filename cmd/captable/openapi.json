@@ -1,0 +1,348 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "captable"
+    }
+  ],
+  "paths": {
+    "/v1/captable/company": {
+      "get": {
+        "operationId": "get_v1_captable_company",
+        "tags": [
+          "captable"
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_captable_company",
+        "tags": [
+          "captable"
+        ]
+      }
+    },
+    "/v1/captable/convertibles": {
+      "get": {
+        "operationId": "get_v1_captable_convertibles",
+        "tags": [
+          "captable"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_captable_convertibles",
+        "tags": [
+          "captable"
+        ]
+      }
+    },
+    "/v1/captable/convertibles/{id}": {
+      "delete": {
+        "operationId": "delete_v1_captable_convertibles_by_id",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/captable/equity-plans": {
+      "get": {
+        "operationId": "get_v1_captable_equity-plans",
+        "tags": [
+          "captable"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_captable_equity-plans",
+        "tags": [
+          "captable"
+        ]
+      }
+    },
+    "/v1/captable/investments": {
+      "get": {
+        "operationId": "get_v1_captable_investments",
+        "tags": [
+          "captable"
+        ]
+      }
+    },
+    "/v1/captable/options": {
+      "get": {
+        "operationId": "get_v1_captable_options",
+        "tags": [
+          "captable"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_captable_options",
+        "tags": [
+          "captable"
+        ]
+      }
+    },
+    "/v1/captable/options/{id}": {
+      "delete": {
+        "operationId": "delete_v1_captable_options_by_id",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/captable/rounds": {
+      "get": {
+        "operationId": "get_v1_captable_rounds",
+        "tags": [
+          "captable"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_captable_rounds",
+        "tags": [
+          "captable"
+        ]
+      }
+    },
+    "/v1/captable/rounds/{id}": {
+      "get": {
+        "operationId": "get_v1_captable_rounds_by_id",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/captable/rounds/{id}/close": {
+      "post": {
+        "operationId": "post_v1_captable_rounds_by_id_close",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/captable/rounds/{id}/investments": {
+      "post": {
+        "operationId": "post_v1_captable_rounds_by_id_investments",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/captable/safes": {
+      "get": {
+        "operationId": "get_v1_captable_safes",
+        "tags": [
+          "captable"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_captable_safes",
+        "tags": [
+          "captable"
+        ]
+      }
+    },
+    "/v1/captable/safes/{id}": {
+      "delete": {
+        "operationId": "delete_v1_captable_safes_by_id",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/captable/share-classes": {
+      "get": {
+        "operationId": "get_v1_captable_share-classes",
+        "tags": [
+          "captable"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_captable_share-classes",
+        "tags": [
+          "captable"
+        ]
+      }
+    },
+    "/v1/captable/share-classes/{id}": {
+      "patch": {
+        "operationId": "patch_v1_captable_share-classes_by_id",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/captable/shares": {
+      "get": {
+        "operationId": "get_v1_captable_shares",
+        "tags": [
+          "captable"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_captable_shares",
+        "tags": [
+          "captable"
+        ]
+      }
+    },
+    "/v1/captable/shares/transfer": {
+      "post": {
+        "operationId": "post_v1_captable_shares_transfer",
+        "tags": [
+          "captable"
+        ]
+      }
+    },
+    "/v1/captable/shares/{id}": {
+      "delete": {
+        "operationId": "delete_v1_captable_shares_by_id",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/captable/stakeholders": {
+      "get": {
+        "operationId": "get_v1_captable_stakeholders",
+        "tags": [
+          "captable"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_captable_stakeholders",
+        "tags": [
+          "captable"
+        ]
+      }
+    },
+    "/v1/captable/stakeholders/{id}": {
+      "delete": {
+        "operationId": "delete_v1_captable_stakeholders_by_id",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_captable_stakeholders_by_id",
+        "tags": [
+          "captable"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/captable/summary": {
+      "get": {
+        "operationId": "get_v1_captable_summary",
+        "tags": [
+          "captable"
+        ]
+      }
+    }
+  }
+}
