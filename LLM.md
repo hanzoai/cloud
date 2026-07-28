@@ -140,6 +140,25 @@ package under `clients/<name>` that obeys these seams — nothing more.
   process-wide handles (Logger, DataDir, the subsystem `Client` seams). No
   subsystem reaches into another's internals. There is no init()-registry and no
   `cloud.Register` — subsystems do NOT self-register.
+- **Out-of-process variant.** A subsystem may run as its OWN binary without
+  changing anything about it: `cloud.PluginSpec(name, zip.Plugin{…}, prefixes…)`
+  returns an ordinary `MountSpec`, so where a subsystem runs stops being a
+  property of its source and becomes one line at the composition root. zip starts
+  `cmd/<name>` as a child on a private unix socket and forwards the path
+  UNCHANGED. Today `o11y` is the only one — it is the heaviest graph in the tree
+  (otel-collector, prometheus, gonum) and imported by nothing else, so unlinking
+  it is pure subtraction.
+  - `prefixes` is variadic because ONE plugin commonly owns several subtrees
+    (`o11y` answers `/v1/o11y` AND `/v1/sentry`). Naming only the first 404s the
+    rest AT THE HOST — the request never reaches the child — while the host
+    starts and reports healthy. Both readers take the same list: zip routes on
+    it, and `indexSubsystems` reports it to `/v1/admin/subsystems` and to the
+    per-request subsystem attribution tracing hangs off.
+  - The image must actually CONTAIN the binary: `zip.Load` fork/execs a sibling
+    of `/cloud`, so a missing one aborts the mount and cloud never listens
+    (`fork/exec /o11y: no such file`). The Dockerfile DERIVES the list by grepping
+    `PluginSpec("…"` out of `apps/apps.go` rather than keeping a second copy —
+    unlinking o11y without adding a build step once cost five consecutive releases.
 - **Client seams.** Cross-subsystem calls go through a narrow in-process interface
   published in `types` and aliased at the provider, e.g. `commerce.Client =
   types.CommerceClient` (`GetOrgConfig` + `CheckEntitlement`). Consumers depend on
@@ -428,7 +447,8 @@ repoints by changing one host. It replaced the standalone Meilisearch containers
 
 **Four different things, four names — do not merge them.** `hanzoai/search` is the
 SEARCH PRODUCT (our own Meilisearch build, serving `search.hanzo.ai` and the docs
-corpus). `clients/websearch` queries the OUTSIDE world. `hanzoai/crawl` fetches it.
+corpus). `clients/websearch` queries the OUTSIDE world. `clients/crawl` fetches it
+(in-binary — see below; the standalone `hanzoai/crawl` service it used to call is gone).
 `clients/index` is the storage primitive an application writes documents into and
 queries back. It is NOT at `/v1/search`: that path belongs to the `hanzoai/ai` RAG
 plane, whose `/v1/search/{name}` pattern silently swallowed this subsystem's
@@ -456,6 +476,43 @@ keeps the wrapped data key beside it as `<path>.dek`, so moving the `.db` alone
 strands the key and every document becomes undecryptable — data loss that presents
 as an empty index.
 
+## Fetching the web (`clients/crawl`, `/v1/crawl`)
+
+In-binary fetch + extract + markdown. It replaced a call to a standalone crawler
+at `crawl.hanzo.svc.cluster.local:11235` — a name that had stopped resolving, which
+nothing noticed because every caller is allowed to degrade: the answer engine's read
+stage falls back to the ~600-char search snippet, so research answers silently
+grounded on snippets and looked fine.
+
+**`Fetch` and `Read` are different doors, deliberately.** `Fetch` is the pure network
+primitive (URL in, `Page` out, no IO beyond the request) — testable with no store.
+`Read` is what callers use: archive first, network second, keep what came back. One
+door, so no caller has to remember to persist and no two can disagree about where
+pages live.
+
+Kept pages ride the ONE object seam the binary already has (`types.VFSClient` over
+the shared S3 gateway) — no second client, no second bucket, no second credential.
+Key is `crawl/<org>/<project>/<sha256(url)>.json`, and both halves of that path are
+load-bearing:
+
+- The URL is HASHED, never spliced in. A URL carries `/`, `?`, `#`, `%` and arbitrary
+  unicode; embedding one lets a crafted URL walk out of its prefix into another
+  tenant's, which is the whole isolation boundary.
+- Scope comes from the VERIFIED principal, never the body, because it selects that
+  prefix.
+- Keyed by the REQUESTED url, not `Page.URL` (where it landed after redirects) —
+  filing under the latter means a cache that never hits for exactly the pages that
+  redirect.
+- The scope segments are readable + digest, because sanitising alone is LOSSY:
+  fold-to-`-` maps `a/b` and `a-b` onto one segment, and two orgs that collide share
+  a corpus prefix. The digest decides identity; the readable half is for browsing.
+
+SSRF is guarded IN THE DIALER, not by inspecting the hostname: a name check is
+TOCTOU (DNS rebinding), and redirects re-enter the same dialer for free. The dialer
+resolves, refuses if ANY resolved address is non-public, and dials the address it
+checked. Storage failures are best-effort throughout — a store that is down costs a
+cache hit, never the page.
+
 ## Releases are cut by a merge to main
 
 `.github/workflows` is intentionally empty of CI. The image and its `v*` tags have ONE
@@ -463,16 +520,31 @@ owner, `clients/platform/release.go`: compute the next version → build → SMO
 pushed image → tag → roll out. The tag is a RECEIPT for a proven image, so a
 change that breaks boot never reaches production and leaves no phantom tag.
 
-The final step has ONE writer: patch the operator `hanzo.ai/v1` Service CR's
-`spec.image` and let the operator reconcile. It used to write twice — that patch plus
-a `repository_dispatch` mirror at `hanzoai/universe` — composed best-effort so the
-step passed if EITHER landed. Two writers for one fact, and the composition HID their
-disagreement: patch fails, mirror succeeds, cluster and git now describe different
-production states with nothing reporting a problem. The mirror was also never running
-— it read `UNIVERSE_DISPATCH_TOKEN`, never set on the deployment, so it failed closed
-on every release and the CR patch was already doing all the work. A rollout with
-nowhere to write is now an ERROR: the image is built, smoke-passed and tagged but NOT
-live, and a release that claims otherwise is worse than one that fails.
+The final step has ONE writer, and for a first-party service it is **universe git,
+not the cluster**. `clients/paas.releaseService` REFUSES to patch the operator
+`hanzo.ai/v1` App CR's `spec.image`: those CRs are declared in
+`infra/k8s/operator/crs/` and reconciled by Hanzo CD with selfHeal, so a patch is
+reverted on the next sync — the release would look applied and then silently roll
+back. It validates first (DNS-1123 name, clean-semver via `splitReleaseImage`,
+App exists in the namespace) so the refusal is specific rather than generic, and
+names the remedy: **commit the tag to that file.**
+
+So a green pipeline ends at `release tag minted (receipt for a pushed,
+smoke-passed image)` followed by `release failed … reached: tagged`. That pair is
+NOT a broken build — the image is real and proven, it simply has no declared state
+pointing at it. Production moves when someone bumps `tag:` in
+`universe/infra/k8s/operator/crs/cloud.yaml`. Four tags (`.267`–`.270`)
+accumulated behind that once, with prod healthy on `.266` the whole time.
+
+It used to write twice — a CR patch plus a `repository_dispatch` mirror at
+`hanzoai/universe` — composed best-effort so the step passed if EITHER landed. Two
+writers for one fact, and the composition HID their disagreement: patch fails,
+mirror succeeds, cluster and git now describe different production states with
+nothing reporting a problem. The mirror was also never running — it read
+`UNIVERSE_DISPATCH_TOKEN`, never set on the deployment, so it failed closed on every
+release. A rollout with nowhere to write is an ERROR: the image is built,
+smoke-passed and tagged but NOT live, and a release that claims otherwise is worse
+than one that fails.
 
 ### Site releases already have a lifecycle — do not build a second one
 
@@ -506,11 +578,16 @@ added, `activate` must also verify the bytes still exist before flipping — tod
 `ActivateRelease` proves only that the ROW exists, which is sufficient only while
 nothing can prune the bytes out from under it.
 
-It is driven by the GitHub App. A push arrives HMAC-verified at
-`/v1/connector/github/webhook`, which fires `cloud.OnGitPush` — the SAME
-single-registrant seam the embedded git server uses, not a second CI — and
-`clients/platform` decides what the push means: an app tracking the repo rebuilds,
-and cloud's own upstream cuts a release. Cloud is the machine, so it calls the
+**Three transports, one trigger.** A push reaches `cloud.OnGitPush` — the
+single-registrant seam, never a second CI — from the embedded git server
+(`clients/git/smart_http.go`), the GitHub App (`/v1/connector/github/webhook`), and
+the canonical forge (`/v1/git/webhook`, `clients/git/webhook.go`). The third exists
+because git.hanzo.ai is a SEPARATE process: its pushes never touch our receive-pack,
+so without that door the host we call canonical builds nothing and only the mirror
+releases. Both webhook transports HMAC-verify fail-closed and drop bot-authored
+pushes through the one `cloud.IsBotActor`, so a release cannot retrigger itself.
+`clients/platform` is the only place that decides what a push MEANS: an app tracking
+the repo rebuilds, and cloud's own upstream cuts a release. Cloud is the machine, so it calls the
 release in-process and the build token is never handed to a caller. The trigger runs
 BEFORE the token mint and the mirror, because a build reads from GitHub and must not
 be lost to a sync outage.

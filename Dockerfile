@@ -172,24 +172,39 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -ldflags="-s -w" -o /smoke ./cmd/smoke
-# The o11y app (cmd/o11y) — the first subsystem that is NOT linked into /cloud.
-# apps.Wire loads it at run time via zip.Load, which fork/execs this path, so the
-# binary has to be IN the image or the mount fails and cloud never reaches
-# listening:
+# Every subsystem that is NOT linked into /cloud, built from the SAME declaration
+# that makes it a plugin. apps.Wire loads each one at run time via zip.Load, which
+# fork/execs a sibling of /cloud, so the binary must be in the image or the mount
+# aborts and cloud never reaches listening:
 #
 #   cloud: mount: mount o11y: zip: Load(o11y): start: fork/exec /o11y: no such file
 #
-# That is exactly what happened: unlinking o11y (deleting its import so its 2.7k
-# package graph — otel-collector, prometheus, gonum — stops being linked into
-# cloud) shipped without the build step that produces the separate binary, and
-# every release after it failed the boot smoke. Unlinking a subsystem means
-# building it somewhere else, not just deleting the import.
+# That is what happened with the first one: unlinking o11y (deleting its import so
+# its 2.7k-package graph stops being linked into cloud) shipped without the step
+# that builds the separate binary, and five consecutive releases produced an image
+# and shipped none. Unlinking a subsystem means building it somewhere else, not
+# just deleting the import.
 #
-# CGO_ENABLED=0 like /smoke: cmd/o11y touches no sqlite, so it needs no libc and
-# a static binary is one less thing that can disagree with the runtime image.
+# The list is DERIVED, not maintained here. cloud.PluginSpec("<name>", …) in
+# apps/apps.go is what makes something a plugin, so that is what this reads —
+# adding the second plugin is a one-line edit at the composition root and this
+# Dockerfile does not change. A hand-kept copy of the list would be a second place
+# to forget, which is the bug above with extra steps. cmd/<name> is the convention
+# gen-app-cmds already follows; a plugin declared without one fails the build here
+# rather than at a pod's first boot.
+#
+# CGO_ENABLED=0 like /smoke: these touch no sqlite, so they need no libc, and a
+# static binary is one less thing that can disagree with the runtime base.
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o /o11y ./cmd/o11y
+    set -eu; mkdir -p /plugins; \
+    names="$(grep -o 'PluginSpec("[a-z0-9-]*"' apps/apps.go | cut -d'"' -f2 | sort -u || true)"; \
+    [ -n "$names" ] || { echo "FATAL: no PluginSpec found in apps/apps.go — the derivation broke, not the plugin list"; exit 1; }; \
+    for p in $names; do \
+      [ -d "./cmd/$p" ] || { echo "FATAL: plugin '$p' is declared in Wire but has no cmd/$p"; exit 1; }; \
+      echo "building plugin $p"; \
+      CGO_ENABLED=0 go build -ldflags="-s -w" -o "/plugins/$p" "./cmd/$p"; \
+    done
 # Prove the SHIPPED binary binds sqlite3_* to libsqlcipher, not a plaintext libsqlite3.
 RUN readelf -d /cloud | grep -qE 'NEEDED.*(sqlcipher|sqlite3)' || { echo "FATAL: /cloud links no sqlite/sqlcipher .so"; exit 1; }; \
     ! ldd /cloud 2>/dev/null | grep -E 'libsqlite3' | grep -vq 'libsqlcipher' || { echo "FATAL: /cloud resolves a NON-sqlcipher libsqlite3 (plaintext risk)"; exit 1; }
@@ -233,9 +248,11 @@ COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /etc/group /etc/group
 COPY --from=build /cloud /cloud
 COPY --from=build /smoke /smoke
-# The out-of-process o11y app. zip.Load fork/execs /o11y at mount time, so this
-# COPY is load-bearing: without it cloud aborts during mount, before listening.
-COPY --from=build /o11y /o11y
+# The out-of-process plugin binaries, landing beside /cloud because that is where
+# zip.Load looks: apps.o11yPlugin resolves dir(os.Executable())+"/<name>". Copying
+# the DIRECTORY's contents keeps this generic — a new plugin needs no line here,
+# same as the build step above.
+COPY --from=build /plugins/ /
 EXPOSE 8080 9090 9653
 USER 65532:65532
 # tini as PID 1 forwards signals to /cloud unchanged (so SIGTERM still drains

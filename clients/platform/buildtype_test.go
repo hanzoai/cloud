@@ -27,9 +27,7 @@ func postApp(t *testing.T, app *zip.App, org string, body map[string]any) (int, 
 func TestBuildTypeSurface(t *testing.T) {
 	app := mountApp(t)
 	const org = "acme"
-	if code, _ := do(t, app, http.MethodPost, "/v1/platform/projects", org, map[string]any{"name": "web", "slug": "web"}); code != http.StatusCreated {
-		t.Fatalf("create project: got %d", code)
-	}
+	seedProject(t, app, org, "web")
 	const repo = "https://github.com/hanzoai/app"
 
 	// git source, no buildType → default is pack (NOT nixpacks).
