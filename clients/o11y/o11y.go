@@ -133,7 +133,11 @@ func gate(next http.Handler) http.Handler {
 // principal-gated. The {project} segment is a UUID enforced by the runtime route; the
 // trailing slash is the Sentry wire form, the slash-less variant tolerated defensively.
 // The gateway needs a byte-identical sibling allow-rule so the tokenless ingest it lets
-// through is not then 403'd here (coordinated separately; see the report).
+// through is not then 403'd here. VERIFIED in production once the host actually mounted
+// /v1/sentry: a keyless POST to /v1/sentry/<uuid>/envelope/ answers 401 "invalid ingest
+// key" (text/plain, from the ingest verifier) — NOT 404 (unrouted), and NOT the 403
+// {"status":"error","msg":"no validated principal"} that the READ paths still return.
+// Those three responses are how you tell the hops apart if this ever regresses.
 func isSentryIngestPath(method, path string) bool {
 	if method != http.MethodPost {
 		return false
