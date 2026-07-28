@@ -1,3 +1,8 @@
+# This crate is built standalone (the Go binding links its staticlib), so it
+# must not be absorbed into whatever Cargo workspace happens to sit above the
+# checkout directory. An empty [workspace] table declares that boundary.
+[workspace]
+
 [package]
 name = "hanzo-flags"
 version = "0.1.0"
