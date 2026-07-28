@@ -14,6 +14,7 @@ import (
 	"github.com/hanzoai/cloud/clients/metering"
 	"github.com/hanzoai/cloud/internal/org"
 	"github.com/hanzoai/ha"
+	"github.com/hanzoai/metrics"
 	s3 "github.com/hanzoai/s3-go"
 	sqlitedrv "github.com/hanzoai/sqlite"
 	luxlog "github.com/luxfi/log"
@@ -974,6 +975,36 @@ type MountFunc func(app Router, deps Deps) error
 // bounded — Serve calls it within the shutdown deadline. ctx carries that
 // deadline so a slow teardown is cut off rather than hanging SIGTERM.
 type ShutdownFunc func(ctx context.Context) error
+
+// CtxShutdown adapts a subsystem's zero-arg Shutdown() error to ShutdownFunc.
+// Several subsystems expose the simpler form (their teardown ignores the
+// deadline); this bridges the impedance mismatch in ONE place so the Wire
+// entries stay declarative — no inline closures.
+//
+// It lives beside ShutdownFunc rather than in package apps because a Wire entry
+// is copied verbatim into cmd/<app>/main.go by cmd/gen-app-cmds: an apps-local
+// helper is unreachable from a standalone main, so that app falls back to the
+// fat stub that links EVERY subsystem. Package-qualified here, it is nameable
+// from anywhere and the per-app binary stays lean.
+func CtxShutdown(f func() error) ShutdownFunc {
+	return func(context.Context) error { return f() }
+}
+
+// MountMetrics adapts hanzoai/metrics into a MountFunc. metrics declares its OWN
+// narrow Deps (Logger, DataDir, Brand) and does not import hanzoai/cloud, so Typed
+// cannot bridge it; this builds that Deps from cloud's and calls metrics.Mount.
+//
+// It lives here rather than in package apps for exactly CtxShutdown's reason: an
+// apps-local identifier in a Wire entry is unreachable from the generated
+// cmd/<app>/main.go, so metrics fell back to the stub that links every subsystem.
+// The move is affordable only because it is nearly free — cloud's core already
+// carries 398 of metrics' 399 dependencies, so every binary grows by the one
+// package hanzoai/metrics itself. It is the ONLY one of the four mount adapters
+// that is: commerce would add 527 packages to the core, and zen (via
+// hanzoai/ai/controllers) and ai import hanzoai/cloud — a cycle, not a weight.
+func MountMetrics(a *zip.App, deps Deps) error {
+	return metrics.Mount(a, metrics.Deps{Logger: deps.Logger, DataDir: deps.DataDir, Brand: deps.Brand})
+}
 
 // MountSpec describes one subsystem to mount. There is NO Order field: the slice
 // position in apps.Wire() IS the mount order — the composition root lists
