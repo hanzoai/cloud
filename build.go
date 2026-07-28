@@ -1004,6 +1004,14 @@ type MountSpec struct {
 	Mount    MountFunc
 	Shutdown ShutdownFunc // optional; nil means the subsystem has nothing to tear down.
 
+	// Price is what ONE request to this subsystem's surface costs at the edge gate —
+	// Free, Metered, or a positive number of cents (see price.go). It is REQUIRED:
+	// the zero value is Undeclared, and apps.TestPriceDeclared fails on it, so a new
+	// subsystem cannot reach main until someone writes down what it costs. This is
+	// the ONE place a surface's price is declared; DefaultPrice reads it and holds no
+	// table of its own.
+	Price Price
+
 	// OwnsHealth marks a subsystem that serves its OWN GET /v1/<name>/health
 	// (a real, fail-closed probe). Serve's generic liveness loop skips these so
 	// its always-ok route never shadows the subsystem's real probe.
@@ -1042,10 +1050,11 @@ type MountSpec struct {
 // teardown needs no separate enablement gate.
 func MountAll(app *zip.App, specs []MountSpec, cfg *Config, deps Deps) error {
 	logger := deps.Logger
-	// Index the composition root BEFORE anything mounts: TracingMiddleware resolves
-	// hanzo.subsystem off this, and the inventory (including what is switched OFF) is
-	// what /v1/admin/subsystems reports. Built once, read lock-free per request.
-	indexSubsystems(specs, cfg)
+	// Declare the composition root BEFORE anything mounts: TracingMiddleware resolves
+	// hanzo.subsystem off this, DefaultPrice resolves each surface's declared price off
+	// it, and the inventory (including what is switched OFF) is what
+	// /v1/admin/subsystems reports. Built once, read lock-free per request.
+	Declare(specs, cfg)
 	for _, spec := range specs {
 		if !cfg.Enabled(spec.Name) {
 			logger.Debug("subsystem disabled", "name", spec.Name)
