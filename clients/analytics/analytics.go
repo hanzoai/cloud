@@ -161,10 +161,10 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Post("/v1/event", cloud.Handle(s, eventIngest))
 
 	// /v1/ingest — a THIN DEPRECATED ALIAS of /v1/event (delegates to the exact
-	// eventHandle logic: pk_ auth now lives on the canonical door). /v1/ingest/keys
-	// mints a pk_ for the caller's org (minting is a distinct concern, not ingest);
-	// /v1/errors is the type:'error' read lens (validated principal — reads never
-	// accept the write-only key).
+	// eventHandle logic: publishable-key auth lives on the canonical door).
+	// MINTING is a different concern and lives on the key resource, not here:
+	// POST /v1/keys with {"type":"publishable"}. /v1/errors is the type:'error'
+	// read lens (validated principal — reads never accept the write-only key).
 	app.Post("/v1/ingest", cloud.Handle(s, ingest))
 	app.Get("/v1/errors", cloud.Handle(s, errorsLens))
 

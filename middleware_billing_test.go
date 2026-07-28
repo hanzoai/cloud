@@ -218,38 +218,51 @@ func TestBillingGate_NilClientIsNoop(t *testing.T) {
 	}
 }
 
-// DefaultPrice must return 0 for self-metered and health paths (no gating, no
-// double-billing). Every billable surface meters its own units downstream, so
-// the edge charges nothing on its own.
+// TestDefaultPrice proves the gate's price comes from the surface's DECLARATION and
+// from nowhere else — that Metered and Free both charge nothing at the edge, that a
+// health probe charges nothing even under a surface that IS priced, that a declared
+// price is actually charged, and that a path no surface owns is Undeclared (charged
+// nothing here, and refused by apps.TestPriceDeclared before it can ship).
+//
+// The declarations are a FIXTURE, deliberately not the real Wire(): this asserts the
+// mechanism (declaration → gate) and must therefore contain a positive price, which no
+// real surface has. apps.TestEdgeChargesNothingToday is the other half — it asserts the
+// REAL declarations, and it is where a change in what customers pay shows up.
 func TestDefaultPrice(t *testing.T) {
+	index(t, &Config{Enable: []string{"ai", "agent", "agents", "commerce", "o11y", "iam", "base", "probe"}},
+		MountSpec{Name: "ai", Price: Metered, Prefixes: []string{"/v1/ai", "/v1/mcp"}},
+		MountSpec{Name: "agent", Price: Metered},
+		MountSpec{Name: "agents", Price: Metered},
+		MountSpec{Name: "commerce", Price: Free},
+		MountSpec{Name: "o11y", Price: Free},
+		MountSpec{Name: "iam", Price: Free},
+		MountSpec{Name: "base", Price: Free},
+		MountSpec{Name: "probe", Price: 7, Prefixes: []string{"/v1/probe"}},
+	)
 	cases := []struct {
-		path     string
-		wantZero bool
-		why      string
+		path string
+		want int64
+		why  string
 	}{
-		{"/v1/ai/chat/completions", true, "ai self-meters LLM token costs — must not double-bill"},
-		{"/v1/ai/embeddings", true, "ai subsystem self-meters"},
-		{"/v1/commerce/billing/usage", true, "commerce bills its own usage"},
-		{"/v1/o11y/ingest", true, "telemetry not user-billable at edge"},
-		{"/v1/mcp/tools/call", true, "mcp meters per-tool downstream"},
-		{"/health", true, "liveness probe"},
-		{"/healthz", true, "liveness probe"},
-		{"/v1/iam/health", true, "subsystem health suffix"},
-		{"/v1/base/health", true, "subsystem health suffix"},
-		{"/v1/agent", true, "agent orchestrator round bills through its in-process completion — edge must not double-bill"},
-		{"/v1/agent/presets", true, "agent preset read is free — never gate it"},
-		{"/v1/agent/conversations", true, "agent conversation read is free — never gate it"},
-		{"/v1/agents/list", true, "agents subsystem self-meters per-run fee — must not double-bill"},
-		{"/v1/agents/x/run", true, "agent run self-metered by the agents subsystem"},
-		{"/v1/unknown/thing", true, "unpriced path defaults to 0 (opt-in metering)"},
+		{"/v1/ai/chat/completions", 0, "ai declares Metered — the model plane's token meter owns the charge, so an edge charge double-bills"},
+		{"/v1/ai/embeddings", 0, "same surface, same declaration"},
+		{"/v1/mcp/tools/call", 0, "ai owns /v1/mcp too; per-tool dispatch meters downstream"},
+		{"/v1/commerce/billing/usage", 0, "commerce declares Free — it IS the pay path"},
+		{"/v1/o11y/ingest", 0, "o11y declares Free — telemetry ingest is not user-billable"},
+		{"/health", 0, "liveness probe"},
+		{"/healthz", 0, "liveness probe"},
+		{"/v1/iam/health", 0, "subsystem health suffix"},
+		{"/v1/base/health", 0, "subsystem health suffix"},
+		{"/v1/probe/health", 0, "a health probe is free even under a PRICED surface — a probe that 402s hides whether the process is up"},
+		{"/v1/agent", 0, "the orchestrator's round bills through its in-process completion"},
+		{"/v1/agent/presets", 0, "same surface — a read on it is free for the same reason"},
+		{"/v1/agents/x/run", 0, "the agents subsystem meters its own per-run fee"},
+		{"/v1/probe/thing", 7, "a declared price IS charged — without this case every zero above is unfalsifiable"},
+		{"/v1/nobody/owns-this", 0, "no surface owns it: Undeclared charges nothing HERE and fails apps.TestPriceDeclared instead"},
 	}
 	for _, tc := range cases {
-		got := priceForPath(t, tc.path)
-		if tc.wantZero && got != 0 {
-			t.Errorf("DefaultPrice(%q) = %d, want 0 (%s)", tc.path, got, tc.why)
-		}
-		if !tc.wantZero && got <= 0 {
-			t.Errorf("DefaultPrice(%q) = %d, want >0 (%s)", tc.path, got, tc.why)
+		if got := priceForPath(t, tc.path); got != tc.want {
+			t.Errorf("DefaultPrice(%q) = %d, want %d (%s)", tc.path, got, tc.want, tc.why)
 		}
 	}
 }

@@ -40,17 +40,17 @@ func TestIAMEmbedBehindMiddlewareChain(t *testing.T) {
 	// but forgeable X-User-*/X-Org-* headers are still stripped (defense in depth).
 	app.Use(SanitizeIdentity(nil, "admin"))
 	// DefaultPrice governs the IAM paths under test — that is the exemption being
-	// asserted — but it prices NOTHING today (every subsystem self-meters in-handler,
-	// and unpriced paths default to 0), so it cannot supply the control. The control
-	// path carries its own price so the gate is proven LIVE; without that, the IAM
-	// 2xx results below are equally explained by a gate that never denies anything.
-	price := func(c *zip.Ctx) int64 {
-		if c.Path() == controlPricedPath {
-			return 1
-		}
-		return DefaultPrice(c)
-	}
-	app.Use(BillingGate(m, price))
+	// asserted — and it reads the price each surface DECLARED (price.go). Every real
+	// surface is Free or Metered, so the real table cannot supply a control: a 2xx on an
+	// auth path is equally explained by a gate that never denies anything. So the
+	// control is a DECLARED surface priced at 1c, indexed here the way MountAll indexes
+	// the composition root. The gate reads it through the exact production path — no
+	// hand-written price closure standing in for a declaration.
+	index(t, &Config{Enable: []string{"iam", "probe"}},
+		MountSpec{Name: "iam", Price: Free, Prefixes: iamAuthPrefixes},
+		MountSpec{Name: "probe", Price: 1, Prefixes: []string{"/v1/probe"}},
+	)
+	app.Use(BillingGate(m, DefaultPrice))
 
 	var sawForgedAdmin atomic.Bool
 	stub := zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -113,15 +113,34 @@ func TestIAMEmbedBehindMiddlewareChain(t *testing.T) {
 	}
 }
 
-// controlPricedPath is the synthetic priced route the gate-liveness control uses.
-// It is not a product route: DefaultPrice charges nothing anywhere, so a control
-// drawn from the real table cannot distinguish a live gate from a dead one.
+// controlPricedPath is the synthetic priced route the gate-liveness control uses. It
+// is not a product route: every real surface is Free or Metered, so a control drawn
+// from the real declaration cannot distinguish a live gate from a dead one.
 const controlPricedPath = "/v1/probe/priced"
 
-// TestDefaultPriceExemptsIAM pins the price-0 (ungated, unbilled) exemption for
-// every IAM-owned prefix, so a future DefaultPrice edit that starts billing an
-// auth path fails here rather than in production (the M2M token mint would 402).
+// iamAuthPrefixes are the subtrees the embedded IAM surface owns. Restated here rather
+// than read from clients/iam because that package imports this one — and the list is
+// the FIXTURE under test: these are the paths an auth outage would run through.
+var iamAuthPrefixes = []string{"/v1/iam", "/login/oauth", "/.well-known"}
+
+// TestDefaultPriceExemptsIAM pins the price-0 (ungated, unbilled) exemption for every
+// IAM-owned prefix, so a change that starts billing an auth path fails here rather
+// than in production (the M2M token mint would 402).
+//
+// Under surface pricing the exemption is a DECLARATION, so the test asserts the
+// declaration reaches the gate: iam declares Free and every auth path resolves to 0,
+// while a sibling surface declared at 1c resolves to 1. That second half is what makes
+// the first half mean something — without it, a nil index would return 0 for every
+// path in the binary and this test would pass having measured nothing.
 func TestDefaultPriceExemptsIAM(t *testing.T) {
+	index(t, &Config{Enable: []string{"iam", "probe"}},
+		MountSpec{Name: "iam", Price: Free, Prefixes: iamAuthPrefixes},
+		MountSpec{Name: "probe", Price: 1, Prefixes: []string{"/v1/probe"}},
+	)
+	if got := PriceOf(controlPricedPath).Cents(); got != 1 {
+		t.Fatalf("the declared 1c control resolved to %dc — the index is not live, so the "+
+			"IAM zeroes below prove nothing", got)
+	}
 	for _, path := range []string{
 		"/v1/iam/oauth/token",
 		"/v1/iam/oauth/access_token",

@@ -19,6 +19,7 @@ import (
 func main() {
 	if err := cloud.Serve([]cloud.MountSpec{{
 		Name:     "webhooks",
+		Price:    cloud.Free,
 		Mount:    webhooks.Mount,
 		Shutdown: webhooks.Shutdown,
 	}}, []string{"webhooks"}); err != nil {

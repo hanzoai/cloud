@@ -15863,6 +15863,19 @@ paths:
       operationId: post_v1_kb_search
       tags:
       - kb
+  /v1/keys:
+    delete:
+      operationId: delete_v1_keys
+      tags:
+      - keys
+    get:
+      operationId: get_v1_keys
+      tags:
+      - keys
+    post:
+      operationId: post_v1_keys
+      tags:
+      - keys
   /v1/kms/auth/login:
     post:
       operationId: post_v1_kms_auth_login
@@ -20908,6 +20921,7 @@ tags:
 - name: integrations
 - name: k8s
 - name: kb
+- name: keys
 - name: kms
 - name: kv
 - name: legal
