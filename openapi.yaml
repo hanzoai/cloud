@@ -9203,6 +9203,27 @@ paths:
       operationId: get_v1_agents_activity
       tags:
       - agents
+  /v1/agents/builds:
+    get:
+      operationId: get_v1_agents_builds
+      tags:
+      - agents
+  /v1/agents/builds/{org}/{project}:
+    get:
+      operationId: get_v1_agents_builds_by_org_by_project
+      parameters:
+      - in: path
+        name: org
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: project
+        required: true
+        schema:
+          type: string
+      tags:
+      - agents
   /v1/agents/metrics:
     get:
       operationId: get_v1_agents_metrics
