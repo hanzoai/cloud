@@ -76,7 +76,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		},
 	}
 
-	routes(app, s)
+	routes(app, s, deps.Self)
 
 	b.Log.Info("admin surface mounted",
 		"prefix", "/v1/admin",
@@ -92,7 +92,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // through the two-tier gate: org-scoped panels behind core.GuardScoped, the platform
 // control plane behind core.Guard. Each carved-out domain (audit/customer/revenue/finance)
 // owns its own route registration.
-func routes(app cloud.Router, s *cloud.Service[core.State]) {
+//
+// self is this replica's id (Deps.Self), threaded through for the ONE read that reports
+// on the host itself rather than an upstream (/plugins).
+func routes(app cloud.Router, s *cloud.Service[core.State], self string) {
 	g := app.Group("/v1/admin")
 	// Org-scoped panels — GuardScoped. Cross-tenant reads are impossible for a non-super
 	// caller.
@@ -115,6 +118,10 @@ func routes(app cloud.Router, s *cloud.Service[core.State]) {
 	// See moneyboard.go.
 	g.Get("/money", core.Guard(s, moneyBoardHandler))
 	g.Get("/aimetrics", core.Guard(s, aimetrics))
+	// What this HOST is actually running (plugins.go). The only read here that asks
+	// the process rather than an upstream — so it takes the Router, whose Plugins()
+	// is the read-only window onto the app. Self names the replica answering.
+	g.Get("/plugins", core.Guard(s, pluginsBoard(app, self)))
 	g.Post("/sync", core.Guard(s, syncNow))
 
 	// Credit grants — the ONE admin mint surface (SuperAdmin only). Thin, audited

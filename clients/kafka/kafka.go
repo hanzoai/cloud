@@ -30,9 +30,9 @@ import (
 	"github.com/hanzoai/kafka/types"
 )
 
-// order 6: mounts after clients/pubsub (order 5) so the embedded NATS :4222 is
-// already accepting when the broker dials it.
-const order = 6
+// Mount order is the slice position in apps.Wire(): this must stay AFTER
+// clients/pubsub so the embedded NATS :4222 is already accepting when the broker
+// dials it.
 
 // startupProbe bounds how long Mount waits to distinguish a startup failure
 // (Serve returns quickly) from a healthy serving broker (Serve blocks on its

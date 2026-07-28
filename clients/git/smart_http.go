@@ -239,7 +239,7 @@ func fireBranchBuild(s *cloud.Service[state], ctx context.Context, org, project,
 	branch, before, pusher = strings.Clone(branch), strings.Clone(before), strings.Clone(pusher)
 	if err := cloud.OnGitPush(ctx, cloud.GitPushEvent{
 		Org: org, Project: project, Repo: name,
-		Branch: branch, Commit: after, CloneURL: cloneURL(s, org, name),
+		Ref: "refs/heads/" + branch, Commit: after, CloneURL: cloneURL(s, org, name),
 	}); err != nil {
 		s.Log.Warn("git push-to-deploy trigger failed", "org", org, "repo", name, "branch", branch, "err", err)
 	}

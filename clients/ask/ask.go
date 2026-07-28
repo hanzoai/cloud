@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/answer"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
@@ -124,10 +125,11 @@ func askHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 	}
 
 	// WEB grounding domain — selected explicitly by mode (search|news|research|deep). This is the
-	// agentic search/deep-research path: it grounds on live web sources (not ledger figures),
-	// streams the answer-engine envelope, and meters the caller. It is ADDITIVE — when no web mode
-	// is set the advisor's figure path below runs exactly as before.
-	if isWebMode(in.Mode) {
+	// answer engine: it grounds on live web sources (not ledger figures), streams the SearchEvent
+	// envelope, and meters the caller. The loop lives in ONE home (clients/answer); /v1/ask is its
+	// ONE door. It is ADDITIVE — when no web mode is set the advisor's figure path below runs
+	// exactly as before.
+	if answer.IsMode(in.Mode) {
 		return serveWeb(s, c, in, q)
 	}
 
@@ -158,6 +160,25 @@ func askHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 	// and the Figures array above is authoritative regardless of what the prose says.
 	resp.Answer = narrate(s, c, q, facts)
 	return askJSON(c, resp)
+}
+
+// serveWeb hands a web-mode question to the answer engine. It is pure delegation:
+// the door translates its own body into the engine's Request and lends it the
+// Base (logger + the ONE per-org meter) and the AI plane. No loop logic lives
+// here — clients/answer is its one home.
+func serveWeb(s *cloud.Service[*state], c *zip.Ctx, in AskRequest, q string) error {
+	e := answer.Engine{Base: s.Base, AI: s.State.ai, Model: s.State.model}
+	return e.Serve(c, answer.Request{
+		Mode:       in.Mode,
+		Sources:    in.Sources,
+		Model:      in.Model,
+		Stream:     in.Stream,
+		Language:   in.Language,
+		MaxSources: in.MaxSources,
+		MaxQueries: in.MaxQueries,
+		FollowUps:  in.FollowUps,
+		System:     in.System,
+	}, q)
 }
 
 // narrate produces the answer sentence over the EXACT grounded facts. It runs ONE completion that

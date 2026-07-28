@@ -166,6 +166,10 @@ type identityValidator struct {
 	issuers []string
 	cache   *jwksCache
 	keys    keyResolver // resolves an opaque API key to a principal; nil ⟹ keys stay anonymous
+	// claims memoizes token ⇒ verified claims so an already-authenticated caller
+	// (notably a ZAP socket, which replays its credential on every frame) is not
+	// signature-verified again per call. See identity_cache.go.
+	claims *identityCache
 }
 
 // newIdentityValidator builds a validator whose trusted-issuer set is the primary
@@ -180,6 +184,7 @@ func newIdentityValidator(issuer, jwksURL string, ttl time.Duration) *identityVa
 	return &identityValidator{
 		issuers: trustedIssuers(issuer),
 		cache:   newJWKSCache(jwksURL, ttl),
+		claims:  newIdentityCache(),
 		keys:    sharedKeys(), // ONE resolver+cache, shared with OrgForKey (analytics capture)
 	}
 }

@@ -13,7 +13,6 @@ import (
 	"github.com/hanzoai/cloud/audit"
 	tasksclient "github.com/hanzoai/tasks/pkg/sdk/client"
 	tasksworker "github.com/hanzoai/tasks/pkg/sdk/worker"
-	tasksengine "github.com/hanzoai/tasks/pkg/tasks"
 	"github.com/zap-proto/zip"
 )
 
@@ -30,17 +29,7 @@ func TestScheduledRunMeteredExactlyOnce(t *testing.T) {
 
 	app, rec := newAppWithAudit(t) // Mount sets the package `mounted` used by the bookkeeping activity
 
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	port := l.Addr().(*net.TCPAddr).Port
-	_ = l.Close()
-
-	srv, err := tasksengine.Embed(ctx, tasksengine.EmbedConfig{ZAPPort: port, Namespace: "acme", DataDir: t.TempDir()})
-	if err != nil {
-		t.Fatalf("embed: %v", err)
-	}
+	srv, port := embedEngine(ctx, t, "acme")
 	defer func() { _ = srv.Stop(context.Background()) }()
 
 	cli, err := tasksclient.Dial(tasksclient.Options{HostPort: fmt.Sprintf("127.0.0.1:%d", port), Namespace: "acme", DialTimeout: 5 * time.Second, CallTimeout: 5 * time.Second})

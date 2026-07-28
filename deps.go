@@ -44,6 +44,13 @@ type Deps struct {
 	// bypasses billing (every env bills against its own commerce ledger).
 	Env string
 
+	// Self is THIS process's stable id — the StatefulSet ordinal (CLOUD_POD_NAME /
+	// POD_NAME) or the OS hostname. It is the SAME id the durability membership
+	// elects on (selfID), so a status a subsystem reports names the replica the ring
+	// already knows by that name. Any read that is one replica's answer rather than
+	// the fleet's must say WHICH replica, or "restarts: 3" is unactionable.
+	Self string
+
 	// Domain is the deployment's primary domain (e.g. "api.hanzo.ai",
 	// "api.osage.cloud"). Subsystems use this to scope URLs in responses.
 	Domain string
@@ -57,6 +64,12 @@ type Deps struct {
 	// DataDir is the per-deployment data root. Per-org SQLite files
 	// land at {DataDir}/orgs/{orgSlug}/{service}.db per HIP-0302.
 	DataDir string
+
+	// MasterKey is the 32-byte at-rest KEK (decoded CLOUD_KMS_MASTER_KEY_REF), for
+	// subsystems that encrypt their own stores and would otherwise each need a key
+	// provisioned separately. One process, one key. nil ⇒ unset/invalid, and each
+	// subsystem falls back to whatever it did before.
+	MasterKey []byte
 
 	// Durable is the per-deployment HA-durability factory an OrgStore wires
 	// WithDurable: the shared ha election + vfs FencedStore over the SeaweedFS S3

@@ -36,13 +36,17 @@ func (f *fakeDO) server(t *testing.T) *digitalocean.Client {
 		fmt.Fprintf(w, `{"volumes":%s,"meta":{"total":2}}`, f.volumes)
 	})
 	mux.HandleFunc("/v2/load_balancers", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"load_balancers":[],"meta":{"total":0}}`)
+		fmt.Fprintf(w, `{"load_balancers":[
+			{"id":"lb-live","name":"ingress","status":"active","ip":"1.2.3.4","region":{"slug":"sfo3"},"size_unit":1,"droplet_ids":[101]},
+			{"id":"lb-junk","name":"stray","status":"active","ip":"5.6.7.8","region":{"slug":"sfo3"},"size_unit":1,"droplet_ids":[]}
+		],"meta":{"total":2}}`)
 	})
 	mux.HandleFunc("/v2/kubernetes/clusters", func(w http.ResponseWriter, r *http.Request) {
 		rows := []string{}
 		for _, id := range f.clusters {
 			rows = append(rows, fmt.Sprintf(
-				`{"id":%q,"name":"test-k8s","region":"sfo3","version":"1.35","status":{"state":"running"},"node_pools":[{"name":"p"}]}`, id))
+				`{"id":%q,"name":"test-k8s","region":"sfo3","version":"1.35","status":{"state":"running"},
+				"node_pools":[{"id":"pool-1","name":"p","size":"s-1vcpu-1gb","count":1}]}`, id))
 		}
 		fmt.Fprintf(w, `{"kubernetes_clusters":[%s],"meta":{"total":%d}}`, strings.Join(rows, ","), len(rows))
 	})
@@ -85,7 +89,7 @@ const twoVolumes = `[
 	{"id":"vol-junk","name":"junk","size_gigabytes":40,"region":{"slug":"sfo3"},"droplet_ids":[],"tags":["k8s:` + clusterUUID + `"]}
 ]`
 
-// fakeAPIServer serves the four core/v1 collections scanOne reads.
+// fakeAPIServer serves the five core/v1 collections scanOne reads.
 func fakeAPIServer(t *testing.T) string {
 	t.Helper()
 	t.Setenv("FLEET_ALLOW_PRIVATE_HOSTS", "1")
@@ -125,6 +129,20 @@ func fakeAPIServer(t *testing.T) string {
 			"status": map[string]any{"phase": "Running"},
 		}}))
 	})
+	mux.HandleFunc("/api/v1/services", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, list("ServiceList", []map[string]any{{
+			"metadata": map[string]any{"namespace": "ingress", "name": "hanzo-ingress",
+				"annotations": map[string]any{doLBIDAnnotation: "lb-live"}},
+			"spec":   map[string]any{"type": "LoadBalancer"},
+			"status": map[string]any{"loadBalancer": map[string]any{"ingress": []map[string]any{{"ip": "1.2.3.4"}}}},
+		}, {
+			// A ClusterIP Service claims no load balancer and must be ignored.
+			"metadata": map[string]any{"namespace": "db", "name": "pg"},
+			"spec":     map[string]any{"type": "ClusterIP"},
+			"status":   map[string]any{},
+		}}))
+	})
 	mux.HandleFunc("/api/v1/nodes", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, list("NodeList", []map[string]any{{
@@ -150,25 +168,43 @@ func TestCollectEndToEnd(t *testing.T) {
 	if !snap.Complete {
 		t.Fatalf("Complete = false: %s", snap.IncompleteReason)
 	}
-	live, _ := findVolume(snap, "vol-live")
-	if live.State != StateBound || live.Deletable {
-		t.Errorf("vol-live = %s deletable=%v, want bound + not deletable", live.State, live.Deletable)
+	liveVol, _ := findVolume(snap, "vol-live")
+	if liveVol.State != StateBound || liveVol.Deletable {
+		t.Errorf("vol-live = %s deletable=%v, want bound + not deletable", liveVol.State, liveVol.Deletable)
 	}
-	if live.PV != "pv-live" || live.PVCName != "data" {
-		t.Errorf("vol-live PV binding not decoded: %+v", live)
+	if liveVol.PV != "pv-live" || liveVol.PVCName != "data" {
+		t.Errorf("vol-live PV binding not decoded: %+v", liveVol)
 	}
-	if len(live.MountedBy) != 1 || live.MountedBy[0] != "db/pg-0" {
-		t.Errorf("vol-live mountedBy = %v, want [db/pg-0]", live.MountedBy)
+	if len(liveVol.MountedBy) != 1 || liveVol.MountedBy[0] != "db/pg-0" {
+		t.Errorf("vol-live mountedBy = %v, want [db/pg-0]", liveVol.MountedBy)
 	}
-	junk, _ := findVolume(snap, "vol-junk")
-	if junk.State != StateUnreferenced || !junk.Deletable {
-		t.Errorf("vol-junk = %s deletable=%v, want unreferenced + deletable", junk.State, junk.Deletable)
+	junkVol, _ := findVolume(snap, "vol-junk")
+	if junkVol.State != StateUnreferenced || !junkVol.Deletable {
+		t.Errorf("vol-junk = %s deletable=%v, want unreferenced + deletable", junkVol.State, junkVol.Deletable)
 	}
 	if snap.Cost.ReclaimableMonthly != 400 {
 		t.Errorf("reclaimable = %d, want 400 (40 GiB)", snap.Cost.ReclaimableMonthly)
 	}
 	if n := snap.Nodes[0]; !n.Ready || n.Pods != 1 || n.Cluster != "test-k8s" {
 		t.Errorf("node join wrong: %+v", n)
+	}
+	// The DOKS node is DOKS's to manage, so the board refuses to touch the droplet.
+	if n := snap.Nodes[0]; n.Mutable || !strings.Contains(n.BlockedReason, "node pool") {
+		t.Errorf("DOKS node mutable=%v reason=%q, want refused and pointed at the pool", n.Mutable, n.BlockedReason)
+	}
+	// The load balancer the Service annotation claims is in use; the other is not.
+	live, _ := findLoadBalancer(snap, "lb-live")
+	if live.Service != "ingress/hanzo-ingress" || live.Deletable {
+		t.Errorf("lb-live = service %q deletable=%v, want claimed + refused", live.Service, live.Deletable)
+	}
+	junk, _ := findLoadBalancer(snap, "lb-junk")
+	if junk.Service != "" || !junk.Deletable {
+		t.Errorf("lb-junk = service %q deletable=%v, want unclaimed + deletable", junk.Service, junk.Deletable)
+	}
+	// The node pool is the lever the board DOES offer, decoded from the cluster read.
+	p, ok := findNodePool(snap, clusterUUID, "p")
+	if !ok || p.ID != "pool-1" || p.Count != 1 || !p.Scalable {
+		t.Fatalf("node pool = %+v (found=%v), want pool-1 count 1, scalable", p, ok)
 	}
 }
 
