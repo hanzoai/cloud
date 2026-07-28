@@ -153,6 +153,11 @@ func commerceMasterKey(master []byte, lg log.Logger) []byte {
 // This adapter registers the remaining wire-contract families with commerce's
 // own gate chains (see Prefixes).
 func Mount(app *zip.App, deps cloud.Deps) error {
+	// The ledger lives here, so the methods that read and move it are published
+	// here: balance, the prepaid gate, and the debit.
+	exposeBalance()
+	exposeMeter(deps.Metering)
+
 	if app == nil {
 		return fmt.Errorf("commerce: nil app")
 	}
