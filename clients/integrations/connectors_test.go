@@ -318,9 +318,12 @@ func TestConnectorPlanesDisjoint(t *testing.T) {
 		got[p.ID] = p.Methods
 	}
 	want := map[string][]string{
-		"fake":           {"device", "oauth", "token"},
-		"openai":         {"device", "oauth"},
-		"anthropic":      {"token"},
+		"fake":   {"device", "oauth", "token"},
+		"openai": {"device", "oauth"},
+		// anthropic is the one provider serving BOTH planes under one id: "oauth"
+		// is the Claude Pro/Max subscription bundle (Adopt), "token" is the setup
+		// token / API key (Verify). One connector id, three credential flavours.
+		"anthropic":      {"oauth", "token"},
 		"github-copilot": {"device", "token"},
 	}
 	for id, methods := range want {
