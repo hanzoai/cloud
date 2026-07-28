@@ -120,8 +120,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "platform"),
-		State: state{store: store, projects: iamProjects{}, k8s: k, kmsIdentity: newKMSOrgIdentity(deps.KMS, deps.IAMIssuer, deps.Brand),
+		State: state{store: store, k8s: k, kmsIdentity: newKMSOrgIdentity(deps.KMS, deps.IAMIssuer, deps.Brand),
 			sitesHost: getenv("CLOUD_PLATFORM_SITES_HOST", "hanzo.app")}}
+	// The project source is the CANONICAL IAM: external over HTTP when the
+	// deployment names one (IAM_URL), the embedded store when this binary IS
+	// the IAM. The HTTP client authenticates per-org with the SAME
+	// <org>-platform-kms identity the KMS sync uses — one identity per tenant.
+	s.State.projects = newProjectStore(deps.IAMIssuer, s.State.kmsIdentity)
 	mounted = s
 	// UNIFIED PAYWALL (server-side enforcement). To gate the /v1/platform surface
 	// behind the caller's plan, wrap it with entitlements.RequireProduct(deps.Commerce,
