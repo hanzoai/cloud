@@ -133,7 +133,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Publish the reserve balance as a VALUE other subsystems can read without
 	// linking this one. apps/admin renders the figure and has no business
 	// importing the ledger that computes it (see cloud/reserve.go).
-	cloud.RegisterReserveReader(ReserveCents)
+	cloud.RegisterReserve(ReserveCents)
 
 	// ONE scope-aware /v1/finance/* engine, three tenancy surfaces (HIP finance):
 	// per-org reads derive the tenant from the validated IAM identity and see ONLY

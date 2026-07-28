@@ -52,24 +52,24 @@ func adminPatchProject(t *testing.T, app *zip.App, org, slug string, in map[stri
 // any detached caller share it.
 type recorder struct {
 	mu     sync.Mutex
-	events []cloud.CommunityEvent
+	events []cloud.Visibility
 }
 
 func record(t *testing.T) *recorder {
 	t.Helper()
 	r := &recorder{}
-	cloud.RegisterCommunityPublisher(func(_ context.Context, ev cloud.CommunityEvent) error {
+	cloud.RegisterPublisher(func(_ context.Context, ev cloud.Visibility) error {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		r.events = append(r.events, ev)
 		return nil
 	})
-	t.Cleanup(func() { cloud.RegisterCommunityPublisher(nil) })
+	t.Cleanup(func() { cloud.RegisterPublisher(nil) })
 	return r
 }
 
 // last returns the most recent event for a slug, and whether there was one.
-func (r *recorder) last(slug string) (cloud.CommunityEvent, bool) {
+func (r *recorder) last(slug string) (cloud.Visibility, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := len(r.events) - 1; i >= 0; i-- {
@@ -77,7 +77,7 @@ func (r *recorder) last(slug string) (cloud.CommunityEvent, bool) {
 			return r.events[i], true
 		}
 	}
-	return cloud.CommunityEvent{}, false
+	return cloud.Visibility{}, false
 }
 
 // TestPublishingReachesTheCanonicalRepo: creating a project emits its visibility,
@@ -157,7 +157,7 @@ func TestRetractionReachesTheCanonicalRepo(t *testing.T) {
 		}
 		var p projectView
 		_ = json.Unmarshal(body, &p)
-		if p.Visibility != VisibilityPrivate {
+		if p.Visibility != Private {
 			t.Fatalf("visibility = %q, want private", p.Visibility)
 		}
 		ev, ok := rec.last("secret")
@@ -176,7 +176,7 @@ func TestRetractionReachesTheCanonicalRepo(t *testing.T) {
 // create — the next update reconciles.
 func TestPublishSurvivesAnUnmountedGitPlane(t *testing.T) {
 	app := mountApp(t)
-	cloud.RegisterCommunityPublisher(nil)
+	cloud.RegisterPublisher(nil)
 
 	if code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
 		map[string]any{"name": "Alone", "slug": "alone"}); code != http.StatusCreated {

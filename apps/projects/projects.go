@@ -370,7 +370,7 @@ type createReq struct {
 	// Visibility is "public" (the default when absent) or "private". Publishing
 	// publicly is ungated — that is the point of a community. Going PRIVATE is
 	// the paid feature, so an unfunded org asking for it is refused rather than
-	// silently downgraded (see visibilityFor).
+	// silently downgraded (see resolve).
 	Visibility string `json:"visibility"`
 	// Upstream/License credit the third-party work this project was published
 	// from. Taken from any caller: disclaiming authorship can only cost the
@@ -428,7 +428,7 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body createR
 
 	// Resolved BEFORE the row is built, so an unfunded org asking for private is
 	// refused without a half-created project left behind.
-	vis, err := visibilityFor(s, c, body.Visibility)
+	vis, err := resolve(s, c, body.Visibility)
 	if err != nil {
 		return err
 	}
@@ -467,7 +467,7 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body createR
 	provisionSpace(s, c.Context(), &p)
 	// Give it a canonical repo at git.hanzo.ai, world-readable exactly when the
 	// project is.
-	publishCommunity(s, c.Context(), p)
+	share(s, c.Context(), p)
 	return c.JSON(http.StatusCreated, toProjectView(p))
 }
 
@@ -622,7 +622,7 @@ func update(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 	}
 	if body.Visibility != nil {
-		vis, err := visibilityFor(s, c, *body.Visibility)
+		vis, err := resolve(s, c, *body.Visibility)
 		if err != nil {
 			return err
 		}
@@ -653,7 +653,7 @@ func update(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	// Reconcile the repo to whatever this update settled on — including a
 	// moderation, which must reach the source and not just the listing.
-	publishCommunity(s, c.Context(), p)
+	share(s, c.Context(), p)
 	return c.JSON(http.StatusOK, toProjectView(p))
 }
 
