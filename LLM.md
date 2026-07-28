@@ -632,6 +632,47 @@ HIP-0026); never read a raw request header for scope.
   identity vocabulary is org-native regardless; only the on-cluster string waits on
   an infrastructure migration.
 
+## API keys are ONE noun (`/v1/keys`), and the type is a FIELD
+
+`POST` creates, `DELETE` revokes, `GET` lists. `clients/account/account.go`.
+`mint`, `issue` and `revoke` are HTTP methods, never path segments — the concept
+previously had four names (`/v1/iam/mint-user-keys`, `/v1/iam/revoke-user-keys`,
+`/v1/iam/keys`, `/v1/ingest/keys`) and the only honest one 404'd.
+
+```
+GET    /v1/keys                          -> {keys:[{type,prefix,key?,createdAt}]}   no secret
+POST   /v1/keys   {"type":"publishable"} -> {type,key}    the key, ONCE
+DELETE /v1/keys?type=publishable         -> {ok,type}
+```
+
+**Two types, and the type is the only thing that differs.** `secret` (`sk-`)
+resolves to the USER, so it is session-equivalent and belongs on a server.
+`publishable` (`pk-`) resolves to just the ORG, so it is safe in a browser bundle
+and covers analytics, product insights and error capture as ONE key. They are two
+IAM rows, so a user holds both and rotating the browser key does not revoke the API
+key. An unrecognized type is REFUSED, never defaulted — handing an `sk-` to someone
+who asked for a browser key is a credential in the wrong place.
+
+**Do NOT spell a public resource under `/v1/iam`.** api.hanzo.ai routes `/v1/iam/*`
+to the IAM service (ingress router `api-hanzo-ai-iam-api`), so anything cloud mounts
+there is unreachable at the only host callers use: the request lands on IAM's Guard
+and 401s. The tell is the body — `{"status":401,"error":"authentication required"}`
+is IAM's Guard; cloud's own refusal is a 403. `/v1/iam/keys` survives ONLY as a thin
+deprecated alias (same handlers, RFC 8594 `Deprecation` + `Link`) for the go:embed
+console, which addresses cloud's own origin.
+
+**A publishable key has its own resolve door.** `OrgForKey` (`auth_apikey.go`) sends
+a `pk-` to IAM's `resolve-key` (org only, never a principal) and a secret key to
+`get-user?accessKey` (the principal). IAM refuses a `pk-` at `get-user` BY DESIGN,
+so routing every prefix to that one door — which is what cloud used to do — meant a
+publishable key resolved to nobody and could not attribute a beacon. Separate
+caches, because the two answers are different types and must not be confusable.
+Requires `IAM_PUBLISHABLE_RESOLVE_APPS`, which is fail-closed.
+
+**GET reads the KEY ROWS, never the user row.** The mint writes a key row; a read of
+`schema.User.AccessKey` reports "no key" immediately after a successful POST. That is
+the "key never listed" bug and it has recurred twice.
+
 ## Hanzo Company (`clients/company`, `/v1/company`)
 
 The Stripe-Atlas-class incorporation + fundraising product: ONE formation state
@@ -731,6 +772,25 @@ are published because they are the demos a visitor is meant to fork, and every o
 org's live sites land in that org's corpus. `TestSyncRoutesSitesByOrg` asserts the
 routing itself, because that is where a customer's project would leak.
 
+**Being ours is necessary to be published, not sufficient** (`gate.go`). Whose a
+site is says nothing about whether it is worth showing, and for a while the public
+catalog proved it: two deploy probes (399 and 480 bytes), the same scaffolding stub
+under two slugs byte-for-byte (`vite`, `next`), and a mislabeled ACME landing page.
+So `admit` READS the page each of our sites serves and refuses exactly three things:
+an unbuilt scaffolding placeholder (matched on the page's collapsed visible text), a
+page under a kilobyte that is also **inert**, and a body byte-identical to one
+already admitted this pass. Inert is the load-bearing half — a 784-byte SPA shell and
+a 682-byte redirect are both real apps, so "small" alone would have deleted them;
+what has nothing to show is small AND loads no first-party script, style or frame and
+goes nowhere. References to another host do not count, because we staple our own
+analytics onto every page we serve. Refusal is DEMOTION: the row moves to the
+platform's own corpus carrying `Note`, the reason, so a demo that leaves the public
+lens can be explained. It fails open twice — an unreadable page is unjudged and
+therefore admitted, and a pass that would hold MOST of the corpus has diagnosed the
+reader, not the sites, so it is discarded whole. It does NOT catch two different
+BUILDS of one design (same page, different bytes); that needs rendered comparison,
+which a reconcile does not do.
+
 `index.Reconcile` is `index.Query`'s mirror and the only in-process WRITE seam: a
 full-corpus swap (upsert everything, delete what is gone) because the truth lives
 upstream and a re-run must converge.
@@ -757,6 +817,42 @@ tri-state (`boolQuery`/`strconv.ParseBool` — set-true, set-false, unasked; `of
 rides the same helper) and `facet` counts both sides through the same loop as every
 other dimension. `Entry.Forkable` is NOT `omitempty`: false is an answer.
 
+**`origin` is what a row IS to you**, and it is the axis the two hanzo.app lanes
+are cut on. The corpus flattened 579 rows into one list in which a curated starter
+you fork FROM, a stranger's remix of one, somebody else's paid UI kit and
+`luxfi/node` rendered identically — the labelling complaint underneath was an
+information-architecture bug, because there was no field to ask the question with.
+Four values, `template | community | third-party | product` (`origin.go`), all
+DERIVED:
+
+- the source table (`defaultOrgs`) now says both the brand a person browses by AND
+  the lane, because both are facts about the org. `hanzo-templates` → starters,
+  the apps orgs and `hanzo-community` → what people built, everything else → our
+  own software. `hanzo-community` is listed before it has repos, so the auto-publish
+  lane is fed the hour that lands.
+- a live site is one of OUR starters' demos when the CURATED GALLERY says its slug
+  is, read FORWARD through the three slugs the fork flow derives (`<slug>`,
+  `<slug>-<variant>`, `<slug>-template`), so a new template files its own demo and
+  a community app cannot fall in by spelling. Recorded lineage outranks that (a
+  remix is a remix), and a declared `upstream` outranks everything.
+- `fromRepo` lets GitHub's own `fork` bit override the address: a starter we
+  vendored from somebody else is not a starter of ours.
+
+`origin` is deliberately NOT braided with `official`. Origin says which lane;
+`official` says whose work it is. One `official-example` value would make them
+unaskable separately, and *community apps that are NOT ours* is the whole point of
+a community lane. Both are faceted and both filter, plus `?template=<parent id>`
+for one lineage — a facet nobody can act on is a rail that lies.
+
+**Third-party is attributed or NOT LISTED.** A fork holds somebody else's code
+under one of our org headers. GitHub's org listing omits `parent`, so `credit`
+spends one extra request per fork (a few dozen an hour against a listing pass of
+about a dozen) and DROPS any fork it cannot name rather than showing it authorless
+— the safe direction for *whose is this* is silence, not a guess. `NOASSERTION` is
+GitHub failing to identify a licence, not a licence, so those rows carry the
+upstream and state no terms. Live: 437 repos, 40 third-party, every one naming its
+real parent.
+
 ## Starter kits (`clients/templates`, `/v1/templates`)
 
 One embedded PUBLIC catalog (read-only; a customer's own templates are the second
@@ -780,6 +876,35 @@ project slug (`prism` + `react` → `prism-react`) so two shapes coexist in an o
 `ForkedFrom` still records the template, because a shape is not another parent.
 `TestVariantsAreOptionsNotSiblings` forbids the regression: no variant id may
 also be a catalog slug.
+
+### What a row has to carry (`catalog_test.go`)
+
+Shape is not enough — a well-formed row can still be useless or dishonest, and
+all three of these were true on live data:
+
+- **`description` is not decoration.** `fork.go` copies it onto the forked
+  project, so the 43 empty ones propagated into customers' project lists. Where a
+  template has a live deploy the line describes what that deploy renders; where
+  it has none it is written from the row's own `features`/`useCase`, so a
+  description is never a claim about a page nobody looked at.
+- **`source` names the REPOSITORY.** It used to be
+  `gallery.hanzo.ai/templates/<slug>` — a page that 404s — and `fork.go` assigns
+  it to `createReq.Repo.URL`, so a fork handed the builder an HTML error page as
+  a git remote (and `Repo.Provider` came out `git`, because the host was not a
+  forge). A variant resolves to its own repo where it has one (`prism-react`,
+  `cipher-html`, `cipher-react`) and to the template's otherwise: a PAGE of a kit
+  is not a repository.
+- **`demo` is the template's OWN deploy, `<slug>.hanzo.app`, or nothing.** Seven
+  rows advertised another template's deploy (Blocks → `forge.hanzo.app`, which
+  renders "Streamline"; Loop → `blocks.hanzo.app`, which renders Bento v.3), so
+  browsing a template showed a stranger's product. The one derived exception is
+  the one fork.go already derives: a slug that is a reserved subdomain
+  (`sites.IsReserved` — `metrics`) cannot BE a host, so its deploy carries the
+  same `-template` suffix. `TestDemoIsTheTemplatesOwnHost` reads that predicate
+  rather than listing labels, so the two cannot drift.
+
+`framework` is deliberately NOT derived from the deploy: it is fork.go's build
+hint and the repo is its source of truth.
 
 ### Two layers, not one visibility flag
 

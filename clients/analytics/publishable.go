@@ -19,11 +19,19 @@
 //	GET  /v1/errors   recent type:'error' events for the org (read lens)
 //
 // ONE publishable key, and IAM issues it. pk- is publishable, sk- is secret, and
-// there is no third thing.
+// there is no third thing. It is minted at POST /v1/keys with
+// {"type":"publishable"} — the same resource that mints a secret key, because the
+// type is a field on the key, not a second endpoint.
+//
+// Until that existed, nothing anywhere produced a pk- and nothing here could
+// RESOLVE one: OrgForKey sent every prefix to IAM's get-user?accessKey, which
+// refuses a publishable key by design. So the credential this whole file is written
+// around could be neither obtained nor honored, and every surface configured its
+// own thing instead.
 //
 // This file used to mint and verify its OWN pk_ (underscore) under an
-// HMAC of CLOUD_INGEST_KEY_SECRET, with its own mint endpoint at
-// /v1/ingest/keys — a second publishable-key family sitting beside the one IAM
+// HMAC of CLOUD_INGEST_KEY_SECRET, with its own mint endpoint — a second
+// publishable-key family sitting beside the one IAM
 // already owned. The underscore was load-bearing back then: pk_ was deliberately
 // kept OUT of isAPIKey's set, because anything isAPIKey resolved into "the same
 // principal a JWT yields", and a key meant for a browser bundle must not read.
