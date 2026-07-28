@@ -28,7 +28,7 @@
 //
 // Surface:
 //
-//	GET /v1/catalog   search + browse: ?q= &org= &archetype= &language= &forkable=
+//	GET /v1/catalog   search + browse: ?q= &org= &kind= &archetype= &language= &forkable=
 //
 // There is no write route. The corpus reconciles itself (sync.go), which is why
 // there is no credential that could publish into the published catalog at all.
@@ -190,15 +190,19 @@ func read(c *zip.Ctx, org, q, scope string) ([]Entry, error) {
 }
 
 // filter applies the exact-match browse axes. An absent param is not a filter.
+// Every dimension `facet` counts is filterable here and vice versa: a facet a
+// caller can see but cannot act on is a rail that lies about being clickable.
 func filter(in []Entry, c *zip.Ctx) []Entry {
 	org, arch := strings.ToLower(c.Query("org")), strings.ToLower(c.Query("archetype"))
-	lang, fork := strings.ToLower(c.Query("language")), c.Query("forkable") == "true"
+	lang, kind := strings.ToLower(c.Query("language")), strings.ToLower(c.Query("kind"))
+	fork := c.Query("forkable") == "true"
 	out := in[:0]
 	for _, e := range in {
 		switch {
 		case org != "" && strings.ToLower(e.Org) != org,
 			arch != "" && strings.ToLower(e.Archetype) != arch,
 			lang != "" && strings.ToLower(e.Language) != lang,
+			kind != "" && strings.ToLower(e.Kind) != kind,
 			fork && !e.Forkable:
 			continue
 		}
