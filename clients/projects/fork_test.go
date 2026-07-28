@@ -442,3 +442,40 @@ func TestOfficialBadgeOnUpdate(t *testing.T) {
 		}
 	}
 }
+
+// TestCreditIsUngatedWhileTheBadgeIsNot pins the asymmetry the two halves of
+// provenance deliberately have. Official says "Hanzo made this", so only Hanzo
+// may say it. Upstream/License say "somebody ELSE made this", which can only cost
+// the publisher credit — so anyone may say it, about their own project, without
+// an admin. A platform where claiming authorship is easier than disclaiming it is
+// a platform that launders provenance.
+func TestCreditIsUngatedWhileTheBadgeIsNot(t *testing.T) {
+	app := mountApp(t)
+	code, body := do(t, app, http.MethodPost, "/v1/projects", "acme", map[string]any{
+		"name": "Fitness Pro", "slug": "kinetic", "official": true,
+		"upstream": "UI8 — Fitness Pro: Website UI Kit", "license": "UI8 commercial licence",
+	})
+	if code != http.StatusCreated {
+		t.Fatalf("create want 201, got %d (%s)", code, body)
+	}
+	var p projectView
+	_ = json.Unmarshal(body, &p)
+	if p.Official {
+		t.Fatal("official is still admin-only")
+	}
+	if p.Upstream != "UI8 — Fitness Pro: Website UI Kit" || p.License != "UI8 commercial licence" {
+		t.Fatalf("a publisher must be able to credit its upstream: %s", body)
+	}
+
+	// Settable after the fact too: the demos that most need crediting are the ones
+	// already live. And a credit is rendered on a card, so it stays single-line.
+	code, body = do(t, app, http.MethodPatch, "/v1/projects/kinetic", "acme",
+		map[string]any{"upstream": "  UI8\nnewline  ", "license": "MIT"})
+	if code != http.StatusOK {
+		t.Fatalf("patch want 200, got %d (%s)", code, body)
+	}
+	_ = json.Unmarshal(body, &p)
+	if p.Upstream != "UI8 newline" || p.License != "MIT" {
+		t.Fatalf("credit must be trimmed and single-line, got %q/%q", p.Upstream, p.License)
+	}
+}
