@@ -190,12 +190,12 @@ func tenant(c *zip.Ctx) (string, bool) {
 // window resolves the [start,end) window + bucket interval from ?range/?start/?end,
 // reusing hanzoai/types.ParseWindow so analytics and the console Overview share ONE
 // window grammar (24h|7d|30d|custom). A bad range is a 400.
-func window(c *zip.Ctx) (time.Time, time.Time, string, string, error) {
+func window(c *zip.Ctx) (time.Time, time.Time, types.Interval, string, error) {
 	w, err := types.ParseWindow(c.Query("range"), c.Query("start"), c.Query("end"), time.Now())
 	if err != nil {
 		return time.Time{}, time.Time{}, "", "", zip.ErrBadRequest(err.Error())
 	}
-	return w.Start, w.End, string(w.Interval), w.Label, nil
+	return w.Start, w.End, w.Interval, w.Label, nil
 }
 
 // requireDatastore returns the honest 503 when the datastore ledger is not
@@ -338,10 +338,11 @@ func timeseries(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}
 
-	// bucketFn is a CLOSED server-chosen enum (never user input), so interpolating
-	// it is injection-safe; the org + time bounds stay bound parameters.
+	// bucketFn is a CLOSED server-chosen enum, so interpolating it is injection-safe;
+	// the org + time bounds stay bound parameters. types.Interval admits only Hour or
+	// Day, so the closure is a property of the type rather than of this switch.
 	bucketFn := "Hour"
-	if interval == "day" {
+	if interval == types.Day {
 		bucketFn = "Day"
 	}
 	where, args := llmWhere(org, start, end)
