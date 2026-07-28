@@ -23,7 +23,7 @@ func TestStoreIsEncryptedAtRest(t *testing.T) {
 	cek.EnsureDevKey() // pure-Go test build: key the same way a dev binary does
 
 	dir := t.TempDir()
-	path := filepath.Join(dir, "iam2.db")
+	path := filepath.Join(dir, storeFile)
 
 	db, err := openStore(path)
 	if err != nil {
@@ -51,7 +51,7 @@ func TestStoreHasKeySidecar(t *testing.T) {
 	cek.EnsureDevKey()
 
 	dir := t.TempDir()
-	path := filepath.Join(dir, "iam2.db")
+	path := filepath.Join(dir, storeFile)
 
 	db, err := openStore(path)
 	if err != nil {
@@ -70,7 +70,7 @@ func TestStoreHasKeySidecar(t *testing.T) {
 func TestStoreIsUsableAfterEncryptedOpen(t *testing.T) {
 	cek.EnsureDevKey()
 
-	path := filepath.Join(t.TempDir(), "iam2.db")
+	path := filepath.Join(t.TempDir(), storeFile)
 	db, err := openStore(path)
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
