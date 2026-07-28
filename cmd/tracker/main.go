@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/tracker"
+	"github.com/hanzoai/cloud/apps/tracker"
 )
 
 // Standalone entry for the tracker app.

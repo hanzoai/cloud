@@ -1,7 +1,7 @@
 # IAM cutover — Casdoor pod → embedded IAM in cloud (supervised)
 
 Flip `hanzo.id`'s identity plane from the standalone Casdoor pod to the clean-room
-IAM rewrite embedded in this binary (`clients/iam`, `github.com/hanzoai/iam`
+IAM rewrite embedded in this binary (`apps/iam`, `github.com/hanzoai/iam`
 **v1.33.6**). This is the last step of HIP-0106 (one binary embeds IAM + KMS + o11y).
 
 **This is a single supervised session. Do not run it piecemeal or in the
@@ -32,7 +32,7 @@ The blocking code work is **done and shipped**:
    store is single-writer/single-open). **`config.go` refuses to boot iam-enabled
    above 1 replica.** Never scale up with iam on.
 3. `CLOUD_DATA_DIR=/var/lib/cloud` on the RWO `cloud-api-data` PVC. The embedded IAM
-   store is **`/var/lib/cloud/iam/iam2.db`** (`clients/iam/iam.go` `paths()`) — the v2
+   store is **`/var/lib/cloud/iam/iam2.db`** (`apps/iam/iam.go` `paths()`) — the v2
    store. `iam.db` is a different database; opening it serves the wrong identities
    without failing.
 4. You have the live Casdoor store to migrate FROM and its KMS master key:
@@ -68,7 +68,7 @@ migrate-v1 \
   `iam/cmd/migrate-v1/main.go`): a `.db` path is taken verbatim, anything else is
   treated as a data-dir and gets `/iam2.db` appended. So `…/iam/iam2.db` and `…/iam`
   are equivalent. What matters is that the written file is exactly
-  `/var/lib/cloud/iam/iam2.db` — the path `clients/iam` opens.
+  `/var/lib/cloud/iam/iam2.db` — the path `apps/iam` opens.
 
 **Verify:** dry-run report shows expected counts for users, orgs, applications,
 providers, certs; zero drift; zero errors.
@@ -89,7 +89,7 @@ there is no env var to add. Deploying the image IS this step. Nothing here is
 additive or reversible by a flag: plan Step 1 to complete before the next roll.
 
 Apply the CR; the operator rolls the Recreate Deployment (single pod, brief blip —
-expected). On boot, `clients/iam` opens `/var/lib/cloud/iam/iam2.db` (the migrated
+expected). On boot, `apps/iam` opens `/var/lib/cloud/iam/iam2.db` (the migrated
 store), seeds new-only from `init_data.json` (idempotent — real rows already present,
 so seed only adds anything genuinely missing), and mounts the full `/v1/iam/*` surface
 IN-PROCESS. `iam_edge.go` stops mounting (`serve.go`: `if !cfg.Enabled("iam") …`), so

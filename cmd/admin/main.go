@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/admin"
+	"github.com/hanzoai/cloud/apps/admin"
 )
 
 // Standalone entry for the admin app.

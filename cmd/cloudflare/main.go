@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/cloudflare"
+	"github.com/hanzoai/cloud/apps/cloudflare"
 )
 
 // Standalone entry for the cloudflare app.

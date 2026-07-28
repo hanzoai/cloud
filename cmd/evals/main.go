@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/eval"
+	"github.com/hanzoai/cloud/apps/eval"
 )
 
 // Standalone entry for the evals app.

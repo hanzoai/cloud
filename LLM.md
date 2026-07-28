@@ -35,7 +35,7 @@ source for the generated per-language SDKs.
 ## Key entry points
 - `cmd/cloud` — server binary · `cmd/hanzo` (`cli/`) — control CLI · `webui.go` — embedded console
 - `apps/apps.go:Wire()` — composition root (the one ordered subsystem slice)
-- `deps.go` / `cloud.Deps` — process-wide handles · `clients/<name>/` — every subsystem
+- `deps.go` / `cloud.Deps` — process-wide handles · `apps/<name>/` — every subsystem
 - `openapi/` — the document pipeline: the spec is a projection of the live router,
   and `openapi.yaml` at the root is a GOLDEN of it (written by `make openapi`,
   verified by `make test` — not a second source)
@@ -64,23 +64,23 @@ and reports this 5-route plane as 29. Two products, one string prefix.
 
 | Route | Noun | Owner | Tier |
 | --- | --- | --- | --- |
-| `/v1/connectors` | Custody: per-user BYO external accounts | `clients/integrations` (both planes; user scope) | Shipped — 8 ops |
-| `/v1/channels` | Transport: portable message envelope, DM pairing, send + inbox | `clients/channels` | Shipped — 8 ops |
-| `/v1/sync` | Data: bidirectional sync engine | `clients/sync` | Shipped — 7 ops |
-| `/v1/automations` | Workflows: flows/runs, goja piece runtime | `clients/automations` | Shipped — 20 ops |
-| `/v1/bots` | A bot RUN on a surface | `clients/bots` | Shipped — 4 ops |
-| `/v1/compute/bots` | A bot MACHINE (kind=bot + agent binding) | `clients/visor` — NOT `clients/bots` | Shipped — 5 ops |
-| `/v1/tasks` | Durable engine | `clients/tasks` | Shipped — 11 ops |
-| `/v1/machines` `/v1/gpus` `/v1/fleet` `/v1/clusters` `/v1/k8s` `/v1/compute` | Compute: provisioned + BYO machines, GPUs, k8s clusters | `clients/visor` (+ `clients/fleet` registry) | Shipped — 33 ops |
-| `/v1/cloud` | Cloud accounts: link DO/AWS/GCP/Azure, discover native k8s clusters, fold into the fleet | `clients/venue` | Shipped — 5 ops |
-| `/v1/blueprint` | Cost: OSS-template SBOM (compose→images) + compute-cost estimate | `clients/blueprint` | Shipped — 3 ops |
-| `/v1/templates` | Starter kits: ONE entry per template, shapes as variants | `clients/templates` | Shipped — 2 ops |
-| `/v1/iam` | Identity: users, orgs, roles | `clients/iam` | Shipped — opaque (catch-all, see below) |
-| `/v1/kms` | Secret custody: sealed secrets | `clients/kms` | Shipped — 7 ops |
+| `/v1/connectors` | Custody: per-user BYO external accounts | `apps/integrations` (both planes; user scope) | Shipped — 8 ops |
+| `/v1/channels` | Transport: portable message envelope, DM pairing, send + inbox | `apps/channels` | Shipped — 8 ops |
+| `/v1/sync` | Data: bidirectional sync engine | `apps/sync` | Shipped — 7 ops |
+| `/v1/automations` | Workflows: flows/runs, goja piece runtime | `apps/automations` | Shipped — 20 ops |
+| `/v1/bots` | A bot RUN on a surface | `apps/bots` | Shipped — 4 ops |
+| `/v1/compute/bots` | A bot MACHINE (kind=bot + agent binding) | `apps/visor` — NOT `apps/bots` | Shipped — 5 ops |
+| `/v1/tasks` | Durable engine | `apps/tasks` | Shipped — 11 ops |
+| `/v1/machines` `/v1/gpus` `/v1/fleet` `/v1/clusters` `/v1/k8s` `/v1/compute` | Compute: provisioned + BYO machines, GPUs, k8s clusters | `apps/visor` (+ `apps/fleet` registry) | Shipped — 33 ops |
+| `/v1/cloud` | Cloud accounts: link DO/AWS/GCP/Azure, discover native k8s clusters, fold into the fleet | `apps/venue` | Shipped — 5 ops |
+| `/v1/blueprint` | Cost: OSS-template SBOM (compose→images) + compute-cost estimate | `apps/blueprint` | Shipped — 3 ops |
+| `/v1/templates` | Starter kits: ONE entry per template, shapes as variants | `apps/templates` | Shipped — 2 ops |
+| `/v1/iam` | Identity: users, orgs, roles | `apps/iam` | Shipped — opaque (catch-all, see below) |
+| `/v1/kms` | Secret custody: sealed secrets | `apps/kms` | Shipped — 7 ops |
 
 `/v1/bots` and `/v1/compute/bots` are two nouns with two owners; the row above
 pairs each with the package that REGISTERS it. Pairing `/v1/compute/bots` with
-`clients/bots` is the merge "Bot is three values" (below) exists to forbid.
+`apps/bots` is the merge "Bot is three values" (below) exists to forbid.
 
 Custody invariants: secrets sealed in KMS, never in SQLite rows; verify before
 store. Two scopes, two paths, one rule — the path is built from the VALIDATED
@@ -117,7 +117,7 @@ Discovery ends at `fleet.Register` — exactly where `visor.attachCluster` ends 
 which is what makes "discovered" and "attached" the same kind of cluster
 afterwards. Do not add a cluster store; extend the fold.
 
-**`visor` is an agent name, not a query surface.** `clients/visor` OWNS the
+**`visor` is an agent name, not a query surface.** `apps/visor` OWNS the
 compute plane, but it serves it at the nouns above (`/v1/machines`,
 `/v1/clusters`, `/v1/gpus`, `/v1/fleet`, `/v1/k8s`, `/v1/compute`) — never under
 `/v1/visor`. The only live `/v1/visor` route is `GET /v1/visor/health`, and that
@@ -158,7 +158,7 @@ directives are load-bearing and each fixes exactly one graph hazard:
   `github.com/ugorji/go/codec` (pulled by gin) is unambiguous.
 - the `k8s.io/*` staging replace block pins every staging module to the `v0.35.3`
   line. `k8s.io/kubernetes` is a GRAPH-ONLY transitive require of
-  `hanzoai/deploy/gitops-engine` (clients/deploy uses its `pkg/utils/kube`); NO
+  `hanzoai/deploy/gitops-engine` (apps/deploy uses its `pkg/utils/kube`); NO
   cloud package imports `k8s.io/kubernetes`, so its staging tree never compiles —
   do not "drop k8s.io/kubernetes", the pins keep the graph consistent and it is
   never built. koanf resolves to the split modules; the `koanf v1.5.0` monolith
@@ -176,16 +176,16 @@ Test modes: `make test` is pure-Go (`CGO_ENABLED=0`). Encrypted-at-rest OrgDB
 tests (`cek`, `CLOUD_KMS_MASTER_KEY_REF` set) REQUIRE `CGO_ENABLED=1` +
 libsqlcipher (`cek/cek.go` refuses to encrypt in pure-Go); those run only in the
 Dockerfile's dedicated `-tags libsqlite3` CGO stage, and fail under `make test`
-by design (clients/git, kms, flags, x402, cmd/kmsreseal, finance). Bundle-embed
-tests (clients/tasks/ui) need `make deploy-ui` first (real bundle is gitignored).
+by design (apps/git, kms, flags, x402, cmd/kmsreseal, finance). Bundle-embed
+tests (apps/tasks/ui) need `make deploy-ui` first (real bundle is gitignored).
 
 Store-heavy subsystem tests are fsync-bound, not CPU-bound. A mount opens its own
 SQLite stores, so a test that mounts several subsystems commits many times, and
 `t.TempDir()` under `/tmp` puts every commit behind the ext4 journal — on a box with
 a concurrent build the same mount that costs milliseconds idle costs ~90s, at ~0%
 CPU, blocked in `jbd2_log_wait_commit`. Point `TMPDIR` at tmpfs to measure the real
-cost: `TMPDIR=/dev/shm/t GOWORK=off go test -p 1 ./clients/guide` runs the eight-seam
-cross-subsystem harness (`clients/guide/drivehome_e2e_test.go`) in under a second.
+cost: `TMPDIR=/dev/shm/t GOWORK=off go test -p 1 ./apps/guide` runs the eight-seam
+cross-subsystem harness (`apps/guide/drivehome_e2e_test.go`) in under a second.
 Prefer one package per `go test` invocation regardless: `./...` links every main
 package at once (`cmd/cloud` alone links >6GB).
 
@@ -239,7 +239,7 @@ and `manifest/apps.go`, so an app cannot exist in one and not the other. Prefixe
 come from, in order: the `PluginSpec` call's own arguments, a declared
 `Prefixes:` field, then the absolute paths the app's package registers — read by
 walking the call graph from the entry's Mount function (per FUNCTION, because
-`clients/account` serves two Wire entries and a package-wide scan gives each the
+`apps/account` serves two Wire entries and a package-wide scan gives each the
 other's paths). Both registration forms are read: `app.Get("/v1/x", h)` and the
 typed `zip.Get(reg, "/v1/x", h)`. The walk resolves consts, `[]string` ranges and
 concatenation, and tracks which values are Groups so `g.Get("/health")` never
@@ -263,7 +263,7 @@ listen, and all but the first die on "address already in use".
 
 CI pins both properties from `hanzo.yml`: `generated-current` re-runs the
 generator and fails on a dirty tree; `host-is-light` fails if `cmd/host`'s import
-graph reaches `apps` or any `clients/*`.
+graph reaches `apps` or any `apps/*`.
 
 ### Where a subsystem's binary comes from — ONE ladder, and the last rung is the network
 
@@ -334,11 +334,11 @@ published binary is the static one (hanzo.yml:23-26).
   `zip.App.ReloadTo(name, Plugin{URL, Sum})` via
   `POST /v1/admin/plugins/:name/reload`. Any on-demand or per-org upgrade path
   must drive one of those two.
-- **Reload is SuperAdmin-gated, and audited BEFORE it acts.** `clients/plugin`
-  mounts four routes (clients/plugin/plugin.go:78-81): list, reload, enable, disable. Every
+- **Reload is SuperAdmin-gated, and audited BEFORE it acts.** `apps/plugin`
+  mounts four routes (apps/plugin/plugin.go:78-81): list, reload, enable, disable. Every
   mutation is SuperAdmin-gated and written to the hash-chained audit trail BEFORE
   it is reported as done; a deployment with NO durable audit store REFUSES the
-  operation rather than performing an unrecorded one (clients/plugin/fleet.go:154-155).
+  operation rather than performing an unrecorded one (apps/plugin/fleet.go:154-155).
   Reload starts the replacement and proves it LISTENING before any traffic moves,
   so a bad build leaves the old one serving and returns an error rather than a
   hole; naming a digest this host has run before IS the rollback, and costs no
@@ -432,7 +432,7 @@ is exactly the bug this replaced.
 
 ## One build contract: `mk/plugin.mk`, and an app's Makefile is its name
 
-`clients/<app>/Makefile` is two lines — `APPS := <name>` and
+`apps/<app>/Makefile` is two lines — `APPS := <name>` and
 `include ../../mk/plugin.mk`. Everything an app can be asked to do lives in that
 one included file: `generate` (zipdoc lifts handler prose into `zipdoc_gen.go`;
 a prerequisite of `build` — mk/plugin.mk:62 — because it is compiled IN, so
@@ -451,15 +451,15 @@ own standalone pass at line 178. See "Generated and frozen artifacts" below —
 this asymmetry is still live, and it is why the 15 `zipdoc_gen.go` files are
 committed.
 
-Both invocations work — `make -C clients/tasks openapi` from the root and
-`cd clients/tasks && make openapi` — because `mk/plugin.mk` derives every path
+Both invocations work — `make -C apps/tasks openapi` from the root and
+`cd apps/tasks && make openapi` — because `mk/plugin.mk` derives every path
 from the including Makefile's own location, never from the caller's cwd. That is
 what makes the OSS/private split a move rather than a rewrite: an extracted
-`clients/<app>` + `cmd/<app>` + `mk/` keeps the paths intact.
+`apps/<app>` + `cmd/<app>` + `mk/` keeps the paths intact.
 
 `APPS` is a list and is never inferred from the directory name — four packages
 are not named after their app (`zt`→zero-trust, `eval`→evals, `auditlog`→audit,
-`plugin`→plugins) and `clients/account` backs two mounts. Three apps (authz,
+`plugin`→plugins) and `apps/account` backs two mounts. Three apps (authz,
 licensing, metrics) are external modules with a `cmd/<app>` and no source
 directory here; `mk/fleet.mk` runs them through the same recipe by name.
 `mk/go.mk` is the toolchain contract every includer shares (GOWORK=off, TMPDIR on
@@ -468,7 +468,7 @@ disk, `-p=2`, the dev KMS key, the FTS5 tag).
 ## Framework doctrine
 
 One way to do everything. Composable, orthogonal, DRY. A new subsystem is a
-package under `clients/<name>` that obeys these seams — nothing more.
+package under `apps/<name>` that obeys these seams — nothing more.
 
 - **Subsystem shape.** A subsystem exposes
   `func Mount(app cloud.Router, deps cloud.Deps) error` — `MountFunc`
@@ -509,7 +509,7 @@ package under `clients/<name>` that obeys these seams — nothing more.
   Today `o11y` is the only one — the heaviest graph in the tree (otel-collector,
   prometheus, gonum), imported by nothing else, so unlinking it is pure
   subtraction. **Unlinking means deleting the IMPORT, not just the mount**:
-  `apps/apps.go` carries a standing comment where `clients/o11y` would be
+  `apps/apps.go` carries a standing comment where `apps/o11y` would be
   imported, because an import there would keep its 2.7k-package graph linked
   whether or not any Wire entry referenced it.
   - `price` is POSITIONAL, ahead of the variadic prefixes, and that placement is
@@ -679,7 +679,7 @@ document pipeline" below.)
 - **The product axis is mechanical.** The first path segment after `/v1/` IS the
   product (`openapi.Product`), tagged onto each operation so a CLI can build
   `hanzo <product> <resource> <verb>` with no judgment. It is deliberately NOT the
-  subsystem name: `clients/billing` also serves `/v1/finance/*`.
+  subsystem name: `apps/billing` also serves `/v1/finance/*`.
 - **What the router CANNOT tell you — do not try to fix this in the generator.**
   Method, path, path params, and product are derivable; request/response schemas,
   query/header params, status codes, and auth are NOT. The router holds a
@@ -740,7 +740,7 @@ one before it.
   document still cannot disagree with the router. Schemas are additive metadata
   on routes that exist. A duplicate registration for one `(method, path)` panics
   at init rather than letting two declarations race. Seven declarations live
-  there today, all `clients/platform` (platform.go:248-254) — this is a bridge,
+  there today, all `apps/platform` (platform.go:248-254) — this is a bridge,
   not the destination; the destination is the typed op.
 - **zipdoc is why the prose exists at all.** Go drops comments at compile time,
   so the build-time pass is the ONLY way a handler's doc comment, its field
@@ -786,7 +786,7 @@ one before it.
 - **`openapi.Weave` composes the subsets, and its only contribution is the
   REFUSAL** (openapi/weave.go). Two apps may not claim one address, and two apps
   may not mean different things by one schema name. That refusal is not
-  hypothetical: `clients/git`'s `/:org/:repo` catch-all was swallowing other
+  hypothetical: `apps/git`'s `/:org/:repo` catch-all was swallowing other
   apps' routes, and the manifest's call-graph walk is what caught it. The routing
   order in `Wire()` is load-bearing precisely because overlapping claims exist.
   A merge that took last-write-wins would produce a perfectly valid
@@ -845,9 +845,9 @@ operations across 984 paths, of which 164 have a description.** The other ~1234
 are route only — no MCP tool, no CLI command, no SDK method, no schema, no
 prose.
 
-The typed 15 are `clients/admin` and its eight sub-packages, plus `clients/git`,
-`clients/integrations`, `clients/marketing`, `clients/plugin`, `clients/search`,
-`clients/visor`. `clients/admin/core/typed.go` states the rule for that surface:
+The typed 15 are `apps/admin` and its eight sub-packages, plus `apps/git`,
+`apps/integrations`, `apps/marketing`, `apps/plugin`, `apps/search`,
+`apps/visor`. `apps/admin/core/typed.go` states the rule for that surface:
 every `/v1/admin/*` route is a typed op.
 
 **What compensates today, and how it dies.** hanzoai/openapi carries an AUTHORED
@@ -894,7 +894,7 @@ migration silently strips request shapes from every generated CLI and SDK.
   change.** The weave gate catches it: `TestFleetIsTheWeaveOfItsApps` compares the
   composition against `openapi.yaml`, so an app whose subset no longer matches its
   routes fails there — and a MISSING subset fails immediately, naming the file.
-  The fix is to re-emit: `make -C clients/<app> openapi` for one,
+  The fix is to re-emit: `make -C apps/<app> openapi` for one,
   `make -f mk/fleet.mk openapi-apps` for all of them. Never edit the JSON, and
   never relax the gate. The same test also LOGS `UNROUTED: <app> serves <path>,
   which the fleet routes nowhere` — reported rather than refused, because that one
@@ -908,7 +908,7 @@ migration silently strips request shapes from every generated CLI and SDK.
 
 ## Cross-subsystem seams that are values, not places
 
-- **The per-principal MCP plane is callable in-process.** `clients/automations`
+- **The per-principal MCP plane is callable in-process.** `apps/automations`
   decomplects tool dispatch from its front doors: `dispatchTool` is the ONE core
   (resolve `<connector>_<action>` → run with a Token bound to the VALIDATED org),
   and TWO doors share it — the HTTP JSON-RPC handler (`POST /v1/automations/mcp`)
@@ -922,19 +922,19 @@ migration silently strips request shapes from every generated CLI and SDK.
   resolves byte-identical patterns by first-registration with no panic (it MERGES
   the handlers, so counting `GetRoutes()` entries cannot see it), and visor's
   machine list silently answered the console's run list.
-  (1) A bot RUN — a task the runtime executes on a surface — is `clients/bots` at
+  (1) A bot RUN — a task the runtime executes on a surface — is `apps/bots` at
   `/v1/bots`. (2) A bot MACHINE — visor-provisioned compute of kind=bot plus its
-  agent binding — is `clients/visor` at `/v1/compute/bots`; what it rents you is
+  agent binding — is `apps/visor` at `/v1/compute/bots`; what it rents you is
   compute, so it nests in visor's domain. (3) The runtime SERVICE — the TS bot
   (channels/skills), never reimplemented in Go — is reached through
-  `clients/runtime`, which is a TRANSPORT, not a domain: base address, identity,
+  `apps/runtime`, which is a TRANSPORT, not a domain: base address, identity,
   framing, cleartext policy, and the `/v1/bot/*` ops face. It is named for what it
   does, not for the host it dials, and it must never import `bots`/`coding` — each
   of those owns its own wire stub (`bots/wire.go`, `coding/task.go`) and speaks
   through the seam. That isolation is what makes the HIP-0106/HIP-0120 ZAP swap a
   seam swap instead of a rewrite.
 - **Cloud owns policy; the runtime owns the run. Do not copy state you do not
-  own.** `clients/bots` holds NO store. The sandbox lives in the bot runtime,
+  own.** `apps/bots` holds NO store. The sandbox lives in the bot runtime,
   keyed in the runtime's own tenant store, which is the only thing that knows
   whether a run is alive — so list and stop PROXY it, gated by cloud's
   principal/org. A cloud-side registry was tried and was wrong: it minted an id
@@ -947,7 +947,7 @@ migration silently strips request shapes from every generated CLI and SDK.
   `ProjectStore` is READ-ONLY (List/Get/Exists — re-adding Create breaks the
   build). `/v1/run` RESOLVES the org's default project (424 → IAM when absent),
   never mints one. Apps whose IAM project is gone are removed by the orphan
-  reaper (`clients/platform/orphans.go`) — fails SAFE (IAM unreachable ⇒ reap
+  reaper (`apps/platform/orphans.go`) — fails SAFE (IAM unreachable ⇒ reap
   nothing), one existence question per (org,project), volumes left behind.
 - **An app declares storage** (`storageGb` on the platform Application): the
   deploy ensures an RWO claim `<slug>-data`, mounts it at `/data`, and forces
@@ -962,16 +962,16 @@ migration silently strips request shapes from every generated CLI and SDK.
   cross-org readers. The org remains the STORE partition (`/orgs/<org>/…`).
 - **Per-tenant KMS identity is minted, not runbooked.** On a missing
   `orgs/<org>/kms-auth/*` credential and with `IAM_SERVICE_TOKEN` set,
-  `clients/platform` calls IAM's idempotent bootstrap upsert to create
+  `apps/platform` calls IAM's idempotent bootstrap upsert to create
   `<org>-platform-kms` (clientId==name==audience; a surprise clientId is
   refused, never sealed; the upsert must carry `cert-<brand>` or the minted app
   cannot SIGN and its tokens 500), seals both fields, and the sync proceeds.
   In-cluster IAM base resolution is `cloud.IAMBaseURL` — the split-horizon
   policy stated once (Cloudflare 403s server-side POSTs to the public issuer).
 - **A customer IS an IAM user; marketing keeps no contact list.** Who to email is
-  read IN-PROCESS from the embedded IAM (`clients/marketing/roster.go` →
-  `iam/pkg/store.GetMailableUsers` over `clients/iam.DB()`), the same seam
-  `clients/platform` uses for the IAM-owned Project — no HTTP hop to `/v1/iam`
+  read IN-PROCESS from the embedded IAM (`apps/marketing/roster.go` →
+  `iam/pkg/store.GetMailableUsers` over `apps/iam.DB()`), the same seam
+  `apps/platform` uses for the IAM-owned Project — no HTTP hop to `/v1/iam`
   from inside the binary, IAM's `model.User` verbatim, read-only, masked. The org
   is `principal.Org`, which IS IAM's `Owner`, so an audience can only ever resolve
   its own tenant; `GetMailableUsers` REFUSES an empty org rather than falling back
@@ -991,7 +991,7 @@ migration silently strips request shapes from every generated CLI and SDK.
   `runtime.ErrNotServed` (the operation does not exist). Conflating them makes a
   stop that cannot fail: a runtime without the route reports absent for EVERY run,
   so "already gone" becomes permanently true. A bare 404 is 502, never success.
-- **The Business AI Guide (`clients/guide`, `/v1/guide/*`)** is the on-site launch
+- **The Business AI Guide (`apps/guide`, `/v1/guide/*`)** is the on-site launch
   checklist: a pure engine (`curriculum.go` — parse/validate/next-step/dependency
   gating over plain data) + per-org progress (`cloud.OrgStore[*Store]`) + an
   injectable auto-detect registry (`detect.go` — `acted` reads the agent action
@@ -1000,7 +1000,7 @@ migration silently strips request shapes from every generated CLI and SDK.
   curriculum is a machine-readable contract (embedded `default.yaml`; org-custom via
   PUT replaces it) so `hanzoai/marketing` can author the full `checklist.yaml`
   against the same `Step`/`Curriculum` shape.
-- **The EXPERIMENT is a composition, not a fourth engine (`clients/experiments`,
+- **The EXPERIMENT is a composition, not a fourth engine (`apps/experiments`,
   `/v1/experiments`).** A/B testing is ONE value whatever the variant KIND (feature
   flag, ad creative, email subject, model id): the primitive owns only the
   experiment registry (definition + decision); it COMPOSES three planes it never
@@ -1013,12 +1013,12 @@ migration silently strips request shapes from every generated CLI and SDK.
   event store; the analyze fold joins each subject's analytics outcome to its flags
   variant by `distinct_id`. EVIDENCE = `research.Record`/`research.List` — per-variant
   samples land as immutable `kind:"ab"` rows; significance (two-proportion z-test,
-  `math.Erfc`, no dep) is a PURE function over them. `clients/campaign` runs a
+  `math.Erfc`, no dep) is a PURE function over them. `apps/campaign` runs a
   creative A/B by composing `experiments.Assign`/`experiments.Analyze` — it never
   reinvents assignment or evidence. Add a new variant KIND by putting a payload on
   the variant; the primitive does not care what it is.
 - **The OSS-template compute cost is DERIVED from the compose, not a fourth ledger
-  (`clients/blueprint`, `/v1/blueprint`).** A blueprint's `docker-compose.yml` is
+  (`apps/blueprint`, `/v1/blueprint`).** A blueprint's `docker-compose.yml` is
   parsed to its SBOM (the bill of container images) and its services' CPU/memory
   footprint priced through ONE documented rate card (microdollars per vCPU-/GB-hour,
   DigitalOcean-droplet-derived + platform margin; tunable via
@@ -1028,32 +1028,32 @@ migration silently strips request shapes from every generated CLI and SDK.
   returns `{sbom, vcpuHr, gbHr, microUsdPerHour, estCentsPerMonth}`: `estCentsPerMonth`
   is the "~$X/mo to run" the console shows; `microUsdPerHour` is the exact rate the
   deploy path meters the deploying org on via the SAME commerce spine `resource_billing`
-  uses. The author royalty (`clients/authors`, `defaultShareBps=2000`) already accrues
+  uses. The author royalty (`apps/authors`, `defaultShareBps=2000`) already accrues
   20% of a deploying org's metered spend — this plane only DEFINES the compute component
   of that spend from a real rate card; it never touches the ledger or the accrual sweep.
-  Distinct from `clients/sbom` (CycloneDX packages INSIDE one image, keyed by digest);
+  Distinct from `apps/sbom` (CycloneDX packages INSIDE one image, keyed by digest);
   this is the bill of IMAGES a stack runs, keyed by template.
 
 ## Identity vocabulary is IAM-native
 
 Identity is expressed ONLY in IAM-native nouns: **org, user, project, billing
 account**. The word **"tenant" is banned** in cloud identifiers, strings,
-comments, and filenames. Resolve org/project scope through `clients/principal`
+comments, and filenames. Resolve org/project scope through `apps/principal`
 (`principal.Org(c)`, `principal.Project(c)`) and user identity through `c.User()`
 — all gateway-minted, JWT-validated values (X-Org-Id / X-Project-Id / X-User-Id,
 HIP-0026); never read a raw request header for scope.
 
-- **The one gated exception.** `clients/platform` derives customer-app Kubernetes
+- **The one gated exception.** `apps/platform` derives customer-app Kubernetes
   namespaces, registry image refs, and quota/limit objects from a live `tenant-<org>`
   string prefix. Renaming that prefix orphans deployed namespaces + built images,
   so the literal `"tenant-"` string (and its directly-adjacent comment) is retained
-  behind a `// NAMING(gated)` note in `clients/platform/k8s.go`. The surrounding
+  behind a `// NAMING(gated)` note in `apps/platform/k8s.go`. The surrounding
   identity vocabulary is org-native regardless; only the on-cluster string waits on
   an infrastructure migration.
 
 ## API keys are ONE noun (`/v1/keys`), and the type is a FIELD
 
-`POST` creates, `DELETE` revokes, `GET` lists. `clients/account/account.go`.
+`POST` creates, `DELETE` revokes, `GET` lists. `apps/account/account.go`.
 `mint`, `issue` and `revoke` are HTTP methods, never path segments — the concept
 previously had four names (`/v1/iam/mint-user-keys`, `/v1/iam/revoke-user-keys`,
 `/v1/iam/keys`, `/v1/ingest/keys`) and the only honest one 404'd.
@@ -1092,7 +1092,7 @@ Requires `IAM_PUBLISHABLE_RESOLVE_APPS`, which is fail-closed.
 `schema.User.AccessKey` reports "no key" immediately after a successful POST. That is
 the "key never listed" bug and it has recurred twice.
 
-## Hanzo Company (`clients/company`, `/v1/company`)
+## Hanzo Company (`apps/company`, `/v1/company`)
 
 The Stripe-Atlas-class incorporation + fundraising product: ONE formation state
 machine per org. `machine.go` is the PURE core — a `transitions` table with a guard
@@ -1106,14 +1106,14 @@ machine composes them identically in prod and tests: billing → the shared
 `ResourceMeter` ($999 one-time fee); documents → `dataroom.Ingest` (new in-proc
 facade); cap table → `captable.*` (new in-proc facades: SetIncorporation /
 AddStakeholders / EnsureShareClass / IssueShares / RecordRound); equity genesis →
-a KMS-signed Hanzo-L1 anchor mirroring `clients/treasury` (honest pending when
+a KMS-signed Hanzo-L1 anchor mirroring `apps/treasury` (honest pending when
 unwired); KYC + state filing → honest stubs (no fabricated verification/filing).
 Import path (already-incorporated orgs): Google Drive → data room, a Google Sheet →
-captable, via the `google` OAuth provider now completed in `clients/integrations`
+captable, via the `google` OAuth provider now completed in `apps/integrations`
 (token custodied in KMS; the automations `google` connector shares the same token).
 Runbook: `docs/company-dogfood.md`.
 
-## Deploy plane (`clients/deploy`, `/v1/deploy`)
+## Deploy plane (`apps/deploy`, `/v1/deploy`)
 
 Native ArgoCD-grade GitOps console over the operator-managed fleet, parallel to
 `/v1/git`: each `hanzo.ai/v1` App CR IS the Application, and the plane OBSERVES the
@@ -1125,7 +1125,7 @@ image to a prior semver and `/{name}/sync` requests a reconcile. SUPERADMIN-only
 `gitops-engine` (`hanzoai/deploy/gitops-engine` v0.7.2, no replace) in-process for the
 reconcile half behind `DEPLOY_ENGINE_ENABLED` (default off), with a prune-safety fuse.
 
-## The index (`clients/index`, `/v1/index`)
+## The index (`apps/index`, `/v1/index`)
 
 The in-binary index, speaking the Meilisearch REST dialect so a Meilisearch client
 repoints by changing one host. It replaced the standalone Meilisearch containers
@@ -1133,9 +1133,9 @@ repoints by changing one host. It replaced the standalone Meilisearch containers
 
 **Four different things, four names — do not merge them.** `hanzoai/search` is the
 SEARCH PRODUCT (our own Meilisearch build, serving `search.hanzo.ai` and the docs
-corpus). `clients/websearch` queries the OUTSIDE world. `clients/crawl` fetches it
+corpus). `apps/websearch` queries the OUTSIDE world. `apps/crawl` fetches it
 (in-binary — see below; the standalone `hanzoai/crawl` service it used to call is gone).
-`clients/index` is the storage primitive an application writes documents into and
+`apps/index` is the storage primitive an application writes documents into and
 queries back. It is NOT at `/v1/search`: that path belongs to the `hanzoai/ai` RAG
 plane, whose `/v1/search/{name}` pattern silently swallowed this subsystem's
 single-segment routes (`/health`, `/version` answered 404 in production while every
@@ -1162,11 +1162,11 @@ keeps the wrapped data key beside it as `<path>.dek`, so moving the `.db` alone
 strands the key and every document becomes undecryptable — data loss that presents
 as an empty index.
 
-## The cross-org catalog (`clients/catalog`, `/v1/catalog`)
+## The cross-org catalog (`apps/catalog`, `/v1/catalog`)
 
 Everything the fleet has built — hanzo, lux and zoo repos, plus every site this
 deployment serves — as ONE searchable corpus. It owns no store: the rows live in
-`clients/index` under the uid `catalog`, so relevance, paging and encryption at rest
+`apps/index` under the uid `catalog`, so relevance, paging and encryption at rest
 are the index's. What catalog adds is the one thing a per-org index cannot express,
 a corpus that spans orgs, and it does that with a SECOND corpus rather than a
 weaker filter:
@@ -1272,7 +1272,7 @@ somebody else's. A patch had pinned the badge back on from an embedded 75-slug
 manifest, which drifted out of agreement with reality within days of the template
 rename. A second copy of an unforgeable fact can only ever be the wrong one.
 
-**Visibility, not authorship, decides who appears** (`clients/projects/visibility.go`).
+**Visibility, not authorship, decides who appears** (`apps/projects/visibility.go`).
 One axis owned by the publisher — `public` (default) or `private` — plus
 `hidden`, the platform's subtractive moderation from admin.hanzo.ai. A row is
 listed iff `public AND NOT hidden`, enforced in `LiveSites`' own query so a
@@ -1293,7 +1293,7 @@ GitHub failing to identify a licence, not a licence, so those rows carry the
 upstream and state no terms. Live: 437 repos, 40 third-party, every one naming its
 real parent.
 
-## Starter kits (`clients/templates`, `/v1/templates`)
+## Starter kits (`apps/templates`, `/v1/templates`)
 
 One embedded PUBLIC catalog (read-only; a customer's own templates are the second
 layer, below), and **one template is one entry**. The shapes a
@@ -1370,12 +1370,12 @@ A slug stays single-valued across both layers: publishing over a public slug is
 Two DIFFERENT orgs may hold the same private slug — the key is `(org, slug)`.
 
 `templates.Lookup(ctx, org, slug)` is the ONE door other subsystems read through
-(`clients/projects`' fork resolves the caller org's own templates first, then the
+(`apps/projects`' fork resolves the caller org's own templates first, then the
 gallery), so "which templates may this org use" is answered in exactly one place;
 a fork of a private template records owner-qualified lineage (`acme/acme-portal`),
 a fork of a gallery template records the bare public slug.
 
-## Fetching the web (`clients/crawl`, `/v1/crawl`)
+## Fetching the web (`apps/crawl`, `/v1/crawl`)
 
 In-binary fetch + extract + markdown. It replaced a call to a standalone crawler
 at `crawl.hanzo.svc.cluster.local:11235` — a name that had stopped resolving, which
@@ -1415,7 +1415,7 @@ cache hit, never the page.
 ## Releases are cut by a merge to main
 
 `.github/workflows` is intentionally empty of CI. The image and its `v*` tags have ONE
-owner, `clients/platform/release.go`: compute the next version → build → SMOKE the
+owner, `apps/platform/release.go`: compute the next version → build → SMOKE the
 pushed image → tag → roll out. The tag is a RECEIPT for a proven image, so a
 change that breaks boot never reaches production and leaves no phantom tag.
 
@@ -1447,7 +1447,7 @@ than one that fails.
 
 ### Site releases already have a lifecycle — do not build a second one
 
-`clients/projects` owns the full versioned-release model for static sites, and it is
+`apps/projects` owns the full versioned-release model for static sites, and it is
 the ONE way:
 
 - `<org>/.releases/<slug>/rel_<128-bit manifest digest>/` — immutable, content-
@@ -1458,7 +1458,7 @@ the ONE way:
   row)`, so it cannot point a site at a release that was never created, and two
   concurrent activations cannot leave the pointer disagreeing with whichever won.
   `MarkLive` deliberately does NOT touch `current_release`.
-- `servePrefix` (`clients/projects/sites.go`) — the ONE read rule, re-validating the
+- `servePrefix` (`apps/projects/sites.go`) — the ONE read rule, re-validating the
   id against `releaseIDRE` before it can widen a prefix. An unrecognized id falls back
   to the legacy prefix, so there is no flag day and no migration.
 - Rollback is activating an older id. Routes are already mounted on both site
@@ -1500,13 +1500,13 @@ Two consequences, both load-bearing:
 
 **Three transports, one trigger.** A push reaches `cloud.OnGitPush` — the
 single-registrant seam, never a second CI — from the embedded git server
-(`clients/git/smart_http.go`), the GitHub App (`/v1/connector/github/webhook`), and
-the canonical forge (`/v1/git/webhook`, `clients/git/webhook.go`). The third exists
+(`apps/git/smart_http.go`), the GitHub App (`/v1/connector/github/webhook`), and
+the canonical forge (`/v1/git/webhook`, `apps/git/webhook.go`). The third exists
 because git.hanzo.ai is a SEPARATE process: its pushes never touch our receive-pack,
 so without that door the host we call canonical builds nothing and only the mirror
 releases. Both webhook transports HMAC-verify fail-closed and drop bot-authored
 pushes through the one `cloud.IsBotActor`, so a release cannot retrigger itself.
-`clients/platform` is the only place that decides what a push MEANS: an app tracking
+`apps/platform` is the only place that decides what a push MEANS: an app tracking
 the repo rebuilds, and cloud's own upstream cuts a release. Cloud is the machine, so it calls the
 release in-process and the build token is never handed to a caller. The trigger runs
 BEFORE the token mint and the mirror, because a build reads from GitHub and must not
@@ -1533,7 +1533,7 @@ the final bearer fallback — no `--platform-token`). The ONE contract, no TS-Do
 - `hanzo deploy <app>`   → `POST /v1/paas/apps/{app}/deploy` — a zero-downtime ROLLING
   RESTART (stamps the Deployment pod-template `hanzo.ai/restartedAt` annotation; never
   changes the declared TAG — that stays a git commit CD reconciles). `--env` picks the ns.
-- `hanzo clusters list|get` → `GET /v1/clusters`  (`clients/visor`, tenant-scoped)
+- `hanzo clusters list|get` → `GET /v1/clusters`  (`apps/visor`, tenant-scoped)
 - `hanzo build`          → `POST /v1/runner`  (native buildkit fabric). With `--image` it
   builds a container image; with NO `--image` it reads the repo's own `hanzo.yml`
   (`binaries:` + `bucket:`) and builds the ARTIFACT lane instead — see below.
@@ -1543,7 +1543,7 @@ the final bearer fallback — no `--platform-token`). The ONE contract, no TS-Do
 `/v1/runner` has two lanes, and a request is in exactly one of them:
 
 - **image** (`image:`) → `launchDirectBuild` → rootless BuildKit → a pushed OCI ref.
-- **artifact** (`binaries:`) → `launchArtifactBuild` (`clients/platform/artifact.go`) → a
+- **artifact** (`binaries:`) → `launchArtifactBuild` (`apps/platform/artifact.go`) → a
   Job whose initContainers are ONE PER RECIPE ENTRY, each in that entry's toolchain image
   (`image:`, default `golang:1.26-bookworm`), sharing `/w`; then a publisher that hashes
   everything the recipe left in `/w/dist`, PUTs it to hanzoai/s3 and writes `binaries.json`
@@ -1563,7 +1563,7 @@ PUBLIC URL, because `s3.hanzo.ai` is this cluster's own LoadBalancer and does no
 a pod dialling it times out. Its egress hole is `artifact-publish-egress` in universe,
 selecting the pod label `hanzo.ai/publish=artifact`.
 
-`/v1/paas/*` auth mirrors `/v1/runner` (`clients/platform/runner.go`): the `guard` admits a
+`/v1/paas/*` auth mirrors `/v1/runner` (`apps/platform/runner.go`): the `guard` admits a
 validated principal who is SuperAdmin OR OrgAdmin, then each handler CONFINES a non-super
 caller to the platform namespaces its own validated org owns (`scopedNamespaces`, keyed on
 `principal.Org` — a tenant admin can never observe/restart another org's, or a platform,
@@ -1578,18 +1578,18 @@ for the apps board, which reads k8s directly with no IAM-store dependency.
 ## GTM: `/v1/campaign` orchestration → channels → connectors → analytics
 
 The go-to-market stack decomplects a campaign from its execution. A **Campaign is a
-VALUE** (`clients/campaign`: `{name, audience, content[], schedule, budget, channels[],
+VALUE** (`apps/campaign`: `{name, audience, content[], schedule, budget, channels[],
 status}`) that SPANS channels; a **Channel is an EXECUTOR** (`channel.go`, the
 `Channel` interface) it fans out to. The three channels are orthogonal and each
 CONSUMES the connector plane via `integrations.TokenFor` — the campaign object never
 touches a credential:
 
-- **paid → `/v1/ads`** — `ads.LaunchPaid/PaidSpend/PausePaid` (`clients/ads/provider.go`)
+- **paid → `/v1/ads`** — `ads.LaunchPaid/PaidSpend/PausePaid` (`apps/ads/provider.go`)
   resolve the org's ad token (`meta_ads`/`google_ads`/… via `TokenFor(org, <id>,
   "access_token")`) and run the campaign on the provider. Meta is executed for real;
   fail-closed when the org has not connected (424). This is the ONLY place `/v1/ads`
   touches the connector plane.
-- **organic → `/v1/publish`** (rename of `clients/social`) and **email → `/v1/marketing`**
+- **organic → `/v1/publish`** (rename of `apps/social`) and **email → `/v1/marketing`**
   are DESIGNED follow-ons: register their executors the same way in `apps/wire_seams.go`
   (`campaign.RegisterChannel(campaign.NewChannel(kind, launch, spend, pause))`). Until
   wired, a fan-out records that channel "unavailable" (honest), never fabricated.
@@ -1602,7 +1602,7 @@ campaign can only ever resolve its OWN org's token.
 
 **Metrics = the ONE analytics plane, not a second store.** `GET /v1/campaign/:id/metrics`
 reads the funnel from `analytics.CampaignMetrics(org, campaignID, variant, start, end)`
-(`clients/analytics/campaign.go`) — an org+`utm_campaign`(+`utm_content`)-scoped query
+(`apps/analytics/campaign.go`) — an org+`utm_campaign`(+`utm_content`)-scoped query
 over `hanzo.events`, org and campaign bound POSITIONALLY (same tenancy invariant as
 every analytics query) — joined with each channel connector's reported spend
 (`Channel.Spend`). Derived KPIs: CTR/CVR/CAC/ROAS. Honest-empty when the warehouse is
@@ -1622,7 +1622,7 @@ configuration surface is below, because the shape people expect (a per-repo sync
 setting) does not exist and should not be added.
 
 **There is no per-repo and no per-ref configuration.** A repo is not enrolled, and a
-ref is not filtered. `clients/integrations/github_webhook.go` accepts any ref under
+ref is not filtered. `apps/integrations/github_webhook.go` accepts any ref under
 `refs/`, and `Ref` stays a FULL ref (`refs/heads/x`, `refs/tags/v1.2.3`) the length of
 the chain — webhook → `SyncEvent` → `sync.Event` → `GitInboundReq` → `inboundFastForward`
 → `GitPushEvent`. Tags matter here: a version is published by tag, so a filter on
@@ -1636,7 +1636,7 @@ propagated`): the mirror does not get to delete canonical history.
 
 **A consumer that wants a branch cuts the prefix itself.** `strings.CutPrefix(ev.Ref,
 "refs/heads/")` answers "is this a branch" and "what is its name" in one total step,
-so a tag can never rebuild an app that tracks a branch (`clients/platform/push.go`),
+so a tag can never rebuild an app that tracks a branch (`apps/platform/push.go`),
 and `refs/tags/main` is not `refs/heads/main` for the release check.
 
 **Tenancy comes only from the installation id** in the HMAC-verified body — never a
@@ -1648,7 +1648,7 @@ header, never a client-controlled field. That is the whole tenant resolution:
 `Store.Get(ctx, org, provider)` keys a connection on `(org, "github")`: **one row per
 org**, holding one installation id. The App's own identity is a single set of process
 values, `GITHUB_APP_ID` + `GITHUB_APP_PRIVATE_KEY` + `GITHUB_APP_WEBHOOK_SECRET`
-(KMS-synced, `clients/integrations/github.go`), used to mint short-lived installation
+(KMS-synced, `apps/integrations/github.go`), used to mint short-lived installation
 tokens.
 
 So pointing a second App at the same webhook with the same secret does not double
@@ -1683,7 +1683,7 @@ Process values, all with working defaults — none of them selects *what* syncs:
 - `GIT_SYNC_ACTOR` — the actor recorded for a sync-initiated write.
 
 **What genuinely is per-repo is a different plane**, and naming it keeps the two from
-being confused: `/v1/git/repos/:name/*` (`clients/git/subscriptions.go`) holds a
+being confused: `/v1/git/repos/:name/*` (`apps/git/subscriptions.go`) holds a
 repo→Slack-channel subscription and a repo→downstream mirror target. Those are
 reactor config, org-scoped like every repo route. The code index is also per-repo and
 indexes the default branch only — a feature-branch push is skipped so it cannot
@@ -1710,7 +1710,7 @@ same predicate `cek.EnsureDevKey` uses:
 Injecting regardless is not a stricter posture — on a pure-Go build it is a hard refusal
 from `resolveDEK`, `Mount` never reaches `transport.SetApp`, and every S2S billing read
 then falls through to the network and DNS-resolves the in-process placeholder. That is
-the failure `clients/commerce/transport` documents: balance reads that answer
+the failure `apps/commerce/transport` documents: balance reads that answer
 "Insufficient balance" on funded accounts, with DNS named as the cause.
 
 **The gate only enforces on a kind that costs something.** `ResourceMeter.Gate`
@@ -1742,7 +1742,7 @@ preference, but because they all move the same balance and the suite is otherwis
 ## Encryption at rest: cek is the gate, and per-principal binding is not done yet
 
 `cek.Open` is the ONE encryption-at-rest gate — ~50 stores, plus IAM's identity store
-(`clients/iam.openStore`, which previously opened through `iamserver.OpenSQLite` and
+(`apps/iam.openStore`, which previously opened through `iamserver.OpenSQLite` and
 left `iam/iam2.db` beginning with the literal `SQLite format 3` magic). If you add a
 store, open it through cek; if a store is not in the envelope it has no `.dek` sidecar
 beside it, and that absence is the check worth running on any new data dir:

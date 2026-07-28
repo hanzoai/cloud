@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/referrals"
+	"github.com/hanzoai/cloud/apps/referrals"
 )
 
 // Standalone entry for the referrals app.

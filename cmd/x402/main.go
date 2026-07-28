@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/x402"
+	"github.com/hanzoai/cloud/apps/x402"
 )
 
 // Standalone entry for the x402 app.
