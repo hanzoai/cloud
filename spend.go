@@ -188,9 +188,11 @@ func creditIn(ctx context.Context, w principal.Wallet) (ok, funded bool) {
 //   - inference — the exact paths zen's Claim owns (zen@v1.4.2 proxy.go) plus ai's
 //     own tree. These are the free-inference hole.
 //   - meteredTrees — the subsystems that construct a ResourceMeter (the non-LLM
-//     auth-not-balance gap). /v1/commerce/ and /v1/o11y/ are in BillingGate's
-//     selfMeteredPrefixes but are deliberately NOT here: one is the pay path itself
-//     and the other is telemetry ingest, and neither spends a provider's money.
+//     auth-not-balance gap). It must agree with the composition root: every surface
+//     that declares cloud.Metered spends a provider's money and therefore needs
+//     standing, and TestMeteredSurfacesRequireStanding fails if the two drift. The
+//     exceptions are named there, not guessed here: commerce is the pay path itself
+//     and o11y is telemetry ingest, so both charge nothing and declare cloud.Free.
 func Billable(method, path string) bool {
 	switch method {
 	case "GET", "HEAD", "OPTIONS":

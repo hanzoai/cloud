@@ -10,7 +10,7 @@ func index(t *testing.T, cfg *Config, specs ...MountSpec) {
 	t.Helper()
 	prev := subsystems.Load()
 	t.Cleanup(func() { subsystems.Store(prev) })
-	indexSubsystems(specs, cfg)
+	Declare(specs, cfg)
 }
 
 // TestMountPrefixesIsTheOneRule proves the /v1/<name> fallback and that a declared

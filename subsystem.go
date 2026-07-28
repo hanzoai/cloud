@@ -41,6 +41,11 @@ type Subsystem struct {
 	Name     string   `json:"name"`
 	Prefixes []string `json:"prefixes"`
 	Enabled  bool     `json:"enabled"`
+	// Price is the surface's declared per-request cost at the edge (price.go) —
+	// "free", "metered" or "5c". Reported because "what does this cost" is a
+	// question about a running deployment, and until it was declared here nobody
+	// could answer it for a surface without reading the gate's source.
+	Price Price `json:"price"`
 }
 
 // subsystemIndex is the immutable boot snapshot: the declared inventory, plus the
@@ -51,12 +56,16 @@ type subsystemIndex struct {
 	routes []subsystemRoute
 }
 
-type subsystemRoute struct{ prefix, name string }
+type subsystemRoute struct {
+	prefix, name string
+	price        Price
+}
 
-// subsystems is written ONCE by MountAll, before the listener accepts, and read by
-// every traced request after. The atomic pointer keeps that read lock-free on the hot
-// path; a nil index (an entrypoint or test that never calls MountAll) resolves every
-// path to "", so the label is simply absent rather than wrong.
+// subsystems is written ONCE by Declare — which MountAll calls before anything mounts
+// — and read by every traced request after. The atomic pointer keeps that read
+// lock-free on the hot path; a nil index (an entrypoint or test that never declared)
+// resolves every path to "" and Undeclared, so the label is simply absent rather than
+// wrong and the price is unanswered rather than free.
 var subsystems atomic.Pointer[subsystemIndex]
 
 // MountPrefixes is the ONE rule for which subtrees a subsystem owns: the prefixes it
@@ -71,11 +80,17 @@ func MountPrefixes(name string, declared []string) []string {
 	return declared
 }
 
-// indexSubsystems builds the boot snapshot from the composition root's specs and this
-// deployment's enablement. A disabled subsystem is inventoried but claims NO prefix:
-// it serves nothing, so letting it own a path would attribute another subsystem's
-// requests (or a 404) to it.
-func indexSubsystems(specs []MountSpec, cfg *Config) {
+// Declare installs the composition root's boot snapshot — the inventory, the prefix
+// table every traced request resolves against, and each surface's declared Price. A
+// disabled subsystem is inventoried but claims NO prefix: it serves nothing, so
+// letting it own a path would attribute another subsystem's requests (or a 404) to it.
+//
+// MountAll calls it before anything mounts, and that is the only call a running binary
+// makes. It is exported for the tests that must ask what the REAL composition root
+// declares — apps.Wire() — without booting 111 subsystems' stores and dialling their
+// providers to find out. Those tests are why the price a request resolves to can be
+// checked against the number a reviewer approved.
+func Declare(specs []MountSpec, cfg *Config) {
 	idx := &subsystemIndex{
 		all:    make([]Subsystem, 0, len(specs)),
 		routes: make([]subsystemRoute, 0, len(specs)),
@@ -83,12 +98,12 @@ func indexSubsystems(specs []MountSpec, cfg *Config) {
 	for _, spec := range specs {
 		prefixes := MountPrefixes(spec.Name, spec.Prefixes)
 		enabled := cfg.Enabled(spec.Name)
-		idx.all = append(idx.all, Subsystem{Name: spec.Name, Prefixes: prefixes, Enabled: enabled})
+		idx.all = append(idx.all, Subsystem{Name: spec.Name, Prefixes: prefixes, Enabled: enabled, Price: spec.Price})
 		if !enabled {
 			continue
 		}
 		for _, p := range prefixes {
-			idx.routes = append(idx.routes, subsystemRoute{prefix: strings.TrimSuffix(p, "/"), name: spec.Name})
+			idx.routes = append(idx.routes, subsystemRoute{prefix: strings.TrimSuffix(p, "/"), name: spec.Name, price: spec.Price})
 		}
 	}
 	sort.SliceStable(idx.routes, func(i, j int) bool {
@@ -113,15 +128,27 @@ func Subsystems() []Subsystem {
 
 // SubsystemOf resolves the subsystem serving path by longest declared prefix, or ""
 // when nothing owns it (a non-/v1 path, or a route of a disabled subsystem).
-func SubsystemOf(path string) string {
+func SubsystemOf(path string) string { r, _ := ownerOf(path); return r }
+
+// PriceOf resolves what the edge charges for path: the declared Price of the
+// subsystem that owns it (price.go). Undeclared when no subsystem owns the path —
+// which includes every request in a process that never ran MountAll, so a caller
+// that reads this as "free" is reading an absence as an answer. Cents() is the one
+// that turns it into money, and it charges nothing for Undeclared.
+func PriceOf(path string) Price { _, p := ownerOf(path); return p }
+
+// ownerOf is the ONE prefix scan: name and price come from the same match, so the
+// subsystem a request is ATTRIBUTED to and the price it is CHARGED can never be
+// resolved two different ways.
+func ownerOf(path string) (string, Price) {
 	idx := subsystems.Load()
 	if idx == nil {
-		return ""
+		return "", Undeclared
 	}
 	for _, r := range idx.routes {
 		if path == r.prefix || strings.HasPrefix(path, r.prefix+"/") {
-			return r.name
+			return r.name, r.price
 		}
 	}
-	return ""
+	return "", Undeclared
 }
