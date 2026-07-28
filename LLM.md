@@ -1529,8 +1529,9 @@ The `hanzo` CLI (`cli/`) is the same unified binary; its control-plane verbs spe
 routes THIS process serves, authorized off a plain `hanzo login` (the IAM access token is
 the final bearer fallback — no `--platform-token`). The ONE contract, no TS-Dokploy drift:
 
-- `hanzo apps list|get`  → `GET /v1/paas/apps[/{app}]`  (`clients/paas` fleet drift board)
-- `hanzo deploy <app>`   → `POST /v1/paas/apps/{app}/deploy` — a zero-downtime ROLLING
+- `hanzo apps list|get`  → `GET /v1/platform/fleet[/{app}]`  (`clients/platform` fleet.go
+  drift board)
+- `hanzo deploy <app>`   → `POST /v1/platform/fleet/{app}/deploy` — a zero-downtime ROLLING
   RESTART (stamps the Deployment pod-template `hanzo.ai/restartedAt` annotation; never
   changes the declared TAG — that stays a git commit CD reconciles). `--env` picks the ns.
 - `hanzo clusters list|get` → `GET /v1/clusters`  (`clients/visor`, tenant-scoped)
@@ -1563,17 +1564,24 @@ PUBLIC URL, because `s3.hanzo.ai` is this cluster's own LoadBalancer and does no
 a pod dialling it times out. Its egress hole is `artifact-publish-egress` in universe,
 selecting the pod label `hanzo.ai/publish=artifact`.
 
-`/v1/paas/*` auth mirrors `/v1/runner` (`clients/platform/runner.go`): the `guard` admits a
+`/v1/platform/fleet` auth mirrors `/v1/runner` (`clients/platform/runner.go`): the `guard` admits a
 validated principal who is SuperAdmin OR OrgAdmin, then each handler CONFINES a non-super
 caller to the platform namespaces its own validated org owns (`scopedNamespaces`, keyed on
 `principal.Org` — a tenant admin can never observe/restart another org's, or a platform,
 app; `?org=` cannot widen it). The rolling restart needs `patch` on `apps/deployments`
 (ClusterRole/cloud, universe `infra/k8s/cloud/rbac.yaml`). There is NO `/v1/apps` or
 `/v1/org/{org}/cluster` CLI path — both are the TS-Dokploy contract, never served here
-(404 live). `/v1/platform/*` IS served (29 paths live, projects + apps + sites) and no
-longer 500s on a missing co-resident IAM store — it answers the ordinary gate
-(`403 {"error":"X-Org-Id required"}` unauthenticated). The CLI still targets `/v1/paas`
-for the apps board, which reads k8s directly with no IAM-store dependency.
+(404 live). `/v1/platform/*` IS served (projects + apps + sites + fleet) and no longer
+500s on a missing co-resident IAM store — it answers the ordinary gate
+(`403 {"error":"X-Org-Id required"}` unauthenticated).
+
+`/v1/paas` no longer exists. It was a SECOND NAME for platform — the same product
+answering to two prefixes, which is a duplicate definition however you route it — so it
+folded into `/v1/platform/fleet`. The board is a SIBLING of `/v1/platform/projects/:p/apps`,
+not a copy: `fleet` is the platform's OWN service tier (the shared services it runs on),
+`projects/:p/apps` is a customer's apps. Two collections, two names, one prefix. The fleet
+board reads k8s directly with no IAM-store dependency, so it stays up when the store is
+not co-resident.
 
 ## GTM: `/v1/campaign` orchestration → channels → connectors → analytics
 
