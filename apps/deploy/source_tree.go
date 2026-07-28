@@ -79,21 +79,18 @@ type gitFiles struct {
 
 // treeSource renders from the git plane's inventory read.
 type treeSource struct {
-	org  string // tenant that owns the repo, for error messages
+	org  string // tenant that owns the repo; forwarded so git scopes the answer
 	repo string // short repo name
 	ref  string // branch/tag/sha; empty means the repo's default
 	path string // repo-relative dir of manifests
 
-	// who is the request this render serves, whose principal is delegated to
-	// git so git scopes the answer to the SAME caller rather than trusting this
-	// plane to have scoped it.
+	// who is the request this render serves. Its principal is delegated to git,
+	// so git applies its own rules to the SAME caller rather than trusting this
+	// plane to have scoped anything.
 	//
 	// Nil on the background reconcile loop, which has no request to delegate
-	// from. That call reaches git with no identity and git refuses it — the
-	// correct failure, and the one dial.go names as its remaining gap: a
-	// background caller needs a real service credential, not a forwarded
-	// header. Failing closed is right; rendering an unscoped or empty desired
-	// set into a pruning reconcile is not.
+	// from. That path still names its tenant through org, so git scopes the
+	// answer either way — the difference is only whether a user is attached.
 	who *zip.Ctx
 }
 
@@ -108,10 +105,15 @@ func (t treeSource) render(ctx context.Context) ([]*unstructured.Unstructured, s
 		glob = t.path + "/**"
 	}
 	q := url.Values{"ref": {t.ref}, "glob": {glob}}
-	route := fmt.Sprintf("GET /v1/git/repos/%s/files?%s", url.PathEscape(t.repo), q.Encode())
+	path := fmt.Sprintf("/v1/git/repos/%s/files?%s", url.PathEscape(t.repo), q.Encode())
 
+	// Both are passed. As() delegates the requesting principal so git applies its
+	// own rules to the SAME caller; the explicit org names the tenant delivery
+	// acts for, which is what makes the BACKGROUND reconcile work — it has no
+	// request to delegate from, and dial.go lets an explicit org stand in for
+	// exactly that case.
 	var out gitFiles
-	if err := cloud.Dial("git").As(t.who).Call(ctx, route, nil, &out); err != nil {
+	if err := cloud.Dial("git").As(t.who).Get(ctx, t.org, path, &out); err != nil {
 		return nil, "", fmt.Errorf("read %s/%s@%s: %w", t.org, t.repo, t.ref, err)
 	}
 	if out.Rev == "" {
