@@ -150,6 +150,28 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5" -ldflags="-s -w" -o /cloud ./cmd/cloud
+# The light host (cmd/host) — 316 packages, pure Go, no codec and no subsystem.
+# It is shipped alongside /cloud, not instead of it, because the two are run
+# modes of the same image rather than two images:
+#
+#   /cloud            every app in ONE process (the default, see ENTRYPOINT)
+#   /host             every app as its OWN process, started on first request —
+#                     each child is `/cloud --enable=<name>`, which is what
+#                     manifest.App.Plugin falls through to when no dedicated
+#                     binary sits beside the host.
+#
+# Adding it costs 19MB and no duplication: the host links none of the subsystems,
+# and the children ARE /cloud, so the image carries the core exactly once either
+# way. Shipping 108 dedicated plugin binaries instead would be 4.5GB.
+#
+# The default stays /cloud on MEASURED grounds, not inertia: five apps served
+# from one process cost 166MB PSS, and the same five as host+children cost 388MB,
+# because every child pays its own Go runtime and its own BuildDeps. Process
+# isolation is worth buying deliberately for a subsystem that needs it — not
+# fleet-wide by default.
+RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
+    CGO_ENABLED=0 go build -ldflags="-s -w" -o /host ./cmd/host
 # The functional smoke prober (cmd/smoke) — a stdlib-only, static binary shipped
 # alongside /cloud so the release gate can `docker exec` it against the freshly-built
 # image (and any deployment can be smoked via `docker run --entrypoint /smoke ...`).
@@ -198,10 +220,20 @@ COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /etc/group /etc/group
 COPY --from=build /cloud /cloud
+COPY --from=build /host /host
 COPY --from=build /smoke /smoke
 EXPOSE 8080 9090 9653
 USER 65532:65532
 # tini as PID 1 forwards signals to /cloud unchanged (so SIGTERM still drains
 # normally) and reaps the orphans described above. `--` keeps cloud's own args
 # untouched; the CR passes none today, but that stays true if it ever does.
+#
+# Host mode is the same image with the command replaced — `["/sbin/tini","--","/host"]`.
+# tini matters MORE there, not less: the host's children are /cloud processes that
+# fork git and friends of their own. Two things to check before switching a
+# deployment over, because neither fails loudly: the host binds :8080 and :9653 but
+# NOT the :9090 ops port (serve.go leaves it unbound for a plugin, since N children
+# cannot share one port), so anything scraping 9090 must move to the child or be
+# dropped; and the children need a writable directory for their sockets, which as
+# uid 65532 on a read-only rootfs means mounting one.
 ENTRYPOINT ["/sbin/tini", "--", "/cloud"]
