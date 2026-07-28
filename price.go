@@ -12,7 +12,7 @@ package cloud
 //
 // So the price moved to where the surface is declared: App.Price, one field
 // beside Name in the composition root. Its zero value is Undeclared, which is not a
-// price but an unanswered question, and apps.TestPriceDeclared fails on it. A new
+// price but an unanswered question, and TestPriceDeclared fails on it. A new
 // subsystem therefore cannot reach main until someone writes down what it costs, and
 // the number lands in the same diff as the routes. There is no unpriced route at
 // runtime to catch, so there is no runtime gate to maintain, and the failure lands on
@@ -48,7 +48,7 @@ type Price int64
 
 const (
 	// Undeclared is the zero value — the surface's cost is an open question. It is
-	// not Free: nobody chose, and apps.TestPriceDeclared fails until somebody does.
+	// not Free: nobody chose, and TestPriceDeclared fails until somebody does.
 	// The edge charges nothing for it (see Cents), so forgetting a declaration can
 	// never over-bill a customer; it fails the build instead.
 	Undeclared Price = 0
