@@ -7,6 +7,14 @@ import (
 	"github.com/hanzoai/cloud/clients/projects"
 )
 
+// The source orgs these tests read repos as: our own software, and the org whose
+// repos are starters to fork FROM.
+var (
+	hz  = source{"hanzo", OriginProduct}
+	lx  = source{"lux", OriginProduct}
+	tpl = source{"hanzo", OriginTemplate}
+)
+
 // TestSyncRoutesSitesByOrg is the tenancy rule the sync itself must keep: our own
 // org's live sites are published to the world, every other org's land in that
 // org's own corpus and nowhere else. A regression here is a customer's project on
@@ -62,7 +70,7 @@ func TestRepoMapsToBrand(t *testing.T) {
 	e := fromRepo(ghRepo{
 		Name: "node", Description: "lux node", Language: "Go", Stars: 12,
 		HTMLURL: "https://github.com/luxfi/node", Homepage: "lux.network", PushedAt: "2026-07-02T00:00:00Z",
-	}, "lux")
+	}, lx)
 	if e.ID != "lux/node" || e.Org != "lux" || e.Repo != "https://github.com/luxfi/node" {
 		t.Fatalf("bad mapping: %+v", e)
 	}
@@ -76,11 +84,15 @@ func TestRepoMapsToBrand(t *testing.T) {
 
 // TestSourceOrgsOverride pins the "githuborg:brand" form the env takes.
 func TestSourceOrgsOverride(t *testing.T) {
-	t.Setenv(sourceOrgsEnv, "luxfi:lux, zooai:zoo ,solo")
+	t.Setenv(sourceOrgsEnv, "luxfi:lux, zooai:zoo:community ,solo")
 	got := sourceOrgs()
-	for gh, brand := range map[string]string{"luxfi": "lux", "zooai": "zoo", "solo": "solo"} {
-		if got[gh] != brand {
-			t.Errorf("sourceOrgs()[%q] = %q, want %q", gh, got[gh], brand)
+	for gh, want := range map[string]source{
+		"luxfi": {"lux", OriginProduct},   // brand stated, origin left to the default
+		"zooai": {"zoo", OriginCommunity}, // both stated
+		"solo":  {"solo", OriginProduct},  // bare: the org IS the brand
+	} {
+		if got[gh] != want {
+			t.Errorf("sourceOrgs()[%q] = %+v, want %+v", gh, got[gh], want)
 		}
 	}
 	if len(got) != 3 {
@@ -105,7 +117,7 @@ func TestSiteCarriesItsSource(t *testing.T) {
 	repo := fromRepo(ghRepo{
 		Name: "kart-racer", Description: "a kart game", Language: "TypeScript", Stars: 7,
 		HTMLURL: "https://github.com/hanzo-templates/kart-racer", PushedAt: "2026-01-01T00:00:00Z",
-	}, "hanzo")
+	}, tpl)
 
 	got := map[string]Entry{}
 	for _, e := range publish(t, []Entry{repo}) {
@@ -146,8 +158,8 @@ func TestForkableDiscriminates(t *testing.T) {
 		{Org: "hanzo", Slug: "ex-askdocs", Name: "Ask Docs", URL: "https://ex-askdocs.hanzo.app"},
 		{Org: "hanzo", Slug: "engine", Name: "Engine", URL: "https://engine.hanzo.app"},
 	})
-	ours := fromRepo(ghRepo{Name: "console", HTMLURL: "https://github.com/hanzoai/console"}, "hanzo")
-	theirs := fromRepo(ghRepo{Name: "engine", HTMLURL: "https://github.com/hanzoai/engine", Fork: true}, "hanzo")
+	ours := fromRepo(ghRepo{Name: "console", HTMLURL: "https://github.com/hanzoai/console"}, hz)
+	theirs := fromRepo(ghRepo{Name: "engine", HTMLURL: "https://github.com/hanzoai/engine", Fork: true}, hz)
 
 	want := map[string]bool{
 		"hanzo/console":    true,  // ours, public, nobody else's lineage
@@ -187,7 +199,7 @@ func TestProvenanceSurvivesTheSync(t *testing.T) {
 	})
 	// The kit's repo really does live in one of our orgs, and really is not a
 	// GitHub fork — so the repo half infers "ours". That is the trap.
-	kitRepo := fromRepo(ghRepo{Name: "kinetic", HTMLURL: "https://github.com/hanzo-templates/kinetic"}, "hanzo")
+	kitRepo := fromRepo(ghRepo{Name: "kinetic", HTMLURL: "https://github.com/hanzo-templates/kinetic"}, tpl)
 
 	got := map[string]Entry{}
 	for _, e := range publish(t, []Entry{kitRepo}) {
@@ -210,10 +222,10 @@ func TestProvenanceSurvivesTheSync(t *testing.T) {
 // TestRepoOfficialFollowsGitHubsOwnFork keeps the repo half honest with one fact
 // GitHub already asserts: our org's repo is ours, a fork holds upstream's code.
 func TestRepoOfficialFollowsGitHubsOwnFork(t *testing.T) {
-	if e := fromRepo(ghRepo{Name: "node"}, "lux"); !e.Official {
+	if e := fromRepo(ghRepo{Name: "node"}, lx); !e.Official {
 		t.Error("a repo we authored in our own org is first-party")
 	}
-	if e := fromRepo(ghRepo{Name: "go-ethereum", Fork: true}, "lux"); e.Official {
+	if e := fromRepo(ghRepo{Name: "go-ethereum", Fork: true}, lx); e.Official {
 		t.Error("a fork is upstream's work; badging it first-party is the lie")
 	}
 }
@@ -222,20 +234,20 @@ func TestRepoOfficialFollowsGitHubsOwnFork(t *testing.T) {
 // both "hanzo/ui"; sourceOrgs is a map, so without a rule the winner is Go's
 // iteration order and the row would flip its own forkable answer between syncs.
 func TestOneIdOneRepo(t *testing.T) {
-	ours := fromRepo(ghRepo{Name: "ui", HTMLURL: "https://github.com/hanzoai/ui", Stars: 40}, "hanzo")
-	vendored := fromRepo(ghRepo{Name: "ui", HTMLURL: "https://github.com/hanzo-apps/ui", Stars: 900, Fork: true}, "hanzo")
+	ours := fromRepo(ghRepo{Name: "ui", HTMLURL: "https://github.com/hanzoai/ui", Stars: 40}, hz)
+	vendored := fromRepo(ghRepo{Name: "ui", HTMLURL: "https://github.com/hanzo-apps/ui", Stars: 900, Fork: true}, hz)
 	if !canonical(ours, vendored) || canonical(vendored, ours) {
 		t.Error("ours beats a vendored fork, however many stars the fork has")
 	}
-	big := fromRepo(ghRepo{Name: "gallery", HTMLURL: "https://github.com/hanzoai/gallery", Stars: 9}, "hanzo")
-	small := fromRepo(ghRepo{Name: "gallery", HTMLURL: "https://github.com/hanzo-templates/gallery"}, "hanzo")
+	big := fromRepo(ghRepo{Name: "gallery", HTMLURL: "https://github.com/hanzoai/gallery", Stars: 9}, hz)
+	small := fromRepo(ghRepo{Name: "gallery", HTMLURL: "https://github.com/hanzo-templates/gallery"}, hz)
 	if !canonical(big, small) || canonical(small, big) {
 		t.Error("between two of ours, the one people actually use wins")
 	}
 	// The real hanzo/gallery collision: both ours, both unstarred. Arbitrary is
 	// fine, a coin flip is not — the order must be TOTAL either way round.
-	l := fromRepo(ghRepo{Name: "gallery", HTMLURL: "https://github.com/hanzoai/gallery"}, "hanzo")
-	r := fromRepo(ghRepo{Name: "gallery", HTMLURL: "https://github.com/hanzo-templates/gallery"}, "hanzo")
+	l := fromRepo(ghRepo{Name: "gallery", HTMLURL: "https://github.com/hanzoai/gallery"}, hz)
+	r := fromRepo(ghRepo{Name: "gallery", HTMLURL: "https://github.com/hanzo-templates/gallery"}, hz)
 	if canonical(l, r) == canonical(r, l) {
 		t.Error("a tie must still have exactly one winner, or the row flips between syncs")
 	}
