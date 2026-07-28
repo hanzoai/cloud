@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/visor"
+	"github.com/hanzoai/cloud/apps/visor"
 )
 
 // Standalone entry for the visor app.

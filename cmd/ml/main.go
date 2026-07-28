@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/ml"
+	"github.com/hanzoai/cloud/apps/ml"
 )
 
 // Standalone entry for the ml app.

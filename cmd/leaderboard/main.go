@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/leaderboard"
+	"github.com/hanzoai/cloud/apps/leaderboard"
 )
 
 // Standalone entry for the leaderboard app.

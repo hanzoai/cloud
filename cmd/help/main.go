@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/help"
+	"github.com/hanzoai/cloud/apps/help"
 )
 
 // Standalone entry for the help app.

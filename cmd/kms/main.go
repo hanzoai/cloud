@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/kms"
+	"github.com/hanzoai/cloud/apps/kms"
 )
 
 // Standalone entry for the kms app.

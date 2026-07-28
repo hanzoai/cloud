@@ -53,8 +53,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/hanzoai/cloud/clients/finance"
-	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/apps/principal"
 )
 
 // creditUnit is the asset the prepaid wallet is denominated in. One asset ships

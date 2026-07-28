@@ -14,7 +14,7 @@ name: CI/CD
 #   .hanzo/workflows/deploy.yml → deleted, not moved (below)
 #
 # CI gates. It does not deploy, and deliberately builds no cloud image: that
-# image and its v* tags have ONE owner, clients/platform/release.go (POST
+# image and its v* tags have ONE owner, apps/platform/release.go (POST
 # /v1/runner {release:true}) — a second builder on the same commit is the
 # double-build hanzo.yml's images: block already refuses for this reason.
 # deploy.yml claimed to do both and could do neither: it shelled
@@ -53,18 +53,18 @@ jobs:
       tests: ${{ github.ref_type != 'tag' }}
     secrets: inherit
 
-  # Guards the Stage-1 byzantine ceremony containment (clients/controlplane,
+  # Guards the Stage-1 byzantine ceremony containment (apps/controlplane,
   # build tag `controlplane`). Its increment-1 crypto is stub/forgeable BY
   # DESIGN (SHA256-of-public-inputs commitments, symmetric-HMAC
   # proof-of-possession, seed-derived threshold shares — see
-  # clients/controlplane/doc.go) and MUST NEVER reach a release/serve binary.
+  # apps/controlplane/doc.go) and MUST NEVER reach a release/serve binary.
   # Three independent checks; any one failing blocks the merge:
   #
   #   1. grep (tag)    — no build/release invocation anywhere in the repo
   #      (Dockerfile, Makefile, shell scripts, any workflow) may pass a `-tags`
   #      value containing `controlplane` to go build/vet/run/install. The
   #      package's own `//go:build controlplane` tag declarations
-  #      (clients/controlplane/*) are the thing being guarded, not a violation,
+  #      (apps/controlplane/*) are the thing being guarded, not a violation,
   #      and are excluded by path.
   #   2. grep (spoof)  — no build/release invocation may pass
   #      `-X testing.testBinary=1` (or any -ldflags containing it) to a REAL
@@ -73,13 +73,13 @@ jobs:
   #      runtime guard in containment.go trusts that signal, so this is the one
   #      concrete way to spoof it in a non-test binary. This grep is what turns
   #      "someone could type this" into "CI fails the PR that types it".
-  #   3. graph         — no cmd/ main may reach clients/controlplane through its
+  #   3. graph         — no cmd/ main may reach apps/controlplane through its
   #      untagged import graph (`go list -deps`), and
-  #      `go build ./clients/controlplane/...` with no tag must match zero
+  #      `go build ./apps/controlplane/...` with no tag must match zero
   #      buildable packages (proves the tag still gates every file in it).
   #
   # Runtime belt-and-suspenders (defense in depth, not a substitute for the
-  # above): clients/controlplane/containment.go fail-closed panics if its stub
+  # above): apps/controlplane/containment.go fail-closed panics if its stub
   # crypto is ever constructed outside a go-test binary (testing.Testing()==
   # false) — see TestContainment_NonHarnessProcessRefuses in
   # containment_test.go. KNOWN RESIDUAL: testing.Testing() is a linker-set
@@ -118,9 +118,9 @@ jobs:
                --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.claude --exclude-dir=vendor \
                . 2>/dev/null \
                | grep -v '\.git/' \
-               | grep -v 'clients/controlplane/' \
+               | grep -v 'apps/controlplane/' \
                | grep -v '.hanzo/workflows/cicd.yml:'; then
-            echo "::error::found a build/release invocation passing -tags controlplane — clients/controlplane's stub crypto must never enter a release/serve binary (see clients/controlplane/doc.go)"
+            echo "::error::found a build/release invocation passing -tags controlplane — apps/controlplane's stub crypto must never enter a release/serve binary (see apps/controlplane/doc.go)"
             hits=1
           fi
 
@@ -183,7 +183,7 @@ jobs:
           fi
           echo "OK: zen ${V} is at or above the streaming-fix floor ${FLOOR}"
 
-      - name: positive proof — clients/controlplane is unreachable from the default build
+      - name: positive proof — apps/controlplane is unreachable from the default build
         run: |
           set -euo pipefail
 
@@ -191,7 +191,7 @@ jobs:
           # graph. This step used to lead with `go build ./...`, which compiles
           # AND LINKS every cmd/ main — and linking needs
           # native/flags/target/release/libhanzo_flags.a, the Rust staticlib
-          # clients/flags pulls in under cgo (clients/flags/engine.go). Nothing
+          # apps/flags pulls in under cgo (apps/flags/engine.go). Nothing
           # in THIS job builds it: `make native` runs in the gate job, in that
           # job's own workspace. It passed on GitHub only because the arc
           # runners reuse a workspace and target/ is gitignored, so an earlier
@@ -201,17 +201,17 @@ jobs:
           # proof anyway — `go list -deps` reads the same untagged file set
           # without linking, and the gate job is the ONE place that builds.
           for m in $(go list ./cmd/...); do
-            if go list -deps "$m" | grep -qx 'github.com/hanzoai/cloud/clients/controlplane'; then
-              echo "::error::$m links clients/controlplane into a real binary — containment breach"
+            if go list -deps "$m" | grep -qx 'github.com/hanzoai/cloud/apps/controlplane'; then
+              echo "::error::$m links apps/controlplane into a real binary — containment breach"
               exit 1
             fi
           done
 
-          out="$(go build ./clients/controlplane/... 2>&1 || true)"
+          out="$(go build ./apps/controlplane/... 2>&1 || true)"
           if ! printf '%s' "$out" | grep -q 'matched no packages'; then
-            echo "::error::clients/controlplane built successfully WITHOUT -tags controlplane (containment breach): $out"
+            echo "::error::apps/controlplane built successfully WITHOUT -tags controlplane (containment breach): $out"
             exit 1
           fi
 
-          echo "OK: containment holds — clients/controlplane has zero buildable files by default and is linked into no cmd/ binary"
+          echo "OK: containment holds — apps/controlplane has zero buildable files by default and is linked into no cmd/ binary"
 

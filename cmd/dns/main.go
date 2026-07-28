@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/dns"
+	"github.com/hanzoai/cloud/apps/dns"
 )
 
 // Standalone entry for the dns app.

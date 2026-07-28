@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/campaign"
+	"github.com/hanzoai/cloud/apps/campaign"
 )
 
 // Standalone entry for the campaign app.

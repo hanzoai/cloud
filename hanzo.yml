@@ -1,7 +1,7 @@
 # Canonical CI config for hanzoai/cloud — read by the hanzoai/ci reusable
 # (.hanzo/workflows/cicd.yml, the `gate` job) and platform.hanzo.ai.
 #
-# The cloud MAIN image has NO images: entry — clients/platform/release.go OWNS it
+# The cloud MAIN image has NO images: entry — apps/platform/release.go OWNS it
 # + the v* tags (the tag-is-a-receipt invariant: main push → build → smoke → push
 # image → tag). That is the in-cloud port of the old release.yml, reached at
 # POST /v1/runner {release:true}; declaring the cloud image here too would
@@ -34,7 +34,7 @@ images:
 
 test:
   - name: native-flags
-    # The flags evaluator staticlib clients/flags links under CGO=1.
+    # The flags evaluator staticlib apps/flags links under CGO=1.
     run: |
       set -e
       if ! command -v cargo >/dev/null 2>&1; then
@@ -79,7 +79,7 @@ test:
     # what keeps it at ~395 packages while the fleet's subsystem graphs total
     # thousands, and it is a property of the IMPORT GRAPH, so it is checked with
     # the import graph rather than with a size threshold nobody can interpret. One
-    # stray import of a clients/* package drags a subsystem's whole graph back in,
+    # stray import of a apps/* package drags a subsystem's whole graph back in,
     # and the only symptom would be a slow build — this turns that into a failed
     # one. (There is no package apps to leak anymore; it is gone.)
     run: |
@@ -100,7 +100,7 @@ test:
     # openapi/weave.go puts them back together — refusing, loudly, when two apps
     # claim one path+method or mean different things by one schema name. Silent
     # last-write-wins is exactly the class of bug the manifest's call-graph walk
-    # caught when clients/git's /:org/:repo was swallowing its neighbours.
+    # caught when apps/git's /:org/:repo was swallowing its neighbours.
     #
     # It also pins FRESHNESS, which is why it earns its own entry rather than
     # riding go-unit: the monolith is gone, so the woven document IS openapi.yaml —
@@ -133,7 +133,7 @@ test:
       # per-app target owns.
       stale=$(git status --porcelain -- 'cmd/*/openapi.json')
       if [ -n "$stale" ]; then
-        echo "::error::an app's published subset is stale — its routes changed without 'make -C clients/<app> openapi'. Run 'make -f mk/fleet.mk openapi-apps' and commit."
+        echo "::error::an app's published subset is stale — its routes changed without 'make -C apps/<app> openapi'. Run 'make -f mk/fleet.mk openapi-apps' and commit."
         echo "$stale"
         exit 1
       fi
@@ -143,7 +143,7 @@ test:
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off CGO_ENABLED=1
       # THE WHOLE TREE. This used to name twelve packages, which meant a red
       # package could sit on main without ever producing a red build — that is
-      # exactly how clients/git and clients/entitlements went unnoticed. An
+      # exactly how apps/git and apps/entitlements went unnoticed. An
       # allowlist silently stops covering everything added after it is written,
       # so the gate takes ./... and the exceptions are named, with reasons.
       #

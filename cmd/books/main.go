@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/books"
+	"github.com/hanzoai/cloud/apps/books"
 )
 
 // Standalone entry for the books app.

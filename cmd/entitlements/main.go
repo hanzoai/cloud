@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/entitlements"
+	"github.com/hanzoai/cloud/apps/entitlements"
 )
 
 // Standalone entry for the entitlements app.

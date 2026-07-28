@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/ads"
+	"github.com/hanzoai/cloud/apps/ads"
 )
 
 // Standalone entry for the ads app.
