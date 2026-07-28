@@ -52,7 +52,7 @@ type optinStore struct {
 }
 
 func openOptinStore(path string) (*optinStore, error) {
-	db, err := cek.Open(path)
+	db, err := cek.Open(cek.Global, path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}

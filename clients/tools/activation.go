@@ -36,7 +36,7 @@ func projectKey(project string) string {
 
 // OpenActivationStore opens (and migrates) the activation store at path.
 func OpenActivationStore(path string) (*ActivationStore, error) {
-	db, err := cek.Open(path)
+	db, err := cek.Open(cek.Global, path)
 	if err != nil {
 		return nil, fmt.Errorf("tools: open activation store %q: %w", path, err)
 	}

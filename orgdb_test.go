@@ -41,7 +41,7 @@ func TestTenantDBPathConvention(t *testing.T) {
 	dir := "/data"
 
 	// org-scoped: {DataDir}/orgs/{org}/{subsystem}.db
-	got, err := orgDBPath(dir, "acme", "", "git")
+	got, _, err := orgDBPath(dir, "acme", "", "git")
 	if err != nil {
 		t.Fatalf("org-scoped path: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestTenantDBPathConvention(t *testing.T) {
 	}
 
 	// project-scoped nests under projects/{project}
-	got, err = orgDBPath(dir, "acme", "web", "tracker")
+	got, _, err = orgDBPath(dir, "acme", "web", "tracker")
 	if err != nil {
 		t.Fatalf("project-scoped path: %v", err)
 	}
@@ -59,23 +59,23 @@ func TestTenantDBPathConvention(t *testing.T) {
 	}
 
 	// the default project is a real, nested segment (not folded into org scope)
-	got, _ = orgDBPath(dir, "acme", "default", "tracker")
+	got, _, _ = orgDBPath(dir, "acme", "default", "tracker")
 	if want := filepath.Join(dir, "orgs", "acme", "projects", "default", "tracker.db"); got != want {
 		t.Fatalf("default-project path = %q, want %q", got, want)
 	}
 
 	// fail-closed: empty/unsafe org, unsafe project, empty subsystem all error —
 	// NEVER a silent fall-through to some other org's file.
-	if _, err := orgDBPath(dir, "", "", "git"); err == nil {
+	if _, _, err := orgDBPath(dir, "", "", "git"); err == nil {
 		t.Fatal("empty org must error")
 	}
-	if _, err := orgDBPath(dir, "bad org", "", "git"); err == nil {
+	if _, _, err := orgDBPath(dir, "bad org", "", "git"); err == nil {
 		t.Fatal("org with a space (unsafe rune) must error")
 	}
-	if _, err := orgDBPath(dir, "acme", "bad project", "tracker"); err == nil {
+	if _, _, err := orgDBPath(dir, "acme", "bad project", "tracker"); err == nil {
 		t.Fatal("project with a space (unsafe rune) must error")
 	}
-	if _, err := orgDBPath(dir, "acme", "", ""); err == nil {
+	if _, _, err := orgDBPath(dir, "acme", "", ""); err == nil {
 		t.Fatal("empty subsystem must error")
 	}
 }

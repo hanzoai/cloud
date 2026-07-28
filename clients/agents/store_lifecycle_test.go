@@ -110,7 +110,7 @@ func TestMigrationIdempotentOnLegacyDB(t *testing.T) {
 	// the fixture with a bare sql.Open would leave a plaintext file, and converting
 	// one is a production operation that requires the live libsqlcipher codec — so
 	// the fixture, not the code under test, would fail the build the suite runs on.
-	legacy, err := cek.Open(path)
+	legacy, err := cek.Open(cek.Global, path)
 	if err != nil {
 		t.Fatalf("open legacy: %v", err)
 	}
