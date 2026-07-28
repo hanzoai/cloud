@@ -107,6 +107,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return nil
 	}
 
+	// Carry a store written under the old name forward before opening, so the rename
+	// is a one-time move on the volume rather than a fork in the path logic.
+	if moved, merr := adoptLegacyStore(filepath.Dir(dbPath)); merr != nil {
+		log.Error("iam store adopt failed — serving fail-closed 503 (cloud stays up)", "err", merr)
+		mountFailClosed(app)
+		return nil
+	} else if moved != "" {
+		log.Info("iam store adopted under its current name", "from", moved, "to", storeFile)
+	}
+
 	db, err := openStore(dbPath)
 	if err != nil {
 		log.Error("iam store open failed — serving fail-closed 503 (cloud stays up; standalone iam pod unaffected)", "err", err, "path", dbPath)
@@ -140,6 +150,71 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	log.Info("iam embedded in-process (clean iam-v2, zip-native + hanzoai/orm — Casdoor iam-v1 retired)", "db", dbPath, "prefixes", Prefixes)
 	return nil
+}
+
+// The store's place and name. The directory is the namespace, so the file does not
+// repeat it; what the file says instead is which PRINCIPAL PARTITION it holds.
+//
+// This store is IAM's GLOBAL partition — the cross-org configuration every tenant is
+// resolved against: orgs, applications, providers, signing certs. That is not a label
+// chosen for flavour, it is the same word the key derivation uses: cek opens it under
+// sqlitedrv.PrincipalGlobal, whose own doc calls it "the cross-org global/platform
+// database (certs, providers, the admin org catalog)". Naming the file after its
+// principal means the name and the key agree, and it leaves room for the partitions
+// that do not exist yet — a per-org or per-user IAM store would derive under
+// PrincipalOrg/PrincipalUser and be named for THAT, so the split is visible on disk
+// instead of inferred.
+//
+// The name it replaces, iam2.db, carried a version number that stopped meaning anything
+// when the Casdoor iam-v1 embed was retired — a "2" that exists only to not be a "1" is
+// scar tissue, and a version in a filename is a migration waiting to be mistaken for an
+// identity.
+const (
+	storeDir  = "iam"
+	storeFile = "global.db"
+
+	// legacyStoreFile is what the store was called while iam-v1 still existed. The
+	// only reason to still know the name is to move it.
+	legacyStoreFile = "iam2.db"
+)
+
+// adoptLegacyStore renames a pre-existing iam2.db (and the cek sidecar and lock that
+// belong to it) to the current name, once, before the store is opened. It returns the
+// name it moved, or "" when there was nothing to do.
+//
+// A rename is safe here for a specific reason, not by assumption: cek derives the KEK
+// from a random file id stored INSIDE the sidecar, never from the path, so a store
+// carried to a new name reopens under the same key — which cek's own doc promises and
+// TestStoreSurvivesRename pins. Moving the sidecar alongside the database is therefore
+// the whole migration; no page is rewritten and no key is re-derived.
+//
+// It refuses rather than overwrites if both names exist. Two identity stores in one
+// directory is not a case to resolve automatically: picking either one silently serves
+// a set of identities somebody did not choose.
+func adoptLegacyStore(dir string) (string, error) {
+	legacy := filepath.Join(dir, legacyStoreFile)
+	current := filepath.Join(dir, storeFile)
+	// cek.Exists, not os.Stat: a store is present when EITHER the database or its
+	// wrapped-DEK sidecar is there, and on a pure-Go build the codec envelope keys the
+	// file out of band so the sidecar can be the only thing on disk. Statting the
+	// database alone reports "no legacy store" for exactly those builds, and the store
+	// is then silently abandoned while a fresh empty one is created beside it — which
+	// is what this function exists to prevent, so it must not be how it looks.
+	if !cek.Exists(legacy) {
+		return "", nil // nothing to adopt — the normal path
+	}
+	if cek.Exists(current) {
+		return "", fmt.Errorf("both %s and %s exist in %s; refusing to guess which identity store is authoritative — move the one you do not want aside", legacyStoreFile, storeFile, dir)
+	}
+	// The database and the two files cek keeps beside it. The sidecar is the only one
+	// that MUST travel (it holds the wrapped DEK and the file id the KEK derives from);
+	// the lock is advisory and simply belongs with it.
+	for _, suffix := range []string{"", ".dek", ".cek.lock"} {
+		if err := os.Rename(legacy+suffix, current+suffix); err != nil && !os.IsNotExist(err) {
+			return "", fmt.Errorf("adopt %s%s: %w", legacyStoreFile, suffix, err)
+		}
+	}
+	return legacyStoreFile, nil
 }
 
 // openStore opens IAM's store through cek — the SAME encryption-at-rest gate every
@@ -200,9 +275,7 @@ func paths(deps cloud.Deps) (dbPath, initDataPath string) {
 	if root == "" {
 		root = "."
 	}
-	// iam2.db is the v2 store. iam.db is a different database entirely, and
-	// opening it serves the wrong identities without failing.
-	dbPath = filepath.Join(root, "iam", "iam2.db")
+	dbPath = filepath.Join(root, storeDir, storeFile)
 
 	initDataPath = os.Getenv("initDataFile")
 	if initDataPath == "" {

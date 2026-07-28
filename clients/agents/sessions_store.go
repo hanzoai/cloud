@@ -60,6 +60,16 @@ type Session struct {
 	// acct" and so a login-out (link revoke) can stop the sessions that used it.
 	Provider string
 	Account  string
+
+	// Project / Published are the READABLE BUILD (provenance.go): which product
+	// this session built, and its author's decision to let the world read the
+	// story. Two columns, because "the build of project P" is just the sessions
+	// tagged with P — a build log is not a second kind of thing to store.
+	// Published only ever widens READ access to a session that already exists;
+	// it grants nothing else, and an unpublished session is invisible to the
+	// public route no matter who asks.
+	Project   string
+	Published bool
 }
 
 // Event is one entry in a session's ordered log: a model message, a tool call, a
@@ -157,6 +167,10 @@ CREATE INDEX IF NOT EXISTS ix_events_org_session_seq ON agent_session_events(org
 		"target":   "TEXT NOT NULL DEFAULT ''",
 		"provider": "TEXT NOT NULL DEFAULT ''",
 		"account":  "TEXT NOT NULL DEFAULT ''",
+		// The readable build (provenance.go). Defaults keep every pre-existing
+		// session exactly as it was: untagged, and NOT published.
+		"project":   "TEXT NOT NULL DEFAULT ''",
+		"published": "INTEGER NOT NULL DEFAULT 0",
 	}); err != nil {
 		return err
 	}
@@ -167,20 +181,22 @@ CREATE INDEX IF NOT EXISTS ix_events_org_session_seq ON agent_session_events(org
 	if _, err := s.db.Exec(`
 CREATE INDEX IF NOT EXISTS ix_sessions_org_target ON agent_sessions(org, target);
 CREATE INDEX IF NOT EXISTS ix_sessions_org_host ON agent_sessions(org, host);
-CREATE INDEX IF NOT EXISTS ix_sessions_org_account ON agent_sessions(org, provider, account);`); err != nil {
+CREATE INDEX IF NOT EXISTS ix_sessions_org_account ON agent_sessions(org, provider, account);
+CREATE INDEX IF NOT EXISTS ix_sessions_org_project ON agent_sessions(org, project, created_at);
+CREATE INDEX IF NOT EXISTS ix_sessions_published ON agent_sessions(published, updated_at);`); err != nil {
 		return fmt.Errorf("migrate sessions indexes: %w", err)
 	}
 	return nil
 }
 
-const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,target,provider,account`
+const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,target,provider,account,project,published`
 
 func scanSession(sc interface{ Scan(...any) error }) (Session, error) {
 	var x Session
 	err := sc.Scan(&x.ID, &x.Org, &x.Agent, &x.Actor, &x.Status, &x.ParentID, &x.RootID,
 		&x.Title, &x.StartedAt, &x.EndedAt, &x.CreatedAt, &x.UpdatedAt,
 		&x.TaskWorkflowID, &x.TaskRunID, &x.Host, &x.Cwd, &x.Repo, &x.Target,
-		&x.Provider, &x.Account)
+		&x.Provider, &x.Account, &x.Project, &x.Published)
 	return x, err
 }
 
@@ -205,10 +221,10 @@ func (s *Store) CreateSession(ctx context.Context, x Session) error {
 		}
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO agent_sessions (`+sessionCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO agent_sessions (`+sessionCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		x.ID, x.Org, x.Agent, x.Actor, x.Status, x.ParentID, x.RootID, x.Title,
 		x.StartedAt, x.EndedAt, x.CreatedAt, x.UpdatedAt, x.TaskWorkflowID, x.TaskRunID,
-		x.Host, x.Cwd, x.Repo, x.Target, x.Provider, x.Account)
+		x.Host, x.Cwd, x.Repo, x.Target, x.Provider, x.Account, x.Project, x.Published)
 	if err != nil {
 		return fmt.Errorf("insert session: %w", err)
 	}
@@ -235,11 +251,19 @@ func (s *Store) GetSession(ctx context.Context, org, id string) (Session, error)
 //   - Root set   -> every session in that tree (root_id == Root).
 //   - Parent set -> the direct children of Parent (parent_id == Parent).
 //   - neither    -> roots only (parent_id == ”), the outer-agent view.
+//
+// Project narrows to the sessions that built one product; it is orthogonal to
+// the structural axis, so `?project=x` alone lists that build's ROOTS (the
+// default parent_id==” scope) and pairs with Root to walk its subagents.
+// Published additionally requires the author's publish flag — the predicate the
+// PUBLIC build route runs, so an unpublished session cannot be reached anonymously.
 type SessionFilter struct {
-	Root   string
-	Parent string
-	Status string
-	Limit  int
+	Root      string
+	Parent    string
+	Status    string
+	Project   string
+	Published bool
+	Limit     int
 }
 
 // ListSessions returns an org's sessions per filter, newest first, capped.
@@ -263,6 +287,13 @@ func (s *Store) ListSessions(ctx context.Context, org string, f SessionFilter) (
 	if f.Status != "" {
 		where += " AND status=?"
 		args = append(args, f.Status)
+	}
+	if f.Project != "" {
+		where += " AND project=?"
+		args = append(args, f.Project)
+	}
+	if f.Published {
+		where += " AND published=1"
 	}
 	args = append(args, limit)
 	rows, err := s.db.QueryContext(ctx,
@@ -312,9 +343,10 @@ func (s *Store) ListTree(ctx context.Context, org, root string, cap int) ([]Sess
 // Scoped by org so a cross-tenant id can never mutate another's session.
 func (s *Store) UpdateSession(ctx context.Context, x Session) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE agent_sessions SET status=?, title=?, ended_at=?, updated_at=?, target=?
+		`UPDATE agent_sessions SET status=?, title=?, ended_at=?, updated_at=?, target=?,
+		        project=?, published=?
 		 WHERE org=? AND id=?`,
-		x.Status, x.Title, x.EndedAt, x.UpdatedAt, x.Target, x.Org, x.ID)
+		x.Status, x.Title, x.EndedAt, x.UpdatedAt, x.Target, x.Project, x.Published, x.Org, x.ID)
 	if err != nil {
 		return fmt.Errorf("update session: %w", err)
 	}
@@ -323,6 +355,35 @@ func (s *Store) UpdateSession(ctx context.Context, x Session) error {
 		return errSessionNotFound
 	}
 	return nil
+}
+
+// ListPublishedBuilds returns every published build ACROSS ORGS, newest first.
+// It is the one query in this file that is deliberately not org-scoped, because
+// it answers a public question — "which builds may anyone read?" — and its WHERE
+// clause is the publish flag itself. A row can only appear here because its own
+// author set published=1, so cross-org visibility is the author's grant, not a
+// missing tenant predicate. Roots only: a build's story is its outer session.
+func (s *Store) ListPublishedBuilds(ctx context.Context, limit int) ([]Session, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+sessionCols+` FROM agent_sessions
+		 WHERE published=1 AND project<>'' AND parent_id=''
+		 ORDER BY updated_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list published builds: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Session
+	for rows.Next() {
+		x, err := scanSession(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan session: %w", err)
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
 }
 
 // CountChildren returns how many DIRECT children a session has (its fan-out).

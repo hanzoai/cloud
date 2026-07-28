@@ -44,7 +44,7 @@ func newAgentCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 			"Hanzo compute — metered per run. For a computer-using agent (booted desktop\n" +
 			"or terminal), use `hanzo bot`.",
 	}
-	cmd.AddCommand(newAgentRunCmd(envOf))
+	cmd.AddCommand(newAgentRunCmd(envOf), newAgentPublishCmd(envOf))
 	return cmd
 }
 
