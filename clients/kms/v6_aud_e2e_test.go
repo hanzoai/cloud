@@ -143,7 +143,7 @@ func TestPaaSSyncMachineTokenEndToEnd(t *testing.T) {
 	// Seal maxpower's platform secret at the exact coordinate the KMSSecret CR points
 	// the operator at (reuses the paas_sync_test seal helper — one seal path).
 	sealPlatformSecret(t, deps.KMS, paasOrgA, paasValueA) // paasOrgA == "maxpower"
-	aPath := "/v1/kms/orgs/" + paasOrgA + paasEnvPath
+	aPath := "/v1/kms" + paasEnvPath
 	future := time.Now().Add(time.Hour)
 
 	// (1) maxpower's REAL machine token reads maxpower's secret → 200. Audience is not an
@@ -171,7 +171,7 @@ func TestPaaSSyncMachineTokenEndToEnd(t *testing.T) {
 
 	// (4) …and the aud still cannot cross tenants: owner=maxpower bearing acme's machine
 	// aud reading ACME's path is denied by owner-scope → 403 (owner governs, not aud).
-	bPath := "/v1/kms/orgs/" + paasOrgB + paasEnvPath
+	bPath := "/v1/kms" + paasEnvPath
 	if resp := getWithBearer(t, app, bPath, mintMachineToken(t, key, paasOrgA, paasOrgB+"-platform-kms", future)); resp.StatusCode != 403 {
 		t.Fatalf("owner=maxpower token reading acme path = %d, want 403 (owner scopes, not aud)", resp.StatusCode)
 	}
@@ -188,7 +188,7 @@ func TestPaaSSyncMachineTokenEndToEnd(t *testing.T) {
 
 	// (7) maxpower's own token reading its OWN absent scope is 404, not 403 — proving
 	// (1)'s 200 was the org boundary admitting the caller, not a blanket allow.
-	absent := "/v1/kms/orgs/" + paasOrgA + "/secrets/platform/api/NOPE?env=default"
+	absent := "/v1/kms" + "/secrets/platform/api/NOPE?env=default"
 	if resp := getWithBearer(t, app, absent, own); resp.StatusCode != 404 {
 		t.Fatalf("own-org absent secret = %d, want 404 (boundary is org, not blanket-deny)", resp.StatusCode)
 	}

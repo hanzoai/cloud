@@ -40,55 +40,27 @@
         ]
       }
     },
-    "/v1/kms/orgs/{org}/secrets": {
+    "/v1/kms/secrets": {
       "get": {
-        "operationId": "get_v1_kms_orgs_by_org_secrets",
+        "operationId": "get_v1_kms_secrets",
         "tags": [
           "kms"
-        ],
-        "parameters": [
-          {
-            "name": "org",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
         ]
       },
       "post": {
-        "operationId": "post_v1_kms_orgs_by_org_secrets",
+        "operationId": "post_v1_kms_secrets",
         "tags": [
           "kms"
-        ],
-        "parameters": [
-          {
-            "name": "org",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
         ]
       }
     },
-    "/v1/kms/orgs/{org}/secrets/{wildcard1}": {
+    "/v1/kms/secrets/{wildcard1}": {
       "delete": {
-        "operationId": "delete_v1_kms_orgs_by_org_secrets_by_wildcard1",
+        "operationId": "delete_v1_kms_secrets_by_wildcard1",
         "tags": [
           "kms"
         ],
         "parameters": [
-          {
-            "name": "org",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
           {
             "name": "wildcard1",
             "in": "path",
@@ -100,19 +72,11 @@
         ]
       },
       "get": {
-        "operationId": "get_v1_kms_orgs_by_org_secrets_by_wildcard1",
+        "operationId": "get_v1_kms_secrets_by_wildcard1",
         "tags": [
           "kms"
         ],
         "parameters": [
-          {
-            "name": "org",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
           {
             "name": "wildcard1",
             "in": "path",

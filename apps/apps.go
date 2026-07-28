@@ -70,9 +70,11 @@ import (
 	"github.com/hanzoai/cloud/clients/billing"
 	"github.com/hanzoai/cloud/clients/blueprint"
 	"github.com/hanzoai/cloud/clients/books"
+	"github.com/hanzoai/cloud/clients/bot"
 	"github.com/hanzoai/cloud/clients/bots"
 	"github.com/hanzoai/cloud/clients/campaign"
 	"github.com/hanzoai/cloud/clients/captable"
+	"github.com/hanzoai/cloud/clients/catalog"
 	"github.com/hanzoai/cloud/clients/catalogsync"
 	"github.com/hanzoai/cloud/clients/channels"
 	"github.com/hanzoai/cloud/clients/cloudflare"
@@ -81,6 +83,7 @@ import (
 	"github.com/hanzoai/cloud/clients/company"
 	"github.com/hanzoai/cloud/clients/compliance"
 	"github.com/hanzoai/cloud/clients/content"
+	"github.com/hanzoai/cloud/clients/crawl"
 	"github.com/hanzoai/cloud/clients/crm"
 	"github.com/hanzoai/cloud/clients/dataroom"
 	"github.com/hanzoai/cloud/clients/deploy"
@@ -312,7 +315,7 @@ func Wire() []cloud.MountSpec {
 		{Name: "deploy", Mount: deploy.Mount, OwnsHealth: true},
 		{Name: "functions", Mount: functions.Mount},
 		{Name: "tracker", Mount: tracker.Mount},
-		{Name: "templates", Mount: templates.Mount},
+		{Name: "templates", Mount: templates.Mount, Shutdown: templates.Shutdown},
 		// OSS-template compute-cost basis /v1/blueprint/* — parses a blueprint's
 		// docker-compose into its SBOM (bill of container images) and prices the
 		// stack's CPU/memory footprint through a documented rate card. The per-hour
@@ -437,13 +440,38 @@ func Wire() []cloud.MountSpec {
 		{Name: "entitlements", Mount: entitlements.Mount, Shutdown: entitlements.Shutdown},
 		{Name: "exec", Mount: exec.Mount},
 		{Name: "websearch", Mount: websearch.Mount},
+		// Fetch one page and return it as markdown (/v1/crawl). Sibling to
+		// websearch, which finds URLs; this reads one. It is also what backs
+		// websearch's firecrawl-shaped /scrape, in-process — that path used to dial
+		// a separate crawler deployment that did not exist, so scrape answered 200
+		// with success:false on every call. No pod, no hop, one implementation
+		// behind both surfaces.
+		{Name: "crawl", Mount: crawl.Mount},
 		// The in-binary full-text index (/v1/index): a per-org inverted index on
 		// Base/SQLite speaking the Meilisearch dialect, so a Meilisearch client
 		// repoints at it unchanged. websearch above queries the OUTSIDE world;
 		// this one indexes ours. NOT /v1/search — that path belongs to the
 		// hanzoai/ai RAG plane, and the collision silently ate two routes.
 		{Name: "index", Mount: index.Mount, Shutdown: cloud.CtxShutdown(index.Shutdown), OwnsHealth: true},
+		// The cross-org discovery lens (/v1/catalog): every project, app and site the
+		// fleet has built, whichever org built it. Mounts AFTER index because the
+		// corpus IS an index corpus — catalog owns no store, it owns the one thing a
+		// per-org index cannot express: a published corpus under an org no principal
+		// can mint, read alongside (never instead of) the caller's own.
+		{Name: "catalog", Mount: catalog.Mount},
 		{Name: "world", Mount: world.Mount, Shutdown: cloud.CtxShutdown(world.Shutdown)},
+		// The NODE control plane: /v1/bot/connect (the socket a node dials and holds
+		// open), /v1/bot/nodes, /v1/bot/nodes/{id}/invoke, and the replica-to-replica
+		// forward at /v1/bot/peer/invoke. Mounts BEFORE "runtime" so these specific
+		// routes win Fiber's in-order match over that subsystem's /v1/bot/* relay.
+		// Shutdown ends the presence-renew loop, which releases this replica's node
+		// claims so peers stop forwarding into a pod that is draining.
+		//
+		// OwnsHealth: /v1/bot/health is ALREADY a real probe — the runtime relay
+		// answers it from the bot runtime itself — and the generic always-ok route
+		// would shadow it with one that cannot fail. This subsystem does not claim
+		// that path; it declines to break it.
+		{Name: "bot", Mount: bot.Mount, Shutdown: bot.Shutdown, OwnsHealth: true},
 		// The bot runtime's ops face (/v1/bot/*). The transport itself is domain-free;
 		// the run control plane is "bots" below.
 		{Name: "runtime", Mount: runtime.Mount},

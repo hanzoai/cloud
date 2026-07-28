@@ -62,7 +62,26 @@ var fleetTargets = []prober.Target{
 	{Name: "console", URL: "http://console.hanzo.svc:4000/api/public/health"},
 	{Name: "studio", URL: "http://studio.hanzo.svc:80/metrics"},
 	{Name: "hanzo-playground", URL: "http://hanzo-playground.hanzo.svc:80/metrics"},
+
+	// The edge. Nothing else being reachable matters if this is not, and it was
+	// absent from the scrape config this list came from — a gap inherited, not
+	// chosen. It is deployed raw (infra/k8s/ingress), not via an operator CR,
+	// which is likely why it was missed.
+	{Name: "ingress", URL: "http://ingress.hanzo.svc:80/ping"},
 }
+
+// Services folded into cloud are NOT probed separately.
+//
+// commerce and the o11y runtime have no operator CR: they are compiled into this
+// binary and reached through api.hanzo.ai. Probing commerce.hanzo.svc would test
+// a Service whose selector matches no pod — reporting down for something that is
+// up, inside this very process. Probing cloud covers them, because they ARE
+// cloud.
+//
+// iam and bot-gateway still carry their own CRs at replicas=1, so they are still
+// separate processes and are still probed. When they fold in, their entries come
+// out in the same change that removes their CR — not before, or the fold looks
+// like an outage.
 
 // fleetProber is pinned for the process life so Shutdown can stop it.
 var fleetProber *prober.Prober

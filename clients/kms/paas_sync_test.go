@@ -6,7 +6,7 @@ package kms_test
 // The platform control plane (clients/platform/secrets.go) seals each PaaS secret
 // at the org-scoped coordinate  orgs/<org>/platform/<app>/<KEY>  (kmsSecretRef) and
 // authors a KMSSecret CR pointing the kms-operator at
-//   /v1/kms/orgs/<org>/secrets/platform/<app>/<KEY>
+//   /v1/kms/secrets/platform/<app>/<KEY>   (org comes from the token)
 // (projectSlug=<org>, secretsPath=platform/<app>). These tests prove:
 //
 //   (1) ALIGNMENT — that seal path and that read path resolve to the SAME record
@@ -57,7 +57,7 @@ func TestPaaSSecretSealReadAlignment(t *testing.T) {
 	sealPlatformSecret(t, deps.KMS, paasOrgA, paasValueA)
 
 	// projectSlug=org, secretsPath=platform/<app>; authenticated as owner=<org>.
-	path := "/v1/kms/orgs/" + paasOrgA + paasEnvPath
+	path := "/v1/kms" + paasEnvPath
 	resp := do(t, app, "GET", path, paasOrgA, "", false, nil)
 	if resp.StatusCode != 200 {
 		t.Fatalf("operator read of its own sealed secret = %d, want 200 (seal/read coordinates MISALIGNED)", resp.StatusCode)
@@ -75,7 +75,7 @@ func TestPaaSSecretCrossTenantDenied(t *testing.T) {
 	app, deps := newApp(t, baseCfg(t, masterKeyB64(t)))
 	sealPlatformSecret(t, deps.KMS, paasOrgA, paasValueA) // only A's secret exists
 
-	aPath := "/v1/kms/orgs/" + paasOrgA + paasEnvPath
+	aPath := "/v1/kms" + paasEnvPath
 	if resp := do(t, app, "GET", aPath, paasOrgB, "", false, nil); resp.StatusCode != 403 {
 		t.Fatalf("cross-tenant read (B→A) = %d, want 403 DENIED", resp.StatusCode)
 	}
@@ -84,7 +84,7 @@ func TestPaaSSecretCrossTenantDenied(t *testing.T) {
 		t.Fatalf("A→A = %d, want 200 (the boundary is the caller's org, not the path)", resp.StatusCode)
 	}
 	// B reading its OWN (absent) scope is 404, not 403 — the denial is org-scoped.
-	bPath := "/v1/kms/orgs/" + paasOrgB + paasEnvPath
+	bPath := "/v1/kms" + paasEnvPath
 	if resp := do(t, app, "GET", bPath, paasOrgB, "", false, nil); resp.StatusCode != 404 {
 		t.Fatalf("B→B (absent) = %d, want 404 (boundary is org, not blanket-deny)", resp.StatusCode)
 	}

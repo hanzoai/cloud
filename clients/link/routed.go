@@ -21,7 +21,6 @@ package link
 import (
 	"context"
 	"fmt"
-	"time"
 )
 
 // routedDDL is the ONE definition of the routed-usage counter. PRIMARY KEY is the
@@ -133,6 +132,3 @@ func (s *Store) RoutedTotals(ctx context.Context, org, subject string) ([]Routed
 	}
 	return out, rows.Err()
 }
-
-// nowUnix is the counter's default clock, injectable in tests via the Meter.
-func nowUnix() int64 { return time.Now().Unix() }

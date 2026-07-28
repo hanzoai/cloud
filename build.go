@@ -88,6 +88,7 @@ func BuildDeps(cfg *Config) Deps {
 		Env:             cfg.Env,
 		Domain:          cfg.Domain,
 		IAMIssuer:       cfg.IAMIssuer,
+		Self:            selfID(cfg),
 		DataDir:         cfg.DataDir,
 		MasterKey:       masterKeyBytes(cfg),
 		AIDefaultModel:  cfg.AIDefaultModel,
@@ -374,17 +375,30 @@ func RegisterKMSClientFactory(f func(cfg *Config, log luxlog.Logger) (KMSClient,
 // ---- git-push-to-deploy ----
 
 // GitPushEvent describes a push that just landed on the embedded git server: the
-// org, the repo, the branch that moved, and its new tip commit. CloneURL is the
+// org, the repo, the FULL ref that moved (refs/heads/<b> or refs/tags/<t>), and
+// its new tip commit. CloneURL is the
 // canonical clone URL of that repo (https://<host>/v1/git/<org>/<repo>.git) — the
 // exact value an Application's RepoURL carries — so the builder can resolve which
-// app (if any) tracks this branch and needs a rebuild.
+// app (if any) tracks this ref and needs a rebuild. Tags reach the builder too:
+// releases are cut by tag, so filtering them here would stop publishing silently.
 type GitPushEvent struct {
 	Org      string
 	Project  string
 	Repo     string
-	Branch   string
+	Ref      string // FULL ref: refs/heads/<branch> or refs/tags/<tag>
 	Commit   string
 	CloneURL string
+}
+
+// IsBotActor reports whether a push actor is an automation identity rather than a
+// person. Every inbound push transport asks this BEFORE firing OnGitPush: our own
+// release and mirror automation push AS these identities, so without the guard a
+// release's own commit triggers the next release, forever. The two wires we ingest
+// spell a bot differently — GitHub suffixes App-authored logins with "[bot]", our
+// forge attributes workflow-made pushes to its Actions system user — so the ONE
+// predicate knows both.
+func IsBotActor(login string) bool {
+	return strings.HasSuffix(login, "[bot]") || strings.EqualFold(login, "hanzo-actions")
 }
 
 // pushBuilder is the registered git-push-to-deploy trigger. clients/platform
@@ -694,11 +708,8 @@ func aiM2MTokenURL(cfg *Config) string {
 	if override := strings.TrimSpace(os.Getenv("CLOUD_AI_IAM_TOKEN_URL")); override != "" {
 		return override
 	}
-	if base := strings.TrimRight(strings.TrimSpace(os.Getenv("IAM_URL")), "/"); base != "" {
+	if base := IAMBaseURL(cfg.IAMIssuer); base != "" {
 		return base + "/v1/iam/oauth/token"
-	}
-	if iss := strings.TrimRight(strings.TrimSpace(cfg.IAMIssuer), "/"); iss != "" {
-		return iss + "/v1/iam/oauth/token"
 	}
 	return ""
 }
@@ -827,7 +838,7 @@ func buildDurability(cfg *Config, log luxlog.Logger) (*Durability, func() []ha.M
 	// membership_k8s.go). A single-pod deployment with no peers is its own sole writer.
 	// The 2s refresh keeps a drained pod out of every peer's election within a bound the
 	// terminationGracePeriod covers, so a rolling handoff loses no request.
-	self := firstNonEmptyStr(strings.TrimSpace(cfg.ShardSelf), hostnameOr("cloud-0"))
+	self := selfID(cfg)
 	peers := parsePeers(cfg.ShardPeers)
 	if len(peers) == 0 {
 		peers = []org.Member{{ID: self, Addr: self}}
@@ -943,6 +954,15 @@ func durableCipher(cfg *Config, log luxlog.Logger) *org.Cipher {
 		return nil
 	}
 	return c
+}
+
+// selfID is THIS process's stable id: the StatefulSet ordinal (CLOUD_POD_NAME /
+// POD_NAME, already resolved onto cfg.ShardSelf) falling back to the OS hostname.
+// ONE resolver — the durability membership elects on it and Deps.Self reports it, so
+// the id an operator reads in a status IS the id the ring routes by. Two resolutions
+// that drifted would name the same pod two different things at the worst moment.
+func selfID(cfg *Config) string {
+	return firstNonEmptyStr(strings.TrimSpace(cfg.ShardSelf), hostnameOr("cloud-0"))
 }
 
 // hostnameOr returns the OS hostname, or def when unavailable — a stable self id for
@@ -1062,6 +1082,10 @@ type MountSpec struct {
 // teardown needs no separate enablement gate.
 func MountAll(app *zip.App, specs []MountSpec, cfg *Config, deps Deps) error {
 	logger := deps.Logger
+	// Index the composition root BEFORE anything mounts: TracingMiddleware resolves
+	// hanzo.subsystem off this, and the inventory (including what is switched OFF) is
+	// what /v1/admin/subsystems reports. Built once, read lock-free per request.
+	indexSubsystems(specs, cfg)
 	for _, spec := range specs {
 		if !cfg.Enabled(spec.Name) {
 			logger.Debug("subsystem disabled", "name", spec.Name)

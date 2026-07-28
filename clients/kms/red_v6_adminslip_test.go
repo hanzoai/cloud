@@ -41,7 +41,7 @@ func TestRed_MultiValueAud_AdminSlip(t *testing.T) {
 
 	sealPlatformSecret(t, deps.KMS, paasOrgA, paasValueA)       // victim maxpower secret
 	sealPlatformSecret(t, deps.KMS, "admin", "s3kr3t-of-admin") // admin org's own secret
-	victimPath := "/v1/kms/orgs/" + paasOrgA + paasEnvPath
+	victimPath := "/v1/kms" + paasEnvPath
 	adminPath := "/v1/kms/orgs/admin" + paasEnvPath
 	future := time.Now().Add(time.Hour)
 
@@ -115,7 +115,7 @@ func TestRed_ForeignMachineAudInSet_RealAdminKept(t *testing.T) {
 	jwks := e2eJWKS(t, &key.PublicKey)
 	app, deps := newAppWithIdentity(t, e2eCfg(t, jwks.URL))
 	sealPlatformSecret(t, deps.KMS, paasOrgA, paasValueA)
-	victimPath := "/v1/kms/orgs/" + paasOrgA + paasEnvPath
+	victimPath := "/v1/kms" + paasEnvPath
 	future := time.Now().Add(time.Hour)
 
 	// owner=admin, isAdmin=true, aud=[hanzo-console (static), maxpower-platform-kms (FOREIGN machine aud)].

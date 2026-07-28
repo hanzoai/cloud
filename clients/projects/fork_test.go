@@ -2,6 +2,7 @@ package projects
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,13 +10,14 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
+	"github.com/hanzoai/cloud/clients/templates"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // mountApp mounts the projects surface on a fresh in-memory app with a temp
 // store, exactly as the unified binary does. The fork route reads the embedded
-// templates catalog (templates.Get) — no template fixture needed.
+// templates catalog (templates.Lookup) — no template fixture needed.
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
@@ -92,11 +94,11 @@ func TestMapFramework(t *testing.T) {
 func TestForkCreatesProjectFromTemplate(t *testing.T) {
 	app := mountApp(t)
 
-	// Fork "brainwave" (Next.js 14.2 + TS) into maxpower's org, default slug/name.
+	// Fork "synapse" (Next.js 14.2 + TS) into maxpower's org, default slug/name.
 	code, body := do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower",
-		map[string]any{"slug": "brainwave"})
+		map[string]any{"slug": "synapse"})
 	if code != http.StatusCreated {
-		t.Fatalf("fork brainwave want 201, got %d (%s)", code, body)
+		t.Fatalf("fork synapse want 201, got %d (%s)", code, body)
 	}
 	var p projectView
 	if err := json.Unmarshal(body, &p); err != nil {
@@ -105,16 +107,16 @@ func TestForkCreatesProjectFromTemplate(t *testing.T) {
 	if p.Org != "maxpower" {
 		t.Fatalf("fork org want maxpower, got %q", p.Org)
 	}
-	if p.Slug != "brainwave" {
-		t.Fatalf("fork slug want brainwave, got %q", p.Slug)
+	if p.Slug != "synapse" {
+		t.Fatalf("fork slug want synapse, got %q", p.Slug)
 	}
-	if p.Name != "Brainwave" { // seeded from the template title
-		t.Fatalf("fork name want Brainwave (template title), got %q", p.Name)
+	if p.Name != "Synapse" { // seeded from the template title
+		t.Fatalf("fork name want Synapse (template title), got %q", p.Name)
 	}
 	if p.Framework != "next" { // "Next.js 14.2 + TS" → next
 		t.Fatalf("fork framework want next, got %q", p.Framework)
 	}
-	if p.Repo.URL != "https://gallery.hanzo.ai/templates/brainwave" {
+	if p.Repo.URL != "https://gallery.hanzo.ai/templates/synapse" {
 		t.Fatalf("fork repo url want gallery source, got %q", p.Repo.URL)
 	}
 	if p.Repo.Provider != "git" { // gallery.hanzo.ai is not github/gitlab/bitbucket
@@ -125,27 +127,85 @@ func TestForkCreatesProjectFromTemplate(t *testing.T) {
 	}
 
 	// The forked project is a real record: readable via the normal GET.
-	code, body = do(t, app, http.MethodGet, "/v1/projects/brainwave", "maxpower", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/projects/synapse", "maxpower", nil)
 	if code != http.StatusOK {
 		t.Fatalf("get forked project want 200, got %d (%s)", code, body)
 	}
 }
 
-// TestForkFrameworkMappingAndOverrides exercises the Vite-wins mapping and the
-// name/target overrides through the real route.
-func TestForkFrameworkMappingAndOverrides(t *testing.T) {
+// TestForkVariantSelection proves the collapse: prism is ONE catalog entry and
+// its HTML/React shapes are picked with `variant`, which is what used to cost
+// three sibling slugs. The variant drives the framework, the repo URL and the
+// derived project slug, so two shapes coexist in one org.
+func TestForkVariantSelection(t *testing.T) {
 	app := mountApp(t)
 
-	// "React 18 + Vite" must map to vite, not react. Override name + target slug.
+	// The React variant of prism is "React 18 + Vite" → vite, not react.
 	code, body := do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower",
-		map[string]any{"slug": "xora-react", "name": "My Landing", "target": "landing-1"})
+		map[string]any{"slug": "prism", "variant": "react"})
 	if code != http.StatusCreated {
-		t.Fatalf("fork xora want 201, got %d (%s)", code, body)
+		t.Fatalf("fork prism/react want 201, got %d (%s)", code, body)
 	}
 	var p projectView
 	_ = json.Unmarshal(body, &p)
 	if p.Framework != "vite" {
-		t.Fatalf("xora framework want vite (Vite over React), got %q", p.Framework)
+		t.Fatalf("prism/react framework want vite (Vite over React), got %q", p.Framework)
+	}
+	if p.Slug != "prism-react" { // a non-default shape carries its id into the slug
+		t.Fatalf("prism/react slug want prism-react, got %q", p.Slug)
+	}
+	if p.Repo.URL != "https://gallery.hanzo.ai/templates/prism-react" {
+		t.Fatalf("prism/react repo want the variant source, got %q", p.Repo.URL)
+	}
+	if p.ForkedFrom != "prism" { // lineage is the template, not the shape
+		t.Fatalf("prism/react lineage want prism, got %q", p.ForkedFrom)
+	}
+
+	// No preference → the template's default shape, under the bare slug.
+	code, body = do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower",
+		map[string]any{"slug": "prism"})
+	if code != http.StatusCreated {
+		t.Fatalf("fork prism want 201, got %d (%s)", code, body)
+	}
+	_ = json.Unmarshal(body, &p)
+	if p.Slug != "prism" || p.Framework != "static" { // "HTML/SCSS + GSAP" → static
+		t.Fatalf("prism default want prism/static, got %q/%q", p.Slug, p.Framework)
+	}
+
+	// A template whose NAME is a reserved subdomain still forks in one click:
+	// the derived slug is a default, so it takes the suffix its demo carries.
+	code, body = do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower",
+		map[string]any{"slug": "metrics"})
+	if code != http.StatusCreated {
+		t.Fatalf("fork metrics want 201, got %d (%s)", code, body)
+	}
+	_ = json.Unmarshal(body, &p)
+	if p.Slug != "metrics-template" {
+		t.Fatalf("reserved template slug want metrics-template, got %q", p.Slug)
+	}
+
+	// An unknown variant is a 404, not a silent fall back to the default.
+	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower",
+		map[string]any{"slug": "prism", "variant": "cobol"}); code != http.StatusNotFound {
+		t.Fatalf("unknown variant want 404, got %d", code)
+	}
+}
+
+// TestForkFrameworkMappingAndOverrides exercises the framework mapping and the
+// name/target overrides through the real route.
+func TestForkFrameworkMappingAndOverrides(t *testing.T) {
+	app := mountApp(t)
+
+	// "Next.js 14.2 + TS" → next. Override name + target slug.
+	code, body := do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower",
+		map[string]any{"slug": "saas-landing", "name": "My Landing", "target": "landing-1"})
+	if code != http.StatusCreated {
+		t.Fatalf("fork saas-landing want 201, got %d (%s)", code, body)
+	}
+	var p projectView
+	_ = json.Unmarshal(body, &p)
+	if p.Framework != "next" {
+		t.Fatalf("saas-landing framework want next, got %q", p.Framework)
 	}
 	if p.Name != "My Landing" {
 		t.Fatalf("name override want 'My Landing', got %q", p.Name)
@@ -156,7 +216,7 @@ func TestForkFrameworkMappingAndOverrides(t *testing.T) {
 
 	// A bare-HTML template forks to "static".
 	code, body = do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower",
-		map[string]any{"slug": "bento-cards-v3-html"})
+		map[string]any{"slug": "loop", "variant": "html"})
 	if code != http.StatusCreated {
 		t.Fatalf("fork html want 201, got %d (%s)", code, body)
 	}
@@ -173,7 +233,7 @@ func TestForkOrgScopingAndErrors(t *testing.T) {
 	app := mountApp(t)
 
 	// No org → 403 (org-scoped exactly like the other routes).
-	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "", map[string]any{"slug": "brainwave"}); code != http.StatusForbidden {
+	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "", map[string]any{"slug": "synapse"}); code != http.StatusForbidden {
 		t.Fatalf("no-org fork want 403, got %d", code)
 	}
 	// Missing template slug → 400.
@@ -185,22 +245,200 @@ func TestForkOrgScopingAndErrors(t *testing.T) {
 		t.Fatalf("unknown template fork want 404, got %d", code)
 	}
 
-	// maxpower forks brainwave.
-	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower", map[string]any{"slug": "brainwave"}); code != http.StatusCreated {
+	// maxpower forks synapse.
+	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower", map[string]any{"slug": "synapse"}); code != http.StatusCreated {
 		t.Fatalf("maxpower fork want 201, got %d", code)
 	}
 	// A second fork of the same template into the SAME org → 409 (slug taken).
-	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower", map[string]any{"slug": "brainwave"}); code != http.StatusConflict {
+	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower", map[string]any{"slug": "synapse"}); code != http.StatusConflict {
 		t.Fatalf("dup fork want 409, got %d", code)
 	}
 	// A DIFFERENT org can fork the same template (same slug, different org).
-	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "acme", map[string]any{"slug": "brainwave"}); code != http.StatusCreated {
+	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "acme", map[string]any{"slug": "synapse"}); code != http.StatusCreated {
 		t.Fatalf("acme fork same template want 201, got %d", code)
 	}
 	// acme cannot see maxpower's forked project.
-	if code, _ := do(t, app, http.MethodGet, "/v1/projects/brainwave", "acme", nil); code != http.StatusOK {
-		// acme forked its OWN brainwave above, so it SHOULD see one — assert isolation
+	if code, _ := do(t, app, http.MethodGet, "/v1/projects/synapse", "acme", nil); code != http.StatusOK {
+		// acme forked its OWN synapse above, so it SHOULD see one — assert isolation
 		// via a slug acme never forked.
-		t.Fatalf("acme should see its own brainwave, got %d", code)
+		t.Fatalf("acme should see its own synapse, got %d", code)
+	}
+}
+
+// TestForkPublishedProjectRecordsLineage is the creator loop end to end: a
+// first-party example published as a LIVE project is forkable BY SLUG (the same
+// name it serves under at <slug>.hanzo.app), the fork lands in the forker's own
+// org under their own slug carrying the parent's source, and the parent is
+// recorded on the child as forkedFrom so the attribution survives the rename. The
+// badge is NOT inherited — a fork of a Hanzo example is the forker's app.
+func TestForkPublishedProjectRecordsLineage(t *testing.T) {
+	app := mountApp(t)
+
+	ex := mkProject("hanzo", "example-kanban", "Example Kanban")
+	ex.Status, ex.Framework, ex.Official = "live", "vite", true
+	ex.RepoURL, ex.RepoBranch = "https://github.com/hanzo-templates/kanban-board", "main"
+	if err := mounted.State.store.CreateProject(context.Background(), ex); err != nil {
+		t.Fatalf("seed example: %v", err)
+	}
+
+	code, body := do(t, app, http.MethodPost, "/v1/projects/fork", "acme",
+		map[string]any{"slug": "example-kanban", "target": "my-board", "name": "My Board"})
+	if code != http.StatusCreated {
+		t.Fatalf("fork published example want 201, got %d (%s)", code, body)
+	}
+	var p projectView
+	if err := json.Unmarshal(body, &p); err != nil {
+		t.Fatalf("fork json: %v (%s)", err, body)
+	}
+	if p.Org != "acme" || p.Slug != "my-board" || p.Name != "My Board" {
+		t.Fatalf("fork target = %s/%s %q, want acme/my-board 'My Board'", p.Org, p.Slug, p.Name)
+	}
+	if p.ForkedFrom != "hanzo/example-kanban" {
+		t.Fatalf("lineage = %q, want hanzo/example-kanban", p.ForkedFrom)
+	}
+	if p.Repo.URL != ex.RepoURL || p.Framework != "vite" {
+		t.Fatalf("fork did not inherit buildable source: repo=%q framework=%q", p.Repo.URL, p.Framework)
+	}
+	if p.Official {
+		t.Fatalf("a fork of a first-party example must not inherit the official badge")
+	}
+
+	// A DRAFT example is not published, so it is not forkable — you can only fork
+	// what you can browse.
+	dr := mkProject("hanzo", "example-draft", "Draft")
+	if err := mounted.State.store.CreateProject(context.Background(), dr); err != nil {
+		t.Fatalf("seed draft: %v", err)
+	}
+	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "acme", map[string]any{"slug": "example-draft"}); code != http.StatusNotFound {
+		t.Fatalf("fork of a draft want 404, got %d", code)
+	}
+}
+
+// TestForkTemplateRecordsLineage pins that a catalog fork records the template
+// slug as its parent — the same forkedFrom field, one lineage concept for both
+// kinds of parent.
+func TestForkTemplateRecordsLineage(t *testing.T) {
+	app := mountApp(t)
+	code, body := do(t, app, http.MethodPost, "/v1/projects/fork", "acme", map[string]any{"slug": "synapse"})
+	if code != http.StatusCreated {
+		t.Fatalf("fork want 201, got %d (%s)", code, body)
+	}
+	var p projectView
+	_ = json.Unmarshal(body, &p)
+	if p.ForkedFrom != "synapse" {
+		t.Fatalf("template lineage = %q, want synapse", p.ForkedFrom)
+	}
+}
+
+// TestForkPrivateTemplateIsOwnerOnly is the per-org template loop end to end:
+// acme publishes a template PRIVATE to acme, forks it, and gets a project seeded
+// from it with owner-qualified lineage — while globex, asking for the exact same
+// slug, gets a 404. templates.Lookup binds the caller's org, so another org's
+// template is not merely filtered out of the fork, it is unreachable from it.
+func TestForkPrivateTemplateIsOwnerOnly(t *testing.T) {
+	app := mountApp(t)
+	if err := templates.Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("templates.Mount: %v", err)
+	}
+	t.Cleanup(func() { _ = templates.Shutdown(t.Context()) })
+
+	if code, body := do(t, app, http.MethodPost, "/v1/templates", "acme", map[string]any{
+		"slug": "acme-portal", "title": "Acme Portal", "framework": "React 18 + Vite",
+		"source": "https://git.acme.example/portal",
+	}); code != http.StatusCreated {
+		t.Fatalf("publish private template want 201, got %d (%s)", code, body)
+	}
+
+	code, body := do(t, app, http.MethodPost, "/v1/projects/fork", "acme", map[string]any{"slug": "acme-portal"})
+	if code != http.StatusCreated {
+		t.Fatalf("owner fork of own template want 201, got %d (%s)", code, body)
+	}
+	var p projectView
+	_ = json.Unmarshal(body, &p)
+	if p.Org != "acme" || p.Framework != "vite" || p.Repo.URL != "https://git.acme.example/portal" {
+		t.Fatalf("fork did not seed from the private template: org=%s framework=%s repo=%s", p.Org, p.Framework, p.Repo.URL)
+	}
+	if p.ForkedFrom != "acme/acme-portal" {
+		t.Fatalf("private-template lineage = %q, want acme/acme-portal", p.ForkedFrom)
+	}
+
+	if code, body := do(t, app, http.MethodPost, "/v1/projects/fork", "globex", map[string]any{"slug": "acme-portal"}); code != http.StatusNotFound {
+		t.Fatalf("cross-org fork of a private template want 404, got %d (%s)", code, body)
+	}
+}
+
+// TestOfficialBadgeIsPlatformOnly proves the first-party marker cannot be
+// self-asserted: an ordinary tenant asking for official:true gets false, and only
+// a SuperAdmin caller (the seeding path) can raise it.
+func TestOfficialBadgeIsPlatformOnly(t *testing.T) {
+	app := mountApp(t)
+
+	code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
+		map[string]any{"name": "Impostor", "slug": "impostor", "official": true})
+	if code != http.StatusCreated {
+		t.Fatalf("create want 201, got %d (%s)", code, body)
+	}
+	var p projectView
+	_ = json.Unmarshal(body, &p)
+	if p.Official {
+		t.Fatalf("a tenant must not be able to badge its own app as a Hanzo example")
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/projects",
+		bytes.NewReader([]byte(`{"name":"Example","slug":"example-app","official":true}`)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Org-Id", "hanzo")
+	req.Header.Set("X-User-Id", "u_hanzo")
+	req.Header.Set("X-User-IsAdmin", "true")
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("admin create: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("admin create want 201, got %d (%s)", resp.StatusCode, b)
+	}
+	_ = json.Unmarshal(b, &p)
+	if !p.Official {
+		t.Fatalf("the platform must be able to badge its own examples: %s", b)
+	}
+}
+
+// TestOfficialBadgeOnUpdate: the badge must also reach the examples published
+// BEFORE it existed, under the same one rule — a tenant PATCHing official:true
+// on its own app is ignored; a SuperAdmin can badge, and un-badge.
+func TestOfficialBadgeOnUpdate(t *testing.T) {
+	app := mountApp(t)
+	if code, body := do(t, app, http.MethodPost, "/v1/projects", "hanzo",
+		map[string]any{"name": "Legacy Example", "slug": "legacy-example"}); code != http.StatusCreated {
+		t.Fatalf("create want 201, got %d (%s)", code, body)
+	}
+	code, body := do(t, app, http.MethodPatch, "/v1/projects/legacy-example", "hanzo", map[string]any{"official": true})
+	if code != http.StatusOK {
+		t.Fatalf("tenant patch want 200, got %d (%s)", code, body)
+	}
+	var p projectView
+	_ = json.Unmarshal(body, &p)
+	if p.Official {
+		t.Fatalf("a tenant self-badged via update")
+	}
+	for _, want := range []bool{true, false} {
+		b, _ := json.Marshal(map[string]any{"official": want})
+		req := httptest.NewRequest(http.MethodPatch, "/v1/projects/legacy-example", bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Org-Id", "hanzo")
+		req.Header.Set("X-User-Id", "u_hanzo")
+		req.Header.Set("X-User-IsAdmin", "true")
+		resp, err := app.Fiber().Test(req)
+		if err != nil {
+			t.Fatalf("admin patch: %v", err)
+		}
+		rb, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		_ = json.Unmarshal(rb, &p)
+		if p.Official != want {
+			t.Fatalf("admin patch official=%v, want %v (%s)", p.Official, want, rb)
+		}
 	}
 }

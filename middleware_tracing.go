@@ -112,6 +112,15 @@ func TracingMiddleware() zip.Handler {
 			span.SetAttributes(attribute.String("hanzo.request_id", rid))
 		}
 
+		// Which of the ~60 co-resident subsystems served this request. Stamped HERE —
+		// the one place every /v1 request is already traced — so per-subsystem request
+		// rate / error rate / latency / last-error fall out of the trace table the
+		// admin board already reads, with no per-package instrumentation and no second
+		// metrics path. Empty (nothing owns the path) means no label, never a guess.
+		if sub := SubsystemOf(path); sub != "" {
+			span.SetAttributes(attribute.String("hanzo.subsystem", sub))
+		}
+
 		err := c.Continue()
 
 		// Identity headers are validated upstream (IdentityMiddleware) before the
