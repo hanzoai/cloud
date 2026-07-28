@@ -61,6 +61,22 @@ FROM ${SKILLS_IMAGE} AS skills
 FROM ${FLAGS_IMAGE} AS flagslib
 
 FROM ghcr.io/hanzoai/mirror/golang:1.26-alpine3.22@sha256:47d47cb5cc3c7dac409dcb6c3a98a6263571218046cd02d709527feef804a77c AS build
+# go.mod is the ONE place the Go version is declared.
+#
+# The golang image ships GOTOOLCHAIN=local, which makes the image's own Go the
+# authority and refuses to honour a newer `go` directive. That put the version in
+# TWO places that had to be kept in agreement by hand — this digest pin and
+# go.mod — and they drifted: go.mod went to 1.26.5 while this digest stayed on
+# 1.26.4, and every release then died at `go mod download` with
+#   go: go.mod requires go >= 1.26.5 (running go 1.26.4; GOTOOLCHAIN=local)
+# after the image had already built for a minute. Tags were not minted, so
+# nothing shipped broken — releases simply stopped, quietly, for everyone.
+#
+# `auto` makes go.mod authoritative and this pin a floor: bumping the directive
+# is now a one-line change that cannot desync. The toolchain is fetched into
+# GOMODCACHE, which the `go mod download` step below already mounts as a shared
+# build cache, so it costs one download per cache generation and nothing after.
+ENV GOTOOLCHAIN=auto
 # CIPHER-FORMAT FREEZE (cek depends on this). The data-plane stores are
 # SQLCipher pages in a fixed on-disk format (cipher_compatibility 4). An at-open
 # compat pin is infeasible (mattn keys via URI before any pragma), so the format
@@ -156,6 +172,39 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -ldflags="-s -w" -o /smoke ./cmd/smoke
+# Every subsystem that is NOT linked into /cloud, built from the SAME declaration
+# that makes it a plugin. apps.Wire loads each one at run time via zip.Load, which
+# fork/execs a sibling of /cloud, so the binary must be in the image or the mount
+# aborts and cloud never reaches listening:
+#
+#   cloud: mount: mount o11y: zip: Load(o11y): start: fork/exec /o11y: no such file
+#
+# That is what happened with the first one: unlinking o11y (deleting its import so
+# its 2.7k-package graph stops being linked into cloud) shipped without the step
+# that builds the separate binary, and five consecutive releases produced an image
+# and shipped none. Unlinking a subsystem means building it somewhere else, not
+# just deleting the import.
+#
+# The list is DERIVED, not maintained here. cloud.PluginSpec("<name>", …) in
+# apps/apps.go is what makes something a plugin, so that is what this reads —
+# adding the second plugin is a one-line edit at the composition root and this
+# Dockerfile does not change. A hand-kept copy of the list would be a second place
+# to forget, which is the bug above with extra steps. cmd/<name> is the convention
+# gen-app-cmds already follows; a plugin declared without one fails the build here
+# rather than at a pod's first boot.
+#
+# CGO_ENABLED=0 like /smoke: these touch no sqlite, so they need no libc, and a
+# static binary is one less thing that can disagree with the runtime base.
+RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
+    set -eu; mkdir -p /plugins; \
+    names="$(grep -o 'PluginSpec("[a-z0-9-]*"' apps/apps.go | cut -d'"' -f2 | sort -u || true)"; \
+    [ -n "$names" ] || { echo "FATAL: no PluginSpec found in apps/apps.go — the derivation broke, not the plugin list"; exit 1; }; \
+    for p in $names; do \
+      [ -d "./cmd/$p" ] || { echo "FATAL: plugin '$p' is declared in Wire but has no cmd/$p"; exit 1; }; \
+      echo "building plugin $p"; \
+      CGO_ENABLED=0 go build -ldflags="-s -w" -o "/plugins/$p" "./cmd/$p"; \
+    done
 # Prove the SHIPPED binary binds sqlite3_* to libsqlcipher, not a plaintext libsqlite3.
 RUN readelf -d /cloud | grep -qE 'NEEDED.*(sqlcipher|sqlite3)' || { echo "FATAL: /cloud links no sqlite/sqlcipher .so"; exit 1; }; \
     ! ldd /cloud 2>/dev/null | grep -E 'libsqlite3' | grep -vq 'libsqlcipher' || { echo "FATAL: /cloud resolves a NON-sqlcipher libsqlite3 (plaintext risk)"; exit 1; }
@@ -199,6 +248,11 @@ COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /etc/group /etc/group
 COPY --from=build /cloud /cloud
 COPY --from=build /smoke /smoke
+# The out-of-process plugin binaries, landing beside /cloud because that is where
+# zip.Load looks: apps.o11yPlugin resolves dir(os.Executable())+"/<name>". Copying
+# the DIRECTORY's contents keeps this generic — a new plugin needs no line here,
+# same as the build step above.
+COPY --from=build /plugins/ /
 EXPOSE 8080 9090 9653
 USER 65532:65532
 # tini as PID 1 forwards signals to /cloud unchanged (so SIGTERM still drains
