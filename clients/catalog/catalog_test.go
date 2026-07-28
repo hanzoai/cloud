@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -72,8 +73,6 @@ func decode(t *testing.T, body string) Response {
 	return out
 }
 
-const admin = "X-User-IsAdmin"
-
 // as mints the SANITIZED principal headers for one org. A validated principal is
 // an org AND a user — principal.Org refuses an X-Org-Id with no X-User-Id behind
 // it, which is exactly the forgery the identity boundary exists to stop.
@@ -81,23 +80,26 @@ func as(org string) map[string]string {
 	return map[string]string{"X-Org-Id": org, "X-User-Id": "u@" + org}
 }
 
-// seed publishes the cross-org corpus as the platform SuperAdmin.
-func seed(t *testing.T, app *zip.App) {
+// seed publishes the cross-org corpus through the SAME reconcile the sync uses —
+// there is no publish endpoint to call, which is the point.
+func seed(t *testing.T, rows ...Entry) {
 	t.Helper()
-	code, body := do(t, app, http.MethodPut, "/v1/catalog", `{"entries":[
-		{"id":"hanzo/console","org":"hanzo","name":"console","kind":"repo","archetype":"app","language":"TypeScript","description":"the operator console","forkable":true,"updated":"2026-07-01"},
-		{"id":"lux/node","org":"lux","name":"node","kind":"repo","archetype":"infra","language":"Go","description":"lux blockchain node","updated":"2026-07-02"},
-		{"id":"zoo/zips","org":"zoo","name":"zips","kind":"site","archetype":"site","language":"TypeScript","description":"zoo improvement proposals","url":"https://zips.zoo.ngo","updated":"2026-07-03"}
-	]}`, map[string]string{admin: "true"})
-	if code != http.StatusOK {
-		t.Fatalf("publish: %d %s", code, body)
+	if len(rows) == 0 {
+		rows = []Entry{
+			{ID: "hanzo/console", Org: "hanzo", Name: "console", Kind: "repo", Archetype: "app", Language: "TypeScript", Description: "the operator console", Forkable: true, Updated: "2026-07-01"},
+			{ID: "lux/node", Org: "lux", Name: "node", Kind: "repo", Archetype: "infra", Language: "Go", Description: "lux blockchain node", Updated: "2026-07-02"},
+			{ID: "zoo/zips", Org: "zoo", Name: "zips", Kind: "site", Archetype: "site", Language: "TypeScript", Description: "zoo improvement proposals", URL: "https://zips.zoo.ngo", Updated: "2026-07-03"},
+		}
+	}
+	if _, _, err := reconcile(context.Background(), PublicOrg, rows); err != nil {
+		t.Fatalf("seed: %v", err)
 	}
 }
 
 // TestCrossOrgSearch is the whole point: ONE query reaches hanzo, lux and zoo.
 func TestCrossOrgSearch(t *testing.T) {
 	app := mount(t)
-	seed(t, app)
+	seed(t)
 
 	code, body := do(t, app, http.MethodGet, "/v1/catalog", "", nil)
 	if code != http.StatusOK {
@@ -134,7 +136,7 @@ func TestCrossOrgSearch(t *testing.T) {
 // caller — while the published corpus is visible to all three.
 func TestPrivateProjectNeverLeaks(t *testing.T) {
 	app := mount(t)
-	seed(t, app)
+	seed(t)
 
 	// acme writes its own row through the org-scoped dialect, as any tenant would.
 	code, body := do(t, app, http.MethodPost, "/v1/index/indexes/catalog/documents",
@@ -175,35 +177,32 @@ func TestPrivateProjectNeverLeaks(t *testing.T) {
 	}
 }
 
-// TestPublishIsPlatformOnly proves a tenant cannot promote itself into the
-// cross-org catalog: the write is SuperAdmin, and the org it writes is a name no
-// principal can hold.
-func TestPublishIsPlatformOnly(t *testing.T) {
+// TestNoOneCanPublish proves the published corpus has no write door: every verb
+// on /v1/catalog but GET is unroutable, so there is no gate to misconfigure and
+// no credential that could promote a tenant row into the cross-org catalog.
+func TestNoOneCanPublish(t *testing.T) {
 	app := mount(t)
-	for _, hdr := range []map[string]string{nil, as("acme"), as(PublicOrg)} {
-		if code, _ := do(t, app, http.MethodPut, "/v1/catalog",
-			`{"entries":[{"id":"acme/ad","org":"hanzo","name":"ad"}]}`, hdr); code != http.StatusForbidden {
-			t.Fatalf("publish as %v: got %d, want 403", hdr, code)
+	for _, m := range []string{http.MethodPut, http.MethodPost, http.MethodPatch, http.MethodDelete} {
+		code, _ := do(t, app, m, "/v1/catalog",
+			`{"entries":[{"id":"acme/ad","org":"hanzo","name":"ad"}]}`, as("acme"))
+		if code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
+			t.Fatalf("%s /v1/catalog: got %d, want no write route", m, code)
 		}
 	}
 	if got := decode(t, mustGet(t, app, "/v1/catalog")); got.Total != 0 {
-		t.Fatalf("nothing should have been published: %+v", got.Data)
+		t.Fatalf("nothing should be published: %+v", got.Data)
 	}
 }
 
-// TestPublishPrunes proves the corpus is a full swap, not an append: a project
+// TestSyncPrunes proves the corpus is a full swap, not an append: a project
 // deleted upstream leaves the catalog on the next sync.
-func TestPublishPrunes(t *testing.T) {
+func TestSyncPrunes(t *testing.T) {
 	app := mount(t)
-	seed(t, app)
-	code, body := do(t, app, http.MethodPut, "/v1/catalog",
-		`{"entries":[{"id":"lux/node","org":"lux","name":"node","kind":"repo","language":"Go","updated":"2026-07-09"}]}`,
-		map[string]string{admin: "true"})
-	if code != http.StatusOK {
-		t.Fatalf("republish: %d %s", code, body)
-	}
-	if !strings.Contains(body, `"pruned":2`) {
-		t.Errorf("want 2 pruned, got %s", body)
+	seed(t)
+	kept, pruned, err := reconcile(context.Background(), PublicOrg,
+		[]Entry{{ID: "lux/node", Org: "lux", Name: "node", Kind: "repo", Language: "Go", Updated: "2026-07-09"}})
+	if err != nil || kept != 1 || pruned != 2 {
+		t.Fatalf("re-sync: kept=%d pruned=%d err=%v; want 1/2", kept, pruned, err)
 	}
 	got := decode(t, mustGet(t, app, "/v1/catalog"))
 	if got.Total != 1 || got.Data[0].ID != "lux/node" || got.Data[0].Updated != "2026-07-09" {
