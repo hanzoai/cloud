@@ -50,7 +50,6 @@ import (
 	"github.com/hanzoai/cloud/apps/admin/finance"
 	"github.com/hanzoai/cloud/apps/admin/money"
 	"github.com/hanzoai/cloud/apps/admin/revenue"
-	"github.com/hanzoai/cloud/apps/treasury"
 )
 
 // moneyGrantScan bounds the audit scan behind the grant totals. Grants are staff-issued
@@ -170,7 +169,7 @@ func (o ops) Money(ctx context.Context, _ *core.None) (*MoneyOut, error) {
 // reserveCents reads the platform reserve fund. Not mounted ⇒ 0, which is the truth:
 // there is no reserve on this deployment.
 func reserveCents(ctx context.Context) money.Cents {
-	cents, _ := treasury.ReserveCents(ctx)
+	cents, _ := cloud.ReserveCents(ctx)
 	return money.Cents(cents)
 }
 

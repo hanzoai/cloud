@@ -54,11 +54,11 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/treasury/formance"
 	"github.com/hanzoai/cloud/apps/treasury/ledger"
 	"github.com/hanzoai/cloud/apps/treasury/ledger/sqlstore"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
 
@@ -130,6 +130,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		},
 	}
 	mounted = s
+	// Publish the reserve balance as a VALUE other subsystems can read without
+	// linking this one. apps/admin renders the figure and has no business
+	// importing the ledger that computes it (see cloud/reserve.go).
+	cloud.RegisterReserveReader(ReserveCents)
 
 	// ONE scope-aware /v1/finance/* engine, three tenancy surfaces (HIP finance):
 	// per-org reads derive the tenant from the validated IAM identity and see ONLY
