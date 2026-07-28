@@ -506,6 +506,10 @@ type updateReq struct {
 		URL    string `json:"url"`
 		Branch string `json:"branch"`
 	} `json:"repo"`
+	// Official raises or clears the first-party-example badge on an app that
+	// already exists — the examples published before the badge did. Same ONE rule
+	// as at create: honored only for a SuperAdmin caller.
+	Official *bool `json:"official"`
 }
 
 func update(s *cloud.Service[state], c *zip.Ctx) error {
@@ -558,6 +562,9 @@ func update(s *cloud.Service[state], c *zip.Ctx) error {
 		if p.RepoBranch == "" && p.RepoURL != "" {
 			p.RepoBranch = "main"
 		}
+	}
+	if body.Official != nil && c.IsAdmin() {
+		p.Official = *body.Official
 	}
 	p.UpdatedAt = time.Now().Unix()
 	if err := s.State.store.UpdateProject(c.Context(), p); err != nil {

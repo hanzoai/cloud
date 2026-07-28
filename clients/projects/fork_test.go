@@ -308,3 +308,41 @@ func TestOfficialBadgeIsPlatformOnly(t *testing.T) {
 		t.Fatalf("the platform must be able to badge its own examples: %s", b)
 	}
 }
+
+// TestOfficialBadgeOnUpdate: the badge must also reach the examples published
+// BEFORE it existed, under the same one rule — a tenant PATCHing official:true
+// on its own app is ignored; a SuperAdmin can badge, and un-badge.
+func TestOfficialBadgeOnUpdate(t *testing.T) {
+	app := mountApp(t)
+	if code, body := do(t, app, http.MethodPost, "/v1/projects", "hanzo",
+		map[string]any{"name": "Legacy Example", "slug": "legacy-example"}); code != http.StatusCreated {
+		t.Fatalf("create want 201, got %d (%s)", code, body)
+	}
+	code, body := do(t, app, http.MethodPatch, "/v1/projects/legacy-example", "hanzo", map[string]any{"official": true})
+	if code != http.StatusOK {
+		t.Fatalf("tenant patch want 200, got %d (%s)", code, body)
+	}
+	var p projectView
+	_ = json.Unmarshal(body, &p)
+	if p.Official {
+		t.Fatalf("a tenant self-badged via update")
+	}
+	for _, want := range []bool{true, false} {
+		b, _ := json.Marshal(map[string]any{"official": want})
+		req := httptest.NewRequest(http.MethodPatch, "/v1/projects/legacy-example", bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Org-Id", "hanzo")
+		req.Header.Set("X-User-Id", "u_hanzo")
+		req.Header.Set("X-User-IsAdmin", "true")
+		resp, err := app.Fiber().Test(req)
+		if err != nil {
+			t.Fatalf("admin patch: %v", err)
+		}
+		rb, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		_ = json.Unmarshal(rb, &p)
+		if p.Official != want {
+			t.Fatalf("admin patch official=%v, want %v (%s)", p.Official, want, rb)
+		}
+	}
+}
