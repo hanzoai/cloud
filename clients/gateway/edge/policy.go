@@ -184,7 +184,7 @@ func New(dataDir, adminOrg string, static Policy) (*Store, error) {
 	if err := os.MkdirAll(dataDir, 0o750); err != nil {
 		return s, fmt.Errorf("edge: mkdir %s: %w", dataDir, err)
 	}
-	db, err := cek.Open(filepath.Join(dataDir, "gateway.db"))
+	db, err := cek.Open(cek.Global, filepath.Join(dataDir, "gateway.db"))
 	if err != nil {
 		return s, fmt.Errorf("edge: open: %w", err)
 	}

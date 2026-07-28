@@ -43,7 +43,7 @@ func TestGenerateFrozenFixture(t *testing.T) {
 	for _, s := range []string{"", dekSuffix, "-wal", "-shm"} {
 		_ = os.Remove(dbPath + s)
 	}
-	dek, sidecar, err := mintSidecar(frozenMaster())
+	dek, sidecar, err := mintSidecar(Global, frozenMaster())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestFrozenFixtureOpens(t *testing.T) {
 	copyFile(t, src+dekSuffix, dst+dekSuffix)
 
 	resetMaster(frozenMaster())
-	db, err := Open(dst)
+	db, err := Open(Global, dst)
 	if err != nil {
 		t.Fatalf("FORMAT DRIFT: frozen fixture failed to open (libsqlcipher format changed?): %v", err)
 	}

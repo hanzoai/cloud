@@ -44,7 +44,7 @@ type Store struct {
 
 // Open opens (creating + migrating) the ledger database at path.
 func Open(path string) (*Store, error) {
-	db, err := cek.Open(path)
+	db, err := cek.Open(cek.Global, path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}

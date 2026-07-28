@@ -67,7 +67,7 @@ type Store struct {
 // openStore opens (creating if needed) the SQLite metadata DB at path and runs
 // the migration. The "sqlite" driver is the hanzoai/sqlite fork.
 func openStore(path string) (*Store, error) {
-	db, err := cek.Open(path)
+	db, err := cek.Open(cek.Global, path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}

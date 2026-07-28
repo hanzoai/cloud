@@ -17,7 +17,7 @@ import (
 func TestMigrateSelfHealsFromLegacyPromptSchema(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "prompts.db")
 
-	legacy, err := cek.Open(path)
+	legacy, err := cek.Open(cek.Global, path)
 	if err != nil {
 		t.Fatalf("open legacy: %v", err)
 	}

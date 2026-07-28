@@ -36,7 +36,7 @@ type BlueprintStore struct {
 // openBlueprintStore opens the shared blueprint DB at path (a cek-sealed SQLite file,
 // the house pattern) and migrates. MaxOpenConns(1) serializes writes.
 func openBlueprintStore(path string) (*BlueprintStore, error) {
-	db, err := cek.Open(path)
+	db, err := cek.Open(cek.Global, path)
 	if err != nil {
 		return nil, fmt.Errorf("open blueprint store %q: %w", path, err)
 	}

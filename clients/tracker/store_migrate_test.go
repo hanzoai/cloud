@@ -37,7 +37,7 @@ func TestMigrateOverLegacyIssuesTable(t *testing.T) {
 		Name:      "tracker",
 		LegacyDDL: legacyIssuesDDL,
 		Open: func(path string) (io.Closer, error) {
-			db, err := cek.Open(path)
+			db, err := cek.Open(cek.Global, path)
 			if err != nil {
 				return nil, err
 			}

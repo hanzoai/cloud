@@ -383,7 +383,7 @@ type catalog struct {
 // fork (mattn+SQLCipher on cgo, pure-Go on !cgo). MaxOpenConns(1) serializes
 // writes against the file lock without retry.
 func openCatalog(path string) (*catalog, error) {
-	db, err := cek.Open(path)
+	db, err := cek.Open(cek.Global, path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}

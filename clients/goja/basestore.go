@@ -158,7 +158,7 @@ func (s *stores) openLocked(ctx context.Context, tenant, seg string) (*sql.DB, e
 		return nil, fmt.Errorf("gojabase[%s]: mkdir %q: %w", s.name, s.dir, err)
 	}
 	path := filepath.Join(s.dir, seg+".db")
-	db, err := cek.Open(path)
+	db, err := cek.Open(cek.Global, path)
 	if err != nil {
 		return nil, fmt.Errorf("gojabase[%s]: open %q: %w", s.name, path, err)
 	}

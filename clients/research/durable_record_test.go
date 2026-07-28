@@ -106,7 +106,7 @@ func soleMembership(t *testing.T, id string) *org.Membership {
 func cekCanReopen(t *testing.T) bool {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "cek-probe.db")
-	db, err := cek.Open(p)
+	db, err := cek.Open(cek.Global, p)
 	if err != nil {
 		return false
 	}
@@ -115,7 +115,7 @@ func cekCanReopen(t *testing.T) bool {
 		return false
 	}
 	_ = db.Close()
-	db2, err := cek.Open(p) // the reopen a broken-SQLCipher build fails (migrate → sqlcipher_export)
+	db2, err := cek.Open(cek.Global, p) // the reopen a broken-SQLCipher build fails (migrate → sqlcipher_export)
 	if err != nil {
 		return false
 	}
