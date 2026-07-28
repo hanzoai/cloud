@@ -23,8 +23,10 @@ source for the generated per-language SDKs.
 - `/v1/` only, never `/api/`. Voice: "Hanzo — the Open AI Cloud."
 
 ## Install / run
-- `docker run -p 8080:8080 ghcr.io/hanzoai/cloud:vX.Y.Z` (pin a released tag) ·
-  `go install github.com/hanzoai/cloud/cmd/hanzo@latest` · `brew install hanzoai/tap/hanzo`
+- `docker run -p 8080:8080 ghcr.io/hanzoai/cloud:vX.Y.Z` (pin a released tag)
+- The `hanzo` CLI is NOT built here — it is the Rust binary in `~/work/hanzo/cli`
+  (`curl hanzo.sh` · `brew install hanzoai/tap/hanzo`). This module serves `/v1`
+  and ships plugins; it does not ship a CLI. See "The `hanzo` CLI" below.
 - Build in MODULE mode only: `make build` / `GOWORK=off go build <named target>` —
   never workspace mode (see "Build & module graph" below). `make build` is the
   light host; `make plugin APP=<x>` is the one app you are editing; `make ship`
@@ -34,7 +36,8 @@ source for the generated per-language SDKs.
 
 ## Key entry points
 - `cmd/cloud` — the light host (server binary + ENTRYPOINT) · `plugin/<app>` — one binary per subsystem · `webui/` — embedded console
-- `apps/apps.go:Wire()` — composition root (the one ordered subsystem slice)
+- `manifest/apps.go` — the app set; the host mounts a plugin per entry (the old
+  `apps/apps.go:Wire()` composition root was deleted with the mega build, 22f4fc64)
 - `deps.go` / `cloud.Deps` — process-wide handles · `apps/<name>/` — every subsystem
 - `openapi/` — the document pipeline: the spec is a projection of the live router,
   and `openapi.yaml` at the root is a GOLDEN of it (written by `make openapi`,
@@ -1524,21 +1527,45 @@ The org an inbound webhook belongs to comes from the App INSTALLATION id via the
 acked `200 {"ignored":"unknown installation"}` and silently does nothing — a 200 on
 that path is not evidence it worked; check for sync/build activity.
 
-## The `hanzo` CLI targets THIS binary — one contract, one IAM login
+## The `hanzo` CLI is Rust and GENERATED — one contract, one IAM login
 
-The `hanzo` CLI (`cli/`) is the same unified binary; its control-plane verbs speak the
-routes THIS process serves, authorized off a plain `hanzo login` (the IAM access token is
-the final bearer fallback — no `--platform-token`). The ONE contract, no TS-Dokploy drift:
+The `hanzo` CLI is the RUST binary at `~/work/hanzo/cli`. It is the only one. This
+module has shipped no CLI since `cmd/hanzo` was deleted (22f4fc64) — it serves `/v1`
+and ships plugins. Its control-plane verbs speak the routes THIS process serves,
+authorized off a plain `hanzo auth login` (the IAM access token is the final bearer
+fallback — no `--platform-token`).
 
-- `hanzo apps list|get`  → `GET /v1/platform/fleet[/{app}]`  (`apps/platform` fleet.go
-  drift board)
-- `hanzo deploy <app>`   → `POST /v1/platform/fleet/{app}/deploy` — a zero-downtime ROLLING
-  RESTART (stamps the Deployment pod-template `hanzo.ai/restartedAt` annotation; never
-  changes the declared TAG — that stays a git commit CD reconciles). `--env` picks the ns.
-- `hanzo clusters list|get` → `GET /v1/clusters`  (`apps/visor`, tenant-scoped)
-- `hanzo build`          → `POST /v1/runner`  (native buildkit fabric). With `--image` it
-  builds a container image; with NO `--image` it reads the repo's own `hanzo.yml`
-  (`binaries:` + `bucket:`) and builds the ARTIFACT lane instead — see below.
+The CLI does not import this module and never will: its cloud surface is GENERATED
+from a spec. `genspec` joins the authored master (`hanzoai/openapi` `hanzo.yaml`)
+with a live route table into `spec/cloud.json`, and `genproduct` emits
+`src/commands/product/generated.rs` from that. The registry can only REFUTE an
+authored operation, never add one — so a route this module serves reaches no command
+until `hanzoai/openapi` authors it. When a verb is missing from the CLI, author the
+route there; do not hand-write the command.
+
+- `hanzo platform fleet list|get` → `GET /v1/platform/fleet[/{app}]` (`apps/platform`
+  fleet.go drift board). `--env`/`--health`/`--drift` filter it.
+- `hanzo platform fleet deploy <app>` → `POST /v1/platform/fleet/{app}/deploy` — a
+  zero-downtime ROLLING RESTART (stamps the Deployment pod-template
+  `hanzo.ai/restartedAt` annotation; never changes the declared TAG — that stays a
+  git commit CD reconciles). `--env` picks the ns.
+- `hanzo cluster list|show` → `apps/visor`, tenant-scoped.
+
+`cli/` (Go, package `cli`, ~10.4k lines) is NOT built and NOT importable by anything
+here — zero importers, no `main`, no Makefile target. It is retained ONLY as the
+reference for the client-side tools not yet ported to Rust: the GPU worker daemon
+(`gpu.go`/`studio.go` — hardware enumeration, the claim/heartbeat loop, ComfyUI
+supervision, systemd install), `agent publish`'s local half, and `engine install`.
+Rust's `node join` is a one-shot registration, not that daemon. Do not add to `cli/`,
+do not wire it into a build, and do not delete it until those are ported — deleting
+it destroys the only spec for work that is owed.
+
+`POST /v1/runner` (native buildkit fabric) has no CLI verb today: it is served here
+but unauthored in `hanzoai/openapi`, and the bare name `runner` is already taken by
+the Rust CLI's CI-runner daemon. Authoring it needs a name decision first. Called
+directly, with `image:` it builds a container image; with NO `image:` it reads the
+repo's own `hanzo.yml` (`binaries:` + `bucket:`) and builds the ARTIFACT lane
+instead — see below.
 
 ### `/v1/runner` builds ANY project, not only a Dockerfile
 
