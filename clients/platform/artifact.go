@@ -189,7 +189,7 @@ if [ -n "$RUN" ]; then
   for f in $OUT; do
     [ -f "$f" ] || continue
     cp "$f" /w/dist/
-    printf '%s\tany\tany\n' "$(basename "$f")" >> /w/meta.txt
+    printf '%s\tany\tany\t%s\n' "$(basename "$f")" "$NAME" >> /w/meta.txt
     n=$((n+1))
   done
   [ "$n" -gt 0 ] || { echo "$NAME: out: '$OUT' matched no file the recipe produced"; exit 1; }
@@ -201,14 +201,17 @@ else
     echo "== $NAME: go build $MAIN -> $f ($os/$arch)"
     CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" GOFLAGS=-mod=mod \
       go build -trimpath -ldflags "$LDFLAGS" -o "/w/dist/$f" "$MAIN"
-    printf '%s\t%s\t%s\n' "$f" "$os" "$arch" >> /w/meta.txt
+    printf '%s\t%s\t%s\t%s\n' "$f" "$os" "$arch" "$NAME" >> /w/meta.txt
   done
 fi
 ls -l /w/dist
 `
 
 // artifactPublishScript is the ONLY thing that ever sees the object-store
-// credential. It hashes each artifact, PUTs it, and writes binaries.json LAST —
+// credential. Its index entry is field-for-field the ci lane's — `name` is the
+// RECIPE entry's name (what a host asks for; `zip.Load(zip.Plugin{Name})`), NOT
+// the file name, which the url already carries. It hashes each artifact, PUTs
+// it, and writes binaries.json LAST —
 // the index is the one file a host reads, so between the two writes it must
 // never name an object that is not there yet (the ci lane's rule, kept).
 //
@@ -227,9 +230,10 @@ for f in *; do
   sha="$(sha256sum "$f" | cut -d' ' -f1)"
   meta="$(grep -m1 "^$f	" /w/meta.txt || true)"
   os="$(printf '%s' "$meta" | cut -f2)"; arch="$(printf '%s' "$meta" | cut -f3)"
+  name="$(printf '%s' "$meta" | cut -f4)"
   put "$f"
   echo "published $BASE/$f  $sha"
-  idx="$idx${idx:+,}{\"name\":\"$f\",\"os\":\"${os:-any}\",\"arch\":\"${arch:-any}\",\"url\":\"$BASE/$f\",\"sha256\":\"$sha\"}"
+  idx="$idx${idx:+,}{\"name\":\"${name:-$f}\",\"os\":\"${os:-any}\",\"arch\":\"${arch:-any}\",\"url\":\"$BASE/$f\",\"sha256\":\"$sha\"}"
   n=$((n+1))
 done
 [ "$n" -gt 0 ] || { echo 'no artifacts to publish'; exit 1; }

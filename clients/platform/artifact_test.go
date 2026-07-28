@@ -210,3 +210,65 @@ func git(t *testing.T, dir string, args ...string) {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
 }
+
+// The published index is the ci lane's schema, field for field: `name` is the
+// RECIPE entry's name (what a host asks for), not the file, which the url
+// already carries. Proven by running the two scripts back to back over a fake
+// object store, so the meta.txt hand-off between them is exercised for real.
+func TestArtifactScripts_IndexNamesTheRecipeEntry(t *testing.T) {
+	if _, err := exec.LookPath("sha256sum"); err != nil {
+		t.Skip("no sha256sum")
+	}
+	src := t.TempDir()
+	write(t, filepath.Join(src, "pack.sh"), "#!/bin/sh\necho payload > sdk-1.0.0.tgz\n")
+	git(t, src, "init", "-q")
+	git(t, src, "add", "-A")
+	git(t, src, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "src")
+
+	w := t.TempDir()
+	build := exec.Command("/bin/sh", "-c", strings.ReplaceAll(artifactBuildScript, "/w/", w+"/"))
+	build.Env = append(os.Environ(), "NAME=hanzo-sdk", "MAIN=", "RUN=sh pack.sh", "OUT=*.tgz",
+		"LDFLAGS=", "PLATFORMS=", "REPO_URL="+src, "REF=HEAD", "HOME="+w)
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	// The publish half with `put` stubbed out and the readback satisfied: what is
+	// under test is the index it composes, not curl.
+	script := strings.ReplaceAll(artifactPublishScript, "/w/", w+"/")
+	script = strings.Replace(script, "put() {", "put() { :; }\nunused() {", 1)
+	script = strings.Replace(script, `code="$(curl -s -o /dev/null -w '%{http_code}' "$PUT_BASE/binaries.json")"`, `code=200`, 1)
+	pub := exec.Command("/bin/sh", "-c", script)
+	pub.Env = append(os.Environ(), "BASE=https://s3.hanzo.ai/plugins/hanzoai/demo/v1",
+		"PUT_BASE=http://s3.hanzo.svc:9000/plugins/hanzoai/demo/v1",
+		"REPO=hanzoai/demo", "TAG=v1", "S3_REGION=us-east-1",
+		"S3_ADMIN_ACCESS_KEY=k", "S3_ADMIN_SECRET_KEY=s")
+	out, err := pub.CombinedOutput()
+	if err != nil {
+		t.Fatalf("publish: %v\n%s", err, out)
+	}
+	var idx struct {
+		Repo, Tag string
+		Binaries  []struct{ Name, OS, Arch, URL, SHA256 string }
+	}
+	raw, rerr := os.ReadFile(filepath.Join(w, "dist", "binaries.json"))
+	if rerr != nil {
+		t.Fatalf("no index written: %v\n%s", rerr, out)
+	}
+	if err := json.Unmarshal(raw, &idx); err != nil {
+		t.Fatalf("index is not JSON: %v\n%s", err, raw)
+	}
+	if len(idx.Binaries) != 1 {
+		t.Fatalf("index = %s", raw)
+	}
+	b := idx.Binaries[0]
+	if b.Name != "hanzo-sdk" {
+		t.Errorf("name = %q, want the recipe entry name hanzo-sdk", b.Name)
+	}
+	if b.URL != "https://s3.hanzo.ai/plugins/hanzoai/demo/v1/sdk-1.0.0.tgz" {
+		t.Errorf("url = %q — the FILE belongs in the url, not in name", b.URL)
+	}
+	if b.SHA256 == "" || idx.Repo != "hanzoai/demo" || idx.Tag != "v1" {
+		t.Errorf("index = %s", raw)
+	}
+	t.Logf("index: %s", raw)
+}
