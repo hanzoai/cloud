@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/clients/commerce/transport"
 	"github.com/hanzoai/cloud/clients/metering"
@@ -77,7 +76,9 @@ func BuildDeps(cfg *Config) Deps {
 		Env:             cfg.Env,
 		Domain:          cfg.Domain,
 		IAMIssuer:       cfg.IAMIssuer,
+		Self:            selfID(cfg),
 		DataDir:         cfg.DataDir,
+		MasterKey:       masterKeyBytes(cfg),
 		AIDefaultModel:  cfg.AIDefaultModel,
 		AIFallbackModel: cfg.AIFallbackModel,
 	}
@@ -228,9 +229,9 @@ func wireTierReader(m *metering.Client, log luxlog.Logger) {
 	if m == nil || !m.Enabled() {
 		return
 	}
-	aiobject.SetTierReader(func(ctx context.Context, subject, namespace string) (string, error) {
+	tierReader = func(ctx context.Context, subject, namespace string) (string, error) {
 		return m.Tier(ctx, subject, namespace)
-	})
+	}
 	log.Info("ai per-tier SKU gate wired to co-resident commerce (in-process tier read, fail-safe)")
 }
 
@@ -266,16 +267,16 @@ func wireFinance(cfg *Config, log luxlog.Logger) {
 	// the SAME wallet, or spend can outrun the balance that admitted it. Both use
 	// subject; keep them together. The gate reads a coarse cents balance (a >0
 	// threshold only); the DEBIT is 18-decimal-exact.
-	aiobject.SetBalanceReader(func(ctx context.Context, subject, namespace, currency string) (int64, error) {
+	balanceReader = func(ctx context.Context, subject, namespace, currency string) (int64, error) {
 		bal, err := fin.Balance(ctx, namespace, subject, currency, false)
 		if err != nil {
 			return 0, err
 		}
 		return bal.Cents(), nil
-	})
+	}
 	// The DEBIT is exact: the ai module emits the cost as a decimal-USD string, parsed
 	// here to 18-decimal USD (1e-18) so a sub-cent call bills precisely and is never floored.
-	aiobject.SetUsageRecorder(func(ctx context.Context, u aiobject.UsageEvent) error {
+	usageRecorder = func(ctx context.Context, u UsageEvent) error {
 		amt, err := money.ParseUSD(u.USD)
 		if err != nil {
 			return err
@@ -284,7 +285,7 @@ func wireFinance(cfg *Config, log luxlog.Logger) {
 			Org: u.Namespace, Subject: u.Subject, Amount: amt,
 			Currency: u.Currency, Model: u.Model, Provider: u.Provider, RequestID: u.RequestID,
 		})
-	})
+	}
 	log.Info("finance ledger wired (per-subject wallet in the org ledger, 18-decimal-exact, fail-closed)", "dataDir", cfg.DataDir)
 }
 
@@ -362,15 +363,17 @@ func RegisterKMSClientFactory(f func(cfg *Config, log luxlog.Logger) (KMSClient,
 // ---- git-push-to-deploy ----
 
 // GitPushEvent describes a push that just landed on the embedded git server: the
-// org, the repo, the branch that moved, and its new tip commit. CloneURL is the
+// org, the repo, the FULL ref that moved (refs/heads/<b> or refs/tags/<t>), and
+// its new tip commit. CloneURL is the
 // canonical clone URL of that repo (https://<host>/v1/git/<org>/<repo>.git) — the
 // exact value an Application's RepoURL carries — so the builder can resolve which
-// app (if any) tracks this branch and needs a rebuild.
+// app (if any) tracks this ref and needs a rebuild. Tags reach the builder too:
+// releases are cut by tag, so filtering them here would stop publishing silently.
 type GitPushEvent struct {
 	Org      string
 	Project  string
 	Repo     string
-	Branch   string
+	Ref      string // FULL ref: refs/heads/<branch> or refs/tags/<tag>
 	Commit   string
 	CloneURL string
 }
@@ -815,7 +818,7 @@ func buildDurability(cfg *Config, log luxlog.Logger) (*Durability, func() []ha.M
 	// membership_k8s.go). A single-pod deployment with no peers is its own sole writer.
 	// The 2s refresh keeps a drained pod out of every peer's election within a bound the
 	// terminationGracePeriod covers, so a rolling handoff loses no request.
-	self := firstNonEmptyStr(strings.TrimSpace(cfg.ShardSelf), hostnameOr("cloud-0"))
+	self := selfID(cfg)
 	peers := parsePeers(cfg.ShardPeers)
 	if len(peers) == 0 {
 		peers = []org.Member{{ID: self, Addr: self}}
@@ -931,6 +934,15 @@ func durableCipher(cfg *Config, log luxlog.Logger) *org.Cipher {
 		return nil
 	}
 	return c
+}
+
+// selfID is THIS process's stable id: the StatefulSet ordinal (CLOUD_POD_NAME /
+// POD_NAME, already resolved onto cfg.ShardSelf) falling back to the OS hostname.
+// ONE resolver — the durability membership elects on it and Deps.Self reports it, so
+// the id an operator reads in a status IS the id the ring routes by. Two resolutions
+// that drifted would name the same pod two different things at the worst moment.
+func selfID(cfg *Config) string {
+	return firstNonEmptyStr(strings.TrimSpace(cfg.ShardSelf), hostnameOr("cloud-0"))
 }
 
 // hostnameOr returns the OS hostname, or def when unavailable — a stable self id for
@@ -1054,4 +1066,20 @@ func MountAll(app *zip.App, specs []MountSpec, cfg *Config, deps Deps) error {
 		logger.Info("mounted subsystem", "name", spec.Name)
 	}
 	return nil
+}
+
+// masterKeyBytes decodes the base64 KMS master (CLOUD_KMS_MASTER_KEY_REF) into
+// the 32 raw bytes a subsystem needs to encrypt its own store. nil on absent or
+// malformed — never a partial or wrong-length key, because a wrong key encrypts
+// against a store no other key can open.
+func masterKeyBytes(cfg *Config) []byte {
+	ref := strings.TrimSpace(cfg.KMSMasterKeyRef)
+	if ref == "" {
+		return nil
+	}
+	master, err := base64.StdEncoding.DecodeString(ref)
+	if err != nil || len(master) != 32 {
+		return nil
+	}
+	return master
 }

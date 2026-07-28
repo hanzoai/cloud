@@ -59,17 +59,56 @@ func meteredAIClient(inner types.AIClient, deps Deps) types.AIClient {
 		log:   deps.Logger,
 		rate:  aiPriceUUSDPer1kTokens(),
 	}
-	if _, ok := inner.(types.ModelLister); ok {
+	_, lists := inner.(types.ModelLister)
+	_, streams := inner.(types.StreamCompleter)
+	switch {
+	case lists && streams:
+		return &meteredAIModelStream{&meteredAIStream{m}}
+	case lists:
 		return &meteredAIModels{m}
+	case streams:
+		return &meteredAIStream{m}
 	}
 	return m
 }
 
-// meteredAIModels re-exposes the ModelLister capability, delegating to the wrapped
-// client so callers that type-assert types.ModelLister (agents) still see it.
+// The optional capabilities (types.ModelLister, types.StreamCompleter) must
+// SURVIVE the wrap: a caller that type-asserts one against deps.AI would
+// otherwise see the decorator, not the transport, and silently lose the
+// capability. Go cannot synthesize an interface set at runtime, so each
+// combination is one three-line delegator over the SAME *meteredAI — the
+// metering path is not duplicated, only the method set is re-exposed.
+
+// meteredAIModels re-exposes ModelLister (agents' model-catalog validation).
 type meteredAIModels struct{ *meteredAI }
 
 func (m *meteredAIModels) Models(ctx context.Context) ([]string, error) {
+	return m.inner.(types.ModelLister).Models(ctx)
+}
+
+// meteredAIStream re-exposes StreamCompleter (the answer engine's token stream).
+type meteredAIStream struct{ *meteredAI }
+
+// ChatStream meters EXACTLY as ChatCompletion does — gate on the prompt estimate
+// before a token is spent, debit the real usage the terminal frame reports — so
+// streaming can never be a cheaper way to buy inference.
+func (m *meteredAIStream) ChatStream(ctx context.Context, req *types.ChatRequest, emit func(string) error) (*types.ChatResponse, error) {
+	payer := billedOrg(req.BillingOrg, req.Org)
+	if err := m.gate(ctx, payer, req.Project, EstTokens(req.Prompt)); err != nil {
+		return nil, err
+	}
+	resp, err := m.inner.(types.StreamCompleter).ChatStream(ctx, req, emit)
+	if err != nil {
+		return resp, err
+	}
+	m.settle(payer, req, resp)
+	return resp, nil
+}
+
+// meteredAIModelStream carries BOTH capabilities (the httpAI transport does).
+type meteredAIModelStream struct{ *meteredAIStream }
+
+func (m *meteredAIModelStream) Models(ctx context.Context) ([]string, error) {
 	return m.inner.(types.ModelLister).Models(ctx)
 }
 
@@ -90,21 +129,30 @@ func (m *meteredAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) 
 	if err != nil {
 		return resp, err
 	}
-	if resp != nil {
-		total := resp.TotalTokens
-		if total <= 0 {
-			total = resp.PromptTokens + resp.CompletionTokens
-		}
-		if total <= 0 {
-			total = EstTokens(req.Prompt) // gateway omitted usage → fall back to the estimate.
-		}
-		m.record(payer, req.Project, req.Model, metering.Usage{
-			PromptTokens:     resp.PromptTokens,
-			CompletionTokens: resp.CompletionTokens,
-			TotalTokens:      total,
-		}, total)
-	}
+	m.settle(payer, req, resp)
 	return resp, nil
+}
+
+// settle debits the EXACT post-call cost of one completion — the ONE place a chat
+// debit is computed, shared by the buffered and streamed deliveries so they can
+// never price differently. A gateway that omits usage falls back to the same
+// prompt estimate the gate used.
+func (m *meteredAI) settle(payer string, req *types.ChatRequest, resp *types.ChatResponse) {
+	if resp == nil {
+		return
+	}
+	total := resp.TotalTokens
+	if total <= 0 {
+		total = resp.PromptTokens + resp.CompletionTokens
+	}
+	if total <= 0 {
+		total = EstTokens(req.Prompt)
+	}
+	m.record(payer, req.Project, req.Model, metering.Usage{
+		PromptTokens:     resp.PromptTokens,
+		CompletionTokens: resp.CompletionTokens,
+		TotalTokens:      total,
+	}, total)
 }
 
 // Embed pre-authorizes + debits on the deterministic input-token estimate (the

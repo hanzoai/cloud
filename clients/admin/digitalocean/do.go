@@ -291,8 +291,18 @@ type Cluster struct {
 	Region    string
 	Version   string
 	Status    string
-	NodePools int
+	Pools     []NodePool
 	CreatedAt string
+}
+
+// NodePool is one DOKS node pool — the ONLY correct way to change a cluster's node
+// count. DOKS owns the droplets in a pool: deleting or resizing one directly is undone
+// by the pool controller, which recreates it.
+type NodePool struct {
+	ID    string
+	Name  string
+	Size  string
+	Count int
 }
 
 // clusterWire is the raw DO /v2/kubernetes/clusters row.
@@ -305,7 +315,10 @@ type clusterWire struct {
 		State string `json:"state"`
 	} `json:"status"`
 	NodePools []struct {
-		Name string `json:"name"`
+		ID    string `json:"id"`
+		Name  string `json:"name"`
+		Size  string `json:"size"`
+		Count int    `json:"count"`
 	} `json:"node_pools"`
 	CreatedAt string `json:"created_at"`
 }
@@ -320,15 +333,19 @@ func (c *Client) Clusters(ctx context.Context) ([]Cluster, error) {
 	}
 	out := make([]Cluster, len(rows))
 	for i, k := range rows {
-		out[i] = Cluster{
+		cl := Cluster{
 			ID:        k.ID,
 			Name:      k.Name,
 			Region:    k.Region,
 			Version:   k.Version,
 			Status:    k.Status.State,
-			NodePools: len(k.NodePools),
 			CreatedAt: k.CreatedAt,
+			Pools:     make([]NodePool, len(k.NodePools)),
 		}
+		for j, p := range k.NodePools {
+			cl.Pools[j] = NodePool{ID: p.ID, Name: p.Name, Size: p.Size, Count: p.Count}
+		}
+		out[i] = cl
 	}
 	return out, nil
 }
@@ -443,6 +460,84 @@ func (c *Client) DeleteVolume(ctx context.Context, volumeID string) error {
 		return fmt.Errorf("volume id required")
 	}
 	_, err := c.send(ctx, http.MethodDelete, "/v2/volumes/"+url.PathEscape(volumeID), nil)
+	return err
+}
+
+// DeleteDroplet destroys a droplet. Irreversible, and there is no snapshot-first undo
+// for a droplet the way there is for a volume: callers MUST have proven the droplet is
+// not a DOKS node first (see clients/admin/infra).
+func (c *Client) DeleteDroplet(ctx context.Context, dropletID int) error {
+	if !c.Ready() {
+		return fmt.Errorf("DO_API_TOKEN not configured")
+	}
+	_, err := c.send(ctx, http.MethodDelete, "/v2/droplets/"+strconv.Itoa(dropletID), nil)
+	return err
+}
+
+// Action is a queued DO droplet action. DO performs a resize ASYNCHRONOUSLY, so a
+// successful call means "accepted", not "done" — the id is what an operator polls.
+type Action struct {
+	ID     int
+	Status string
+}
+
+// ResizeDroplet changes a droplet's plan.
+//
+// disk=true makes the change PERMANENT AND IRREVERSIBLE: the disk grows and the droplet
+// can never be resized down again. disk=false resizes CPU/RAM only and is reversible.
+//
+// DO requires the droplet to be powered off; if it is not, DO refuses and its message
+// is surfaced verbatim rather than being retried or worked around.
+func (c *Client) ResizeDroplet(ctx context.Context, dropletID int, size string, disk bool) (Action, error) {
+	var out Action
+	if !c.Ready() {
+		return out, fmt.Errorf("DO_API_TOKEN not configured")
+	}
+	if strings.TrimSpace(size) == "" {
+		return out, fmt.Errorf("size slug required")
+	}
+	body, err := c.send(ctx, http.MethodPost, "/v2/droplets/"+strconv.Itoa(dropletID)+"/actions",
+		map[string]any{"type": "resize", "size": strings.TrimSpace(size), "disk": disk})
+	if err != nil {
+		return out, err
+	}
+	var w struct {
+		Action struct {
+			ID     int    `json:"id"`
+			Status string `json:"status"`
+		} `json:"action"`
+	}
+	if err := json.Unmarshal(body, &w); err != nil {
+		return out, fmt.Errorf("do resize decode: %w", err)
+	}
+	return Action{ID: w.Action.ID, Status: w.Action.Status}, nil
+}
+
+// DeleteLoadBalancer destroys a load balancer. Irreversible, and it takes the public IP
+// with it: callers MUST have proven no Kubernetes Service still targets it.
+func (c *Client) DeleteLoadBalancer(ctx context.Context, lbID string) error {
+	if !c.Ready() {
+		return fmt.Errorf("DO_API_TOKEN not configured")
+	}
+	if strings.TrimSpace(lbID) == "" {
+		return fmt.Errorf("load balancer id required")
+	}
+	_, err := c.send(ctx, http.MethodDelete, "/v2/load_balancers/"+url.PathEscape(lbID), nil)
+	return err
+}
+
+// ScaleNodePool sets a node pool's node count. DO's update endpoint requires the pool's
+// name alongside the count — omitting it clears the name, so it is always sent back.
+func (c *Client) ScaleNodePool(ctx context.Context, clusterID, poolID, name string, count int) error {
+	if !c.Ready() {
+		return fmt.Errorf("DO_API_TOKEN not configured")
+	}
+	if strings.TrimSpace(clusterID) == "" || strings.TrimSpace(poolID) == "" {
+		return fmt.Errorf("cluster id and node pool id required")
+	}
+	_, err := c.send(ctx, http.MethodPut,
+		"/v2/kubernetes/clusters/"+url.PathEscape(clusterID)+"/node_pools/"+url.PathEscape(poolID),
+		map[string]any{"name": name, "count": count})
 	return err
 }
 

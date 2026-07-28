@@ -7,13 +7,10 @@ package deploy
 
 import (
 	"context"
-	"github.com/hanzoai/cloud/clients/k8s"
-	"net/http"
-	"sort"
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
+	"github.com/hanzoai/cloud/clients/k8s"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -40,70 +37,6 @@ type Application struct {
 	Sync           string   `json:"sync"` // synced|out-of-sync|unknown
 	Phase          string   `json:"phase,omitempty"`
 	Endpoints      []string `json:"endpoints"`
-}
-
-// listApplications returns every Service CR across the platform namespaces as an
-// Application row, ordered (namespace, name). Optional narrowing: ?env=, ?health=,
-// ?sync=, ?name=.
-func listApplications(s *cloud.Service[state], c *zip.Ctx) error {
-	if err := ready(s); err != nil {
-		return err
-	}
-	var apps []Application
-	for _, ns := range scanOrder() {
-		crs, err := listAppCRs(s, c.Context(), ns)
-		if err != nil {
-			return k8sErr(s, "list", err)
-		}
-		running := runningVersions(s, c.Context(), ns)
-		for i := range crs {
-			cr := &crs[i]
-			apps = append(apps, observeApplication(cr, ns, running[cr.GetName()]))
-		}
-		// Also project the static-plane sites (staticFiles Middleware + IngressRoute,
-		// no App CR) as role:"site" rows, so the board is the WHOLE delivery surface —
-		// every service AND every site (incl. cd.hanzo.ai itself). Best-effort.
-		apps = append(apps, listSiteApplications(s, c.Context(), ns)...)
-	}
-	sort.Slice(apps, func(i, j int) bool {
-		if apps[i].Namespace != apps[j].Namespace {
-			return apps[i].Namespace < apps[j].Namespace
-		}
-		return apps[i].Name < apps[j].Name
-	})
-
-	env := strings.TrimSpace(c.Query("env"))
-	healthF := strings.TrimSpace(c.Query("health"))
-	syncF := strings.TrimSpace(c.Query("sync"))
-	nameF := strings.TrimSpace(c.Query("name"))
-	out := make([]Application, 0, len(apps))
-	summary := map[string]int{"total": 0, "healthy": 0, "degraded": 0, "outOfSync": 0}
-	for _, a := range apps {
-		if env != "" && a.Env != env {
-			continue
-		}
-		if healthF != "" && a.Health != healthF {
-			continue
-		}
-		if syncF != "" && a.Sync != syncF {
-			continue
-		}
-		if nameF != "" && a.Name != nameF {
-			continue
-		}
-		out = append(out, a)
-		summary["total"]++
-		if a.Health == HealthHealthy {
-			summary["healthy"]++
-		}
-		if a.Health == HealthDegraded {
-			summary["degraded"]++
-		}
-		if a.Sync == SyncOutOfSync {
-			summary["outOfSync"]++
-		}
-	}
-	return c.JSON(http.StatusOK, map[string]any{"applications": out, "summary": summary})
 }
 
 // observeApplication maps one Service CR (+ its running version) to an Application

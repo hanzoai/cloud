@@ -40,8 +40,6 @@ type state struct {
 	store *edge.Store
 }
 
-var mounted *cloud.Service[state]
-
 // Mount wires /v1/gateway/config onto app over the shared policy store. The store
 // is owned by deps (not a Base dep), so this constructs the Service value directly
 // via cloud.NewBase rather than cloud.Mount.
@@ -56,7 +54,6 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("gateway.Mount: nil deps.GatewayPolicy")
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "gateway"), State: state{store: deps.GatewayPolicy}}
-	mounted = s
 
 	routes(app, s)
 

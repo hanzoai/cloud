@@ -35,7 +35,7 @@ type GitImportReq struct {
 // outbound mirror suppresses the echo (loop prevention).
 type GitInboundReq struct {
 	Org, Project, Repo string
-	Branch             string // short branch name (refs/heads/<Branch>)
+	Ref                string // FULL ref, e.g. refs/heads/main or refs/tags/v1.2.3
 	CloneURL           string
 	Token              string
 	Origin             string // source host, e.g. "github.com"

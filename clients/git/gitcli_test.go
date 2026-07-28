@@ -150,7 +150,7 @@ func TestGitCLIClonePushRoundTrip(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("want exactly 1 push event, got %d: %+v", len(events), events)
 	}
-	if events[0].Org != "acme" || events[0].Repo != "code" || events[0].Branch != "main" || events[0].Commit != commit {
+	if events[0].Org != "acme" || events[0].Repo != "code" || events[0].Ref != "refs/heads/main" || events[0].Commit != commit {
 		t.Fatalf("unexpected event: %+v (want commit %s)", events[0], commit)
 	}
 

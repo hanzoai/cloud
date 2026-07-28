@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/fqdn"
 	"github.com/zap-proto/zip"
 )
 
@@ -33,11 +33,12 @@ func operatorOrgsFromEnv(brand string) map[string]bool {
 	return out
 }
 
-// hostnameRE validates a public FQDN a caller may bind as a custom domain: one or
-// more DNS labels then a TLD, lowercase. It rejects schemes, ports, paths, and
-// bare labels — a bound host must be a real hostname the ingress can route to the
-// site edge.
-var hostnameRE = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$`)
+// Hostname syntax and canonical form come from internal/fqdn — the same rules the
+// /v1/platform apps path binds against. They used to be a second copy here, and
+// the copies had already drifted: this path never stripped the trailing root dot
+// and never bounded the name's length, so `example.com.` was canonical for an app
+// and malformed for a site, and an over-long name was refused by one and accepted
+// by the other. One concept, one implementation.
 
 type setDomainsReq struct {
 	Domains []string `json:"domains"`
@@ -78,11 +79,11 @@ func setDomains(s *cloud.Service[state], c *zip.Ctx) error {
 	now := time.Now().Unix()
 	bound := make([]string, 0, len(body.Domains))
 	for _, d := range body.Domains {
-		host := strings.ToLower(strings.TrimSpace(d))
+		host := fqdn.Clean(d)
 		if host == "" {
 			continue
 		}
-		if !hostnameRE.MatchString(host) {
+		if !fqdn.Valid(host) {
 			return zip.ErrBadRequest("invalid domain: " + d)
 		}
 		if !authorized {

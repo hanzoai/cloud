@@ -38,6 +38,9 @@ package apps
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
@@ -45,7 +48,6 @@ import (
 	// External subsystem modules. As of the atomic wave-2 bump they NO LONGER
 	// self-register (no cloud.Register in their init) — the composition root wires
 	// each one explicitly below, so removing an entry here is the ONLY way to drop it.
-	"github.com/hanzoai/ai"
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/licensing"
 	"github.com/hanzoai/metrics"
@@ -80,6 +82,7 @@ import (
 	"github.com/hanzoai/cloud/clients/company"
 	"github.com/hanzoai/cloud/clients/compliance"
 	"github.com/hanzoai/cloud/clients/content"
+	"github.com/hanzoai/cloud/clients/crawl"
 	"github.com/hanzoai/cloud/clients/crm"
 	"github.com/hanzoai/cloud/clients/dataroom"
 	"github.com/hanzoai/cloud/clients/deploy"
@@ -101,6 +104,7 @@ import (
 	"github.com/hanzoai/cloud/clients/guide"
 	"github.com/hanzoai/cloud/clients/help"
 	"github.com/hanzoai/cloud/clients/iam"
+	"github.com/hanzoai/cloud/clients/index"
 	"github.com/hanzoai/cloud/clients/ingress"
 	"github.com/hanzoai/cloud/clients/integrations"
 	"github.com/hanzoai/cloud/clients/kafka"
@@ -113,7 +117,12 @@ import (
 	"github.com/hanzoai/cloud/clients/marketplace"
 	"github.com/hanzoai/cloud/clients/ml"
 	"github.com/hanzoai/cloud/clients/notify"
-	"github.com/hanzoai/cloud/clients/o11y"
+	// NOTE: clients/o11y is deliberately NOT imported. It is loaded at run time
+	// as a plugin (see the o11y entry in Wire), and this line is the whole reason
+	// that works: an import here would keep its 2.7k-package graph — the
+	// otel-collector, prometheus, gonum — linked into cloud whether or not any
+	// Wire entry referenced it. Unlinking a subsystem means deleting its import,
+	// not just its mount.
 	"github.com/hanzoai/cloud/clients/paas"
 	"github.com/hanzoai/cloud/clients/plan"
 	"github.com/hanzoai/cloud/clients/platform"
@@ -130,7 +139,6 @@ import (
 	"github.com/hanzoai/cloud/clients/rollingcap"
 	"github.com/hanzoai/cloud/clients/runtime"
 	"github.com/hanzoai/cloud/clients/sbom"
-	"github.com/hanzoai/cloud/clients/search"
 	"github.com/hanzoai/cloud/clients/security"
 	"github.com/hanzoai/cloud/clients/settings"
 	"github.com/hanzoai/cloud/clients/share"
@@ -229,14 +237,29 @@ func Wire() []cloud.MountSpec {
 		// Embedded Base app engine + viral waitlist (/v1/waitlist/*). STAGED behind
 		// CLOUD_BASE_EMBED. OwnsHealth: native /v1/base/health.
 		{Name: "base", Mount: base.Mount, Shutdown: base.Shutdown, OwnsHealth: true},
-		// The ONE observability subsystem: the in-repo o11y READ plane + runtime-handler
-		// install (o11y.SetHandler), with the hanzoai/o11y module wildcard /v1/o11y/*
-		// folded in as the TERMINAL sub-mount INSIDE o11y.MountO11y. Every specific
-		// /v1/o11y/* route registers before that wildcard, so Fiber's in-order match gives
-		// them precedence. NOT OwnsHealth: /v1/o11y/health stays the generic always-ok
-		// route (registered before MountAll), exactly as when the former module co-entry —
-		// which also set OwnsHealth=false — triggered it.
-		{Name: "o11y", Mount: cloud.Global(o11y.MountO11y), Shutdown: o11y.ShutdownO11y, Global: true},
+		// The ONE observability subsystem — and the first one that is NOT linked in.
+		// It runs as its own binary (cmd/o11y) and mounts at /v1/o11y over a private
+		// unix socket; the whole read plane, the runtime handler, the OTLP collector
+		// and the trace sink moved into that process untouched (it calls the same
+		// o11y.MountO11y). Nothing about the ROUTES changed: the plugin's own in-order
+		// registration still puts every specific /v1/o11y/* route ahead of the
+		// hanzoai/o11y module wildcard, and NOT OwnsHealth still leaves /v1/o11y/health
+		// the generic always-ok route Serve registers before MountAll — which therefore
+		// still wins over this mount's /v1/o11y/* and answers without waking the child.
+		//
+		// No Shutdown: teardown moved with the resources. zip.Load registers its own
+		// OnShutdown that stops the child, and the child flushes its collector/sink in
+		// its own app.OnShutdown. The host has nothing left of o11y's to close.
+		//
+		// Why this one first: o11y is the heaviest app in the graph — the
+		// otel-collector, prometheus and gonum are here and nowhere else — and it is
+		// imported by NOTHING but this line, so unlinking it is a pure subtraction.
+		//
+		// KNOWN GAP, see the branch report: o11y also owns /v1/sentry/* (mountSentry),
+		// which is a SECOND public prefix. zip.Load takes one, so /v1/sentry/* is not
+		// mounted on the host by this line and 404s until zip.Plugin can name more than
+		// one prefix. Do not merge this to main before that is closed.
+		cloud.PluginSpec("o11y", "/v1/o11y", o11yPlugin()),
 		{Name: "authz", Mount: cloud.Global(authz.Mount), Global: true},
 		// Embedded commerce plane /v1/commerce/*, /_/commerce/* — the hanzoai/commerce
 		// MODULE via the adapter in commerce.go (un-forked; the in-process
@@ -407,13 +430,19 @@ func Wire() []cloud.MountSpec {
 		{Name: "entitlements", Mount: entitlements.Mount, Shutdown: entitlements.Shutdown},
 		{Name: "exec", Mount: exec.Mount},
 		{Name: "websearch", Mount: websearch.Mount},
-		// The in-binary full-text index (/v1/search): a per-org inverted index on
+		// Fetch one page and return it as markdown (/v1/crawl). Sibling to
+		// websearch, which finds URLs; this reads one. It is also what backs
+		// websearch's firecrawl-shaped /scrape, in-process — that path used to dial
+		// a separate crawler deployment that did not exist, so scrape answered 200
+		// with success:false on every call. No pod, no hop, one implementation
+		// behind both surfaces.
+		{Name: "crawl", Mount: crawl.Mount},
+		// The in-binary full-text index (/v1/index): a per-org inverted index on
 		// Base/SQLite speaking the Meilisearch dialect, so a Meilisearch client
-		// repoints at it unchanged.
-		// websearch above queries the OUTSIDE world; this one indexes ours.
-		// OwnsHealth: its /v1/search/health is Meilisearch's {"status":"available"}
-		// and fails closed when the store is unreadable.
-		{Name: "search", Mount: search.Mount, Shutdown: ctxShutdown(search.Shutdown), OwnsHealth: true},
+		// repoints at it unchanged. websearch above queries the OUTSIDE world;
+		// this one indexes ours. NOT /v1/search — that path belongs to the
+		// hanzoai/ai RAG plane, and the collision silently ate two routes.
+		{Name: "index", Mount: index.Mount, Shutdown: ctxShutdown(index.Shutdown), OwnsHealth: true},
 		{Name: "world", Mount: world.Mount, Shutdown: ctxShutdown(world.Shutdown)},
 		// The bot runtime's ops face (/v1/bot/*). The transport itself is domain-free;
 		// the run control plane is "bots" below.
@@ -522,7 +551,7 @@ func Wire() []cloud.MountSpec {
 		// other model and the /v1/models list. Order is load-bearing — Claim must
 		// run before ai's catch-all. (See hip-00NN.)
 		{Name: "zen", Mount: mountZen, Prefixes: []string{"/v1"}},
-		{Name: "ai", Mount: cloud.Global(ai.Mount), Global: true},
+		{Name: "ai", Mount: cloud.Global(mountAI), Global: true},
 		// Runtime wasm/proxy plugins — mounts dead last.
 		{Name: "plugins", Mount: plugin.Mount},
 	}
@@ -545,6 +574,32 @@ func ServeSingle(name string) error {
 		}
 	}
 	return fmt.Errorf("ServeSingle: unknown app %q — run `hanzo code ls`/`hanzo` for the list", name)
+}
+
+// o11yPlugin says where to find the o11y binary. Its two knobs map 1:1 onto
+// zip.Plugin's own fields, so there is no third notion of "where a plugin is"
+// and nothing to translate:
+//
+//	CLOUD_O11Y_ADDR — already listening there; start nothing, just mount it.
+//	CLOUD_O11Y_BIN  — the binary's path on disk.
+//
+// The default is a file named "o11y" beside the running cloud binary, which is
+// the container layout: both binaries in the image, still one artifact to ship.
+// Resolving it from os.Executable rather than $PATH means a host always loads
+// the o11y it was built and shipped with, not whichever one a PATH happens to
+// find.
+func o11yPlugin() zip.Plugin {
+	if addr := strings.TrimSpace(os.Getenv("CLOUD_O11Y_ADDR")); addr != "" {
+		return zip.Plugin{Addr: addr}
+	}
+	path := strings.TrimSpace(os.Getenv("CLOUD_O11Y_BIN"))
+	if path == "" {
+		path = "o11y"
+		if self, err := os.Executable(); err == nil {
+			path = filepath.Join(filepath.Dir(self), "o11y")
+		}
+	}
+	return zip.Plugin{Path: path}
 }
 
 // mountMetrics adapts hanzoai/metrics into a cloud.MountFunc. Unlike the other

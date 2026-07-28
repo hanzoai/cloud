@@ -146,9 +146,29 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 		// its own datastore (standalone), but in this unified binary finance is
 		// co-resident, so we inject the finance-backed ledger adapter.
 		Ledger: ledger{},
+		// ONE KEY for one process. commerce encrypts its per-tenant money stores
+		// under a 32-byte KEK; cloud already resolves one (CLOUD_KMS_MASTER_KEY_REF,
+		// the same master durableCipher and cek derive from), so it hands that over
+		// rather than a SECOND key being provisioned for the same process through
+		// commerce's own env var.
+		//
+		// It is not a convenience. Without a key commerce refuses to boot on a
+		// libsqlcipher-linked build — correctly, it will not open money data
+		// unencrypted — and that refusal is silent from out here: Mount never
+		// reaches transport.SetApp, so every S2S billing read falls through to the
+		// network and DNS-resolves the in-process placeholder. On 2026-07-27 that
+		// read as "Insufficient balance" on funded accounts, fleet-wide.
+		//
+		// Empty ref ⇒ nil ⇒ commerce reads its own env, unchanged, which is the
+		// standalone and pure-Go dev path.
+		MasterKey: deps.MasterKey,
 	})
 	if err != nil {
 		lg.Error("commerce embed failed — serving fail-closed 503 (cloud stays up)", "err", err)
+		// State, not just a log line: /v1/health reports this and the release smoke
+		// refuses an image whose planes are dead. Without it a fail-closed commerce
+		// is indistinguishable from a commerce that was never enabled.
+		cloud.Degraded("commerce", err)
 		mountCommerceFailClosed(app)
 		return nil
 	}

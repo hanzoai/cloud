@@ -8,6 +8,10 @@ package main
 
 import (
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -15,6 +19,75 @@ import (
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
 )
+
+// TestMain supplies the two things MountAll(apps.Wire()) needs from its
+// environment and cannot invent for itself.
+//
+// The dev KMS key is the same 32 zero bytes the root package's TestMain and
+// clients/{esign,translate} already inject: subsystems with an encrypted store
+// (pricing, o11y's annotation queues) refuse to open a data plane unencrypted,
+// which is correct, and a test box has no KMS. One dev-only key, one pattern.
+//
+// The o11y binary is new, and is the cost of a plugin subsystem: o11y is no
+// longer linked in, so the composition root can only mount it by starting the
+// real binary. Building it here is deliberate — the alternative, a stub, would
+// let these tests pass against a route table no deployment ever serves. Cached
+// after the first run. If it cannot be built the dependent tests fail with
+// zip's own fork/exec message, which names the missing file.
+func TestMain(m *testing.M) { os.Exit(runTests(m)) }
+
+// runTests exists so the temp dirs are removed on the way out: os.Exit does not
+// run deferred functions, so TestMain cannot both clean up and set the code.
+func runTests(m *testing.M) int {
+	if os.Getenv("CLOUD_KMS_MASTER_KEY_REF") == "" {
+		_ = os.Setenv("CLOUD_KMS_MASTER_KEY_REF", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=") // dev-only
+	}
+	// The plugin child inherits this; without it the child would target the
+	// production /var/lib/cloud and die opening its store.
+	if os.Getenv("CLOUD_DATA_DIR") == "" {
+		dir, err := os.MkdirTemp("", "cloud-test-data-")
+		if err != nil {
+			return 1
+		}
+		defer os.RemoveAll(dir)
+		_ = os.Setenv("CLOUD_DATA_DIR", dir)
+	}
+	if os.Getenv("CLOUD_O11Y_BIN") == "" {
+		dir, err := os.MkdirTemp("", "cloud-test-plugins-")
+		if err != nil {
+			return 1
+		}
+		defer os.RemoveAll(dir)
+		bin := filepath.Join(dir, "o11y")
+		// GOROOT/bin/go, not "go": the toolchain that is running this test is the
+		// one that must build the plugin, and it is not always on PATH.
+		cmd := exec.Command(goTool(), "build", "-o", bin, "./cmd/o11y")
+		cmd.Dir = "../.." // the package dir is cmd/cloud
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			os.Stderr.WriteString("TestMain: building the o11y plugin failed: " + err.Error() + "\n")
+		} else {
+			_ = os.Setenv("CLOUD_O11Y_BIN", bin)
+		}
+	}
+	code := m.Run()
+	// fullyMountedApp deliberately mounts ONCE and shares the app across tests, so
+	// no single test may shut it down. It still holds a plugin child, so it is
+	// closed here — after the last test — for the same reason newTestApp cleans up.
+	if mountedTo != nil {
+		_ = mountedTo.Shutdown()
+	}
+	return code
+}
+
+func goTool() string {
+	if exe := filepath.Join(runtime.GOROOT(), "bin", "go"); exe != "" {
+		if _, err := os.Stat(exe); err == nil {
+			return exe
+		}
+	}
+	return "go"
+}
 
 // every subsystem the unified binary wires must appear in apps.Wire() — this
 // is the proof Wire() actually assembles the whole matrix.
@@ -55,6 +128,12 @@ func newTestApp(t *testing.T, enable ...string) *zip.App {
 	if err := cloud.MountAll(app, apps.Wire(), cfg, deps); err != nil {
 		t.Fatalf("MountAll(%v): %v", enable, err)
 	}
+	// Mounting a plugin subsystem starts a CHILD PROCESS, and zip stops it in an
+	// OnShutdown hook. A harness that mounts but never shuts down leaks that child
+	// for the life of the run — and because zip gives the child the host's stdout,
+	// the pipe stays open and `go test` blocks after the last test, then reports
+	// FAILURE on a suite that passed. Releasing what we acquired is the fix.
+	t.Cleanup(func() { _ = app.Shutdown() })
 	return app
 }
 

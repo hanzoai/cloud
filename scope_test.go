@@ -196,3 +196,36 @@ func TestGlobalMountNeedsTheGlobalFlag(t *testing.T) {
 		t.Fatal("MountAll succeeded — cloud.Global ran without Global: true")
 	}
 }
+
+// TestScopedRouterReportsHostPlugins pins the read-only hole Plugins() opens. A
+// non-Global subsystem is handed a scope, not the app — so without this passthrough
+// the admin fleet board (/v1/admin/plugins) would have had to take Global, granting
+// app-wide middleware to buy a status field. The scope reports the host's plugins
+// verbatim: same names, same count, no filtering by the subsystem's own prefixes.
+func TestScopedRouterReportsHostPlugins(t *testing.T) {
+	app := newApp()
+	if err := app.Add(zip.Load(
+		zip.Plugin{Name: "remote", Addr: "127.0.0.1:1"}, "/v1/remote", "/v1/legacy",
+	)); err != nil {
+		t.Fatalf("Add(Load): %v", err)
+	}
+
+	var seen []zip.PluginStatus
+	err := mountAll(t, app, []cloud.MountSpec{
+		{Name: "board", Mount: func(r cloud.Router, _ cloud.Deps) error {
+			seen = r.Plugins() // a scope, not the bare app
+			return nil
+		}},
+	})
+	if err != nil {
+		t.Fatalf("MountAll: %v", err)
+	}
+	if len(seen) != 1 || seen[0].Name != "remote" {
+		t.Fatalf("scoped Plugins() = %+v, want the host's one plugin", seen)
+	}
+	// The whole surface, not the subsystem's own slice of it: a board that reported
+	// only prefixes its own subsystem owns would report nothing at all.
+	if len(seen[0].Prefixes) != 2 {
+		t.Errorf("prefixes = %v, want both subtrees the host mounted", seen[0].Prefixes)
+	}
+}

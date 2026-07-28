@@ -67,10 +67,9 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// subsystemOrder binds /v1/notify/* after the product control planes and before
-// the AI /v1/* catch-all (150) so the send routes resolve here, not in the AI
-// fallthrough. 139 is free (integrations=137, auto=140).
-const subsystemOrder = 139
+// Mount order is the slice position in apps.Wire(): /v1/notify/* must bind after
+// the product control planes and BEFORE the AI /v1/* catch-all, so the send
+// routes resolve here rather than in the AI fallthrough.
 
 // notifier is the minimal delivery contract every notifyd provider satisfies
 // (github.com/hanzoai/notify.Notifier). Declaring it locally lets this package
