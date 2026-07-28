@@ -31,7 +31,7 @@ require (
 	github.com/hanzoai/types v0.1.0
 	github.com/hanzokv/go/v9 v9.22.0
 	github.com/lib/pq v1.12.3
-	github.com/luxfi/log v1.5.0
+	github.com/luxfi/log v1.6.0
 	github.com/luxfi/node v1.36.15
 	github.com/luxfi/trace v1.4.0
 	github.com/luxfi/zapdb v1.10.1
@@ -250,8 +250,8 @@ require (
 	go.opentelemetry.io/otel/exporters/stdout/stdoutlog v0.14.0 // indirect
 	go.opentelemetry.io/otel/exporters/stdout/stdoutmetric v1.40.0 // indirect
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.44.0 // indirect
-	go.opentelemetry.io/otel/log v0.19.0 // indirect
-	go.opentelemetry.io/otel/sdk/log v0.19.0 // indirect
+	go.opentelemetry.io/otel/log v0.20.0 // indirect
+	go.opentelemetry.io/otel/sdk/log v0.20.0 // indirect
 	go.uber.org/goleak v1.3.0 // indirect
 	gonum.org/v1/gonum v0.17.0 // indirect
 	gopkg.in/go-playground/validator.v9 v9.31.0 // indirect
@@ -740,6 +740,8 @@ exclude github.com/ugorji/go v0.0.0-20171122102828-84cb69a8af83
 // --- /v1/deploy engine embed (argo gitops-engine, in-process) ---
 require (
 	github.com/hanzoai/deploy/gitops-engine v0.7.2
+	github.com/hanzoai/doctype v0.1.0
+	github.com/hanzoai/framework v0.1.0
 	k8s.io/kubernetes v1.35.3 // indirect
 )
 
