@@ -202,8 +202,8 @@ func entries(root string, s spec) []entry {
 			return true
 		}
 		for p := range s.imports {
-			// The qualifier's own import; cloud.Global/cloud.CtxShutdown are
-			// adapters, never the subsystem's registrar.
+			// The qualifier's own import; cloud.CtxShutdown is an
+			// adapter, never the subsystem's registrar.
 			if p == modPath || path.Base(p) != id.Name {
 				continue
 			}

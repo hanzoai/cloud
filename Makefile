@@ -48,17 +48,10 @@ OPENAPI_DIR    ?= ../openapi
 CGO_ENABLED     ?= 0
 
 # Every app the light host mounts, read from the generated manifest — the same
-# list cmd/host links, so `make plugins` cannot build a set that differs from the
-# one the host expects to find beside it.
+# list cmd/host links and the multi-call binary serves.
 APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
 
-# Linking a cloud binary is a multi-GiB act, and the Go LINKER writes its
-# temporaries to TMPDIR (not GOTMPDIR). On a host where /tmp is a tmpfs that is
-# RAM, so `make plugins` — 100+ links back to back — exhausts it. Point it at
-# disk by default; override for a box where /tmp is real.
-export TMPDIR ?= $(HOME)/.cache/go-tmp
-
-.PHONY: help native webui deploy-ui agentskills build host ship plugins plugin generate openapi run smoke test test-cgo test-codec vet tidy docker docker-push clean monolith monolith-standalone
+.PHONY: help native webui deploy-ui agentskills build host ship plugin generate openapi run smoke test test-cgo test-codec vet tidy docker docker-push clean monolith monolith-standalone
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -115,35 +108,22 @@ build: host ## FAST PATH (default): build the light host into ./bin/host. Then `
 # The apps run as their own processes, started on the first request that reaches
 # them, so the host's build does not grow when a subsystem does.
 host: ## Build the light host into ./bin/host (links zip + the manifest, none of the apps).
-	@mkdir -p bin $(TMPDIR)
+	@mkdir -p bin
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$@ ./cmd/$@
 	@echo ">> bin/host — $$(CGO_ENABLED=$(CGO_ENABLED) $(GO) list -deps ./cmd/host | wc -l) packages, $$(du -h bin/host | cut -f1)"
 
-# Sequential and -p=2 on purpose: each link peaks in the GiBs, and building a
-# hundred of them in parallel is how this OOMs a 128GiB box.
-plugins: ## Build every app the manifest mounts into ./bin — the host's plugins. Slow by construction.
-	@mkdir -p bin $(TMPDIR)
-	@for a in $(APPS); do \
-	  printf '>> %s\n' "$$a"; \
-	  GOFLAGS=-p=2 CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$$a ./cmd/$$a || exit 1; \
-	done
-	@echo ">> $(words $(APPS)) plugins in ./bin"
-
-# THE RELEASE LAYOUT, and the reason `plugins` above is a development target
-# rather than a shipping one. A dedicated plugin is ~40MB of which ~35MB is the
-# core every other plugin also links, so 108 of them are 4.5GB of duplicated
+# THE RELEASE LAYOUT. A dedicated plugin is ~40MB of which ~35MB is the
+# core every other plugin also links, so 108 of them measure 4.41GB of duplicated
 # code (already stripped — -s -w is the default LDFLAGS, there is no symbol win
-# left in it). The unified binary is that core ONCE and serves any app via
-# `cloud --enable=<name>`, which manifest.App.Plugin falls through to when no
-# dedicated binary sits beside the host. Same contract, same child, 20x less to
-# ship.
+# left in it). The unified binary is that core ONCE, 196MB, and serves any app
+# via `cloud --enable=<name>`. Same contract, same child, 23x less to ship.
 ship: host monolith ## Build the RELEASE layout into ./bin: the host + the one multi-call binary that serves all $(words $(APPS)) apps.
 	@echo ">> ship: host $$(du -h bin/host | cut -f1) + cloud $$(du -h bin/cloud | cut -f1) = $$(du -ch bin/host bin/cloud | tail -1 | cut -f1) for $(words $(APPS)) apps"
 
 plugin: ## Build ONE app into ./bin: make plugin APP=wallets.
 	@test -n "$(APP)" || { echo "usage: make plugin APP=<name>"; echo "apps: $(APPS)"; exit 1; }
 	@test -d cmd/$(APP) || { echo "no cmd/$(APP) — run 'make generate', or check the name against 'make plugin' with no APP"; exit 1; }
-	@mkdir -p bin $(TMPDIR)
+	@mkdir -p bin
 	GOFLAGS=-p=2 CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$(APP) ./cmd/$(APP)
 
 # apps.Wire() is the single source of truth for the subsystem set. This derives
@@ -192,6 +172,30 @@ TEST_TAGS := sqlite_fts5
 test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ships).
 	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -tags "$(TEST_TAGS)" ./...
 
+# THE spec, in one command. Three steps, in the only order they work in:
+#
+#   1. zipdoc lifts the doc comments off every typed handler into zipdoc_gen.go.
+#      Go drops comments at compile time, so this build-time pass is the ONLY way
+#      prose and examples reach the document. `-run zipdoc` picks the directives
+#      out of ./... by name, so a typed op added anywhere is covered and no
+#      unrelated generator fires.
+#   2. the golden test mounts apps.Wire() and folds the two readings of that one
+#      router — the live route table (every operation) over zip's typed-op
+#      registry (schemas, parameters, responses, prose) — into one document.
+#   3. it writes both sinks from that single value: openapi.yaml here, and the
+#      drop hanzoai/openapi aggregates, audits and generates SDKs from.
+#
+# openapi.yaml is a golden file: written with -update, VERIFIED by the same test
+# with no flag, which `make test` (and therefore CI) already runs. That is the
+# whole drift guard — change a route without regenerating and the build goes red
+# before a stale spec reaches an SDK. OPENAPI_DIR is optional; without a checkout
+# there the golden is still regenerated and guarded.
+openapi: ## Regenerate the spec from the live router + typed registry, into openapi.yaml and $(OPENAPI_DIR)/generated.
+	$(GO) generate -run zipdoc ./...
+	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -tags "$(TEST_TAGS)" -count=1 -run TestOpenAPIYAML ./cmd/cloud \
+	  -update $(if $(wildcard $(OPENAPI_DIR)/capabilities.yaml),-publish="$(abspath $(OPENAPI_DIR))")
+	@echo ">> openapi.yaml — $$(grep -c '^  /' openapi.yaml) paths"
+
 test-cgo: ## Prove the cgo build works too — forces the fork's pure-Go backend via -tags sqlite_purego so the embedded modernc importers don't double-register "sqlite".
 	$(TEST_ENV) CGO_ENABLED=1 $(GO) test -tags "sqlite_purego $(TEST_TAGS)" ./...
 
@@ -231,22 +235,16 @@ native: ## Build the native flags evaluator staticlib (required for CGO=1 builds
 	cargo build --release --manifest-path native/flags/Cargo.toml
 
 # ---------------------------------------------------------------------------
-# SLOW FALLBACK — everything linked together. Deliberately last, in the file and
-# in `make help`, because typing it is a choice and it should look like one.
+# The ONE binary. Running it directly serves every app in this process; the host
+# running it as a child with --enable=<app> serves one. Same bits, same Serve,
+# same middleware — "monolith" and "plugin" are not two artifacts to choose
+# between, they are one artifact under two invocations, which is why there is
+# nothing here to keep in sync.
 #
-# Two reasons it still exists:
-#   1. It is the SHIPPED artifact today. The Dockerfile builds ./cmd/cloud, and
-#      the host+plugins layout cannot replace it until a plugin stops linking the
-#      whole core: the 106 plugins weigh 5.3GB in ./bin against this one binary's
-#      212MB, because each statically re-links the same ~650-package root. The
-#      image gets ~25x bigger before the model pays off, so flipping the
-#      Dockerfile waits on cutting that floor, not on this target.
-#   2. It is the reference the plugin set is checked against: every app mounted
-#      here through apps.Wire() is the same app cmd/<name> serves standalone, and
-#      when the two disagree this is the one that is right.
-# Delete it when neither is true — not before.
-monolith: ## SLOW FALLBACK: link every subsystem into one ./bin/cloud (3108 packages, 212MB, 9.5s warm / minutes cold). Prefer `make build`.
-	@mkdir -p bin $(TMPDIR)
+# It is also what `ship` publishes and what manifest.App resolves to, on disk or
+# over the network, when no dedicated binary sits beside the host.
+monolith: ## Link the one multi-call binary into ./bin/cloud (3027 packages, 196MB). `ship` builds this plus the host.
+	@mkdir -p bin
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$(BIN) $(PKG)
 
-monolith-standalone: webui monolith ## SLOW FALLBACK: the REAL 1-binary console — console build:embed → webui/dist → monolith.
+monolith-standalone: webui monolith ## The 1-binary console — console build:embed → webui/dist → monolith.
