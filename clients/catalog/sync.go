@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/clients/projects"
 )
 
 // sync.go builds the corpus. It is a RECONCILE, not an API: there is no endpoint
@@ -100,7 +102,46 @@ func run(ctx context.Context) (int, int, error) {
 // the catalog — so a failed fetch returns its error AND whatever it did read, and
 // run only reconciles when it got something.
 func corpus(ctx context.Context) ([]Entry, map[string][]Entry, error) {
-	var pub []Entry
+	pub, ferr := fromOrgs(ctx)
+	// at is where each published row already sits, so a live site can be FOLDED
+	// onto the repo it was built from instead of replacing it. Both key on
+	// "<org>/<name>" and so does the index, so before this a demo silently
+	// overwrote its own source row and took the repo link down with it —
+	// which is exactly why no site row could name where it came from.
+	at := make(map[string]int, len(pub))
+	for i, e := range pub {
+		at[e.ID] = i
+	}
+	byOrg := map[string][]Entry{}
+	sites, err := liveSites(ctx)
+	if err != nil {
+		ferr = err
+	}
+	platform := getenv(platformOrgEnv, "hanzo")
+	for _, s := range sites {
+		e := fromSite(s)
+		if s.Org != platform {
+			byOrg[s.Org] = append(byOrg[s.Org], e)
+			continue
+		}
+		if i, ok := at[e.ID]; ok {
+			pub[i] = fold(pub[i], e)
+			continue
+		}
+		at[e.ID] = len(pub)
+		pub = append(pub, e)
+	}
+	if len(pub) == 0 && len(byOrg) == 0 {
+		return nil, nil, ferr
+	}
+	return pub, byOrg, ferr
+}
+
+// orgRepos reads every source org's public, un-archived repos. It is the FIRST
+// of the corpus's two sources, and a package var for the same reason liveSites
+// is one: the assembly is testable without a live GitHub.
+func orgRepos(ctx context.Context) ([]Entry, error) {
+	var out []Entry
 	var ferr error
 	for gh, brand := range sourceOrgs() {
 		rows, err := repos(ctx, gh)
@@ -110,34 +151,51 @@ func corpus(ctx context.Context) ([]Entry, map[string][]Entry, error) {
 		}
 		for _, r := range rows {
 			if r.Archived || r.Private {
-				continue
+				continue // dead or not ours to show — a corpus decision, not a forkable one
 			}
-			pub = append(pub, fromRepo(r, brand))
+			out = append(out, fromRepo(r, brand))
 		}
 	}
-	byOrg := map[string][]Entry{}
-	sites, err := liveSites(ctx)
-	if err != nil {
-		ferr = err
+	return out, ferr
+}
+
+// fromSite maps one live project to a catalog row. Repo and Template are READ
+// from the project, never inferred: the platform already records what a site was
+// built from and what it was forked from, and a catalog that guessed either
+// would be guessing about authorship.
+func fromSite(s projects.LiveSite) Entry {
+	e := Entry{
+		ID: s.Org + "/" + s.Slug, Org: s.Org, Name: s.Slug, Title: s.Name,
+		Kind: "site", Archetype: "site", URL: s.URL,
+		Repo: s.Repo, Template: s.ForkedFrom,
+		Updated: time.Unix(s.UpdatedAt, 0).UTC().Format(time.RFC3339),
 	}
-	platform := getenv(platformOrgEnv, "hanzo")
-	for _, s := range sites {
-		e := Entry{
-			ID: s.Org + "/" + s.Slug, Org: s.Org, Name: s.Slug, Title: s.Name,
-			Kind: "site", Archetype: "site", URL: s.URL,
-			Updated: time.Unix(s.UpdatedAt, 0).UTC().Format(time.RFC3339),
-		}
-		if s.Org == platform {
-			e.Forkable = true // our own demos are what a visitor is meant to fork
-			pub = append(pub, e)
-			continue
-		}
-		byOrg[s.Org] = append(byOrg[s.Org], e)
+	e.Forkable = e.Repo != ""
+	return e
+}
+
+// fold merges a live site onto the repo it was built from. The site owns what is
+// LIVE — its URL, its human title, when it last deployed. The repo owns what is
+// SOURCE — the link, the description, the language, the stars. Nothing the site
+// does not carry is blanked, because the merged row is the only one that can
+// answer the question the catalog exists for: show me the demo AND its code.
+func fold(repo, site Entry) Entry {
+	out := repo
+	out.Kind, out.Archetype = site.Kind, site.Archetype
+	out.URL, out.Updated = site.URL, site.Updated
+	if site.Title != "" {
+		out.Title = site.Title
 	}
-	if len(pub) == 0 && len(byOrg) == 0 {
-		return nil, nil, ferr
+	if site.Repo != "" {
+		out.Repo = site.Repo // a project that DECLARES its source outranks the name match
 	}
-	return pub, byOrg, ferr
+	if site.Template != "" {
+		out.Template = site.Template
+	}
+	// Forkable stays the REPO's answer: hosting a demo of someone else's fork
+	// does not make it ours to hand over.
+	out.Forkable = repo.Forkable && out.Repo != ""
+	return out
 }
 
 // fromRepo maps one repo to a catalog row. The archetype is derived from the
@@ -152,8 +210,11 @@ func fromRepo(r ghRepo, brand string) Entry {
 		ID: brand + "/" + r.Name, Org: brand, Name: r.Name, Title: r.Name,
 		Kind: "repo", Archetype: archetype(r), Language: r.Language,
 		Description: r.Description, URL: url, Repo: r.HTMLURL,
-		// Every public repo is forkable; a template repo is forkable ON PURPOSE.
-		Forkable: true, Stars: r.Stars, Updated: r.PushedAt,
+		// Forkable is the one axis with teeth, so it has to be able to say no.
+		// A public repo of ours is yours to take. A repo that is itself a FORK
+		// of a third-party upstream is not: its license and its lineage belong
+		// to that upstream, and the honest fork button for it points there.
+		Forkable: !r.Fork, Stars: r.Stars, Updated: r.PushedAt,
 	}
 }
 
