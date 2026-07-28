@@ -1053,7 +1053,7 @@ type Plugin struct {
 
 	// Price is what ONE request to this subsystem's surface costs at the edge gate —
 	// Free, Metered, or a positive number of cents (see price.go). It is REQUIRED:
-	// the zero value is Undeclared, and apps.TestPriceDeclared fails on it, so a new
+	// the zero value is Undeclared, and TestPriceDeclared fails on it, so a new
 	// subsystem cannot reach main until someone writes down what it costs. This is
 	// the ONE place a surface's price is declared; DefaultPrice reads it and holds no
 	// table of its own.

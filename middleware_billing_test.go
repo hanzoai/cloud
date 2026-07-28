@@ -222,7 +222,7 @@ func TestBillingGate_NilClientIsNoop(t *testing.T) {
 // from nowhere else — that Metered and Free both charge nothing at the edge, that a
 // health probe charges nothing even under a surface that IS priced, that a declared
 // price is actually charged, and that a path no surface owns is Undeclared (charged
-// nothing here, and refused by apps.TestPriceDeclared before it can ship).
+// nothing here, and refused by TestPriceDeclared before it can ship).
 //
 // The declarations are a FIXTURE, deliberately not the real Wire(): this asserts the
 // mechanism (declaration → gate) and must therefore contain a positive price, which no
@@ -258,7 +258,7 @@ func TestDefaultPrice(t *testing.T) {
 		{"/v1/agent/presets", 0, "same surface — a read on it is free for the same reason"},
 		{"/v1/agents/x/run", 0, "the agents subsystem meters its own per-run fee"},
 		{"/v1/probe/thing", 7, "a declared price IS charged — without this case every zero above is unfalsifiable"},
-		{"/v1/nobody/owns-this", 0, "no surface owns it: Undeclared charges nothing HERE and fails apps.TestPriceDeclared instead"},
+		{"/v1/nobody/owns-this", 0, "no surface owns it: Undeclared charges nothing HERE and fails TestPriceDeclared instead"},
 	}
 	for _, tc := range cases {
 		if got := priceForPath(t, tc.path); got != tc.want {
