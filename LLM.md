@@ -595,7 +595,8 @@ upstream and a re-run must converge.
 
 ## Starter kits (`clients/templates`, `/v1/templates`)
 
-One embedded catalog, read-only, and **one template is one entry**. The shapes a
+One embedded PUBLIC catalog (read-only; a customer's own templates are the second
+layer, below), and **one template is one entry**. The shapes a
 template ships in — FORMAT (`-html`/`-react`/`-bootstrap`), PAGE (folio's
 about/contact/grid-3-fluid) and THEME — are `variants` inside that entry, chosen
 at fork time: `POST /v1/projects/fork {"slug":"prism","variant":"react"}`.
@@ -615,6 +616,35 @@ project slug (`prism` + `react` → `prism-react`) so two shapes coexist in an o
 `ForkedFrom` still records the template, because a shape is not another parent.
 `TestVariantsAreOptionsNotSiblings` forbids the regression: no variant id may
 also be a catalog slug.
+
+### Two layers, not one visibility flag
+
+Same shape as the cross-org catalog above, for the same reason. A customer must be able to
+hold starter kits that are THEIRS — private to their org, forkable only by them —
+next to the public gallery, and the public gallery is what an anonymous visitor
+browses on hanzo.app. So the two live in different containers:
+
+- the PUBLIC catalog is the embedded `catalog.json`, immutable, with **no write
+  route**. Nothing a customer does can put a row in it.
+- a customer's OWN templates are rows in `{DataDir}/templates.db` keyed by
+  `principal.Org` — the gateway-minted, JWT-validated owner, never a request field
+  (a body `org` is overwritten server-side). Every read binds that column.
+
+An anonymous `GET /v1/templates` never touches the store at all, so a private
+template cannot surface publicly by CONSTRUCTION rather than by a filter each
+future reader must remember. `TestPrivateTemplateIsOrgOnly` asserts both
+directions (owner sees it; another org and anonymous do not) and that the
+anonymous view is exactly the embedded gallery, entry for entry.
+
+A slug stays single-valued across both layers: publishing over a public slug is
+409, so `slug → template` remains a function and no org can shadow the gallery.
+Two DIFFERENT orgs may hold the same private slug — the key is `(org, slug)`.
+
+`templates.Lookup(ctx, org, slug)` is the ONE door other subsystems read through
+(`clients/projects`' fork resolves the caller org's own templates first, then the
+gallery), so "which templates may this org use" is answered in exactly one place;
+a fork of a private template records owner-qualified lineage (`acme/acme-portal`),
+a fork of a gallery template records the bare public slug.
 
 ## Fetching the web (`clients/crawl`, `/v1/crawl`)
 
