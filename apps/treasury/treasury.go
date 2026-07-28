@@ -130,10 +130,20 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		},
 	}
 	mounted = s
-	// Publish the reserve balance as a VALUE other subsystems can read without
-	// linking this one. apps/admin renders the figure and has no business
-	// importing the ledger that computes it (see cloud/reserve.go).
-	cloud.RegisterReserve(ReserveCents)
+	// The reserve, published on the internal plane (native ZAP over the unix
+	// socket, cloud/rpc.go). admin's money board reads it here — as the
+	// SuperAdmin who asked, re-checked on THIS side — instead of importing this
+	// package, which in admin's own binary could only ever return zero.
+	cloud.Expose("treasury.reserve", func(ctx context.Context, who cloud.Ident, _ []byte) ([]byte, error) {
+		if !who.Admin {
+			return nil, cloud.Fault(403, "SuperAdmin required")
+		}
+		cents, ok := ReserveCents(ctx)
+		if !ok {
+			return nil, cloud.Fault(503, "treasury store not open")
+		}
+		return cloud.PutI64(cents), nil
+	})
 
 	// ONE scope-aware /v1/finance/* engine, three tenancy surfaces (HIP finance):
 	// per-org reads derive the tenant from the validated IAM identity and see ONLY
