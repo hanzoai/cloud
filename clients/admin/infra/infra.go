@@ -14,6 +14,7 @@ import (
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/admin/digitalocean"
+	"github.com/hanzoai/cloud/clients/admin/money"
 )
 
 // cacheTTL bounds how stale a READ may be. It exists because one board is a fan-out
@@ -39,6 +40,7 @@ func Routes(app cloud.Router, s *cloud.Service[core.State]) {
 	g := app.Group("/v1/admin")
 	g.Get("/infra", core.Guard(s, b.read))
 	g.Post("/infra/volumes/:id/snapshot", core.Guard(s, b.snapshotVolume))
+	g.Post("/infra/volumes/:id/resize", core.Guard(s, b.expandVolume))
 	g.Delete("/infra/volumes/:id", core.Guard(s, b.deleteVolume))
 	g.Post("/infra/nodes/:id/cordon", core.Guard(s, b.cordonNode))
 	g.Delete("/infra/droplets/:id", core.Guard(s, b.deleteDroplet))
@@ -230,6 +232,52 @@ func (b *board) deleteVolume(s *cloud.Service[core.State], c *zip.Ctx) error {
 				return out, err
 			}
 			out["deleted"] = true
+			return out, nil
+		},
+	})
+}
+
+// expandVolume grows a volume. GROW ONLY — see Volume.ExpandTo for why the other
+// direction is a data migration this board deliberately refuses to run.
+//
+// The MECHANISM follows the volume's owner, because there is exactly one way to grow each
+// kind completely. A volume a PVC claims is grown by patching the claim: the CSI driver
+// then resizes the DigitalOcean device AND grows the filesystem on it, leaving claim, PV,
+// device and filesystem all agreeing. Calling DigitalOcean directly for that volume would
+// grow the device while the PV kept declaring the old capacity and the filesystem never
+// grew at all. One operation, one correct mechanism per owner — not two ways to do it.
+func (b *board) expandVolume(s *cloud.Service[core.State], c *zip.Ctx) error {
+	id := strings.TrimSpace(c.Param("id"))
+	var body struct {
+		SizeGiB int `json:"sizeGiB"`
+	}
+	if err := c.Bind(&body); err != nil {
+		return core.Fail(c, "invalid body")
+	}
+	return run(b, s, c, mutation[Volume]{
+		action: "infra.volume.resize", resType: "do_volume", resID: id,
+		find:    func(snap Snapshot) (Volume, bool) { return findVolume(snap, id) },
+		verdict: func(v Volume) (bool, string) { return v.ExpandTo(body.SizeGiB) },
+		apply: func(ctx context.Context, do *digitalocean.Client, v Volume) (map[string]any, error) {
+			out := map[string]any{"name": v.Name, "from": v.SizeGiB, "to": body.SizeGiB,
+				"addedMonthlyCents": money.Cents(body.SizeGiB-v.SizeGiB) * volumeGiBCents}
+			if v.PVCName != "" {
+				if err := ExpandPVC(ctx, do, v.ClusterID, v.PVCNamespace, v.PVCName, body.SizeGiB); err != nil {
+					return out, err
+				}
+				out["via"] = fmt.Sprintf("pvc %s/%s", v.PVCNamespace, v.PVCName)
+				out["note"] = "The CSI driver resizes the volume and then grows the filesystem. " +
+					"Both are asynchronous: watch the PVC's conditions until FileSystemResizePending clears."
+				return out, nil
+			}
+			act, err := do.ResizeVolume(ctx, v.ID, v.Region, body.SizeGiB)
+			if err != nil {
+				return out, err
+			}
+			out["via"] = "digitalocean volume action"
+			out["actionId"], out["actionStatus"] = act.ID, act.Status
+			out["note"] = "No PersistentVolumeClaim owns this volume, so only the DEVICE was grown. " +
+				"Any filesystem on it still reports the old size until it is grown in place."
 			return out, nil
 		},
 	})
