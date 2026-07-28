@@ -17,6 +17,10 @@
 //     (siteResolver.Resolve), so activation is one atomic UPDATE and rollback is
 //     the same flip aimed at an older release — free, because releases are
 //     immutable and retained.
+//   - Retained to a BOUND, not forever: each publish reclaims what fell past
+//     keepReleases (pruneReleases), and the live release is never a candidate.
+//     Because bytes can now be reclaimed, activation stats them before it flips
+//     — the row alone stopped being proof that a release can serve.
 //
 // TENANT ISOLATION — the make-or-break property, and the reason the source is
 // NOT an S3 URL. A caller names a path RELATIVE to their own org's storage
@@ -61,6 +65,13 @@ const (
 	maxSourceLen = 512
 	// maxReleaseList bounds the rollback menu one request can ask for.
 	maxReleaseList = 200
+	// keepReleases is the retention depth: how many SUPERSEDED releases of a site
+	// survive, on top of the live one, which is never counted and never pruned.
+	// It is the rollback depth expressed as a number — deep enough that "roll back
+	// to last week's build" is always there, shallow enough that a site publishing
+	// on every commit does not accumulate its whole history in the object store
+	// forever.
+	keepReleases = 10
 )
 
 // releaseIDRE is the release-id grammar: "rel_" + 128 bits of the manifest
@@ -78,6 +89,7 @@ var (
 	errTooManyFiles  = errors.New("projects: source exceeds the release object limit")
 	errTooLarge      = errors.New("projects: source exceeds the release size limit")
 	errSourceChanged = errors.New("projects: source changed while publishing; retry")
+	errReleaseGone   = errors.New("projects: release bytes are no longer in the store")
 )
 
 // releaseSpace is the per-org namespace holding every release of every site the
@@ -339,7 +351,80 @@ func promote(s *cloud.Service[state], ctx context.Context, org string, p Project
 	if err := s.State.store.PutRelease(ctx, r); err != nil {
 		return Release{}, err
 	}
+	pruneReleases(s, ctx, cli, org, p.Slug)
 	return r, nil
+}
+
+// pruneReleases enforces retention at the ONE event that grows the set: a
+// publish. Every promote that mints a new release immediately reclaims the
+// oldest superseded ones, so a site's release space is bounded by keepReleases
+// (+1 for the live release) at all times, with no sweeper, no schedule, and no
+// second notion of "which releases exist" to drift from the rows.
+//
+// Best-effort by construction: the release the caller asked for is already
+// complete and recorded, so a retention failure MUST NOT fail the publish. It is
+// logged and retried by the next publish, which recomputes the same victims.
+//
+// Rows first, then bytes — never the reverse. PruneReleases returns only rows it
+// really deleted (it refuses to delete the live one), so this can only ever
+// address prefixes that no row, and therefore no serving pointer, names. A purge
+// that fails after its row is gone leaks that prefix until the project is
+// deleted (del purges the whole release space); that is wasted bytes, logged
+// with the exact prefix, and never a site serving 404s.
+func pruneReleases(s *cloud.Service[state], ctx context.Context, cli *s3.Client, org, slug string) {
+	pruned, err := s.State.store.PruneReleases(ctx, org, slug, keepReleases)
+	if err != nil {
+		s.Log.Warn("release retention: prune failed", "org", org, "slug", slug, "err", err)
+	}
+	for _, r := range pruned {
+		if pErr := purgePrefix(ctx, cli, s.State.blob.bucket, r.Prefix); pErr != nil {
+			s.Log.Warn("release retention: prefix purge failed (bytes leaked)",
+				"org", org, "slug", slug, "release", r.ID, "prefix", r.Prefix, "err", pErr)
+		}
+	}
+}
+
+// releaseServable reports that a release's BYTES are still in the store, by
+// stating the one object that decides whether the site answers at all: its
+// index.html. Every release has one (scanSource refuses a source without it), so
+// its absence means the prefix was reclaimed, not that the build was odd.
+//
+// This check exists because retention broke an invariant activation used to get
+// for free. Before it, a release row could only be created after its bytes
+// landed and nothing ever removed bytes, so "row exists" implied "bytes exist"
+// and ActivateRelease's `WHERE EXISTS (release row)` was the whole guard. Now
+// bytes CAN go away — pruned, purged by an operator, expired by a bucket
+// lifecycle rule — and flipping the pointer at a reclaimed prefix would take a
+// live site down to 404s with no way to tell from the row that it happened.
+// Verify BEFORE the flip: a failed check leaves the site serving whatever it
+// already serves.
+//
+// The prefix comes from the ROW, not from recomputing releasePrefix: the row is
+// where the bytes were actually written, so the probe can never disagree with
+// the copy about which prefix a release is.
+func releaseServable(s *cloud.Service[state], ctx context.Context, r Release) error {
+	cli, err := s.State.blob.client()
+	if err != nil {
+		return fmt.Errorf("s3 connect: %w", err)
+	}
+	_, err = cli.StatObject(ctx, s.State.blob.bucket, r.Prefix+"/index.html", s3.StatObjectOptions{})
+	switch {
+	case err == nil:
+		return nil
+	case isNoSuchKey(err):
+		return errReleaseGone
+	default:
+		return fmt.Errorf("stat release: %w", err)
+	}
+}
+
+// isNoSuchKey reports whether a store error is "that object is not there".
+func isNoSuchKey(err error) bool {
+	var resp s3.ErrorResponse
+	if errors.As(err, &resp) {
+		return resp.StatusCode == http.StatusNotFound || resp.Code == s3.NoSuchKey
+	}
+	return false
 }
 
 // activate points the site at a release and runs the go-live side effects.
@@ -350,9 +435,29 @@ func promote(s *cloud.Service[state], ctx context.Context, org string, p Project
 // disagreeing with whichever flip won. Everything after the flip is best-effort
 // — the site is already serving the new release, so no edge-hygiene failure may
 // turn a completed activation into an error.
-func activate(s *cloud.Service[state], ctx context.Context, org string, p Project, id string) error {
+//
+// Two conditions, in the order that gives each its own honest answer: the ROW
+// says whether this release exists for this tenant at all (errNotFound → 404,
+// with no signal about a foreign id), and only then do the BYTES say whether it
+// can still serve (errReleaseGone → 410). Both run on EVERY activation,
+// including the one that follows a fresh promote, so there is exactly one answer
+// to "may this release serve" and the one-shot publish path cannot drift from
+// the staged one. Returning the row also means the caller never re-reads it.
+//
+// Racing a prune is safe from either side: a prune drops the row before the
+// bytes, so a row that vanishes after the read makes the atomic flip itself miss
+// (404), and bytes that vanish after the probe were already rowless — the flip
+// misses too. No interleaving flips the pointer at a reclaimed prefix.
+func activate(s *cloud.Service[state], ctx context.Context, org string, p Project, id string) (Release, error) {
+	r, err := s.State.store.GetRelease(ctx, org, p.Slug, id)
+	if err != nil {
+		return Release{}, err
+	}
+	if err := releaseServable(s, ctx, r); err != nil {
+		return Release{}, err
+	}
 	if err := s.State.store.ActivateRelease(ctx, org, p.Slug, id, time.Now().Unix()); err != nil {
-		return err
+		return Release{}, err
 	}
 	// Claim the public host + purge the edge, exactly as a deploy does — a release
 	// that is live must be reachable and must not serve a cached predecessor.
@@ -362,7 +467,7 @@ func activate(s *cloud.Service[state], ctx context.Context, org string, p Projec
 		s.Log.Warn("release activated but project metadata update failed",
 			"org", org, "slug", p.Slug, "release", id, "err", err)
 	}
-	return nil
+	return r, nil
 }
 
 // ---- HTTP ----
@@ -442,6 +547,22 @@ func releaseErr(err error) error {
 	}
 }
 
+// activateErr maps an activation failure to its honest status, for BOTH the
+// staged flip and the one-shot publish. A release nobody can name and a release
+// whose row is gone are the same 404; a release whose row is still listed but
+// whose bytes were reclaimed is 410 GONE — a distinct answer, because the fix is
+// distinct: that rollback target is not coming back, publish again.
+func activateErr(err error) error {
+	switch {
+	case errors.Is(err, errNotFound):
+		return zip.ErrNotFound("release not found")
+	case errors.Is(err, errReleaseGone):
+		return zip.Errorf(http.StatusGone, "release bytes were reclaimed by retention; publish again")
+	default:
+		return zip.Errorf(http.StatusInternalServerError, "activate: %v", err)
+	}
+}
+
 // createRelease promotes a build output into a new immutable release WITHOUT
 // serving it. This is the staged half of publishing: create now, activate after
 // whatever check you want to run against the release first.
@@ -473,8 +594,8 @@ func createRelease(s *cloud.Service[state], c *zip.Ctx) error {
 
 // activateRelease flips the site's pointer to an existing release — the go-live,
 // and equally the ROLLBACK (aim it at an older release; releases are immutable
-// and retained, so nothing is rebuilt or re-copied). Not billed: no new content
-// is produced, only a pointer moved.
+// and RETAINED to the retention depth, so nothing is rebuilt or re-copied). Not
+// billed: no new content is produced, only a pointer moved.
 func activateRelease(s *cloud.Service[state], c *zip.Ctx) error {
 	org, p, err := releaseSite(s, c)
 	if err != nil {
@@ -484,15 +605,9 @@ func activateRelease(s *cloud.Service[state], c *zip.Ctx) error {
 	if !releaseIDRE.MatchString(id) {
 		return zip.ErrNotFound("release not found")
 	}
-	if err := activate(s, c.Context(), org, p, id); err != nil {
-		if errors.Is(err, errNotFound) {
-			return zip.ErrNotFound("release not found")
-		}
-		return zip.Errorf(http.StatusInternalServerError, "activate: %v", err)
-	}
-	r, err := s.State.store.GetRelease(c.Context(), org, p.Slug, id)
+	r, err := activate(s, c.Context(), org, p, id)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get release: %v", err)
+		return activateErr(err)
 	}
 	return c.JSON(http.StatusOK, toReleaseView(s, r, true))
 }
@@ -520,8 +635,8 @@ func publishSiteRelease(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return releaseErr(err)
 	}
-	if err := activate(s, c.Context(), org, p, r.ID); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "activate: %v", err)
+	if _, err := activate(s, c.Context(), org, p, r.ID); err != nil {
+		return activateErr(err)
 	}
 	meterDeploy(s, c, fee)
 	return c.JSON(http.StatusOK, toReleaseView(s, r, true))
