@@ -1,4 +1,4 @@
-package paas
+package platform
 
 import (
 	"context"
@@ -29,7 +29,7 @@ func appCRObj(name, ns, repo, tag string) *unstructured.Unstructured {
 
 // fakeService builds a hermetic paas Service backed by an in-memory fake dynamic
 // client seeded with objs — the release path is exercised without a real cluster.
-func fakeService(objs ...runtime.Object) *cloud.Service[state] {
+func fakeService(objs ...runtime.Object) *cloud.Service[fleetState] {
 	scheme := runtime.NewScheme()
 	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
 		k8s.Apps:        "AppList",
@@ -40,14 +40,14 @@ func fakeService(objs ...runtime.Object) *cloud.Service[state] {
 		// set falls back to the first-party set, which is what these tests assert on.
 		k8s.Namespaces: "NamespaceList",
 	}, objs...)
-	return &cloud.Service[state]{
+	return &cloud.Service[fleetState]{
 		Base:  cloud.Base{Log: luxlog.New("test")},
-		State: state{dyn: dyn, scan: &nsCache{}},
+		State: fleetState{dyn: dyn, scan: &nsCache{}},
 	}
 }
 
 // declaredImage reads spec.image.{repository,tag} off the live App CR in the fake.
-func declaredImage(t *testing.T, s *cloud.Service[state], ns, name string) (repo, tag, pull string) {
+func declaredImage(t *testing.T, s *cloud.Service[fleetState], ns, name string) (repo, tag, pull string) {
 	t.Helper()
 	obj, err := s.State.dyn.Resource(k8s.Apps).Namespace(ns).Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
@@ -159,7 +159,7 @@ func TestReleaseServiceMainFirst(t *testing.T) {
 // TestReleaseServiceFailClosed proves that with no cluster client the release
 // fails closed (never a fabricated success).
 func TestReleaseServiceFailClosed(t *testing.T) {
-	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{initErr: "no cluster (test)"}}
+	s := &cloud.Service[fleetState]{Base: cloud.Base{Log: luxlog.New("test")}, State: fleetState{initErr: "no cluster (test)"}}
 	if _, _, changed, err := releaseService(s, context.Background(), "cloud", "ghcr.io/hanzoai/cloud:v1.0.0"); err == nil || changed {
 		t.Fatalf("no cluster: got (changed=%v,err=%v), want (false, error)", changed, err)
 	}

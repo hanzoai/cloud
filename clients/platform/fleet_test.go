@@ -1,4 +1,4 @@
-package paas
+package platform
 
 import (
 	"github.com/hanzoai/cloud/clients/k8s"
@@ -167,7 +167,7 @@ func TestRepoFromRepository(t *testing.T) {
 
 // TestHealthFromStatus mirrors inventory.ts healthFromDeployment semantics but
 // off the operator-reconciled Service status.
-func TestHealthFromStatus(t *testing.T) {
+func TestFleetHealthFromStatus(t *testing.T) {
 	cases := []struct {
 		name   string
 		status map[string]any
@@ -185,7 +185,7 @@ func TestHealthFromStatus(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := healthFromStatus(tc.status); got != tc.want {
+			if got := fleetHealthFromStatus(tc.status); got != tc.want {
 				t.Errorf("healthFromStatus(%v) = %q, want %q", tc.status, got, tc.want)
 			}
 		})
