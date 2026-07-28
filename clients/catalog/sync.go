@@ -54,14 +54,31 @@ const (
 	maxPages = 5
 )
 
-// defaultOrgs maps a GitHub org to the brand it belongs to. The brand — not the
-// GitHub org — is what a person browses by: nobody looks for "zoo-apps", they
-// look for zoo.
-var defaultOrgs = map[string]string{
-	"hanzoai": "hanzo", "hanzo-apps": "hanzo", "hanzo-templates": "hanzo",
-	"luxfi": "lux", "lux-apps": "lux", "luxcpp": "lux",
-	"zooai": "zoo", "zoo-apps": "zoo",
-	"zenlm": "zen",
+// source is one GitHub org the corpus is built from, and it says the two things
+// a place can say about what is in it: the BRAND a person browses it by — nobody
+// looks for "zoo-apps", they look for zoo — and the ORIGIN, what those repos are
+// to a visitor (origin.go). Both are facts about the org, so they live in one
+// table; splitting them into two maps is how they would come to disagree.
+type source struct{ brand, origin string }
+
+// defaultOrgs IS the fleet. Which org a repo sits in is the whole derivation of
+// its lane: the templates org holds starters to fork FROM, the apps orgs and the
+// auto-publish community org hold what people BUILT, and everything else is our
+// own software.
+var defaultOrgs = map[string]source{
+	"hanzoai":         {"hanzo", OriginProduct},
+	"hanzo-templates": {"hanzo", OriginTemplate},
+	"hanzo-apps":      {"hanzo", OriginCommunity},
+	// hanzo-community is where a public fork auto-publishes. It is listed before
+	// it has repos on purpose: the lane must be fed the hour that lands, not the
+	// week somebody remembers to add a line here.
+	"hanzo-community": {"hanzo", OriginCommunity},
+	"luxfi":           {"lux", OriginProduct},
+	"luxcpp":          {"lux", OriginProduct},
+	"lux-apps":        {"lux", OriginCommunity},
+	"zooai":           {"zoo", OriginProduct},
+	"zoo-apps":        {"zoo", OriginCommunity},
+	"zenlm":           {"zen", OriginProduct},
 }
 
 // ghRepo is the slice of GitHub's repo object the catalog reads.
@@ -79,6 +96,15 @@ type ghRepo struct {
 	IsTemplate  bool     `json:"is_template"`
 	Archived    bool     `json:"archived"`
 	Private     bool     `json:"private"`
+	License     struct {
+		SPDX string `json:"spdx_id"`
+	} `json:"license"`
+	// Parent is the work a fork was taken FROM. GitHub's org listing omits it and
+	// only the single-repo read carries it, which is why crediting a fork costs one
+	// extra request (see credit).
+	Parent *struct {
+		FullName string `json:"full_name"`
+	} `json:"parent"`
 }
 
 // run reconciles the whole corpus once: the published one, then each org's own.
@@ -120,9 +146,13 @@ func corpus(ctx context.Context) ([]Entry, map[string][]Entry, error) {
 		ferr = err
 	}
 	platform := getenv(platformOrgEnv, "hanzo")
+	// Which live slugs are OUR starters' demos, read forward from the curated
+	// gallery once per pass (origin.go) — the one thing that tells a template's
+	// own demo apart from an app somebody built on the platform.
+	starter := starters()
 	var ours []Entry
 	for _, s := range sites {
-		e := fromSite(s)
+		e := fromSite(s, starter)
 		if s.Org != platform {
 			byOrg[s.Org] = append(byOrg[s.Org], e)
 			continue
@@ -161,7 +191,7 @@ func orgRepos(ctx context.Context) ([]Entry, error) {
 	at := map[string]int{}
 	var out []Entry
 	var ferr error
-	for gh, brand := range sourceOrgs() {
+	for gh, src := range sourceOrgs() {
 		rows, err := repos(ctx, gh)
 		if err != nil {
 			ferr = err
@@ -171,7 +201,10 @@ func orgRepos(ctx context.Context) ([]Entry, error) {
 			if r.Archived || r.Private {
 				continue // dead or not ours to show — a corpus decision, not a forkable one
 			}
-			e := fromRepo(r, brand)
+			if r.Fork && !credit(ctx, &r) {
+				continue // somebody else's, and we cannot say whose — so we do not list it
+			}
+			e := fromRepo(r, src)
 			i, seen := at[e.ID]
 			if !seen {
 				at[e.ID] = len(out)
@@ -184,6 +217,25 @@ func orgRepos(ctx context.Context) ([]Entry, error) {
 		}
 	}
 	return out, ferr
+}
+
+// credit fills in the work a fork was taken from, and reports whether the row may
+// be listed at all. A fork holds somebody else's code under one of OUR org
+// headers, so it is either ATTRIBUTED or it is NOT LISTED — there is no third
+// option where we show it with no author on it and let the page's title imply
+// the answer.
+//
+// The cost is one extra request per fork (a few dozen an hour, against a listing
+// pass of about a dozen), and it is spent on the forks only. A read that fails
+// drops the row rather than admitting it uncredited: the safe direction for
+// "whose is this" is silence, not a guess.
+func credit(ctx context.Context, r *ghRepo) bool {
+	full, err := repoRead(ctx, r.FullName)
+	if err != nil || full.Parent == nil || full.Parent.FullName == "" {
+		return false
+	}
+	r.Parent, r.License = full.Parent, full.License
+	return true
 }
 
 // canonical breaks a name collision between two orgs claiming one catalog id —
@@ -208,11 +260,15 @@ func canonical(a, b Entry) bool {
 // from the project, never inferred: the platform already records what a site was
 // built from and what it was forked from, and a catalog that guessed either
 // would be guessing about authorship.
-func fromSite(s projects.LiveSite) Entry {
+func fromSite(s projects.LiveSite, starter map[string]bool) Entry {
 	e := Entry{
 		ID: s.Org + "/" + s.Slug, Org: s.Org, Name: s.Slug, Title: s.Name,
 		Kind: "site", Archetype: "site", URL: s.URL,
 		Repo: s.Repo, Template: s.ForkedFrom,
+		// Which lane a demo belongs in is derived from what it IS — our curated
+		// starter's own demo, a remix with recorded lineage, a credited kit — never
+		// from the fact that we happen to be the ones hosting it (origin.go).
+		Origin:  siteOrigin(s, starter),
 		Updated: time.Unix(s.UpdatedAt, 0).UTC().Format(time.RFC3339),
 		// Authorship is CARRIED, never re-derived: the store already gates Official
 		// behind an admin, so the corpus repeats that answer instead of forming an
@@ -244,12 +300,30 @@ func fold(repo, site Entry) Entry {
 	if site.Template != "" {
 		out.Template = site.Template
 	}
+	// The REPO's origin wins by default — which org the source lives in is a
+	// harder fact than what a demo's slug spells — but the two things the SITE
+	// knows and the repo cannot are both overrides, in strengthening order:
+	// recorded lineage means somebody built this FROM something, and a declared
+	// credit means it was never ours at all.
+	out.Origin = repo.Origin
+	if out.Template != "" {
+		out.Origin = OriginCommunity
+	}
+	if site.Upstream != "" {
+		out.Origin = OriginThirdParty
+	}
 	// A DECLARED credit is a veto, not a tie-break. The repo half infers "ours"
 	// from the org the repo sits in; the site half is a human statement that the
 	// work is somebody else's. An inference must never outrank a statement, or
 	// hosting a bought kit in our own template org would launder it into a
 	// first-party example — which is precisely how this went wrong.
-	out.Upstream, out.License = site.Upstream, site.License
+	//
+	// It is a veto and not a REPLACEMENT: the repo half's credit survives when the
+	// site declares none, because a GitHub fork's parent is a credit too and
+	// blanking it would leave a third-party row with no author on it.
+	if site.Upstream != "" {
+		out.Upstream, out.License = site.Upstream, site.License
+	}
 	out.Official = (repo.Official || site.Official) && site.Upstream == ""
 	// Forkable stays the REPO's answer, minus the same veto: hosting a demo of
 	// someone else's fork does not make it ours to hand over.
@@ -260,15 +334,29 @@ func fold(repo, site Entry) Entry {
 // fromRepo maps one repo to a catalog row. The archetype is derived from the
 // repo's own topics and name rather than guessed by a model: a wrong archetype is
 // worse than none, because it silently hides the row from the browse rail.
-func fromRepo(r ghRepo, brand string) Entry {
+func fromRepo(r ghRepo, src source) Entry {
 	url := strings.TrimSpace(r.Homepage)
 	if url != "" && !strings.HasPrefix(url, "http") {
 		url = "https://" + url
 	}
+	// The org the repo lives in says which lane it is in — EXCEPT that GitHub
+	// itself says a fork holds upstream's code, and that outranks the address. A
+	// starter we vendored from somebody else is not a starter of ours.
+	origin, upstream := src.origin, ""
+	if r.Fork {
+		origin = OriginThirdParty
+		if r.Parent != nil {
+			upstream = r.Parent.FullName
+		}
+	}
 	return Entry{
-		ID: brand + "/" + r.Name, Org: brand, Name: r.Name, Title: r.Name,
-		Kind: "repo", Archetype: archetype(r), Language: r.Language,
+		ID: src.brand + "/" + r.Name, Org: src.brand, Name: r.Name, Title: r.Name,
+		Kind: "repo", Origin: origin, Archetype: archetype(r), Language: r.Language,
 		Description: r.Description, URL: url, Repo: r.HTMLURL,
+		// The credit a fork is listed on at all. License is what GitHub can name;
+		// when it can name none the row still carries WHOSE work it is, which is
+		// the half that keeps us from implying it is ours.
+		Upstream: upstream, License: spdx(r),
 		// Forkable is the one axis with teeth, so it has to be able to say no.
 		// A public repo of ours is yours to take. A repo that is itself a FORK
 		// of a third-party upstream is not: its license and its lineage belong
@@ -280,6 +368,18 @@ func fromRepo(r ghRepo, brand string) Entry {
 		// fact GitHub already asserts, never a guess about what is inside.
 		Official: !r.Fork,
 	}
+}
+
+// spdx is the licence of the work a fork carries, as GitHub names it. Only a
+// fork gets one: on our own repo the field would be noise, because License here
+// means "the terms SOMEBODY ELSE's work is under". NOASSERTION is GitHub saying
+// it could not identify the licence, which is not a licence name, so it reads as
+// none — the row still carries its upstream, which is the half that matters.
+func spdx(r ghRepo) string {
+	if !r.Fork || r.License.SPDX == "NOASSERTION" {
+		return ""
+	}
+	return r.License.SPDX
 }
 
 // archetypes are ordered: the first match wins, so the more specific topic beats
@@ -339,10 +439,9 @@ func isWordByte(b byte) bool {
 func repos(ctx context.Context, org string) ([]ghRepo, error) {
 	var out []ghRepo
 	for page := 1; page <= maxPages; page++ {
-		rows, err := repoPage(ctx, org, page, getenv("GH_PAT", ""))
-		if isAuth(err) {
-			rows, err = repoPage(ctx, org, page, "")
-		}
+		var rows []ghRepo
+		err := ghJSON(ctx, fmt.Sprintf(
+			"https://api.github.com/orgs/%s/repos?per_page=%d&type=public&page=%d", org, perPage, page), &rows)
 		if err != nil {
 			return out, err
 		}
@@ -354,16 +453,38 @@ func repos(ctx context.Context, org string) ([]ghRepo, error) {
 	return out, nil
 }
 
+// repoRead is the SINGLE-repo read, and the only reason it exists is `parent`:
+// GitHub does not carry it in an org listing, and a fork with no named parent is
+// a row we refuse to publish (credit). A package var so the corpus assembly stays
+// testable without a live GitHub, like every other source here.
+var repoRead = func(ctx context.Context, fullName string) (ghRepo, error) {
+	var out ghRepo
+	err := ghJSON(ctx, "https://api.github.com/repos/"+fullName, &out)
+	return out, err
+}
+
 // errAuth marks a credential rejection, the one failure worth retrying without one.
 var errAuth = errors.New("catalog: github rejected the credential")
 
 func isAuth(err error) bool { return errors.Is(err, errAuth) }
 
-func repoPage(ctx context.Context, org string, page int, token string) ([]ghRepo, error) {
-	url := fmt.Sprintf("https://api.github.com/orgs/%s/repos?per_page=%d&type=public&page=%d", org, perPage, page)
+// ghJSON is the ONE GitHub read. GH_PAT is used when present (the same token the
+// git mirror already holds) purely for rate limit; the corpus is PUBLIC, so the
+// token changes the hourly budget, never the answer — which is exactly why an
+// expired or wrong-scoped token must not be able to empty the catalog, and why a
+// 401/403 is retried once anonymously rather than reported as a failed source.
+func ghJSON(ctx context.Context, url string, out any) error {
+	err := ghOnce(ctx, url, getenv("GH_PAT", ""), out)
+	if isAuth(err) {
+		err = ghOnce(ctx, url, "", out)
+	}
+	return err
+}
+
+func ghOnce(ctx context.Context, url, token string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	if token != "" {
@@ -371,42 +492,46 @@ func repoPage(ctx context.Context, org string, page int, token string) ([]ghRepo
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	switch resp.StatusCode {
 	case http.StatusOK:
 	case http.StatusUnauthorized, http.StatusForbidden:
-		return nil, fmt.Errorf("%w: %s: %s", errAuth, org, resp.Status)
+		return fmt.Errorf("%w: %s: %s", errAuth, url, resp.Status)
 	default:
-		return nil, fmt.Errorf("catalog: github %s: %s", org, resp.Status)
+		return fmt.Errorf("catalog: github %s: %s", url, resp.Status)
 	}
-	var rows []ghRepo
-	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
-		return nil, err
-	}
-	return rows, nil
+	return json.NewDecoder(resp.Body).Decode(out)
 }
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
-// sourceOrgs resolves the GitHub org → brand map. An override lists orgs as
-// "githuborg:brand" or bare (brand = the org).
-func sourceOrgs() map[string]string {
+// sourceOrgs resolves the GitHub org → source table. An override lists orgs as
+// "githuborg:brand:origin", "githuborg:brand" or bare (brand = the org). An
+// unstated origin is `product`: whoever pointed the catalog at an org configured
+// it as a source of THEIRS, and "our own software" is the answer that claims the
+// least — it neither offers the repos as starters nor credits them to a stranger.
+func sourceOrgs() map[string]source {
 	raw := strings.TrimSpace(getenv(sourceOrgsEnv, ""))
 	if raw == "" {
 		return defaultOrgs
 	}
-	out := map[string]string{}
+	out := map[string]source{}
 	for _, part := range strings.Split(raw, ",") {
-		gh, brand, ok := strings.Cut(strings.TrimSpace(part), ":")
-		if gh = strings.TrimSpace(gh); gh == "" {
+		f := strings.Split(strings.TrimSpace(part), ":")
+		gh := strings.TrimSpace(f[0])
+		if gh == "" {
 			continue
 		}
-		if !ok || strings.TrimSpace(brand) == "" {
-			brand = gh
+		s := source{brand: gh, origin: OriginProduct}
+		if len(f) > 1 && strings.TrimSpace(f[1]) != "" {
+			s.brand = strings.TrimSpace(f[1])
 		}
-		out[gh] = strings.TrimSpace(brand)
+		if len(f) > 2 && strings.TrimSpace(f[2]) != "" {
+			s.origin = strings.TrimSpace(f[2])
+		}
+		out[gh] = s
 	}
 	return out
 }

@@ -322,3 +322,62 @@ func TestProvenanceReachesTheAPI(t *testing.T) {
 		}
 	}
 }
+
+// TestTwoLanesOneCorpus is the information-architecture bug this axis fixes:
+// /templates and /community are two VIEWS of this one corpus, cut on origin, so
+// they can never disagree the way a second hand-kept catalog does. It asserts
+// what each lane returns AND that the lanes partition — a row in no lane is a row
+// no surface can show.
+func TestTwoLanesOneCorpus(t *testing.T) {
+	app := mount(t)
+	seed(t,
+		Entry{ID: "hanzo/folio", Org: "hanzo", Name: "folio", Kind: "site", Origin: OriginTemplate,
+			URL: "https://folio.hanzo.app", Forkable: true, Updated: "2026-07-01"},
+		Entry{ID: "hanzo/ex-kanban", Org: "hanzo", Name: "ex-kanban", Kind: "site", Origin: OriginCommunity,
+			URL: "https://ex-kanban.hanzo.app", Template: "folio", Official: true, Updated: "2026-07-02"},
+		Entry{ID: "acme/board", Org: "acme", Name: "board", Kind: "site", Origin: OriginCommunity,
+			URL: "https://board.hanzo.app", Template: "folio", Updated: "2026-07-03"},
+		Entry{ID: "hanzo/ui", Org: "hanzo", Name: "ui", Kind: "repo", Origin: OriginThirdParty,
+			Upstream: "frappe/ui", License: "MIT", Updated: "2026-07-04"},
+		Entry{ID: "lux/node", Org: "lux", Name: "node", Kind: "repo", Origin: OriginProduct,
+			Updated: "2026-07-05"},
+	)
+
+	all := decode(t, mustGet(t, app, "/v1/catalog"))
+	if got := all.Facets["origin"]; got[OriginTemplate] != 1 || got[OriginCommunity] != 2 ||
+		got[OriginThirdParty] != 1 || got[OriginProduct] != 1 {
+		t.Fatalf("every lane must be countable from the rail: %v", got)
+	}
+	tpl := decode(t, mustGet(t, app, "/v1/catalog?origin=template"))
+	if tpl.Total != 1 || tpl.Data[0].ID != "hanzo/folio" {
+		t.Errorf("/templates browses our starters: %+v", tpl.Data)
+	}
+	com := decode(t, mustGet(t, app, "/v1/catalog?origin=community"))
+	if com.Total != 2 {
+		t.Fatalf("/community browses what people built, got %d: %+v", com.Total, com.Data)
+	}
+	// Ours in the community lane are the ones carrying the marker — that is the
+	// whole reason origin and official are two fields and not one value.
+	mine := decode(t, mustGet(t, app, "/v1/catalog?origin=community&official=true"))
+	if mine.Total != 1 || mine.Data[0].ID != "hanzo/ex-kanban" {
+		t.Errorf("a seeded example is community AND ours: %+v", mine.Data)
+	}
+	// Lineage is browsable, which is what makes the lane readable rather than a
+	// pile: everything built from folio, in one ask.
+	from := decode(t, mustGet(t, app, "/v1/catalog?template=folio"))
+	if from.Total != 2 {
+		t.Errorf("the lineage axis must select every child of folio, got %d: %+v", from.Total, from.Data)
+	}
+	sum := 0
+	for _, lane := range []string{OriginTemplate, OriginCommunity, OriginThirdParty, OriginProduct} {
+		sum += decode(t, mustGet(t, app, "/v1/catalog?origin="+lane)).Total
+	}
+	if sum != all.Total {
+		t.Errorf("the lanes must partition the corpus: %d != %d", sum, all.Total)
+	}
+	// origin must reach the wire on every row: an absent lane is the flattening
+	// this field was added to end.
+	if body := mustGet(t, app, "/v1/catalog?q=node"); !strings.Contains(body, `"origin":"product"`) {
+		t.Errorf("origin must be on the wire: %s", body)
+	}
+}

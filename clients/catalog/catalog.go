@@ -29,8 +29,14 @@
 // Surface:
 //
 //	GET /v1/catalog   search + browse: ?q= &org= &kind= &archetype= &language=
+//	                  &origin=template|community|third-party|product
+//	                  &template=<parent id>   (lineage: what was forked from it)
 //	                  &forkable=true|false &official=true|false
 //	                  (absent = both; see filter)
+//
+// origin is the axis the two hanzo.app lanes are cut on — /templates browses
+// origin=template, /community browses origin=community — so they are TWO VIEWS
+// of this one corpus and not two catalogs that can disagree.
 //
 // There is no write route. The corpus reconciles itself (sync.go), which is why
 // there is no credential that could publish into the published catalog at all.
@@ -79,11 +85,16 @@ const (
 // discovery is done along (org, archetype, language, forkable) plus the two links
 // that make a hit actionable (URL to see it, Repo to read it).
 type Entry struct {
-	ID          string `json:"id"`
-	Org         string `json:"org"` // hanzo | lux | zoo
-	Name        string `json:"name"`
-	Title       string `json:"title,omitempty"`
-	Kind        string `json:"kind"` // repo | site
+	ID    string `json:"id"`
+	Org   string `json:"org"` // hanzo | lux | zoo
+	Name  string `json:"name"`
+	Title string `json:"title,omitempty"`
+	Kind  string `json:"kind"` // repo | site
+	// Origin is WHAT THIS IS TO YOU: template | community | third-party | product
+	// (origin.go owns the four nouns and derives them). Not omitempty, for the
+	// same reason Forkable and Official are not: every row has an answer, and a
+	// missing one is exactly the flattening this field exists to end.
+	Origin      string `json:"origin"`
 	Archetype   string `json:"archetype,omitempty"`
 	Language    string `json:"language,omitempty"`
 	Description string `json:"description,omitempty"`
@@ -221,6 +232,10 @@ func read(c *zip.Ctx, org, q, scope string) ([]Entry, error) {
 func filter(in []Entry, c *zip.Ctx) []Entry {
 	org, arch := strings.ToLower(c.Query("org")), strings.ToLower(c.Query("archetype"))
 	lang, kind := strings.ToLower(c.Query("language")), strings.ToLower(c.Query("kind"))
+	// origin cuts the corpus into the lanes a person actually browses; parent
+	// narrows a lane to one lineage ("everything built from folio"), which is what
+	// turns the community lane from a pile into something you can read.
+	orig, parent := strings.ToLower(c.Query("origin")), strings.ToLower(c.Query("template"))
 	fork, forkSet := boolQuery(c, "forkable")
 	first, firstSet := boolQuery(c, "official")
 	out := in[:0]
@@ -230,6 +245,8 @@ func filter(in []Entry, c *zip.Ctx) []Entry {
 			arch != "" && strings.ToLower(e.Archetype) != arch,
 			lang != "" && strings.ToLower(e.Language) != lang,
 			kind != "" && strings.ToLower(e.Kind) != kind,
+			orig != "" && strings.ToLower(e.Origin) != orig,
+			parent != "" && strings.ToLower(e.Template) != parent,
 			forkSet && e.Forkable != fork,
 			firstSet && e.Official != first:
 			continue
@@ -251,11 +268,13 @@ func boolQuery(c *zip.Ctx, name string) (v, ok bool) {
 // trues rendered {true: everything} and told a caller there was a choice where
 // there was none.
 func facet(in []Entry) map[string]counts {
-	f := map[string]counts{"org": {}, "archetype": {}, "language": {}, "kind": {}, "forkable": {}, "official": {}}
+	f := map[string]counts{"org": {}, "archetype": {}, "language": {}, "kind": {},
+		"origin": {}, "template": {}, "forkable": {}, "official": {}}
 	for _, e := range in {
 		for dim, v := range map[string]string{
 			"org": e.Org, "archetype": e.Archetype, "language": e.Language,
-			"kind": e.Kind, "forkable": strconv.FormatBool(e.Forkable),
+			"kind": e.Kind, "origin": e.Origin, "template": e.Template,
+			"forkable": strconv.FormatBool(e.Forkable),
 			"official": strconv.FormatBool(e.Official),
 		} {
 			if v != "" {
