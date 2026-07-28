@@ -242,7 +242,6 @@ func PutApps(apps []App) []byte {
 		ob.SetText(aLatestOff, a.LatestTag)
 		ob.SetText(aDriftOff, a.DriftSeverity)
 		ob.SetText(aRegOff, a.Registry)
-		ob.SetText(aRegOff, a.Registry)
 		ob.FinishAsRoot()
 		_ = writeFrame(&out, b.Finish())
 	}
