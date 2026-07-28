@@ -2,109 +2,169 @@ package plugin
 
 import (
 	"context"
-	"encoding/json"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/goa"
+	"github.com/hanzoai/cloud/clients/admin/core"
+	"github.com/hanzoai/cloud/manifest"
+	"github.com/zap-proto/zip"
 )
 
-// TestBuildWasm mounts the goa Rust echo guest (testdata/echo.wasm) as a wasm
-// plugin and exercises it end to end through the produced http.Handler.
-func TestBuildWasm(t *testing.T) {
-	p := Plugin{
-		Name: "echo", Kind: "wasm", Lang: "rust", Source: "echo.wasm",
-		Prefix: "/v1/echo", Pool: 2,
-		Routes: []goa.Route{{Method: "POST", Path: "/echo", Func: "echo"}},
-	}
-	h, err := build(context.Background(), p, "testdata")
-	if err != nil {
-		t.Fatal(err)
-	}
-	srv := httptest.NewServer(h)
-	defer srv.Close()
+// TestRoutes_LandInTheTypedRegistry is the point of typing these ops at all: the
+// registry is what the OpenAPI document, the MCP tool list and the generated CLI
+// are projections of, so a route that lands here needs no second definition to
+// appear in any of them. A raw handler would serve the same bytes and be
+// invisible to all three.
+func TestRoutes_LandInTheTypedRegistry(t *testing.T) {
+	z := zip.New(zip.Config{AppName: "host", DisableStartupMessage: true})
+	Routes(z, &ops{z: z})
 
-	resp, err := http.Post(srv.URL+"/v1/echo/echo", "application/json", strings.NewReader(`{"name":"ada"}`))
-	if err != nil {
-		t.Fatal(err)
+	spec := z.OpenAPISpec()
+	paths, ok := spec["paths"].(map[string]map[string]any)
+	if !ok {
+		t.Fatalf("OpenAPI spec has no paths (%T)", spec["paths"])
 	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	var got map[string]map[string]string
-	if err := json.Unmarshal(body, &got); err != nil {
-		t.Fatalf("response not JSON: %q", body)
+	want := map[string]struct{ method, opID string }{
+		"/v1/admin/plugins":                {"get", "adminPlugins"},
+		"/v1/admin/plugins/{name}/reload":  {"post", "adminReloadPlugin"},
+		"/v1/admin/plugins/{name}/enable":  {"post", "adminEnablePlugin"},
+		"/v1/admin/plugins/{name}/disable": {"post", "adminDisablePlugin"},
 	}
-	if got["echo"]["name"] != "ada" {
-		t.Fatalf("got %s", body)
+	for path, w := range want {
+		item, ok := paths[path]
+		if !ok {
+			t.Errorf("%s missing from the OpenAPI projection", path)
+			continue
+		}
+		op, ok := item[w.method].(map[string]any)
+		if !ok {
+			t.Errorf("%s has no %s operation", path, w.method)
+			continue
+		}
+		if got := op["operationId"]; got != w.opID {
+			t.Errorf("%s %s operationId = %v, want %s", w.method, path, got, w.opID)
+		}
 	}
 }
 
-// TestBuildProxy forwards to a standalone backend over the default HTTP
-// transport, with and without prefix stripping.
-func TestBuildProxy(t *testing.T) {
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, "hit:"+r.URL.Path)
-	}))
-	defer backend.Close()
+// TestDrift pins the one judgement this view makes. An unreachable host must not
+// be read as a plugin being down, and two digests running at once must read as
+// drift — that is the difference between "the rollout is finished" and "the
+// rollout is stuck", which is the question the board exists to answer.
+func TestDrift(t *testing.T) {
+	hosts := []Host{
+		{Host: "cloud-0", Plugins: []zip.PluginStatus{
+			{Name: "billing", Running: true, Version: "aaa"},
+			{Name: "search", Running: true, Version: "ccc"},
+		}},
+		{Host: "cloud-1", Plugins: []zip.PluginStatus{
+			{Name: "billing", Running: true, Version: "bbb"}, // mid-rollout
+			{Name: "search", Disabled: true},
+		}},
+		{Host: "cloud-2", Err: "dial tcp: connection refused", Plugins: nil},
+	}
 
+	got := map[string]Drift{}
+	for _, d := range drift(hosts) {
+		got[d.Name] = d
+	}
+	if len(got) != 2 {
+		t.Fatalf("drift produced %d rows, want 2", len(got))
+	}
+	if b := got["billing"]; !b.Drifted || len(b.Versions) != 2 || b.Running != 2 {
+		t.Errorf("billing = %+v, want drifted with 2 versions across 2 running", b)
+	}
+	if s := got["search"]; s.Drifted || s.Running != 1 || s.Disabled != 1 || s.Down != 0 {
+		t.Errorf("search = %+v, want 1 running + 1 disabled, not drifted", s)
+	}
+	// The unreachable host contributed nothing at all.
+	if got["billing"].Down != 0 {
+		t.Errorf("an unreachable host was counted as down: %+v", got["billing"])
+	}
+}
+
+// TestArtifact_RefusesUnverified proves the control plane cannot be talked into
+// installing an unpinned artifact. zip refuses a URL without a Sum; so does the
+// route in front of it, so the refusal is reported as a clean 'error' envelope
+// rather than surfacing from three layers down.
+func TestArtifact_RefusesUnverified(t *testing.T) {
+	o := &ops{}
 	for _, tc := range []struct {
-		name  string
-		strip bool
-		want  string
+		name string
+		in   ReloadIn
+		want string
 	}{
-		{"keep-prefix", false, "hit:/v1/svc/foo"},
-		{"strip-prefix", true, "hit:/foo"},
+		{"url without sum", ReloadIn{URL: "https://s3.hanzo.ai/x"}, "unverified"},
+		{"both version and url", ReloadIn{Version: "v1", URL: "https://s3.hanzo.ai/x", Sum: "ab"}, "not both"},
+		{"version with no origin", ReloadIn{Version: "v1"}, OriginEnv},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			h, err := build(context.Background(),
-				Plugin{Name: "svc", Kind: "proxy", Prefix: "/v1/svc", Target: backend.URL, StripPrefix: tc.strip}, "")
-			if err != nil {
-				t.Fatal(err)
-			}
-			front := httptest.NewServer(h)
-			defer front.Close()
-			resp, err := http.Get(front.URL + "/v1/svc/foo")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer resp.Body.Close()
-			b, _ := io.ReadAll(resp.Body)
-			if string(b) != tc.want {
-				t.Fatalf("got %q want %q", b, tc.want)
+			_, err := o.artifact(context.Background(), &tc.in)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v, want it to mention %q", err, tc.want)
 			}
 		})
 	}
-}
 
-// TestTransportSeam: "http" is built in; a custom transport is selectable once
-// registered; an unknown transport errors.
-func TestTransportSeam(t *testing.T) {
-	if _, err := transportFor("http"); err != nil {
-		t.Fatalf("http transport: %v", err)
+	// A url WITH a sum is the pinned form and must pass through untouched.
+	got, err := o.artifact(context.Background(), &ReloadIn{URL: "https://s3.hanzo.ai/x", Sum: "abc"})
+	if err != nil || got.URL == "" || got.Sum != "abc" {
+		t.Fatalf("artifact(url+sum) = %+v, %v", got, err)
 	}
-	if _, err := transportFor(""); err != nil {
-		t.Fatalf("default transport: %v", err)
-	}
-	if _, err := transportFor("zap"); err == nil {
-		t.Fatal("unregistered transport should error")
-	}
-	RegisterTransport("zap", roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("ok")), Header: http.Header{}}, nil
-	}))
-	if _, err := transportFor("zap"); err != nil {
-		t.Fatalf("zap transport after register: %v", err)
+	// Neither means "restart what is loaded", which is a legitimate request.
+	got, err = o.artifact(context.Background(), &ReloadIn{})
+	if err != nil || got.URL != "" || got.Sum != "" {
+		t.Fatalf("artifact(empty) = %+v, %v — want an empty spec meaning restart", got, err)
 	}
 }
 
-type roundTripFunc func(*http.Request) (*http.Response, error)
+// TestKnown proves the generated manifest is the authority on which apps exist,
+// so a typo is refused here rather than three layers down.
+func TestKnown(t *testing.T) {
+	o := &ops{}
+	if len(manifest.Apps) == 0 {
+		t.Skip("no generated manifest")
+	}
+	real := manifest.Apps[0].Name
+	if err := o.known(real); err != nil {
+		t.Errorf("known(%q) = %v, want nil", real, err)
+	}
+	if err := o.known("definitely-not-an-app"); err == nil {
+		t.Error("known() accepted a name the manifest does not declare")
+	}
+}
 
-func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+// TestRun_RefusesWithoutAuditStore is the AU-5 refusal: a lifecycle change can
+// take production down, so a deployment that cannot durably record it does not
+// get to make it. Same discipline as a credit grant refusing to move money it
+// cannot account for.
+func TestRun_RefusesWithoutAuditStore(t *testing.T) {
+	ran := false
+	o := &ops{self: "cloud-0"} // no audit recorder
+	out, err := o.run(context.Background(), nil, act{
+		name: "billing", action: "plugin.reload", scope: scopeHost,
+		here: func() error { ran = true; return nil },
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if out.Status != core.Err || !strings.Contains(out.Msg, "audit") {
+		t.Fatalf("out = %+v, want an error envelope naming the missing audit store", out)
+	}
+	if ran {
+		t.Fatal("the operation ran anyway — the refusal must come BEFORE the change")
+	}
+}
 
-func TestUnknownKind(t *testing.T) {
-	if _, err := build(context.Background(), Plugin{Name: "x", Kind: "bogus"}, ""); err == nil {
-		t.Fatal("unknown kind should error")
+// TestVerb pins the route segment an action fans out to. The audit action and
+// the route share a word on purpose, so this stays a suffix rather than a table
+// that can drift from the routes above.
+func TestVerb(t *testing.T) {
+	for action, want := range map[string]string{
+		"plugin.reload": "reload", "plugin.enable": "enable", "plugin.disable": "disable",
+	} {
+		if got := verb(action); got != want {
+			t.Errorf("verb(%q) = %q, want %q", action, got, want)
+		}
 	}
 }
