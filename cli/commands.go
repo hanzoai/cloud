@@ -3,10 +3,12 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
 )
 
 // platform builds a platform REST client from the resolved env + the global
@@ -262,7 +264,7 @@ func printCluster(w io.Writer, c Cluster) {
 
 func newBuildCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 	var br BuildReq
-	var buildToken string
+	var buildToken, recipe string
 	cmd := &cobra.Command{
 		Use:   "build <repo>",
 		Short: "Enqueue a platform-native build on the runner fabric (no GitHub builders)",
@@ -276,8 +278,17 @@ func newBuildCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 			if len(args) == 1 {
 				br.Repo = args[0]
 			}
-			if br.Repo == "" || br.SHA == "" || br.Image == "" {
-				return fmt.Errorf("--repo (or positional), --sha and --image are required")
+			// No --image ⇒ the ARTIFACT lane: the repo's own hanzo.yml says what to
+			// build (`binaries:`) and where it lands (`bucket:`). One declaration —
+			// the same file hanzoai/ci reads — so nothing is restated on the command
+			// line, and a project with no Dockerfile is still buildable.
+			if br.Image == "" && len(br.Binaries) == 0 {
+				if err := br.loadRecipe(recipe); err != nil {
+					return err
+				}
+			}
+			if br.Repo == "" || br.SHA == "" || (br.Image == "" && len(br.Binaries) == 0) {
+				return fmt.Errorf("--repo (or positional) and --sha are required, plus --image or a hanzo.yml declaring binaries:")
 			}
 			// The platform build muscle clones an https git URL; accept the
 			// idiomatic `owner/name` shorthand and expand it to GitHub (the host
@@ -295,8 +306,11 @@ func newBuildCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 				fmt.Fprintf(tw, "buildJobId:\t%s\n", job.BuildJobID)
 				fmt.Fprintf(tw, "status:\t%s\n", job.Status)
 				fmt.Fprintf(tw, "runnerPool:\t%s\n", job.RunnerPool)
-				fmt.Fprintf(tw, "image:\t%s\n", job.Image)
-				fmt.Fprintf(tw, "target:\t%s\n", job.Target)
+				fmt.Fprintf(tw, "image:\t%s\n", dashIfEmpty(job.Image))
+				fmt.Fprintf(tw, "target:\t%s\n", dashIfEmpty(job.Target))
+				if job.Index != "" {
+					fmt.Fprintf(tw, "index:\t%s\n", job.Index)
+				}
 				tw.Flush()
 			})
 		},
@@ -311,8 +325,36 @@ func newBuildCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 	f.StringVar(&br.DockerTarget, "target", "", "Docker build stage (--target)")
 	f.StringVar(&br.OS, "os", "", "linux|darwin|windows (default linux)")
 	f.StringVar(&br.Arch, "arch", "", "amd64|arm64 (default amd64)")
+	f.StringVar(&br.Bucket, "bucket", "", "object-store bucket for artifacts (default: hanzo.yml bucket:)")
+	f.StringVar(&br.Tag, "tag", "", "version segment artifacts publish under (default: the sha)")
+	f.StringVar(&recipe, "recipe", "hanzo.yml", "hanzo.yml to read binaries:/bucket: from when --image is absent")
 	f.StringVar(&buildToken, "build-token", "", "platform build-enqueue token (else env/credential store)")
 	return cmd
+}
+
+// loadRecipe fills Binaries/Bucket from a hanzo.yml. It reads the SAME two keys
+// hanzoai/ci reads out of the SAME file — the CLI parses no format of its own,
+// so a recipe that builds here builds identically on the GitHub lane.
+func (br *BuildReq) loadRecipe(path string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("no --image and no readable %s: %w", path, err)
+	}
+	var doc struct {
+		Binaries []BuildBinary `yaml:"binaries"`
+		Bucket   string        `yaml:"bucket"`
+	}
+	if err := yaml.Unmarshal(b, &doc); err != nil {
+		return fmt.Errorf("parse %s: %w", path, err)
+	}
+	if len(doc.Binaries) == 0 {
+		return fmt.Errorf("%s declares no binaries: — pass --image to build a container image instead", path)
+	}
+	br.Binaries = doc.Binaries
+	if br.Bucket == "" {
+		br.Bucket = doc.Bucket
+	}
+	return nil
 }
 
 // normalizeRepoURL expands the idiomatic `owner/name` shorthand to a full GitHub
