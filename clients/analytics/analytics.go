@@ -102,32 +102,45 @@ func build(b cloud.Base) (state, error) {
 // sites.SetBaseHostHandler): a page served on a site host can POST its OWN analytics
 // beacon to the canonical /v1/event (or the deprecated /v1/analytics{,/batch} and
 // /v1/insights/e beacons kept working mid-migration) and have it ingested into
-// hanzo.events with the tenant FORCED to the site's resolved Org — the
-// server-supplied, host-derived tenant, never a body/header claim. It funnels
-// through the SAME write core (eventWithOrg / captureWithOrg / insightsWithOrg →
-// ingestBody → ingestEvents); the in-handler tenant resolvers are deliberately NOT
-// consulted because the host already authorizes the tenant.
+// hanzo.events under the site's resolved Org — the server-supplied, host-derived
+// tenant, never a body/header claim.
+//
+// It goes STRAIGHT to the ANONYMOUS lane (publicIngest), and this is the honest
+// description of the door rather than a policy applied to it: sites.Middleware runs
+// BEFORE the identity boundary (serve.go — sites at 241, IdentityMiddleware at 267),
+// so on a site host c.User()/c.Org() are still RAW client headers and NOTHING here can
+// be vouched for. A published site is a public artifact and its beacons are anonymous
+// by construction, so they get the anonymous capability: the pageview/error allowlist
+// and the field projection (no revenue, no personId, no groupId, no property bag), the
+// 50-event / 64 KiB bounds, the per-IP and per-peer rate caps, and the DNT gate.
+//
+// The Site's org is the anonymous TENANT, so a customer's own site analytics keep
+// landing in the customer's org — the same host-derived tenant this host is already
+// trusted for when the file plane serves its bytes and the Base carve serves its data.
+// A caller wanting FULL capability presents a credential to api.hanzo.ai/v1/event,
+// which sits behind the identity boundary where a credential can actually be checked.
 //
 // Gated by the SAME already-existing flag the anonymous ingest path uses —
 // CLOUD_ANALYTICS_PUBLIC_CAPTURE (publicCaptureEnabled, default ON) — so a site
 // host accepts its own beacons out of the box, and turning public capture off also
-// removes this carve (a site host then 405s a beacon POST, unchanged). The org is
-// the resolver's Site.Org; sites.Middleware gates this carve on method POST so the
-// authenticated GET read lenses are never hijacked.
+// removes this carve (a site host then 405s a beacon POST, unchanged). sites.Middleware
+// gates the carve on method POST and on an exact ingest-path set, so the authenticated
+// GET read lenses are never hijacked.
 func installHostCarve(b cloud.Base) {
 	if !publicCaptureEnabled() {
 		b.Log.Info("analytics public-host ingest carve disabled", "flag", publicCaptureEnv)
 		return
 	}
 	sites.SetAnalyticsHostHandler(func(org string, c *zip.Ctx) error {
-		switch c.Path() {
-		case "/v1/event": // the canonical door — host-forced org, canonical wire
-			return eventWithOrg(org, c)
-		case "/v1/insights/e": // deprecated PostHog-wire beacon
-			return insightsWithOrg(org, c)
-		default: // deprecated Segment/beacon wire: /v1/analytics{,/batch}
-			return captureWithOrg(org, c)
+		// Only the WIRE differs per path; capability and tenant are the same for all
+		// three, which is the whole point of routing them through one lane.
+		if c.Path() == "/v1/insights/e" { // deprecated PostHog-wire beacon
+			return publicIngest(c, decodeInsights, org, sourcePostHog)
 		}
+		if c.Path() == "/v1/event" { // the canonical door, canonical wire
+			return publicIngest(c, decodeIngest, org, sourceEvent)
+		}
+		return publicIngest(c, decodeIngest, org, sourceCapture) // /v1/analytics{,/batch}
 	})
 	b.Log.Info("analytics public-host ingest carve enabled", "flag", publicCaptureEnv)
 }

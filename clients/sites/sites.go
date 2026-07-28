@@ -249,16 +249,29 @@ var analyticsHostHandler func(org string, c *zip.Ctx) error
 // analyticsHostHandler).
 func SetAnalyticsHostHandler(h func(org string, c *zip.Ctx) error) { analyticsHostHandler = h }
 
-// isAnalyticsPath reports whether a path targets the site-host analytics-beacon
-// ingest: the CANONICAL door at /v1/event, plus the deprecated Segment/beacon wire
-// at /v1/analytics{,/batch} and the deprecated PostHog wire at /v1/insights/e (kept
-// so beacons already deployed on published sites don't break mid-migration). The
-// Middleware carve additionally gates on POST, so the authenticated GET read lenses
-// (/v1/analytics/overview|timeseries|top) — which live on api.hanzo.ai, never a site
-// host — are never hijacked.
-func isAnalyticsPath(p string) bool {
-	return p == "/v1/event" || strings.HasPrefix(p, "/v1/analytics") || p == "/v1/insights/e"
+// analyticsPaths is the EXACT set of site-host analytics-beacon INGEST paths: the
+// canonical door at /v1/event, the deprecated Segment/beacon wire at
+// /v1/analytics{,/batch}, and the deprecated PostHog wire at /v1/insights/e (kept so
+// beacons already deployed on published sites don't break mid-migration).
+//
+// It is an exact set and not a prefix. `HasPrefix(p, "/v1/analytics")` also swallowed
+// every READ lens — /v1/analytics/overview, /timeseries, /top, /health — leaving the
+// POST-method check in Middleware as the only thing keeping a read path out of the
+// ingest carve. That made a lens's exposure depend on which verb it happened to be
+// mounted under: the day a read path grows a POST (a query body, a batched lens), the
+// carve silently starts routing it to the beacon handler with a host-derived org. The
+// set names what ingest actually is, so the method check is a second line rather than
+// the only one, and a new /v1/analytics/* route is out by default.
+var analyticsPaths = map[string]bool{
+	"/v1/event":           true,
+	"/v1/analytics":       true,
+	"/v1/analytics/batch": true,
+	"/v1/insights/e":      true,
 }
+
+// isAnalyticsPath reports whether a path targets the site-host analytics-beacon
+// ingest (analyticsPaths). The Middleware carve additionally gates on POST.
+func isAnalyticsPath(p string) bool { return analyticsPaths[p] }
 
 func (s *Server) Middleware() zip.Handler {
 	return func(c *zip.Ctx) error {
