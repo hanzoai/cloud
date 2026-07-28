@@ -60,6 +60,7 @@ import (
 	"github.com/hanzoai/cloud/clients/base"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/sites"
+	"github.com/hanzoai/cloud/internal/fqdn"
 	"github.com/zap-proto/zip"
 )
 
@@ -87,13 +88,16 @@ type state struct {
 	store *Store
 	blob  *blobStore
 	cf    *sites.Purger
-	// operatorOrgs may bind CUSTOM domains to their sites in addition to a global
-	// admin — the platform operator (the deployment's own brand org) manages
-	// customer domains until per-org DNS-ownership verification is wired here.
+	// operatorOrgs may bind a CUSTOM domain to their sites WITHOUT proving they
+	// own it, in addition to a global admin — the platform operator (the
+	// deployment's own brand org) manages customer DNS, so its bind is the vouch.
 	// Env CLOUD_PLATFORM_OPERATOR_ORGS (comma-separated) overrides; default is the
-	// brand org (hanzo). A bound domain only SERVES once its owner points DNS at
-	// this edge, so binding without DNS control is inert — the real gate is DNS.
+	// brand org (hanzo). Every OTHER org self-serves: it claims the host pending
+	// and proves control with the DNS challenge (domains.go).
 	operatorOrgs map[string]bool
+	// resolver reads the custom-domain ownership challenge (domains.go); nil ⇒ the
+	// system resolver. Tests inject a fake so verification is deterministic.
+	resolver fqdn.Resolver
 	// ai generates static sites from a natural-language brief for POST /v1/sites.
 	// It is the SAME shared inference client the agents surface uses (deps.AI) and
 	// may be nil when no gateway is configured — buildSite then answers 503 honestly.
@@ -259,6 +263,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Post("/v1/projects/:slug/deployments/:id/complete", cloud.Handle(s, completeDeployment))
 	app.Get("/v1/projects/:slug/domains", cloud.Handle(s, listDomains))
 	app.Post("/v1/projects/:slug/domains", cloud.Handle(s, setDomains))
+	app.Post("/v1/projects/:slug/domains/:host/verify", cloud.Handle(s, verifyDomain))
 
 	// /v1/sites — the surface-agnostic deploy_site capability, shared with agents.
 	// /v1/sites builds a responsive static site from a brief and deploys it;
@@ -296,6 +301,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/platform/sites/:slug/deployments/:id", cloud.Handle(s, getDeployment))
 	app.Get("/v1/platform/sites/:slug/domains", cloud.Handle(s, listDomains))
 	app.Post("/v1/platform/sites/:slug/domains", cloud.Handle(s, setDomains))
+	app.Post("/v1/platform/sites/:slug/domains/:host/verify", cloud.Handle(s, verifyDomain))
 	siteReleases(app, s, "/v1/platform/sites")
 }
 
