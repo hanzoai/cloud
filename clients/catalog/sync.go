@@ -195,7 +195,13 @@ func canonical(a, b Entry) bool {
 	if a.Forkable != b.Forkable {
 		return a.Forkable
 	}
-	return a.Stars > b.Stars
+	if a.Stars != b.Stars {
+		return a.Stars > b.Stars
+	}
+	// Both ours, both unstarred (hanzoai/gallery vs hanzo-templates/gallery). The
+	// tiebreak is arbitrary ON PURPOSE — what matters is that it is TOTAL, so the
+	// row does not change its repo link every time the map iterates differently.
+	return a.Repo < b.Repo
 }
 
 // fromSite maps one live project to a catalog row. Repo and Template are READ

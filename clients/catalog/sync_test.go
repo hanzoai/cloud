@@ -232,6 +232,13 @@ func TestOneIdOneRepo(t *testing.T) {
 	if !canonical(big, small) || canonical(small, big) {
 		t.Error("between two of ours, the one people actually use wins")
 	}
+	// The real hanzo/gallery collision: both ours, both unstarred. Arbitrary is
+	// fine, a coin flip is not — the order must be TOTAL either way round.
+	l := fromRepo(ghRepo{Name: "gallery", HTMLURL: "https://github.com/hanzoai/gallery"}, "hanzo")
+	r := fromRepo(ghRepo{Name: "gallery", HTMLURL: "https://github.com/hanzo-templates/gallery"}, "hanzo")
+	if canonical(l, r) == canonical(r, l) {
+		t.Error("a tie must still have exactly one winner, or the row flips between syncs")
+	}
 }
 
 // publish runs the reconcile with a fixed repo set standing in for GitHub, and
