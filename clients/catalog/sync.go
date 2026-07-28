@@ -169,8 +169,15 @@ func fromSite(s projects.LiveSite) Entry {
 		Kind: "site", Archetype: "site", URL: s.URL,
 		Repo: s.Repo, Template: s.ForkedFrom,
 		Updated: time.Unix(s.UpdatedAt, 0).UTC().Format(time.RFC3339),
+		// Authorship is CARRIED, never re-derived: the store already gates Official
+		// behind an admin, so the corpus repeats that answer instead of forming an
+		// opinion of its own.
+		Official: s.Official, Upstream: s.Upstream, License: s.License,
 	}
-	e.Forkable = e.Repo != ""
+	// You may fork it if there is a source to fork AND nobody has declared the
+	// work somebody else's. "Fork this" is an invitation, and a credited kit is
+	// ours to SHOW, never ours to hand out.
+	e.Forkable = e.Repo != "" && e.Upstream == ""
 	return e
 }
 
@@ -192,9 +199,16 @@ func fold(repo, site Entry) Entry {
 	if site.Template != "" {
 		out.Template = site.Template
 	}
-	// Forkable stays the REPO's answer: hosting a demo of someone else's fork
-	// does not make it ours to hand over.
-	out.Forkable = repo.Forkable && out.Repo != ""
+	// A DECLARED credit is a veto, not a tie-break. The repo half infers "ours"
+	// from the org the repo sits in; the site half is a human statement that the
+	// work is somebody else's. An inference must never outrank a statement, or
+	// hosting a bought kit in our own template org would launder it into a
+	// first-party example — which is precisely how this went wrong.
+	out.Upstream, out.License = site.Upstream, site.License
+	out.Official = (repo.Official || site.Official) && site.Upstream == ""
+	// Forkable stays the REPO's answer, minus the same veto: hosting a demo of
+	// someone else's fork does not make it ours to hand over.
+	out.Forkable = repo.Forkable && out.Repo != "" && site.Upstream == ""
 	return out
 }
 
@@ -215,6 +229,11 @@ func fromRepo(r ghRepo, brand string) Entry {
 		// of a third-party upstream is not: its license and its lineage belong
 		// to that upstream, and the honest fork button for it points there.
 		Forkable: !r.Fork, Stars: r.Stars, Updated: r.PushedAt,
+		// Authorship rests on the same one fact, for the same reason: a repo in an
+		// org we own is ours, unless GitHub itself says it is a fork — in which
+		// case the code is upstream's and the badge would be a lie. Derived from a
+		// fact GitHub already asserts, never a guess about what is inside.
+		Official: !r.Fork,
 	}
 }
 

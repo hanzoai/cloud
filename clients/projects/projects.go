@@ -161,8 +161,13 @@ type projectView struct {
 	// from "this API is too old to say".
 	ForkedFrom string `json:"forkedFrom,omitempty"`
 	Official   bool   `json:"official"`
-	CreatedAt  int64  `json:"createdAt"`
-	UpdatedAt  int64  `json:"updatedAt"`
+	// Upstream/License credit the third-party work this project was published
+	// from, and the terms it carries. Omitted when nothing is declared: an absent
+	// credit means "nobody has said", not "there is nothing to say".
+	Upstream  string `json:"upstream,omitempty"`
+	License   string `json:"license,omitempty"`
+	CreatedAt int64  `json:"createdAt"`
+	UpdatedAt int64  `json:"updatedAt"`
 }
 
 func toProjectView(p Project) projectView {
@@ -173,6 +178,7 @@ func toProjectView(p Project) projectView {
 		CurrentDeploymentID: p.CurrentDeploy, CacheControl: p.CacheControl, LastPurgeAt: p.LastPurgeAt,
 		Analytics: p.Analytics, Space: p.SpaceId,
 		ForkedFrom: p.ForkedFrom, Official: p.Official,
+		Upstream: p.Upstream, License: p.License,
 		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 }
@@ -352,6 +358,11 @@ type createReq struct {
 	// SuperAdmin caller (createProject drops it otherwise), so a tenant can never
 	// pass its own app off as a Hanzo example.
 	Official bool `json:"official"`
+	// Upstream/License credit the third-party work this project was published
+	// from. Taken from any caller: disclaiming authorship can only cost the
+	// publisher credit, so it needs no gate (see Project.Upstream).
+	Upstream string `json:"upstream"`
+	License  string `json:"license"`
 	// ForkedFrom is the lineage stamp. json:"-": it is set by the fork path from
 	// the parent it actually resolved, never by the caller, so an attribution edge
 	// always names a real ancestor.
@@ -415,6 +426,7 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body createR
 		// The badge is an assertion about WHO published, so only the platform may
 		// make it: a tenant asking for official:true simply gets false.
 		Official: body.Official && c.IsAdmin(),
+		Upstream: credit(body.Upstream), License: credit(body.License),
 	}
 	if p.RepoBranch == "" && p.RepoURL != "" {
 		p.RepoBranch = "main"
@@ -512,6 +524,23 @@ type updateReq struct {
 	// already exists — the examples published before the badge did. Same ONE rule
 	// as at create: honored only for a SuperAdmin caller.
 	Official *bool `json:"official"`
+	// Upstream/License credit the third-party work this app was published from —
+	// settable after the fact, because the demos that need crediting most are the
+	// ones already live. Pointers so "" clears a credit and absent leaves it.
+	Upstream *string `json:"upstream"`
+	License  *string `json:"license"`
+}
+
+// credit normalizes one attribution line: trimmed, single-line, bounded. It is
+// free text on purpose — "UI8 — Fitness Pro Website UI Kit" is the honest answer
+// and no enum could hold it — but free text that reaches a rendered card must not
+// smuggle newlines or run unbounded.
+func credit(s string) string {
+	s = strings.TrimSpace(strings.NewReplacer("\r", " ", "\n", " ").Replace(s))
+	if len(s) > 200 {
+		s = s[:200]
+	}
+	return s
 }
 
 func update(s *cloud.Service[state], c *zip.Ctx) error {
@@ -567,6 +596,12 @@ func update(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	if body.Official != nil && c.IsAdmin() {
 		p.Official = *body.Official
+	}
+	if body.Upstream != nil {
+		p.Upstream = credit(*body.Upstream)
+	}
+	if body.License != nil {
+		p.License = credit(*body.License)
 	}
 	p.UpdatedAt = time.Now().Unix()
 	if err := s.State.store.UpdateProject(c.Context(), p); err != nil {
