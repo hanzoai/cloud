@@ -181,6 +181,79 @@ CI pins both properties from `hanzo.yml`: `generated-current` re-runs the
 generator and fails on a dirty tree; `host-is-light` fails if `cmd/host`'s import
 graph reaches `apps` or any `clients/*`.
 
+## Credentials: one key for the deployment, one scope per app (`credz`)
+
+A plugin is a child process, and `zip` spawns it with `os.Environ()`. So whatever
+the launcher holds, all 108 children hold — every secret in every
+`/proc/<pid>/environ`, inherited by anything any of them execs. `credz` replaces
+that: **one process holds the root key; every other asks it, over a unix socket,
+for the credentials of the app it is.**
+
+- **The ONE credential a deployment provisions is `CLOUD_KMS_MASTER_KEY_REF`.**
+  It unseals the KMS secret store and keys the cek data plane. Every other secret
+  lives *inside* that store. `credz.Boot` takes it out of the environment at
+  process start and holds it in memory, so no spawned child inherits it.
+- **Who brokers**: the process that read the root key from its own environment
+  AND owns the sealed store (`deps.KMS` is the embedded client). That is the KMS
+  subsystem — exactly one process. `cmd/host` stays light; it holds nothing.
+- **Who asks**: every other `cloud` process, at the top of `Serve`, before
+  `LoadConfig` and before any store opens.
+- **Identity is the kernel's**: no token, no name in the request. The broker reads
+  `SO_PEERCRED` and resolves the peer's argv through `/proc`. Both spawn shapes
+  the manifest produces are accepted (`<dir>/<app>`, `cloud --enable=<app>`) and
+  the result is checked against `manifest.Apps`. Nothing to steal, nothing to
+  expire, and a child that crashes and respawns is re-attested for free.
+- **Scope is derived, not configured** — the manifest names every app, the store
+  holds every secret, and the path is built from the peer's identity:
+
+      /orgs/{adminOrg}/svc/_shared/{NAME}   every app
+      /orgs/{adminOrg}/svc/{app}/{NAME}     that app only
+
+  `{NAME}` is the environment variable the app already reads. Provisioning is a
+  `POST /v1/kms/orgs/{adminOrg}/secrets` — no second registry, no code change to
+  add a credential. `billing` cannot read `/svc/ai` because it cannot ask for a
+  path it is not.
+- **The environment stays the interface**: the bundle is installed with
+  `os.Setenv`, so all 108 apps keep reading `os.Getenv` unchanged — and a value
+  set after `execve` never appears in `/proc/<pid>/environ`.
+- **Three postures, logged at boot** (`credentials: ROOT|LEAF|DEV`, plus the
+  fail-closed case). `make host` with nothing provisioned resolves DEV: a
+  deterministic key through the same encrypted path as production, zero config.
+- **Boundary, stated honestly**: the data-plane key is shared by every process in
+  the pod, because they open the same encrypted files. `credz` scopes the
+  *service* credentials. The pod is the data-plane boundary; the app is the
+  credential boundary.
+
+Ordering is load-bearing: `cek` memoizes the master key on first use, so
+`credz.Boot` runs before the first store opens (top of `Serve`, and again at the
+top of `BuildDeps` for callers that skip `Serve` — it is `sync.Once`). Installing
+a key any later loses to the cached "no key" while the log claims success, which
+is exactly the bug this replaced.
+
+## One build contract: `mk/plugin.mk`, and an app's Makefile is its name
+
+`clients/<app>/Makefile` is two lines — `APPS := <name>` and
+`include ../../mk/plugin.mk`. Everything an app can be asked to do lives in that
+one included file: `generate` (zipdoc lifts handler prose into the untracked
+`zipdoc_gen.go`; a prerequisite of `build` because it is compiled IN), `build`
+(its own lean binary into `./bin`), `test`, `vet`, `openapi` (its own spec
+subset), `clean`, `help`. A target written once per app would be one place per
+app for them to disagree, and nobody edits a hundred files at once.
+
+Both invocations work — `make -C clients/tasks openapi` from the root and
+`cd clients/tasks && make openapi` — because `mk/plugin.mk` derives every path
+from the including Makefile's own location, never from the caller's cwd. That is
+what makes the OSS/private split a move rather than a rewrite: an extracted
+`clients/<app>` + `cmd/<app>` + `mk/` keeps the paths intact.
+
+`APPS` is a list and is never inferred from the directory name — four packages
+are not named after their app (`zt`→zero-trust, `eval`→evals, `auditlog`→audit,
+`plugin`→plugins) and `clients/account` backs two mounts. Three apps (authz,
+licensing, metrics) are external modules with a `cmd/<app>` and no source
+directory here; `mk/fleet.mk` runs them through the same recipe by name.
+`mk/go.mk` is the toolchain contract every includer shares (GOWORK=off, TMPDIR on
+disk, `-p=2`, the dev KMS key, the FTS5 tag).
+
 ## Framework doctrine
 
 One way to do everything. Composable, orthogonal, DRY. A new subsystem is a
