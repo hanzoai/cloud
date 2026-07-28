@@ -103,7 +103,7 @@ var probes = []probe{
 	// ── tolerant (preview / SuperAdmin / cross-org / staged-optional) ──
 	{"account", http.MethodGet, "/v1/ai/account", classTolerant},
 	{"chats", http.MethodGet, "/v1/ai/chats", classTolerant},
-	{"kms-secrets", http.MethodGet, "/v1/kms/orgs/smoke/secrets", classTolerant}, // BUG 1: was 402
+	{"kms-secrets", http.MethodGet, "/v1/kms/secrets", classTolerant}, // BUG 1: was 402
 	{"deploy-apps", http.MethodGet, "/v1/deploy/applications", classTolerant},
 	{"websearch", http.MethodGet, "/v1/websearch/search?q=hanzo", classTolerant},
 }

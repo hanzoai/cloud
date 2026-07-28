@@ -9,15 +9,20 @@
 //
 //	GET    /v1/kms/health                 — real probe (503 in health-only mode); public
 //	GET    /v1/kms/config                 — SPA runtime config;                    public
-//	GET    /v1/kms/orgs/:org/secrets      — list a path's secret metadata;         JWT, org-scoped
-//	GET    /v1/kms/orgs/:org/secrets/+    — read one secret value;                 JWT, org-scoped
-//	POST   /v1/kms/orgs/:org/secrets      — upsert a secret (sealed);              JWT, org-scoped
-//	DELETE /v1/kms/orgs/:org/secrets/+    — delete a secret;                       JWT, org-scoped
+//	GET    /v1/kms/secrets                — list a path's secret metadata;         JWT
+//	GET    /v1/kms/secrets/+              — read one secret value;                 JWT
+//	POST   /v1/kms/secrets                — upsert a secret (sealed);              JWT
+//	DELETE /v1/kms/secrets/+              — delete a secret;                       JWT
 //
-// ORG SCOPING — {org} must equal the caller's validated org (c.Org()); a global
-// admin (c.IsAdmin()) may act on any org. The org is folded into the store PATH
-// as /orgs/{org}{subpath}, so one org can never address another org's records.
-// This mirrors clients/paas and clients/admin.
+// ORG SCOPING — the org is the CALLER'S, read from the validated principal, and
+// never named in the URL. It used to be a path segment that had to equal
+// c.Org(), which made the tenant caller-selectable and left the guard
+// reconciling two sources for one fact; every other subsystem (platform, paas)
+// derives it from the identity, and so does this one now.
+//
+// The org is still folded into the store PATH as /orgs/{org}{subpath} — that is
+// the isolation partition, the same role the `org` column plays in every table,
+// and it is what keeps one org from addressing another's records.
 package kms
 
 import (
@@ -131,10 +136,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// from getSecret (400 "secret name is required"), leaving listSecrets
 	// unreachable. `+` requires a non-empty name, so the bare path falls through
 	// to the exact list route.
-	g.Get("/orgs/:org/secrets", guard(s, cloud.Handle(s, listSecrets)))
-	g.Get("/orgs/:org/secrets/+", guard(s, cloud.Handle(s, getSecret)))
-	g.Post("/orgs/:org/secrets", guard(s, cloud.Handle(s, putSecret)))
-	g.Delete("/orgs/:org/secrets/+", guard(s, cloud.Handle(s, deleteSecret)))
+	// The tenant surface: the caller's OWN secrets. No org in the path.
+	g.Get("/secrets", guard(s, cloud.Handle(s, listSecrets)))
+	g.Get("/secrets/+", guard(s, cloud.Handle(s, getSecret)))
+	g.Post("/secrets", guard(s, cloud.Handle(s, putSecret)))
+	g.Delete("/secrets/+", guard(s, cloud.Handle(s, deleteSecret)))
+
 
 	s.Log.Info(
 		"kms subsystem mounted",
@@ -198,19 +205,15 @@ func newEmbeddedClient(cfg *cloud.Config, log luxlog.Logger) (cloud.KMSClient, e
 // case-insensitive authz check would let org "Acme" reach org "acme"'s namespace.
 func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 	return func(ctx *zip.Ctx) error {
+		// A validated principal FIRST: the identity middleware restores a client
+		// X-Org-Id on the bearer-less path, so an unvalidated ctx.Org() is just a
+		// header an off-gateway caller chose. Refuse before reading it.
+		if !principal.Validated(ctx) {
+			return zip.ErrForbidden("no validated principal")
+		}
 		org := reqOrg(ctx)
 		if !validOrg(org) {
 			return zip.ErrBadRequest("org must be a DNS-1123 label")
-		}
-		if !principal.Validated(ctx) {
-			// No validated principal. The identity middleware RESTORES a client
-			// X-Org-Id on the bearer-less path, so ctx.Org() could equal a forged
-			// :org and defeat the equality check below — an off-gateway caller
-			// could read another org's secrets with no credential. Refuse here.
-			return zip.ErrForbidden("no validated principal")
-		}
-		if !ctx.IsAdmin() && ctx.Org() != org {
-			return zip.ErrForbidden("caller may only access its own org's secrets")
 		}
 		if !s.State.kms.Ready() {
 			return zip.Errorf(http.StatusServiceUnavailable, "%s", ErrMasterKeyMissing.Error())
@@ -401,7 +404,12 @@ func deleteSecret(s *cloud.Service[state], ctx *zip.Ctx) error {
 
 // ── path helpers ───────────────────────────────────────────────────────────────
 
-func reqOrg(ctx *zip.Ctx) string { return strings.TrimSpace(ctx.Param("org")) }
+// reqOrg is the org whose records a request addresses: always the CALLER'S own,
+// from the validated principal. There is no per-request choice of tenant and no
+// admin override — a token names one org, and that is the one whose secrets it
+// reaches. Cross-org access exists only IN-PROCESS (cloud's own kms.Client, which
+// holds the master key), never over HTTP.
+func reqOrg(ctx *zip.Ctx) string { return strings.TrimSpace(ctx.Org()) }
 
 // reqWildcard returns the trailing "+" segment of a /secrets/+ route, trimmed of
 // surrounding slashes. This is the secret's sub-path + name under the org.
