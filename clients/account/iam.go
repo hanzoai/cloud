@@ -295,7 +295,30 @@ func (c *iamClient) mintUserKey(ctx context.Context, id, typ string) (string, er
 	if out.AccessKey == "" {
 		return "", fmt.Errorf("iam did not return an access key")
 	}
+	// The PREFIX must match the type that was asked for. A key's prefix is what every
+	// downstream reader dispatches on — a pk- resolves to an org, an sk- resolves to
+	// the USER — so a mismatch is not a labelling nit, it is a session-equivalent
+	// secret handed to a caller who asked for something to put in a browser bundle.
+	//
+	// It is reachable without anyone making a mistake: an IAM that predates the type
+	// field ignores an unknown query parameter and answers with the sk- it always
+	// minted. So this refuses rather than trusting deploy order, and the failure is a
+	// 502 the caller sees instead of a credential in the wrong place.
+	if want := prefixForType(typ); !strings.HasPrefix(out.AccessKey, want) {
+		return "", fmt.Errorf("iam returned a key that is not %s (expected the %s prefix); it may not support the type field yet", typ, want)
+	}
 	return out.AccessKey, nil
+}
+
+// prefixForType is the one place the wire type and the credential prefix are tied
+// together: publishable keys are pk-, secret keys are sk-. hk- is sk- under an older
+// name, so a legacy secret key satisfies neither — deliberately: this gate runs only
+// on a FRESH mint, and IAM has not minted an hk- since v1.33.9.
+func prefixForType(typ string) string {
+	if typ == keyTypePublishable {
+		return "pk-"
+	}
+	return "sk-"
 }
 
 // revokeUserKey clears the user's key of `typ` (immediate revoke; the gateway key
