@@ -109,6 +109,17 @@ type Project struct {
 	// (/v1/base). Set once at create (the app's namespace/repoId convention);
 	// immutable thereafter. A Base space is provisioned best-effort at create.
 	SpaceId string
+	// ForkedFrom is this project's PARENT — the published example it was forked
+	// from: "<org>/<slug>" for a live project, or a bare catalog template slug.
+	// Empty for an original. Set by the fork path only (never by the caller, so
+	// lineage cannot be forged) and immutable after create; it is the attribution
+	// edge the gallery credits back to the author.
+	ForkedFrom string
+	// Official marks a FIRST-PARTY example app published by Hanzo itself, not an
+	// independent community submission. It is the machine-readable half of the
+	// badge the gallery renders; the human-visible half reads this field. Raised
+	// only for a SuperAdmin caller, so a tenant can never self-badge.
+	Official bool
 }
 
 // Deployment is one deploy attempt for a project, versioned monotonically per
@@ -274,6 +285,11 @@ CREATE INDEX IF NOT EXISTS ix_releases_org_slug_created ON releases(org, slug, c
 		// too; space_id backfills empty and the deploy/serve paths re-derive it.
 		`ALTER TABLE projects ADD COLUMN analytics INTEGER NOT NULL DEFAULT 1`,
 		`ALTER TABLE projects ADD COLUMN space_id TEXT NOT NULL DEFAULT ''`,
+		// forked_from is the attribution edge (parent "<org>/<slug>" or template
+		// slug); official is the first-party-example badge. Both backfill to the
+		// honest default for every pre-existing row: unknown lineage, not official.
+		`ALTER TABLE projects ADD COLUMN forked_from TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE projects ADD COLUMN official INTEGER NOT NULL DEFAULT 0`,
 		// Every site_hosts row that exists when this migration runs is ALREADY
 		// SERVING, so the default must be 'verified'. Defaulting to 'pending'
 		// would take every live custom domain and subdomain off the air the
@@ -292,7 +308,7 @@ CREATE INDEX IF NOT EXISTS ix_releases_org_slug_created ON releases(org, slug, c
 // Close closes the underlying database.
 func (s *Store) Close() error { return s.db.Close() }
 
-const projectCols = `id,org,slug,name,description,repo_url,repo_branch,repo_provider,framework,status,live_url,bucket,current_deploy,current_release,cache_control,last_purge_at,created_at,updated_at,analytics,space_id`
+const projectCols = `id,org,slug,name,description,repo_url,repo_branch,repo_provider,framework,status,live_url,bucket,current_deploy,current_release,cache_control,last_purge_at,created_at,updated_at,analytics,space_id,forked_from,official`
 
 func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 	var p Project
@@ -300,7 +316,7 @@ func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 		&p.RepoURL, &p.RepoBranch, &p.RepoProvider, &p.Framework,
 		&p.Status, &p.LiveURL, &p.Bucket, &p.CurrentDeploy, &p.CurrentRelease,
 		&p.CacheControl, &p.LastPurgeAt, &p.CreatedAt, &p.UpdatedAt,
-		&p.Analytics, &p.SpaceId)
+		&p.Analytics, &p.SpaceId, &p.ForkedFrom, &p.Official)
 	return p, err
 }
 
@@ -308,12 +324,12 @@ func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 // errConflict.
 func (s *Store) CreateProject(ctx context.Context, p Project) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		p.ID, p.Org, p.Slug, p.Name, p.Description,
 		p.RepoURL, p.RepoBranch, p.RepoProvider, p.Framework,
 		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CurrentRelease,
 		p.CacheControl, p.LastPurgeAt, p.CreatedAt, p.UpdatedAt,
-		p.Analytics, p.SpaceId)
+		p.Analytics, p.SpaceId, p.ForkedFrom, p.Official)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return errConflict
