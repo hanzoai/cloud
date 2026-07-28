@@ -161,6 +161,13 @@ test-codec: ## Run the suite against the engine the image ships (cgo + a real li
 vet: ## go vet across the module.
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) vet ./...
 
+# Not part of `test`: it rewrites source, so it runs deliberately, alone. It is how a
+# new assertion earns its place — break the property, watch the test go RED. An anchor
+# that no longer matches is a hard FAILURE here, never a skip, so a refactor that
+# outruns a guard says so instead of quietly reading as a pass.
+mutate: ## Mutation-test the guarded properties: break each one, prove its test goes red.
+	scripts/mutate.py $(MUTANT)
+
 tidy: ## go mod tidy + verify go.sum.
 	$(GO) mod tidy
 	$(GO) mod verify
