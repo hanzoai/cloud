@@ -2,6 +2,7 @@ package projects
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -202,5 +203,108 @@ func TestForkOrgScopingAndErrors(t *testing.T) {
 		// acme forked its OWN brainwave above, so it SHOULD see one — assert isolation
 		// via a slug acme never forked.
 		t.Fatalf("acme should see its own brainwave, got %d", code)
+	}
+}
+
+// TestForkPublishedProjectRecordsLineage is the creator loop end to end: a
+// first-party example published as a LIVE project is forkable BY SLUG (the same
+// name it serves under at <slug>.hanzo.app), the fork lands in the forker's own
+// org under their own slug carrying the parent's source, and the parent is
+// recorded on the child as forkedFrom so the attribution survives the rename. The
+// badge is NOT inherited — a fork of a Hanzo example is the forker's app.
+func TestForkPublishedProjectRecordsLineage(t *testing.T) {
+	app := mountApp(t)
+
+	ex := mkProject("hanzo", "example-kanban", "Example Kanban")
+	ex.Status, ex.Framework, ex.Official = "live", "vite", true
+	ex.RepoURL, ex.RepoBranch = "https://github.com/hanzo-templates/kanban-board", "main"
+	if err := mounted.State.store.CreateProject(context.Background(), ex); err != nil {
+		t.Fatalf("seed example: %v", err)
+	}
+
+	code, body := do(t, app, http.MethodPost, "/v1/projects/fork", "acme",
+		map[string]any{"slug": "example-kanban", "target": "my-board", "name": "My Board"})
+	if code != http.StatusCreated {
+		t.Fatalf("fork published example want 201, got %d (%s)", code, body)
+	}
+	var p projectView
+	if err := json.Unmarshal(body, &p); err != nil {
+		t.Fatalf("fork json: %v (%s)", err, body)
+	}
+	if p.Org != "acme" || p.Slug != "my-board" || p.Name != "My Board" {
+		t.Fatalf("fork target = %s/%s %q, want acme/my-board 'My Board'", p.Org, p.Slug, p.Name)
+	}
+	if p.ForkedFrom != "hanzo/example-kanban" {
+		t.Fatalf("lineage = %q, want hanzo/example-kanban", p.ForkedFrom)
+	}
+	if p.Repo.URL != ex.RepoURL || p.Framework != "vite" {
+		t.Fatalf("fork did not inherit buildable source: repo=%q framework=%q", p.Repo.URL, p.Framework)
+	}
+	if p.Official {
+		t.Fatalf("a fork of a first-party example must not inherit the official badge")
+	}
+
+	// A DRAFT example is not published, so it is not forkable — you can only fork
+	// what you can browse.
+	dr := mkProject("hanzo", "example-draft", "Draft")
+	if err := mounted.State.store.CreateProject(context.Background(), dr); err != nil {
+		t.Fatalf("seed draft: %v", err)
+	}
+	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "acme", map[string]any{"slug": "example-draft"}); code != http.StatusNotFound {
+		t.Fatalf("fork of a draft want 404, got %d", code)
+	}
+}
+
+// TestForkTemplateRecordsLineage pins that a catalog fork records the template
+// slug as its parent — the same forkedFrom field, one lineage concept for both
+// kinds of parent.
+func TestForkTemplateRecordsLineage(t *testing.T) {
+	app := mountApp(t)
+	code, body := do(t, app, http.MethodPost, "/v1/projects/fork", "acme", map[string]any{"slug": "brainwave"})
+	if code != http.StatusCreated {
+		t.Fatalf("fork want 201, got %d (%s)", code, body)
+	}
+	var p projectView
+	_ = json.Unmarshal(body, &p)
+	if p.ForkedFrom != "brainwave" {
+		t.Fatalf("template lineage = %q, want brainwave", p.ForkedFrom)
+	}
+}
+
+// TestOfficialBadgeIsPlatformOnly proves the first-party marker cannot be
+// self-asserted: an ordinary tenant asking for official:true gets false, and only
+// a SuperAdmin caller (the seeding path) can raise it.
+func TestOfficialBadgeIsPlatformOnly(t *testing.T) {
+	app := mountApp(t)
+
+	code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
+		map[string]any{"name": "Impostor", "slug": "impostor", "official": true})
+	if code != http.StatusCreated {
+		t.Fatalf("create want 201, got %d (%s)", code, body)
+	}
+	var p projectView
+	_ = json.Unmarshal(body, &p)
+	if p.Official {
+		t.Fatalf("a tenant must not be able to badge its own app as a Hanzo example")
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/projects",
+		bytes.NewReader([]byte(`{"name":"Example","slug":"example-app","official":true}`)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Org-Id", "hanzo")
+	req.Header.Set("X-User-Id", "u_hanzo")
+	req.Header.Set("X-User-IsAdmin", "true")
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("admin create: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("admin create want 201, got %d (%s)", resp.StatusCode, b)
+	}
+	_ = json.Unmarshal(b, &p)
+	if !p.Official {
+		t.Fatalf("the platform must be able to badge its own examples: %s", b)
 	}
 }
