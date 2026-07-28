@@ -46,17 +46,17 @@ TAGS = "sqlite_fts5"  # the tag `make test` carries, so the same schema surface 
 ENV = dict(os.environ, PATH="/usr/local/go/bin:" + os.environ.get("PATH", ""))
 ENV.setdefault("CLOUD_KMS_MASTER_KEY_REF", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
 
-E = "clients/analytics/event.go"
-A = "clients/analytics/analytics.go"
-C = "clients/analytics/capture.go"
-P = "clients/analytics/public.go"
-S = "clients/sites/sites.go"
-T = "clients/analytics/team.go"
-M = "clients/meet/meet.go"
-MT = "clients/meet/meet_test.go"
-PA = "./clients/analytics/"
-PS = "./clients/sites/"
-PM = "./clients/meet/"
+E = "apps/analytics/event.go"
+A = "apps/analytics/analytics.go"
+C = "apps/analytics/capture.go"
+P = "apps/analytics/public.go"
+S = "apps/sites/sites.go"
+T = "apps/analytics/team.go"
+M = "apps/meet/meet.go"
+MT = "apps/meet/meet_test.go"
+PA = "./apps/analytics/"
+PS = "./apps/sites/"
+PM = "./apps/meet/"
 
 # A mutant is (name, edits, test regex, package). edits is a LIST of (file, old,
 # new) so a mutation that needs a helper injected alongside it is the same kind of
@@ -147,7 +147,7 @@ MUTANTS = [
             '\t\t\t\tif site, ok := s.resolveLivePinned(c.Context(), slug, firstParty); ok {\n\t\t\t\t\t_ = site\n\t\t\t\t\treturn h(c.Org(), c)')],
      "TestSiteHostLaneWritesTheResolvedSiteOrg", PA),
 
-    # Guarded in clients/sites, which owns host→org resolution, and NOT in analytics:
+    # Guarded in apps/sites, which owns host→org resolution, and NOT in analytics:
     # the analytics test on this host shape proves the carve fires, not who it fires for.
     ("carve: the CUSTOM DOMAIN takes the tenant from the caller's header", [
         (S, '\t\t\t\tif h, ok := analyticsIngest(c); ok {\n\t\t\t\t\treturn h(site.Org, c)',
