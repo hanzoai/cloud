@@ -5,6 +5,10 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+
+	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/sites"
+	luxlog "github.com/luxfi/log"
 )
 
 // TestSiteHostBindingIsFirstComeAndTenantSafe proves the global subdomain
@@ -70,6 +74,41 @@ func TestSiteHostBindingIsFirstComeAndTenantSafe(t *testing.T) {
 	}
 	if p, _ := s.ResolveHost(ctx, "maxpower"); p.Org != "acme" {
 		t.Fatalf("reclaim resolved to %q, want acme", p.Org)
+	}
+}
+
+// TestPublishedURLIsTheHostWeOwn proves the loser of the global first-come slug
+// race is TOLD it lost. The store was always tenant-safe (above), but the deploy
+// derived the advertised URL from the slug instead of from the binding, so both
+// orgs' API said `liveUrl: https://maxpower.hanzo.app` while that host served only
+// the winner — the second tenant would publish a link to the first tenant's site.
+// Ownership decides what serves, so ownership must decide what we advertise.
+func TestPublishedURLIsTheHostWeOwn(t *testing.T) {
+	ctx := context.Background()
+	log := luxlog.New("test")
+	svc := &cloud.Service[state]{
+		Base:  cloud.Base{Log: log},
+		State: state{apex: "hanzo.app", store: newTestStore(t), cf: sites.NewPurger(log)},
+	}
+	hz, ac := mkProject("hanzo", "maxpower", "Hanzo Max"), mkProject("acme", "maxpower", "Acme Max")
+
+	// Winner publishes first: it owns the host, so it gets the pretty URL.
+	if live, note := onPublish(svc, ctx, "hanzo", &hz); live != "https://maxpower.hanzo.app" || note != "" {
+		t.Fatalf("winner published at (%q,%q), want the pretty URL and no note", live, note)
+	}
+	// Loser publishes the same slug: the bytes are live at its own S3 prefix, but it
+	// owns NO public host — so it gets no URL and an explanation, never the winner's.
+	if live, note := onPublish(svc, ctx, "acme", &ac); live != "" || note == "" {
+		t.Fatalf("loser published at (%q,%q), want no URL and an explanation", live, note)
+	}
+	// A reserved label can never be bound either, so it is the same honest answer.
+	rs := mkProject("acme", "admin", "Acme Admin")
+	if live, note := onPublish(svc, ctx, "acme", &rs); live != "" || note == "" {
+		t.Fatalf("reserved slug published at (%q,%q), want no URL and an explanation", live, note)
+	}
+	// The winner's re-deploy is idempotent and keeps its URL.
+	if live, _ := onPublish(svc, ctx, "hanzo", &hz); live != "https://maxpower.hanzo.app" {
+		t.Fatalf("winner redeploy lost its URL: %q", live)
 	}
 }
 

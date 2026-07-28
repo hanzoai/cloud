@@ -13,9 +13,11 @@ binary (HIP-0106), reachable at `https://api.hanzo.ai/v1/projects`.
 - Authenticate via the `@hanzo/iam` SDK; send the IAM bearer token to
   `api.hanzo.ai`. The **gateway** validates the JWT and injects `X-Org-Id`,
   `X-User-Id`, `X-User-Email` (and strips any client-supplied copies).
-- Every route is **org-scoped**: the tenant is the gateway-minted `X-Org-Id`
-  (the JWT `owner` claim). No org → `403` (admins fall back to an `admin`
-  bucket). Two orgs can hold the same `slug`; `(org, slug)` is unique.
+- Every route is **org-scoped**: the tenant is the gateway-minted `X-Org-Id`,
+  resolved from the JWT's signed `orgs` **membership** claim — *never* from
+  `owner`, which IAM stamps with the **application's** org, so the same human
+  authenticating through two apps carries two different `owner` values. No org →
+  `403`. Two orgs can hold the same `slug`; `(org, slug)` is unique.
 - Never send `X-Org-Id` from the browser — it is ignored/stripped at the edge.
 
 ## Resources
@@ -115,9 +117,13 @@ status (`400` validation, `403` no org, `404` not found, `409` slug taken,
    `/v1/projects/:slug/deployments/:id/complete` to flip it `live`. For sites
    too large to stream through the API.
 
-`liveUrl` is `https://s3.hanzo.ai/<bucket>/<org>/<slug>/index.html` by default,
-or `https://<sites-host>/<org>/<slug>/` when the `hanzoai/static` container
-(the static-app image) is configured to serve the bucket behind the gateway.
+`liveUrl` is `https://<slug>.hanzo.app` — the one host shape a wildcard Ingress
+and a wildcard cert can route and secure. That bare `<slug>` namespace is
+**global and first-come across every org**, so `liveUrl` is set only when the
+deploy actually WON the binding; a project whose slug is already claimed (or is
+a reserved label) deploys and bills normally, its bytes are live at its own S3
+prefix, and it comes back with an **empty `liveUrl`** plus a `message` saying to
+rename. It is never given the URL that serves the other tenant.
 GitHub export is an optional, separate step — going live never requires it.
 
 ## Edge cache purge (no redeploy)

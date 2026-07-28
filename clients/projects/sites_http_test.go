@@ -302,8 +302,9 @@ func TestFailedDeploy_NotBilled(t *testing.T) {
 // bare <slug>.hanzo.app URL and bills each deploy (distinct billable events).
 // The bare slug is a GLOBAL first-come namespace: the first org to publish a slug
 // owns the subdomain; a second org publishing the same slug is REFUSED the host
-// binding (it still deploys + bills + serves at its S3 URL, just not at the shared
-// subdomain). This is the anti-hijack guarantee at the host boundary.
+// binding (it still deploys + bills, its bytes are live at its own S3 prefix) and
+// is given NO public URL, because the only one its slug names belongs to someone
+// else. This is the anti-hijack guarantee at the host boundary.
 func TestIdempotentRedeploy(t *testing.T) {
 	startFakeS3(t)
 	bs := &billServer{available: 1000000}
@@ -325,10 +326,12 @@ func TestIdempotentRedeploy(t *testing.T) {
 	}
 
 	// A different org deploying the SAME slug still deploys + bills (its build is
-	// real), but the bare host stays bound to acme — evil never hijacks it.
+	// real), but the bare host stays bound to acme — evil never hijacks it, and is
+	// TOLD so: it gets NO public URL. Returning the pretty URL here (what this
+	// assertion used to demand) handed the loser a link to the winner's site.
 	evil := deployVia(t, app, "evil", "myapp")
-	if evil != "https://myapp.hanzo.app" {
-		t.Fatalf("evil deploy url=%q, want https://myapp.hanzo.app", evil)
+	if evil != "" {
+		t.Fatalf("evil deploy url=%q, want empty (the host belongs to acme)", evil)
 	}
 	if p, err := mounted.State.store.ResolveHost(context.Background(), "myapp"); err != nil || p.Org != "acme" {
 		t.Fatalf("bare host myapp must STILL resolve to acme (first-come), got %q err=%v", p.Org, err)
