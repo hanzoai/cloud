@@ -45,7 +45,7 @@ concurrency:
 jobs:
   # Test gate + the decoupled native flags staticlib image, driven by hanzo.yml.
   gate:
-    uses: hanzoai/ci/.hanzo/workflows/build.yml@v2
+    uses: hanzoai/ci/.hanzo/workflows/build.yml@v1
     with:
       # Not on a tag: release.go mints v* only after that SHA passed this gate
       # on main and built and smoked, so a tag build re-tests a proven commit —
