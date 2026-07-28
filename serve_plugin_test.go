@@ -27,10 +27,11 @@ func TestListenOn_PluginServesTheSocketItWasGiven(t *testing.T) {
 	if len(addrs) == 0 || addrs[0] != sock {
 		t.Fatalf("addrs = %q, want the host socket %q first — that is the one it waits on", addrs, sock)
 	}
-	// The app still serves its canonical peer path, so a co-located caller reaches
-	// it over ZAP rather than falling out to the public edge.
-	if want := PeerSocket("wallets"); !slices.Contains(addrs, want) {
-		t.Fatalf("addrs = %q, missing the peer socket %q", addrs, want)
+	// The peer socket is NOT here: rpc.Listen binds it (Serve), and listing it
+	// again would double-bind the same path. A plugin serves the host's socket
+	// and nothing else.
+	if want := PeerSocket("wallets"); slices.Contains(addrs, want) {
+		t.Fatalf("addrs = %q double-binds the peer socket %q — rpc.Listen owns it", addrs, want)
 	}
 	// Second-order bug: one ops port, N children. Binding it here means every
 	// plugin after the first dies on "address already in use", and the host's
@@ -47,9 +48,10 @@ func TestListenOn_StandaloneBindsTheConfiguredPorts(t *testing.T) {
 
 	t.Setenv(runDirEnv, t.TempDir())
 	addrs, ops := listenOn(testListenCfg(), []MountSpec{{Name: "wallets"}})
-	// Every transport in parallel over one route surface: the peer UDS (ZAP), the
-	// machine TCP (ZAP), and HTTP for the edge — which is also what carries WS/SSE.
-	want := []string{PeerSocket("wallets"), ":9653", "http://:8080"}
+	// The peer UDS is absent by design: rpc.Listen binds it in Serve. What is
+	// left here is the machine TCP (ZAP) and HTTP for the edge, which also
+	// carries WS/SSE.
+	want := []string{":9653", "http://:8080"}
 	if !reflect.DeepEqual(addrs, want) {
 		t.Fatalf("addrs = %q, want %q", addrs, want)
 	}
