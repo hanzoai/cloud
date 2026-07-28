@@ -81,47 +81,58 @@ func WithStoreLogger(log luxlog.Logger) OrgStoreOption {
 // SanitizeOrg refuses is an error — never a silent fall-through to another
 // org's file.
 func OrgDB(dataDir, org, project, subsystem string) (*sql.DB, error) {
-	path, err := orgDBPath(dataDir, org, project, subsystem)
+	path, orgSlug, err := orgDBPath(dataDir, org, project, subsystem)
 	if err != nil {
 		return nil, err
 	}
-	return openOrgDB(path)
+	return openOrgDB(orgPrincipal(orgSlug), path)
 }
 
 // orgDBPath builds the on-disk path for an org DB, folding org and (when
 // project-scoped) project through the injective SanitizeOrg slugger and failing
 // closed on any input that does not yield a safe, non-empty segment.
-func orgDBPath(dataDir, org, project, subsystem string) (string, error) {
+func orgDBPath(dataDir, org, project, subsystem string) (path, orgSlug string, err error) {
 	if dataDir == "" {
-		return "", fmt.Errorf("cloud: OrgDB empty dataDir")
+		return "", "", fmt.Errorf("cloud: OrgDB empty dataDir")
 	}
 	if subsystem == "" {
-		return "", fmt.Errorf("cloud: OrgDB empty subsystem")
+		return "", "", fmt.Errorf("cloud: OrgDB empty subsystem")
 	}
-	orgSlug := SanitizeOrg(org)
+	orgSlug = SanitizeOrg(org)
 	if orgSlug == "" {
-		return "", fmt.Errorf("cloud: OrgDB invalid org %q", org)
+		return "", "", fmt.Errorf("cloud: OrgDB invalid org %q", org)
 	}
 	dir := filepath.Join(dataDir, "orgs", orgSlug)
 	if project != "" {
 		projSlug := SanitizeOrg(project)
 		if projSlug == "" {
-			return "", fmt.Errorf("cloud: OrgDB invalid project %q", project)
+			return "", "", fmt.Errorf("cloud: OrgDB invalid project %q", project)
 		}
 		dir = filepath.Join(dir, "projects", projSlug)
 	}
-	return filepath.Join(dir, subsystem+".db"), nil
+	return filepath.Join(dir, subsystem+".db"), orgSlug, nil
+}
+
+// orgPrincipal maps a resolved store slug to the principal whose key opens it. The
+// reserved platform slug is NOT a tenant — it is the deployment's own partition of an
+// otherwise per-org subsystem — so it keys under Global exactly like every other
+// platform store, and only real tenants get an owner-bound key.
+func orgPrincipal(slug string) cek.Principal {
+	if slug == reservedPlatformSlug {
+		return cek.Global
+	}
+	return cek.Org(slug)
 }
 
 // openOrgDB creates the parent dir 0700 and opens the SQLite file with the
 // single-writer + WAL pragmas shared by every org store. MaxOpenConns(1)
 // serializes writes against the file lock (and makes a read-modify-write such as
 // tracker's per-project issue-number allocation a safe transaction).
-func openOrgDB(path string) (*sql.DB, error) {
+func openOrgDB(p cek.Principal, path string) (*sql.DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("cloud: OrgDB mkdir: %w", err)
 	}
-	db, err := cek.Open(path)
+	db, err := cek.Open(p, path)
 	if err != nil {
 		return nil, fmt.Errorf("cloud: OrgDB open %q: %w", path, err)
 	}
@@ -160,7 +171,7 @@ func PlatformDB(dataDir, subsystem string) (*sql.DB, error) {
 	if subsystem == "" {
 		return nil, fmt.Errorf("cloud: PlatformDB empty subsystem")
 	}
-	return openOrgDB(filepath.Join(dataDir, "orgs", reservedPlatformSlug, subsystem+".db"))
+	return openOrgDB(cek.Global, filepath.Join(dataDir, "orgs", reservedPlatformSlug, subsystem+".db"))
 }
 
 // OrgStore is the lazily-opened, cached set of per-org stores of type T
@@ -231,7 +242,7 @@ func NewOrgStore[T io.Closer](dataDir, subsystem string, open func(*sql.DB) (T, 
 // distinct (org[, project]) resolves to a distinct file, so a query in one can
 // never reach another's rows.
 func (c *OrgStore[T]) For(orgID, project string) (T, error) {
-	path, err := orgDBPath(c.dataDir, orgID, project, c.subsystem)
+	path, _, err := orgDBPath(c.dataDir, orgID, project, c.subsystem)
 	if err != nil {
 		var zero T
 		return zero, err
@@ -305,7 +316,7 @@ func (c *OrgStore[T]) forPath(slug, dbKey, path string) (T, error) {
 	// pre-durability cache.
 	if c.dur == nil {
 		defer c.mu.Unlock()
-		db, err := openOrgDB(path)
+		db, err := openOrgDB(orgPrincipal(slug), path)
 		if err != nil {
 			return zero, err
 		}
@@ -361,7 +372,7 @@ func (c *OrgStore[T]) openDurable(slug, dbKey, path string) (T, *org.Durable, er
 	if err != nil && c.log != nil {
 		c.log.Warn("org store hydrate degraded — opening read-only", "subsystem", c.subsystem, "org", slug, "key", dbKey, "err", err)
 	}
-	db, err := openOrgDB(path)
+	db, err := openOrgDB(orgPrincipal(slug), path)
 	if err != nil {
 		return zero, nil, err
 	}
@@ -410,7 +421,7 @@ func (c *OrgStore[T]) Sync(orgID, project string) (acked bool, err error) {
 	if c.dur == nil {
 		return true, nil
 	}
-	path, err := orgDBPath(c.dataDir, orgID, project, c.subsystem)
+	path, _, err := orgDBPath(c.dataDir, orgID, project, c.subsystem)
 	if err != nil {
 		return false, err
 	}

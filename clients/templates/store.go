@@ -34,7 +34,7 @@ var errConflict = errors.New("templates: slug taken")
 type Store struct{ db *sql.DB }
 
 func openStore(path string) (*Store, error) {
-	db, err := cek.Open(path)
+	db, err := cek.Open(cek.Global, path)
 	if err != nil {
 		return nil, fmt.Errorf("templates: open store %q: %w", path, err)
 	}

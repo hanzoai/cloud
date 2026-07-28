@@ -33,7 +33,7 @@ func TestMigrateOverLegacyWalletsTable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "wallets.db")
 
 	// Stand up the legacy schema exactly as a pre-scoping prod DB has it.
-	raw, err := cek.Open(path)
+	raw, err := cek.Open(cek.Global, path)
 	if err != nil {
 		t.Fatalf("open legacy db: %v", err)
 	}

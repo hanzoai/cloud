@@ -36,7 +36,7 @@ type Settlement struct {
 type store struct{ db *sql.DB }
 
 func openStore(path string) (*store, error) {
-	db, err := cek.Open(path)
+	db, err := cek.Open(cek.Global, path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}

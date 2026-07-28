@@ -112,7 +112,7 @@ type CheckpointFunc func(cp Checkpoint)
 // the file lock — the same single-writer discipline pricing/provisioning use,
 // here doubling as the chain's serialization guarantee.
 func Open(path string, mirror Mirror) (*Recorder, error) {
-	db, err := cek.Open(path)
+	db, err := cek.Open(cek.Global, path)
 	if err != nil {
 		return nil, fmt.Errorf("audit: open sqlite %q: %w", path, err)
 	}
