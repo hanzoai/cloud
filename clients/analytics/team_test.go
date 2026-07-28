@@ -8,6 +8,7 @@
 package analytics
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -265,7 +266,10 @@ func TestTeamNonArrayRefused(t *testing.T) {
 
 func teamToken(t *testing.T, org, secret string, extra map[string]any, exp int64) string {
 	t.Helper()
-	e := map[string]any{"org": org}
+	// role defaults to member — the ordinary caller selectWorkspace mints. Pass
+	// extra{"role":"guest"} for a guest, extra{"role":""} for a token that never
+	// proved a role.
+	e := map[string]any{"org": org, "role": token.RoleMember}
 	for k, v := range extra {
 		e[k] = v
 	}
@@ -283,13 +287,29 @@ func TestTeamTenantResolvesSignedOrg(t *testing.T) {
 	app := mountApp(t)
 	tok := teamToken(t, "acme", "a-real-team-secret", nil, time.Now().Add(time.Hour).Unix())
 
-	// One admitted event reaches the write core, which has no warehouse in this
-	// harness -> 503. That 503 IS the signal: the pipeline tried to STORE. Contrast
-	// with the all-dropped case below, which short-circuits to 200 before the
-	// datastore is ever consulted.
-	code, _ := postBody(t, app, "/v1/event/collect", teamWire, tok)
+	// The batch must be something ONLY full capability can store. error+navigation is
+	// not: both kinds are in publicKinds, so the anonymous lane 503s identically and
+	// deleting the teamTenant clause entirely would have gone unnoticed.
+	//
+	// A customEvent is the discriminator. canonicalType is "event", which is NOT in
+	// publicKinds, so the projection drops it and the write core is never reached
+	// (200, accepted:0) — while a resolved member writes it and hits the absent
+	// warehouse (503).
+	const custom = `[{"event":"customEvent","properties":{"event":"checkout_started","revenue":42},"timestamp":1750000000000,"distinct_id":"u"}]`
+
+	code, res := postBody(t, app, "/v1/event/collect", custom, tok)
 	if code != http.StatusServiceUnavailable {
-		t.Fatalf("valid team token POST = %d, want 503 (reached the write core)", code)
+		t.Fatalf("member POST = %d %+v, want 503 (full capability reached the write core)", code, res)
+	}
+	// Same bytes, NO credential: dropped by the projection, never reaching the store.
+	code, res = postBody(t, app, "/v1/event/collect", custom, "")
+	if code != http.StatusOK || res.Accepted != 0 || res.Dropped != 1 {
+		t.Fatalf("anonymous POST = %d %+v, want 200 accepted=0 dropped=1", code, res)
+	}
+	// And the resolution itself names the signed org at full capability.
+	org, ok := resolvedTeamOrg(t, app, tok)
+	if !ok || org != "acme" {
+		t.Fatalf("teamTenant = (%q, %v), want (acme, true)", org, ok)
 	}
 }
 
@@ -310,12 +330,6 @@ func TestTeamTenantRefusals(t *testing.T) {
 		{"expired", secret, func(t *testing.T) string {
 			return teamToken(t, "acme", secret, nil, time.Now().Add(-time.Hour).Unix())
 		}},
-		{"guest session", secret, func(t *testing.T) string {
-			return teamToken(t, "acme", secret, map[string]any{"guest": "true"}, hour)
-		}},
-		{"readonly session", secret, func(t *testing.T) string {
-			return teamToken(t, "acme", secret, map[string]any{"readonly": "true"}, hour)
-		}},
 		{"no org claim", secret, func(t *testing.T) string {
 			tok, err := token.Generate(teamAccount, "", nil, hour, secret)
 			if err != nil {
@@ -334,22 +348,26 @@ func TestTeamTenantRefusals(t *testing.T) {
 		{"secret unset", "", func(t *testing.T) string {
 			return teamToken(t, "acme", secret, nil, hour)
 		}},
-		{"not a token", secret, func(t *testing.T) string { return "not-a-jwt" }},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Setenv("SERVER_SECRET", c.env)
 			app := mountApp(t)
 			bearer := c.bearer(t)
-			// An unresolved bearer takes the ANONYMOUS lane, where the projection
-			// still admits error+pageview -> the write core -> 503. What must NOT
-			// happen is a resolution: assert it by checking the tenant directly.
+			// A team token that does not resolve is REFUSED, not downgraded. This
+			// assertion used to accept "503 or 200", which did not merely miss the
+			// weakness — it ENFORCED it: the fix (naming the team bearer in
+			// presented()) turns these into 403 and would have failed the old test.
+			//
+			// 200-with-rows-under-$public is the exact pathology this door exists to
+			// prevent: the caller sees success and the org cannot read its own data.
 			code, _ := postBody(t, app, "/v1/event/collect", teamWire, bearer)
-			if code != http.StatusServiceUnavailable && code != http.StatusOK {
-				t.Fatalf("POST = %d, want 503 or 200 (never a server error)", code)
+			if code != http.StatusForbidden {
+				t.Fatalf("POST = %d, want 403 (a presented team credential that does not resolve is refused)", code)
 			}
-			if got := resolvedTeamOrg(t, app, bearer); got != "" {
-				t.Fatalf("credential resolved to org %q; it must not resolve", got)
+			org, ok := resolvedTeamOrg(t, app, bearer)
+			if ok {
+				t.Fatalf("credential resolved to org %q; it must not resolve", org)
 			}
 		})
 	}
@@ -359,14 +377,18 @@ func TestTeamTenantRefusals(t *testing.T) {
 // and returns the org it resolved to (empty when it refused). It exercises the SAME
 // function eventTenant calls, so the refusal table above is a statement about
 // production admission, not about a copy of it.
-func resolvedTeamOrg(t *testing.T, app *zip.App, bearer string) string {
+func resolvedTeamOrg(t *testing.T, app *zip.App, bearer string) (string, bool) {
 	t.Helper()
 	var got string
+	var resolved bool
 	probe := zip.New(zip.Config{})
 	probe.Post("/probe", func(c *zip.Ctx) error {
-		if org, ok := teamTenant(c); ok {
-			got = org
-		}
+		a, ok := teamTenant(c)
+		// Record ok INDEPENDENTLY of the org. The previous version assigned only when
+		// ok, so a mutant returning ("", true) — which normalizeEvent would store as
+		// an empty tenant column and fanOut would forward under an empty org — was
+		// indistinguishable from a clean refusal.
+		got, resolved = a.org, ok
 		return c.JSON(http.StatusOK, map[string]string{})
 	})
 	req := httptest.NewRequest(http.MethodPost, "/probe", strings.NewReader("[]"))
@@ -378,7 +400,7 @@ func resolvedTeamOrg(t *testing.T, app *zip.App, bearer string) string {
 		t.Fatalf("probe: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	return got
+	return got, resolved
 }
 
 // ── the door ─────────────────────────────────────────────────────────────────
@@ -404,4 +426,210 @@ func TestTeamDoorIsRegistered(t *testing.T) {
 	if code, _ := postBody(t, app, "/v1/event/collect", teamWire, ""); code != http.StatusServiceUnavailable {
 		t.Fatalf("team door with team wire = %d, want 503 (reached the write core)", code)
 	}
+}
+
+// ── capability: the guest lane, and the trust order ──────────────────────────
+
+// TestGuestWritesProjectedIntoItsOwnOrg is the F1 fix, stated positively. A guest is
+// neither trusted with the org's whole custom/billing surface nor exiled to $public:
+// it writes into its OWN org, through the projection.
+//
+// The attack this closes: accept a guest invite, lift presentation.metadata.Token out
+// of the tab, POST an `order_completed` with a revenue figure, and it landed as an
+// unprojected row in the host org — plus a fanOut to that org's GA4/Meta CAPI.
+func TestGuestWritesProjectedIntoItsOwnOrg(t *testing.T) {
+	t.Setenv("SERVER_SECRET", "a-real-team-secret")
+	app := mountApp(t)
+	hour := time.Now().Add(time.Hour).Unix()
+	guest := teamToken(t, "acme", "a-real-team-secret", map[string]any{"role": token.RoleGuest}, hour)
+	member := teamToken(t, "acme", "a-real-team-secret", nil, hour)
+
+	// The forgeable payload: a custom event carrying revenue. kind "event" is not in
+	// publicKinds, so the projection drops it whole.
+	const revenue = `[{"event":"customEvent","properties":{"event":"order_completed","revenue":99999},"timestamp":1750000000000,"distinct_id":"u"}]`
+	code, res := postBody(t, app, "/v1/event/collect", revenue, guest)
+	if code != http.StatusOK || res.Accepted != 0 || res.Dropped != 1 {
+		t.Fatalf("guest revenue POST = %d %+v, want 200 accepted=0 dropped=1 (projected away)", code, res)
+	}
+	// A member CAN write it — so the refusal is about the role, not the payload.
+	if code, _ := postBody(t, app, "/v1/event/collect", revenue, member); code != http.StatusServiceUnavailable {
+		t.Fatalf("member revenue POST = %d, want 503 (reached the write core)", code)
+	}
+
+	// But the guest is NOT silenced: its errors/pageviews still land, and they land in
+	// ITS OWN org — not $public, which acme could never read.
+	code, res = postBody(t, app, "/v1/event/collect", teamWire, guest)
+	if code != http.StatusServiceUnavailable {
+		t.Fatalf("guest error/pageview POST = %d %+v, want 503 (admitted, reached the store)", code, res)
+	}
+	a, ok := teamAdmission(t, guest)
+	if !ok || a.org != "acme" || a.full {
+		t.Fatalf("guest admission = %+v ok=%v, want org=acme full=false", a, ok)
+	}
+	a, ok = teamAdmission(t, member)
+	if !ok || a.org != "acme" || !a.full {
+		t.Fatalf("member admission = %+v ok=%v, want org=acme full=true", a, ok)
+	}
+}
+
+// TestUnprovenRoleIsNotPrivileged: fail-closed on the claim's absence. A token that
+// never proved a workspace role gets the projection, not the benefit of the doubt.
+func TestUnprovenRoleIsNotPrivileged(t *testing.T) {
+	t.Setenv("SERVER_SECRET", "a-real-team-secret")
+	hour := time.Now().Add(time.Hour).Unix()
+	for _, role := range []string{"", "observer", "GUEST", "Member", "owner ,admin"} {
+		tok := teamToken(t, "acme", "a-real-team-secret", map[string]any{"role": role}, hour)
+		a, ok := teamAdmission(t, tok)
+		if !ok {
+			t.Fatalf("role %q did not resolve at all; it should resolve at reduced capability", role)
+		}
+		if a.full {
+			t.Errorf("role %q was treated as PRIVILEGED; only owner/admin/member are", role)
+		}
+	}
+	// The three that ARE privileged, so the allowlist is not vacuously empty.
+	for _, role := range []string{token.RoleOwner, token.RoleAdmin, token.RoleMember} {
+		tok := teamToken(t, "acme", "a-real-team-secret", map[string]any{"role": role}, hour)
+		if a, ok := teamAdmission(t, tok); !ok || !a.full {
+			t.Errorf("role %q = %+v ok=%v, want full", role, a, ok)
+		}
+	}
+	// Surrounding whitespace IS trimmed, deliberately: reading a claim has ONE spelling
+	// across this package and clients/meet, which is the fix for the two guards that
+	// used to disagree about it. That is safe here because the role is not
+	// caller-supplied — selectWorkspace signs it from a validInviteRole-checked DB
+	// column, so " member " has no production path. Case is NOT folded ("Member" above
+	// is unprivileged), so the allowlist stays exact where it can be.
+	tok := teamToken(t, "acme", "a-real-team-secret", map[string]any{"role": " member "}, hour)
+	if a, ok := teamAdmission(t, tok); !ok || !a.full {
+		t.Errorf("a whitespace-padded role = %+v ok=%v; claim reads are trimmed by design", a, ok)
+	}
+}
+
+// TestInertClaimsGrantAndReduceNothing pins the dead claims as dead. extra.guest and
+// extra.readonly were the old guards' inputs and NOTHING mints them; asserting they are
+// inert stops someone "restoring" the guards and believing they protect anything.
+func TestInertClaimsGrantAndReduceNothing(t *testing.T) {
+	t.Setenv("SERVER_SECRET", "a-real-team-secret")
+	hour := time.Now().Add(time.Hour).Unix()
+	// On a member they do not REDUCE.
+	tok := teamToken(t, "acme", "a-real-team-secret",
+		map[string]any{"guest": "true", "readonly": "true"}, hour)
+	if a, ok := teamAdmission(t, tok); !ok || !a.full {
+		t.Errorf("inert claims reduced a member: %+v ok=%v", a, ok)
+	}
+	// On a guest they do not ELEVATE.
+	tok = teamToken(t, "acme", "a-real-team-secret",
+		map[string]any{"role": token.RoleGuest, "guest": "false", "readonly": "false"}, hour)
+	if a, ok := teamAdmission(t, tok); !ok || a.full {
+		t.Errorf("inert claims elevated a guest: %+v ok=%v", a, ok)
+	}
+}
+
+// TestTrustOrderPrefersTheApiCredential makes the documented ordering OBSERVABLE.
+// eventTenant's comment says the team token is last so a request holding both is
+// attributed to the deliberate API credential — but nothing tested it, so swapping the
+// order was a free mutation.
+func TestTrustOrderPrefersTheApiCredential(t *testing.T) {
+	t.Setenv("SERVER_SECRET", "a-real-team-secret")
+	// Stand in for IAM's key seam: this key belongs to org "keyorg".
+	prev := resolveKeyOrg
+	resolveKeyOrg = func(_ context.Context, key string) (string, bool) {
+		if key == "hk-the-key" {
+			return "keyorg", true
+		}
+		return "", false
+	}
+	defer func() { resolveKeyOrg = prev }()
+
+	tok := teamToken(t, "teamorg", "a-real-team-secret", nil, time.Now().Add(time.Hour).Unix())
+	got, ok := tenantWith(t, map[string]string{
+		"Authorization": "Bearer " + tok, // team token -> teamorg
+		"x-api-key":     "hk-the-key",    // API key    -> keyorg
+	})
+	if !ok {
+		t.Fatal("nothing resolved with both credentials present")
+	}
+	if got.org != "keyorg" {
+		t.Fatalf("resolved org = %q, want keyorg — the API credential must win over a tab's session", got.org)
+	}
+	// With ONLY the team token, it does resolve — so the assertion above is about
+	// precedence, not about the team token being ignored.
+	if got, ok := tenantWith(t, map[string]string{"Authorization": "Bearer " + tok}); !ok || got.org != "teamorg" {
+		t.Fatalf("team-only resolved (%+v, %v), want teamorg", got, ok)
+	}
+}
+
+// teamAdmission runs teamTenant against a real request context carrying the bearer.
+func teamAdmission(t *testing.T, bearer string) (admission, bool) {
+	t.Helper()
+	return runTenant(t, map[string]string{"Authorization": "Bearer " + bearer}, func(c *zip.Ctx) (admission, bool) {
+		return teamTenant(c)
+	})
+}
+
+// tenantWith runs the FULL eventTenant trust order over a set of headers.
+func tenantWith(t *testing.T, headers map[string]string) (admission, bool) {
+	t.Helper()
+	return runTenant(t, headers, eventTenant)
+}
+
+func runTenant(t *testing.T, headers map[string]string, fn func(*zip.Ctx) (admission, bool)) (admission, bool) {
+	t.Helper()
+	var got admission
+	var ok bool
+	probe := zip.New(zip.Config{})
+	probe.Post("/probe", func(c *zip.Ctx) error {
+		got, ok = fn(c)
+		return c.JSON(http.StatusOK, map[string]string{})
+	})
+	req := httptest.NewRequest(http.MethodPost, "/probe", strings.NewReader("[]"))
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := probe.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	return got, ok
+}
+
+// TestUnidentifiableBearerStillTakesTheAnonymousLane is the OTHER half of the F2 fix,
+// and the reason presented() names the team bearer STRUCTURALLY rather than treating
+// every Bearer as presented. A stale or foreign JWT — no `account` claim — must keep
+// degrading to the anonymous projection, exactly as before this file learned about
+// team tokens. Turning those into 403 would be a refusal on evidence we do not have.
+func TestUnidentifiableBearerStillTakesTheAnonymousLane(t *testing.T) {
+	t.Setenv("SERVER_SECRET", "a-real-team-secret")
+	app := mountApp(t)
+	// A well-formed JWT with no `account` claim (an IAM-shaped bearer).
+	foreign := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
+		"eyJzdWIiOiJ1c2VyLTEiLCJpc3MiOiJodHRwczovL2hhbnpvLmlkIn0.c2ln"
+	if code, _ := postBody(t, app, "/v1/event/collect", teamWire, foreign); code != http.StatusServiceUnavailable {
+		t.Fatalf("foreign bearer = %d, want 503 (anonymous lane reached the store), NOT 403", code)
+	}
+	if teamPresented2(t, foreign) {
+		t.Error("a bearer with no account claim was counted as a presented team credential")
+	}
+	// A team-shaped bearer IS counted, which is what makes the 403 path fire.
+	tok := teamToken(t, "acme", "another-secret", nil, time.Now().Add(time.Hour).Unix())
+	if !teamPresented2(t, tok) {
+		t.Error("a team-shaped bearer was not counted as presented")
+	}
+}
+
+func teamPresented2(t *testing.T, bearer string) bool {
+	t.Helper()
+	var got bool
+	probe := zip.New(zip.Config{})
+	probe.Post("/probe", func(c *zip.Ctx) error {
+		got = teamPresented(c)
+		return c.JSON(http.StatusOK, map[string]string{})
+	})
+	req := httptest.NewRequest(http.MethodPost, "/probe", strings.NewReader("[]"))
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	resp, _ := probe.Fiber().Test(req)
+	defer func() { _ = resp.Body.Close() }()
+	return got
 }

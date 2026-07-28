@@ -58,7 +58,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/team/token"
 	"github.com/zap-proto/zip"
-	"sigs.k8s.io/yaml"
+	"gopkg.in/yaml.v3"
 )
 
 // ttl is how long a minted join token is good for. Ten minutes: long enough to
@@ -77,6 +77,10 @@ const keyFileEnv = "LIVEKIT_KEY_FILE"
 // keyFile is where the manifest mounts Secret `livekit-keys`. Same file, same Secret,
 // same content the LiveKit server reads.
 const keyFile = "/etc/livekit-keys/keys.yaml"
+
+// apiKeyEnv names WHICH api key in keys.yaml to sign with, for the case where the file
+// declares more than one. Unset is correct and normal for a single-key file.
+const apiKeyEnv = "LIVEKIT_API_KEY"
 
 // state is meet's own data: the caller-verifying key, the answer-signing pair, and
 // the reason it is unusable when it is. reason is the ONE flag — a non-empty reason
@@ -130,9 +134,19 @@ func readKeys(path string) (string, string, error) {
 	if err != nil {
 		return "", "", fmt.Errorf("cannot read the LiveKit key file %s (K8s Secret livekit-keys, key keys.yaml): %v", path, err)
 	}
-	// map[string]string, not map[string]any: this mirrors how the LiveKit server
-	// itself decodes the file, so a value YAML would read as a number or bool is a
-	// loud parse error here instead of being coerced into a key that fails to verify.
+	// gopkg.in/yaml.v3 into map[string]string — the EXACT library and target type the
+	// LiveKit server decodes this file with (livekit/pkg/config: `Keys
+	// map[string]string`, yaml.v3), so we and the verifier read identical bytes to
+	// identical strings by construction.
+	//
+	// This was sigs.k8s.io/yaml, which is NOT equivalent: it routes YAML through JSON
+	// and coerces a scalar to the target type, so measured on real input it turned
+	//   0123456789 -> "1.2345679e+08"      yes -> "true"      0x1f -> "31"
+	//   1e5        -> "100000"             no  -> "false"     00   -> "0"
+	// and silently took the LAST of a duplicated key. Any of those mints a token that
+	// verifies nowhere while the log says "mounted" — the exact silent failure this
+	// file claims to prevent. yaml.v3 preserves all of them verbatim and REFUSES a
+	// duplicate key outright, which we get for free by using the right library.
 	var keys map[string]string
 	if err := yaml.Unmarshal(raw, &keys); err != nil {
 		return "", "", fmt.Errorf("cannot parse the LiveKit key file %s (K8s Secret livekit-keys, key keys.yaml) as a YAML apiKey->apiSecret map: %v", path, err)
@@ -141,14 +155,27 @@ func readKeys(path string) (string, string, error) {
 	for k := range keys {
 		names = append(names, k)
 	}
-	switch {
-	case len(names) == 0:
+	sort.Strings(names) // stable messages; no decision depends on map order
+	if len(names) == 0 {
 		return "", "", fmt.Errorf("the LiveKit key file %s (K8s Secret livekit-keys, key keys.yaml) declares no api key", path)
-	case len(names) > 1:
-		sort.Strings(names) // a stable message; the refusal does not depend on order
-		return "", "", fmt.Errorf("the LiveKit key file %s (K8s Secret livekit-keys, key keys.yaml) declares %d api keys (%s); exactly one is required — refusing to pick", path, len(names), strings.Join(names, ", "))
 	}
-	key, apiSecret := names[0], keys[names[0]]
+	// A LiveKit key file is a MAP because a server may hold several keys. When it
+	// does, LIVEKIT_API_KEY names which one this binary signs with. Selecting by name
+	// is the only safe way to resolve the ambiguity: Go map order is random, so
+	// "take the first" would pick differently per process start and produce tokens
+	// that fail at the media edge intermittently.
+	key := ""
+	if want := strings.TrimSpace(os.Getenv(apiKeyEnv)); want != "" {
+		if _, found := keys[want]; !found {
+			return "", "", fmt.Errorf("%s names api key %q, which the LiveKit key file %s (K8s Secret livekit-keys, key keys.yaml) does not declare (it has: %s)", apiKeyEnv, want, path, strings.Join(names, ", "))
+		}
+		key = want
+	} else if len(names) > 1 {
+		return "", "", fmt.Errorf("the LiveKit key file %s (K8s Secret livekit-keys, key keys.yaml) declares %d api keys (%s); set %s to name which one to sign with — refusing to pick", path, len(names), strings.Join(names, ", "), apiKeyEnv)
+	} else {
+		key = names[0]
+	}
+	apiSecret := keys[key]
 	// Blank-ish is refused, but the values are returned BYTE-EXACT — deliberately not
 	// trimmed. The only property that matters is that the pair we sign with is
 	// identical to the pair the LiveKit server read from these same bytes. Trimming
@@ -181,6 +208,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// front image, not editing a manifest.
 	app.Post("/v1/meet/getToken", cloud.Handle(s, mint))
 
+	// /v1/meet/health makes "the office is unconfigured" a SIGNAL rather than a grep.
+	// A boot log line is invisible to a dashboard and rotates away; this is the same
+	// contract every other subsystem exposes, so the existing probe/alerting surface
+	// picks it up with no new machinery. It carries the reason because /v1/*/health is
+	// an operator surface, not the unauthenticated mint path.
+	app.Get("/v1/meet/health", cloud.Handle(s, health))
+
 	if !s.State.ready() {
 		// ERROR, not warn, and it names the file/Secret to fix. A subsystem that can
 		// never serve a single request is not a warning — and the previous version of
@@ -195,6 +229,19 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// LiveKit server agree on which key pair is in play. The secret is never logged.
 	s.Log.Info("meet subsystem mounted", "prefix", "/v1/meet", "ttl", ttl.String(), "livekitApiKey", s.State.apiKey)
 	return nil
+}
+
+// health reports whether meet can mint, and when it cannot, why. 503 + ready:false so
+// the degraded state is legible to a probe and to a dashboard, not just to whoever
+// greps the boot log.
+func health(s *cloud.Service[state], c *zip.Ctx) error {
+	res := map[string]any{"service": "meet", "status": "ok"}
+	if !s.State.ready() {
+		res["status"], res["ready"], res["error"] = "degraded", false, s.State.reason
+		return c.JSON(http.StatusServiceUnavailable, res)
+	}
+	res["ready"], res["livekitApiKey"], res["ttl"] = true, s.State.apiKey, ttl.String()
+	return c.JSON(http.StatusOK, res)
 }
 
 // request is the office client's wire. `_id` is the person ref, which becomes the
@@ -265,8 +312,13 @@ func workspace(room string) string {
 //     for any room in any other workspace by naming it;
 //   - an empty workspace claim is refused outright, so a session token that is not
 //     bound to a workspace cannot match a room that has no separator in its name;
-//   - a readonly or guest session is refused. Both are REDUCED sessions, and speaking
-//     in a colleague's meeting is not a reduced-session privilege.
+//   - the token must carry a PRIVILEGED workspace role (token.Privileged, the one
+//     predicate that reads the signed extra.role). A guest is a reduced principal and
+//     a seat in a colleague's meeting is not a reduced-session privilege. This used to
+//     compare extra.readonly/extra.guest — claims NOTHING in this repo mints, so the
+//     check was inert and every guest was admitted. selectWorkspace now signs the real
+//     workspace role, and an ABSENT role is unprivileged, so a token that has not
+//     proven a role is refused rather than assumed to be a member.
 func (s state) admits(room, auth string) bool {
 	raw := bearer(auth)
 	if raw == "" {
@@ -279,16 +331,7 @@ func (s state) admits(room, auth string) bool {
 	if t.Workspace == "" || t.Workspace != workspace(room) {
 		return false
 	}
-	if extraIs(t.Extra, "readonly", "true") || extraIs(t.Extra, "guest", "true") {
-		return false
-	}
-	return true
-}
-
-// extraIs reports whether a token's extra claim holds a given string value.
-func extraIs(extra map[string]any, key, want string) bool {
-	s, _ := extra[key].(string)
-	return s == want
+	return t.Privileged()
 }
 
 // bearer extracts the token from an "Authorization: Bearer <t>" header (scheme

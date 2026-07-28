@@ -68,6 +68,52 @@ type Token struct {
 }
 
 // ErrMalformed is returned when a token is not three base64url segments.
+// The workspace roles a token can carry, signed into extra.role at mint
+// (clients/team selectWorkspace). This is the CLOSED set validInviteRole accepts.
+const (
+	RoleOwner  = "owner"
+	RoleAdmin  = "admin"
+	RoleMember = "member"
+	RoleGuest  = "guest"
+)
+
+// claim reads a string extra claim. ONE spelling of "read a claim", so two callers
+// cannot disagree about whether surrounding space counts — it does not, anywhere.
+func (t *Token) claim(key string) string {
+	s, _ := t.Extra[key].(string)
+	return strings.TrimSpace(s)
+}
+
+// Org is the signed tenant claim. Every capability decision that names an org must
+// come from here, never from a request body or Host.
+func (t *Token) Org() string { return t.claim("org") }
+
+// Role is the signed workspace role, or "" when the token carries none — a session
+// token (no workspace chosen yet), or one minted before roles were signed.
+func (t *Token) Role() string { return t.claim("role") }
+
+// Privileged reports whether this token's role confers FULL capability on the
+// workspace's data — writing rows nobody projected, minting a seat in a meeting.
+//
+// FAIL-CLOSED, and the closed case is the important one: an ABSENT role is NOT
+// privileged. A role is only absent on a token that has not proven a workspace role
+// (a pre-selectWorkspace session token) or one minted before this claim existed, and
+// neither has demonstrated the thing this predicate is asked about. Guests are
+// excluded by being outside the allowlist rather than by being named, so a role added
+// to the invite vocabulary tomorrow starts unprivileged instead of silently full.
+//
+// This is the ONE predicate for reduced capability. It used to be two string
+// comparisons written twice, against extra.guest/extra.readonly — claims NOTHING in
+// this repo ever mints, so both copies were inert AND they disagreed about whitespace.
+func (t *Token) Privileged() bool {
+	switch t.Role() {
+	case RoleOwner, RoleAdmin, RoleMember:
+		return true
+	default:
+		return false
+	}
+}
+
 var ErrMalformed = errors.New("token: malformed")
 
 // ErrSignature is returned when HMAC verification fails.
