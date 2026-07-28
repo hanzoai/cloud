@@ -171,6 +171,18 @@ func TestForkVariantSelection(t *testing.T) {
 		t.Fatalf("prism default want prism/static, got %q/%q", p.Slug, p.Framework)
 	}
 
+	// A template whose NAME is a reserved subdomain still forks in one click:
+	// the derived slug is a default, so it takes the suffix its demo carries.
+	code, body = do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower",
+		map[string]any{"slug": "metrics"})
+	if code != http.StatusCreated {
+		t.Fatalf("fork metrics want 201, got %d (%s)", code, body)
+	}
+	_ = json.Unmarshal(body, &p)
+	if p.Slug != "metrics-template" {
+		t.Fatalf("reserved template slug want metrics-template, got %q", p.Slug)
+	}
+
 	// An unknown variant is a 404, not a silent fall back to the default.
 	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower",
 		map[string]any{"slug": "prism", "variant": "cobol"}); code != http.StatusNotFound {

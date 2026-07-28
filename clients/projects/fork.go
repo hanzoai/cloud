@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/hanzoai/cloud/clients/templates"
 	"github.com/zap-proto/zip"
 )
@@ -83,6 +84,13 @@ func seedFrom(s *cloud.Service[state], c *zip.Ctx, slug, variant string) (create
 		// shapes of one template can live side by side in the same org.
 		if len(t.Variants) > 0 && v.ID != t.Variants[0].ID {
 			req.Slug += "-" + v.ID
+		}
+		// The derived slug is a DEFAULT, not the caller's choice, so a template
+		// whose name is a reserved subdomain (metrics) must still fork in one
+		// click. `-template` is the suffix its live demo already carries
+		// (metrics-template.hanzo.app), so the derived name matches the demo.
+		if sites.IsReserved(req.Slug) {
+			req.Slug += "-template"
 		}
 		req.Repo.URL = v.Source
 		return req, nil
