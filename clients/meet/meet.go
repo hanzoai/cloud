@@ -28,15 +28,18 @@
 //
 //   - SERVER_SECRET verifies the CALLER. It is the HS256 key clients/team signs
 //     session tokens with, so "is this a real member of this workspace" is answered
-//     against the same signature the rest of /v1/team trusts.
-//   - LIVEKIT_API_SECRET signs the ANSWER. It is the key the LiveKit server verifies
-//     with, so the token this package mints is exactly as trustworthy to LiveKit as
-//     one LiveKit minted itself.
+//     against the same signature the rest of /v1/team trusts. It arrives as env from
+//     the KMS-synced `team-secrets`.
+//   - The LiveKit api key/secret signs the ANSWER, and it is read from the SAME
+//     keys.yaml file the LiveKit server itself validates against (Secret
+//     `livekit-keys`, mounted read-only). ONE representation of that material, so it
+//     cannot drift: a second copy projected into env would mint tokens that look
+//     perfect and are refused at the media edge, which is the silent failure this
+//     whole package is trying not to have.
 //
-// Both arrive as env from KMS-synced Secrets (never a literal, never a default).
-// Missing either one is a 503: with no team key we cannot tell members from
-// strangers, and with no LiveKit key we could only produce a token that fails
-// verification anyway.
+// Missing or ambiguous material is a 503, LOUDLY: the reason names the file and the
+// Secret in the log at boot, while the caller gets an unadorned "not configured" (an
+// unauthenticated 503 is not the place to enumerate our secret plumbing).
 package meet
 
 import (
@@ -44,15 +47,18 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/team/token"
 	"github.com/zap-proto/zip"
+	"sigs.k8s.io/yaml"
 )
 
 // ttl is how long a minted join token is good for. Ten minutes: long enough to
@@ -62,34 +68,98 @@ import (
 // and does not re-check the token.
 const ttl = 10 * time.Minute
 
-// state is meet's own data: the caller-verifying key and the answer-signing pair.
-// An empty key means "not configured", which is a 503 and never a soft default.
+// keyFileEnv overrides where keys.yaml is read from. It exists because the LiveKit
+// server takes the same knob (--key-file), so the path is a deployment fact on both
+// sides of the pair rather than a constant on one — and because a test must be able
+// to point at a temp file.
+const keyFileEnv = "LIVEKIT_KEY_FILE"
+
+// keyFile is where the manifest mounts Secret `livekit-keys`. Same file, same Secret,
+// same content the LiveKit server reads.
+const keyFile = "/etc/livekit-keys/keys.yaml"
+
+// state is meet's own data: the caller-verifying key, the answer-signing pair, and
+// the reason it is unusable when it is. reason is the ONE flag — a non-empty reason
+// IS "not configured", so there is no way for the two to disagree.
 type state struct {
-	teamSecret string // SERVER_SECRET  — verifies the caller's team session
-	apiKey     string // LIVEKIT_API_KEY    — the `iss` LiveKit matches on
-	apiSecret  string // LIVEKIT_API_SECRET — signs the minted token
+	teamSecret string // SERVER_SECRET — verifies the caller's team session
+	apiKey     string // LiveKit api key    — the `iss` LiveKit matches on
+	apiSecret  string // LiveKit api secret — signs the minted token
+	reason     string // why this is unusable; empty means usable
 }
 
-// ready reports whether both keys are present. Fail-closed: an unconfigured deploy
-// refuses every mint rather than issuing a token nobody can verify.
-func (s state) ready() bool {
-	return s.teamSecret != "" && s.apiKey != "" && s.apiSecret != ""
-}
+// ready reports whether meet can mint. Fail-closed: an unconfigured deploy refuses
+// every mint rather than issuing a token nobody can verify.
+func (s state) ready() bool { return s.reason == "" }
 
-// load reads the three keys from env, where the KMS operator syncs them. It refuses
-// the upstream public default team secret for the reason clients/team's resolveSecret
-// does: a known signing key lets anyone mint a session naming any workspace, which
-// here would be a join token for a room they were never in.
+// load assembles the signing material and, when it cannot, says exactly why. Every
+// failure path produces a reason naming the file or env var an operator has to fix —
+// this used to return a bare zero value, which made a misconfigured deploy an
+// indistinguishable permanent 503 with nothing in the log to chase.
 func load() state {
 	secret := os.Getenv("SERVER_SECRET")
-	if secret == "secret" {
-		secret = ""
+	if secret == "" || secret == "secret" {
+		// The upstream public default is treated as absent for the reason
+		// clients/team's resolveSecret does: a known key lets anyone mint a session
+		// naming any workspace — here, a join token for a room they were never in.
+		return state{reason: "SERVER_SECRET is unset or the public default literal (K8s Secret team-secrets, key SERVER_SECRET)"}
 	}
-	return state{
-		teamSecret: secret,
-		apiKey:     os.Getenv("LIVEKIT_API_KEY"),
-		apiSecret:  os.Getenv("LIVEKIT_API_SECRET"),
+	path := os.Getenv(keyFileEnv)
+	if path == "" {
+		path = keyFile
 	}
+	key, apiSecret, err := readKeys(path)
+	if err != nil {
+		return state{reason: err.Error()}
+	}
+	return state{teamSecret: secret, apiKey: key, apiSecret: apiSecret}
+}
+
+// readKeys parses a LiveKit key file: a YAML map of apiKey -> apiSecret, which is the
+// format the LiveKit server's --key-file takes. It returns the single pair, or an
+// error naming the file and Secret.
+//
+// EXACTLY ONE entry is required. Zero is unconfigured. More than one is AMBIGUOUS,
+// and ambiguity here is refused rather than resolved: Go map iteration is random, so
+// "just take the first" would pick a different key per process start, and a token
+// signed under a key the caller's room was not provisioned for fails at the media
+// edge intermittently — the worst possible failure shape. If a deployment ever needs
+// several api keys, the code that chooses between them has to be written on purpose.
+func readKeys(path string) (string, string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", "", fmt.Errorf("cannot read the LiveKit key file %s (K8s Secret livekit-keys, key keys.yaml): %v", path, err)
+	}
+	// map[string]string, not map[string]any: this mirrors how the LiveKit server
+	// itself decodes the file, so a value YAML would read as a number or bool is a
+	// loud parse error here instead of being coerced into a key that fails to verify.
+	var keys map[string]string
+	if err := yaml.Unmarshal(raw, &keys); err != nil {
+		return "", "", fmt.Errorf("cannot parse the LiveKit key file %s (K8s Secret livekit-keys, key keys.yaml) as a YAML apiKey->apiSecret map: %v", path, err)
+	}
+	names := make([]string, 0, len(keys))
+	for k := range keys {
+		names = append(names, k)
+	}
+	switch {
+	case len(names) == 0:
+		return "", "", fmt.Errorf("the LiveKit key file %s (K8s Secret livekit-keys, key keys.yaml) declares no api key", path)
+	case len(names) > 1:
+		sort.Strings(names) // a stable message; the refusal does not depend on order
+		return "", "", fmt.Errorf("the LiveKit key file %s (K8s Secret livekit-keys, key keys.yaml) declares %d api keys (%s); exactly one is required — refusing to pick", path, len(names), strings.Join(names, ", "))
+	}
+	key, apiSecret := names[0], keys[names[0]]
+	// Blank-ish is refused, but the values are returned BYTE-EXACT — deliberately not
+	// trimmed. The only property that matters is that the pair we sign with is
+	// identical to the pair the LiveKit server read from these same bytes. Trimming
+	// would silently diverge from any reader that does not trim: the api key is the
+	// `iss` LiveKit matches on, and the secret IS the signing key, so one stripped
+	// space produces tokens that mint perfectly and verify nowhere. Consistency with
+	// the other reader beats tidiness.
+	if strings.TrimSpace(key) == "" || strings.TrimSpace(apiSecret) == "" {
+		return "", "", fmt.Errorf("the LiveKit key file %s (K8s Secret livekit-keys, key keys.yaml) has an empty api key or secret", path)
+	}
+	return key, apiSecret, nil
 }
 
 // Mount wires /v1/meet/* onto app. The route is registered even when unconfigured so
@@ -112,10 +182,18 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	app.Post("/v1/meet/getToken", cloud.Handle(s, mint))
 
 	if !s.State.ready() {
-		s.Log.Warn("meet subsystem mounted fail-closed: SERVER_SECRET / LIVEKIT_API_KEY / LIVEKIT_API_SECRET not all set (every mint 503)")
+		// ERROR, not warn, and it names the file/Secret to fix. A subsystem that can
+		// never serve a single request is not a warning — and the previous version of
+		// this line said only "not all set", which is exactly why a Secret that was
+		// empty in the cluster could have shipped as a permanent, silent 503.
+		s.Log.Error("meet subsystem UNCONFIGURED — POST /v1/meet/getToken will 503 on every call until this is fixed; the office (video/audio rooms) is down",
+			"reason", s.State.reason, "prefix", "/v1/meet")
 		return nil
 	}
-	s.Log.Info("meet subsystem mounted", "prefix", "/v1/meet", "ttl", ttl.String())
+	// apiKey is an identifier, not a secret (it is the public `iss` of every minted
+	// token), so logging it is what lets an operator confirm the binary and the
+	// LiveKit server agree on which key pair is in play. The secret is never logged.
+	s.Log.Info("meet subsystem mounted", "prefix", "/v1/meet", "ttl", ttl.String(), "livekitApiKey", s.State.apiKey)
 	return nil
 }
 
@@ -137,7 +215,11 @@ type request struct {
 func mint(s *cloud.Service[state], c *zip.Ctx) error {
 	st := s.State
 	if !st.ready() {
-		return zip.Errorf(http.StatusServiceUnavailable, "meet: signing keys not configured")
+		// The CALLER gets the fact, not the plumbing: this 503 is reachable without
+		// any credential, so it must not enumerate our file paths and Secret names.
+		// The full reason went to the log at boot (Mount), which is where an operator
+		// is looking.
+		return zip.Errorf(http.StatusServiceUnavailable, "meet: the office is not configured")
 	}
 	var req request
 	if err := json.Unmarshal(c.Body(), &req); err != nil {
@@ -260,6 +342,14 @@ var header = base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"
 // alg confusion, `alg: none`, non-constant-time comparison — has no code path here.
 // The primitives themselves are stdlib; nothing cryptographic is hand-rolled.
 func (s state) grant(room, identity, name string, now time.Time) (string, error) {
+	// Defense in depth at the CRYPTO boundary, not just at the gate. crypto/hmac
+	// accepts an empty key and returns a perfectly well-formed MAC, so an empty
+	// signing key does not fail — it silently produces a token that verifies under
+	// the empty key and under nothing the LiveKit server holds. Refusing here means
+	// removing the ready() check upstream still cannot mint an unverifiable token.
+	if s.apiKey == "" || s.apiSecret == "" {
+		return "", errors.New("meet: refusing to sign with an empty LiveKit api key or secret")
+	}
 	payload, err := json.Marshal(claims{
 		Iss:   s.apiKey,
 		Sub:   identity,
