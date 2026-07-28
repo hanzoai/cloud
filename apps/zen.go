@@ -35,7 +35,7 @@ import (
 // AuditTrail, ScopeRateLimit, and BillingGate app-wide BEFORE MountAll, so a
 // zen-claimed request is already authenticated, audited, and rate-limited at the
 // edge. But the edge BillingGate prices bare /v1/messages, /v1/chat/completions,
-// and /v1/embeddings at 0 (they are not under /v1/ai/ in selfMeteredPrefixes), and
+// and /v1/embeddings at 0 (zen's surface declares cloud.Metered), and
 // ai's OWN in-handler metering — which used to bill zen* — is SKIPPED because
 // zen's Claim runs before ai's beego catch-all. zen therefore bills zen* itself,
 // through the same commerce metering client the edge gate uses, so there is ONE
