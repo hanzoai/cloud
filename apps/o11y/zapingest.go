@@ -46,12 +46,23 @@ import (
 type zapReceiverConfig struct {
 	// Endpoint is host:port to bind. A scheme has no meaning on this wire.
 	Endpoint string `mapstructure:"endpoint"`
+
+	// LogsEndpoint is where the OTLZ log receiver binds. It is SEPARATE because
+	// zapreceiver and zaplogreceiver each open their own listener and neither
+	// accepts a shared node — two receivers on one address is
+	// "bind: address already in use", and that error kills the whole pipeline,
+	// so traces died with logs. The wire already multiplexes by path (/v1/traces,
+	// /v1/logs); when the library serves both from one node this collapses back
+	// to a single endpoint.
+	LogsEndpoint string `mapstructure:"logs_endpoint"`
 }
 
 func newZapReceiverFactory() receiver.Factory {
 	return receiver.NewFactory(
 		component.MustNewType("zap"),
-		func() component.Config { return &zapReceiverConfig{Endpoint: "0.0.0.0:4317"} },
+		func() component.Config {
+			return &zapReceiverConfig{Endpoint: "0.0.0.0:4317", LogsEndpoint: "0.0.0.0:4318"}
+		},
 		receiver.WithTraces(createZapTracesReceiver, component.StabilityLevelBeta),
 		receiver.WithLogs(createZapLogsReceiver, component.StabilityLevelBeta),
 	)
@@ -229,15 +240,19 @@ type zapLogsReceiver struct {
 }
 
 func (r *zapLogsReceiver) Start(_ context.Context, _ component.Host) error {
+	listen := r.cfg.LogsEndpoint
+	if listen == "" {
+		listen = "0.0.0.0:4318"
+	}
 	rcv, err := zaplogreceiver.New(zaplogreceiver.Config{
-		Listen: r.cfg.Endpoint,
+		Listen: listen,
 		NodeID: "cloud-zap-log-ingest",
 		OnBatch: func(ctx context.Context, b *zaplogreceiver.LogBatch) error {
 			return r.next.ConsumeLogs(ctx, logBatchToLogs(b))
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("zap log receiver: start on %s: %w", r.cfg.Endpoint, err)
+		return fmt.Errorf("otlz log receiver: start on %s: %w", listen, err)
 	}
 	r.rcv = rcv
 	return nil
