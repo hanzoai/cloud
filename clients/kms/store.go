@@ -45,9 +45,14 @@ import (
 	kmsstore "github.com/luxfi/kms/pkg/store"
 )
 
-// reservedPlatformSlug mirrors cloud.PlatformDB's reserved partition: a path that
-// names no tenant org routes here. It carries '_', which SanitizeOrg never emits,
-// so it can never alias a real org's file.
+// reservedPlatformSlug names cloud.PlatformDB's reserved partition — the file that
+// holds deployment-wide, org-less facade secrets. It is reached ONLY when fileOrg
+// signals facade=true (an empty / non-"/orgs/" path), never by an org STRING. A
+// tenant path that literally spells "/orgs/_platform/…" keys on SanitizeOrg's slug,
+// which carries no '_' and so can never equal this reserved slug — that path opens a
+// distinct (empty) tenant store and reads a plain 404, indistinguishable from any
+// missing secret. (The earlier code compared the RAW pre-slug org and would have
+// aliased the two; the comment claimed a guarantee the code did not have.)
 const reservedPlatformSlug = "_platform"
 
 // errReadOnly is returned by a reader-mode store when a mutation is attempted. A
@@ -63,7 +68,7 @@ type secretStore struct {
 	readOnly bool
 
 	mu  sync.Mutex
-	dbs map[string]*sql.DB // key: fileOrg(path) → open handle for that org's kms.db
+	dbs map[string]*sql.DB // key: the file-identity slug (SanitizeOrg, or the reserved facade slug)
 }
 
 func newSecretStore(dataDir string, readOnly bool) *secretStore {
@@ -75,16 +80,16 @@ func newSecretStore(dataDir string, readOnly bool) *secretStore {
 // lands in the reserved platform partition. The returned value is the RAW org (or
 // the reserved sentinel); cloud.OrgDB folds a raw org through SanitizeOrg, so
 // distinct raw orgs stay on distinct files.
-func fileOrg(path string) string {
+func fileOrg(path string) (org string, facade bool) {
 	p := strings.Trim(strings.TrimSpace(path), "/")
 	if p == "" {
-		return reservedPlatformSlug
+		return reservedPlatformSlug, true
 	}
 	segs := strings.SplitN(p, "/", 3)
 	if segs[0] == "orgs" && len(segs) >= 2 && segs[1] != "" {
-		return segs[1]
+		return segs[1], false
 	}
-	return reservedPlatformSlug
+	return reservedPlatformSlug, true
 }
 
 // dbFor resolves (opening + migrating + caching on first use) the SQLite handle
@@ -93,6 +98,7 @@ func fileOrg(path string) string {
 //   - create=false (read/list/delete) → return (nil, nil); the caller treats
 //     absence as "no such secret" and NEVER litters an empty store shell for an
 //     org that only had a read attempted.
+//
 // A reader (s.readOnly) never creates: create is forced false, and it performs no
 // DDL (the writer already migrated). The org is folded through the injective
 // slugger inside cloud.OrgDB, so a path can never traverse out of {DataDir}/orgs
@@ -101,14 +107,28 @@ func (s *secretStore) dbFor(path string, create bool) (*sql.DB, error) {
 	if s.readOnly {
 		create = false
 	}
-	org := fileOrg(path)
+	org, facade := fileOrg(path)
+	// key is the FILE identity, not the raw org: the reserved slug for the facade,
+	// else the SanitizeOrg slug that OrgDB actually opens. This is what the cache and
+	// the existence check MUST key on — the raw org does not, and that mismatch was a
+	// real aliasing: a tenant path "/orgs/_platform/…" (raw "_platform") shared a cache
+	// slot with the facade (also "_platform"), so whichever opened first served the
+	// other. SanitizeOrg NEVER emits "_platform" (it carries '_'), so a real tenant
+	// slug can never collide with the reserved one — the boundary is now structural.
+	key := reservedPlatformSlug
+	if !facade {
+		key = cloud.SanitizeOrg(org)
+		if key == "" {
+			return nil, nil // unsluggable org → not found (same 404 as any miss; no oracle)
+		}
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if db, ok := s.dbs[org]; ok {
+	if db, ok := s.dbs[key]; ok {
 		return db, nil
 	}
-	if !create && !s.orgFileExists(org) {
+	if !create && !cek.Exists(filepath.Join(s.dataDir, "orgs", key, "kms.db")) {
 		return nil, nil // nothing to open; caller returns not-found / empty
 	}
 
@@ -116,7 +136,7 @@ func (s *secretStore) dbFor(path string, create bool) (*sql.DB, error) {
 		db  *sql.DB
 		err error
 	)
-	if org == reservedPlatformSlug {
+	if facade {
 		db, err = cloud.PlatformDB(s.dataDir, "kms")
 	} else {
 		// OrgDB SanitizeOrg-slugs the org, creates {DataDir}/orgs/{slug} 0700, opens
@@ -132,25 +152,8 @@ func (s *secretStore) dbFor(path string, create bool) (*sql.DB, error) {
 			return nil, fmt.Errorf("kms: migrate org store %q: %w", org, err)
 		}
 	}
-	s.dbs[org] = db
+	s.dbs[key] = db
 	return db, nil
-}
-
-// orgFileExists reports whether the on-disk kms.db for org already exists — the
-// reader's "is this store hydrated?" check. Best-effort: an unreadable path is
-// treated as absent (fail closed).
-func (s *secretStore) orgFileExists(org string) bool {
-	var path string
-	if org == reservedPlatformSlug {
-		path = filepath.Join(s.dataDir, "orgs", reservedPlatformSlug, "kms.db")
-	} else {
-		slug := cloud.SanitizeOrg(org)
-		if slug == "" {
-			return false
-		}
-		path = filepath.Join(s.dataDir, "orgs", slug, "kms.db")
-	}
-	return cek.Exists(path)
 }
 
 // migrateSecrets creates the sealed-secret table. Idempotent (IF NOT EXISTS), so
