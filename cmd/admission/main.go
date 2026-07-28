@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/admission"
+	"github.com/hanzoai/cloud/apps/admission"
 )
 
 // Standalone entry for the admission app.

@@ -4,10 +4,10 @@ info:
   version: "1.0.0"
   description: >-
     The `/v1/automations` surface of Hanzo Cloud (hanzoai/cloud
-    `clients/automations`, HIP-0106 / task #51): a native-Go Connectors +
+    `apps/automations`, HIP-0106 / task #51): a native-Go Connectors +
     Automations engine that runs an org's flows durably on the shared in-process
     hanzoai/tasks engine and invokes third-party connectors whose credentials are
-    custodied by `clients/integrations` (KMS-sealed, per-org). The reused
+    custodied by `apps/integrations` (KMS-sealed, per-org). The reused
     ActivePieces `web/` flow builder is the contract consumer — the JSON field
     names match the ported shared contract
     (`auto/packages/shared/src/lib/automation/`) verbatim.

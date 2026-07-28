@@ -1,0 +1,599 @@
+// Copyright © 2026 Hanzo AI. MIT License.
+
+// mount.go mounts the hanzoai/commerce MODULE into a cloud binary
+// (HIP-0106) via the NATIVE co-residence contract: commerce registers its routes
+// directly on the HOST's zip app (EmbedConfig.App) — one router, one specificity
+// space, zero handler adaptation. This adapter narrows cloud.Deps, boots the
+// embed, and wires the in-process seams. Direction is one-way: cloud → commerce.
+//
+// PCI SCOPE. Commerce is a LIGHT ROUTER, NOT in PCI-DSS scope: tokens + intent IDs
+// only, NEVER a PAN. PAN-touching paths call the out-of-process Payments / Vault
+// (ZAP-RPC); when those clients are absent the payment handlers fail closed while
+// tenant config + admin stay served — Mount warns loudly at startup.
+//
+// FAIL-SOFT. A broken Embed does NOT crash the binary: commerce degrades to a 503
+// on its own prefixes while every co-resident subsystem stays up.
+package commerce
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/hanzoai/cloud"
+	accountclient "github.com/hanzoai/cloud/apps/account"
+	"github.com/hanzoai/cloud/apps/commerce/transport"
+	financeclient "github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/apps/principal"
+	commercemod "github.com/hanzoai/commerce"
+	commercebilling "github.com/hanzoai/commerce/api/billing"
+	catalogapi "github.com/hanzoai/commerce/api/catalog"
+	planapi "github.com/hanzoai/commerce/api/plan"
+	commercestore "github.com/hanzoai/commerce/api/store"
+	commercedatastore "github.com/hanzoai/commerce/datastore"
+	commercemid "github.com/hanzoai/commerce/middleware"
+	"github.com/hanzoai/commerce/middleware/iammiddleware"
+	commercensctx "github.com/hanzoai/commerce/util/nscontext"
+	sqlitedrv "github.com/hanzoai/sqlite"
+	log "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
+)
+
+func init() {
+	// In-process CommerceClient factory — pickCommerceClient calls it when the
+	// commerce subsystem is enabled. Registered HERE (not called directly from
+	// package cloud) because the commerce client's entitlement client imports
+	// clients/plan, which imports cloud: the hook keeps the package graph acyclic.
+	cloud.RegisterCommerceClientFactory(func(cfg *cloud.Config, _ log.Logger) cloud.CommerceClient {
+		return InProcessClient(cfg.Brand)
+	})
+}
+
+// Prefixes is every root path the commerce surface owns on the shared
+// app. Under the native SharedApp contract most of these are registered by
+// commerce's own setupRoutes; the list is the fail-closed 503 set AND the wire
+// contract prefix_test pins — the route families a session gate or the
+// AI /v1/* catch-all must never swallow.
+//
+// It is exported because the composition root DECLARES it (apps.Wire's commerce
+// entry, Prefixes: commerce.Prefixes), which is what puts commerce on the light
+// host's manifest. Derived instead, the walk would read the `app.Group("/v1")`
+// this file opens for the store/catalog/plan bundle as a claim on ALL of /v1 and
+// hand commerce every request in the fleet. Same list, one owner, stated once.
+var Prefixes = []string{
+	"/v1/commerce", // public checkout + tenant + catalog + deposits
+	"/_/commerce",  // tenant-admin surface
+	// The BARE store surface: GET /v1/store/current (the org-scoped default
+	// store the admin dashboard AND the content storefront edge resolve), the
+	// per-listing upsert /v1/store/:id/listing/:slug the publish edge writes,
+	// and the public storefront reads karma.style serves at runtime. Without
+	// this owner, /v1/store/* fell through to the bare /v1/* AI catch-all —
+	// whose prepaid BALANCE gate 402'd every store read (a store-metadata read
+	// must never require an LLM balance).
+	"/v1/store",
+	// Platform-admin catalog CMS: GET/POST/PUT/DELETE /v1/catalog/entries +
+	// POST /v1/catalog/seed — the SuperAdmin CRUD admin.hanzo.ai's editor drives.
+	// commerce's setupRoutes wires only the PUBLIC read (/v1/commerce/catalog);
+	// the CRUD lives on the standalone /v1 bundle (api.Route → catalogApi.AdminRoute),
+	// which the co-resident embed skips, so Mount mounts it below on the
+	// same /v1 gate chain. Own the prefix here so it reaches commerce (each handler
+	// is requireSuperAdmin-gated) instead of the AI /v1/* balance catch-all.
+	"/v1/catalog",
+	// Platform-admin subscription/DNS plan authority CMS: GET/POST/PUT/DELETE
+	// /v1/plans/entries + POST /v1/plans/seed (increment 3a) — the SuperAdmin CRUD
+	// the console plan editor drives. The PUBLIC read stays GET /v1/billing/plans;
+	// this CRUD rides the /v1 bundle (api.Route → planApi.AdminRoute), which the
+	// embed skips, so Mount mounts it below. Own the prefix so it reaches
+	// commerce (each handler requireSuperAdmin-gated), not the AI /v1/* 402 gate.
+	"/v1/plans",
+	// Payment-provider webhook receiver (POST /v1/billing/webhooks/:provider —
+	// Square et al). The provider's HMAC over the registered notification URL +
+	// body IS the auth; a bearer gate is impossible for provider callbacks.
+	"/v1/billing/webhooks",
+	// The platform auto-recharge sweep (PlatformOnly, POST .../run-all). The
+	// durable cron's poke carries the COMMERCE_SERVICE_TOKEN bearer; without
+	// this owner it lands on the account-bridge /v1/billing/* catch-all, whose
+	// session gate 403s a service token. (Landed 5x before the unfork — #274 —
+	// and the pin test lives beside THIS list so it can't silently regress.)
+	"/v1/billing/auto-recharge",
+}
+
+// commerceMasterKey answers ONE question — can this build actually use the key we
+// have? — and it is the only place cloud decides commerce's at-rest posture.
+//
+// ONE KEY for one process. commerce encrypts its per-tenant money stores under a
+// 32-byte KEK, and cloud already resolves one (CLOUD_KMS_MASTER_KEY_REF, the same
+// master durableCipher and cek derive from), so it hands that over rather than a
+// SECOND key being provisioned for the same process through commerce's own env var.
+//
+// That is not a convenience. Without a key commerce refuses to boot on a
+// libsqlcipher-linked build — correctly, it will not open money data unencrypted —
+// and the refusal is silent from out here: Mount never reaches transport.SetApp, so
+// every S2S billing read falls through to the network and DNS-resolves the
+// in-process placeholder. On 2026-07-27 that read as "Insufficient balance" on
+// funded accounts, fleet-wide.
+//
+// But a key this build CANNOT USE is its own failure, in the opposite direction.
+// commerce's stores need the LIVE libsqlcipher codec: its dual pool opens a
+// concurrent read pool and a serialized write pool on the same file, which the
+// pure-Go codec envelope (a single writer) cannot serve. So on a pure-Go build an
+// injected key is not a stricter posture, it is a hard refusal — commerce cannot
+// boot at all, and the whole money plane is 503 in every local dev build and every
+// `go test`. That is the state this function exists to end.
+//
+// CodecLinked is the SAME predicate commerce's own resolveMasterKey gates on, and
+// the same one cek.EnsureDevKey uses for cloud's stores, so asking it here keeps ONE
+// posture decision across the process rather than three that can disagree:
+//
+//   - codec linked (the production image: CGO_ENABLED=1 -tags libsqlite3) → inject.
+//     commerce encrypts, and its resolveMasterKey still fails closed if the key is
+//     absent, so a production build can never quietly write plaintext money data.
+//   - codec not linked (a pure-Go dev/CI build) → nil, which hands the decision back
+//     to commerce's own env, whose documented answer is a zero-config unencrypted
+//     dev store. Such a build has no encrypted path to fall back to; the choice is
+//     between an unencrypted dev store and no money plane at all.
+func commerceMasterKey(master []byte, lg log.Logger) []byte {
+	if sqlitedrv.CodecLinked() {
+		return master
+	}
+	if len(master) > 0 {
+		lg.Warn("commerce: pure-Go build cannot open its dual pool encrypted — using commerce's unencrypted dev store; the production image links libsqlcipher and encrypts",
+			"codec_linked", false)
+	}
+	return nil
+}
+
+// Mount boots commerce ON the shared zip app (native co-residence).
+// commerce's own setupRoutes registers /v1/commerce/* and /_/commerce/*
+// directly; the standalone-only surfaces (bare /healthz, legacy /admin SPA,
+// checkout SPA root catch-all, Listen) are skipped by the SharedApp contract.
+// This adapter registers the remaining wire-contract families with commerce's
+// own gate chains (see Prefixes).
+func Mount(app *zip.App, deps cloud.Deps) error {
+	if app == nil {
+		return fmt.Errorf("commerce: nil app")
+	}
+	if deps.Logger == nil {
+		return fmt.Errorf("commerce: nil deps.Logger")
+	}
+	lg := deps.Logger.New("subsystem", "commerce")
+	if deps.Payments == nil {
+		lg.Warn("commerce: deps.Payments is nil — payment intent paths will fail; tenant config + admin still served")
+	}
+	if deps.Vault == nil {
+		lg.Warn("commerce: deps.Vault is nil — vault charge paths unavailable; tenant config + admin still served")
+	}
+
+	// Native zip health endpoint — registered FIRST so probes answer even when
+	// the embed fails below.
+	app.Get("/_/commerce/healthz", func(c *zip.Ctx) error {
+		return c.JSON(http.StatusOK, map[string]string{"status": "ok", "service": "commerce"})
+	})
+
+	// commerce persists its per-org SQLite + `base` tree under <DataDir>/commerce,
+	// NEVER at DataDir directly: cloud already owns DataDir/orgs and DataDir/base,
+	// and commerce also writes orgs/ + base/ — sharing the root would collide two
+	// apps on the same SQLite files and corrupt them.
+	dataDir := "/var/lib/cloud/commerce"
+	if deps.DataDir != "" {
+		dataDir = filepath.Join(deps.DataDir, "commerce")
+	}
+
+	embedded, err := commercemod.Embed(context.Background(), commercemod.EmbedConfig{
+		DataDir:   dataDir,
+		MasterKey: commerceMasterKey(deps.MasterKey, lg),
+		// RequireIdentity stays gateway-owned: the gateway in front of the cloud
+		// binary is the trust boundary per HIP-0026.
+		RequireIdentity: false,
+		// THE native co-residence contract: commerce registers its routes on
+		// cloud's own app — no second engine, no net/http adaptation.
+		App: app,
+		// ONE LEDGER: commerce's POST /v1/billing/credit mints into cloud's native
+		// finance ledger (the SAME per-org account the AI spend-gate reads), so a
+		// granted credit is immediately spendable. commercemod.Embed calls
+		// creditledger.Set(this) before routes register; nil would leave commerce on
+		// its own datastore (standalone), but in this unified binary finance is
+		// co-resident, so we inject the finance-backed ledger adapter.
+		Ledger: ledger{},
+	})
+	if err != nil {
+		lg.Error("commerce embed failed — serving fail-closed 503 (cloud stays up)", "err", err)
+		// State, not just a log line: /v1/health reports this and the release smoke
+		// refuses an image whose planes are dead. Without it a fail-closed commerce
+		// is indistinguishable from a commerce that was never enabled.
+		cloud.Degraded("commerce", err)
+		mountCommerceFailClosed(app)
+		return nil
+	}
+
+	// The BARE /v1/store surface (see Prefixes). Group-scoped chain
+	// mirrors the standalone /v1 bundle: gated request context, host, IAM
+	// resolution; store.Route's own tokenRequired arg gates the CRUD.
+	storeV1 := app.Group("/v1")
+	storeV1.Use(commercemid.AddHost(), commercemid.RequestContext(), commerceErrorScope())
+	// Unconditional, exactly like the standalone bundle: IAMTokenRequired
+	// no-ops gracefully when IAM is not initialized.
+	storeV1.Use(iammiddleware.IAMTokenRequired())
+	commercestore.Route(storeV1, commercemid.TokenRequired())
+
+	// Platform-admin catalog CMS on the SAME /v1 bundle: GET/POST/PUT/DELETE
+	// /v1/catalog/entries + POST /v1/catalog/seed. setupRoutes wires only the
+	// public read (/v1/commerce/catalog); the CRUD rides the standalone /v1 bundle
+	// (api.Route → catalogApi.AdminRoute), which the co-resident embed skips — so
+	// register it here, exactly as the standalone does. storeV1's IAMTokenRequired
+	// populates the claims each handler's requireSuperAdmin reads (anon → 403, a
+	// platform admin edits); it is cross-tenant data, never org-scoped.
+	//
+	// TokenRequired is passed for the same reason the standalone passes it
+	// (api.Route hands AdminRoute its adminRequired): IAMTokenRequired resolves a
+	// USER, and only TokenRequired's service-token branch stamps the marker
+	// IsServiceToken reads. Without it no scheduled run can ever authenticate
+	// here — the model sync 403'd on every attempt and the model catalog sat
+	// empty in production. Same reason the auto-recharge poke below is wired with
+	// its own TokenRequired rather than relying on this group's chain.
+	catalogapi.AdminRoute(storeV1, commercemid.TokenRequired())
+
+	// Platform-admin subscription/DNS plan authority CRUD on the SAME /v1 bundle:
+	// GET/POST/PUT/DELETE /v1/plans/entries + POST /v1/plans/seed (increment 3a).
+	// Mirrors the catalog mount: the standalone wires it on the /v1 bundle
+	// (api.Route → planApi.AdminRoute), which the co-resident embed skips. The
+	// embed seed SOURCE is injected here (the composition root) — commercebilling.
+	// SeedRows, the SAME @hanzo/plans embed the boot seed + resolveSubscriptionPlan
+	// read — so api/plan never imports api/billing. Each handler is
+	// requireSuperAdmin-gated (anon → 403); prices are admin-editable but the mint
+	// gates score the IMMUTABLE embed, so an edit never moves a charge gate.
+	planapi.AdminRoute(storeV1, commercebilling.SeedRows)
+
+	// Provider webhook intake at the LIVE registered path. Chain mirrors the
+	// commerce-standalone posture: gated request context, then the sessionless
+	// HMAC-verified handler.
+	app.Post("/v1/billing/webhooks/:provider", commercemid.RequestContext(), commercebilling.HandleProviderWebhook)
+
+	// Durable-cron auto-recharge poke (COMMERCE_SERVICE_TOKEN bearer) at its
+	// live path — the bridge's session gate would 403 the poke. Same gate
+	// chain the commerce route table uses: TokenRequired authenticates the
+	// service token, PlatformOnly authorizes the mint.
+	app.Post("/v1/billing/auto-recharge/run-all",
+		commercemid.RequestContext(),
+		commercemid.TokenRequired(),
+		commercemid.PlatformOnly(),
+		commercebilling.RunAutoRechargeAllOrgs,
+	)
+
+	// GET /v1/billing/plans — the public tier catalog the console renders. commerce's
+	// legacy api.Route() billing bundle (ListPlans, invoices, subscriptions, …) is NOT
+	// registered by the co-resident embed: setupRoutes wires only /v1/commerce/*, so
+	// /v1/billing/plans has NO handler in this binary. The account bridge's
+	// /v1/billing/* wildcard (order 122) then forwards the read BACK to commerce at
+	// COMMERCE_URL — which defaults to the public api.hanzo.ai edge — re-entering the
+	// same bridge in an unbounded self-dispatch loop that surfaces as a 502
+	// ("commerce unreachable: Get https://api.hanzo.ai/v1/billing/plans"). Registering
+	// the static ListPlans handler HERE (order 100, ahead of the bridge) shadows that
+	// wildcard and serves plans in-process — the same co-resident move billing.go makes
+	// for usage/balance. RequestContext supplies the namespaced context promo.Active reads.
+	app.Get("/v1/billing/plans", commercemid.RequestContext(), commercebilling.ListPlans)
+
+	// The rest of the console's billing READS, served co-resident for the SAME reason
+	// plans is: commerce's api.Route() billing bundle is never compiled here, so without
+	// these registrations every one of them falls through to the account bridge's
+	// /v1/billing/* wildcard, which forwards to COMMERCE_URL — the public api.hanzo.ai
+	// edge, which is THIS binary — and self-dispatches into a 502 loop. In prod there is
+	// no separate commerce backend to point COMMERCE_URL at (the in-cluster `commerce`
+	// Service selects the cloud pods), so co-residence is the only way to break the loop.
+	//
+	// Chain: RequestContext (gated context) → IAMTokenRequired (resolves the org from the
+	// gateway-validated X-Org-Id into Locals("organization"), the namespace commerce's
+	// GetOrganization reads) → PinBillingSubject (pins the caller's OWN billing subject
+	// into the query — the SAME isolation the bridge applies, so a read can never widen
+	// past the caller; fail-closed for an unvalidated caller) → the commerce handler. The
+	// specific paths shadow the bridge wildcard (order 100 < 122). payment-config is
+	// org-scoped, not subject-scoped, but PinBillingSubject is still the auth gate that
+	// keeps an unvalidated caller from reaching GetOrganization; its pinned (unused)
+	// subject params are ignored by that handler.
+	billingRead := []struct {
+		path string
+		h    zip.Handler
+	}{
+		{"/v1/billing/invoices", commercebilling.ListInvoices},
+		{"/v1/billing/invoices/:id/pdf", commercebilling.DownloadInvoicePDF},
+		{"/v1/billing/subscriptions", commercebilling.ListBillingSubscriptions},
+		{"/v1/billing/spend-alerts", commercebilling.ListSpendAlerts},
+		{"/v1/billing/payouts", commercebilling.ListPayouts},
+		{"/v1/billing/payment-config", commercebilling.GetPaymentConfig},
+	}
+	for _, r := range billingRead {
+		app.Get(r.path,
+			commercemid.RequestContext(),
+			iammiddleware.IAMTokenRequired(),
+			accountclient.PinBillingSubject(),
+			r.h,
+		)
+	}
+
+	// GET /v1/billing/spend-alerts/authorize — the per-request per-scope spend-CAP
+	// VERDICT the request-edge metering gate consumes (clients/metering scopeAuthorize,
+	// pathLimitsAuthorize). It is a SERVICE-token S2S read (COMMERCE_SERVICE_TOKEN +
+	// X-Org-Id), NOT a browser/IAM read — so it needs its OWN registration, distinct from
+	// the console billingRead block above: without a co-resident handler this authorize
+	// fell through to the account bridge's /v1/billing/* wildcard (order 122), which — being
+	// service-token-forwardable (billing.go billingForwardable) — re-forwarded it to
+	// COMMERCE_URL (the public api.hanzo.ai edge = THIS binary) over the commerce transport's
+	// self-routing dispatch, re-entering the same wildcard until the depth-8 guard refused
+	// → 502 → the gate fails OPEN (the cap is a policy overlay, so no traffic was blocked,
+	// but ~135 502s/30m spammed the money path and each burned 8 full-app dispatches). The
+	// plain GET /v1/billing/spend-alerts (registered above) already broke this loop for the
+	// CRUD read; this closes the /authorize sibling the metering gate hits on every call.
+	//
+	// Chain mirrors commerce's OWN gate on this route (api/billing/handlers.go: the `billing`
+	// group's userRequired = TokenRequired) plus the RequestContext the standalone supplies
+	// globally — NOT the IAM/PinBillingSubject console chain: a raw service token is not an
+	// IAM JWT, so IAMTokenRequired would leave GetOrganization unset and AuthorizeSpendCap
+	// would 500. TokenRequired authenticates the service token AND resolves the tenant from
+	// the gateway-pinned X-Org-Id into Locals("organization"), which AuthorizeSpendCap reads.
+	// The specific route shadows the bridge wildcard (order 100 < 122). No PlatformOnly:
+	// authorize is a per-org cap read, not a cross-org mint (unlike auto-recharge/run-all).
+	app.Get("/v1/billing/spend-alerts/authorize",
+		commercemid.RequestContext(),
+		commercemid.TokenRequired(),
+		commercebilling.AuthorizeSpendCap,
+	)
+
+	// Self-service spend-cap CRUD WRITES — the customer half of the cap: a customer
+	// (or the admin S2S) CREATES / EDITS / REMOVES their own usage caps. These are the
+	// write siblings of the co-resident GET /v1/billing/spend-alerts list; without their
+	// own registration they too fell through the account bridge's /v1/billing/* wildcard
+	// (billingForwardable includes POST spend-alerts) into the SAME 502 self-dispatch loop
+	// authorize hit — so a customer could not set a cap AT ALL in the unified binary
+	// (POST/PATCH/DELETE all 502'd). Same chain commerce's own route table gates them with
+	// (api/billing/handlers.go:322-325, the `user` group's userRequired = TokenRequired) +
+	// the global RequestContext — an IAM JWT OR the COMMERCE_SERVICE_TOKEN, org resolved
+	// from the gateway-pinned X-Org-Id into Locals("organization"). Org-scoped by that
+	// namespace (a caller only ever writes their OWN org's caps; a foreign :id is a
+	// not-found miss in the caller's namespace), so no PinBillingSubject — spend-alerts are
+	// org-level, not billing-subject-level. Shadow the bridge wildcard (order 100 < 122).
+	// A spend cap is a FINANCIAL SAFETY control, so its writes are gated to an ORG ADMIN
+	// (or SuperAdmin, or the trusted S2S service token for the SuperAdmin cap-oversight
+	// Forward) — never any authenticated member. commerce's own `user` group admits any
+	// member, which would let a compromised member key DELETE the org's cap (→ unbounded
+	// spend) or POST a 1¢ enforce cap (→ org-wide 402 DoS). requireSpendCapAdmin closes that.
+	app.Post("/v1/billing/spend-alerts",
+		commercemid.RequestContext(),
+		commercemid.TokenRequired(),
+		requireSpendCapAdmin(),
+		commercebilling.CreateSpendAlert,
+	)
+	app.Patch("/v1/billing/spend-alerts/:id",
+		commercemid.RequestContext(),
+		commercemid.TokenRequired(),
+		requireSpendCapAdmin(),
+		commercebilling.UpdateSpendAlert,
+	)
+	app.Delete("/v1/billing/spend-alerts/:id",
+		commercemid.RequestContext(),
+		commercemid.TokenRequired(),
+		requireSpendCapAdmin(),
+		commercebilling.DeleteSpendAlert,
+	)
+
+	// POST /v1/billing/topup/token — the INLINE Square card top-up (the console's
+	// "Billing → Credits → add credits": the Square Web Payments SDK tokenizes the card
+	// IN THE BROWSER → a single-use nonce → this endpoint charges it and credits the
+	// caller's balance). commerce's api.Route() billing bundle is NOT compiled into the
+	// co-resident embed, so — exactly like plans/invoices/spend-alerts above — without
+	// this registration the POST fell through to the account bridge's /v1/billing/*
+	// wildcard (order 122). That wildcard is service-token-forwardable for topup/token
+	// (billing.go billingForwardable), so billingData re-forwarded it to COMMERCE_URL
+	// (default the public api.hanzo.ai edge = THIS binary) over the commerce transport's
+	// self-routing dispatch, re-entering the SAME wildcard until the depth-8 guard
+	// refused → the "commerce transport: in-process dispatch depth 8 exceeded" 502 that broke
+	// top-up outright. Registering commerce's real TopupWithToken co-resident here
+	// (order 100 < 122) shadows the wildcard and serves the charge in-process at depth 1
+	// — no HTTP hop, no self-dispatch. topup/token STAYS in billingForwardable as the
+	// split-deploy fallback (a standalone commerce still serves it); co-residence just
+	// wins first.
+	//
+	// Chain — the browser money-WRITE posture, byte-for-byte what the bridge applied:
+	//   RequireCSRF        — the ambient-cookie anti-CSRF gate the bridge's requireCSRF
+	//                        wrapped POST /v1/billing/* with (a Bearer/gateway caller is
+	//                        not CSRF-able; an ambient-cookie write needs the token).
+	//   RequestContext     — the gated request context commerce's handler + ledger read.
+	//   IAMTokenRequired   — resolves the org from the gateway-validated X-Org-Id into
+	//                        Locals("organization"), which TopupWithToken.GetOrganization
+	//                        + topupDestination read as the org billing key.
+	//   PinBillingSubject  — pins ?user= to the caller's OWN account.Payer subject (the
+	//                        SAME rule the ai spend-gate debits and billingData pins), so
+	//                        the credit lands on the caller's subject (person=org/name) and
+	//                        can never be widened; fail-closed for an unvalidated caller —
+	//                        the IDOR boundary stays exactly where billingData put it.
+	// The card PAN never touches this binary: TopupWithToken charges the Square nonce only,
+	// and the settled charge itself is the mint authority (mintauth.WithAuthorized).
+	app.Post("/v1/billing/topup/token",
+		accountclient.RequireCSRF(),
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercebilling.TopupWithToken,
+	)
+
+	// The remaining console billing WRITES that share topup/token's self-dispatch loop
+	// class — each is a POST the console makes (billingForwardable in billing.go), each had
+	// NO co-resident handler, so each fell through to the account bridge's /v1/billing/*
+	// wildcard (order 122) and re-entered it over the commerce transport until the depth-8 guard
+	// refused (the same "in-process dispatch depth 8 exceeded" 502 that broke top-up). Each
+	// commerce handler exists in the vendored module (v1.49.13); registering them co-resident
+	// (order 100 < 122) shadows the wildcard and serves the write in-process at depth 1. They
+	// STAY in billingForwardable as the split-deploy fallback (same precedent as topup/token
+	// + spend-alerts). Chain matches the bridge's write posture byte-for-byte:
+	//
+	//   - RequireCSRF        — the ambient-cookie anti-CSRF gate the bridge wrapped POST
+	//                          /v1/billing/* with (Bearer/gateway callers are not CSRF-able).
+	//   - RequestContext     — the gated request context commerce's handlers read.
+	//   - IAMTokenRequired   — resolves the org from the gateway-validated X-Org-Id into
+	//                          Locals("organization") — the namespace GetOrganization reads.
+	//   - PinBillingSubject  — pins the caller's OWN account.Payer subject into BOTH query and
+	//                          body AND fail-closes an unvalidated caller. It is the auth gate
+	//                          on every one, and the IDOR control on the subject-scoped one.
+	//
+	// payment-methods (save a card-on-file / vault a Square nonce) is SUBJECT-scoped: commerce's
+	// CreatePaymentMethod reads `customerId` from the BODY, so PinBillingSubject's body-pin is
+	// load-bearing here — a member can only vault a card for their OWN subject, exactly the
+	// boundary billingData's scopedBillingBody enforced. The Square nonce goes to Square; the
+	// PAN never touches this binary.
+	app.Post("/v1/billing/payment-methods",
+		accountclient.RequireCSRF(),
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercebilling.CreatePaymentMethod,
+	)
+
+	// subscriptions/:id/{cancel,reactivate} are org-NAMESPACE-scoped: commerce's handlers
+	// resolve the subscription by `:id` WITHIN the caller's org namespace (a foreign org's id
+	// is a 404 miss), so tenancy is the namespace IAMTokenRequired resolves and PinBillingSubject
+	// is the fail-closed-anon auth gate — its pinned subject params are ignored by these
+	// handlers (the SAME role it plays for the org-scoped payment-config read). The bridge's
+	// subject-pin was likewise a no-op for these, so nothing is dropped.
+	app.Post("/v1/billing/subscriptions/:id/cancel",
+		accountclient.RequireCSRF(),
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercebilling.CancelBillingSubscription,
+	)
+	app.Post("/v1/billing/subscriptions/:id/reactivate",
+		accountclient.RequireCSRF(),
+		commercemid.RequestContext(),
+		iammiddleware.IAMTokenRequired(),
+		accountclient.PinBillingSubject(),
+		commercebilling.ReactivateBillingSubscription,
+	)
+
+	// In-process seams:
+	//   - the commerce transport routes the S2S billing byte-stream into the co-resident
+	//     app (the metering debit path) instead of a socket to a standalone pod.
+	//   - the commerce client reads the Embedded's datastore DIRECTLY (entitlements +
+	//     BalanceCents) — no HTTP shape at all.
+	transport.SetApp(app.Fiber())
+	PublishEmbedded(embedded)
+
+	// Usage-cap enforcement on the FINANCE path. The unified binary records usage in
+	// the finance ledger (fin.RecordUsage), NOT commerce's transaction store — which
+	// it leaves empty — so the cap must read spend from, and fire alerts on, the
+	// finance ledger. Two seams, both org-wide (the finance Entry carries no scope;
+	// per-scope caps are a follow-up):
+	//   - SetPeriodSpendReader: AuthorizeSpendCap's scopeSpentCents reads the org's
+	//     finance period spend instead of the empty commerce transaction ledger, so
+	//     a real LLM request increments the cap's `spent` and trips the 402.
+	//   - SetUsageHook: after each finance debit, fire the org's spend-alerts on the
+	//     SAME crossing (the alert half), reading the same finance spend + debouncing.
+	commercebilling.SetPeriodSpendReader(financePeriodSpend)
+	financeclient.SetUsageHook(fireCapAlert)
+
+	lg.Info("commerce embedded natively (hanzoai/commerce module on the shared zip app)",
+		"data_dir", dataDir,
+		"brand", deps.Brand,
+		"env", deps.Env,
+	)
+	return nil
+}
+
+// mountCommerceFailClosed serves an honest JSON 503 on every commerce prefix when
+// the embed cannot boot, so /v1/commerce/* answers "commerce unavailable" instead
+// commerceErrorScope confines commerce's JSON error envelope to commerce's OWN
+// routes. commercemid.ErrorHandlerJSON is a `/v1` GROUP middleware, and fiber
+// matches group middleware by PREFIX, not by the handle a route registered on —
+// so on the shared `/v1` it wraps every subsystem mounted AFTER commerce and
+// flattens their typed zip.HTTPError (403/400/…) into a blanket 500 (the store
+// envelope always renders 500). Guarded by Prefixes, the envelope stays on
+// commerce and every other subsystem renders its own status via zip's default
+// handler — the pre-commerce subsystems (kms, o11y, …) already do; this makes the
+// post-commerce ones (projects, agents, wallets, …) match.
+func commerceErrorScope() zip.Handler {
+	envelope := commercemid.ErrorHandlerJSON()
+	return func(c *zip.Ctx) error {
+		if hasCommercePrefix(c.Path()) {
+			return envelope(c)
+		}
+		return c.Next()
+	}
+}
+
+// hasCommercePrefix reports whether path is a commerce-owned root (an exact prefix
+// or a child of one), the SAME ownership Prefixes encodes for the
+// fail-closed mount.
+func hasCommercePrefix(path string) bool {
+	for _, p := range Prefixes {
+		if path == p || strings.HasPrefix(path, p+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// of falling through to another subsystem's catch-all.
+func mountCommerceFailClosed(app cloud.Router) {
+	failed := func(c *zip.Ctx) error {
+		c.SetHeader("Content-Type", "application/json")
+		return c.Bytes(http.StatusServiceUnavailable, []byte(`{"error":"commerce unavailable","code":503}`))
+	}
+	for _, p := range Prefixes {
+		app.All(p+"/*", failed)
+	}
+}
+
+// financePeriodSpend is the usage-cap's period-spend source (injected into commerce
+// via SetPeriodSpendReader). It returns the org's finance-ledger usage in cents since
+// the start of the CURRENT UTC month — the window the cap resets on (mirrors
+// commerce periodStartUTC). Org-wide: the finance Entry carries no project/service,
+// so scope args are ignored and the org total is returned (what the covering
+// org-wide spend-alert row binds on). A finance impl without the sum capability, or a
+// split deploy (no co-resident finance), reports 0 — the cap can never over-count.
+func financePeriodSpend(ctx context.Context, org string, test bool, _, _ string) (int64, error) {
+	fin := financeclient.Current()
+	if fin == nil {
+		return 0, nil
+	}
+	summer, ok := fin.(interface {
+		SumUsageSince(context.Context, string, bool, int64) (int64, error)
+	})
+	if !ok {
+		return 0, nil
+	}
+	n := time.Now().UTC()
+	since := time.Date(n.Year(), n.Month(), 1, 0, 0, 0, 0, time.UTC).Unix()
+	return summer.SumUsageSince(ctx, org, test, since)
+}
+
+// fireCapAlert fires the org's spend-alerts after a finance usage debit — the alert
+// half of the cap on the finance path (wired via finance.SetUsageHook). It resolves
+// the org's commerce datastore (where the spend-alert rows live) and calls the
+// exported commerce trigger, which reads the org's period spend via financePeriodSpend
+// and stamps/debounces. Detached + best-effort; never blocks the money path. Runs in
+// its own goroutine (the hook is invoked with `go`), so a background context is right.
+func fireCapAlert(org string, test bool, project, service string) {
+	if strings.TrimSpace(org) == "" {
+		return
+	}
+	ctx := commercensctx.WithNamespace(context.Background(), org)
+	db := commercedatastore.New(ctx)
+	commercebilling.FireSpendAlerts(ctx, db, org, test, project, service, nil)
+}
+
+// requireSpendCapAdmin gates a spend-alert WRITE to a validated ORG ADMIN or platform
+// SuperAdmin (the unforgeable SanitizeIdentity-minted X-User-IsOrgAdmin / isAdmin bits),
+// OR the trusted in-proc S2S service token (the SuperAdmin cap-oversight Forward + internal
+// automation). A validated non-admin MEMBER is REFUSED (403): a spend cap is a financial
+// safety boundary — a member must not be able to delete the org's cap (→ unbounded spend)
+// or set a punitive 1¢ cap (→ org-wide 402 DoS). The read paths (list/authorize) stay
+// member/S2S-open; only the mutations require admin.
+func requireSpendCapAdmin() zip.Handler {
+	return func(c *zip.Ctx) error {
+		if principal.IsSuperAdmin(c) || principal.IsOrgAdmin(c) || accountclient.IsServiceToken(c) {
+			return c.Next()
+		}
+		return zip.ErrForbidden("org admin required to change spend caps")
+	}
+}

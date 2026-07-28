@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/flags"
+	"github.com/hanzoai/cloud/apps/flags"
 )
 
 // Standalone entry for the flags app.

@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/pubsub"
+	"github.com/hanzoai/cloud/apps/pubsub"
 )
 
 // Standalone entry for the pubsub app.

@@ -23,7 +23,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/o11y"
+	"github.com/hanzoai/cloud/apps/o11y"
 	"github.com/zap-proto/zip"
 )
 

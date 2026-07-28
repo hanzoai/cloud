@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/catalogsync"
+	"github.com/hanzoai/cloud/apps/catalogsync"
 )
 
 // Standalone entry for the catalogsync app.
