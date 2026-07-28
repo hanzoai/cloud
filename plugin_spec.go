@@ -39,8 +39,18 @@ func PluginSpec(name string, p zip.Plugin, prefixes ...string) MountSpec {
 		p.Name = name
 	}
 	return MountSpec{
-		Name:   name,
-		Global: true,
+		Name: name,
+		// Stated once, and it reaches both places that care. zip routes on it, and
+		// indexSubsystems reads it for the boot inventory (/v1/admin/subsystems) and
+		// the per-request subsystem attribution tracing hangs off. Leaving it empty
+		// falls back to the /v1/<name> convention, which for a plugin owning a second
+		// subtree means that subtree's traffic is attributed to NOBODY and the admin
+		// board understates what goes dark when the plugin does.
+		//
+		// It does not narrow middleware here the way it would for a scoped subsystem:
+		// MountAll only builds a scope when !Global, and this spec is always Global.
+		Prefixes: prefixes,
+		Global:   true,
 		Mount: func(router Router, _ Deps) error {
 			app, ok := router.(*zip.App)
 			if !ok {
