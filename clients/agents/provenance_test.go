@@ -412,3 +412,27 @@ func TestParseLinksSurvivesASplitTrailerBlock(t *testing.T) {
 		t.Fatalf("a hook-split trailer block must still bind, got %+v", links)
 	}
 }
+
+// TestSessionViewCarriesOwnOrg pins the field a client needs to link a published
+// session to its public build page (/builds/:org/:project) without guessing or
+// making a second call. It is the CALLER'S org — every read is org-scoped long
+// before the view is built — so echoing it discloses nothing the caller did not
+// already authenticate as.
+func TestSessionViewCarriesOwnOrg(t *testing.T) {
+	app := mountApp(t, &fakeAI{content: "x"})
+	s := register(t, app, "acme", map[string]any{"agent": "dev", "project": "shop"})
+	if s.Org != "acme" {
+		t.Fatalf("register must echo the caller's org, got %q", s.Org)
+	}
+	code, b := do(t, app, http.MethodGet, "/v1/agents/sessions", "acme", nil)
+	if code != http.StatusOK {
+		t.Fatalf("list: %d %s", code, b)
+	}
+	var out struct {
+		Sessions []sessionView `json:"sessions"`
+	}
+	mustJSON(t, b, &out)
+	if len(out.Sessions) != 1 || out.Sessions[0].Org != "acme" {
+		t.Fatalf("list rows must carry the org: %+v", out.Sessions)
+	}
+}
