@@ -1748,45 +1748,71 @@ another's ledger. The specs are `describe.configure({mode:'serial'})` — not by
 preference, but because they all move the same balance and the suite is otherwise
 `fullyParallel`.
 
-## Encryption at rest: cek is the gate, and per-principal binding is not done yet
+## Encryption at rest: cek is the gate, and it binds the owner
 
-`cek.Open` is the ONE encryption-at-rest gate — ~50 stores, plus IAM's identity store
-(`apps/iam.openStore`, which previously opened through `iamserver.OpenSQLite` and
-left `iam/iam2.db` beginning with the literal `SQLite format 3` magic). If you add a
-store, open it through cek; if a store is not in the envelope it has no `.dek` sidecar
-beside it, and that absence is the check worth running on any new data dir:
+`cek.Open(principal, path)` is the ONE encryption-at-rest gate. The principal comes
+first because it is a question the caller must answer, not one it can forget:
+`cek.Global` for a platform store, `cek.Org(slug)` for a tenant's. `cek.User(id)` exists
+for the per-user partition, which has no store yet.
+
+If you add a store, open it through cek. A store inside the envelope has a `.dek`
+sidecar beside it; one outside does not, and this is the check worth running on any data
+dir — note it looks for the SIDECAR, because on a pure-Go build the codec envelope keys
+the file out of band and the database may not exist at that path at all:
 
     find $DATA_DIR -name '*.db' -printf '%P\n' | while read -r r; do
       printf '%-40s dek=%s\n' "$r" "$([ -f "$DATA_DIR/$r.dek" ] && echo yes || echo NO)"; done
 
-**What cek binds today, and what it does not.** The KEK derives from a random per-file
-id, NOT from the principal:
+**The derivation.** The KEK binds (owner, file) and never the path, so a store survives a
+move but not a change of owner:
 
-    KEK = HKDF-SHA256(master, lp("global") || lp(hex(fileID)))
+    tenant:   KEK = HKDF(master, lp("org") || lp(slug || "/" || hex(fileID)))
+    platform: KEK = HKDF(master, lp("global") || lp(hex(fileID)))
 
-`PrincipalOrg` and `PrincipalUser` — which `hanzoai/sqlite` provides and `commerce`
-uses — appear ZERO times in cloud; `const principalType = sqlitedrv.PrincipalGlobal`
-is the only one. So confidentiality between orgs DOES hold (every file has its own
-random DEK under its own KEK, and one org's key cannot read another's file), but there
-is no BINDING: `OrgDB` knows the validated org slug and discards it one call later at
-`openOrgDB → cek.Open(path)`. A `{db,.dek}` pair is therefore valid in any org's
-directory, so a PV-write adversary could swap two of our own stores between tenants.
-cek's header names this as a deliberate non-goal; it stops being one the moment
-tenant-isolation-under-node-compromise is in scope.
+The platform form is byte-identical to what every store on disk was written under, which
+`TestGlobalDerivationIsUnchanged` asserts against an independently written reference — so
+the platform fleet cannot be silently orphaned. Only tenant stores gained an owner.
 
-**The shape of the fix, when it is taken up.** Bind BOTH principal and file, so the
-per-file KEK survives:
+**Migration is an operation, not a fallback.** `cek.Rebind(from, to, path)` rewraps one
+sidecar; `cek.RebindOrgs(dataDir, platformSlug)` is the walk over `{DataDir}/orgs`. It
+rewrites no database page and never opens the file, so it is safe on a store too large to
+copy and a failure cannot corrupt data. Already-bound reports `ErrNotBound` and counts as
+skipped, so the walk converges rather than pretending to be a transaction; a sidecar that
+unwraps under NEITHER principal is a real error, because an operator must not read
+corruption as success.
 
-    KEK = DeriveKey(master, PrincipalOrg, orgSlug + "/" + hex(fileID))
-    AAD = PrincipalAAD(same)
+There is deliberately no legacy path inside `Open`. A second derivation tried on failure
+would mean every open silently accepts two answers forever — which is exactly what made
+the old binding unenforceable.
 
-(`SanitizeOrg` guarantees the slug has no "/", so the id stays injective.) It cannot be
-a flag day: every existing sidecar is wrapped under the legacy global derivation, so
-open must try the principal-bound derivation, fall back to legacy on unwrap failure,
-and rewrap the sidecar on success. That is safe because rewrapping touches only the
-sidecar — the DEK and fileID never change and no page is rewritten, the same property
-master-key rotation already relies on — and because a half-migrated fleet reads either
-form. `cek.Open` grows a principal parameter (~50 call sites pass an explicit Global).
+⚠️ **Deploy order.** A volume written before the binding must be rebound before its
+tenants can open their stores. Run `RebindOrgs` against the data dir, then start.
 
-**Still outside the envelope:** `tasks/_/default.db`. `hanzoai/tasks`'s `EmbedConfig`
-has no key field, so that one is an upstream change, not a cloud one.
+**IAM's store is `iam/global.db`** and opens through cek like everything else. It is named
+for its principal partition, not for a version — it previously opened through
+`iamserver.OpenSQLite`, which has no key to give it, and sat in plaintext.
+
+**Still outside the envelope:** `tasks/<org>/<namespace>.db`. `hanzoai/tasks`'s
+`EmbedConfig` has no key field, so that is an upstream change.
+
+## Inter-app calls: ZAP over UDS
+
+`dial.go` is the ONE way one app calls another. Local resolves to the callee's unix
+socket at `{DataDir}/run/<app>.sock`, remote to TLS, and `Dial(app)` picks by whether the
+socket exists — so an app can move hosts and no call site changes.
+
+The socket is also the authorization boundary: `credz` authenticates its peers with
+`SO_PEERCRED`, so a 0600 socket proves who is calling without a credential to mint,
+rotate or hand-shake, and nothing is reachable from the network.
+
+**DIRECTED: the wire is ZAP, on both legs.** The socket transport currently frames plain
+HTTP, on the reasoning that ZAP ops are already zip handlers so swapping only `net.Conn`
+keeps one protocol. That reasoning is why the change must be ZAP on BOTH local and remote
+— framing local calls as ZAP while remote stays HTTP would give one typed op two wire
+formats, which is the thing the original decision was avoiding. One protocol, one router,
+one set of typed ops; the transport underneath is a socket or a TLS conn.
+
+Two callers are not there yet, both upstream: `hanzoai/tasks` speaks ZAP already but its
+SDK takes host:port only (`newZAPTransport(opts.HostPort, …)`, pinned by
+`TestDialRequiresHostPort`), and pubsub/NATS cannot use a unix socket for client
+connections at all, so `psembed` stays TCP until that is patched.

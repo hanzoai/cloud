@@ -5,13 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/valyala/fasthttp"
+	zaphttp "github.com/zap-proto/http"
 	"github.com/zap-proto/zip"
 )
 
@@ -37,10 +39,16 @@ import (
 // enforces for free. The socket is also not reachable from the network at all,
 // so the blast radius is the filesystem.
 //
-// It is plain HTTP over both, deliberately. ZAP ops are zip handlers, so they
-// already speak request/response; swapping only net.Conn keeps ONE protocol,
-// one router and one set of typed ops. A second wire format for local calls
-// would be a second way to do the same thing.
+// THE INNER WIRE IS ZAP. A co-located call frames ZAP over the socket
+// (zaphttp.Transport, the same transport the gateway and ingress speak), not
+// HTTP. ZAP ops are zip handlers either way, so there is still ONE router and
+// one set of typed ops — what changes is only the framing underneath them, and
+// the caller still never says which.
+//
+// The remote leg stays HTTPS because it is not an inner call: it crosses the
+// public boundary, where TLS is the requirement and zaphttp carries no TLS. The
+// split is a real boundary — inside the deployment ZAP over a unix socket,
+// outside it TLS — rather than two spellings of the same hop.
 
 // runDirEnv overrides where app sockets live. Default: {DataDir}/run, the same
 // data root credz puts its broker socket in.
@@ -65,6 +73,22 @@ func runDir() string {
 // sock is the well-known socket path for one app.
 func sock(app string) string { return filepath.Join(runDir(), app+".sock") }
 
+// PeerSocket is the canonical path an app serves on so its peers can reach it,
+// and it is the SAME path Dial looks for — one definition, so a server and its
+// callers cannot disagree about where an app lives.
+//
+// A ZAP listener takes a PATH here, not a port: there is nothing to allocate, no
+// clash between co-located apps, and nothing bound to a network interface. An app
+// binary adds it to the addresses it already serves, alongside its HTTP/WS/SSE
+// listener — zip serves every address in parallel over the one route surface, so
+// adding the socket takes nothing away from the edge.
+//
+//	app.Listen(cloud.PeerSocket("tasks"), "http://"+httpAddr)
+//
+// A bare path is ZAP by zip's own convention; only an "http://" prefix selects
+// the HTTP framing. That is why this returns a path and not a URL.
+func PeerSocket(app string) string { return sock(app) }
+
 // Peer is another app, reachable. Get/Post carry the caller's principal so the
 // callee applies its OWN authorization — a peer call is never implicitly
 // privileged.
@@ -72,8 +96,9 @@ type Peer struct {
 	app   string
 	base  string
 	local bool
-	c     *http.Client
-	who   map[string]string // forwarded principal; see As
+	zap   *zaphttp.Transport // inner: ZAP frames over the callee's unix socket
+	c     *http.Client       // outer: TLS to the public edge
+	who   map[string]string  // forwarded principal; see As
 }
 
 // identity is the set of headers the edge mints from a validated IAM JWT
@@ -119,12 +144,13 @@ func (p *Peer) As(c *zip.Ctx) *Peer {
 // hold one or dial per request.
 func Dial(app string) *Peer {
 	if s := sock(app); sockExists(s) {
-		return &Peer{app: app, base: "http://" + app, local: true, c: &http.Client{
-			Timeout: 20 * time.Second,
-			Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				return (&net.Dialer{}).DialContext(ctx, "unix", s)
-			}},
-		}}
+		// zaphttp dials lazily, so constructing this opens nothing — a Peer stays
+		// cheap enough to build per request, which is what makes late-starting apps
+		// resolve without a restart.
+		t := zaphttp.Dial("unix", s)
+		t.SetDialTimeout(5 * time.Second)
+		t.SetReadTimeout(20 * time.Second)
+		return &Peer{app: app, base: "http://" + app, local: true, zap: t}
 	}
 	base := strings.TrimSuffix(peerURL(app), "/")
 	return &Peer{app: app, base: base, c: &http.Client{Timeout: 30 * time.Second}}
@@ -160,57 +186,118 @@ func (p *Peer) Post(ctx context.Context, org, path string, in, out any) error {
 }
 
 func (p *Peer) do(ctx context.Context, method, org, path string, in, out any) error {
-	var body *bytes.Reader
+	var body []byte
 	if in != nil {
 		b, err := json.Marshal(in)
 		if err != nil {
 			return fmt.Errorf("peer %s: encode: %w", p.app, err)
 		}
-		body = bytes.NewReader(b)
-	} else {
-		body = bytes.NewReader(nil)
+		body = b
 	}
-	req, err := http.NewRequestWithContext(ctx, method, p.base+path, body)
-	if err != nil {
-		return fmt.Errorf("peer %s: request: %w", p.app, err)
-	}
+
+	head := make(map[string]string, len(p.who)+2)
 	for h, v := range p.who {
-		req.Header.Set(h, v)
+		head[h] = v
 	}
 	// An explicit org overrides the delegated one: a background job has no
 	// request to delegate from and must still name the tenant it acts for.
 	if org != "" {
-		req.Header.Set("X-Org-Id", org)
+		head["X-Org-Id"] = org
 	}
 	if in != nil {
-		req.Header.Set("Content-Type", "application/json")
+		head["Content-Type"] = "application/json"
 	}
-	resp, err := p.c.Do(req)
+
+	status, reply, err := p.send(ctx, method, path, head, body)
 	if err != nil {
 		return fmt.Errorf("peer %s (%s): %w", p.app, p.where(), err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+	if status < 200 || status > 299 {
 		// The status is carried verbatim: a caller distinguishing 402 from 404
 		// from 503 is the difference between "unfunded", "no such thing" and
 		// "that app is down", and collapsing them would make every board lie the
 		// same way the in-process reads did.
-		return fmt.Errorf("peer %s: %s %s: status %d", p.app, method, path, resp.StatusCode)
+		return fmt.Errorf("peer %s: %s %s: status %d", p.app, method, path, status)
 	}
 	if out == nil {
 		return nil
 	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	if err := json.Unmarshal(reply, out); err != nil {
 		return fmt.Errorf("peer %s: decode: %w", p.app, err)
 	}
 	return nil
+}
+
+// send performs one exchange over whichever wire this peer resolved to. It is
+// the ONLY place the two framings differ, and nothing above it knows which ran:
+// do builds one request description, send frames it.
+func (p *Peer) send(ctx context.Context, method, path string, head map[string]string, body []byte) (int, []byte, error) {
+	if p.zap != nil {
+		return p.sendZAP(ctx, method, path, head, body)
+	}
+	return p.sendTLS(ctx, method, path, head, body)
+}
+
+// sendZAP frames the call as ZAP over the callee's unix socket.
+//
+// zaphttp.Do has no context parameter — it bounds itself with the dial and read
+// timeouts set in Dial. So a cancelled context is honoured before the exchange
+// starts rather than during it; the timeouts, not the caller, bound a call that
+// is already in flight. That is acceptable on a socket to a process on the same
+// disk, where there is no network to hang on, and it is why the timeouts are set
+// tighter here than on the TLS leg.
+func (p *Peer) sendZAP(ctx context.Context, method, path string, head map[string]string, body []byte) (int, []byte, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, nil, err
+	}
+	req := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(req)
+	resp := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseResponse(resp)
+
+	req.SetRequestURI(p.base + path)
+	req.Header.SetMethod(method)
+	for h, v := range head {
+		req.Header.Set(h, v)
+	}
+	if body != nil {
+		req.SetBody(body)
+	}
+	if err := p.zap.Do(req, resp); err != nil {
+		return 0, nil, err
+	}
+	// The response body is owned by the pooled response, so copy it out before
+	// ReleaseResponse hands the buffer back — returning the slice itself would
+	// hand the caller memory that is about to be reused under it.
+	return resp.StatusCode(), append([]byte(nil), resp.Body()...), nil
+}
+
+// sendTLS is the outer leg: ordinary HTTPS to the public edge.
+func (p *Peer) sendTLS(ctx context.Context, method, path string, head map[string]string, body []byte) (int, []byte, error) {
+	req, err := http.NewRequestWithContext(ctx, method, p.base+path, bytes.NewReader(body))
+	if err != nil {
+		return 0, nil, fmt.Errorf("request: %w", err)
+	}
+	for h, v := range head {
+		req.Header.Set(h, v)
+	}
+	resp, err := p.c.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	reply, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, nil, fmt.Errorf("read: %w", err)
+	}
+	return resp.StatusCode, reply, nil
 }
 
 // where names the transport for an error message, so a failure says whether it
 // could not reach a socket or could not reach the internet.
 func (p *Peer) where() string {
 	if p.local {
-		return "uds " + sock(p.app)
+		return "zap over uds " + sock(p.app)
 	}
 	return p.base
 }
