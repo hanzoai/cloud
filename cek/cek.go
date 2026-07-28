@@ -17,11 +17,11 @@
 // exposure above (no master key ⇒ no plaintext). It is NOT integrity,
 // authenticity, or anti-rollback against a PV-WRITE (node-compromise) adversary
 // who can modify the volume: the per-file id lives in the (unauthenticated) .dek
-// sidecar, so such an adversary could swap two of OUR OWN {db,.dek} pairs or
-// replay an old snapshot. That is outside the stated model and is deliberately
-// NOT defended here (a logical-id+epoch binding would add complexity for an
-// out-of-model threat); revisit only if tenant-isolation-under-node-compromise
-// is scoped in.
+// sidecar, so such an adversary could still replay an old snapshot of a store in
+// place. Swapping two stores ACROSS tenants no longer works — the owner is in the
+// KEK and the AAD, so a pair carried into another org's directory fails to unwrap
+// (Principal). Rollback of a store onto itself remains out of model; it needs an
+// epoch, which the sidecar does not carry.
 //
 // ENVELOPE (the primitives live in github.com/hanzoai/sqlite/cek.go and are
 // reused verbatim — one crypto implementation, KAT-gated there):
@@ -29,15 +29,24 @@
 //   - Each database has its OWN random 256-bit DEK (the SQLCipher page key),
 //     minted once at first touch and NEVER changed, so ciphertext pages are
 //     never rewritten.
+//
 //   - Each database also gets a random 128-bit FILE ID, stored in the clear at
-//     the head of its <db>.dek sidecar. The KEK is derived from that id, NOT the
-//     file path: KEK = HKDF-SHA256(masterKey, lp("global") || lp(hex(fileID))).
-//     The id is intrinsic to the file and travels with the sidecar, so moving
-//     the data dir or changing CLOUD_DATA_DIR can never change the KEK and brick
-//     a store. RFC-5869 HKDF via x/crypto/hkdf — NOT luxfi/crypto/kdf (a QZMQ
-//     KeySchedule, not generic HKDF; using it would brick every store).
+//     the head of its <db>.dek sidecar. The KEK derives from the OWNER and that
+//     id, never from the file path:
+//
+//     KEK = HKDF-SHA256(masterKey, lp(type) || lp(owner || "/" || hex(fileID)))
+//
+//     for a tenant store, and lp("global") || lp(hex(fileID)) for the platform
+//     partition, which has no owner. Because the path is absent, moving the data
+//     dir or changing CLOUD_DATA_DIR can never change a KEK or brick a store;
+//     because the owner is present, a {db,.dek} pair carried into another
+//     tenant's directory fails to unwrap rather than opening. RFC-5869 HKDF via
+//     x/crypto/hkdf — NOT luxfi/crypto/kdf (a QZMQ KeySchedule, not generic
+//     HKDF; using it would brick every store).
+//
 //   - The DEK is wrapped AES-256-GCM under the KEK, bound to the same id as AAD.
 //     Sidecar = fileID(16) || wrapped-DEK. The raw DEK is never written.
+//
 //   - Master-key ROTATION rewraps only the sidecar: the DEK and fileID are
 //     unchanged, so no page is rewritten and no file can be bricked.
 //
@@ -88,9 +97,58 @@ const (
 	fileIDLen   = 16 // random per-file KEK-derivation id, stored in the sidecar head
 )
 
-// principalType domain-separates cloud's platform databases from IAM's org/user
-// stores in the shared HKDF namespace.
-const principalType = sqlitedrv.PrincipalGlobal
+// Principal is WHOSE store this is. It is the first argument to Open because it is
+// part of a store's identity, not a property of its location: the same bytes at the
+// same path belong to exactly one org, and the key says so.
+//
+// It binds the derivation. Before, every store — platform and per-org alike — derived
+// under the single tag "global", so a store's key knew nothing about its owner and a
+// {db,.dek} pair lifted into another org's directory opened there perfectly well.
+// Confidentiality between orgs still held (each file has its own random DEK under its
+// own KEK), but nothing tied a file to the tenant it belonged to. Now the owner is in
+// the HKDF info and in the GCM AAD, so a store carried across a tenant boundary fails
+// to unwrap instead of opening.
+type Principal struct {
+	typ sqlitedrv.PrincipalType
+	id  string
+}
+
+// Global is the cross-org platform partition: certs, providers, the audit trail, the
+// gateway's own store. Its id is fixed, so a platform store's key derives from the
+// file id alone exactly as it always has — the platform partition is not a tenant and
+// has no owner to bind to.
+var Global = Principal{typ: sqlitedrv.PrincipalGlobal}
+
+// Org binds a store to one tenant. slug MUST be the value SanitizeOrg produced (the
+// injective slugger OrgDB already folds every org through), so two distinct orgs can
+// never derive the same key.
+func Org(slug string) Principal { return Principal{typ: sqlitedrv.PrincipalOrg, id: slug} }
+
+// User binds a store to one person, for the per-user partition.
+func User(id string) Principal { return Principal{typ: sqlitedrv.PrincipalUser, id: id} }
+
+// String renders the principal for errors and logs. It never carries key material.
+func (p Principal) String() string {
+	if p.id == "" {
+		return string(p.typ)
+	}
+	return string(p.typ) + ":" + p.id
+}
+
+// derivationID is the HKDF/AAD identity of one file under this principal: the owner
+// and the file, in that order, so neither alone determines the key.
+//
+// SanitizeOrg emits no "/", so owner and file id cannot run together into an ambiguous
+// string — and lengthPrefixedInfo (which DeriveKey and PrincipalAAD both use) is
+// injective over (type, id) regardless, so the separator is for reading, not safety.
+// The platform partition keeps the bare file id, which is what its stores already use.
+func (p Principal) derivationID(fileID []byte) string {
+	id := hex.EncodeToString(fileID)
+	if p.id == "" {
+		return id
+	}
+	return p.id + "/" + id
+}
 
 var (
 	masterOnce     sync.Once
@@ -260,10 +318,13 @@ func Exists(path string) bool {
 	return err == nil
 }
 
-// Open returns a *sql.DB for the SQLite database at path, encrypted at rest when
-// a master key is configured. It is the single drop-in replacement for
-// sql.Open("sqlite", path) across every cloud store.
-func Open(path string) (*sql.DB, error) {
+// Open returns a *sql.DB for the SQLite database at path, encrypted at rest and bound
+// to p. It is the single way a cloud store opens its file.
+//
+// The principal comes first because it is the question a caller must answer, not one
+// it may forget: pass cek.Global for a platform store, cek.Org(slug) for a tenant's.
+// Passing the wrong one is not a silent mistake — the store will not unwrap.
+func Open(p Principal, path string) (*sql.DB, error) {
 	// An in-memory database never reaches disk, so there is nothing at rest to
 	// encrypt and no master key to require. Treating the spelling as a filename
 	// instead creates a FILE literally named ":memory:" — silently making an
@@ -288,10 +349,10 @@ func Open(path string) (*sql.DB, error) {
 		// (nil, nil). Fail closed anyway — cek never opens a store plaintext.
 		return nil, fmt.Errorf("cek: no master key resolved for %q", path)
 	}
-	return openEncrypted(path, master)
+	return openEncrypted(p, path, master)
 }
 
-func openEncrypted(path string, master []byte) (*sql.DB, error) {
+func openEncrypted(p Principal, path string, master []byte) (*sql.DB, error) {
 	unlock, err := flock(path)
 	if err != nil {
 		return nil, err
@@ -305,11 +366,11 @@ func openEncrypted(path string, master []byte) (*sql.DB, error) {
 	var db *sql.DB
 	switch classify(path) {
 	case stateFresh:
-		db, err = createFresh(path, master)
+		db, err = createFresh(p, path, master)
 	case stateEncrypted:
-		db, err = openExisting(path, master)
+		db, err = openExisting(p, path, master)
 	default: // statePlaintext
-		db, err = migrateThenOpen(path, master)
+		db, err = migrateThenOpen(p, path, master)
 	}
 	if err != nil {
 		return nil, err
@@ -356,12 +417,12 @@ func isPlaintextHeader(path string) bool {
 
 // mintSidecar generates a fresh fileID + DEK, wraps the DEK under the id-derived
 // KEK, and returns the DEK and the sidecar bytes to persist.
-func mintSidecar(master []byte) (dek, sidecar []byte, err error) {
+func mintSidecar(p Principal, master []byte) (dek, sidecar []byte, err error) {
 	fileID := make([]byte, fileIDLen)
 	if _, err = rand.Read(fileID); err != nil {
 		return nil, nil, fmt.Errorf("cek: generate file id: %w", err)
 	}
-	kek, aad, err := deriveFor(master, fileID)
+	kek, aad, err := deriveFor(p, master, fileID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -381,12 +442,12 @@ func mintSidecar(master []byte) (dek, sidecar []byte, err error) {
 // unwrapSidecar reads the fileID from the sidecar head and unwraps the DEK under
 // the id-derived KEK. A wrong master key, tampered blob, or truncated sidecar
 // fails the GCM tag and errors — never a partial/garbage key.
-func unwrapSidecar(master, sidecar []byte) ([]byte, error) {
+func unwrapSidecar(p Principal, master, sidecar []byte) ([]byte, error) {
 	if len(sidecar) <= fileIDLen {
 		return nil, fmt.Errorf("cek: sidecar too short (%d bytes)", len(sidecar))
 	}
 	fileID, wrapped := sidecar[:fileIDLen], sidecar[fileIDLen:]
-	kek, aad, err := deriveFor(master, fileID)
+	kek, aad, err := deriveFor(p, master, fileID)
 	if err != nil {
 		return nil, err
 	}
@@ -398,25 +459,27 @@ func unwrapSidecar(master, sidecar []byte) ([]byte, error) {
 	return dek, nil
 }
 
-// deriveFor derives the KEK and the wrap-AAD for a file id. Both bind to
-// hex(fileID) so the id — not any path or config value — is the sole identity.
-func deriveFor(master, fileID []byte) (kek, aad []byte, err error) {
-	id := hex.EncodeToString(fileID)
-	kek, err = sqlitedrv.DeriveKey(master, principalType, id)
+// deriveFor derives the KEK and the wrap-AAD for one file under one principal. Both
+// bind to (principal, fileID) — never to a path or a config value — so moving a store
+// or renaming the data dir cannot change its key, while carrying it into another
+// tenant's directory cannot open it.
+func deriveFor(p Principal, master, fileID []byte) (kek, aad []byte, err error) {
+	id := p.derivationID(fileID)
+	kek, err = sqlitedrv.DeriveKey(master, p.typ, id)
 	if err != nil {
-		return nil, nil, fmt.Errorf("cek: derive KEK: %w", err)
+		return nil, nil, fmt.Errorf("cek: derive KEK for %s: %w", p, err)
 	}
-	return kek, sqlitedrv.PrincipalAAD(principalType, id), nil
+	return kek, sqlitedrv.PrincipalAAD(p.typ, id), nil
 }
 
 // ── open paths ───────────────────────────────────────────────────────────────
 
-func createFresh(path string, master []byte) (*sql.DB, error) {
+func createFresh(p Principal, path string, master []byte) (*sql.DB, error) {
 	dekPath := path + dekSuffix
 	if fileExists(dekPath) {
-		return openExisting(path, master) // a concurrent first-touch won the lock
+		return openExisting(p, path, master) // a concurrent first-touch won the lock
 	}
-	dek, sidecar, err := mintSidecar(master)
+	dek, sidecar, err := mintSidecar(p, master)
 	if err != nil {
 		return nil, err
 	}
@@ -431,13 +494,13 @@ func createFresh(path string, master []byte) (*sql.DB, error) {
 	return db, nil
 }
 
-func openExisting(path string, master []byte) (*sql.DB, error) {
+func openExisting(p Principal, path string, master []byte) (*sql.DB, error) {
 	dekPath := path + dekSuffix
 	sidecar, err := os.ReadFile(dekPath)
 	if err != nil {
 		return nil, fmt.Errorf("cek: read sidecar %q (encrypted db, refusing to open blind): %w", dekPath, err)
 	}
-	dek, err := unwrapSidecar(master, sidecar)
+	dek, err := unwrapSidecar(p, master, sidecar)
 	if err != nil {
 		return nil, err
 	}
@@ -454,7 +517,7 @@ func openExisting(path string, master []byte) (*sql.DB, error) {
 // until an atomic rename commits) and fail-secure (the swap happens only after
 // the encrypted copy reproduces the source schema + per-table content hash +
 // integrity_check, re-opened via the exact keyed path the app uses).
-func migrateThenOpen(path string, master []byte) (*sql.DB, error) {
+func migrateThenOpen(p Principal, path string, master []byte) (*sql.DB, error) {
 	// Converting an existing plaintext database to SQLCipher uses libsqlcipher's
 	// ATTACH ... KEY + sqlcipher_export (see exportPlaintext), which only the live C
 	// codec provides. The pure-Go envelope opens and creates encrypted stores but
@@ -472,7 +535,7 @@ func migrateThenOpen(path string, master []byte) (*sql.DB, error) {
 	tmp := path + tmpSuffix
 	removeDBFiles(tmp)
 
-	dek, sidecar, err := mintSidecar(master)
+	dek, sidecar, err := mintSidecar(p, master)
 	if err != nil {
 		return nil, err
 	}

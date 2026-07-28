@@ -40,7 +40,7 @@ type Store struct {
 var ErrHostTaken = errors.New("host already claimed by another route")
 
 func openStore(path string) (*Store, error) {
-	db, err := cek.Open(path)
+	db, err := cek.Open(cek.Global, path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}

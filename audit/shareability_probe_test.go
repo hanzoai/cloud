@@ -60,7 +60,7 @@ func TestShareability_ReaderSharesLiveWriterStore(t *testing.T) {
 	// handle that only ever reads — it still proves the reader sees the live
 	// writer's committed records, which is the claim, but it does not by itself
 	// prove the reader takes no write lock.
-	ro, err := cek.Open(path)
+	ro, err := cek.Open(cek.Global, path)
 	if err != nil {
 		t.Fatalf("reader Open: %v", err)
 	}

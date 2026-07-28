@@ -23,6 +23,7 @@ package framework
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -61,9 +62,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// cek is CLOUD's storage policy — encrypted at rest under a KMS-held master
 	// key. The engine takes it as an opener rather than importing it, so the
 	// same engine runs unencrypted in a test or a standalone app.
+	// The engine opens the deployment's own DocType stores under deps.DataDir, not a
+	// tenant's, so they key under the platform principal. A per-org DocType store would
+	// come through OrgDB, which names its owner.
 	eng, err := engine.Open(engine.Config{
 		Dir:    deps.DataDir,
-		OpenDB: cek.Open,
+		OpenDB: func(path string) (*sql.DB, error) { return cek.Open(cek.Global, path) },
 		Logger: log,
 	})
 	if err != nil {

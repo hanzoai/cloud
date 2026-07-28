@@ -16,7 +16,7 @@ func TestMigrateFromPreReferrerOrgSchema(t *testing.T) {
 
 	// 1) Stand up the OLD schema: affiliate_referrals WITHOUT referrer_org, and an
 	// affiliates row so the backfill has something to resolve.
-	db, err := cek.Open(path)
+	db, err := cek.Open(cek.Global, path)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

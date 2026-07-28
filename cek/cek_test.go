@@ -144,7 +144,7 @@ func TestMigratePlaintextToCipher(t *testing.T) {
 	want := makePlaintextDB(t, path, 37, 91)
 
 	resetMaster(testMaster(t))
-	db, err := Open(path)
+	db, err := Open(Global, path)
 	if err != nil {
 		t.Fatalf("cek.Open (migrate): %v", err)
 	}
@@ -166,7 +166,7 @@ func TestMigratePlaintextToCipher(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read sidecar: %v", err)
 	}
-	if dek, err := unwrapSidecar(testMaster(t), sidecar); err != nil || len(dek) != 32 {
+	if dek, err := unwrapSidecar(Global, testMaster(t), sidecar); err != nil || len(dek) != 32 {
 		t.Fatalf("unwrap sidecar: dek=%d err=%v", len(dek), err)
 	}
 
@@ -188,14 +188,14 @@ func TestOpenIdempotent(t *testing.T) {
 	want := makePlaintextDB(t, path, 5, 5)
 
 	resetMaster(testMaster(t))
-	db1, err := Open(path)
+	db1, err := Open(Global, path)
 	if err != nil {
 		t.Fatalf("first open: %v", err)
 	}
 	_ = db1.Close()
 	hdr1 := firstBytes(t, path, 16)
 
-	db2, err := Open(path)
+	db2, err := Open(Global, path)
 	if err != nil {
 		t.Fatalf("second open: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestFreshCreateEncrypted(t *testing.T) {
 	requireCipher(t)
 	path := filepath.Join(t.TempDir(), "wallets.db")
 	resetMaster(testMaster(t))
-	db, err := Open(path)
+	db, err := Open(Global, path)
 	if err != nil {
 		t.Fatalf("open fresh: %v", err)
 	}
@@ -242,7 +242,7 @@ func TestWrongMasterFailsClosed(t *testing.T) {
 	makePlaintextDB(t, path, 3, 3)
 
 	resetMaster(testMaster(t))
-	db, err := Open(path)
+	db, err := Open(Global, path)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestWrongMasterFailsClosed(t *testing.T) {
 		other[i] = 0xAB
 	}
 	resetMaster(other)
-	if _, err := Open(path); err == nil {
+	if _, err := Open(Global, path); err == nil {
 		t.Fatalf("SECURITY: opened encrypted db under the WRONG master key")
 	}
 }
@@ -269,7 +269,7 @@ func TestDataDirMoveNoBrick(t *testing.T) {
 
 	t.Setenv("CLOUD_DATA_DIR", dir1)
 	resetMaster(testMaster(t))
-	db, err := Open(pathA)
+	db, err := Open(Global, pathA)
 	if err != nil {
 		t.Fatalf("migrate under dir1: %v", err)
 	}
@@ -282,7 +282,7 @@ func TestDataDirMoveNoBrick(t *testing.T) {
 	copyFile(t, pathA+dekSuffix, pathB+dekSuffix)
 	t.Setenv("CLOUD_DATA_DIR", "/some/other/root") // the old brick trigger
 
-	db2, err := Open(pathB) // KEK from fileID → must still open
+	db2, err := Open(Global, pathB) // KEK from fileID → must still open
 	if err != nil {
 		t.Fatalf("AVAILABILITY: data-dir change bricked the store: %v", err)
 	}
@@ -302,7 +302,7 @@ func TestMissingKeyFatalOnCapableBuild(t *testing.T) {
 	resetMaster(nil)
 	os.Unsetenv(masterKeyEnv)
 
-	_, err := Open(path)
+	_, err := Open(Global, path)
 	if sqlitedrv.EncryptionAvailable() {
 		if err == nil {
 			t.Fatalf("SECURITY: capable build opened the data plane with NO master key (silent plaintext)")
@@ -336,7 +336,7 @@ func TestEnsureDevKeyEncryptsOnPureGo(t *testing.T) {
 	}
 
 	path := filepath.Join(t.TempDir(), "settings.db")
-	db, err := Open(path)
+	db, err := Open(Global, path)
 	if err != nil {
 		t.Fatalf("open with dev key: %v", err)
 	}
@@ -395,7 +395,7 @@ func TestCorruptSidecarFailsClosed(t *testing.T) {
 	makePlaintextDB(t, path, 4, 4)
 
 	resetMaster(testMaster(t))
-	db, err := Open(path)
+	db, err := Open(Global, path)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -411,7 +411,7 @@ func TestCorruptSidecarFailsClosed(t *testing.T) {
 		t.Fatalf("write sidecar: %v", err)
 	}
 	resetMaster(testMaster(t))
-	if _, err := Open(path); err == nil {
+	if _, err := Open(Global, path); err == nil {
 		t.Fatalf("SECURITY: opened an encrypted db with a corrupted DEK sidecar")
 	}
 
@@ -420,7 +420,7 @@ func TestCorruptSidecarFailsClosed(t *testing.T) {
 		t.Fatalf("rm sidecar: %v", err)
 	}
 	resetMaster(testMaster(t))
-	if _, err := Open(path); err == nil {
+	if _, err := Open(Global, path); err == nil {
 		t.Fatalf("SECURITY: opened an encrypted db with NO DEK sidecar")
 	}
 }

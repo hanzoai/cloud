@@ -620,7 +620,7 @@ func tamperOutOfBand(t *testing.T, path, stmt string) {
 	// so a bare sql.Open cannot read it. The modelled adversary is one with database
 	// access AND the key (an insider, or a compromised process) — file access alone
 	// no longer suffices, which is the point of encrypting it.
-	db, err := cek.Open(path)
+	db, err := cek.Open(cek.Global, path)
 	if err != nil {
 		t.Fatalf("tamper open: %v", err)
 	}

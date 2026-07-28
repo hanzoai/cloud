@@ -68,7 +68,7 @@ func (p *dstPool) get(ctx context.Context, org, user string, t TableInfo) (*dstH
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return nil, fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
 		}
-		db, err := cek.Open(path)
+		db, err := cek.Open(cek.Global, path)
 		if err != nil {
 			return nil, fmt.Errorf("open %s: %w", path, err)
 		}
