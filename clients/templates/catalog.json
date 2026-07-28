@@ -1078,5 +1078,163 @@
   "source": "https://gallery.hanzo.ai/templates/video-streaming",
   "preview": "",
   "demo": "https://video-streaming.hanzo.app"
+ },
+ {
+  "slug": "mobile",
+  "title": "Hanzo Mobile",
+  "category": "Mobile",
+  "description": "Expo Router tab starter — iOS, Android and web from one tree. Feed, search, settings and a dynamic detail route.",
+  "framework": "Expo SDK 54 + expo-router 6",
+  "features": [
+   "Expo Router",
+   "Tabs",
+   "Dynamic route",
+   "Dark theme",
+   "Web target"
+  ],
+  "useCase": "Cross-platform mobile apps",
+  "tier": 1,
+  "rating": 5,
+  "source": "https://github.com/hanzo-templates/mobile",
+  "preview": "https://gallery.hanzo.ai/screenshots/mobile.png",
+  "demo": "https://mobile.hanzo.app"
+ },
+ {
+  "slug": "expo-chat",
+  "title": "Hanzo Chat (Expo)",
+  "category": "Mobile",
+  "description": "Streaming AI chat client on Expo Router, wired to the Hanzo /v1 API with run-time endpoint config.",
+  "framework": "Expo SDK 54 + expo-router 6",
+  "features": [
+   "SSE streaming",
+   "Hanzo /v1",
+   "Runtime config",
+   "Tabs",
+   "Web target"
+  ],
+  "useCase": "AI assistants on mobile",
+  "tier": 1,
+  "rating": 5,
+  "source": "https://github.com/hanzo-templates/expo-chat",
+  "preview": "https://gallery.hanzo.ai/screenshots/expo-chat.png",
+  "demo": "https://expo-chat.hanzo.app"
+ },
+ {
+  "slug": "expo-shop",
+  "title": "Hanzo Shop",
+  "category": "Mobile",
+  "description": "Storefront: product grid, detail route and a cart with a live tab badge.",
+  "framework": "Expo SDK 54 + expo-router 6",
+  "features": [
+   "Product grid",
+   "Cart",
+   "Tab badge",
+   "Dynamic route",
+   "Web target"
+  ],
+  "useCase": "Mobile commerce",
+  "tier": 1,
+  "rating": 5,
+  "source": "https://github.com/hanzo-templates/expo-shop",
+  "preview": "https://gallery.hanzo.ai/screenshots/expo-shop.png",
+  "demo": "https://expo-shop.hanzo.app"
+ },
+ {
+  "slug": "expo-auth",
+  "title": "Hanzo Auth",
+  "category": "Mobile",
+  "description": "OAuth 2.0 + PKCE sign-in against Hanzo IAM in the system browser, with a one-place route guard.",
+  "framework": "Expo SDK 54 + expo-auth-session",
+  "features": [
+   "PKCE",
+   "Hanzo IAM",
+   "Keychain storage",
+   "Route guard",
+   "Web target"
+  ],
+  "useCase": "Authenticated mobile apps",
+  "tier": 1,
+  "rating": 5,
+  "source": "https://github.com/hanzo-templates/expo-auth",
+  "preview": "https://gallery.hanzo.ai/screenshots/expo-auth.png",
+  "demo": "https://expo-auth.hanzo.app"
+ },
+ {
+  "slug": "flutter",
+  "title": "Hanzo Flutter",
+  "category": "Mobile",
+  "description": "Material 3 starter — NavigationBar over an IndexedStack, search, detail route and widget tests.",
+  "framework": "Flutter 3.44 + Material 3",
+  "features": [
+   "Material 3",
+   "NavigationBar",
+   "Search",
+   "Widget tests",
+   "Web target"
+  ],
+  "useCase": "Cross-platform mobile apps",
+  "tier": 1,
+  "rating": 5,
+  "source": "https://github.com/hanzo-templates/flutter",
+  "preview": "https://gallery.hanzo.ai/screenshots/flutter.png",
+  "demo": "https://flutter.hanzo.app"
+ },
+ {
+  "slug": "flutter-chat",
+  "title": "Hanzo Chat (Flutter)",
+  "category": "Mobile",
+  "description": "Streaming AI chat in Flutter, wired to the Hanzo /v1 API, with tests over the failure path.",
+  "framework": "Flutter 3.44 + http",
+  "features": [
+   "SSE streaming",
+   "Hanzo /v1",
+   "Runtime config",
+   "Widget tests",
+   "Web target"
+  ],
+  "useCase": "AI assistants on mobile",
+  "tier": 1,
+  "rating": 5,
+  "source": "https://github.com/hanzo-templates/flutter-chat",
+  "preview": "https://gallery.hanzo.ai/screenshots/flutter-chat.png",
+  "demo": "https://flutter-chat.hanzo.app"
+ },
+ {
+  "slug": "swiftui",
+  "title": "Hanzo SwiftUI",
+  "category": "Mobile",
+  "description": "Native iOS 17 starter — TabView, NavigationStack, @AppStorage and swift-testing. Project generated from project.yml.",
+  "framework": "SwiftUI + Swift 6 (iOS 17)",
+  "features": [
+   "TabView",
+   "NavigationStack",
+   "swift-testing",
+   "XcodeGen",
+   "Native"
+  ],
+  "useCase": "Native iOS apps",
+  "tier": 1,
+  "rating": 5,
+  "source": "https://github.com/hanzo-templates/swiftui",
+  "preview": "https://gallery.hanzo.ai/screenshots/swiftui.png"
+ },
+ {
+  "slug": "swiftui-chat",
+  "title": "Hanzo Chat (SwiftUI)",
+  "category": "Mobile",
+  "description": "Native streaming AI chat — @Observable, AsyncThrowingStream over URLSession.bytes, Hanzo /v1.",
+  "framework": "SwiftUI + Swift 6 (iOS 17)",
+  "features": [
+   "@Observable",
+   "AsyncThrowingStream",
+   "Hanzo /v1",
+   "swift-testing",
+   "Native"
+  ],
+  "useCase": "Native iOS apps",
+  "tier": 1,
+  "rating": 5,
+  "source": "https://github.com/hanzo-templates/swiftui-chat",
+  "preview": "https://gallery.hanzo.ai/screenshots/swiftui-chat.png"
  }
 ]
