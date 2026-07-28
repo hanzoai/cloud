@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 
-	"github.com/hanzoai/cloud/clients/automations"
-	"github.com/hanzoai/cloud/clients/coding"
-	"github.com/hanzoai/cloud/clients/git"
-	"github.com/hanzoai/cloud/clients/integrations"
+	"github.com/hanzoai/cloud/apps/automations"
+	"github.com/hanzoai/cloud/apps/coding"
+	"github.com/hanzoai/cloud/apps/git"
+	"github.com/hanzoai/cloud/apps/integrations"
 )
 
 // The cross-subsystem seams integrations owns, wired in ITS OWN composition root.
