@@ -56,9 +56,10 @@
 // site beacon gets the projection and its pageviews still land where the site's owner
 // reads them.
 //
-// Every ingest route (/v1/event, /v1/ingest, /v1/analytics{,/batch}, /v1/tracker,
-// /v1/insights/e) is therefore one line: handle(c, <wire>, <origin tag>). One write
-// path, many doors, ONE admission decision.
+// Every ingest route is therefore one line — handle(c, <wire>, <origin tag>) — and no
+// route is written by hand at all: doors below declares them and both the router and
+// the site-host carve derive from it. One write path, many doors, ONE admission
+// decision.
 package analytics
 
 import (
@@ -311,10 +312,23 @@ type door struct {
 //
 //   - /v1/event — the canonical door and the canonical wire (Event | [Event] |
 //     {batch:[…]}), which every current Hanzo client emits.
-//   - /v1/insights/e — the PostHog wire. External PostHog SDKs emit it and
-//     insights.hanzo.ai rewrites every PostHog ingest path onto it, so no
-//     canonical-wire door can serve those callers. A second WIRE, not a second name
-//     for the first.
+//
+//   - /v1/insights/e — the PostHog wire. A second WIRE, not a second name for the
+//     first: PostHog SDKs emit this shape and no canonical-wire door can serve them.
+//
+//     ALMOST NOTHING CALLS THIS PATH DIRECTLY. Its live traffic arrives through the
+//     insights-cloud-ingest-rewrite middleware on insights.hanzo.ai (universe
+//     infra/k8s/ingress/routes.yaml), which matches EIGHT SDK spellings — /e, /batch,
+//     /capture and each one's trailing-slash form, the forms real PostHog SDKs
+//     actually send — and replacePath's them all to this one literal. Two things
+//     follow. This door must NEVER be sunset on a $source count: its callers do not
+//     name it, so $source='posthog' would not decay even after every SDK moved. And
+//     if that middleware is dropped or reordered below the catch-all, eight live
+//     ingest paths break at once, here, with no change in this repo.
+//
+//     insights.hanzo.ai is an API host, so those rewritten requests reach the ROUTER
+//     (which tolerates a trailing slash) and never the site-host carve — the carve's
+//     byte-exact matching is not what holds this door open.
 //
 // The last three are SUNSETTING: they speak the canonical wire under an older name,
 // so they are aliases and the target is /v1/event. They are still here because they
@@ -326,11 +340,15 @@ type door struct {
 //   - /v1/analytics/batch is a published contract: openapi analytics_batch, the
 //     generated python SDK, and `hanzo analytics batch` in the CLI.
 //
-// $source is what closes them. Every row this package writes carries the door it
-// arrived through, so "has the alias stopped being used" is a warehouse query
+// $source is what closes THOSE THREE. Every row this package writes carries the door
+// it arrived through, so "has the alias stopped being used" is a warehouse query
 // (properties.$source = 'capture') rather than a guess — and when that count is zero
-// the entries below are deleted, which by construction also drops them from the
-// routes and from the site-host carve.
+// the three entries are deleted, which by construction also drops them from the routes
+// and from the site-host carve.
+//
+// The rule holds only because those callers name those paths themselves. It does NOT
+// generalize to /v1/insights/e, whose callers arrive through an ingress rewrite — see
+// its entry below before applying a $source count to any door.
 var doors = []door{
 	{path: "/v1/event", decode: decodeIngest, source: sourceEvent},
 	{path: "/v1/insights/e", decode: decodeInsights, source: sourcePostHog},

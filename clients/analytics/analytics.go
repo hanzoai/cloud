@@ -202,7 +202,7 @@ func window(c *zip.Ctx) (time.Time, time.Time, string, string, error) {
 // requireDatastore returns the honest 503 when the datastore ledger is not
 // connected, rather than fabricating zeros. Mirrors ai/object's read gate.
 func requireDatastore() error {
-	if !datastore.Ready() {
+	if !warehouseReady() {
 		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: datastore (datastore) not connected")
 	}
 	return nil
