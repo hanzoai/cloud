@@ -1,4 +1,4 @@
-# THE build contract for one app. Included by every clients/<app>/Makefile,
+# THE build contract for one app. Included by every apps/<app>/Makefile,
 # which is otherwise just the app's name.
 #
 # Why one file instead of a target per app: `build` is the same command for every
@@ -7,16 +7,16 @@
 # edits a hundred files at once. Here the contract has ONE definition and each app
 # supplies the ONE thing that actually varies: its name.
 #
-# It works from the repo root (`make -C clients/tasks openapi`) and from inside
-# the app (`cd clients/tasks && make openapi`), because everything below is
+# It works from the repo root (`make -C apps/tasks openapi`) and from inside
+# the app (`cd apps/tasks && make openapi`), because everything below is
 # absolute and derived from the including Makefile's own location — never from
 # the caller's cwd. That is not a convenience: task #49 extracts apps into their
-# own repos, and an extracted clients/<app> + cmd/<app> + mk/ keeps these paths
+# own repos, and an extracted apps/<app> + cmd/<app> + mk/ keeps these paths
 # intact, so extraction is a move rather than a rewrite.
 #
 # APPS is a LIST and is never inferred from the directory name. Four packages
-# are not named after the app they back (clients/zt → zero-trust, eval → evals,
-# auditlog → audit, plugin → plugins) and clients/account backs TWO mounts — its
+# are not named after the app they back (apps/zt → zero-trust, eval → evals,
+# auditlog → audit, plugin → plugins) and apps/account backs TWO mounts — its
 # self-service routes and the /v1/billing catch-all bridge. An inferred name
 # would be right 99 times and silently wrong 5.
 
@@ -83,7 +83,7 @@ vet: ## go vet this app and its entrypoint(s).
 #
 # `build` first, because a spec generated from a stale binary is a lie.
 #
-# GIT_SSH_ADDR: mounting is not free of side effects — clients/git opens a real
+# GIT_SSH_ADDR: mounting is not free of side effects — apps/git opens a real
 # SSH listener on a fixed :2222 — and a document is a projection of routes, not a
 # reason to contend for a port with a cloud already running on the box. The same
 # ephemeral-port convention cmd/cloud's spec harness uses.

@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/kafka"
+	"github.com/hanzoai/cloud/apps/kafka"
 )
 
 // Standalone entry for the kafka app.

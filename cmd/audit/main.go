@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/auditlog"
+	"github.com/hanzoai/cloud/apps/auditlog"
 )
 
 // Standalone entry for the audit app.

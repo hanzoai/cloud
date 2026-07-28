@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/prompts"
+	"github.com/hanzoai/cloud/apps/prompts"
 )
 
 // Standalone entry for the prompts app.

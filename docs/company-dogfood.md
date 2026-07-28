@@ -36,7 +36,7 @@ are running.
 ## Step 0 — connect Google (one-time, per org)
 
 Drive + Sheets import reads through the org's Google OAuth token, custodied in KMS by
-the `google` provider in `clients/integrations`. Connect it once:
+the `google` provider in `apps/integrations`. Connect it once:
 
 ```bash
 # The google card shows available=true once GOOGLE_CLIENT_ID/SECRET are set on the
@@ -164,7 +164,7 @@ curl -s -X POST "$H/v1/company/fundraise/deck?name=deck.pdf" \
 
 - **Google token refresh.** The OAuth flow seals `access_token` + `refresh_token` in
   KMS. Access tokens expire in ~1h; a refresh seam (mint a fresh access token from
-  the refresh token inside `clients/integrations`) is not yet wired, so a long-idle
+  the refresh token inside `apps/integrations`) is not yet wired, so a long-idle
   connection must re-consent. Import runs immediately after connect, so this does not
   affect the runbook.
 - **E-sign completion.** The fundraising SAFE/note signature request
@@ -174,6 +174,6 @@ curl -s -X POST "$H/v1/company/fundraise/deck?name=deck.pdf" \
   provider webhook. See the PR's gap list.
 - **State filing.** Not part of the import path (already-incorporated orgs are already
   filed). For greenfield formation, filing is an honest stub — see
-  `clients/company/filing.go`.
+  `apps/company/filing.go`.
 - **Drive import is shallow.** Only files directly in the named folder are imported;
   sub-folders are skipped. Point the import at the folder that holds the documents.

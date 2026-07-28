@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/runtime"
+	"github.com/hanzoai/cloud/apps/runtime"
 )
 
 // Standalone entry for the runtime app.

@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hanzoai/cloud/clients/security/detect"
+	"github.com/hanzoai/cloud/apps/security/detect"
 	"github.com/spf13/cobra"
 )
 

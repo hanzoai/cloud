@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/zen"
+	"github.com/hanzoai/cloud/apps/zen"
 )
 
 // Standalone entry for the zen app.

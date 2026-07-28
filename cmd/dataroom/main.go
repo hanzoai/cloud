@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/dataroom"
+	"github.com/hanzoai/cloud/apps/dataroom"
 )
 
 // Standalone entry for the dataroom app.

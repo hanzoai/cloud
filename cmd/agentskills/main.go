@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/agentskills"
+	"github.com/hanzoai/cloud/apps/agentskills"
 )
 
 // Standalone entry for the agentskills app.

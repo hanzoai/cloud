@@ -15,7 +15,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/hanzoai/cloud/clients/money"
+	"github.com/hanzoai/cloud/apps/money"
 )
 
 // ErrBlobNotFound is the sentinel a WORKING VFS backend returns from Get/Delete

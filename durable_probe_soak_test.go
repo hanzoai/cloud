@@ -34,7 +34,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/hanzoai/cloud/clients/s3admin"
+	"github.com/hanzoai/cloud/apps/s3admin"
 	"github.com/hanzoai/cloud/internal/org"
 )
 

@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/meet"
+	"github.com/hanzoai/cloud/apps/meet"
 )
 
 // Standalone entry for the meet app.

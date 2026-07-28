@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/websearch"
+	"github.com/hanzoai/cloud/apps/websearch"
 )
 
 // Standalone entry for the websearch app.

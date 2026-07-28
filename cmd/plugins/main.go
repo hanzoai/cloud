@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/plugin"
+	"github.com/hanzoai/cloud/apps/plugin"
 )
 
 // Standalone entry for the plugins app.

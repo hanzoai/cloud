@@ -40,7 +40,7 @@ OPENAPI_DIR    ?= ../openapi
 # libsqlcipher, so NEITHER exercises the engine the image ships. Without the codec,
 # cek falls back to the pure-Go envelope, whose properties differ — a store is
 # single-writer and durable at close rather than in-place and per-commit. The tests
-# that pin the shipped storage posture (clients/kms concurrent-open, audit
+# that pin the shipped storage posture (apps/kms concurrent-open, audit
 # shareability) therefore skip in both targets. `make test-codec` below is the one
 # that runs them, and needs a real libsqlcipher to do it.
 CGO_ENABLED     ?= 0
@@ -65,23 +65,23 @@ webui: ## Build the real console static bundle into webui/dist (go:embed source)
 	cp -r "$(CONSOLE_DIR)/out/." webui/dist/
 	@echo ">> embedded real console bundle into webui/dist (index.html $$(wc -c < webui/dist/index.html) bytes)"
 
-deploy-ui: ## Build the monochrome ArgoCD dashboard bundle into clients/deploy/webui/dist (go:embed source). DEPLOY_DIR=<path to hanzoai/deploy>.
+deploy-ui: ## Build the monochrome ArgoCD dashboard bundle into apps/deploy/webui/dist (go:embed source). DEPLOY_DIR=<path to hanzoai/deploy>.
 	@command -v yarn >/dev/null 2>&1 || { echo "yarn is required to build the deploy dashboard bundle"; exit 1; }
 	@test -f "$(DEPLOY_DIR)/ui/package.json" || { echo "deploy checkout not found at $(DEPLOY_DIR) — set DEPLOY_DIR=<path to hanzoai/deploy on rebrand/hanzo-monochrome>"; exit 1; }
 	@test -d "$(DEPLOY_DIR)/ui/node_modules" || (cd "$(DEPLOY_DIR)/ui" && yarn install --frozen-lockfile)
 	cd "$(DEPLOY_DIR)/ui" && NODE_OPTIONS=--max-old-space-size=8192 yarn build
 	# Overlay the fresh bundle, keeping only the tracked fallback (.gitignore +
 	# index.html shell); the real 43MB bundle is build-time-only (gitignored).
-	find clients/deploy/webui/dist -mindepth 1 -maxdepth 1 ! -name .gitignore -exec rm -rf {} +
-	cp -r "$(DEPLOY_DIR)/ui/dist/app/." clients/deploy/webui/dist/
-	@echo ">> embedded monochrome ArgoCD bundle into clients/deploy/webui/dist (index.html $$(wc -c < clients/deploy/webui/dist/index.html) bytes)"
+	find apps/deploy/webui/dist -mindepth 1 -maxdepth 1 ! -name .gitignore -exec rm -rf {} +
+	cp -r "$(DEPLOY_DIR)/ui/dist/app/." apps/deploy/webui/dist/
+	@echo ">> embedded monochrome ArgoCD bundle into apps/deploy/webui/dist (index.html $$(wc -c < apps/deploy/webui/dist/index.html) bytes)"
 
-agentskills: ## Regenerate the FULL agent-skills catalog into clients/agentskills/catalog (go:embed source) from the openapi SOT. OPENAPI_DIR=<path to openapi>.
+agentskills: ## Regenerate the FULL agent-skills catalog into apps/agentskills/catalog (go:embed source) from the openapi SOT. OPENAPI_DIR=<path to openapi>.
 	@test -f "$(OPENAPI_DIR)/skills.py" || { echo "openapi checkout not found at $(OPENAPI_DIR) — set OPENAPI_DIR=<path> or clone hanzoai/openapi"; exit 1; }
 	# skills.py rewrites the whole catalog dir; the .gitignore keeps only the tiny
 	# `ai` fallback tracked, so the full set is embedded at build but never committed.
-	python3 "$(OPENAPI_DIR)/skills.py" --no-services --out clients/agentskills/catalog
-	@echo ">> embedded FULL agent-skills catalog ($$(jq -r .skill_count clients/agentskills/catalog/hanzo/index.json) skills/brand)"
+	python3 "$(OPENAPI_DIR)/skills.py" --no-services --out apps/agentskills/catalog
+	@echo ">> embedded FULL agent-skills catalog ($$(jq -r .skill_count apps/agentskills/catalog/hanzo/index.json) skills/brand)"
 
 # THE DEFAULT BUILD IS THE HOST, and that is the whole point of the plugin model:
 # nothing compiles together. The fused binary linked all 112 subsystems into one
@@ -183,7 +183,7 @@ TEST_ENV = CLOUD_KMS_MASTER_KEY_REF="$${CLOUD_KMS_MASTER_KEY_REF:-$(DEV_KMS_KEY)
 # The release image builds with -tags "libsqlite3 sqlite_fts5" (see Dockerfile).
 # libsqlite3 needs cgo and the C library, but sqlite_fts5 does not — and without it
 # any store whose migration declares an FTS5 table fails to open, so a subsystem
-# built on full-text search (clients/code) cannot be tested at all. Carry the tag
+# built on full-text search (apps/code) cannot be tested at all. Carry the tag
 # the shipped build carries, so the suite exercises the same schema surface.
 TEST_TAGS := sqlite_fts5
 

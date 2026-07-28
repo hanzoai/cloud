@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/kms"
+	"github.com/hanzoai/cloud/apps/kms"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
 )

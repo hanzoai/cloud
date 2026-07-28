@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/templates"
+	"github.com/hanzoai/cloud/apps/templates"
 )
 
 // Standalone entry for the templates app.

@@ -10,7 +10,7 @@ import (
 	// Blank import registers the kms subsystem's client factory (init) into cloud,
 	// so BuildDeps can build the in-process deps.KMS below. cloud itself never
 	// imports clients/kms (no cloud⇄kms cycle); this external test can.
-	_ "github.com/hanzoai/cloud/clients/kms"
+	_ "github.com/hanzoai/cloud/apps/kms"
 )
 
 // TestBuildDeps_EnabledLeavesNil verifies that BuildDeps leaves an enabled

@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/crm"
+	"github.com/hanzoai/cloud/apps/crm"
 )
 
 // Standalone entry for the crm app.
