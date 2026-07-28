@@ -63,6 +63,16 @@ func communityOrg() string {
 // never a display name.
 func communityRepoName(org, slug string) string { return org + "-" + slug }
 
+// ghVisibility is GitHub's name for what we call listed. The CREATE endpoint
+// takes a `private` boolean and the PATCH endpoint takes this string; they are
+// not interchangeable (see ensureGitHubRepo), so the mapping lives here once.
+func ghVisibility(listed bool) string {
+	if listed {
+		return "public"
+	}
+	return "private"
+}
+
 // githubToken is the shared mirror credential, or "" when unconfigured.
 func githubToken() string { return strings.TrimSpace(os.Getenv(mirrorEnvToken)) }
 
@@ -118,7 +128,14 @@ func ensureGitHubRepo(ctx context.Context, org, slug, description string, listed
 
 	// Visibility is the ONE field this owns. Description is sent only at create
 	// (below) so an author who edits it on GitHub keeps their edit.
-	code, err := ghDo(ctx, http.MethodPatch, api, map[string]any{"private": !listed})
+	//
+	// The field is `visibility`, NOT `private`. They look interchangeable and are
+	// not: PATCHing {"private":true} on an org repo is rejected 422 with an empty
+	// error list, while {"visibility":"private"} succeeds. Verified against the
+	// live hanzo-community org — with `private` here, creates would have worked
+	// and every RETRACTION would have silently failed, which is precisely the
+	// direction that cannot be allowed to fail.
+	code, err := ghDo(ctx, http.MethodPatch, api, map[string]any{"visibility": ghVisibility(listed)})
 	if err != nil {
 		return "", fmt.Errorf("github: patch %s/%s: %w", ghOrg, name, err)
 	}
