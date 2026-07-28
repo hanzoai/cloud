@@ -2725,7 +2725,7 @@ components:
         replicas:
           type: integer
         repo:
-          $ref: '#/components/schemas/repoView'
+          $ref: '#/components/schemas/gitSource'
         secretSync:
           type: string
         secretSyncDetail:
@@ -3742,6 +3742,15 @@ components:
             SizeBytes is the size measured AFTER the repack — usually smaller, since
             repacking drops the packs it supersedes.
           type: integer
+      type: object
+    gitSource:
+      properties:
+        branch:
+          type: string
+        provider:
+          type: string
+        url:
+          type: string
       type: object
     githubBackfillIn:
       properties:
@@ -18103,38 +18112,6 @@ paths:
           type: string
       tags:
       - orgs
-  /v1/paas/apps:
-    get:
-      operationId: get_v1_paas_apps
-      tags:
-      - paas
-  /v1/paas/apps/{app}:
-    get:
-      operationId: get_v1_paas_apps_by_app
-      parameters:
-      - in: path
-        name: app
-        required: true
-        schema:
-          type: string
-      tags:
-      - paas
-  /v1/paas/apps/{app}/deploy:
-    post:
-      operationId: post_v1_paas_apps_by_app_deploy
-      parameters:
-      - in: path
-        name: app
-        required: true
-        schema:
-          type: string
-      tags:
-      - paas
-  /v1/paas/health:
-    get:
-      operationId: get_v1_paas_health
-      tags:
-      - paas
   /v1/pipelines:
     get:
       operationId: get_v1_pipelines
@@ -18262,6 +18239,33 @@ paths:
       operationId: get_v1_plans_vocab
       tags:
       - plans
+  /v1/platform/fleet/:
+    get:
+      operationId: get_v1_platform_fleet
+      tags:
+      - platform
+  /v1/platform/fleet/{app}:
+    get:
+      operationId: get_v1_platform_fleet_by_app
+      parameters:
+      - in: path
+        name: app
+        required: true
+        schema:
+          type: string
+      tags:
+      - platform
+  /v1/platform/fleet/{app}/deploy:
+    post:
+      operationId: post_v1_platform_fleet_by_app_deploy
+      parameters:
+      - in: path
+        name: app
+        required: true
+        schema:
+          type: string
+      tags:
+      - platform
   /v1/platform/health:
     get:
       operationId: get_v1_platform_health
@@ -21340,7 +21344,6 @@ tags:
 - name: o11y
 - name: oracles
 - name: orgs
-- name: paas
 - name: pipelines
 - name: plans
 - name: platform
