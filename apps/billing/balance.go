@@ -2,7 +2,10 @@ package billing
 
 import (
 	"context"
+	"encoding/json"
 
+	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/commerce"
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
@@ -47,13 +50,33 @@ func subjectFor(c *zip.Ctx, org string) string { return principal.Subject(c, org
 // must be surfaced, never rendered as a zero balance — a balance that cannot be read is
 // unknown, and unknown is not "broke".
 func availableCents(ctx context.Context, org, subject string) (cents int64, ok bool, err error) {
-	fin := finance.Current()
-	if fin == nil {
-		return 0, false, nil
+	if fin := finance.Current(); fin != nil {
+		bal, err := fin.Balance(ctx, org, subject, "usd", false)
+		if err != nil {
+			return 0, true, err
+		}
+		return bal.Cents(), true, nil
 	}
-	bal, err := fin.Balance(ctx, org, subject, "usd", false)
+	// No ledger in THIS process, which is the normal case and not a gap: the
+	// prepaid ledger is per-org SQLite with one writer, so only the process that
+	// mounts commerce opens it. Ask that process over the internal plane rather
+	// than reporting "not configured" for a ledger that exists one socket away —
+	// which is what answered 501 on a funded account once apps became their own
+	// binaries.
+	req, err := json.Marshal(commerce.BalanceRequest{Org: org, Subject: subject, Currency: "usd"})
 	if err != nil {
 		return 0, true, err
 	}
-	return bal.Cents(), true, nil
+	out, err := cloud.Dial("commerce").For(org).Call(ctx, "finance.balance", req)
+	if err != nil {
+		// Unknown, not zero. A balance that cannot be read must never render as
+		// broke: the caller turns this into an upstream failure, and the prepaid
+		// gate fails closed on it rather than handing out free work.
+		return 0, true, err
+	}
+	var reply commerce.BalanceReply
+	if err := json.Unmarshal(out, &reply); err != nil {
+		return 0, true, err
+	}
+	return reply.Cents, true, nil
 }

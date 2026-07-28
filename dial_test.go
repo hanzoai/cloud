@@ -3,6 +3,7 @@ package cloud
 import (
 	"bytes"
 	"context"
+	"os"
 	"strings"
 	"testing"
 )
@@ -142,18 +143,26 @@ func TestScalarRoundTrip(t *testing.T) {
 	}
 }
 
-// The loop closed: what serve.go binds is exactly what Call resolves. Before
-// listenOn bound these, nothing created the path, so every peer call failed with
-// "not running here" while the app was up and one socket away.
+// The loop closed: what rpc.Listen SERVES is exactly what Call RESOLVES. They are
+// two functions deriving a path from a name, and if they ever disagreed an app
+// would be up and unreachable — so the socket a listener creates is asserted to be
+// the one PeerSocket names, rather than each side being trusted separately.
 func TestPeerSocketIsWhatDialLooksFor(t *testing.T) {
 	t.Setenv(runDirEnv, t.TempDir())
 
-	addrs, _ := listenOn(&Config{ListenAddr: ":0", ZAPListenAddr: ":0", HealthListenAddr: ":0"},
-		[]MountSpec{{Name: "tasks"}})
-	if len(addrs) == 0 {
-		t.Fatal("listenOn bound nothing")
+	c, err := Listen("tasks", nil)
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
 	}
-	if want := PeerSocket("tasks"); addrs[0] != want {
-		t.Fatalf("listenOn serves %q but callers resolve %q — an app would be up and unreachable", addrs[0], want)
+	t.Cleanup(func() { _ = c.Close() })
+
+	if _, err := os.Stat(PeerSocket("tasks")); err != nil {
+		t.Fatalf("rpc.Listen served something other than %s: %v", PeerSocket("tasks"), err)
+	}
+	// And a call resolves to that same file rather than the network.
+	if _, err := Dial("tasks").Call(context.Background(), "nope", nil); err == nil {
+		t.Fatal("an unknown method must be refused, not silently answered")
+	} else if !strings.Contains(err.Error(), "tasks") {
+		t.Fatalf("error should name the app it could not serve: %v", err)
 	}
 }

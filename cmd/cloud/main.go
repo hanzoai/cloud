@@ -40,6 +40,7 @@ import (
 	"sort"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/hanzoai/cloud/credz/launch"
 	"github.com/hanzoai/cloud/manifest"
@@ -117,6 +118,7 @@ func run(addr, zapAddr, enable string) error {
 		// in the host's os.Environ() would reach every child alike and prove
 		// nothing about any of them (#51).
 		p.Env = append(p.Env, childEnv(a.Name, secret, rootKey)...)
+		p.Start = startTimeout()
 		if err := app.Add(zip.Load(p, a.Prefixes...)); err != nil {
 			return err
 		}
@@ -175,6 +177,23 @@ func stampAndScrub() (secret, rootKey string) {
 }
 
 // childEnv is the environment the host stamps onto ONE plugin child's
+// startTimeout bounds how long a plugin may take to listen. zip's default is 10s,
+// which an app that opens stores, runs migrations and seeds a catalog does not
+// meet on a cold volume — commerce misses it, the host reports "did not listen
+// within 10s", and its prefix answers 502 for an app that was merely still
+// booting. The cost of waiting is paid only by a slow start; the cost of not
+// waiting is a subsystem that never comes up.
+//
+// CLOUD_PLUGIN_START overrides it for a deployment on slower storage.
+func startTimeout() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("CLOUD_PLUGIN_START")); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return 90 * time.Second
+}
+
 // zip.Plugin.Env: a scoped launch token (credz/launch.Env) for EVERY child,
 // naming the app it was started as; and — for the broker child ALONE — the launch
 // secret it verifies those tokens with and the KMS root key it needs to be Root
