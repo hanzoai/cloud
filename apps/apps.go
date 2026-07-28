@@ -72,6 +72,7 @@ import (
 	"github.com/hanzoai/cloud/clients/billing"
 	"github.com/hanzoai/cloud/clients/blueprint"
 	"github.com/hanzoai/cloud/clients/books"
+	"github.com/hanzoai/cloud/clients/bot"
 	"github.com/hanzoai/cloud/clients/bots"
 	"github.com/hanzoai/cloud/clients/campaign"
 	"github.com/hanzoai/cloud/clients/captable"
@@ -444,6 +445,18 @@ func Wire() []cloud.MountSpec {
 		// hanzoai/ai RAG plane, and the collision silently ate two routes.
 		{Name: "index", Mount: index.Mount, Shutdown: ctxShutdown(index.Shutdown), OwnsHealth: true},
 		{Name: "world", Mount: world.Mount, Shutdown: ctxShutdown(world.Shutdown)},
+		// The NODE control plane: /v1/bot/connect (the socket a node dials and holds
+		// open), /v1/bot/nodes, /v1/bot/nodes/{id}/invoke, and the replica-to-replica
+		// forward at /v1/bot/peer/invoke. Mounts BEFORE "runtime" so these specific
+		// routes win Fiber's in-order match over that subsystem's /v1/bot/* relay.
+		// Shutdown ends the presence-renew loop, which releases this replica's node
+		// claims so peers stop forwarding into a pod that is draining.
+		//
+		// OwnsHealth: /v1/bot/health is ALREADY a real probe — the runtime relay
+		// answers it from the bot runtime itself — and the generic always-ok route
+		// would shadow it with one that cannot fail. This subsystem does not claim
+		// that path; it declines to break it.
+		{Name: "bot", Mount: bot.Mount, Shutdown: bot.Shutdown, OwnsHealth: true},
 		// The bot runtime's ops face (/v1/bot/*). The transport itself is domain-free;
 		// the run control plane is "bots" below.
 		{Name: "runtime", Mount: runtime.Mount},
