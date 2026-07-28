@@ -4,7 +4,6 @@ package marketing
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/hanzoai/cloud"
 	iamclient "github.com/hanzoai/cloud/apps/iam"
@@ -61,9 +60,9 @@ func iamRoster(org string) ([]*model.User, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errIAMUnavailable, err)
 	}
-	var people []iamclient.Recipient
-	if err := json.Unmarshal(out, &people); err != nil {
-		return nil, fmt.Errorf("%w: decode roster: %v", errIAMUnavailable, err)
+	people, derr := cloud.Recipients(out)
+	if derr != nil {
+		return nil, fmt.Errorf("%w: decode roster: %v", errIAMUnavailable, derr)
 	}
 	users := make([]*model.User, 0, len(people))
 	for _, p := range people {

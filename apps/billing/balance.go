@@ -67,14 +67,19 @@ func availableCents(ctx context.Context, org, subject string) (cents int64, ok b
 	out, err := cloud.Dial("commerce").For(org).Call(ctx, "finance.balance",
 		cloud.PutBalanceReq(subject, "usd"))
 	if err != nil {
-		// Unknown, not zero. A balance that cannot be read must never render as
-		// broke: the caller turns this into an upstream failure, and the prepaid
-		// gate fails closed on it rather than handing out free work.
-		return 0, true, err
+		// No ledger in this process AND no peer serving one. That is the SPLIT
+		// DEPLOY, which already has an answer: the caller reads commerce over its
+		// configured URL. Reporting "not resolved here" hands it back rather than
+		// making the socket the only path — which would 502 a deployment that is
+		// working exactly as designed.
+		return 0, false, nil
 	}
-	cents, err = cloud.I64(out)
-	if err != nil {
-		return 0, true, err
+	cents, cerr := cloud.I64(out)
+	if cerr != nil {
+		// The peer ANSWERED and the reply did not parse. That is a real failure, not
+		// an absent ledger, and it must surface: a corrupt reply rendered as zero is
+		// a funded account shown as broke.
+		return 0, true, cerr
 	}
 	return cents, true, nil
 }

@@ -4,7 +4,6 @@ package iam
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/hanzoai/cloud"
@@ -24,16 +23,6 @@ import (
 // Sending only what the question needs is the difference between an RPC and a
 // database connection.
 const rosterMethod = "iam.mailable"
-
-// Recipient is one mailable person: enough to address them, and enough to match
-// them against a warehouse cohort (which may name them by opaque id, by
-// "owner/name", by bare username, or by email).
-type Recipient struct {
-	ID    string `json:"id"`
-	Owner string `json:"owner"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
-}
 
 // exposeRoster publishes the roster read. Mount calls it.
 func exposeRoster() {
@@ -56,13 +45,13 @@ func exposeRoster() {
 		if err != nil {
 			return nil, fmt.Errorf("roster: %w", err)
 		}
-		out := make([]Recipient, 0, len(users))
+		out := make([]cloud.Recipient, 0, len(users))
 		for _, u := range users {
 			if u == nil {
 				continue
 			}
-			out = append(out, Recipient{ID: u.Id, Owner: u.Owner, Name: u.Name, Email: u.Email})
+			out = append(out, cloud.Recipient{ID: u.Id, Owner: u.Owner, Name: u.Name, Email: u.Email})
 		}
-		return json.Marshal(out)
+		return cloud.PutRecipients(out), nil
 	})
 }

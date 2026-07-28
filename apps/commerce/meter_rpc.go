@@ -4,7 +4,6 @@ package commerce
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -25,47 +24,12 @@ const (
 	recordMethod    = "finance.record"
 )
 
-// AuthorizeRequest gates one priced act before it runs.
-type AuthorizeRequest struct {
-	Subject          string `json:"subject"`
-	AmountCents      int64  `json:"amountCents"`
-	Project          string `json:"project"`
-	ProjectValidated bool   `json:"projectValidated"`
-	Service          string `json:"service"`
-	Currency         string `json:"currency"`
-}
-
-// AuthorizeReply says whether the act may proceed, and if not, in the vocabulary
-// the caller renders: an out-of-funds refusal and a cap refusal are different
-// remedies and must not collapse into one error string.
-type AuthorizeReply struct {
-	OK       bool `json:"ok"`
-	NoFunds  bool `json:"noFunds"`
-	CapSpent bool `json:"capSpent"`
-	// Reason carries anything that is neither of the above — an upstream failure
-	// the caller must treat as "unknown", never as "allowed".
-	Reason string `json:"reason,omitempty"`
-}
-
-// RecordRequest is one debit against the caller's org ledger.
-type RecordRequest struct {
-	Subject     string `json:"subject"`
-	AmountCents int64  `json:"amountCents"`
-	Model       string `json:"model"`
-	Project     string `json:"project"`
-	Provider    string `json:"provider"`
-	Service     string `json:"service"`
-	RequestID   string `json:"requestId"`
-	ClientIP    string `json:"clientIp"`
-	Currency    string `json:"currency"`
-}
-
 // exposeMeter publishes the gate and the debit. Mount calls it.
 func exposeMeter(m *metering.Client) {
 	cloud.Expose(authorizeMethod, func(ctx context.Context, who cloud.Ident, req []byte) ([]byte, error) {
-		var in AuthorizeRequest
-		if err := json.Unmarshal(req, &in); err != nil {
-			return nil, fmt.Errorf("authorize: decode: %w", err)
+		subject, amount, project, service, validated, err := cloud.AuthorizeReq(req)
+		if err != nil {
+			return nil, err
 		}
 		org := who.Org
 		if org == "" {
@@ -75,36 +39,38 @@ func exposeMeter(m *metering.Client) {
 			// This process owns the money plane. If ITS meter is unconfigured the
 			// honest answer is "unknown", not "allowed" — the caller fails closed on
 			// a reason it can log, rather than handing out work nobody can bill.
-			return json.Marshal(AuthorizeReply{Reason: "commerce has no metering client"})
+			return cloud.PutVerdict(cloud.Verdict{Reason: "commerce has no metering client"}), nil
 		}
-		subject := in.Subject
 		if subject == "" {
 			subject = org
 		}
-		err := m.Authorize(ctx, metering.AuthInput{
+		// The ledger's gate still speaks minor units; the WIRE is exact so the
+		// contract does not lose anything the ledger later gains.
+		cents := amount.Minor().Int64()
+		aerr := m.Authorize(ctx, metering.AuthInput{
 			User: subject, Org: org,
-			AmountCents:      in.AmountCents,
-			Project:          in.Project,
-			ProjectValidated: in.ProjectValidated,
-			Service:          in.Service,
-			Currency:         in.Currency,
+			AmountCents:      cents,
+			Project:          project,
+			ProjectValidated: validated,
+			Service:          service,
+			Currency:         amount.Currency().Code,
 		})
 		switch {
-		case err == nil:
-			return json.Marshal(AuthorizeReply{OK: true})
-		case errors.Is(err, metering.ErrInsufficientBalance):
-			return json.Marshal(AuthorizeReply{NoFunds: true})
-		case errors.Is(err, metering.ErrSpendCapExceeded):
-			return json.Marshal(AuthorizeReply{CapSpent: true})
+		case aerr == nil:
+			return cloud.PutVerdict(cloud.Verdict{OK: true}), nil
+		case errors.Is(aerr, metering.ErrInsufficientBalance):
+			return cloud.PutVerdict(cloud.Verdict{NoFunds: true}), nil
+		case errors.Is(aerr, metering.ErrSpendCapExceeded):
+			return cloud.PutVerdict(cloud.Verdict{CapSpent: true}), nil
 		default:
-			return json.Marshal(AuthorizeReply{Reason: err.Error()})
+			return cloud.PutVerdict(cloud.Verdict{Reason: aerr.Error()}), nil
 		}
 	})
 
 	cloud.Expose(recordMethod, func(ctx context.Context, who cloud.Ident, req []byte) ([]byte, error) {
-		var in RecordRequest
-		if err := json.Unmarshal(req, &in); err != nil {
-			return nil, fmt.Errorf("record: decode: %w", err)
+		subject, amount, project, service, _, err := cloud.AuthorizeReq(req)
+		if err != nil {
+			return nil, err
 		}
 		org := who.Org
 		if org == "" {
@@ -113,26 +79,23 @@ func exposeMeter(m *metering.Client) {
 		if m == nil || !m.Enabled() {
 			return nil, fmt.Errorf("record: commerce has no metering client")
 		}
-		subject := in.Subject
 		if subject == "" {
 			subject = org
 		}
 		// User and Org are set HERE from the capability, never from the payload: a
 		// caller that could name the billed org could bill someone else.
-		if _, err := m.Record(ctx, metering.Usage{
+		if _, rerr := m.Record(ctx, metering.Usage{
 			User: subject, Org: org,
-			AmountCents: in.AmountCents,
-			Model:       in.Model,
-			Project:     in.Project,
-			Provider:    in.Provider,
-			Service:     in.Service,
-			RequestID:   in.RequestID,
-			ClientIP:    in.ClientIP,
-			Currency:    in.Currency,
+			AmountCents: amount.Minor().Int64(),
+			Model:       service,
+			Project:     project,
+			Provider:    service,
+			Service:     service,
+			Currency:    amount.Currency().Code,
 			Status:      "success",
-		}); err != nil {
-			return nil, fmt.Errorf("record: %w", err)
+		}); rerr != nil {
+			return nil, fmt.Errorf("record: %w", rerr)
 		}
-		return []byte(`{"ok":true}`), nil
+		return cloud.PutI64(amount.Minor().Int64()), nil
 	})
 }
