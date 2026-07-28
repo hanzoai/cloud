@@ -218,6 +218,22 @@ func TestRepoOfficialFollowsGitHubsOwnFork(t *testing.T) {
 	}
 }
 
+// TestOneIdOneRepo pins the collision rule. hanzoai/ui and hanzo-apps/ui are
+// both "hanzo/ui"; sourceOrgs is a map, so without a rule the winner is Go's
+// iteration order and the row would flip its own forkable answer between syncs.
+func TestOneIdOneRepo(t *testing.T) {
+	ours := fromRepo(ghRepo{Name: "ui", HTMLURL: "https://github.com/hanzoai/ui", Stars: 40}, "hanzo")
+	vendored := fromRepo(ghRepo{Name: "ui", HTMLURL: "https://github.com/hanzo-apps/ui", Stars: 900, Fork: true}, "hanzo")
+	if !canonical(ours, vendored) || canonical(vendored, ours) {
+		t.Error("ours beats a vendored fork, however many stars the fork has")
+	}
+	big := fromRepo(ghRepo{Name: "gallery", HTMLURL: "https://github.com/hanzoai/gallery", Stars: 9}, "hanzo")
+	small := fromRepo(ghRepo{Name: "gallery", HTMLURL: "https://github.com/hanzo-templates/gallery"}, "hanzo")
+	if !canonical(big, small) || canonical(small, big) {
+		t.Error("between two of ours, the one people actually use wins")
+	}
+}
+
 // publish runs the reconcile with a fixed repo set standing in for GitHub, and
 // returns the published corpus.
 func publish(t *testing.T, repos []Entry) []Entry {
