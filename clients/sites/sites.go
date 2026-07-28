@@ -289,7 +289,11 @@ func analyticsIngest(c *zip.Ctx) (func(org string, c *zip.Ctx) error, bool) {
 		return nil, false
 	}
 	h, ok := analyticsHost[c.Path()]
-	return h, ok
+	// A present-but-nil handler is not a door. The map arrives across a package
+	// boundary, so "the key exists" and "there is something to call" are two facts
+	// here, and dispatching on the first alone panics the request instead of
+	// serving it as static — the carve must fail to the serve path, never fail open.
+	return h, ok && h != nil
 }
 
 func (s *Server) Middleware() zip.Handler {
