@@ -162,3 +162,38 @@ func findRule(fs []Finding, id string) *Finding {
 	}
 	return nil
 }
+
+// TestGenericSecretDoesNotFlagANamedReference is the regression guard for the
+// false positive a real 14,873-turn agent transcript exposed: the generic rule
+// allowed `=` anywhere in the value, so after matching the keyword in
+// `--secret=id=GIT_AUTH_TOKEN` it swallowed the following `id=…` pair and
+// reported the NAME of a credential as a credential.
+//
+// That is worse than a missed finding. Referencing a secret by name instead of
+// pasting its value is exactly the practice we ask for (secrets live in KMS), and
+// a scanner that flags the safe pattern teaches people to ignore it. Base64
+// padding is still accepted, at the end, where it actually occurs.
+func TestGenericSecretDoesNotFlagANamedReference(t *testing.T) {
+	named := []string{
+		`--secret=id=GIT_AUTH_TOKEN,env=GIT_AUTH_TOKEN`,
+		`buildkit needs a secret named exactly GIT_AUTH_TOKEN`,
+		`client_secret: from KMS at hanzo/console/client-secret`,
+		`password = ${{ secrets.DEPLOY_PASSWORD }}`,
+	}
+	for _, s := range named {
+		if f := ScanContent("x", s); len(f) != 0 {
+			t.Errorf("naming a secret is not exposing one; %q flagged as %s (%q)",
+				s, f[0].RuleID, f[0].Preview)
+		}
+	}
+	// The real thing still fires, padding and all.
+	real := []string{
+		`api_key = "sk4Kd9Xm2Qw7Rt5Yu8Ip3Ol6Az1Bc0De"`,
+		`client_secret: "T0pS3cr3tV4lu3W1thP4dd1ng=="`,
+	}
+	for _, s := range real {
+		if f := ScanContent("x", s); len(f) == 0 {
+			t.Errorf("a real assigned secret must still fire: %q", s)
+		}
+	}
+}
