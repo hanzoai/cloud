@@ -31,25 +31,38 @@ import (
 func siteHost(org, slug string) string { return slug }
 
 // onPublish runs the go-live side effects after a deployment's build lands at the
-// project's S3 origin prefix: it claims the org-scoped public host (first-come per
-// (org,slug), idempotent for the owner) and purges the edge cache-tag so the new
-// build serves at the edge immediately. Both are best-effort — a taken/reserved
-// host or an unconfigured/failing edge purge must NOT fail the deploy; the project
-// still serves from its S3 origin. purgeEdge stamps LastPurgeAt; the caller
-// persists it in the same UpdateProject that flips status to live.
-func onPublish(s *cloud.Service[state], ctx context.Context, org string, p *Project) {
+// project's S3 origin prefix: it claims the public host (first-come per (org,slug),
+// idempotent for the owner) and purges the edge cache-tag so the new build serves at
+// the edge immediately. Neither failure fails the deploy — the bytes are live at the
+// S3 origin either way. purgeEdge stamps LastPurgeAt; the caller persists it in the
+// same UpdateProject that flips status to live.
+//
+// It returns the public URL the project ACTUALLY owns, and a note when there is
+// none. The bare `<slug>` namespace is GLOBAL and first-come across every org
+// (siteHost), so a second org publishing the same slug loses the subdomain — and
+// used to be told its site was live at a URL serving the WINNER's content, because
+// the URL was derived from the slug rather than from the binding that decides what
+// serves. Ownership is the only thing that can answer "what is my URL", so the
+// answer is minted HERE, from the bind result, and only errHostTaken/errReservedHost
+// blank it: those two are DEFINITE proof the host is not ours, while a transient
+// bind error proves nothing and must not blank a working site's URL.
+func onPublish(s *cloud.Service[state], ctx context.Context, org string, p *Project) (live, note string) {
 	host := siteHost(org, p.Slug)
+	live = siteURL(s, org, p.Slug)
 	if err := s.State.store.BindHost(ctx, host, org, p.Slug, time.Now().Unix()); err != nil {
 		switch {
 		case errors.Is(err, errHostTaken):
-			s.Log.Warn("subdomain already claimed by another project (serving from S3 origin only)", "org", org, "slug", p.Slug, "host", host)
+			live, note = "", host+"."+s.State.apex+" is already claimed by another project, so this site has no public subdomain — rename the project to publish it"
+			s.Log.Warn("subdomain already claimed by another project (no public URL)", "org", org, "slug", p.Slug, "host", host)
 		case errors.Is(err, errReservedHost):
-			s.Log.Warn("subdomain is a reserved label; not bound (serving from S3 origin only)", "org", org, "slug", p.Slug, "host", host)
+			live, note = "", host+"."+s.State.apex+" is a reserved subdomain, so this site has no public subdomain — rename the project to publish it"
+			s.Log.Warn("subdomain is a reserved label; not bound (no public URL)", "org", org, "slug", p.Slug, "host", host)
 		default:
 			s.Log.Warn("bind host failed (continuing)", "org", org, "slug", p.Slug, "host", host, "err", err)
 		}
 	}
 	purgeEdge(s, ctx, org, p)
+	return live, note
 }
 
 // purgeTag flushes the edge cache-tag site-<org>-<slug> for a project's site. It is
@@ -154,21 +167,22 @@ func publishSite(s *cloud.Service[state], ctx context.Context, org string, p Pro
 		return d, fmt.Errorf("upload failed: %w", upErr)
 	}
 
-	live := siteURL(s, org, p.Slug)
-	d.Status, d.LiveURL, d.Prefix, d.Files, d.Bytes, d.UpdatedAt = "live", live, prefix, files, total, time.Now().Unix()
-	if err := s.State.store.UpdateDeployment(ctx, d); err != nil {
-		return d, fmt.Errorf("finalize deployment: %w", err)
-	}
-	emitProjectLifecycle(ctx, cloud.LifecycleDeployLive, org, p, d, p.Slug+" live ("+live+")")
-
-	p.Status, p.LiveURL, p.CurrentDeploy, p.Bucket, p.UpdatedAt = "live", live, d.ID, s.State.blob.bucket, time.Now().Unix()
 	// A full-artifact deploy REPLACES the site at its legacy mutable prefix, so it
 	// takes the serving pointer back from any active release (releaseSpace is a
 	// sibling of that prefix, so the release objects themselves survive and remain
 	// re-activatable). Leaving a stale pointer here would serve the old release
 	// instead of the artifact just uploaded.
 	p.CurrentRelease = ""
-	onPublish(s, ctx, org, &p)
+	// Claim the host BEFORE stamping the URL: the binding is what decides which
+	// project a host serves, so it is the only honest source of "my live URL".
+	live, note := onPublish(s, ctx, org, &p)
+	d.Status, d.LiveURL, d.Message, d.Prefix, d.Files, d.Bytes, d.UpdatedAt = "live", live, note, prefix, files, total, time.Now().Unix()
+	if err := s.State.store.UpdateDeployment(ctx, d); err != nil {
+		return d, fmt.Errorf("finalize deployment: %w", err)
+	}
+	emitProjectLifecycle(ctx, cloud.LifecycleDeployLive, org, p, d, p.Slug+" live ("+live+note+")")
+
+	p.Status, p.LiveURL, p.CurrentDeploy, p.Bucket, p.UpdatedAt = "live", live, d.ID, s.State.blob.bucket, time.Now().Unix()
 	if err := s.State.store.UpdateProject(ctx, p); err != nil {
 		return d, fmt.Errorf("finalize project: %w", err)
 	}
@@ -421,10 +435,18 @@ func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 	d.Message = strings.TrimSpace(body.Message)
 	d.Files, d.Bytes = body.Files, body.Bytes
 	if status == "live" {
-		d.LiveURL = strings.TrimSpace(body.LiveURL)
-		if d.LiveURL == "" {
-			d.LiveURL = siteURL(s, org, p.Slug)
+		// Claim the host first, so the git/CI path reports the URL it OWNS — the
+		// same rule publishSite follows. A CI-supplied LiveURL is a hint only: it
+		// cannot assert a subdomain another tenant holds.
+		live, note := onPublish(s, c.Context(), org, &p)
+		if live != "" {
+			if hint := strings.TrimSpace(body.LiveURL); hint != "" {
+				live = hint
+			}
+		} else if d.Message == "" {
+			d.Message = note
 		}
+		d.LiveURL = live
 	}
 	if err := s.State.store.UpdateDeployment(c.Context(), d); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "update deployment: %v", err)
@@ -456,8 +478,8 @@ func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 		p.Status, p.LiveURL, p.CurrentDeploy = "live", d.LiveURL, d.ID
 		// CI synced the built site to the legacy mutable prefix, so — exactly as in
 		// publishSite — going live there takes the pointer back from any release.
+		// (onPublish already ran above, where the owned URL was decided.)
 		p.CurrentRelease = ""
-		onPublish(s, c.Context(), org, &p)
 	} else {
 		p.Status = "error"
 	}
