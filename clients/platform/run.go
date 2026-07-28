@@ -191,23 +191,23 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
-// ensureRunProject resolves the org's default project so a run needs no explicit
-// one. It RESOLVES; it does not create.
-//
-// It used to create the project when absent, which made a container run the thing
-// that minted an org's project — a project is IAM's resource, and the platform's
-// nouns are apps and sites. A default project is part of what an org IS, so it is
-// seeded when the org is provisioned, not by whoever happens to run first.
+// ensureRunProject resolves the project a run lands in. The DEFAULT project is
+// IMPLICIT: it is part of what an org IS, so a run under it proceeds whether or
+// not IAM has materialized the row yet — platform still never CREATES a project
+// (that is IAM's, at /v1/iam/projects), it just declines to fail an org for a
+// row IAM owes it. An explicit, non-default project must exist, exactly like
+// the apps routes require.
 func ensureRunProject(s *cloud.Service[state], ctx context.Context, org string) (string, error) {
 	name := principal.DefaultProject
 	ok, err := s.State.projects.Exists(ctx, org, name)
 	if err != nil {
-		return "", zip.Errorf(http.StatusInternalServerError, "get project: %v", err)
+		// The project store being unreachable must not take /v1/run down for the
+		// implicit default — the row is owed by provisioning, not load-bearing.
+		s.Log.Warn("run: project store unavailable; proceeding under the implicit default project", "org", org, "err", err)
+		return name, nil
 	}
 	if !ok {
-		return "", zip.Errorf(http.StatusFailedDependency,
-			"org %q has no %q project — create it at POST /v1/iam/projects; the platform deploys into a project, it does not create one",
-			org, name)
+		s.Log.Info("run: default project row absent in IAM; proceeding (IAM provisioning owes it)", "org", org)
 	}
 	return name, nil
 }
