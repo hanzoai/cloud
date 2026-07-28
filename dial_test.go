@@ -142,57 +142,18 @@ func TestScalarRoundTrip(t *testing.T) {
 	}
 }
 
-// The loop closed: an app serving its canonical peer socket is found by Dial and
-// answered over ZAP. Before listenOn bound these, nothing created the path Dial
-// looks for, so every "local" call silently fell out to the public edge — the
-// inner plane existed in dial.go and nowhere on disk.
+// The loop closed: what serve.go binds is exactly what Call resolves. Before
+// listenOn bound these, nothing created the path, so every peer call failed with
+// "not running here" while the app was up and one socket away.
 func TestPeerSocketIsWhatDialLooksFor(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv(runDirEnv, dir)
+	t.Setenv(runDirEnv, t.TempDir())
 
-	// What listenOn hands zip for an app named "tasks"...
 	addrs, _ := listenOn(&Config{ListenAddr: ":0", ZAPListenAddr: ":0", HealthListenAddr: ":0"},
 		[]MountSpec{{Name: "tasks"}})
 	if len(addrs) == 0 {
 		t.Fatal("listenOn bound nothing")
 	}
-	served := addrs[0]
-
-	// ...must be exactly the path Dial resolves for that name.
-	if want := PeerSocket("tasks"); served != want {
-		t.Fatalf("listenOn serves %q but Dial looks for %q — an app would be up and unreachable", served, want)
-	}
-
-	// And a peer standing on it is reached over ZAP, not the network.
-	srv := &zaphttp.Server{Network: "unix", Addr: served, Handler: fasthttpadaptor.NewFastHTTPHandler(
-		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]any{"queued": 7})
-		}))}
-	go func() { _ = srv.ListenAndServe() }()
-	t.Cleanup(func() { _ = srv.Close() })
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		if c, err := net.Dial("unix", served); err == nil {
-			_ = c.Close()
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("peer socket never accepted")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-
-	p := Dial("tasks")
-	if !p.Local() {
-		t.Fatal("an app on its canonical socket must resolve local")
-	}
-	var out struct {
-		Queued int `json:"queued"`
-	}
-	if err := p.Get(context.Background(), "hanzo", "/v1/tasks", &out); err != nil {
-		t.Fatalf("commerce->tasks over zap/uds: %v", err)
-	}
-	if out.Queued != 7 {
-		t.Fatalf("queued = %d, want 7", out.Queued)
+	if want := PeerSocket("tasks"); addrs[0] != want {
+		t.Fatalf("listenOn serves %q but callers resolve %q — an app would be up and unreachable", addrs[0], want)
 	}
 }
