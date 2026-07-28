@@ -59,7 +59,9 @@ func publishCommunity(ctx context.Context, ev cloud.CommunityEvent) error {
 	})
 	switch {
 	case err == nil:
-		return nil // created with the right visibility already on it
+		// Created with the right visibility already on it; still attach (or skip)
+		// the replica, so a brand-new public project is mirrored like any other.
+		return mirrorCommunity(ctx, ev)
 	case !errors.Is(err, errConflict):
 		return fmt.Errorf("community: provision %s/%s: %w", ev.Org, ev.Slug, err)
 	}
@@ -67,6 +69,35 @@ func publishCommunity(ctx context.Context, ev cloud.CommunityEvent) error {
 	// Already there: reconcile the one field this seam owns.
 	if err := store.SetPublic(ctx, ev.Org, "", ev.Slug, ev.Listed, now); err != nil {
 		return fmt.Errorf("community: set visibility %s/%s: %w", ev.Org, ev.Slug, err)
+	}
+	return mirrorCommunity(ctx, ev)
+}
+
+// mirrorCommunity gives the project a REAL GitHub repo under the community org
+// and keeps its visibility in step with the canonical one, so a public project
+// is public in both places and a private one is private in both.
+//
+// Visibility lives on the REPO, not on the mirror registration, so the mirror
+// stays enabled either way and a project that goes private keeps receiving its
+// own pushes — just where nobody else can read them. Deregistering instead would
+// silently stop replicating, and the day it went public again the GitHub side
+// would be stale by however long it was private.
+//
+// The registration itself routes through gitMirrorController.EnsureMirror — the
+// SAME idempotent, host-allowlisted path the sync engine and the /mirror
+// endpoint use — so there is one outbound target list and no second way to add
+// to it. No credential ⇒ ensureGitHubRepo returns "" and the whole replica is
+// skipped, rather than registering a push that could never land.
+func mirrorCommunity(ctx context.Context, ev cloud.CommunityEvent) error {
+	url, err := ensureGitHubRepo(ctx, ev.Org, ev.Slug, ev.Description, ev.Listed)
+	if err != nil {
+		return err
+	}
+	if url == "" {
+		return nil
+	}
+	if err := (gitMirrorController{}).EnsureMirror(ctx, ev.Org, "", ev.Slug, url, true); err != nil {
+		return fmt.Errorf("community: mirror %s/%s: %w", ev.Org, ev.Slug, err)
 	}
 	return nil
 }
