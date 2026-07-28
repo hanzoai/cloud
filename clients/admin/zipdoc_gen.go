@@ -119,7 +119,7 @@ func init() {
 		Response:    json.RawMessage(`{"status":"ok","msg":"","data":{"orgs":2,"users":14,"products":31,"activeProducts":29,"drift":1,"spendCents30d":250000,"tokens30d":0,"creditsCents":10000,"lastSync":"2026-07-27T00:00:00Z","sources":[{"name":"iam","ok":true,"rows":2,"lastSync":"2026-07-27T00:00:00Z"}]}}`),
 	})
 	zip.Describe("GET /v1/admin/products", zip.Doc{
-		Description: "products lists the fleet workload registry: every operator App CR across the platform\nnamespaces with its declared vs running image tag, reconciled health/phase and drift\nverdict. Optionally narrowed by kind, tier or env, each an exact match.\n\nThe rows are the SAME observation /v1/paas/apps renders — read through the in-process\npaas seam, not a second k8s client — so the two boards can never disagree about what\nthe fleet is. A PaaS plane that is not co-resident yields an honestly empty registry,\nnever a fabricated row.",
+		Description: "products lists the fleet workload registry: every operator App CR across the platform\nnamespaces with its declared vs running image tag, reconciled health/phase and drift\nverdict. Optionally narrowed by kind, tier or env, each an exact match.\n\nThe rows are the SAME observation /v1/platform/fleet renders — read through the in-process\nplatform seam, not a second k8s client — so the two boards can never disagree about what\nthe fleet is. A PaaS plane that is not co-resident yields an honestly empty registry,\nnever a fabricated row.",
 		Fields: map[string]string{
 			"productRow.cluster":       "hanzo-k8s",
 			"productRow.declaredTag":   "spec.image.tag on the App CR (declared truth)",

@@ -119,14 +119,14 @@ func serverMessage(raw []byte) string {
 }
 
 // ---------------------------------------------------------------------------
-// Apps board — GET /v1/paas/apps, GET /v1/paas/apps/{app}. The live Go cloud's
-// fleet drift board (clients/paas): the operator App CRs across the platform
+// Apps board — GET /v1/platform/fleet, GET /v1/platform/fleet/{app}. The live Go cloud's
+// fleet drift board (clients/platform fleet.go): the operator App CRs across the platform
 // namespaces, declared/running/latest tags + health + the drift verdict. It is
 // org-confined server-side (a SuperAdmin sees the fleet; an OrgAdmin only its own
 // org), so the CLI sends NO org filter — identity scopes the view.
 // ---------------------------------------------------------------------------
 
-// AppView mirrors clients/paas.AppView (the LIVE board DTO). Tags/health are plain
+// AppView mirrors clients/platform.AppView (the LIVE board DTO). Tags/health are plain
 // strings ("" == unknown, rendered "-"); Drift is kept raw so --json is
 // byte-faithful and the drift schema can evolve without a client bump.
 type AppView struct {
@@ -147,7 +147,7 @@ type AppView struct {
 	Drift       json.RawMessage `json:"drift"`
 }
 
-// AppsList is the /v1/paas/apps envelope: ordered rows + a drift summary.
+// AppsList is the /v1/platform/fleet envelope: ordered rows + a drift summary.
 type AppsList struct {
 	Apps    []AppView `json:"apps"`
 	Summary struct {
@@ -156,7 +156,7 @@ type AppsList struct {
 	} `json:"summary"`
 }
 
-// AppsQuery are the optional /v1/paas/apps filters (server-honored). Env/Health/
+// AppsQuery are the optional /v1/platform/fleet filters (server-honored). Env/Health/
 // Drift narrow the board; there is deliberately no org filter — the board is
 // confined to the caller's org by the validated identity, never a client value.
 type AppsQuery struct {
@@ -176,7 +176,7 @@ func (p *Platform) Apps(ctx context.Context, q AppsQuery) (*AppsList, error) {
 	if q.Drift {
 		v.Set("drift", "1")
 	}
-	path := "/v1/paas/apps"
+	path := "/v1/platform/fleet"
 	if len(v) > 0 {
 		path += "?" + v.Encode()
 	}
@@ -188,7 +188,7 @@ func (p *Platform) Apps(ctx context.Context, q AppsQuery) (*AppsList, error) {
 // scans the caller's authorized namespaces main→test→dev).
 func (p *Platform) App(ctx context.Context, app string) (*AppView, error) {
 	out := &AppView{}
-	return out, p.do(ctx, http.MethodGet, "/v1/paas/apps/"+url.PathEscape(app), p.token, nil, out)
+	return out, p.do(ctx, http.MethodGet, "/v1/platform/fleet/"+url.PathEscape(app), p.token, nil, out)
 }
 
 // driftSeverity extracts the severity string from the raw drift object.
@@ -254,7 +254,7 @@ func (p *Platform) Clusters(ctx context.Context) ([]Cluster, error) {
 }
 
 // ---------------------------------------------------------------------------
-// Deploy — POST /v1/paas/apps/{app}/deploy: a zero-downtime ROLLING RESTART of the
+// Deploy — POST /v1/platform/fleet/{app}/deploy: a zero-downtime ROLLING RESTART of the
 // app's Deployment (re-pulls the declared image, recreates pods). Org-confined
 // server-side; an optional env selects the lifecycle namespace (main|test|dev).
 // ---------------------------------------------------------------------------
@@ -262,7 +262,7 @@ func (p *Platform) Clusters(ctx context.Context) ([]Cluster, error) {
 // Redeploy triggers a rolling restart of the named app. env is optional
 // (main|test|dev); empty targets production (the first match, main→test→dev).
 func (p *Platform) Redeploy(ctx context.Context, app, env string) (*DeployResult, error) {
-	path := "/v1/paas/apps/" + url.PathEscape(app) + "/deploy"
+	path := "/v1/platform/fleet/" + url.PathEscape(app) + "/deploy"
 	if env != "" {
 		path += "?env=" + url.QueryEscape(env)
 	}

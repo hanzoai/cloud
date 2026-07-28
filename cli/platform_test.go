@@ -18,15 +18,15 @@ func platformStub(t *testing.T, token string, h http.HandlerFunc) (*Platform, fu
 	return newPlatform(srv.URL, token), srv.Close
 }
 
-// Apps hits the LIVE board /v1/paas/apps with the IAM bearer; it sends NO org
+// Apps hits the LIVE board /v1/platform/fleet with the IAM bearer; it sends NO org
 // filter (the board is org-confined server-side by the validated identity).
 func TestPlatformAuthHeaderAndApps(t *testing.T) {
 	p, done := platformStub(t, "svc-tok", func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Authorization"); got != "Bearer svc-tok" {
 			t.Errorf("auth header = %q", got)
 		}
-		if r.URL.Path != "/v1/paas/apps" {
-			t.Errorf("path = %s, want /v1/paas/apps", r.URL.Path)
+		if r.URL.Path != "/v1/platform/fleet" {
+			t.Errorf("path = %s, want /v1/platform/fleet", r.URL.Path)
 		}
 		if r.URL.Query().Get("env") != "main" || r.URL.Query().Get("drift") != "1" {
 			t.Errorf("query = %s", r.URL.RawQuery)
@@ -52,11 +52,11 @@ func TestPlatformAuthHeaderAndApps(t *testing.T) {
 	}
 }
 
-// App hits /v1/paas/apps/{app}; no org query (identity scopes it).
+// App hits /v1/platform/fleet/{app}; no org query (identity scopes it).
 func TestPlatformApp(t *testing.T) {
 	p, done := platformStub(t, "t", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/paas/apps/iam" {
-			t.Errorf("path = %s, want /v1/paas/apps/iam", r.URL.Path)
+		if r.URL.Path != "/v1/platform/fleet/iam" {
+			t.Errorf("path = %s, want /v1/platform/fleet/iam", r.URL.Path)
 		}
 		if r.URL.RawQuery != "" {
 			t.Errorf("app get must carry no query, got %s", r.URL.RawQuery)
@@ -96,11 +96,11 @@ func TestClusterIDFallsBackToName(t *testing.T) {
 	}
 }
 
-// Redeploy hits /v1/paas/apps/{app}/deploy (rolling restart), org from identity.
+// Redeploy hits /v1/platform/fleet/{app}/deploy (rolling restart), org from identity.
 func TestPlatformRedeploy(t *testing.T) {
 	p, done := platformStub(t, "t", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/v1/paas/apps/app-x/deploy" {
-			t.Errorf("redeploy = %s %s, want POST /v1/paas/apps/app-x/deploy", r.Method, r.URL.Path)
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/platform/fleet/app-x/deploy" {
+			t.Errorf("redeploy = %s %s, want POST /v1/platform/fleet/app-x/deploy", r.Method, r.URL.Path)
 		}
 		if r.URL.Query().Get("env") != "test" {
 			t.Errorf("env query = %s", r.URL.RawQuery)

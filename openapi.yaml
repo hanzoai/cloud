@@ -7932,8 +7932,8 @@ paths:
         namespaces with its declared vs running image tag, reconciled health/phase and drift
         verdict. Optionally narrowed by kind, tier or env, each an exact match.
 
-        The rows are the SAME observation /v1/paas/apps renders — read through the in-process
-        paas seam, not a second k8s client — so the two boards can never disagree about what
+        The rows are the SAME observation /v1/platform/fleet renders — read through the in-process
+        platform seam, not a second k8s client — so the two boards can never disagree about what
         the fleet is. A PaaS plane that is not co-resident yields an honestly empty registry,
         never a fabricated row.
       operationId: adminProducts
@@ -16071,6 +16071,19 @@ paths:
       operationId: post_v1_kb_search
       tags:
       - kb
+  /v1/keys:
+    delete:
+      operationId: delete_v1_keys
+      tags:
+      - keys
+    get:
+      operationId: get_v1_keys
+      tags:
+      - keys
+    post:
+      operationId: post_v1_keys
+      tags:
+      - keys
   /v1/kms/auth/login:
     post:
       operationId: post_v1_kms_auth_login
@@ -18206,7 +18219,7 @@ paths:
       operationId: get_v1_plans_vocab
       tags:
       - plans
-  /v1/platform/fleet/:
+  /v1/platform/fleet:
     get:
       operationId: get_v1_platform_fleet
       tags:
@@ -21262,6 +21275,7 @@ tags:
 - name: integrations
 - name: k8s
 - name: kb
+- name: keys
 - name: kms
 - name: kv
 - name: legal

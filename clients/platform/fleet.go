@@ -241,9 +241,13 @@ func buildFleet(b cloud.Base) fleetState {
 // collections need two different names — calling both "apps" under one prefix would
 // be the duplicate definition this fold exists to remove.
 func fleetRoutes(app cloud.Router, s *cloud.Service[fleetState]) {
-	g := app.Group("/v1/platform/fleet")
-	g.Get("", fleetGuard(s, cloud.Handle(s, listFleet)))
-	g.Get("/:app", fleetGuard(s, cloud.Handle(s, getFleetApp)))
+	// FLAT paths, not a Group: `Group("/v1/platform/fleet").Get("")` composes to the
+	// literal "/v1/platform/fleet/", and that trailing slash is what the OpenAPI
+	// emitter publishes — so every generated SDK would call a path the manifest
+	// prefix does not name. Fiber happens to match both forms, which is exactly why
+	// this hides: the router forgives it and the CONTRACT does not.
+	app.Get("/v1/platform/fleet", fleetGuard(s, cloud.Handle(s, listFleet)))
+	app.Get("/v1/platform/fleet/:app", fleetGuard(s, cloud.Handle(s, getFleetApp)))
 	// MUTATION is superadmin-only (fleetOperatorGuard), NOT the broader read guard: the
 	// only namespaces this board scans are the platform's OWN tier (hanzo{,-testnet,
 	// -devnet}), so a rolling restart here recreates a SHARED platform service
@@ -251,7 +255,7 @@ func fleetRoutes(app cloud.Router, s *cloud.Service[fleetState]) {
 	// admin is a CUSTOMER-org admin, not a platform operator — restarting prod iam is
 	// a platform-operator action. Gating the read board (below) any wider is bounded
 	// (observe, audit-logged); gating a restart wider is a live DoS lever (RED H1).
-	g.Post("/:app/deploy", fleetOperatorGuard(s, cloud.Handle(s, deployFleet)))
+	app.Post("/v1/platform/fleet/:app/deploy", fleetOperatorGuard(s, cloud.Handle(s, deployFleet)))
 
 	// Native release seam: install the first-party CR-rollout hook (build.go's
 	// RegisterServiceReleaser inversion) so a proven, clean-semver image rolls onto
