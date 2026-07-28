@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/core"
-	"github.com/hanzoai/cloud/apps/commerce"
 	ledger "github.com/hanzoai/cloud/apps/finance"
 )
 
@@ -48,7 +48,8 @@ type BackfillOut struct {
 // Example: {"org":"acme"}
 // Response: {"status":"ok","msg":"","data":{"org":"acme","migratedCents":50000,"entryId":"fe_01J"}}
 func Backfill(ctx context.Context, in *BackfillIn) (*BackfillOut, error) {
-	if _, err := core.Admit(ctx); err != nil {
+	c, err := core.Admit(ctx)
+	if err != nil {
 		return nil, err
 	}
 	org := strings.TrimSpace(in.Org)
@@ -57,12 +58,21 @@ func Backfill(ctx context.Context, in *BackfillIn) (*BackfillOut, error) {
 	}
 
 	// Pre-migration source of truth: the org's current commerce prepaid balance for the
-	// org-pool subject (== the org slug), read DIRECTLY from the co-resident embedded
-	// commerce ledger. The admin commerce HTTP client dials an unroutable in-proc address
-	// and reads $0, which would migrate nothing; the native read returns the real figure,
-	// or an ERROR when commerce is not co-resident (never a phantom zero the cutover would
-	// silently carry as "nothing to migrate").
-	balanceCents, err := commerce.BalanceCents(ctx, org, org, "usd", false)
+	// org-pool subject (== the org slug), ASKED of the process that owns the ledger
+	// rather than opened here. The per-org ledger has one writer, so importing commerce
+	// to read it gave admin the whole commerce graph and still could not open the file;
+	// the admin commerce HTTP client dials an unroutable in-proc address and reads $0,
+	// which would migrate nothing. A missing socket is an ERROR here — never a phantom
+	// zero the cutover would silently carry as "nothing to migrate".
+	//
+	// As(c) delegates the SuperAdmin core.Admit just validated; For(org) names the tenant
+	// being migrated, which is the org whose books the callee then scopes to.
+	out, err := cloud.Dial("commerce").As(c).For(org).Call(ctx, "finance.balance",
+		cloud.PutBalanceReq(org, "usd"))
+	if err != nil {
+		return &BackfillOut{Status: core.Err, Msg: "read commerce balance: " + err.Error()}, nil
+	}
+	balanceCents, err := cloud.I64(out)
 	if err != nil {
 		return &BackfillOut{Status: core.Err, Msg: "read commerce balance: " + err.Error()}, nil
 	}
