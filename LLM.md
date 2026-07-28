@@ -745,6 +745,18 @@ one before it.
     document, so the prose never reached any of them either. `-run zipdoc` picks
     the directives out of `./...` by name, so a typed op added anywhere is
     covered and no unrelated generator fires.
+  - The same bug had a SECOND instance one projection over, and it outlived the
+    first. zip's `mcpTools` read `op.Summary` — set only by an explicit
+    `WithSummary`, which cloud uses nowhere because the doc comment is the source.
+    So `zipdoc` ran, the spec got its prose, and **all 164 MCP tools still served
+    an empty description over a schema whose fields said nothing.** Fixed in
+    `zap-proto/zip` v1.17.6 (`mcpTools` reads the same `docFor` extraction and
+    builds the input schema with `schemaOfDoc`); measured after: 164/164 tools
+    described, 324 documented fields. Requires zip >= v1.17.6 — an older zip
+    silently reverts the MCP plane to nameless tools while the spec still looks
+    correct, which is precisely why it went unnoticed. The lesson generalises:
+    when a projection reads a DIFFERENT field than its siblings, it does not fail,
+    it just goes quiet.
 - **Each app describes ITSELF: `<binary> openapi <file>`** (openapi_dump.go). An
   app's subset is generated from the app's OWN live router by the SAME
   `openapi.FleetSpec` the whole document is, over an app with only that subsystem
