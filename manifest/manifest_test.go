@@ -3,7 +3,6 @@
 package manifest
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -85,47 +84,25 @@ func TestPluginResolution(t *testing.T) {
 	}
 }
 
-// The two link modes of one contract, resolved from what is on disk beside the
-// host. A release ships the host plus the unified binary and every app runs as
-// `cloud --enable=<name>`; a developer builds the single app they are editing and
-// the host must prefer that one, or the fast loop silently serves stale code from
-// the release binary instead.
-func TestPluginResolutionPrefersDedicatedThenMultiCall(t *testing.T) {
+// pluginIn resolves an app to its ONE binary: the dedicated per-app binary beside
+// the host. There is no multi-call fallback — every subsystem ships as its own
+// cmd/<name>, so the path is always <dir>/<name> with empty args. Whether that
+// file is actually present is Plugin()'s decision (found), not this one's; this
+// pins the PATH it names and the lazy flag it carries.
+func TestPluginResolvesToDedicatedBinary(t *testing.T) {
 	dir := t.TempDir()
-	write := func(name string) {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/true\n"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
 
-	// Nothing shipped: the failure must name the binary a developer expects to
-	// have built, not the one they never asked for.
-	if p := (App{Name: "dns"}).pluginIn(dir); p.Path != filepath.Join(dir, "dns") || len(p.Args) != 0 {
-		t.Errorf("neither present: got path %q args %v, want the dedicated path and no args", p.Path, p.Args)
-	}
-
-	// Release layout: host + the unified binary, nothing else.
-	write(MultiCall)
+	// A lazy (non-eager) app: the dedicated path, no args, started on first request.
 	p := (App{Name: "dns"}).pluginIn(dir)
-	if p.Path != filepath.Join(dir, MultiCall) {
-		t.Errorf("multi-call: got path %q, want %q", p.Path, filepath.Join(dir, MultiCall))
-	}
-	if len(p.Args) != 1 || p.Args[0] != "--enable=dns" {
-		t.Errorf("multi-call: got args %v, want [--enable=dns]", p.Args)
+	if p.Path != filepath.Join(dir, "dns") || len(p.Args) != 0 {
+		t.Errorf("dns: got path %q args %v, want %q and no args", p.Path, p.Args, filepath.Join(dir, "dns"))
 	}
 	if !p.Lazy {
-		t.Error("multi-call: a non-eager app must still start lazily")
+		t.Error("dns: a non-eager app must start lazily")
 	}
 
-	// Eager apps take the same rung — only the start time differs.
-	if p := (App{Name: "pubsub", Eager: true}).pluginIn(dir); p.Lazy || p.Args[0] != "--enable=pubsub" {
-		t.Errorf("eager multi-call: got args %v lazy %v, want [--enable=pubsub] eager", p.Args, p.Lazy)
-	}
-
-	// Developer layout: the one app being edited is built beside the host and
-	// must win over the unified binary that is also sitting there.
-	write("dns")
-	if p := (App{Name: "dns"}).pluginIn(dir); p.Path != filepath.Join(dir, "dns") || len(p.Args) != 0 {
-		t.Errorf("dedicated must win: got path %q args %v", p.Path, p.Args)
+	// An eager app takes the same path — only the start time differs.
+	if p := (App{Name: "pubsub", Eager: true}).pluginIn(dir); p.Lazy || len(p.Args) != 0 || p.Path != filepath.Join(dir, "pubsub") {
+		t.Errorf("eager pubsub: got path %q args %v lazy %v, want the dedicated path, no args, eager", p.Path, p.Args, p.Lazy)
 	}
 }

@@ -1,10 +1,16 @@
-# hanzoai/cloud — the ONE unified Hanzo Cloud binary (HIP-0106).
+# hanzoai/cloud — the light host + one binary per app (HIP-0106).
 #
-# This image is a SINGLE artifact that serves BOTH the /v1 API AND the console
-# UI from one process: the console is compiled into the Go binary via
-# //go:embed (see webui.go). The final `/cloud` binary already carries the UI —
-# no separate console Service, no second origin; the embedded console calls /v1
-# on its own host.
+# This image is ONE directory: the light router /host (ENTRYPOINT) plus a /plugins
+# binary for every subsystem beside it. The host knows only where each app lives
+# and what path it answers; it loads each as its OWN process on the first request
+# that reaches it. There is no fused binary — no build in this image links the
+# fleet together, which is the whole point of this layout.
+#
+# The console UI is still compiled in via //go:embed (webui.go, package cloud), so
+# every per-app plugin carries it and cloud.Serve mounts it as the "/" catch-all;
+# whichever process owns the web root serves it. Routing "/" and threading the
+# deployment's brand/domain/data-dir config to the per-app children are cmd/host's
+# job (the host is the front door) — see cmd/host.
 #
 # ── prebuilt decomplection artifacts (cloud compiles ONLY Go) ────────────────
 # The console SPA, the agent-skills catalog, and the native flags staticlib are
@@ -138,12 +144,15 @@ COPY --from=skills /catalog/ /src/clients/agentskills/catalog/
 # The native flags staticlib at the exact ${SRCDIR}-relative path the cgo
 # directive in clients/featureflags/engine.go links.
 COPY --from=flagslib /libhanzo_flags.a /src/native/flags/target/release/libhanzo_flags.a
-# RED gate — modernc double-registration guard: 0 modernc under CGO=1, else the
-# "sqlite" driver is registered twice (mattn + modernc) → panic at init.
+# RED gate — modernc double-registration guard: 0 modernc under CGO=1 ACROSS EVERY
+# per-app binary, else the "sqlite" driver is registered twice (mattn + modernc) →
+# panic at init. The fused cmd/cloud that this once checked is gone; the union of
+# the per-app graphs (./cmd/...) is the same package set it linked, so listing them
+# together is the equivalent guard — one modernc import in ANY app fails here.
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
-    MODERNC="$(CGO_ENABLED=1 go list -tags "libsqlite3 sqlite_fts5" -deps ./cmd/cloud 2>/dev/null | grep -c 'modernc.org/sqlite' || true)"; \
-    [ "$MODERNC" = "0" ] || { echo "SQLITE-GATE FAIL: cmd/cloud links modernc.org/sqlite ($MODERNC pkgs) under CGO=1 — double-registers \"sqlite\" with hanzoai/sqlite(mattn) and panics at init."; exit 1; }
+    MODERNC="$(CGO_ENABLED=1 go list -tags "libsqlite3 sqlite_fts5" -deps ./cmd/... 2>/dev/null | grep -c 'modernc.org/sqlite' || true)"; \
+    [ "$MODERNC" = "0" ] || { echo "SQLITE-GATE FAIL: a per-app binary links modernc.org/sqlite ($MODERNC pkgs) under CGO=1 — double-registers \"sqlite\" with hanzoai/sqlite(mattn) and panics at init. Find it: CGO_ENABLED=1 go list -tags 'libsqlite3 sqlite_fts5' -deps ./cmd/<app> | grep modernc"; exit 1; }
 # RED gate — ENCRYPTION PROOF + the cek.go GOLDEN-VECTOR KAT, under the SAME CGO +
 # libsqlcipher build this image ships. TestEncryptionProof asserts real
 # ciphertext-at-rest (SQLITE_REQUIRE_CODEC=1 makes a plaintext link FAIL → NO
@@ -176,73 +185,55 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     go generate -run zipdoc ./...
-RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
-    --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
-    CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5" -ldflags="-s -w" -o /cloud ./cmd/cloud
-# The light host (cmd/host) — 316 packages, pure Go, no codec and no subsystem.
-# It is shipped alongside /cloud, not instead of it, because the two are run
-# modes of the same image rather than two images:
-#
-#   /cloud            every app in ONE process (the default, see ENTRYPOINT)
-#   /host             every app as its OWN process, started on first request —
-#                     each child is `/cloud --enable=<name>`, which is what
-#                     manifest.App.Plugin falls through to when no dedicated
-#                     binary sits beside the host.
-#
-# Adding it costs 19MB and no duplication: the host links none of the subsystems,
-# and the children ARE /cloud, so the image carries the core exactly once either
-# way. Shipping 108 dedicated plugin binaries instead would be 4.5GB.
-#
-# The default stays /cloud on MEASURED grounds, not inertia: five apps served
-# from one process cost 166MB PSS, and the same five as host+children cost 388MB,
-# because every child pays its own Go runtime and its own BuildDeps. Process
-# isolation is worth buying deliberately for a subsystem that needs it — not
-# fleet-wide by default.
+# THE LIGHT HOST (cmd/host) — ~395 packages, pure Go, no codec and no subsystem.
+# It is the ENTRYPOINT. It knows only where each app lives and what path it
+# answers, and loads each app as its OWN process (a plugin) on the first request
+# that reaches it. There is no fused binary anymore: the fleet never links
+# together, so no build in this image is the mega link that once dominated it.
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -ldflags="-s -w" -o /host ./cmd/host
-# The functional smoke prober (cmd/smoke) — a stdlib-only, static binary shipped
-# alongside /cloud so the release gate can `docker exec` it against the freshly-built
-# image (and any deployment can be smoked via `docker run --entrypoint /smoke ...`).
+# The functional smoke prober (cmd/smoke) — a stdlib-only static binary shipped
+# alongside the host so the release gate can `docker exec` it against the freshly-
+# built image (and any deployment can be smoked via `docker run --entrypoint /smoke`).
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -ldflags="-s -w" -o /smoke ./cmd/smoke
-# Every subsystem that is NOT linked into /cloud, built from the SAME declaration
-# that makes it a plugin. apps.Wire loads each one at run time via zip.Load, which
-# fork/execs a sibling of /cloud, so the binary must be in the image or the mount
-# aborts and cloud never reaches listening:
+# EVERY subsystem, each as its OWN binary in /plugins beside the host. The host
+# fork/execs a sibling <dir>/<name> (manifest.App.Plugin) on the first request that
+# reaches its prefix, so the binary must be in the image or the mount aborts:
 #
-#   cloud: mount: mount o11y: zip: Load(o11y): start: fork/exec /o11y: no such file
+#   host: mount o11y: zip: Load(o11y): start: fork/exec /o11y: no such file
 #
-# That is what happened with the first one: unlinking o11y (deleting its import so
-# its 2.7k-package graph stops being linked into cloud) shipped without the step
-# that builds the separate binary, and five consecutive releases produced an image
-# and shipped none. Unlinking a subsystem means building it somewhere else, not
-# just deleting the import.
+# The list is DERIVED from manifest/apps.go — the SAME hand-authored source the
+# host reads and gen-app-cmds validates cmd/<app> against — so adding an app is a
+# one-line manifest edit and this Dockerfile does not change. An app with no
+# cmd/<app> fails HERE (the generator's bijection would have caught it first).
 #
-# The list is DERIVED, not maintained here. cloud.PluginSpec("<name>", …) in
-# apps/apps.go is what makes something a plugin, so that is what this reads —
-# adding the second plugin is a one-line edit at the composition root and this
-# Dockerfile does not change. A hand-kept copy of the list would be a second place
-# to forget, which is the bug above with extra steps. cmd/<name> is the convention
-# gen-app-cmds already follows; a plugin declared without one fails the build here
-# rather than at a pod's first boot.
+# Each link is the ONE app's own graph (~600–2200 packages), NEVER the ~3040-pkg
+# fleet union the fused binary was. 112 lean links, sequential, none of them mega —
+# which is the whole point of this change.
 #
-# CGO_ENABLED=0 like /smoke: these touch no sqlite, so they need no libc, and a
-# static binary is one less thing that can disagree with the runtime base.
+# CGO_ENABLED=1 + libsqlite3 + sqlite_fts5, exactly as the fused binary was built:
+# every app that opens a store needs the SQLCipher codec (a plaintext link silently
+# no-ops PRAGMA key), so they are built uniformly — one contract for all, the
+# non-sqlite apps merely carrying a libc dep they do not use. The modernc gate above
+# already proved none of them double-registers "sqlite" under this tag.
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     set -eu; mkdir -p /plugins; \
-    names="$(grep -o 'PluginSpec("[a-z0-9-]*"' apps/apps.go | cut -d'"' -f2 | sort -u || true)"; \
-    [ -n "$names" ] || { echo "FATAL: no PluginSpec found in apps/apps.go — the derivation broke, not the plugin list"; exit 1; }; \
+    names="$(sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)"; \
+    [ -n "$names" ] || { echo "FATAL: no apps parsed from manifest/apps.go — the derivation broke, not the app list"; exit 1; }; \
     for p in $names; do \
-      [ -d "./cmd/$p" ] || { echo "FATAL: plugin '$p' is declared in Wire but has no cmd/$p"; exit 1; }; \
+      [ -d "./cmd/$p" ] || { echo "FATAL: manifest app '$p' has no cmd/$p — run 'make generate' and commit"; exit 1; }; \
       echo "building plugin $p"; \
-      CGO_ENABLED=0 go build -ldflags="-s -w" -o "/plugins/$p" "./cmd/$p"; \
+      CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5" -ldflags="-s -w" -o "/plugins/$p" "./cmd/$p"; \
     done
-# Prove the SHIPPED binary binds sqlite3_* to libsqlcipher, not a plaintext libsqlite3.
-RUN readelf -d /cloud | grep -qE 'NEEDED.*(sqlcipher|sqlite3)' || { echo "FATAL: /cloud links no sqlite/sqlcipher .so"; exit 1; }; \
-    ! ldd /cloud 2>/dev/null | grep -E 'libsqlite3' | grep -vq 'libsqlcipher' || { echo "FATAL: /cloud resolves a NON-sqlcipher libsqlite3 (plaintext risk)"; exit 1; }
+# Prove a SHIPPED sqlite-backed plugin binds sqlite3_* to libsqlcipher, not a
+# plaintext libsqlite3. /plugins/base opens per-org stores under the SAME CGO=1 +
+# libsqlite3 build every plugin above got, so it is a real witness for the set.
+RUN readelf -d /plugins/base | grep -qE 'NEEDED.*(sqlcipher|sqlite3)' || { echo "FATAL: /plugins/base links no sqlite/sqlcipher .so"; exit 1; }; \
+    ! ldd /plugins/base 2>/dev/null | grep -E 'libsqlite3' | grep -vq 'libsqlcipher' || { echo "FATAL: /plugins/base resolves a NON-sqlcipher libsqlite3 (plaintext risk)"; exit 1; }
 
 # ── final image (alpine, NOT scratch — CGO needs libc + libsqlcipher) ─────────
 FROM ghcr.io/hanzoai/mirror/alpine:3.22@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6
@@ -281,46 +272,44 @@ COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certifica
 COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /etc/group /etc/group
-COPY --from=build /cloud /cloud
 COPY --from=build /host /host
 COPY --from=build /smoke /smoke
-# The out-of-process plugin binaries, landing beside /cloud because that is where
-# zip.Load looks: apps.o11yPlugin resolves dir(os.Executable())+"/<name>". Copying
-# the DIRECTORY's contents keeps this generic — a new plugin needs no line here,
-# same as the build step above.
+# The per-app plugin binaries, landing beside /host because that is where the host
+# looks: manifest.App.Plugin resolves dir(os.Executable())+"/<name>". Copying the
+# DIRECTORY's contents keeps this generic — a new app needs no line here, same as
+# the build step above.
 COPY --from=build /plugins/ /
 EXPOSE 8080 9090 9653
 USER 65532:65532
-# tini as PID 1 forwards signals to /cloud unchanged (so SIGTERM still drains
-# normally) and reaps the orphans described above. `--` keeps cloud's own args
-# untouched; the CR passes none today, but that stays true if it ever does.
+# tini as PID 1 forwards signals to /host unchanged (so SIGTERM still drains
+# normally) and reaps orphans — which matters MORE for the host than it did for the
+# fused binary, not less: the host's children are per-app processes that fork git
+# and friends of their own, and when the host Kill()s a wedged child those
+# grandchildren reparent to PID 1. `--` keeps the host's own args untouched.
 #
-# Host mode is the same image with the command replaced — `["/sbin/tini","--","/host"]`.
-# tini matters MORE there, not less: the host's children are /cloud processes that
-# fork git and friends of their own. Three things to check before switching a
-# deployment over, because none of them fails loudly:
+# ENTRYPOINT is /host — the fused /cloud is GONE, so there is no alternative, and
+# host mode is now the shipped topology rather than an opt-in. THREE properties,
+# because none fails loudly:
 #
-#  1. CREDENTIALS ARE NOT SCOPED IN HOST MODE YET. /cloud calls credz.Boot, which
-#     takes CLOUD_KMS_MASTER_KEY_REF OUT of its environment before it spawns
-#     anything, so its children inherit no root key and must ask the broker for a
-#     per-app bundle — that is where the identity fix (credz/launch: the launcher
-#     stamps each child's app, the broker verifies it) is actually load-bearing.
-#     /host does NOT call credz.Boot. It has no store to open and nothing to
-#     decrypt, so it never had a reason to — but that means the root key is still
-#     in its environment when zip spawns each child with os.Environ(), every child
-#     resolves the Root posture from that inherited key, and none of them asks the
-#     broker at all. The scoping is bypassed, not broken: every child holds the
-#     root key and can open any store, exactly as it did before credz existed.
-#     /host already stamps every child's launch token and hands the secret to the
-#     kms child, so closing this is one credz.Boot call in cmd/host — deliberately
-#     not made here, because a light host that imports credz drags cek →
-#     modernc/sqlite + sqlcipher into a ~395-package build whose entire reason to
-#     exist is being small. The fix belongs with that dependency question, and
-#     until it lands, host mode is a routing topology and not a credential
-#     boundary. The DEPLOYED entrypoint is /cloud (below), where it is a boundary.
-#  2. The host binds :8080 and :9653 but NOT the :9090 ops port (serve.go leaves
-#     it unbound for a plugin, since N children cannot share one port), so anything
+#  1. CREDENTIALS ARE NOT SCOPED IN HOST MODE YET (credz's caveat, now active). The
+#     fused /cloud called credz.Boot, which took CLOUD_KMS_MASTER_KEY_REF OUT of its
+#     environment before spawning anything, so children inherited no root key and had
+#     to ask the broker for a per-app bundle — where credz/launch (the host stamps
+#     each child's app, the broker verifies it) is load-bearing. /host does NOT call
+#     credz.Boot: it has no store to open and nothing to decrypt, so the root key is
+#     still in its environment when zip spawns each child with os.Environ(), every
+#     child resolves the Root posture from that inherited key, and none asks the
+#     broker. The scoping is bypassed, not broken: every child holds the root key and
+#     can open any store, as before credz existed. /host already STAMPS every child's
+#     launch token and hands the secret to the kms child, so closing this is one
+#     credz.Boot call in cmd/host — deliberately not made there, because a light host
+#     that imports credz drags cek → modernc/sqlite + sqlcipher into a ~395-package
+#     build whose whole reason to exist is being small. FOLLOW-UP: a scrub that does
+#     not link the codec, or an accepted per-pod boundary. Until then host mode is a
+#     routing topology first; there is no /cloud left to fall back to.
+#  2. The host binds :8080 and :9653 but NOT the :9090 ops port (serve.go leaves it
+#     unbound for a plugin, since N children cannot share one port), so anything
 #     scraping 9090 must move to the child or be dropped.
-#  3. The children need a writable directory for their sockets, which as uid 65532
-#     on a read-only rootfs means mounting one.
-ENTRYPOINT ["/sbin/tini", "--", "/cloud"]
+#  3. The children need a writable directory for their unix sockets, which as uid
+#     65532 on a read-only rootfs means mounting one.
+ENTRYPOINT ["/sbin/tini", "--", "/host"]
