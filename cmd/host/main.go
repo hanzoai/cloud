@@ -35,6 +35,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/hanzoai/cloud/credz/launch"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/zap-proto/zip"
 )
@@ -61,12 +62,36 @@ func run(addr, zapAddr, enable string) error {
 		return c.JSON(200, map[string]string{"status": "ok"})
 	})
 
+	// One secret for this host's whole child set, minted here and held only here.
+	// The host is the only process that knows which app it started as which
+	// child, so it is the only process that can say so — the credz broker will
+	// not take a child's word for it (#51: a child chooses its own argv, and one
+	// exec'd as `billing` used to be handed billing's KMS scope).
+	//
+	// credz/launch is stdlib-only for exactly this call site. Importing credz
+	// itself would pull cek → modernc/sqlite + sqlcipher into a build whose whole
+	// reason to exist is being ~395 packages instead of 3105.
+	secret := launch.Secret()
+
 	on := enabled(enable)
 	for _, a := range manifest.Apps {
 		if on != nil && !on[a.Name] {
 			continue
 		}
-		if err := app.Add(zip.Load(a.Plugin(), a.Prefixes...)); err != nil {
+		p := a.Plugin()
+		// Per-plugin, on the plugin's own Env, which zip appends to that ONE
+		// child's environment. A token in the host's os.Environ() would reach
+		// every child alike and prove nothing about any of them.
+		p.Env = append(p.Env, launch.Env(secret, a.Name))
+		// The secret itself crosses exactly one edge: to the child that runs the
+		// broker, because it owns the sealed store and is therefore the process
+		// that has to verify what the others present. Anything holding this can
+		// mint any app's identity, so it goes nowhere else — and credz.Boot in
+		// that child scrubs it from its environment on arrival.
+		if a.Name == launch.Broker {
+			p.Env = append(p.Env, launch.SecretEnv+"="+secret)
+		}
+		if err := app.Add(zip.Load(p, a.Prefixes...)); err != nil {
 			return err
 		}
 		delete(on, a.Name)
