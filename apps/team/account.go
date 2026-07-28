@@ -726,7 +726,7 @@ func (g *api) getWorkspaceInfo(c *zip.Ctx) error {
 	if t.Workspace == "" {
 		return g.fail(c, statusWorkspaceNotFound(""))
 	}
-	org, _ := t.Extra["org"].(string)
+	org := t.Org()
 	ws, err := g.accounts.WorkspaceByUUID(c.Context(), org, t.Workspace)
 	if err != nil {
 		return g.fail(c, statusWorkspaceNotFound(t.Workspace))
@@ -792,7 +792,7 @@ func (g *api) account(c *zip.Ctx) (account, org, tok string, err error) {
 	if err != nil {
 		return "", "", "", err
 	}
-	org, _ = t.Extra["org"].(string)
+	org = t.Org()
 	return t.Account, org, raw, nil
 }
 
