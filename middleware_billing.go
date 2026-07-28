@@ -250,28 +250,27 @@ func clientIP(c *zip.Ctx) string { return ClientIP(c) }
 // is nil or has no commerce URL (Enabled()==false), making the gate a no-op.
 func billingEnabled(m *metering.Client) bool { return m != nil && m.Enabled() }
 
-// DefaultPrice is cloud's per-request price (in cents) for the edge gate.
+// DefaultPrice is cloud's per-request price (in cents) for the edge gate. It holds
+// NO table: it reads the price the surface DECLARED at the composition root
+// (MountSpec.Price → PriceOf, see price.go), so the number the gate charges and the
+// number a reviewer approved are the same number, in one place.
 //
-// It returns 0 — meaning "do not gate, do not charge" — for:
+// It used to be the table, and its last line was `return 0` for anything unlisted —
+// which made a new route free forever, silently, because free never errors. That
+// default is gone: an unpriced surface now fails apps.TestPriceDeclared before it can
+// ship. Undeclared still charges nothing HERE (Price.Cents), because a missing
+// declaration must break the build, never a customer's card.
 //
-//   - health/liveness probes (every /v1/<svc>/health and bare /health),
+// Two things it does on its own:
 //
-//   - /v1/ai/* : the ai subsystem self-meters its own LLM token costs to
-//     commerce; charging again here would DOUBLE-BILL,
-//
-//   - /v1/agents/* : the canonical agents subsystem now gates + meters its OWN
-//     per-run fee to commerce (clients/agents runAgent); the edge must stay 0 or
-//     every agent run is billed twice,
-//
-//   - other subsystems that already self-meter their units (commerce billing
-//     itself, o11y telemetry, mcp tool dispatch),
-//
-//   - /v1/agent* : the agent orchestrator self-meters, billing through the
-//     completion it runs in-process, so an edge charge would double-bill.
-//
-// Every billable surface meters its own units downstream, so the edge charges
-// nothing on its own; it stays wired as a uniform passthrough. Keep self-metering
-// subsystems at 0 to preserve single-charge accounting.
+//   - Health probes are Free regardless of the surface they sit under. A liveness
+//     probe that 402s hides whether the process is up, and /v1/<svc>/health is a
+//     route of the same surface as everything else under /v1/<svc> — so the moment
+//     any surface carries a positive price, its probe has to be exempted here or the
+//     exemption has to be written 111 times.
+//   - A surface declared Metered charges 0, because its meter is downstream: an edge
+//     charge on top of it bills the same work twice. That is Price.Cents's job, not a
+//     prefix list's.
 func DefaultPrice(c *zip.Ctx) int64 {
 	path := c.Path()
 
@@ -280,40 +279,5 @@ func DefaultPrice(c *zip.Ctx) int64 {
 		return 0
 	}
 
-	// Subsystems that meter their own usage to commerce — never double-bill at
-	// the edge. ai is the load-bearing case (LLM token costs); the rest either
-	// bill their own units or are not billable here.
-	for _, selfMetered := range selfMeteredPrefixes {
-		if strings.HasPrefix(path, selfMetered) {
-			return 0
-		}
-	}
-
-	// The agent orchestrator owns /v1/agent (the POST round) and /v1/agent/* (the
-	// preset and conversation reads). It self-meters: the reads are free, and the
-	// round bills through the /v1/chat/completions it runs in-process (gated and
-	// metered downstream), so the edge stays 0 or a round is billed twice.
-	if path == "/v1/agent" || strings.HasPrefix(path, "/v1/agent/") {
-		return 0
-	}
-
-	// Default: do not charge unknown/unpriced paths. Metering is opt-in per
-	// path so a new route never silently starts billing.
-	return 0
-}
-
-// selfMeteredPrefixes are path prefixes whose subsystem records its own usage to
-// commerce via the shared cloud.ResourceMeter (in-handler Gate+Meter). The edge
-// gate must return 0 for these to avoid double-billing — the subsystem owns the
-// per-org charge (fail-closed pre-auth + debit-on-success), attributed to its own
-// product label, so an additional flat edge charge would double-bill.
-var selfMeteredPrefixes = []string{
-	"/v1/ai/",        // LLM token costs metered by the ai subsystem.
-	"/v1/agents/",    // per-run agent fee metered by the agents subsystem.
-	"/v1/commerce/",  // billing itself; not metered as usage.
-	"/v1/o11y/",      // telemetry ingest; not user-billable here.
-	"/v1/mcp/",       // tool dispatch meters per-tool downstream.
-	"/v1/functions/", // serverless invoke self-meters (product "functions").
-	"/v1/s3/",        // object-storage data plane self-meters per-op (product "s3").
-	"/v1/translate",  // HIP-0516: quality bills through the model plane's token meter, bulk through its own per-character ResourceMeter.
+	return PriceOf(path).Cents()
 }
