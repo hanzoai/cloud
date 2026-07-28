@@ -140,9 +140,9 @@ type Telemetry interface {
 
 // ── datastore (shared datastore client) implementation ──────────────────────
 
-// dsTelemetry writes eval telemetry to the datastore over the SHARED ai/object
-// datastore client. It holds no connection of its own — aiobject owns the peer,
-// its retry/backoff, its pool and its DATASTORE_* creds. dsTelemetry owns only
+// dsTelemetry writes eval telemetry to the datastore over cloud's ONE warehouse
+// connection (clients/datastore). It holds no connection of its own — that package
+// owns the peer, its retry/backoff, its pool and its DATASTORE_* creds. dsTelemetry owns only
 // its two tables and the SQL for its rows.
 type dsTelemetry struct {
 	db  string
@@ -161,7 +161,7 @@ type dsTelemetry struct {
 // datastore.Ready() for an honest "unavailable" during the boot window.
 //
 // Creds are the ONE shared namespace (KMS-injected, never hard-coded), resolved
-// by aiobject: DATASTORE_ADDR / DATASTORE_DB / DATASTORE_USER / DATASTORE_PASSWORD.
+// by clients/datastore: DATASTORE_ADDR / DATASTORE_DB / DATASTORE_USER / DATASTORE_PASSWORD.
 func newDatastoreTelemetry(log luxlog.Logger) (Telemetry, error) {
 	if getenv("DATASTORE_ADDR") == "" {
 		return nil, nil // no datastore configured — telemetry disabled.
@@ -410,7 +410,7 @@ func (t *dsTelemetry) ListTraces(ctx context.Context, f TraceFilter) ([]Trace, e
 }
 
 // Close is a no-op: dsTelemetry does not own the shared datastore connection
-// (aiobject does), so it has nothing to release.
+// (clients/datastore does), so it has nothing to release.
 func (t *dsTelemetry) Close() error { return nil }
 
 // ── in-memory implementation (tests + telemetry-disabled fallback is nil) ─────

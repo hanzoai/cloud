@@ -3,7 +3,8 @@ package answer
 // read.go — the READ stage: the loop's fourth stage, between rank and synthesize.
 // Search gives a ~600-char snippet; a research-grade answer needs the PAGE. read()
 // fetches the top sources through the ONE crawl (self-hosted Hanzo Crawl / Crawl4AI
-// behind ai/object) and replaces each Source's Snippet with the fetched markdown.
+// behind clients/websearch) and replaces each Source's Snippet with the fetched
+// markdown.
 //
 // It enriches, it never re-identifies: URL/Title/Engine/Favicon are untouched, so
 // the `sources` frame the client already rendered stays valid. It is also STRICTLY
@@ -14,7 +15,7 @@ import (
 	"context"
 	"strings"
 
-	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud/clients/websearch"
 )
 
 const (
@@ -75,14 +76,12 @@ func read(ctx context.Context, srcs []Source, top int) []Source {
 // caller keeps the search snippets.
 //
 // The crawl runs on its own goroutine so ctx (the loop's 90s bound, or a client
-// disconnect) cancels the WAIT even though the pinned ai/object.Crawl takes no
-// ctx; the in-flight HTTP call still ends on its own 30s transport timeout. This
-// collapses to a direct ctx-carrying call at the next ai bump — the ctx-threaded
-// signature ships in hanzoai/ai on this same branch.
+// disconnect) cancels the WAIT even though websearch.Crawl takes no ctx; the
+// in-flight HTTP call still ends on its own transport timeout.
 func crawlPages(ctx context.Context, urls []string) []Page {
 	done := make(chan []Page, 1) // buffered: the goroutine never blocks after we give up
 	go func() {
-		res, err := aiobject.Crawl(urls)
+		res, err := websearch.Crawl(urls)
 		if err != nil {
 			done <- nil
 			return
@@ -90,7 +89,7 @@ func crawlPages(ctx context.Context, urls []string) []Page {
 		out := make([]Page, 0, len(res))
 		for _, r := range res {
 			if r.Success {
-				out = append(out, Page{URL: r.URL, Markdown: r.Markdown})
+				out = append(out, Page{URL: r.URL, Markdown: string(r.Markdown)})
 			}
 		}
 		done <- out

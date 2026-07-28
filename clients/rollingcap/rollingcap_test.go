@@ -117,7 +117,7 @@ func TestRollingCapDecision(t *testing.T) {
 // TestMountNoOpWhenGlobalsUnwired proves Mount installs nothing when the tier/finance
 // globals are absent (standalone / split deploy) — no panic, no hook.
 func TestMountNoOpWhenGlobalsUnwired(t *testing.T) {
-	// aiobject.TierReader() and finance.Current() are nil in a bare test binary, so
+	// cloud.TierReader() and finance.Current() are nil in a bare test binary, so
 	// Mount must return nil without installing a reader.
 	if err := Mount(nil, cloud.Deps{}); err != nil {
 		t.Fatalf("Mount with unwired globals must be a no-op nil, got %v", err)

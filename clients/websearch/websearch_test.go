@@ -346,7 +346,7 @@ func TestScrapeHandlesCrawl4AIObjectMarkdown(t *testing.T) {
 
 // The bare-string markdown form (older mirror / other crawlers) must still work.
 func TestMarkdownFieldAcceptsBareString(t *testing.T) {
-	var r crawlResult
+	var r CrawlResult
 	if err := json.Unmarshal([]byte(`{"url":"u","markdown":"# S","success":true}`), &r); err != nil {
 		t.Fatalf("decode bare-string markdown: %v", err)
 	}

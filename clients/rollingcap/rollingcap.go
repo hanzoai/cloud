@@ -18,7 +18,7 @@
 //
 // It composes three co-resident GLOBALS and owns no state of its own:
 //
-//	aiobject.TierReader()  — the caller's commerce plan tier   (installed by wireTierReader)
+//	cloud.TierReader()     — the caller's commerce plan tier   (installed by wireTierReader)
 //	finance.Current()      — the per-org ledger's windowed sum  (installed by wireFinance)
 //	flags.Int(key)         — the admin-editable per-tier caps    (the platform-switch registry)
 //
@@ -34,8 +34,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	aiobject "github.com/hanzoai/ai/object"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/finance"
@@ -91,12 +89,18 @@ func init() {
 // stays nil, behavior unchanged. Runs after MountAll's prerequisites — wireTierReader
 // + wireFinance have already installed the globals it reads.
 func Mount(_ cloud.Router, _ cloud.Deps) error {
-	tier := aiobject.TierReader()
+	// cloud.TierReader is the SOURCE (wireTierReader sets it in BuildDeps, which
+	// runs before MountAll). aiobject's is a COPY clients/ai makes at ai.Mount, and
+	// reading that copy here made the cap DEAD in every deployment: cmd/rollingcap
+	// never links clients/ai at all, and in the unified binary apps.Wire() mounts
+	// rollingcap BEFORE ai — so the copy was nil either way and this took the
+	// early-out below on every boot. Read the source, not a copy of it.
+	tier := cloud.TierReader()
 	fin := finance.Current()
 	if tier == nil || fin == nil {
 		return nil // money/tier layer not co-resident → no rolling cap
 	}
-	aiobject.SetRollingCapReader(func(ctx context.Context, subject, namespace string) (bool, error) {
+	cloud.SetRollingCapReader(func(ctx context.Context, subject, namespace string) (bool, error) {
 		window := flags.Int(capWindowKey)
 		if window <= 0 {
 			return false, nil // cap disabled globally
