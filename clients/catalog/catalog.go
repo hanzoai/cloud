@@ -28,7 +28,8 @@
 //
 // Surface:
 //
-//	GET /v1/catalog   search + browse: ?q= &org= &kind= &archetype= &language= &forkable=
+//	GET /v1/catalog   search + browse: ?q= &org= &kind= &archetype= &language=
+//	                  &forkable=true|false   (absent = both; see filter)
 //
 // There is no write route. The corpus reconciles itself (sync.go), which is why
 // there is no credential that could publish into the published catalog at all.
@@ -88,9 +89,11 @@ type Entry struct {
 	URL         string `json:"url,omitempty"`      // live, if it is deployed
 	Repo        string `json:"repo,omitempty"`     // source
 	Template    string `json:"template,omitempty"` // lineage, if forked from one
-	Forkable    bool   `json:"forkable,omitempty"`
-	Stars       int    `json:"stars,omitempty"`
-	Updated     string `json:"updated,omitempty"`
+	// Forkable is NOT omitempty: false is an answer here, not a missing field.
+	// Omitted, a client could not tell "you cannot fork this" from "nobody said".
+	Forkable bool   `json:"forkable"`
+	Stars    int    `json:"stars,omitempty"`
+	Updated  string `json:"updated,omitempty"`
 	// Scope is provenance, not storage: "public" for a row from the published
 	// corpus, "org" for one only this caller can see. A UI that cannot tell them
 	// apart cannot warn before sharing a link.
@@ -192,10 +195,15 @@ func read(c *zip.Ctx, org, q, scope string) ([]Entry, error) {
 // filter applies the exact-match browse axes. An absent param is not a filter.
 // Every dimension `facet` counts is filterable here and vice versa: a facet a
 // caller can see but cannot act on is a rail that lies about being clickable.
+//
+// forkable is TRI-state for that reason. Read as `== "true"` it could only ever
+// narrow, never select the complement, so `?forkable=false` silently meant "no
+// filter" — a boolean axis whose negative case is unaskable is a label, not a
+// filter.
 func filter(in []Entry, c *zip.Ctx) []Entry {
 	org, arch := strings.ToLower(c.Query("org")), strings.ToLower(c.Query("archetype"))
 	lang, kind := strings.ToLower(c.Query("language")), strings.ToLower(c.Query("kind"))
-	fork := c.Query("forkable") == "true"
+	fork, forkSet := boolQuery(c, "forkable")
 	out := in[:0]
 	for _, e := range in {
 		switch {
@@ -203,7 +211,7 @@ func filter(in []Entry, c *zip.Ctx) []Entry {
 			arch != "" && strings.ToLower(e.Archetype) != arch,
 			lang != "" && strings.ToLower(e.Language) != lang,
 			kind != "" && strings.ToLower(e.Kind) != kind,
-			fork && !e.Forkable:
+			forkSet && e.Forkable != fork:
 			continue
 		}
 		out = append(out, e)
@@ -211,20 +219,27 @@ func filter(in []Entry, c *zip.Ctx) []Entry {
 	return out
 }
 
+// boolQuery reads a flag that has three answers, not two: yes, no, and unasked.
+func boolQuery(c *zip.Ctx, name string) (v, ok bool) {
+	b, err := strconv.ParseBool(strings.TrimSpace(c.Query(name)))
+	return b, err == nil
+}
+
 // facet counts the matching set along every browse axis, so the rail a client
-// renders is the rail that actually has results behind it.
+// renders is the rail that actually has results behind it. forkable is counted
+// on BOTH sides by the same rule as every other dimension — counting only the
+// trues rendered {true: everything} and told a caller there was a choice where
+// there was none.
 func facet(in []Entry) map[string]counts {
-	f := map[string]counts{"org": {}, "archetype": {}, "language": {}, "kind": {}}
+	f := map[string]counts{"org": {}, "archetype": {}, "language": {}, "kind": {}, "forkable": {}}
 	for _, e := range in {
 		for dim, v := range map[string]string{
-			"org": e.Org, "archetype": e.Archetype, "language": e.Language, "kind": e.Kind,
+			"org": e.Org, "archetype": e.Archetype, "language": e.Language,
+			"kind": e.Kind, "forkable": strconv.FormatBool(e.Forkable),
 		} {
 			if v != "" {
 				f[dim][v]++
 			}
-		}
-		if e.Forkable {
-			f["forkable"] = counts{"true": f["forkable"]["true"] + 1}
 		}
 	}
 	return f
@@ -269,5 +284,7 @@ var (
 		}
 		return index.Reconcile(ctx, org, uid, pk, docs)
 	}
+	// The corpus's two sources, one seam each: what we BUILT and what is LIVE.
+	fromOrgs  = orgRepos
 	liveSites = projects.LiveSites
 )
