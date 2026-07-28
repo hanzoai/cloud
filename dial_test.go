@@ -147,3 +147,28 @@ func TestUnreachablePeerNamesItsTransport(t *testing.T) {
 		t.Fatalf("error must name the transport it tried, got: %v", err)
 	}
 }
+
+// TestPeerDelegatesThePrincipal: As carries the edge-minted identity headers to
+// the callee unchanged, and an explicit org overrides the delegated one — a
+// background job with no request to delegate from must still name the tenant
+// it acts for, even when it inherited someone else's.
+func TestPeerDelegatesThePrincipal(t *testing.T) {
+	var gotUser, gotOrg string
+	serveSock(t, "treasury", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUser, gotOrg = r.Header.Get("X-User-Id"), r.Header.Get("X-Org-Id")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+
+	p := Dial("treasury")
+	cp := *p
+	cp.who = map[string]string{"X-User-Id": "u-1", "X-Org-Id": "delegated"}
+	if err := (&cp).Get(context.Background(), "explicit", "/v1/x", nil); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if gotUser != "u-1" {
+		t.Fatalf("X-User-Id = %q, want the delegated principal to arrive intact", gotUser)
+	}
+	if gotOrg != "explicit" {
+		t.Fatalf("X-Org-Id = %q — an explicit org must override the delegated one", gotOrg)
+	}
+}
