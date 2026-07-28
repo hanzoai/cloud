@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -19,29 +20,54 @@ const testPassword = "hunter2-Sup3rSecret!"
 // TestCredentialVerbsAreRefused proves hanzo.team establishes no session from a
 // credential it handled itself. hanzo.id is the only way in.
 //
-// This asserts the PRESENCE of a specific refusal, not the absence of a handler.
-// The distinction is the whole test. An earlier version probed the "login" verb
-// and checked only that no token came back — and it passed with passwordLogin
-// restored verbatim, because `mountTeam` resolves iamEndpoint to production
-// hanzo.id, which refused these invented credentials with a 401 that satisfied
-// every assertion. It could not tell "handler deleted" from "handler present,
-// IAM refused THESE credentials", and it made a live outbound credential POST to
-// production on every run. Pinning the refusal code kills both problems: a
-// restored handler cannot answer account:status:Unauthorized with this message,
-// and nothing leaves the process.
+// The load-bearing assertion is the TRIPWIRE, not the reply shape. Two earlier
+// versions of this test were both forgeable:
+//
+//  1. Asserting "no token came back" passed with passwordLogin restored
+//     verbatim, because mountTeam resolves iamEndpoint to PRODUCTION hanzo.id,
+//     which refused the invented credentials with a real 401 carrying no token.
+//     It could not tell "handler deleted" from "handler refused THESE
+//     credentials", and it POSTed credentials to production on every run.
+//  2. Asserting the refusal CODE fixed that for a revert, but a handler can
+//     still forge the shape: return statusUnauthorized(signInAtIssuer) from
+//     passwordLogin's error path and the test passes while the door is open and
+//     talking to the issuer.
+//
+// So the test pins absence BEHAVIORALLY. Any handler that walks a credential
+// must call IAM; the door never leaves the process. Pointing IAM_ENDPOINT at a
+// recording server and failing on ANY request is the one thing a resurrected
+// handler cannot forge — and it takes the credential POST off production.
 func TestCredentialVerbsAreRefused(t *testing.T) {
+	var mu sync.Mutex
+	var tripped []string
+	tripwire := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		tripped = append(tripped, r.Method+" "+r.URL.Path)
+		mu.Unlock()
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	defer tripwire.Close()
+	t.Setenv("IAM_ENDPOINT", tripwire.URL)
+
 	app := mountTeam(t)
 
-	// Every verb the account client can send that would mint a session from a
-	// credential. loginAsGuest and exchangeGuestToken are in here deliberately:
-	// they are the same bypass class, one line from the door just closed.
+	// Every verb the account client can send that would establish a session from
+	// a credential. loginAsGuest and exchangeGuestToken are the same bypass class
+	// one line from the door just closed; confirm is the sharp one — upstream it
+	// is email confirmation returning a LoginInfo WITH a token.
 	verbs := []string{
 		"login", "loginAsGuest", "loginOtp", "signUp", "signUpOtp", "signUpJoin",
 		"validateOtp", "join", "joinByToken", "exchangeGuestToken",
 		"changePassword", "restorePassword", "requestPasswordReset",
+		"confirm", "createAccessLink", "checkJoin", "checkAutoJoin",
+		"refreshHanzoAssistantToken",
 	}
 
 	for _, verb := range verbs {
+		mu.Lock()
+		tripped = nil
+		mu.Unlock()
+
 		body := `{"method":"` + verb + `","params":{"email":"ada@acme.io","password":"` + testPassword + `"}}`
 		req := httptest.NewRequest(http.MethodPost, "http://hanzo.team/v1/team/account", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -51,6 +77,14 @@ func TestCredentialVerbsAreRefused(t *testing.T) {
 		}
 		raw, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
+
+		// THE assertion: the door answers without ever consulting the issuer.
+		mu.Lock()
+		hops := append([]string(nil), tripped...)
+		mu.Unlock()
+		if len(hops) > 0 {
+			t.Fatalf("%s reached the issuer (%v) — a handler walked a credential; the door never leaves the process", verb, hops)
+		}
 
 		var out struct {
 			Result *struct {
@@ -62,8 +96,6 @@ func TestCredentialVerbsAreRefused(t *testing.T) {
 		if err := json.Unmarshal(raw, &out); err != nil {
 			t.Fatalf("%s decode %s: %v", verb, raw, err)
 		}
-
-		// No session material, in any form.
 		if out.Result != nil && out.Result.Token != "" {
 			t.Fatalf("%s minted a session token — the door is open: %s", verb, raw)
 		}
@@ -72,16 +104,8 @@ func TestCredentialVerbsAreRefused(t *testing.T) {
 				t.Fatalf("%s set a session cookie: %s", verb, ck)
 			}
 		}
-
-		// And THE refusal — the assertion a resurrected handler cannot forge.
 		if out.Error == nil {
 			t.Fatalf("%s was not refused: %s", verb, raw)
-		}
-		if out.Error.Code != "account:status:Unauthorized" {
-			t.Fatalf("%s refused with %q, want account:status:Unauthorized (a handler answered instead of the door)", verb, out.Error.Code)
-		}
-		if got, _ := out.Error.Params["message"].(string); got != signInAtIssuer {
-			t.Fatalf("%s message = %q, want %q", verb, got, signInAtIssuer)
 		}
 	}
 }
@@ -106,11 +130,18 @@ func TestUnknownMethodDoesNotEchoUnbounded(t *testing.T) {
 	}
 }
 
-// TestAuthStartProviderHint locks the federation start: /auth/google and
-// /auth/github redirect into the SAME IAM authorize URL as /auth/openid — the
-// canonical openid callback — differing ONLY in the provider_hint that makes
-// hanzo.id auto-federate; an explicit provider_hint query passes through, and
-// plain openid carries none.
+// TestAuthStartProviderHint locks what cloud EMITS, which is all this package
+// controls: /auth/google and /auth/github redirect into the SAME IAM authorize
+// URL as /auth/openid — the canonical openid callback — differing only in the
+// provider_hint param; an explicit query value passes through, plain openid
+// carries none.
+//
+// It does NOT assert federation, because there is none: hanzo.id's
+// /v1/iam/oauth/authorize strips provider_hint before its login app sees it, so
+// /auth/google lands on the same SSO page as /auth/openid (see providerHint —
+// the Location is byte-identical with and without the param). This test is the
+// contract for the redirect_uri and the param we emit; the day IAM passes the
+// param through, federation starts working with no change here.
 func TestAuthStartProviderHint(t *testing.T) {
 	app := mountTeam(t)
 	cases := []struct{ path, wantHint string }{
