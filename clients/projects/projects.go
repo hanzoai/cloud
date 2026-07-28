@@ -183,6 +183,12 @@ type deploymentView struct {
 	Message   string `json:"message,omitempty"`
 	CreatedAt int64  `json:"createdAt"`
 	UpdatedAt int64  `json:"updatedAt"`
+	// Upload is the prefix-scoped, short-lived S3 write grant handed to CI with a
+	// queued git deployment, so it needs no bucket credential (grant.go). Present
+	// ONLY on the 202 that creates the deployment — it is never stored and never
+	// replayed on a later read, so a grant cannot outlive the build it was minted
+	// for by being fetched again.
+	Upload *uploadGrant `json:"upload,omitempty"`
 }
 
 func toDeploymentView(d Deployment) deploymentView {
