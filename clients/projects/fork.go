@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/hanzoai/cloud/clients/templates"
 	"github.com/zap-proto/zip"
 )
@@ -14,6 +15,10 @@ import (
 type forkReq struct {
 	Slug string `json:"slug"` // parent slug to fork — catalog template or published project (required)
 	Name string `json:"name"` // target project name (optional; defaults to the parent's title)
+	// Variant picks a template's format/page/theme (optional; defaults to the
+	// template's first shape). This is the axis the catalog used to spend
+	// sibling slugs on, so it is expressed here, where the user's preference is.
+	Variant string `json:"variant"`
 	// Target overrides the derived project slug (optional; defaults to the
 	// parent slug). Kept distinct from Slug so callers can rename on fork.
 	Target string `json:"target"`
@@ -40,7 +45,7 @@ func fork(s *cloud.Service[state], c *zip.Ctx) error {
 	if slug == "" {
 		return zip.ErrBadRequest("slug is required")
 	}
-	req, err := seedFrom(s, c, slug)
+	req, err := seedFrom(s, c, org, slug, strings.TrimSpace(body.Variant))
 	if err != nil {
 		return err
 	}
@@ -55,22 +60,53 @@ func fork(s *cloud.Service[state], c *zip.Ctx) error {
 	return createProject(s, c, org, req)
 }
 
-// seedFrom resolves the fork parent and returns the createReq it seeds. Catalog
-// FIRST: a curated template slug is a stable public name and must keep meaning the
-// same thing even if some org later publishes a live project under it. Falling
-// back to the unique live owner of the slug is the SAME resolution the sites edge
-// uses to serve <slug>.hanzo.app, so "what you can browse is what you can fork".
-// A live parent contributes its repo, so the child builds from the same source;
-// the parent's deployed BYTES are never copied — releases are per-tenant by
-// design, so the fork publishes its own.
-func seedFrom(s *cloud.Service[state], c *zip.Ctx, slug string) (createReq, error) {
-	if t, found := templates.Get(slug); found {
+// seedFrom resolves the fork parent and returns the createReq it seeds. Templates
+// FIRST, through the ONE catalog door (templates.Lookup), which resolves the
+// CALLER ORG's own private templates ahead of the public gallery: a curated
+// template slug is a stable public name and must keep meaning the same thing even
+// if some org later publishes a live project under it, and an org's private
+// template is forkable only by that org (Lookup binds org, so another org's row is
+// not reachable from here at all). Falling back to the unique live owner of the
+// slug is the SAME resolution the sites edge uses to serve <slug>.hanzo.app, so
+// "what you can browse is what you can fork". A live parent contributes its repo,
+// so the child builds from the same source; the parent's deployed BYTES are never
+// copied — releases are per-tenant by design, so the fork publishes its own.
+func seedFrom(s *cloud.Service[state], c *zip.Ctx, org, slug, variant string) (createReq, error) {
+	if t, found := templates.Lookup(c.Context(), org, slug); found {
+		// One template, one slug: the format/page/theme it ships in is chosen
+		// here, from the catalog's own options.
+		v, ok := t.Variant(variant)
+		if !ok {
+			return createReq{}, zip.ErrNotFound("template variant not found")
+		}
+		// Lineage is owner-qualified for a private template (the same shape a live
+		// project parent gets) and a bare slug for the public catalog, whose slug IS
+		// the global name.
+		from := t.Slug
+		if t.Org != "" {
+			from = t.Org + "/" + t.Slug
+		}
 		req := createReq{
 			Name: t.Title, Slug: t.Slug, Description: t.Description,
-			Framework: mapFramework(t.Framework), ForkedFrom: t.Slug,
+			Framework: mapFramework(v.Framework), ForkedFrom: from,
 		}
-		req.Repo.URL = t.Source
+		// A non-default shape carries its id into the derived slug, so two
+		// shapes of one template can live side by side in the same org.
+		if len(t.Variants) > 0 && v.ID != t.Variants[0].ID {
+			req.Slug += "-" + v.ID
+		}
+		// The derived slug is a DEFAULT, not the caller's choice, so a template
+		// whose name is a reserved subdomain (metrics) must still fork in one
+		// click. `-template` is the suffix its live demo already carries
+		// (metrics-template.hanzo.app), so the derived name matches the demo.
+		if sites.IsReserved(req.Slug) {
+			req.Slug += "-template"
+		}
+		req.Repo.URL = v.Source
 		return req, nil
+	}
+	if variant != "" {
+		return createReq{}, zip.ErrNotFound("template variant not found")
 	}
 	p, err := s.State.store.ResolveUniqueLiveSlug(c.Context(), slug)
 	if err != nil {

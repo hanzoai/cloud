@@ -14,7 +14,7 @@ import (
 // same MountSpec type, so Wire() can swap in-process for out-of-process by
 // editing one line.
 func TestPluginSpec_IsAnOrdinaryMountSpec(t *testing.T) {
-	s := PluginSpec("search", zip.Plugin{Addr: "127.0.0.1:1"}, "/v1/search")
+	s := PluginSpec("search", Free, zip.Plugin{Addr: "127.0.0.1:1"}, "/v1/search")
 	if s.Name != "search" {
 		t.Fatalf("name = %q, want search", s.Name)
 	}
@@ -23,6 +23,9 @@ func TestPluginSpec_IsAnOrdinaryMountSpec(t *testing.T) {
 	}
 	if !s.Global {
 		t.Fatal("Global must be set: zip.Load registers the prefix itself, and a scoped Router would nest it")
+	}
+	if s.Price != Free {
+		t.Fatalf("Price = %s, want free — a dropped price leaves the surface Undeclared, and a plugin's is the one nothing in this binary can infer", s.Price)
 	}
 }
 
@@ -34,7 +37,7 @@ func TestPluginSpec_IsAnOrdinaryMountSpec(t *testing.T) {
 func TestPluginSpec_MountsEveryPrefix(t *testing.T) {
 	app := zip.New(zip.Config{AppName: "host", DisableStartupMessage: true})
 	// Addr, not Bin: this asserts what was WIRED, so it must not fork a child.
-	s := PluginSpec("o11y", zip.Plugin{Addr: "127.0.0.1:1"}, "/v1/o11y", "/v1/sentry")
+	s := PluginSpec("o11y", Free, zip.Plugin{Addr: "127.0.0.1:1"}, "/v1/o11y", "/v1/sentry")
 	if err := s.Mount(app, Deps{}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
@@ -45,7 +48,7 @@ func TestPluginSpec_MountsEveryPrefix(t *testing.T) {
 	if want := []string{"/v1/o11y", "/v1/sentry"}; !slices.Equal(got[0].Prefixes, want) {
 		t.Fatalf("Prefixes = %v, want %v — a dropped prefix dark-holes its whole subtree", got[0].Prefixes, want)
 	}
-	// The SAME list must reach the spec, because indexSubsystems reads it for the
+	// The SAME list must reach the spec, because Declare reads it for the
 	// admin inventory and for per-request subsystem attribution. Routed-but-
 	// unattributed is the subtler half of the same bug: the subtree answers, and
 	// every trace on it names no subsystem.
@@ -57,7 +60,7 @@ func TestPluginSpec_MountsEveryPrefix(t *testing.T) {
 // The convention still holds for the ordinary single-subtree plugin: what zip
 // routes and what the index reports are the same list, not two that can drift.
 func TestPluginSpec_PrefixesMatchWhatIsRouted(t *testing.T) {
-	s := PluginSpec("search", zip.Plugin{Addr: "127.0.0.1:1"}, "/v1/search")
+	s := PluginSpec("search", Free, zip.Plugin{Addr: "127.0.0.1:1"}, "/v1/search")
 	if want := []string{"/v1/search"}; !slices.Equal(s.Prefixes, want) {
 		t.Fatalf("spec.Prefixes = %v, want %v", s.Prefixes, want)
 	}
@@ -68,7 +71,7 @@ func TestPluginSpec_PrefixesMatchWhatIsRouted(t *testing.T) {
 // the refusal rather than papering over it with a default.
 func TestPluginSpec_RefusesNoPrefix(t *testing.T) {
 	app := zip.New(zip.Config{AppName: "host", DisableStartupMessage: true})
-	s := PluginSpec("nowhere", zip.Plugin{Addr: "127.0.0.1:1"})
+	s := PluginSpec("nowhere", Free, zip.Plugin{Addr: "127.0.0.1:1"})
 	if err := s.Mount(app, Deps{}); err == nil {
 		t.Fatal("a plugin with no prefix mounted — it would run unreachable")
 	}
@@ -77,7 +80,7 @@ func TestPluginSpec_RefusesNoPrefix(t *testing.T) {
 // Mounting onto a scoped Router is a wiring mistake, not something to paper
 // over: the routes would answer under a doubled prefix. Fail loudly.
 func TestPluginSpec_RefusesAScopedRouter(t *testing.T) {
-	s := PluginSpec("bad", zip.Plugin{Addr: "127.0.0.1:1"}, "/v1/bad")
+	s := PluginSpec("bad", Free, zip.Plugin{Addr: "127.0.0.1:1"}, "/v1/bad")
 	err := s.Mount(scopedStub{}, Deps{})
 	if err == nil {
 		t.Fatal("mounting on a non-root Router must fail")

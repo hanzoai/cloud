@@ -10,7 +10,6 @@ package team
 // net/http — it is an external hop to hanzo.id.
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -189,6 +188,20 @@ type Status struct {
 func statusUnauthorized(msg string) Status {
 	return Status{Severity: "ERROR", Code: "account:status:Unauthorized", Params: map[string]any{"message": msg}}
 }
+
+// signInAtIssuer is the refusal every credential verb answers with. One string,
+// so the door's answer is a single fact a test can pin.
+const signInAtIssuer = "sign in at hanzo.id"
+
+// trunc bounds a caller-supplied string before it rides back in an error. The RPC
+// body is only capped by GATEWAY_BODY_LIMIT (16MB), so echoing a method name
+// verbatim lets a caller choose the size of our response.
+func trunc(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
+}
 func statusError(msg string) Status {
 	return Status{Severity: "ERROR", Code: "account:status:InternalServerError", Params: map[string]any{"message": msg}}
 }
@@ -211,14 +224,6 @@ func statusAmbiguous(url string) Status {
 	return Status{Severity: "ERROR", Code: "account:status:WorkspaceAmbiguous", Params: map[string]any{"workspace": url}}
 }
 
-// statusBadCredentials is the password-login refusal. The code is the platform
-// status the SPA already translates ("Account not found or the provided
-// credentials are incorrect") so the form renders a native message, and it
-// deliberately does not distinguish no-such-account from wrong-password.
-func statusBadCredentials() Status {
-	return Status{Severity: "ERROR", Code: "platform:status:AccountNotFound", Params: map[string]any{}}
-}
-
 // ── route registration ────────────────────────────────────────────────────────
 
 func (g *api) register(r zip.Router, guard guardFn) {
@@ -233,13 +238,12 @@ func (g *api) register(r zip.Router, guard guardFn) {
 // ── REST: providers ───────────────────────────────────────────────────────────
 
 func (g *api) providers(c *zip.Ctx) error {
-	// Every entry federates through the SAME IAM authorize hop: google/github
-	// carry a provider_hint so hanzo.id lands STRAIGHT in the provider's OAuth
-	// flow (the console-proven pattern, id >= 0.2.6); openid is the plain Hanzo
-	// SSO page.
+	// ONE door: hanzo.id. Which identities that door accepts — Google, GitHub,
+	// passkey, password — is IAM's question, answered on IAM's own page, next to
+	// the identity check and the training-data consent that must precede a first
+	// session. Listing providers here would be a second place holding that answer,
+	// and the two drift the moment IAM gains or drops one.
 	return c.JSON(http.StatusOK, []ProviderInfo{
-		{Name: "google", DisplayName: "Google"},
-		{Name: "github", DisplayName: "GitHub"},
 		{Name: g.cfg.provider, DisplayName: "Hanzo"},
 	})
 }
@@ -278,10 +282,23 @@ func (g *api) authStart(c *zip.Ctx) error {
 }
 
 // providerHint is the ONE mapping from the SPA's provider path segment to the
-// IAM provider_hint that makes hanzo.id auto-federate straight into the social
-// provider (hint values are the IAM provider record names, e.g.
+// IAM provider_hint param (hint values are the IAM provider record names, e.g.
 // "provider-github"). An explicit provider_hint query passes through verbatim;
 // "openid" — the plain Hanzo SSO — carries none.
+//
+// MEASURED: the hint is currently a NO-OP end to end, and the gap is upstream.
+// hanzo.id's login app does honour it, but the endpoint authStart calls strips
+// it first:
+//
+//	GET /v1/iam/oauth/authorize?...&provider_hint=provider-google
+//	  -> 302 /login/oauth/authorize?client_id&redirect_uri&response_type&scope&state
+//	                                                        (no provider_hint)
+//
+// The Location is byte-identical with and without the param. So /auth/google
+// lands on the same Hanzo SSO page as /auth/openid. That is not a hole — every
+// path still runs IAM's authorize flow — it just buys nothing today. If the
+// federation shortcut is wanted, the fix is param passthrough in IAM's
+// /v1/iam/oauth/authorize, NOT more code here.
 func providerHint(provider, explicit string) string {
 	if explicit = strings.TrimSpace(explicit); explicit != "" {
 		return explicit
@@ -514,8 +531,6 @@ func (g *api) rpc(c *zip.Ctx) error {
 		return g.fail(c, statusError("bad request"))
 	}
 	switch req.Method {
-	case "login":
-		return g.passwordLogin(c, req.Params)
 	case "getLoginInfoByToken", "getLoginWithWorkspaceInfo":
 		return g.getLoginInfoByToken(c)
 	case "getUserWorkspaces":
@@ -536,105 +551,24 @@ func (g *api) rpc(c *zip.Ctx) error {
 		return g.getPerson(c)
 	case "isReadOnlyGuest":
 		return g.ok(c, false)
-	case "loginAsGuest":
-		return g.fail(c, statusUnauthorized("guest login disabled"))
+
+	// Every verb that would establish a session from a credential this service
+	// handled itself. Stating the policy beats falling through to UnknownMethod:
+	// that answer renders "Unknown method: login" to the user, tells a caller the
+	// parser did not recognise the verb rather than that the door is shut, and —
+	// because "no handler" and "handler refused" then produce the same envelope —
+	// makes a resurrected handler indistinguishable from a deleted one. A test can
+	// pin THIS answer; it cannot pin an absence.
+	case "login", "loginAsGuest", "loginOtp", "signUp", "signUpOtp", "signUpJoin",
+		"validateOtp", "join", "joinByToken", "exchangeGuestToken",
+		"changePassword", "restorePassword", "requestPasswordReset",
+		"confirm", "createAccessLink", "checkJoin", "checkAutoJoin",
+		"refreshHanzoAssistantToken":
+		return g.fail(c, statusUnauthorized(signInAtIssuer))
+
 	default:
-		return g.fail(c, Status{Severity: "ERROR", Code: "account:status:UnknownMethod", Params: map[string]any{"method": req.Method}})
+		return g.fail(c, Status{Severity: "ERROR", Code: "account:status:UnknownMethod", Params: map[string]any{"method": trunc(req.Method, 64)}})
 	}
-}
-
-// passwordLogin is the account RPC "login" — the SPA's native email+password
-// form. It authenticates against IAM ONLY (there are no local accounts): the
-// SAME two-step the platform e2e auth helper documents — POST /v1/iam/login
-// (responseType=code) with the credentials, then the standard confidential code
-// exchange — then the EXACT session establishment the OAuth callback runs. The
-// password lives in one local string, rides only in the body of the ONE IAM
-// login call, and is never logged or persisted; bad credentials answer a clean
-// 401 with the platform status the form already translates.
-func (g *api) passwordLogin(c *zip.Ctx, params map[string]any) error {
-	email, _ := params["email"].(string)
-	password, _ := params["password"].(string)
-	email = strings.TrimSpace(email)
-	if email == "" || password == "" {
-		return c.JSON(http.StatusUnauthorized, map[string]any{"error": statusBadCredentials()})
-	}
-	redirect := g.callbackOrigin(c) + "/v1/team/account/auth/" + g.cfg.provider + "/callback"
-	code, err := g.passwordCode(email, password, redirect)
-	if err != nil {
-		// err carries IAM's status message only — never the submitted secret.
-		g.log.Warn("account: password login refused", "err", err)
-		return c.JSON(http.StatusUnauthorized, map[string]any{"error": statusBadCredentials()})
-	}
-	access, err := g.exchangeCode(code, redirect)
-	if err != nil {
-		g.log.Error("account: password login code exchange", "err", err)
-		return c.JSON(http.StatusUnauthorized, map[string]any{"error": statusBadCredentials()})
-	}
-	account, tok, _, err := g.establishSession(c.Context(), access)
-	if err != nil {
-		g.log.Error("account: password login session", "err", err)
-		return c.JSON(http.StatusUnauthorized, map[string]any{"error": statusBadCredentials()})
-	}
-	// Same cookie posture as the OAuth callback: the IAM access_token rides an
-	// HttpOnly cookie for the same-origin agents proxy; the SPA then PUTs the
-	// session cookie through the SAME /cookie route every login path uses.
-	g.setIAMTokenCookie(c, access)
-	return g.ok(c, LoginInfo{Account: account, Token: tok})
-}
-
-// passwordCode performs the IAM password login and returns the authorization
-// code (the same two-step contract the platform e2e auth helper locks: the
-// OAuth params ride the query string, the credentials ride the JSON body — the
-// ONE place the password touches the wire). Error paths surface only IAM's
-// status message.
-func (g *api) passwordCode(username, password, redirectURI string) (string, error) {
-	nonce, err := randState()
-	if err != nil {
-		return "", err
-	}
-	q := url.Values{
-		"clientId":     {g.cfg.iamClientID},
-		"responseType": {"code"},
-		"redirectUri":  {redirectURI},
-		"scope":        {"openid profile email"},
-		"state":        {nonce},
-		"type":         {"code"},
-	}
-	body, err := json.Marshal(map[string]any{
-		"type":         "code",
-		"application":  g.cfg.iamClientID,
-		"username":     username,
-		"password":     password,
-		"signinMethod": "Password",
-		"autoSignin":   true,
-	})
-	if err != nil {
-		return "", err
-	}
-	resp, err := http.Post(oauthBase(g.cfg.iamEndpoint)+"/login?"+q.Encode(), "application/json", bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("iam login request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("iam login status %d", resp.StatusCode)
-	}
-	var out struct {
-		Status string          `json:"status"`
-		Msg    string          `json:"msg"`
-		Data   json.RawMessage `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", fmt.Errorf("iam login decode: %w", err)
-	}
-	if out.Status != "ok" {
-		return "", fmt.Errorf("iam login: %s", out.Msg)
-	}
-	var code string
-	if err := json.Unmarshal(out.Data, &code); err != nil || code == "" {
-		return "", fmt.Errorf("iam login: no authorization code in response")
-	}
-	return code, nil
 }
 
 func (g *api) getLoginInfoByToken(c *zip.Ctx) error {

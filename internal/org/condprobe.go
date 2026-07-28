@@ -101,7 +101,7 @@ func raceCAS(ctx context.Context, store replica.ConditionalStore, key, expectVer
 	for i := 0; i < probeRacers; i++ {
 		go func(i int) {
 			defer wg.Done()
-			_, err := store.PutIfVersion(ctx, key, probePayload(i), expectVersion)
+			_, err := store.PutIfVersion(ctx, key, probePayload(key, expectVersion, i), expectVersion)
 			mu.Lock()
 			defer mu.Unlock()
 			switch {
@@ -129,6 +129,23 @@ func probeKey(prefix string) (string, error) {
 	return prefix + hex.EncodeToString(b[:]), nil
 }
 
-// probePayload is a small distinct value per racer so a store that (wrongly) accepts
-// two writes leaves observably different bytes, not an idempotent no-op.
-func probePayload(i int) []byte { return []byte{'c', 'a', 's', '-', 'p', 'r', 'o', 'b', 'e', byte('0' + i)} }
+// probePayload is the bytes one racer writes. It must be distinct from every
+// OTHER write this probe performs — across racers AND across the two race
+// phases — or the probe reports a false non-atomic verdict.
+//
+// It used to be `cas-probe<i>`, four fixed values reused by both phases. The
+// create race leaves the object at one of them; the update race then conditions
+// on that ETag and racers write the same four again. Whenever the update-race
+// winner drew the same index as the create-race winner it rewrote identical
+// bytes, so the ETag did not move, so every remaining racer's If-Match STILL
+// held and they all committed. The probe counted them and called the store
+// non-atomic. One collision in four — which is exactly the 19-37% verdict rate
+// measured against production and against a local build, and it is why the
+// durability fence spent that time disabled on a store that was behaving.
+//
+// Binding the payload to the probe key (16 random bytes, fresh per probe) and to
+// the version being raced on makes an unchanged ETag impossible unless the store
+// really did reject the write.
+func probePayload(key, expectVersion string, i int) []byte {
+	return fmt.Appendf(nil, "cas-probe\x00%s\x00%s\x00%d", key, expectVersion, i)
+}

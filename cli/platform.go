@@ -291,7 +291,20 @@ type DeployResult struct {
 // machine automation). Unchanged wire contract.
 // ---------------------------------------------------------------------------
 
-// BuildReq is the direct-enqueue body. Repo/SHA/Image are required.
+// BuildBinary is ONE hanzo.yml `binaries:` entry, sent verbatim. The recipe a
+// repo declares IS the request body — there is no CLI-side recipe format.
+type BuildBinary struct {
+	Name      string   `json:"name" yaml:"name"`
+	Main      string   `json:"main,omitempty" yaml:"main"`
+	Run       string   `json:"run,omitempty" yaml:"run"`
+	Out       string   `json:"out,omitempty" yaml:"out"`
+	Ldflags   string   `json:"ldflags,omitempty" yaml:"ldflags"`
+	Platforms []string `json:"platforms,omitempty" yaml:"platforms"`
+	Image     string   `json:"image,omitempty" yaml:"image"`
+}
+
+// BuildReq is the direct-enqueue body. Repo/SHA are required, plus EITHER Image
+// (build a container image) or Binaries (build the artifacts hanzo.yml declares).
 type BuildReq struct {
 	Repo           string `json:"repo"`
 	SHA            string `json:"sha"`
@@ -304,15 +317,22 @@ type BuildReq struct {
 	OS             string `json:"os,omitempty"`
 	Arch           string `json:"arch,omitempty"`
 	OrganizationID string `json:"organizationId,omitempty"`
+
+	// The artifact lane: `binaries:` + `bucket:` from the repo's hanzo.yml.
+	Binaries []BuildBinary `json:"binaries,omitempty"`
+	Bucket   string        `json:"bucket,omitempty"`
+	Tag      string        `json:"tag,omitempty"`
 }
 
-// BuildJob is the enqueue acceptance (HTTP 202).
+// BuildJob is the enqueue acceptance (HTTP 202). Image is the image lane's
+// output; Index is the artifact lane's binaries.json — a build has one or other.
 type BuildJob struct {
 	BuildJobID string `json:"buildJobId"`
 	Status     string `json:"status"`
 	RunnerPool string `json:"runnerPool"`
 	Image      string `json:"image"`
 	Target     string `json:"target"`
+	Index      string `json:"index,omitempty"`
 }
 
 // EnqueueBuild enqueues a native build. buildToken is resolved by the caller (IAM

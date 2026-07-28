@@ -633,3 +633,113 @@ func teamPresented2(t *testing.T, bearer string) bool {
 	defer func() { _ = resp.Body.Close() }()
 	return got
 }
+
+// ── the reduced lane, observed at the write core ─────────────────────────────
+
+// TestGuestRowsLandInItsOwnOrgNotPublic is the assertion the previous version of this
+// suite only CLAIMED to make. TestGuestWritesProjectedIntoItsOwnOrg checks the org on
+// teamAdmission — a pure function — and then uses a 503 as its end-to-end proof. But the
+// 503 comes from the absent warehouse either way, so swapping handle's `a.org` for
+// publicTenant survived: the whole rationale of this lane is "not $public", and nothing
+// tested it.
+//
+// With the fake warehouse the tenant column is directly observable, so this binds to
+// where the row actually lands.
+func TestGuestRowsLandInItsOwnOrgNotPublic(t *testing.T) {
+	t.Setenv("SERVER_SECRET", "a-real-team-secret")
+	roomyRate(t)
+	w := fakeWarehouse(t)
+	app := mountApp(t)
+	guest := teamToken(t, "acme", "a-real-team-secret",
+		map[string]any{"role": token.RoleGuest}, time.Now().Add(time.Hour).Unix())
+
+	// One event per request: the fake warehouse records one entry per INSERT, and a
+	// batch becomes a single multi-row INSERT, so tenants() reports per statement.
+	// Both kinds are exercised, one request each.
+	for _, body := range []string{
+		`[{"event":"error","properties":{"error_message":"boom"},"timestamp":1750000000000,"distinct_id":"u"}]`,
+		`[{"event":"navigation","properties":{"path":"/pricing"},"timestamp":1750000000000,"distinct_id":"u"}]`,
+	} {
+		code, res := postBody(t, app, "/v1/event/collect", body, guest)
+		if code != http.StatusOK || res.Accepted != 1 {
+			t.Fatalf("guest POST = %d %+v, want 200 accepted:1 (admitted and written)", code, res)
+		}
+	}
+	got := w.tenants(t)
+	if len(got) != 2 {
+		t.Fatalf("wrote %d statements, want 2", len(got))
+	}
+	for _, g := range got {
+		if g == publicTenant {
+			t.Errorf("a guest's row was filed under %q, where its org cannot read it", publicTenant)
+		}
+		if g != "acme" {
+			t.Errorf("tenant = %q, want acme (the SIGNED org)", g)
+		}
+	}
+}
+
+// TestReducedLaneAttributesToTheSignedAccount is N-5. The projection strips revenue,
+// personId, groupId and the event name — but distinct_id survives, because it is the
+// join key that makes the lane useful. The team SPA puts an ACCOUNT IDENTIFIER there, so
+// on a real org a guest could attribute pageviews and errors to a named colleague. The
+// fix is not to strip it but to stop taking it from the caller.
+func TestReducedLaneAttributesToTheSignedAccount(t *testing.T) {
+	t.Setenv("SERVER_SECRET", "a-real-team-secret")
+	roomyRate(t)
+	w := fakeWarehouse(t)
+	app := mountApp(t)
+	guest := teamToken(t, "acme", "a-real-team-secret",
+		map[string]any{"role": token.RoleGuest}, time.Now().Add(time.Hour).Unix())
+
+	// The forgery: claim a colleague as the person, and a colleague's anonymous alias.
+	const victim = "ada@acme.example"
+	body := `[{"event":"navigation","properties":{"path":"/salaries","$anonymous_id":"anon-of-ada"},` +
+		`"timestamp":1750000000000,"distinct_id":"` + victim + `"}]`
+	if code, res := postBody(t, app, "/v1/event/collect", body, guest); code != http.StatusOK || res.Accepted != 1 {
+		t.Fatalf("guest POST = %d %+v, want 200 accepted:1", code, res)
+	}
+	if got := w.col(t, 0, "distinct_id"); got == victim {
+		t.Fatalf("the guest attributed its pageview to %q — person-level forgery inside a real tenant", victim)
+	}
+	if got := w.col(t, 0, "distinct_id"); got != teamAccount {
+		t.Errorf("distinct_id = %v, want the SIGNED account %q", got, teamAccount)
+	}
+	// The pre-login alias is cleared: it exists to stitch an anonymous session to a
+	// person later, and there is nothing to stitch when the person is already known.
+	if got := w.col(t, 0, "anonymous_id"); got != "" {
+		t.Errorf("anonymous_id = %v, want empty on the attributed lane", got)
+	}
+
+	// The FULL lane is unchanged: a member is trusted to attribute its own writes, so
+	// the distinct_id it sends is the one stored. Without this, the test above would
+	// pass for a version that clobbered identity everywhere.
+	member := teamToken(t, "acme", "a-real-team-secret", nil, time.Now().Add(time.Hour).Unix())
+	w2 := fakeWarehouse(t)
+	if code, res := postBody(t, app, "/v1/event/collect", body, member); code != http.StatusOK || res.Accepted != 1 {
+		t.Fatalf("member POST = %d %+v, want 200 accepted:1", code, res)
+	}
+	if got := w2.col(t, 0, "distinct_id"); got != victim {
+		t.Errorf("member distinct_id = %v, want %q — the full lane must not be rewritten", got, victim)
+	}
+}
+
+// TestAnonymousLaneIdentityIsUntouched: the two genuinely anonymous callers have no
+// signed identity to substitute, so attribute() must not reach them. A credential-less
+// beacon keeps the distinct_id it sent (into $public, where it means nothing).
+func TestAnonymousLaneIdentityIsUntouched(t *testing.T) {
+	t.Setenv("SERVER_SECRET", "a-real-team-secret")
+	roomyRate(t)
+	w := fakeWarehouse(t)
+	app := mountApp(t)
+	body := `[{"event":"navigation","properties":{"path":"/pricing"},"timestamp":1750000000000,"distinct_id":"visitor-7"}]`
+	if code, res := postBody(t, app, "/v1/event/collect", body, ""); code != http.StatusOK || res.Accepted != 1 {
+		t.Fatalf("anonymous POST = %d %+v, want 200 accepted:1", code, res)
+	}
+	if got := w.tenants(t); len(got) != 1 || got[0] != publicTenant {
+		t.Fatalf("anonymous tenant = %v, want [%s]", got, publicTenant)
+	}
+	if got := w.col(t, 0, "distinct_id"); got != "visitor-7" {
+		t.Errorf("anonymous distinct_id = %v, want visitor-7 (nobody signed for it, so there is nothing to substitute)", got)
+	}
+}
