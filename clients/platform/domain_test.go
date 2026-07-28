@@ -45,7 +45,7 @@ func TestValidateOrgDomainsBindsToOrg(t *testing.T) {
 // into the operator CR ingress).
 func TestHTTPCrossOrgDomainRejected(t *testing.T) {
 	app := mountApp(t)
-	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
+	seedProject(t, app, "maxpower", "web")
 	code, _ := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
 		"name": "api", "source": "image", "image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1"},
 		"domains": []string{"api.acme.hanzo.app"}, // acme's subtree — hijack attempt
