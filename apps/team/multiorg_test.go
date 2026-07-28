@@ -245,8 +245,8 @@ func TestSelectWorkspaceCrossOrg(t *testing.T) {
 	// The workspace token carries the NON-home org (maxpower), so the transactor
 	// routes to the right tenant.
 	dec, err := token.Decode(sw.Result.Token, testSecret, true)
-	if err != nil || dec.Extra["org"] != "maxpower" {
-		t.Fatalf("workspace token org = %v (err %v), want maxpower", dec.Extra["org"], err)
+	if err != nil || dec.Org() != "maxpower" {
+		t.Fatalf("workspace token org = %v (err %v), want maxpower", dec.Org(), err)
 	}
 }
 

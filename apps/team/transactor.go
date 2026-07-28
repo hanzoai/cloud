@@ -88,7 +88,7 @@ func (srv *transServer) serveWS(c *zip.Ctx) error {
 	if err != nil || t.Account == "" || t.Workspace == "" {
 		return zip.ErrUnauthorized("invalid workspace token")
 	}
-	org, _ := t.Extra["org"].(string)
+	org := t.Org()
 	sess := &session{
 		server:    srv,
 		store:     srv.store,

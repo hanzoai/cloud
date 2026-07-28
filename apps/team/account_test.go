@@ -41,7 +41,7 @@ func TestTokenRoundTrip(t *testing.T) {
 	if dec.Account != account {
 		t.Fatalf("account = %s want %s", dec.Account, account)
 	}
-	if dec.Extra["org"] != "acme" {
+	if dec.Org() != "acme" {
 		t.Fatalf("org claim lost: %v", dec.Extra)
 	}
 }
