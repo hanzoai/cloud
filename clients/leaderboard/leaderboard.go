@@ -39,7 +39,6 @@ import (
 	"strings"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/hanzoai/cloud/clients/principal"
@@ -53,7 +52,7 @@ var (
 	queryDatastore   = datastore.Query
 	execDatastore    = datastore.Exec
 	datastoreEnabled = datastore.Ready
-	ensureUsageTable = aiobject.EnsureCloudUsageTable
+	ensureUsageTable = datastore.EnsureCloudUsage
 	nowFn            = time.Now
 )
 

@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud/clients/datastore"
 )
 
@@ -502,7 +501,7 @@ func (s *Store) HanzoTotals(ctx context.Context, org string, from, to time.Time)
 	if !datastore.Ready() {
 		return nil, false
 	}
-	if err := aiobject.EnsureCloudUsageTable(ctx); err != nil {
+	if err := datastore.EnsureCloudUsage(ctx); err != nil {
 		return nil, false
 	}
 	q, args := hanzoQuery(org, from, to)

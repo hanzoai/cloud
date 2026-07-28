@@ -135,7 +135,7 @@ type firecrawlData struct {
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
-// crawlRequest / crawlResult mirror Hanzo Crawl's /crawl contract
+// crawlRequest / CrawlResult mirror Hanzo Crawl's /crawl contract
 // (ai/object/crawl4ai.go).
 type crawlRequest struct {
 	Urls []string `json:"urls"`
@@ -176,7 +176,10 @@ func (m *markdownField) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-type crawlResult struct {
+// CrawlResult is one URL's outcome. Exported because it is the value Crawl
+// hands out; Markdown keeps its shape-polymorphic decoder, so a consumer reads it
+// as string(r.Markdown) exactly like scrapeHandler does below.
+type CrawlResult struct {
 	URL      string                 `json:"url"`
 	Markdown markdownField          `json:"markdown"`
 	Success  bool                   `json:"success"`
@@ -191,7 +194,7 @@ type crawlResult struct {
 type crawlResponse struct {
 	Status  string        `json:"status"`
 	Success bool          `json:"success"`
-	Results []crawlResult `json:"results"`
+	Results []CrawlResult `json:"results"`
 }
 
 func scrapeHandler(w http.ResponseWriter, r *http.Request) {
@@ -229,9 +232,16 @@ func scrapeHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// crawl fetches one URL via Hanzo Crawl and returns its markdown result.
-func crawl(target string) (*crawlResult, error) {
-	body, _ := json.Marshal(crawlRequest{Urls: []string{target}})
+// Crawl fetches a batch of URLs through Hanzo Crawl in ONE request and returns
+// every per-result the service produced, in service order. /crawl is natively a
+// batch endpoint, so this is the primitive and the single-URL crawl below is its
+// len==1 case — one dial path, one auth path, one decode path.
+//
+// Per-URL failure is reported IN BAND (Success=false on that result), not as an
+// error: a dead page must not discard the pages that did come back. The error
+// return is reserved for the call itself failing.
+func Crawl(urls []string) ([]CrawlResult, error) {
+	body, _ := json.Marshal(crawlRequest{Urls: urls})
 	req, err := http.NewRequest(http.MethodPost, crawlEndpoint()+"/crawl", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -253,10 +263,19 @@ func crawl(target string) (*crawlResult, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
 		return nil, err
 	}
-	if len(cr.Results) == 0 {
+	return cr.Results, nil
+}
+
+// crawl fetches one URL via Hanzo Crawl and returns its markdown result.
+func crawl(target string) (*CrawlResult, error) {
+	res, err := Crawl([]string{target})
+	if err != nil {
+		return nil, err
+	}
+	if len(res) == 0 {
 		return nil, fmt.Errorf("hanzo crawl returned no results for %s", target)
 	}
-	return &cr.Results[0], nil
+	return &res[0], nil
 }
 
 // ── shared JSON writers ─────────────────────────────────────────────────────

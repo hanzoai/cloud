@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
@@ -22,7 +21,7 @@ import (
 // ported to pure Go over our datastore; none of Langfuse's commercial (ee/) code
 // is used.
 //
-// TWO datastore sources, ONE shared client (aiobject peer), both READ-ONLY:
+// TWO datastore sources, ONE shared client (clients/datastore), both READ-ONLY:
 //   - hanzo.cloud_usage — the proven spend/usage ledger (ai/object-owned; the SAME
 //     table ListObservations reads). Every production generation lands here, so it
 //     is the AUTHORITATIVE source for counts, tokens, cost, errors, model & user
@@ -267,7 +266,7 @@ func (t *dsTelemetry) Metrics(ctx context.Context, f MetricsFilter) (Board, erro
 	if !datastore.Ready() {
 		return Board{}, fmt.Errorf("evals telemetry: datastore not connected")
 	}
-	if err := aiobject.EnsureCloudUsageTable(ctx); err != nil {
+	if err := datastore.EnsureCloudUsage(ctx); err != nil {
 		return Board{}, fmt.Errorf("evals telemetry: ensure cloud_usage: %w", err)
 	}
 
