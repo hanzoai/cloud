@@ -141,13 +141,13 @@ func foldException(e CaptureEvent) CaptureEvent {
 // ingest answers POST /v1/ingest — a THIN DEPRECATED ALIAS of the canonical door.
 // Since /v1/event now natively accepts the publishable key (pk-…, via eventTenant)
 // AND the {batch:[…]} wire (via decodeIngest), /v1/ingest is redundant: it delegates
-// to the EXACT canonical handler logic (eventHandle) — the SAME pluggable auth,
-// tolerant decode, error-fold, and ONE write core — differing only in a one-shot
-// deprecation log and the $source=ingest origin tag for the migration signal.
-// Existing pk- callers keep working unchanged; there is ONE implementation.
+// to the EXACT canonical pipeline (handle) — the SAME admission decision, tolerant
+// decode, error-fold, and ONE write core — differing only in a one-shot deprecation
+// log and the $source=ingest origin tag for the migration signal. Existing pk- callers
+// keep working unchanged; there is ONE implementation.
 func ingest(s *cloud.Service[state], c *zip.Ctx) error {
 	deprecated(s, c, "/v1/event")
-	return eventHandle(c, sourceIngest)
+	return handle(c, decodeIngest, sourceIngest)
 }
 
 // errorsLens answers GET /v1/errors — the error-tracking read view: recent
