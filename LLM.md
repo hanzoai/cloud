@@ -593,6 +593,28 @@ routing itself, because that is where a customer's project would leak.
 full-corpus swap (upsert everything, delete what is gone) because the truth lives
 upstream and a re-run must converge.
 
+**A demo and its repo are ONE row.** Both key on `<org>/<name>` and so does the
+index, so the site row used to OVERWRITE its own repo row and take the source link,
+description, language and stars down with it — which is why every `kind=site` row
+carried no `repo`. `corpus` folds instead: the site contributes what is LIVE (url,
+title, last deploy), the repo what is SOURCE. `projects.LiveSites` carries
+`repo_url` and `forked_from` out of the store, so a project that DECLARES its source
+outranks the name match and fork lineage reaches `Entry.Template`. Two repos can
+claim one id too (`hanzoai/ui` vs `hanzo-apps/ui`); `canonical` is a TOTAL order over
+that — ours beats a vendored fork, then stars, then the repo URL — because
+`sourceOrgs` is a map and the alternative is a row that changes its answer between
+syncs.
+
+**`forkable` means we can hand you a public source**, and it has to be able to say
+no or it is a label rather than a filter. It was `true` on all 579 rows and read as
+`c.Query("forkable") == "true"`, so the facet was `{"true": 579}` and
+`?forkable=false` silently meant *no filter*. Now: a repo that is itself a fork of a
+third-party upstream is not ours to hand over, a live demo with no public source has
+nothing to hand over, and a declared `upstream` credit vetoes both. The query is
+tri-state (`boolQuery`/`strconv.ParseBool` — set-true, set-false, unasked; `official`
+rides the same helper) and `facet` counts both sides through the same loop as every
+other dimension. `Entry.Forkable` is NOT `omitempty`: false is an answer.
+
 ## Starter kits (`clients/templates`, `/v1/templates`)
 
 One embedded PUBLIC catalog (read-only; a customer's own templates are the second
