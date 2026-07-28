@@ -38,11 +38,9 @@ package apps
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/zap-proto/zip"
 
 	// External subsystem modules. As of the atomic wave-2 bump they NO LONGER
@@ -61,6 +59,7 @@ import (
 	"github.com/hanzoai/cloud/clients/agent"
 	"github.com/hanzoai/cloud/clients/agents"
 	"github.com/hanzoai/cloud/clients/agentskills"
+	"github.com/hanzoai/cloud/clients/ai"
 	"github.com/hanzoai/cloud/clients/analytics"
 	"github.com/hanzoai/cloud/clients/ask"
 	"github.com/hanzoai/cloud/clients/auditlog"
@@ -78,6 +77,7 @@ import (
 	"github.com/hanzoai/cloud/clients/channels"
 	"github.com/hanzoai/cloud/clients/cloudflare"
 	"github.com/hanzoai/cloud/clients/code"
+	"github.com/hanzoai/cloud/clients/commerce"
 	"github.com/hanzoai/cloud/clients/company"
 	"github.com/hanzoai/cloud/clients/compliance"
 	"github.com/hanzoai/cloud/clients/content"
@@ -115,6 +115,7 @@ import (
 	"github.com/hanzoai/cloud/clients/marketplace"
 	"github.com/hanzoai/cloud/clients/ml"
 	"github.com/hanzoai/cloud/clients/notify"
+
 	// NOTE: clients/o11y is deliberately NOT imported. It is loaded at run time
 	// as a plugin (see the o11y entry in Wire), and this line is the whole reason
 	// that works: an import here would keep its 2.7k-package graph — the
@@ -159,6 +160,7 @@ import (
 	"github.com/hanzoai/cloud/clients/websearch"
 	"github.com/hanzoai/cloud/clients/world"
 	"github.com/hanzoai/cloud/clients/x402"
+	"github.com/hanzoai/cloud/clients/zen"
 	"github.com/hanzoai/cloud/clients/zt"
 
 	// Framework CONTENT modules — pure fixture lanes that carry no HTTP surface and
@@ -262,7 +264,7 @@ func Wire() []cloud.MountSpec {
 		// Embedded commerce plane /v1/commerce/*, /_/commerce/* — the hanzoai/commerce
 		// MODULE via the adapter in commerce.go (un-forked; the in-process
 		// CommerceClient is wired directly in pickCommerceClient).
-		{Name: "commerce", Mount: cloud.Global(mountCommerce), Global: true},
+		{Name: "commerce", Mount: cloud.Global(commerce.Mount), Prefixes: commerce.Prefixes, Global: true},
 		{Name: "licensing", Mount: cloud.Global(licensing.Mount), Global: true},
 		// clients/plan.Mount. Enable id normalized "plans" -> "plan" to match the
 		// package + generated cmd/plan (one subsystem, one name). Its product routes
@@ -419,7 +421,13 @@ func Wire() []cloud.MountSpec {
 		// provider stays on the integrations plane; this plane only MANAGES resources.
 		{Name: "cloudflare", Mount: cloudflare.Mount},
 		{Name: "sbom", Mount: sbom.Mount, OwnsHealth: true},
-		{Name: "team", Mount: team.Mount, Shutdown: cloud.CtxShutdown(team.Shutdown)},
+		// /collaborator (+ /rpc/:documentId) is a ROOT route, not a /v1/team one: the
+		// Team front derives both the Y.js WebSocket and the snapshot RPC from
+		// COLLABORATOR_URL. Declared because a walk cannot tell that one apart from
+		// the group-relative /account, /bots, /billing/* siblings — it must assume a
+		// group, or an app claims /bots for the whole fleet — so the root route is
+		// stated here or it is lost.
+		{Name: "team", Mount: team.Mount, Shutdown: cloud.CtxShutdown(team.Shutdown), Prefixes: []string{"/v1/team", "/collaborator"}},
 		{Name: "settings", Mount: settings.Mount, Shutdown: settings.Shutdown},
 		{Name: "prefs", Mount: prefs.Mount, Shutdown: prefs.Shutdown},
 		{Name: "notify", Mount: notify.Mount, OwnsHealth: true},
@@ -541,8 +549,8 @@ func Wire() []cloud.MountSpec {
 		// c.Next()s everything else to ai. zen owns the zen family; ai owns every
 		// other model and the /v1/models list. Order is load-bearing — Claim must
 		// run before ai's catch-all. (See hip-00NN.)
-		{Name: "zen", Mount: mountZen, Prefixes: []string{"/v1"}},
-		{Name: "ai", Mount: cloud.Global(mountAI), Global: true},
+		{Name: "zen", Mount: zen.Mount, Prefixes: []string{"/v1"}},
+		{Name: "ai", Mount: cloud.Global(ai.Mount), Prefixes: []string{"/v1"}, Global: true},
 		// Runtime wasm/proxy plugins — mounts dead last.
 		{Name: "plugins", Mount: plugin.Mount},
 	}
@@ -567,18 +575,6 @@ func ServeSingle(name string) error {
 	return fmt.Errorf("ServeSingle: unknown app %q — run `hanzo code ls`/`hanzo` for the list", name)
 }
 
-// o11yPlugin says where to find the o11y binary. Its two knobs map 1:1 onto
-// zip.Plugin's own fields, so there is no third notion of "where a plugin is"
-// and nothing to translate:
-//
-//	CLOUD_O11Y_ADDR — already listening there; start nothing, just mount it.
-//	CLOUD_O11Y_BIN  — the binary's path on disk.
-//
-// The default is a file named "o11y" beside the running cloud binary, which is
-// the container layout: both binaries in the image, still one artifact to ship.
-// Resolving it from os.Executable rather than $PATH means a host always loads
-// the o11y it was built and shipped with, not whichever one a PATH happens to
-// find.
 // eager names the subsystems that must start WITH the host rather than on first
 // request, because their work is not request-driven: they own a listener or a
 // background loop, so deferring them means they silently do nothing and the
@@ -591,24 +587,21 @@ var eager = map[string]bool{
 	"o11y":   true, // OTLP collector + trace sink — must be listening from t=0
 	"pubsub": true, // embedded NATS :4222
 	"kafka":  true, // embedded Kafka adaptor :9092
+	// A pure bus consumer: it reads the commerce COMMERCE stream and renders
+	// catalog assets, and registers no route at all. Lazy, its process would
+	// wait for a request that never arrives and the loop would simply never run.
+	"catalogsync": true,
 }
 
-// where resolves which host+binary subsystem name runs on, without naming it twice. The
-// operator points CLOUD_<NAME>_ADDR at an already-listening instance, or
-// CLOUD_<NAME>_BIN at a specific binary; with neither, the binary is a sibling
-// of this executable, which is what makes the shipped layout (one dir, host
-// plus its plugins) work with no configuration at all.
+// where resolves which host+binary subsystem `name` runs on. The resolution
+// rule — CLOUD_<NAME>_ADDR, else CLOUD_<NAME>_BIN, else a sibling of this
+// executable — lives ONCE, in manifest.App.Plugin, because the light host
+// resolves the SAME binaries from the SAME rule out of the generated manifest.
+// A second copy here is exactly how the two come to disagree about where a
+// binary is, and the copy that was here had already drifted: it left Plugin.Name
+// empty and did not fold "-" to "_", so CLOUD_ZERO_TRUST_ADDR was unreadable
+// from this side. This supplies the one fact the manifest cannot — `eager`,
+// declared above, which is also what the generator stamps onto every row.
 func where(name string) zip.Plugin {
-	env := "CLOUD_" + strings.ToUpper(name)
-	if addr := strings.TrimSpace(os.Getenv(env + "_ADDR")); addr != "" {
-		return zip.Plugin{Addr: addr}
-	}
-	path := strings.TrimSpace(os.Getenv(env + "_BIN"))
-	if path == "" {
-		path = name
-		if self, err := os.Executable(); err == nil {
-			path = filepath.Join(filepath.Dir(self), name)
-		}
-	}
-	return zip.Plugin{Path: path, Lazy: !eager[name]}
+	return manifest.App{Name: name, Eager: eager[name]}.Plugin()
 }

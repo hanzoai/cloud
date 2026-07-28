@@ -1,6 +1,6 @@
 // Copyright 2026 Hanzo AI Inc. All Rights Reserved.
 
-package apps
+package zen
 
 import (
 	"context"
