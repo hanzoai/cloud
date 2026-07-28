@@ -89,6 +89,14 @@ func init() {
 		},
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"owner":"admin","name":"z","email":"z@hanzo.ai","displayName":"z","isSuperAdmin":true,"isWhiteLabel":false}}`),
 	})
+	zip.Describe("GET /v1/admin/money", zip.Doc{
+		Description: "moneyBoardHandler answers GET /v1/admin/money.",
+		Fields: map[string]string{
+			"moneyCredits.grantedPrepaidCents": "real money added",
+			"moneyCredits.grantedTrialCents":   "non-cash comps/promos",
+			"moneyRevenue.realizedCents":       "consumed spend, fleet-wide",
+		},
+	})
 	zip.Describe("GET /v1/admin/o11y", zip.Doc{
 		Description: "o11y is the fleet-wide observability board: LLM usage (requests, tokens, cost,\nerrors, top orgs, top models), trace RED metrics (count, p50/p95/p99 latency in ms,\nerror rate, top services), fleet log volume, and the O11yAI generation rollup — all\naggregated across EVERY tenant, with no org filter applied.\n\nEvery signal degrades INDEPENDENTLY. A table that is absent or errors contributes its\nzero value and the read still succeeds, so the board renders exactly what the\nwarehouse holds rather than failing whole because one of four sources is missing.\nSame when the warehouse is not connected at all: the zero board, never a fabricated\nfleet.",
 		Fields: map[string]string{
@@ -163,6 +171,15 @@ func init() {
 		},
 		Example:  json.RawMessage(`{"org":"acme"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"id":"cap_1","limitCents":100000,"enforce":true,"periodSpendCents":42000,"over":false,"warn":false,"resetsAt":"2026-08-01T00:00:00Z"}],"data2":0}`),
+	})
+	zip.Describe("GET /v1/admin/subsystems", zip.Doc{
+		Description: "subsystems answers GET /v1/admin/subsystems. ?range=24h|7d|30d bounds the telemetry\nwindow (default 30d) — the same enum, and the same helpers, as the o11y board.",
+		Fields: map[string]string{
+			"SubsystemsIn.range":        "Range bounds the telemetry window: 24h, 7d or 30d. Anything else, including\nempty, resolves to the default through the same o11yRange the o11y board uses.",
+			"subsystemRow.errorRate":    "percent (0..100)",
+			"subsystemTotals.errorRate": "percent (0..100)",
+			"subsystemTotals.reporting": "enabled AND served ≥1 traced request in the window",
+		},
 	})
 	zip.Describe("GET /v1/admin/usage", zip.Doc{
 		Description: "usage returns the month-to-date money totals: one org's when org names one, else the\nfleet sum across every org a SuperAdmin can see.\n\nseries and byProduct are ALWAYS empty. A daily trend and a per-product split are not\nderivable from the commerce billing API — they live in insights/datastore — so this\nanswers with the honest empty arrays rather than fabricating a shape the console would\nthen chart. Same reason tokens and requests are 0: there is no fleet counter to read.",

@@ -1078,3 +1078,114 @@ func TestVerifyOrgFileMethod(t *testing.T) {
 		t.Fatalf("org-covered deploy not attributed to owner author: %+v", deploys)
 	}
 }
+
+// TestSettlementIsRecordedNotInferred is the disclosure proof for the seeded
+// first-party creators: a FIRST-PARTY author's royalty settles into our own
+// treasury and the payout row SAYS SO, so the books can never read a house
+// settlement as an independent creator's earnings. An external author's credits
+// payout says "wallet", a cash one says "cash". The basis publishes both halves
+// of the split — the creator's share AND the platform's — and where it settles.
+func TestSettlementIsRecordedNotInferred(t *testing.T) {
+	app, s, fc, fg := mount(t) // maintainerOrg = "hanzo"
+	ctx := context.Background()
+
+	// FIRST-PARTY: an external org deploys a Hanzo-maintained repo; the royalty
+	// auto-pays into the treasury.
+	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false,
+		map[string]any{"repoUrl": "https://github.com/hanzoai/chat-starter", "project": "proj-b"})
+	fc.setSpend("orgB", 10000)
+	sweepAndPayout(s)
+	sys, err := s.State.store.GetByOrg(ctx, "hanzo")
+	if err != nil {
+		t.Fatalf("first-party author missing: %v", err)
+	}
+	house, _ := s.State.store.ListPayouts(ctx, sys.ID, 10)
+	if len(house) != 1 || house[0].Settlement != settlementTreasury {
+		t.Fatalf("first-party payout settlement = %+v, want one row settled %q", house, settlementTreasury)
+	}
+
+	// The author-facing basis discloses the split from both sides and names the
+	// settlement destination.
+	b, err := basisOf(s, ctx, sys, "")
+	if err != nil {
+		t.Fatalf("basisOf: %v", err)
+	}
+	if b["shareBps"] != sys.ShareBps || b["platformShareBps"] != bpsDenom-sys.ShareBps {
+		t.Fatalf("basis split = creator %v / platform %v, want %d/%d", b["shareBps"], b["platformShareBps"], sys.ShareBps, bpsDenom-sys.ShareBps)
+	}
+	if b["settlesTo"] != settlementTreasury {
+		t.Fatalf("first-party basis settlesTo = %v, want %q", b["settlesTo"], settlementTreasury)
+	}
+
+	// EXTERNAL: credits → wallet, cash method → cash. Same one payout path.
+	idA, _ := connectOrg(t, app, s, "orgA", "acmedev")
+	fg.setLinked("orgA", "acmedev", "tok_a")
+	fg.setAdmin("tok_a", "acme", "widgets")
+	req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgA", false, map[string]any{"repoUrl": "acme/widgets"})
+	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgC", false, map[string]any{"repoUrl": "acme/widgets", "project": "proj-c"})
+	approve(t, app, idA)
+	fc.setSpend("orgC", 10000)
+	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
+
+	const accrued = 10000 * defaultShareBps / bpsDenom
+	req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true,
+		map[string]any{"amountCents": accrued / 2, "method": "credits"})
+	req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true,
+		map[string]any{"amountCents": accrued / 2, "method": "wire"})
+	ext, _ := s.State.store.ListPayouts(ctx, idA, 10)
+	if len(ext) != 2 {
+		t.Fatalf("external payouts = %d, want 2", len(ext))
+	}
+	got := map[string]string{ext[0].Method: ext[0].Settlement, ext[1].Method: ext[1].Settlement}
+	if got["credits"] != settlementWallet || got["wire"] != settlementCash {
+		t.Fatalf("external settlements = %v, want credits→%s wire→%s", got, settlementWallet, settlementCash)
+	}
+	a, _ := s.State.store.GetByID(ctx, idA)
+	eb, _ := basisOf(s, ctx, a, "")
+	if eb["settlesTo"] != settlementWallet {
+		t.Fatalf("external basis settlesTo = %v, want %q", eb["settlesTo"], settlementWallet)
+	}
+}
+
+// TestEnsureSystemAuthorPromotesExistingConnected: an org that connected as an
+// author BEFORE it became the maintainer org keeps a CONNECTED row, and a
+// connected author never accrues — so "pay ourselves" was silently blocked
+// forever on exactly the deployment that had once used the manual flow. Ensure
+// means ensure: the row is promoted to approved and then actually earns. A
+// SUSPENDED row is left alone: un-suspending is an operator decision.
+func TestEnsureSystemAuthorPromotesExistingConnected(t *testing.T) {
+	t.Run("connected is promoted and earns", func(t *testing.T) {
+		app, s, fc, _ := mount(t) // maintainerOrg = "hanzo"
+		ctx := context.Background()
+		connectOrg(t, app, s, "hanzo", "zeekay")
+		if a, _ := s.State.store.GetByOrg(ctx, "hanzo"); a.Status != StatusConnected {
+			t.Fatalf("precondition: want connected, got %q", a.Status)
+		}
+		req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false,
+			map[string]any{"repoUrl": "https://github.com/hanzoai/chat-starter", "project": "proj-b"})
+		a, err := s.State.store.GetByOrg(ctx, "hanzo")
+		if err != nil || a.Status != StatusApproved {
+			t.Fatalf("maintainer author = %+v (%v), want approved — else it can never earn", a, err)
+		}
+		fc.setSpend("orgB", 10000)
+		sweepAndPayout(s)
+		a, _ = s.State.store.GetByOrg(ctx, "hanzo")
+		if want := int64(10000 * defaultShareBps / bpsDenom); a.AccruedCents != want || a.PaidCents != want {
+			t.Fatalf("accrued=%d paid=%d, want %d/%d", a.AccruedCents, a.PaidCents, want, want)
+		}
+	})
+
+	t.Run("suspended stays suspended", func(t *testing.T) {
+		app, s, _, _ := mount(t)
+		ctx := context.Background()
+		id, _ := connectOrg(t, app, s, "hanzo", "zeekay")
+		if st, body := req(t, app, http.MethodPost, "/v1/admin/authors/"+id+"/suspend", "admin", true, nil); st != http.StatusOK {
+			t.Fatalf("suspend want 200, got %d (%s)", st, body)
+		}
+		req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false,
+			map[string]any{"repoUrl": "https://github.com/hanzoai/chat-starter", "project": "proj-b"})
+		if a, _ := s.State.store.GetByOrg(ctx, "hanzo"); a.Status != StatusSuspended {
+			t.Fatalf("suspended maintainer author was silently reinstated: %q", a.Status)
+		}
+	})
+}

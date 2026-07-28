@@ -30,6 +30,7 @@ func init() {
 		Fields: map[string]string{
 			"VolumeIn.id":       "ID is the DO volume id, from the path.",
 			"VolumeIn.name":     "Name is the snapshot name on the snapshot action. Blank gets a deterministic\n\"<volume>-predelete-<unix>\" so the undo is findable in the DO console.",
+			"VolumeIn.sizeGiB":  "SizeGiB is the target size on the resize action. A volume only ever grows —\nExpandTo is the verdict that refuses a shrink, so this is not validated here.",
 			"VolumeIn.snapshot": "Snapshot is the snapshot-first switch on DELETE. Anything other than the literal\n\"false\" snapshots before destroying — the snapshot IS the undo, so waiving it is\ndeliberate and explicit.",
 		},
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"deleted":true,"name":"acme-data","sizeGiB":200,"freedMonthlyCents":2000,"snapshotId":"snap-01J"}}`),
@@ -37,11 +38,18 @@ func init() {
 	zip.Describe("GET /v1/admin/infra", zip.Doc{
 		Description: "read serves the whole DigitalOcean infrastructure board: droplets, volumes, DOKS\nclusters and load balancers, each cross-referenced against every cluster's live\nKubernetes state so the board can say what is safe to destroy and what is not.\n\nIt is cached for up to a minute because one read is a fan-out over the DO API plus a\nfull pod/PV listing per cluster. Staleness is never load-bearing: every MUTATION\nre-scans from scratch and ignores this cache.\n\nOnly an unusable DO account is a hard failure. A partial read still produces a board,\nwith the failing source named in sources[] — except for clusters and volumes, which\nthe safety verdict depends on; without those the analysis degrades rather than\nclassifying anything it cannot prove.",
 		Fields: map[string]string{
-			"LoadBalancer.service": "Service is the `namespace/name` of the live type=LoadBalancer Service that claims\nthis load balancer, proven from the cluster scan. Non-empty means IN USE.",
-			"Node.mutable":         "Mutable reports whether this droplet may be changed DIRECTLY — deleted or resized.\nOne predicate covers both because one fact decides both: a DOKS node belongs to a\nnode pool, and the pool is the only thing allowed to change it.",
-			"ReadIn.refresh":       "Refresh, when present, forces a full re-scan instead of serving the cached\nsnapshot. Every MUTATION re-scans regardless — this is only for the reader.",
-			"Volume.cluster":       "Cluster/ClusterID are the PROVEN owner — resolved through a PV that names this\nvolume, never through the tag.",
-			"Volume.tagCluster":    "TagCluster is the `k8s:<uuid>` tag. ADVISORY ONLY: it outlives the cluster that\nset it. Shown so the operator can see tag-vs-truth disagree, never acted on.",
+			"Cost.wastedMonthly":     "WastedMonthly is what the fleet pays every month for provisioned-but-empty space on\nthe volumes a kubelet actually measured.\n\nIt is NOT ReclaimableMonthly and must never be added to it. Reclaimable is money a\nbutton on this board collects, by deleting volumes proven to belong to no one.\nWasted is money locked inside volumes that are IN USE and holding live data:\nDigitalOcean can only ever grow a volume, so collecting it means copying a database\nonto a smaller one. See shrinkRecipe.\n\nIt is also a LOWER BOUND — unmeasured volumes contribute nothing.",
+			"LoadBalancer.service":   "Service is the `namespace/name` of the live type=LoadBalancer Service that claims\nthis load balancer, proven from the cluster scan. Non-empty means IN USE.",
+			"Node.mutable":           "Mutable reports whether this droplet may be changed DIRECTLY — deleted or resized.\nOne predicate covers both because one fact decides both: a DOKS node belongs to a\nnode pool, and the pool is the only thing allowed to change it.",
+			"ReadIn.refresh":         "Refresh, when present, forces a full re-scan instead of serving the cached\nsnapshot. Every MUTATION re-scans regardless — this is only for the reader.",
+			"Totals.measuredVolumes": "Fill. MeasuredVolumes/UnmeasuredVolumes are the honesty denominator: UsedGiB and\nWastedGiB describe the measured set ONLY, so a board showing waste must show how\nmuch of the fleet the figure was computed from. Unmeasured capacity contributes\nnothing to either — it is not assumed empty, and it is not assumed full.",
+			"Volume.cluster":         "Cluster/ClusterID are the PROVEN owner — resolved through a PV that names this\nvolume, never through the tag.",
+			"Volume.controller":      "Controller is the workload owning the pod that mounts this volume\n(\"StatefulSet/luxd\"), or \"\" when nothing mounts it. It names who has to act.",
+			"Volume.expandable":      "Expandable/ExpandBlockedReason are the GROW verdict, kept separate from Deletable\nbecause the two ask opposite questions: a volume is deletable when nothing uses it,\nand expandable when something uses it in a way this board can grow completely.",
+			"Volume.hasUsage":        "HasUsage reports whether a kubelet actually MEASURED this volume's filesystem.\n\nFalse means NOT MEASURED. It does NOT mean empty, and the three fields below are\nmeaningless — not zero — when it is false. A reading exists only while a running pod\nhas the volume mounted on a node that answered; a detached, idle or unreferenced\nvolume has none. Rendering an unmeasured volume as \"0 used / 100% wasted\" would\ninvent the single most expensive lie this board could tell, so every consumer must\nbranch on this flag and show unknown.",
+			"Volume.tagCluster":      "TagCluster is the `k8s:<uuid>` tag. ADVISORY ONLY: it outlives the cluster that\nset it. Shown so the operator can see tag-vs-truth disagree, never acted on.",
+			"Volume.usedBytes":       "UsedBytes is the measured filesystem usage. BYTES, not GiB: the volumes this exists\nto catch hold a fraction of a GiB in 200, and rounding that to an integer GiB would\nprint the very 0 the flag above exists to prevent.",
+			"Volume.wastedGiB":       "WastedGiB is provisioned minus measured, in the unit DigitalOcean BILLS: whole GiB\nof the volume's own size, never the filesystem's capacity — a 200 GiB volume carries\na 196 GiB filesystem after format overhead, and the invoice says 200.",
 		},
 		Example:  json.RawMessage(`{"refresh":"1"}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"volumes":[],"nodes":[],"clusters":[],"loadBalancers":[],"sources":[{"name":"do.volumes","ok":true,"rows":2,"lastSync":"2026-07-27T00:00:00Z"}]}}`),
@@ -76,11 +84,21 @@ func init() {
 		Example:  json.RawMessage(`{"cordon":true,"drain":true}`),
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":{"name":"worker-3","schedulable":false,"evicted":7}}`),
 	})
+	zip.Describe("POST /v1/admin/infra/volumes/:id/resize", zip.Doc{
+		Description: "expandVolume grows a volume. GROW ONLY — see Volume.ExpandTo for why the other\ndirection is a data migration this board deliberately refuses to run.\n\nThe MECHANISM follows the volume's owner, because there is exactly one way to grow each\nkind completely. A volume a PVC claims is grown by patching the claim: the CSI driver\nthen resizes the DigitalOcean device AND grows the filesystem on it, leaving claim, PV,\ndevice and filesystem all agreeing. Calling DigitalOcean directly for that volume would\ngrow the device while the PV kept declaring the old capacity and the filesystem never\ngrew at all. One operation, one correct mechanism per owner — not two ways to do it.",
+		Fields: map[string]string{
+			"VolumeIn.id":       "ID is the DO volume id, from the path.",
+			"VolumeIn.name":     "Name is the snapshot name on the snapshot action. Blank gets a deterministic\n\"<volume>-predelete-<unix>\" so the undo is findable in the DO console.",
+			"VolumeIn.sizeGiB":  "SizeGiB is the target size on the resize action. A volume only ever grows —\nExpandTo is the verdict that refuses a shrink, so this is not validated here.",
+			"VolumeIn.snapshot": "Snapshot is the snapshot-first switch on DELETE. Anything other than the literal\n\"false\" snapshots before destroying — the snapshot IS the undo, so waiving it is\ndeliberate and explicit.",
+		},
+	})
 	zip.Describe("POST /v1/admin/infra/volumes/:id/snapshot", zip.Doc{
 		Description: "snapshotVolume takes a point-in-time snapshot of one volume — the undo a delete relies\non, available on its own so an operator can take one before any risky change.\n\nIt re-scans the board first (never the cache) so the volume it snapshots is one that\nexists right now, and audits the outcome either way.",
 		Fields: map[string]string{
 			"VolumeIn.id":       "ID is the DO volume id, from the path.",
 			"VolumeIn.name":     "Name is the snapshot name on the snapshot action. Blank gets a deterministic\n\"<volume>-predelete-<unix>\" so the undo is findable in the DO console.",
+			"VolumeIn.sizeGiB":  "SizeGiB is the target size on the resize action. A volume only ever grows —\nExpandTo is the verdict that refuses a shrink, so this is not validated here.",
 			"VolumeIn.snapshot": "Snapshot is the snapshot-first switch on DELETE. Anything other than the literal\n\"false\" snapshots before destroying — the snapshot IS the undo, so waiving it is\ndeliberate and explicit.",
 		},
 		Example:  json.RawMessage(`{"name":"acme-data-before-migration"}`),

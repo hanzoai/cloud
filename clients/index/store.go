@@ -157,6 +157,45 @@ CREATE INDEX IF NOT EXISTS ix_terms_pk ON terms(org, uid, pk);
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("index migrate: %w", err)
 	}
+	return s.adoptLegacyTables()
+}
+
+// legacyTables maps a table's previous name to its current one. Moving the store
+// FILE is not enough when the tables inside it were renamed too: the rows would
+// still be there, under names nothing queries, and the index would read as empty
+// while every document sat intact one identifier away.
+var legacyTables = map[string]string{
+	"search_indexes": "indexes",
+	"search_docs":    "docs",
+	"search_terms":   "terms",
+}
+
+// adoptLegacyTables carries rows out of a previous schema's tables and drops
+// them. Idempotent: a table that is not there is skipped, and one that is gets
+// emptied by the DROP, so a second boot has nothing left to adopt. INSERT OR
+// IGNORE means rows already written under the current names win — the migration
+// never overwrites live data with older rows.
+func (s *Store) adoptLegacyTables() error {
+	for previous, current := range legacyTables {
+		var name string
+		err := s.db.QueryRow(
+			`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, previous).Scan(&name)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("index migrate: look for %s: %w", previous, err)
+		}
+		// The column lists are identical across the rename, so an unqualified
+		// INSERT…SELECT is exact.
+		if _, err := s.db.Exec(
+			`INSERT OR IGNORE INTO ` + current + ` SELECT * FROM ` + previous); err != nil {
+			return fmt.Errorf("index migrate: adopt %s into %s: %w", previous, current, err)
+		}
+		if _, err := s.db.Exec(`DROP TABLE ` + previous); err != nil {
+			return fmt.Errorf("index migrate: drop %s: %w", previous, err)
+		}
+	}
 	return nil
 }
 
@@ -332,6 +371,28 @@ func (s *Store) Upsert(ctx context.Context, org, uid, primaryKey string, docs []
 		}
 	}
 	return tx.Commit()
+}
+
+// PKs lists an index's primary keys. Reconcile needs the KEYS and not the
+// documents to work out what a full-corpus swap must prune; reading the doc
+// column to throw it away would pull a whole corpus into memory for a set
+// difference.
+func (s *Store) PKs(ctx context.Context, org, uid string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT pk FROM docs WHERE org=? AND uid=?`, org, uid)
+	if err != nil {
+		return nil, fmt.Errorf("index: list keys: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var pk string
+		if err := rows.Scan(&pk); err != nil {
+			return nil, err
+		}
+		out = append(out, pk)
+	}
+	return out, rows.Err()
 }
 
 // Document reads one stored document verbatim.

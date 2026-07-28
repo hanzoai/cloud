@@ -18,16 +18,20 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// These tests cover the project-API-key → org resolution added to captureTenant so
-// keyed, bearer-less SDK traffic (posthog-js / insights-go batch) maps to a tenant.
-// They drive the REAL /v1/insights/e handler through the injectable resolveKeyOrg
-// seam, so no IAM is needed. The observable proxy for "resolved to a tenant" is
-// "passed the tenant gate" — i.e. NOT 403; without a datastore the handler then
-// returns 503, so any non-403 status means captureTenant admitted the request.
+// These tests cover the project-API-key → org resolution on the deprecated PostHog
+// door, so keyed, bearer-less SDK traffic (posthog-js / insights-go batch) maps to a
+// tenant. They drive the REAL /v1/insights/e handler through the injectable
+// resolveKeyOrg seam, so no IAM is needed. The observable proxy for "resolved to a
+// tenant" is "passed the credential gate" — i.e. NOT 403; without a datastore the
+// handler then returns 503, so any non-403 status means the request was admitted.
+//
+// The resolver used to live in a per-door copy (captureTenant) whose last resort was
+// the request Host; every door now shares ONE credential resolver (eventTenant) and
+// there is no host fallback anywhere.
 
 // stubResolver swaps resolveKeyOrg for the test and records the key it was handed,
-// so a test asserts BOTH that projectKey extracted the right key AND that
-// captureTenant honored the resolution. Restored via t.Cleanup.
+// so a test asserts BOTH that projectKey extracted the right key AND that the
+// credential resolver honored the resolution. Restored via t.Cleanup.
 func stubResolver(t *testing.T, fn func(key string) (string, bool)) *string {
 	t.Helper()
 	var got string
@@ -62,10 +66,10 @@ func postKeyed(t *testing.T, app *zip.App, path, host, body string, hdr map[stri
 	return resp.StatusCode
 }
 
-// TestCaptureTenant_KeyExtractionReachesResolver: a project key presented in the
+// TestKeyOrg_KeyExtractionReachesResolver: a project key presented in the
 // body, the ?api_key= query, or the x-api-key header is extracted and handed to the
-// resolver, and a resolved key passes the tenant gate (never 403).
-func TestCaptureTenant_KeyExtractionReachesResolver(t *testing.T) {
+// resolver, and a resolved key passes the credential gate (never 403).
+func TestKeyOrg_KeyExtractionReachesResolver(t *testing.T) {
 	app := mountApp(t)
 	cases := []struct {
 		name, path, body string
@@ -90,10 +94,10 @@ func TestCaptureTenant_KeyExtractionReachesResolver(t *testing.T) {
 	}
 }
 
-// TestCaptureTenant_UnresolvableKeyFailsClosed: a PRESENTED key that does not
+// TestKeyOrg_UnresolvableKeyFailsClosed: a PRESENTED key that does not
 // resolve is refused (403) EVEN on a recognized brand host — it must never fall
-// through to the brand-public partition (that would be a cross-tenant write).
-func TestCaptureTenant_UnresolvableKeyFailsClosed(t *testing.T) {
+// through to a brand's partition (that would be a cross-tenant write).
+func TestKeyOrg_UnresolvableKeyFailsClosed(t *testing.T) {
 	app := mountApp(t)
 	stubResolver(t, func(string) (string, bool) { return "", false }) // nothing resolves
 	code := postKeyed(t, app, "/v1/insights/e", "hanzo.ai",
@@ -103,10 +107,13 @@ func TestCaptureTenant_UnresolvableKeyFailsClosed(t *testing.T) {
 	}
 }
 
-// TestCaptureTenant_AnonBrandHostFallsBack: with NO key presented, anonymous
-// traffic on a recognized brand host still resolves to the brand org (not 403), and
-// the key resolver is never consulted — the key path only triggers on a real key.
-func TestCaptureTenant_AnonBrandHostFallsBack(t *testing.T) {
+// TestKeyOrg_KeylessRequestNeverConsultsResolver: with NO key presented the key
+// resolver is never consulted — the key path triggers only on a real key — and the
+// request is not refused either: it takes the anonymous lane, where its custom event
+// kind is dropped and reported honestly (200), never stored. It used to be admitted
+// here at FULL capability into the brand org named by the Host.
+func TestKeyOrg_KeylessRequestNeverConsultsResolver(t *testing.T) {
+	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
 	stubResolver(t, func(key string) (string, bool) {
 		t.Fatalf("resolver consulted for a keyless request (key=%q)", key)
@@ -114,7 +121,7 @@ func TestCaptureTenant_AnonBrandHostFallsBack(t *testing.T) {
 	})
 	code := postKeyed(t, app, "/v1/insights/e", "hanzo.ai",
 		`{"event":"e","distinct_id":"d"}`, nil)
-	if code == http.StatusForbidden {
-		t.Fatalf("anonymous capture on a recognized brand host must pass the tenant gate, got 403")
+	if code != http.StatusOK {
+		t.Fatalf("keyless PostHog event want 200 (anonymous lane, kind dropped), got %d", code)
 	}
 }

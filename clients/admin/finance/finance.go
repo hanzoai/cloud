@@ -20,6 +20,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/commerce"
 	"github.com/hanzoai/cloud/clients/admin/core"
+	"github.com/hanzoai/cloud/clients/admin/iam"
 	"github.com/zap-proto/zip"
 )
 
@@ -182,8 +183,15 @@ func (o ops) Finance(ctx context.Context, _ *core.None) (*FinanceOut, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := o.s
-	cr := core.CallerCreds(c)
+	data := Compute(o.s, ctx, core.CallerCreds(c))
+	return &FinanceOut{Status: core.OK, Data: &data}, nil
+}
+
+// Compute gathers the cost/revenue inputs and folds them through ComputeFinance. It is
+// split out of the handler so the consolidated money board (/v1/admin/money) reports
+// the SAME infrastructure cost and margin this endpoint serves — one aggregation, two
+// views. (ComputeFinance stays the PURE fold; this is the I/O half in front of it.)
+func Compute(s *cloud.Service[core.State], ctx context.Context, cr iam.Creds) FinanceData {
 	now := time.Now().UTC().Format(time.RFC3339)
 	period := time.Now().UTC().Format("2006-01")
 
@@ -278,13 +286,13 @@ func (o ops) Finance(ctx context.Context, _ *core.None) (*FinanceOut, error) {
 		}
 	}
 
-	data := ComputeFinance(FinanceInput{
+	return ComputeFinance(FinanceInput{
 		Cost:        cost,
 		Revenue:     rev,
 		GeneratedAt: now,
 		Sources:     sources,
 	})
-	return &FinanceOut{Status: core.OK, Data: &data}, nil
+
 }
 
 // doHistory reads DO billing history into the burn-down series (best-effort: a failure

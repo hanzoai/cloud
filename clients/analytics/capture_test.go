@@ -238,20 +238,47 @@ func doBody(t *testing.T, app *zip.App, method, path, user, org, body string) (i
 	return resp.StatusCode, b
 }
 
-func TestCapture_NoPrincipalForbidden(t *testing.T) {
+// TestCapture_NoPrincipalGetsAnonymousLane: a credential-less POST to a deprecated
+// alias is no longer refused outright — it takes the SAME anonymous lane the canonical
+// door has always taken, because the aliases speak the same wire and admission is now
+// decided by trust level rather than per door. A pageview is admitted (503, datastore
+// down) under the reserved public tenant, and everything beyond the allowlist is
+// dropped, which is what these routes used to get WRONG in the other direction: they
+// resolved a REAL brand org from the Host and admitted the lot.
+func TestCapture_NoPrincipalGetsAnonymousLane(t *testing.T) {
+	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
 	for _, p := range capturePaths {
-		if code, _ := doBody(t, app, http.MethodPost, p, "", "", `{"batch":[{"type":"pageview"}]}`); code != http.StatusForbidden {
-			t.Fatalf("no-principal POST %s want 403, got %d", p, code)
+		if code, body := doBody(t, app, http.MethodPost, p, "", "", `{"batch":[{"type":"pageview"}]}`); code != http.StatusServiceUnavailable {
+			t.Fatalf("no-principal POST %s want 503 (anonymous lane, admitted), got %d (%s)", p, code, body)
+		}
+		code, body := doBody(t, app, http.MethodPost, p, "", "", `{"batch":[{"type":"event","event":"order_completed","revenue":99}]}`)
+		if code != http.StatusOK {
+			t.Fatalf("no-principal commerce POST %s want 200 all-dropped, got %d (%s)", p, code, body)
+		}
+		if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
+			t.Fatalf("no-principal commerce POST %s receipt = %+v, want accepted:0 dropped:1", p, r)
 		}
 	}
 }
 
-func TestCapture_ForgedOrgWithoutBearerForbidden(t *testing.T) {
+// TestCapture_ForgedOrgWithoutBearerBuysNothing: a raw X-Org-Id with no validated
+// principal is the cross-tenant forge. It is not refused any more (the request is
+// anonymous, and anonymous traffic is admitted), but it buys NOTHING: the anonymous
+// tenant is server-chosen, so the forged org cannot be the one a row lands in
+// (TestAdmitPublic_DoorOwnsTheTenant), and the projection strips every field that
+// could name the victim anyway.
+func TestCapture_ForgedOrgWithoutBearerBuysNothing(t *testing.T) {
+	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
 	for _, p := range capturePaths {
-		if code, _ := doBody(t, app, http.MethodPost, p, "", "maxpower", `{"batch":[{"type":"pageview"}]}`); code != http.StatusForbidden {
-			t.Fatalf("forged-org-no-bearer POST %s want 403, got %d", p, code)
+		code, body := doBody(t, app, http.MethodPost, p, "", "maxpower",
+			`{"batch":[{"type":"event","event":"steal","groupId":"maxpower","personId":"victim","revenue":1}]}`)
+		if code != http.StatusOK {
+			t.Fatalf("forged-org-no-bearer POST %s want 200 all-dropped, got %d (%s)", p, code, body)
+		}
+		if r := receipt(t, body); r.Accepted != 0 || r.Dropped != 1 {
+			t.Fatalf("forged-org-no-bearer POST %s receipt = %+v, want accepted:0 dropped:1", p, r)
 		}
 	}
 }
@@ -318,29 +345,24 @@ func doHost(t *testing.T, app *zip.App, path, user, org, host, body string) (int
 	return resp.StatusCode, b
 }
 
-func TestCapture_AnonymousBrandHostAccepted(t *testing.T) {
+// TestCapture_HostIsNotATenant: marketing traffic on a recognized brand Host is still
+// ACCEPTED (503 — admitted, datastore down), so nothing external breaks; what changed is
+// that the Host no longer picks the TENANT. Anonymous traffic lands under the reserved
+// public tenant whatever the Host says, and an UNRECOGNIZED Host now behaves exactly
+// like a recognized one — the two used to differ (403 vs. a real brand org), which is
+// precisely how a caller-settable header ended up selecting a real partition.
+func TestCapture_HostIsNotATenant(t *testing.T) {
+	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := mountApp(t)
-	// No principal, but a recognized brand Host → anonymous capture is accepted
-	// and attributed to the brand-public org. It reaches requireDatastore (503
-	// here, datastore down) rather than 403 — proving the tenant resolved.
-	code, _ := doHost(t, app, "/v1/analytics", "", "", "hanzo.ai", `{"batch":[{"type":"pageview"}]}`)
-	if code != http.StatusServiceUnavailable {
-		t.Fatalf("anonymous brand-host capture want 503 (accepted, datastore down), got %d", code)
-	}
-	// The tracker beacon alias must accept the same anonymous brand-host traffic.
-	code, _ = doHost(t, app, "/v1/tracker", "", "", "app.lux.cloud", `{"batch":[{"type":"pageview"}]}`)
-	if code != http.StatusServiceUnavailable {
-		t.Fatalf("anonymous brand-host beacon want 503, got %d", code)
-	}
-}
-
-func TestCapture_AnonymousUnknownHostForbidden(t *testing.T) {
-	app := mountApp(t)
-	// An unrecognized Host with no principal must be refused — anonymous events
-	// are never dumped into a default org.
-	code, _ := doHost(t, app, "/v1/analytics", "", "", "evil.example.com", `{"batch":[{"type":"pageview"}]}`)
-	if code != http.StatusForbidden {
-		t.Fatalf("anonymous unknown-host capture want 403, got %d", code)
+	for _, tc := range []struct{ path, host string }{
+		{"/v1/analytics", "hanzo.ai"},
+		{"/v1/tracker", "app.lux.cloud"},
+		{"/v1/analytics", "evil.example.com"}, // an unknown Host is treated the same
+		{"/v1/tracker", "evil.example.com"},
+	} {
+		if code, body := doHost(t, app, tc.path, "", "", tc.host, `{"batch":[{"type":"pageview"}]}`); code != http.StatusServiceUnavailable {
+			t.Fatalf("anonymous pageview %s on host %q want 503 (admitted), got %d (%s)", tc.path, tc.host, code, body)
+		}
 	}
 }
 

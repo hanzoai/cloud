@@ -72,31 +72,9 @@
         "tags": [
           "platform"
         ]
-      },
-      "post": {
-        "operationId": "post_v1_platform_projects",
-        "tags": [
-          "platform"
-        ]
       }
     },
     "/v1/platform/projects/{project}": {
-      "delete": {
-        "operationId": "delete_v1_platform_projects_by_project",
-        "tags": [
-          "platform"
-        ],
-        "parameters": [
-          {
-            "name": "project",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
       "get": {
         "operationId": "get_v1_platform_projects_by_project",
         "tags": [
