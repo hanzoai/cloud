@@ -287,11 +287,69 @@ func handle(c *zip.Ctx, dec decode, source string) error {
 	return publicIngest(c, dec, publicTenant, source)
 }
 
-// eventIngest answers POST /v1/event — the ONE canonical ingestion front door.
-// Capability is resolved fail-closed by handle (bearer | pk- | access key ⇒ full;
-// nothing ⇒ the anonymous projection); the body is Event | [Event] | {batch}; every
-// admitted event flows through the ONE write core into the ONE hanzo.events table,
-// tagged source=event.
-func eventIngest(s *cloud.Service[state], c *zip.Ctx) error {
-	return handle(c, decodeIngest, sourceEvent)
+// door is one ingest door: a PATH bound to the WIRE it speaks. Capability is not a
+// field and cannot become one — handle decides it, once, for every door.
+type door struct {
+	path   string
+	decode decode
+	source string
+}
+
+// doors is THE ingest surface: the ONE place a door is declared, and the ONE list
+// both consumers derive from. routes (analytics.go) registers exactly these paths;
+// installHostCarve hands sites exactly these paths bound to exactly these wires. So
+// "what is an ingest door" has a single answer, and the router and the site-host
+// carve cannot hold different ones.
+//
+// They used to, because the answer was written three times — the route table, sites'
+// analyticsPaths literal, and a path switch inside the carve — and the copies had
+// already drifted: /v1/tracker and /v1/ingest were routed doors that sites did not
+// name, so the same beacon was admitted (503, datastore down) on an API host and
+// refused (405) on a site host. Nothing decided that; two lists just disagreed.
+//
+// TWO WIRES, and no more — the canonical one and PostHog's:
+//
+//   - /v1/event — the canonical door and the canonical wire (Event | [Event] |
+//     {batch:[…]}), which every current Hanzo client emits.
+//   - /v1/insights/e — the PostHog wire. External PostHog SDKs emit it and
+//     insights.hanzo.ai rewrites every PostHog ingest path onto it, so no
+//     canonical-wire door can serve those callers. A second WIRE, not a second name
+//     for the first.
+//
+// The last three are SUNSETTING: they speak the canonical wire under an older name,
+// so they are aliases and the target is /v1/event. They are still here because they
+// still carry traffic, which is a caller fact and not a design opinion:
+//
+//   - @hanzo/capture (the SDK @hanzo/event replaced) POSTs /v1/analytics and beacons
+//     /v1/tracker on unload. It is a PUBLISHED npm package, so retiring it in our
+//     repos does not retire the bundles already serving it.
+//   - /v1/analytics/batch is a published contract: openapi analytics_batch, the
+//     generated python SDK, and `hanzo analytics batch` in the CLI.
+//
+// $source is what closes them. Every row this package writes carries the door it
+// arrived through, so "has the alias stopped being used" is a warehouse query
+// (properties.$source = 'capture') rather than a guess — and when that count is zero
+// the entries below are deleted, which by construction also drops them from the
+// routes and from the site-host carve.
+var doors = []door{
+	{path: "/v1/event", decode: decodeIngest, source: sourceEvent},
+	{path: "/v1/insights/e", decode: decodeInsights, source: sourcePostHog},
+	{path: "/v1/analytics", decode: decodeIngest, source: sourceCapture},
+	{path: "/v1/analytics/batch", decode: decodeIngest, source: sourceCapture},
+	{path: "/v1/tracker", decode: decodeIngest, source: sourceCapture},
+}
+
+// ingest is the door's API-host handler: admission (handle) over the door's wire.
+// Capability is resolved fail-closed there — bearer | pk- | access key ⇒ full;
+// presented-but-unresolvable ⇒ 403; nothing ⇒ the anonymous projection.
+func (d door) ingest(_ *cloud.Service[state], c *zip.Ctx) error {
+	return handle(c, d.decode, d.source)
+}
+
+// anon is the door's SITE-HOST handler: the anonymous lane directly, with the
+// resolved Site's org as the tenant. It does not consult handle because there is
+// nothing to consult — sites.Middleware runs before the identity boundary, so no
+// credential on a site host has been validated by anything (installHostCarve).
+func (d door) anon(org string, c *zip.Ctx) error {
+	return publicIngest(c, d.decode, org, d.source)
 }

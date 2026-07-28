@@ -24,7 +24,9 @@ type captureHostHandler struct {
 func (h *captureHostHandler) handle(org string, c *zip.Ctx) error {
 	h.mu.Lock()
 	h.orgs = append(h.orgs, org)
-	h.paths = append(h.paths, c.Path())
+	// CLONED: c.Path() is a zero-copy view into the reused fasthttp buffer, so a
+	// retained one reads as another request's path by the time a failure prints it.
+	h.paths = append(h.paths, strings.Clone(c.Path()))
 	h.mu.Unlock()
 	c.SetHeader("X-Carve", h.kind)
 	return c.String(http.StatusOK, "ok")
@@ -50,34 +52,76 @@ func postReq(host, path, body string) *http.Request {
 	return req
 }
 
-// TestIsAnalyticsPath pins the ingest-path predicate as an EXACT SET: the canonical
-// door /v1/event plus the deprecated beacon ingest paths, and nothing else. Everything
-// else on a site host falls through to the static serve.
+// carvePaths is the FIXTURE ingest set these tests install. sites no longer holds an
+// ingest-path literal of its own — the package that owns ingest hands it one
+// (SetAnalyticsHost) — so the contract under test here is not "is this list right",
+// it is "carve EXACTLY the paths you were handed, on POST, and nothing else". The
+// values are the real doors only so the table reads familiarly; every assertion below
+// is about set-exactness against whatever was installed.
+var carvePaths = []string{"/v1/event", "/v1/analytics", "/v1/analytics/batch", "/v1/tracker", "/v1/insights/e"}
+
+// carveSet binds one handler to carvePaths, the shape SetAnalyticsHost takes: the
+// path set and the dispatch are ONE map, so a path is carved iff it has a handler.
+func carveSet(h func(string, *zip.Ctx) error) map[string]func(string, *zip.Ctx) error {
+	m := make(map[string]func(string, *zip.Ctx) error, len(carvePaths))
+	for _, p := range carvePaths {
+		m[p] = h
+	}
+	return m
+}
+
+// TestMiddlewareCarvesExactlyTheInstalledSet pins the carve as an EXACT SET, in both
+// directions, against the live middleware rather than a helper: every installed path
+// carves, and every path NOT installed falls through to the static serve.
 //
 // The READ lenses are the point of the exact set. `HasPrefix(p, "/v1/analytics")` also
 // matched /v1/analytics/overview|timeseries|top|health, leaving the carve's POST check
 // as the only thing keeping a read path out of the beacon handler — so a lens's
-// exposure hung on the verb it happened to be mounted under. They are OUT of the set
-// now, and stay out even if one grows a POST.
-func TestIsAnalyticsPath(t *testing.T) {
-	yes := []string{"/v1/event", "/v1/analytics", "/v1/analytics/batch", "/v1/insights/e"}
-	for _, p := range yes {
-		if !isAnalyticsPath(p) {
-			t.Errorf("isAnalyticsPath(%q) = false, want true", p)
+// exposure hung on the verb it happened to be mounted under. They are OUT of the set,
+// and stay out even if one grows a POST — which is what the negative half proves.
+//
+// The negative half is also the paired failure for the lookup itself: widen the carve
+// to a prefix match, or fall back to a default handler on a miss, and /v1/analytics/
+// overview or /v1/analytics/anything starts carving and this test goes red.
+func TestMiddlewareCarvesExactlyTheInstalledSet(t *testing.T) {
+	fr := &fakeResolver{found: true, site: Site{Org: "hanzo", Slug: "yadota", Bucket: "b", Prefix: "hanzo/yadota", Status: "live"}}
+	SetResolver(fr)
+	defer SetResolver(nil)
+	h := &captureHostHandler{kind: "analytics"}
+	SetAnalyticsHost(carveSet(h.handle))
+	defer SetAnalyticsHost(nil)
+	app := newTestApp(testServer())
+
+	carved := func(p string) bool {
+		resp, err := app.Fiber().Test(postReq("yadota.hanzo.app", p, beaconBody))
+		if err != nil {
+			t.Fatalf("POST %s: %v", p, err)
+		}
+		return resp.Header.Get("X-Carve") == "analytics"
+	}
+	for _, p := range carvePaths {
+		if !carved(p) {
+			t.Errorf("POST %s did not carve — an installed door must be carved", p)
 		}
 	}
-	no := []string{
+	for _, p := range []string{
 		// the read lenses — never ingest, whatever verb they carry
 		"/v1/analytics/overview", "/v1/analytics/timeseries", "/v1/analytics/top", "/v1/analytics/health",
-		// no prefix match: a future /v1/analytics/* route is out by default
+		// no prefix match: a /v1/analytics/* route that is not a door is out by default
 		"/v1/analytics/anything", "/v1/analytics/batch/extra", "/v1/eventx", "/v1/insights/e/extra",
-		"/v1/base", "/v1/base/collections", "/v1/tracker",
+		"/v1/tracker/projects", "/v1/ingest", "/v1/base", "/v1/base/collections",
+		// byte-exact on the RAW target: a near-miss spelling of a real door fails
+		// to the static serve, never into ingest (analyticsIngest).
+		"/v1/%65vent", "/v1/event/", "//v1/event", "/v1/./event",
 		"/v1/insights", "/v1/insights/events", "/v1/insights/health", "/", "/index.html",
-	}
-	for _, p := range no {
-		if isAnalyticsPath(p) {
-			t.Errorf("isAnalyticsPath(%q) = true, want false", p)
+	} {
+		if carved(p) {
+			t.Errorf("POST %s carved — only an installed door may be carved", p)
 		}
+	}
+	_, paths := h.seen()
+	if len(paths) != len(carvePaths) {
+		t.Fatalf("carve fired %d times, want exactly %d (one per installed door): %v", len(paths), len(carvePaths), paths)
 	}
 }
 
@@ -90,8 +134,8 @@ func TestMiddlewareAnalyticsCarveReadLensPostNotHijacked(t *testing.T) {
 	SetResolver(fr)
 	defer SetResolver(nil)
 	h := &captureHostHandler{kind: "analytics"}
-	SetAnalyticsHostHandler(h.handle)
-	defer SetAnalyticsHostHandler(nil)
+	SetAnalyticsHost(carveSet(h.handle))
+	defer SetAnalyticsHost(nil)
 	app := newTestApp(testServer())
 
 	for _, p := range []string{"/v1/analytics/overview", "/v1/analytics/timeseries", "/v1/analytics/top", "/v1/analytics/health"} {
@@ -116,11 +160,11 @@ func TestMiddlewareAnalyticsCarveSlugHost(t *testing.T) {
 	SetResolver(fr)
 	defer SetResolver(nil)
 	h := &captureHostHandler{kind: "analytics"}
-	SetAnalyticsHostHandler(h.handle)
-	defer SetAnalyticsHostHandler(nil)
+	SetAnalyticsHost(carveSet(h.handle))
+	defer SetAnalyticsHost(nil)
 	app := newTestApp(testServer())
 
-	for _, p := range []string{"/v1/event", "/v1/analytics", "/v1/analytics/batch", "/v1/insights/e"} {
+	for _, p := range carvePaths {
 		resp, err := app.Fiber().Test(postReq("yadota.hanzo.app", p, beaconBody))
 		if err != nil {
 			t.Fatalf("POST %s: %v", p, err)
@@ -133,8 +177,8 @@ func TestMiddlewareAnalyticsCarveSlugHost(t *testing.T) {
 		}
 	}
 	orgs, paths := h.seen()
-	if len(orgs) != 4 {
-		t.Fatalf("analytics handler invoked %d times, want 4 (%v)", len(orgs), paths)
+	if len(orgs) != len(carvePaths) {
+		t.Fatalf("analytics handler invoked %d times, want %d (%v)", len(orgs), len(carvePaths), paths)
 	}
 	for i, o := range orgs {
 		if o != "hanzo" {
@@ -150,8 +194,8 @@ func TestMiddlewareAnalyticsCarveCustomDomain(t *testing.T) {
 	SetResolver(fr)
 	defer SetResolver(nil)
 	h := &captureHostHandler{kind: "analytics"}
-	SetAnalyticsHostHandler(h.handle)
-	defer SetAnalyticsHostHandler(nil)
+	SetAnalyticsHost(carveSet(h.handle))
+	defer SetAnalyticsHost(nil)
 	app := newTestApp(selfServer())
 
 	resp, err := app.Fiber().Test(postReq("yadota.tech", "/v1/analytics", beaconBody))
@@ -170,31 +214,39 @@ func TestMiddlewareAnalyticsCarveCustomDomain(t *testing.T) {
 	}
 }
 
-// TestMiddlewareAnalyticsCarveGetServesStatic: a GET on an ingest path is NOT
-// hijacked — the POST gate lets it fall to the static serve (X-Hanzo-Site set,
-// carve never fired). This is what keeps the read-lens surface uninvolved.
+// TestMiddlewareAnalyticsCarveGetServesStatic: a GET is NOT hijacked — the POST gate
+// lets it fall to the static serve (X-Hanzo-Site set, carve never fired).
+//
+// It GETs an INSTALLED DOOR, which is the only way this test can see the POST gate at
+// all. It used to GET /v1/analytics/overview — a read lens, which is not in the carve
+// set — so the path lookup alone refused it and the method check was never exercised:
+// deleting the POST gate outright left this test green. A GET of a real door is
+// refused by the method check and nothing else, so now it is the assertion.
 func TestMiddlewareAnalyticsCarveGetServesStatic(t *testing.T) {
 	fr := &fakeResolver{found: true, site: Site{Org: "hanzo", Slug: "yadota", Bucket: "b", Prefix: "hanzo/yadota", Status: "live"}}
 	SetResolver(fr)
 	defer SetResolver(nil)
 	h := &captureHostHandler{kind: "analytics"}
-	SetAnalyticsHostHandler(h.handle)
-	defer SetAnalyticsHostHandler(nil)
+	SetAnalyticsHost(carveSet(h.handle))
+	defer SetAnalyticsHost(nil)
 	app := newTestApp(testServer())
 
-	req := httptest.NewRequest(http.MethodGet, "http://yadota.hanzo.app/v1/analytics/overview", nil)
-	resp, err := app.Fiber().Test(req)
-	if err != nil {
-		t.Fatalf("GET: %v", err)
-	}
-	if resp.Header.Get("X-Carve") == "analytics" {
-		t.Fatal("a GET must never route to the analytics ingest carve")
-	}
-	if resp.Header.Get("X-Hanzo-Site") != "yadota" {
-		t.Errorf("GET did not reach the static serve (X-Hanzo-Site=%q)", resp.Header.Get("X-Hanzo-Site"))
-	}
-	if resp.Header.Get("X-Sentinel") == "hit" {
-		t.Error("site host leaked into the API pipeline on GET")
+	// Every installed door, plus a read lens (which must stay out on any verb).
+	for _, p := range append(append([]string{}, carvePaths...), "/v1/analytics/overview") {
+		req := httptest.NewRequest(http.MethodGet, "http://yadota.hanzo.app"+p, nil)
+		resp, err := app.Fiber().Test(req)
+		if err != nil {
+			t.Fatalf("GET %s: %v", p, err)
+		}
+		if resp.Header.Get("X-Carve") == "analytics" {
+			t.Errorf("GET %s routed to the ingest carve — a GET is never ingest", p)
+		}
+		if resp.Header.Get("X-Hanzo-Site") != "yadota" {
+			t.Errorf("GET %s did not reach the static serve (X-Hanzo-Site=%q)", p, resp.Header.Get("X-Hanzo-Site"))
+		}
+		if resp.Header.Get("X-Sentinel") == "hit" {
+			t.Errorf("GET %s leaked into the API pipeline", p)
+		}
 	}
 	if orgs, _ := h.seen(); len(orgs) != 0 {
 		t.Fatalf("analytics carve fired on a GET (%v)", orgs)
@@ -212,8 +264,8 @@ func TestMiddlewareBaseCarveStillWins(t *testing.T) {
 	anal := &captureHostHandler{kind: "analytics"}
 	SetBaseHostHandler(base.handle)
 	defer SetBaseHostHandler(nil)
-	SetAnalyticsHostHandler(anal.handle)
-	defer SetAnalyticsHostHandler(nil)
+	SetAnalyticsHost(carveSet(anal.handle))
+	defer SetAnalyticsHost(nil)
 	app := newTestApp(testServer())
 
 	req := httptest.NewRequest(http.MethodGet, "http://yadota.hanzo.app/v1/base/collections", nil)
@@ -237,8 +289,8 @@ func TestMiddlewareAnalyticsCarveNonSiteHostUnaffected(t *testing.T) {
 	SetResolver(fr)
 	defer SetResolver(nil)
 	h := &captureHostHandler{kind: "analytics"}
-	SetAnalyticsHostHandler(h.handle)
-	defer SetAnalyticsHostHandler(nil)
+	SetAnalyticsHost(carveSet(h.handle))
+	defer SetAnalyticsHost(nil)
 	app := newTestApp(selfServer())
 
 	resp, err := app.Fiber().Test(postReq("api.hanzo.ai", "/v1/analytics", beaconBody))
@@ -264,8 +316,8 @@ func TestMiddlewareAnalyticsCarveNonLive405(t *testing.T) {
 	SetResolver(fr)
 	defer SetResolver(nil)
 	h := &captureHostHandler{kind: "analytics"}
-	SetAnalyticsHostHandler(h.handle)
-	defer SetAnalyticsHostHandler(nil)
+	SetAnalyticsHost(carveSet(h.handle))
+	defer SetAnalyticsHost(nil)
 	app := newTestApp(testServer())
 
 	resp, err := app.Fiber().Test(postReq("yadota.hanzo.app", "/v1/analytics", beaconBody))
@@ -287,7 +339,7 @@ func TestMiddlewareNoAnalyticsHandlerIs405(t *testing.T) {
 	fr := &fakeResolver{found: true, site: Site{Org: "hanzo", Slug: "yadota", Bucket: "b", Prefix: "hanzo/yadota", Status: "live"}}
 	SetResolver(fr)
 	defer SetResolver(nil)
-	SetAnalyticsHostHandler(nil)
+	SetAnalyticsHost(nil)
 	app := newTestApp(testServer())
 
 	resp, err := app.Fiber().Test(postReq("yadota.hanzo.app", "/v1/analytics", beaconBody))
