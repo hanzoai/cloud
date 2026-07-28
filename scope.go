@@ -28,16 +28,24 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// Router is the surface a subsystem mounts on: zip's routing methods, plus the
-// *fiber.App escape the in-process dispatchers need (fiber.Test, GetRoutes,
-// adaptor.FiberApp). *zip.App satisfies it as-is, so Serve can hand the bare app
-// to a global subsystem and tests can pass a raw app.
+// Router is the surface a subsystem mounts on: zip's routing methods, plus two
+// named, read-only holes onto the host — the *fiber.App the in-process
+// dispatchers need (fiber.Test, GetRoutes, adaptor.FiberApp) and Plugins(), what
+// this process is actually running. *zip.App satisfies it as-is, so Serve can
+// hand the bare app to a subsystem that supplies App, and tests can pass a raw app.
 //
 // Fiber() is a deliberate, named hole: it is the concrete engine, and middleware
 // installed through it is app-wide. It is promoted onto the scoped Router rather
 // than granting those subsystems App — the alternative was four more of them for
 // four read-only uses. Its callers are greppable and none of them registers
 // middleware.
+//
+// Plugins() is promoted for the same reason and is strictly weaker: it registers
+// nothing and mutates nothing. It exists because the ONE thing config cannot tell
+// you is what a live process actually loaded — deployment manifests answer what was
+// INTENDED, and during a rolling upgrade the two disagree by design. The admin
+// fleet board (/v1/admin/plugins) is the reader; making it Global to ask a
+// read-only question would have granted app-wide middleware to buy a status field.
 type Router interface {
 	Use(handlers ...zip.Handler) zip.Router
 
@@ -53,6 +61,12 @@ type Router interface {
 	Group(prefix string, handlers ...zip.Handler) zip.Router
 
 	Fiber() *fiber.App
+
+	// Plugins reports every plugin this HOST has loaded — name, prefixes, source,
+	// artifact digest, pid, running, uptime, reloads, restarts and kernel-measured
+	// usage. It is this replica's answer, never the fleet's: a reader that presents
+	// it as fleet-wide is lying about the other pods.
+	Plugins() []zip.Status
 }
 
 // ZipApp recovers the concrete *zip.App behind a Router. It is what zip's TYPED
@@ -93,10 +107,7 @@ type scope struct {
 // same subtree Serve's generic liveness route assumes — so only a subsystem that
 // owns something else has to say so.
 func newScope(app *zip.App, name string, prefixes []string) *scope {
-	if len(prefixes) == 0 {
-		prefixes = []string{"/v1/" + name}
-	}
-	return &scope{app: app, name: name, prefixes: prefixes, escaped: new([]string)}
+	return &scope{app: app, name: name, prefixes: MountPrefixes(name, prefixes), escaped: new([]string)}
 }
 
 // owns reports whether path is the subsystem's own subtree or lives inside it.
@@ -141,6 +152,7 @@ func (s *scope) Head(p string, h ...zip.Handler) zip.Router    { return s.app.He
 func (s *scope) Options(p string, h ...zip.Handler) zip.Router { return s.app.Options(p, h...) }
 func (s *scope) All(p string, h ...zip.Handler) zip.Router     { return s.app.All(p, h...) }
 func (s *scope) Fiber() *fiber.App                             { return s.app.Fiber() }
+func (s *scope) Plugins() []zip.Status                   { return s.app.Plugins() }
 
 // err reports the middleware the subsystem tried to install outside its prefixes.
 func (s *scope) err() error {

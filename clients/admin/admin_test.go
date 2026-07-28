@@ -55,6 +55,8 @@ func mountService(t *testing.T, iamURL, commerceURL, healthURL string) (func(met
 	// (org-scoped panels behind GuardScoped, the platform control plane behind Guard,
 	// each domain owning its own routes), so the harness stays authoritative for the
 	// two-tier gate + every surface.
+	// `self` is the replica id Mount threads from Deps.Self; the harness pins it so the
+	// /plugins board's Host is asserted against a known value rather than a hostname.
 	routes(app, s)
 	fa := app.Fiber()
 
@@ -111,6 +113,9 @@ var platformAdminRoutes = []adminRoute{
 	{"POST", "/v1/admin/infra/volumes/v1/snapshot"},
 	{"DELETE", "/v1/admin/infra/volumes/v1"},
 	{"POST", "/v1/admin/infra/nodes/1/cordon"},
+	// /v1/admin/plugins is NOT here: clients/plugin owns that address, and its own
+	// TestGate covers the same route for anonymous, tenant-admin and forged-header
+	// callers. The coverage moved with the route rather than being dropped.
 }
 
 // adminRoutes is the full surface (both tiers) — the fail-closed gate test denies an

@@ -33,7 +33,6 @@ import (
 
 	"github.com/hanzoai/deploy/gitops-engine/pkg/cache"
 	"github.com/hanzoai/deploy/gitops-engine/pkg/engine"
-	enginehealth "github.com/hanzoai/deploy/gitops-engine/pkg/health"
 	enginesync "github.com/hanzoai/deploy/gitops-engine/pkg/sync"
 	synccommon "github.com/hanzoai/deploy/gitops-engine/pkg/sync/common"
 	"github.com/hanzoai/deploy/gitops-engine/pkg/utils/kube"
@@ -181,12 +180,6 @@ func (r *reconciler) reconcile(ctx context.Context, target []*unstructured.Unstr
 		enginesync.WithServerSideApplyManager(engineFieldManager),
 		enginesync.WithLogr(r.log),
 	)
-}
-
-// resourceHealth assesses one live object with the engine's built-in per-GVK
-// checks — the SAME health library the ArgoCD dashboard uses.
-func engineResourceHealth(un *unstructured.Unstructured) (*enginehealth.HealthStatus, error) {
-	return enginehealth.GetResourceHealth(un, nil)
 }
 
 // gitSource is the desired-state source: a shallow clone of repo@ref, from which

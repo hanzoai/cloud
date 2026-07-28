@@ -32,7 +32,7 @@ func TestRESTPutSecret_RequiresEnv(t *testing.T) {
 	body, _ := json.Marshal(map[string]string{
 		"name": "Z_PASSWORD", "path": "iam-passwords", "value": "irrelevant",
 	})
-	resp := do(t, app, "POST", "/v1/kms/orgs/hanzo/secrets", "hanzo", string(body), false, nil)
+	resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, nil)
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("omitted-env write = %d, want 400", resp.StatusCode)
 	}
@@ -41,7 +41,7 @@ func TestRESTPutSecret_RequiresEnv(t *testing.T) {
 	}
 
 	// The rejected write must not have populated the default bucket.
-	g := do(t, app, "GET", "/v1/kms/orgs/hanzo/secrets/iam-passwords/Z_PASSWORD?env=default", "hanzo", "", false, nil)
+	g := do(t, app, "GET", "/v1/kms/secrets/iam-passwords/Z_PASSWORD?env=default", "hanzo", "", false, nil)
 	if g.StatusCode != http.StatusNotFound {
 		t.Fatalf("omitted-env write must not land in env=default: GET = %d, want 404", g.StatusCode)
 	}
@@ -58,13 +58,13 @@ func TestRESTPutSecret_EnvProd_ProjectEnvPath(t *testing.T) {
 	body, _ := json.Marshal(map[string]string{
 		"name": "Z_PASSWORD", "path": "iam-passwords", "env": "prod", "value": secret,
 	})
-	resp := do(t, app, "POST", "/v1/kms/orgs/hanzo/secrets", "hanzo", string(body), false, nil)
+	resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("explicit-env write = %d, want 200: %s", resp.StatusCode, readAll(resp.Body))
 	}
 
 	// Operator resolution: org=hanzo (project), env=prod, path=/iam-passwords.
-	g := do(t, app, "GET", "/v1/kms/orgs/hanzo/secrets/iam-passwords/Z_PASSWORD?env=prod", "hanzo", "", false, nil)
+	g := do(t, app, "GET", "/v1/kms/secrets/iam-passwords/Z_PASSWORD?env=prod", "hanzo", "", false, nil)
 	if g.StatusCode != http.StatusOK {
 		t.Fatalf("project/env/path read = %d, want 200", g.StatusCode)
 	}
@@ -74,7 +74,7 @@ func TestRESTPutSecret_EnvProd_ProjectEnvPath(t *testing.T) {
 	}
 
 	// No cross-bucket bleed: env=default must not resolve the prod write.
-	gd := do(t, app, "GET", "/v1/kms/orgs/hanzo/secrets/iam-passwords/Z_PASSWORD?env=default", "hanzo", "", false, nil)
+	gd := do(t, app, "GET", "/v1/kms/secrets/iam-passwords/Z_PASSWORD?env=default", "hanzo", "", false, nil)
 	if gd.StatusCode != http.StatusNotFound {
 		t.Fatalf("prod write must not be visible in env=default: GET = %d, want 404", gd.StatusCode)
 	}

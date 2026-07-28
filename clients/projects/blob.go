@@ -16,6 +16,7 @@ import (
 
 	s3 "github.com/hanzoai/s3-go"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/s3admin"
 	"github.com/hanzoai/cloud/clients/sites"
 )
@@ -309,10 +310,24 @@ func (b *blobStore) ensureBucket(ctx context.Context, cli *s3.Client) error {
 
 // purgePrefix removes every object under prefix so a redeploy never leaves stale
 // files behind (a deploy is the full site, not a diff).
+//
+// A prefix must actually SCOPE the delete. Empty or "/" would list — and remove —
+// the entire bucket, so the ONE primitive that deletes objects refuses it here
+// rather than trusting every caller to have computed a real one. That matters now
+// that retention passes a prefix READ FROM A ROW (pruneReleases) and not only
+// values computed on the spot: one bad row must not become a bucket wipe.
 func purgePrefix(ctx context.Context, cli *s3.Client, bucket, prefix string) error {
+	if strings.Trim(prefix, "/") == "" {
+		return fmt.Errorf("purge: refusing an unscoped prefix %q", prefix)
+	}
 	objCh := cli.ListObjects(ctx, bucket, s3.ListObjectsOptions{Prefix: prefix + "/", Recursive: true})
 	toDelete := make(chan s3.ObjectInfo)
-	go func() {
+	// Contained: this feeder runs per deploy over object metadata from the store,
+	// and an unrecovered panic on a spawned goroutine takes the whole binary down
+	// rather than failing this purge. close(toDelete) is deferred INSIDE the work,
+	// so a panic still closes the channel and RemoveObjects below drains and
+	// returns instead of blocking forever on a producer that is never coming back.
+	cloud.Go(nil, "projects.purgePrefix", []any{"bucket", bucket, "prefix", prefix}, func() {
 		defer close(toDelete)
 		for obj := range objCh {
 			if obj.Err != nil {
@@ -320,7 +335,7 @@ func purgePrefix(ctx context.Context, cli *s3.Client, bucket, prefix string) err
 			}
 			toDelete <- obj
 		}
-	}()
+	})
 	for rmErr := range cli.RemoveObjects(ctx, bucket, toDelete, s3.RemoveObjectsOptions{}) {
 		if rmErr.Err != nil {
 			return rmErr.Err

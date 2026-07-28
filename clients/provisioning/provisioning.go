@@ -361,7 +361,7 @@ func create(s *cloud.Service[state], kind string) zip.Handler {
 		// Secret handling. Only secretful kinds carry a real per-resource
 		// password. Seal it in KMS when configured; otherwise return once and
 		// store nothing (never plaintext).
-		secretRef := fmt.Sprintf("org/%s/%s/%s", org, kind, name)
+		secretRef := fmt.Sprintf("orgs/%s/%s/%s", org, kind, name)
 		storedRef, returnPw, username := "", "", ""
 		if secretfulKinds[kind] {
 			returnPw, username = pw, user

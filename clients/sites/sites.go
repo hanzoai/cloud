@@ -26,6 +26,7 @@ import (
 	"context"
 	"mime"
 	"net/http"
+	"net/url"
 	"path"
 	"regexp"
 	"strings"
@@ -168,6 +169,10 @@ func New(cfg Config, log luxlog.Logger) *Server {
 		seen[d] = true
 		self = append(self, d)
 	}
+	// Publish the SAME set to the shared source, so the claim gate refuses what the
+	// serve gate would refuse. Registered here, next to SetReservedExtra, for the
+	// identical reason: one source, no drift between enforcement points.
+	SetSelfDomains(self)
 	// First-party apex (internal, opt-in sites) — normalize, force it to be a self
 	// domain (a first-party site host is never a customer custom-domain candidate),
 	// and build the explicit allowlist. Empty apex or empty allowlist ⇒ disabled.
@@ -249,16 +254,29 @@ var analyticsHostHandler func(org string, c *zip.Ctx) error
 // analyticsHostHandler).
 func SetAnalyticsHostHandler(h func(org string, c *zip.Ctx) error) { analyticsHostHandler = h }
 
-// isAnalyticsPath reports whether a path targets the site-host analytics-beacon
-// ingest: the CANONICAL door at /v1/event, plus the deprecated Segment/beacon wire
-// at /v1/analytics{,/batch} and the deprecated PostHog wire at /v1/insights/e (kept
-// so beacons already deployed on published sites don't break mid-migration). The
-// Middleware carve additionally gates on POST, so the authenticated GET read lenses
-// (/v1/analytics/overview|timeseries|top) — which live on api.hanzo.ai, never a site
-// host — are never hijacked.
-func isAnalyticsPath(p string) bool {
-	return p == "/v1/event" || strings.HasPrefix(p, "/v1/analytics") || p == "/v1/insights/e"
+// analyticsPaths is the EXACT set of site-host analytics-beacon INGEST paths: the
+// canonical door at /v1/event, the deprecated Segment/beacon wire at
+// /v1/analytics{,/batch}, and the deprecated PostHog wire at /v1/insights/e (kept so
+// beacons already deployed on published sites don't break mid-migration).
+//
+// It is an exact set and not a prefix. `HasPrefix(p, "/v1/analytics")` also swallowed
+// every READ lens — /v1/analytics/overview, /timeseries, /top, /health — leaving the
+// POST-method check in Middleware as the only thing keeping a read path out of the
+// ingest carve. That made a lens's exposure depend on which verb it happened to be
+// mounted under: the day a read path grows a POST (a query body, a batched lens), the
+// carve silently starts routing it to the beacon handler with a host-derived org. The
+// set names what ingest actually is, so the method check is a second line rather than
+// the only one, and a new /v1/analytics/* route is out by default.
+var analyticsPaths = map[string]bool{
+	"/v1/event":           true,
+	"/v1/analytics":       true,
+	"/v1/analytics/batch": true,
+	"/v1/insights/e":      true,
 }
+
+// isAnalyticsPath reports whether a path targets the site-host analytics-beacon
+// ingest (analyticsPaths). The Middleware carve additionally gates on POST.
+func isAnalyticsPath(p string) bool { return analyticsPaths[p] }
 
 func (s *Server) Middleware() zip.Handler {
 	return func(c *zip.Ctx) error {
@@ -307,15 +325,7 @@ func hostOnly(host string) string {
 // lookup and makes it structurally impossible for a customer binding to shadow a
 // real Hanzo host — only genuinely external domains reach the binding resolver.
 func (s *Server) customCandidate(host string) bool {
-	if host == "" || !strings.Contains(host, ".") {
-		return false
-	}
-	for _, d := range s.selfDomains {
-		if host == d || strings.HasSuffix(host, "."+d) {
-			return false
-		}
-	}
-	return true
+	return host != "" && strings.Contains(host, ".") && !IsSelfHost(host)
 }
 
 // resolveLive resolves a key (a subdomain slug OR a full custom host) to a LIVE
@@ -605,14 +615,24 @@ func (s *Server) errorPage(c *zip.Ctx, status int, msg string) error {
 }
 
 // resolveKey turns a request path into a cleaned, tenant-relative key fragment.
-// This is the traversal boundary: it roots the path at "/", runs path.Clean
-// (which resolves every "." and ".." segment against that root), then strips the
-// leading "/". The result provably contains no ".." segment, so joining it under
-// a fixed prefix can never escape that prefix — regardless of how many "..",
-// backslashes, or percent-encoded dots the client sends (fasthttp has already
-// percent-decoded + normalized c.Path(); this re-clean is the defensive guarantee
-// that does not depend on that normalization).
+// This is the traversal boundary: it percent-decodes, roots the path at "/",
+// runs path.Clean (which resolves every "." and ".." segment against that root),
+// then strips the leading "/". The result provably contains no ".." segment, so
+// joining it under a fixed prefix can never escape that prefix — regardless of
+// how many "..", backslashes, or percent-encoded dots the client sends.
+//
+// Decoding is FIRST and it is not optional. c.Path() is the RAW request target —
+// zip hands back Fiber's path verbatim, nothing upstream unescapes it — while an
+// object key is stored decoded, so an encoded request could never match its own
+// file. Next.js names a dynamic route's chunk after the literal segment
+// (app/blog/[slug]/page-*.js), every browser sends that as %5Bslug%5D, and so
+// every dynamic page on hanzo.app 404'd its own JS and rendered without ever
+// hydrating. Decoding before Clean also means "%2e%2e" is collapsed as the
+// traversal it is, rather than surviving as an opaque literal.
 func resolveKey(reqPath string) string {
+	if dec, err := url.PathUnescape(reqPath); err == nil {
+		reqPath = dec // malformed escapes stay verbatim: a miss, never an error
+	}
 	p := strings.ReplaceAll(reqPath, `\`, "/")
 	if !strings.HasPrefix(p, "/") {
 		p = "/" + p
@@ -708,7 +728,13 @@ func CacheControlFor(key, htmlOverride string) string {
 		}
 		return "public, max-age=60, s-maxage=86400"
 	case ".js", ".mjs", ".css", ".woff", ".woff2", ".png", ".jpg", ".jpeg",
-		".gif", ".svg", ".webp", ".avif", ".ico", ".ttf", ".otf", ".wasm":
+		".gif", ".svg", ".webp", ".avif", ".ico", ".ttf", ".otf", ".wasm",
+		// Game-engine payloads. gameAssetType already teaches this file that a
+		// site can be a WebGL build; the cache policy has to know it too, or the
+		// biggest object in the deploy (Unity's .data, Godot's .pck — megabytes
+		// each) is the ONLY fingerprinted asset that still gets re-fetched every
+		// hour. Same rule, same reason: a content-hashed name cannot go stale.
+		".data", ".pck", ".unityweb", ".mem":
 		if isFingerprinted(key) {
 			return "public, max-age=31536000, immutable"
 		}

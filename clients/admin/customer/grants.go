@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/admin/core"
 )
@@ -66,6 +67,20 @@ type GrantsOut struct {
 	Data2  *int       `json:"data2,omitempty"`
 }
 
+// GrantFilter is the ONE audit query that identifies a credit grant. Both the grants
+// ledger and the consolidated money board select rows through it, so "what counts as a
+// grant" is defined once. org filters the ACTOR's org; result is "" (all), "success" or
+// "error".
+func GrantFilter(org, result string, limit int) audit.Filter {
+	return audit.Filter{
+		Resource: "credit", // res_type of every grant audit row
+		Action:   "admin.customer.credit",
+		Org:      org,
+		Result:   result,
+		Limit:    limit,
+	}
+}
+
 // Grants reads the credit-grant ledger across ALL orgs, newest first — who granted what
 // to whom, when, and from which money bucket.
 //
@@ -85,15 +100,6 @@ func (o ops) Grants(ctx context.Context, in *GrantsIn) (*GrantsOut, error) {
 		return nil, err
 	}
 	s := o.s
-	if s.State.AuditStore == nil {
-		return &GrantsOut{
-			Status: core.OK,
-			Msg:    "grant history is unavailable (no local audit store configured on this deployment)",
-			Data:   []GrantRow{},
-			Data2:  core.Total(0),
-		}, nil
-	}
-
 	limit := 200
 	if v := strings.TrimSpace(in.Limit); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
@@ -101,17 +107,32 @@ func (o ops) Grants(ctx context.Context, in *GrantsIn) (*GrantsOut, error) {
 		}
 	}
 
-	f := audit.Filter{
-		Resource: "credit", // res_type of every grant audit row
-		Action:   "admin.customer.credit",
-		Org:      strings.TrimSpace(in.Org),    // actor org (rarely filtered)
-		Result:   strings.TrimSpace(in.Result), // "" = all (success+error)
-		Limit:    limit,
+	out, total, err := GrantRows(s, ctx,
+		GrantFilter(strings.TrimSpace(in.Org), strings.TrimSpace(in.Result), limit))
+	if err != nil {
+		return &GrantsOut{Status: core.Err, Msg: err.Error()}, nil
+	}
+	msg := ""
+	if s.State.AuditStore == nil {
+		msg = "grant history is unavailable (no local audit store configured on this deployment)"
+	}
+
+	return &GrantsOut{Status: core.OK, Msg: msg, Data: out, Data2: core.Total(total)}, nil
+}
+
+// GrantRows projects the audit trail into grant rows. It is split out of the handler so
+// the consolidated money board (/v1/admin/money) totals the SAME grants this endpoint
+// lists — one projection of the trail, two views. No audit store is an honest empty
+// result, not an error: the caller decides how to report that (the board marks the
+// source not-ok).
+func GrantRows(s *cloud.Service[core.State], ctx context.Context, f audit.Filter) ([]GrantRow, int, error) {
+	if s.State.AuditStore == nil {
+		return []GrantRow{}, 0, nil
 	}
 
 	rows, total, err := s.State.AuditStore.Query(ctx, f)
 	if err != nil {
-		return &GrantsOut{Status: core.Err, Msg: err.Error()}, nil
+		return nil, 0, err
 	}
 
 	out := make([]GrantRow, 0, len(rows))
@@ -148,8 +169,7 @@ func (o ops) Grants(ctx context.Context, in *GrantsIn) (*GrantsOut, error) {
 			Result:        r.Outcome.Result,
 		})
 	}
-
-	return &GrantsOut{Status: core.OK, Data: out, Data2: core.Total(total)}, nil
+	return out, total, nil
 }
 
 // GrantIn is the input of BOTH credit-grant ops. They differ only in where the target

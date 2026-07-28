@@ -46,6 +46,7 @@ import (
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/wsx"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/team/token"
 	"github.com/hanzoai/cloud/types"
 )
@@ -673,7 +674,13 @@ func (s *collabService) ws(c *zip.Ctx) error {
 		})
 		stop := make(chan struct{})
 		defer close(stop)
-		go func() { // keepalive: WriteControl is safe alongside WriteMessage
+		// Contained: one of these runs for the life of EVERY collab websocket, so
+		// the count scales with connected users and a single panic would take the
+		// binary down for all of them. WriteControl on a racing close is exactly the
+		// kind of fault that shows up only under load. (nil logger: collabService
+		// carries none — containment is the point here, and a contained fault beats
+		// a dead process even unlogged.)
+		cloud.Go(nil, "team.collab.keepalive", nil, func() { // WriteControl is safe alongside WriteMessage
 			t := time.NewTicker(collabPingEvery)
 			defer t.Stop()
 			for {
@@ -686,7 +693,7 @@ func (s *collabService) ws(c *zip.Ctx) error {
 					}
 				}
 			}
-		}()
+		})
 		ctx := context.Background()
 		cc := newCollabConn(s, &collabWriter{conn: conn})
 		defer cc.close(ctx)

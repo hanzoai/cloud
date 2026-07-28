@@ -1,0 +1,62 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "bot"
+    }
+  ],
+  "paths": {
+    "/v1/bot/connect": {
+      "get": {
+        "operationId": "get_v1_bot_connect",
+        "tags": [
+          "bot"
+        ]
+      }
+    },
+    "/v1/bot/nodes": {
+      "get": {
+        "operationId": "get_v1_bot_nodes",
+        "tags": [
+          "bot"
+        ]
+      }
+    },
+    "/v1/bot/nodes/{id}/invoke": {
+      "post": {
+        "operationId": "post_v1_bot_nodes_by_id_invoke",
+        "tags": [
+          "bot"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/bot/peer/invoke": {
+      "post": {
+        "operationId": "post_v1_bot_peer_invoke",
+        "tags": [
+          "bot"
+        ]
+      }
+    }
+  }
+}
