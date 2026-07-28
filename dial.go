@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/zap-proto/zip"
 )
 
 // dial.go — how one app calls another. The ONLY way.
@@ -63,13 +65,50 @@ func runDir() string {
 // sock is the well-known socket path for one app.
 func sock(app string) string { return filepath.Join(runDir(), app+".sock") }
 
-// Peer is another app, reachable. Get/Post carry the caller's org so the callee
-// applies its own tenancy rules — a peer call is never implicitly privileged.
+// Peer is another app, reachable. Get/Post carry the caller's principal so the
+// callee applies its OWN authorization — a peer call is never implicitly
+// privileged.
 type Peer struct {
 	app   string
 	base  string
 	local bool
 	c     *http.Client
+	who   map[string]string // forwarded principal; see As
+}
+
+// identity is the set of headers the edge mints from a validated IAM JWT
+// (middleware_identity.go). A peer call forwards them UNCHANGED so the callee
+// re-applies its own rules to the SAME principal — admin reading the treasury
+// as the SuperAdmin who asked, not as "admin the service".
+var identity = []string{"X-Org-Id", "X-User-Id", "X-User-Email", "X-User-IsAdmin", "X-Project-Id"}
+
+// As delegates the caller's principal to the peer, taken from the request being
+// served. This is DELEGATION, not escalation: the headers were minted at the
+// edge from a validated token, the callee still runs its own check, and a
+// caller can only ever pass on authority it already holds.
+//
+// It is sound over the socket because the kernel proves the peer is one of our
+// own processes (credz authenticates with SO_PEERCRED, and the socket is 0600),
+// so a forwarded claim cannot originate outside the deployment.
+//
+// It is NOT sufficient over the network: the gateway mints identity from a JWT
+// and deliberately ignores inbound identity headers, so a remote peer call
+// carrying only these will be treated as anonymous and fail closed. That is the
+// safe direction, and it is the remaining gap — a remote peer needs a real
+// service credential, not a forwarded header.
+func (p *Peer) As(c *zip.Ctx) *Peer {
+	if c == nil {
+		return p
+	}
+	who := make(map[string]string, len(identity))
+	for _, h := range identity {
+		if v := strings.TrimSpace(c.Header(h)); v != "" {
+			who[h] = v
+		}
+	}
+	cp := *p
+	cp.who = who
+	return &cp
 }
 
 // Dial resolves how to reach app. A socket on disk means it is co-located, so
@@ -135,6 +174,11 @@ func (p *Peer) do(ctx context.Context, method, org, path string, in, out any) er
 	if err != nil {
 		return fmt.Errorf("peer %s: request: %w", p.app, err)
 	}
+	for h, v := range p.who {
+		req.Header.Set(h, v)
+	}
+	// An explicit org overrides the delegated one: a background job has no
+	// request to delegate from and must still name the tenant it acts for.
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
 	}

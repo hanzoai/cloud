@@ -217,6 +217,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// provider can ensure/remove a repo's mirror target through the SAME store the
 	// mirror_out reactor pushes from — no sync⇆git cycle (mirror_control.go).
 	cloud.RegisterGitMirrorController(gitMirrorController{})
+	// Install the tree reader so the delivery plane can read a repo's inventory
+	// at a revision without cloning it, and with no deploy⇄git cycle (tree.go).
+	cloud.RegisterTreeFunc(readTree)
 
 	// SSH transport: `git clone git@<sshHost>:<org>/<repo>.git`. The listener is
 	// a per-process goroutine started here and stopped by Shutdown. The host key
