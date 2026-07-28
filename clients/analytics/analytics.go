@@ -63,7 +63,6 @@ import (
 	"strings"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/hanzoai/cloud/clients/principal"
@@ -278,7 +277,7 @@ func overview(s *cloud.Service[state], c *zip.Ctx) error {
 	// Ensure the ai-owned ledger table exists (idempotent, latched) so a fresh
 	// warehouse yields honest zeros, not an error. We NEVER create hanzo.events —
 	// that table is operator-owned (unified-analytics.md §3.1).
-	if err := aiobject.EnsureCloudUsageTable(ctx); err != nil {
+	if err := datastore.EnsureCloudUsage(ctx); err != nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}
 
@@ -334,7 +333,7 @@ func timeseries(s *cloud.Service[state], c *zip.Ctx) error {
 		return err
 	}
 	ctx := c.Context()
-	if err := aiobject.EnsureCloudUsageTable(ctx); err != nil {
+	if err := datastore.EnsureCloudUsage(ctx); err != nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}
 
@@ -379,7 +378,7 @@ func top(s *cloud.Service[state], c *zip.Ctx) error {
 		return err
 	}
 	ctx := c.Context()
-	if err := aiobject.EnsureCloudUsageTable(ctx); err != nil {
+	if err := datastore.EnsureCloudUsage(ctx); err != nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}
 	limit := topLimit(c)
