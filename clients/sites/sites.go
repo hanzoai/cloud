@@ -728,7 +728,13 @@ func CacheControlFor(key, htmlOverride string) string {
 		}
 		return "public, max-age=60, s-maxage=86400"
 	case ".js", ".mjs", ".css", ".woff", ".woff2", ".png", ".jpg", ".jpeg",
-		".gif", ".svg", ".webp", ".avif", ".ico", ".ttf", ".otf", ".wasm":
+		".gif", ".svg", ".webp", ".avif", ".ico", ".ttf", ".otf", ".wasm",
+		// Game-engine payloads. gameAssetType already teaches this file that a
+		// site can be a WebGL build; the cache policy has to know it too, or the
+		// biggest object in the deploy (Unity's .data, Godot's .pck — megabytes
+		// each) is the ONLY fingerprinted asset that still gets re-fetched every
+		// hour. Same rule, same reason: a content-hashed name cannot go stale.
+		".data", ".pck", ".unityweb", ".mem":
 		if isFingerprinted(key) {
 			return "public, max-age=31536000, immutable"
 		}
