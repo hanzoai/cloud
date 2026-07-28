@@ -53,7 +53,9 @@ const MultiCall = "cloud"
 //	CLOUD_<NAME>_ADDR — already listening there; start nothing, just mount it.
 //	CLOUD_<NAME>_BIN  — the binary's path on disk.
 //	neither           — a file named <name> beside the running host,
-//	                    else the multi-call binary beside it, serving that app.
+//	                    else the multi-call binary beside it, serving that app,
+//	                    else the release index at CLOUD_PLUGINS (see release.go),
+//	                    which is how a host with NO plugins in its image runs.
 //
 // The default is the shipped container layout — still one directory, still no
 // configuration. Resolving from os.Executable rather than $PATH means a host
@@ -83,8 +85,20 @@ func (a App) Plugin() zip.Plugin {
 	if self, err := os.Executable(); err == nil {
 		dir = filepath.Dir(self)
 	}
+	// On-disk still wins, for the reason above: a binary shipped beside the host
+	// is what that host was built with. The release index is the rung BELOW it,
+	// so it changes nothing for an image that carries its plugins and is the
+	// whole answer for one that carries none.
+	if p := a.pluginIn(dir); found(p.Path) {
+		return p
+	}
+	if p, ok := a.fromRelease(); ok {
+		return p
+	}
 	return a.pluginIn(dir)
 }
+
+func found(path string) bool { _, err := os.Stat(path); return err == nil }
 
 // pluginIn is the sibling-directory half of the ladder, split out because the
 // choice it makes depends on what is ON DISK next to the host — and a test whose
