@@ -27,14 +27,19 @@ source for the generated per-language SDKs.
   `go install github.com/hanzoai/cloud/cmd/hanzo@latest` · `brew install hanzoai/tap/hanzo`
 - Build in MODULE mode only: `make build` / `GOWORK=off go build <named target>` —
   never workspace mode (see "Build & module graph" below). `make build` is the
-  light host; `make plugin APP=<x>` is the one app you are editing. Do not run
-  `go build ./...` here — it links 100+ binaries at ~4.5 GiB each.
+  light host; `make plugin APP=<x>` is the one app you are editing; `make ship`
+  is the release layout (host + the one multi-call binary — two links, not 108).
+  Do not run `go build ./...` here — it links 100+ binaries at ~4.5 GiB each, and
+  `make plugins` was DELETED for exactly that reason (62c7f52d).
 
 ## Key entry points
 - `cmd/cloud` — server binary · `cmd/hanzo` (`cli/`) — control CLI · `webui.go` — embedded console
 - `apps/apps.go:Wire()` — composition root (the one ordered subsystem slice)
 - `deps.go` / `cloud.Deps` — process-wide handles · `clients/<name>/` — every subsystem
-- `openapi/` — live spec derived from the router (no checked-in spec file)
+- `openapi/` — the document pipeline: the spec is a projection of the live router,
+  and `openapi.yaml` at the root is a GOLDEN of it (written by `make openapi`,
+  verified by `make test` — not a second source)
+- `manifest/apps.go` — GENERATED from `Wire()`; what `cmd/host` knows about the fleet
 
 ---
 
@@ -186,7 +191,12 @@ package at once (`cmd/cloud` alone links >6GB).
 
 ## Two hosts: `cmd/cloud` links every app, `cmd/host` links none
 
-`cmd/cloud` imports `apps` and therefore links all ~103 subsystem graphs into one
+The app count is `len(manifest.Apps)` — 113 at `b3ba3f11`
+(`grep -c '^\s*{Name: ' manifest/apps.go`), and the standing figures below were
+each measured against a smaller fleet. Treat every absolute in this section as a
+measurement with provenance, not as a live count; re-measure before quoting one.
+
+`cmd/cloud` imports `apps` and therefore links every subsystem graph into one
 binary — **3108 packages**, 212 MB, 9.5s to link with a fully warm cache (minutes
 cold) at 3.8 GiB peak RSS, and a relink for every app that changes. `cmd/host` is
 the same API served a different way: it links `zip` and `manifest` and stops
@@ -195,12 +205,32 @@ the same API served a different way: it links `zip` and `manifest` and stops
 app nobody calls costs a route entry, not a process; a woken one costs ~27 MB.
 
 **The host is the default.** `make build` builds it; `make plugin APP=<x>` builds
-the one app you edited (1.3s after a real source change). The monolith is still
-there as `make monolith`, last in `make help` and marked SLOW FALLBACK, because
-the Dockerfile still ships `./cmd/cloud` — host+plugins cannot replace it until a
-plugin stops linking the whole core. Today the 106 plugins weigh 5.3 GB in `./bin`
-against the monolith's 212 MB, since each statically re-links the same
-~650-package root. That floor, not the app list, is what the image is waiting on.
+the one app you edited (1.3s after a real source change).
+
+**There is ONE artifact, invoked two ways.** A dedicated plugin binary is ~40 MB
+of which ~35 MB is the core every other plugin also links, so 108 of them measure
+4.41 GB of duplicated code — already stripped, `-s -w` is the default `LDFLAGS`,
+there is no symbol win left in it. The multi-call binary is that core ONCE
+(196 MB) and serves any app via `cloud --enable=<name>`; `manifest.MultiCall`
+(manifest/plugin.go:49) is its name. That invocation is not a second mode:
+`--enable` is the flag `cloud.Serve` has always taken (config.go:483), so a child
+started that way is byte-for-byte the process a dedicated `cmd/<name>` binary
+would be — same `Serve`, same middleware, same `ZIP_ADDR` contract. **Monolith
+and plugin are not two artifacts to keep in sync; they are one artifact under two
+invocations,** which is why `make ship` links two things (`host monolith`,
+Makefile:120) and the image ships `/cloud` + `/host` as run modes of itself
+(Dockerfile:182-194).
+
+`make plugins` is DELETED, deliberately (62c7f52d). It linked 100+ binaries back
+to back, which exhausted a tmpfs `/tmp` and OOM'd a 128 GiB box, so it had to
+build sequentially at `-p=2`; the forced `TMPDIR` went with it. Do not
+reintroduce it — the set it built is what the multi-call binary replaced.
+
+The default ENTRYPOINT stays `/cloud` on measured grounds, not inertia: five apps
+in one process cost 166 MB PSS, and the same five as host+children cost 388 MB,
+because every child pays its own Go runtime and its own `BuildDeps`
+(Dockerfile:196-200). Process isolation is worth buying deliberately for a
+subsystem that needs it — never fleet-wide by default.
 
 The host knows three facts per app and no more — name, prefixes, eager-or-lazy —
 and they are DERIVED from `apps.Wire()`, never hand-maintained. `make generate`
@@ -234,6 +264,93 @@ listen, and all but the first die on "address already in use".
 CI pins both properties from `hanzo.yml`: `generated-current` re-runs the
 generator and fails on a dirty tree; `host-is-light` fails if `cmd/host`'s import
 graph reaches `apps` or any `clients/*`.
+
+### Where a subsystem's binary comes from — ONE ladder, and the last rung is the network
+
+`manifest.App.Plugin()` (manifest/plugin.go:74) is the SOLE resolver, and
+`apps.where(name)` (apps/apps.go:650) calls it rather than re-deriving anything:
+the light host resolves the same binaries from the same rule out of the generated
+manifest, and a second copy is exactly how the two come to disagree. The copy
+that used to live in `apps` had already drifted — it left `Plugin.Name` empty and
+did not fold `-` to `_`, so `CLOUD_ZERO_TRUST_ADDR` was unreadable from that side.
+`where` now supplies the one fact the manifest cannot: `eager`.
+
+    CLOUD_<NAME>_ADDR   already listening there — start nothing, just mount it
+    CLOUD_<NAME>_BIN    this exact path, honoured as given (the operator named it)
+    <dir>/<name>        a dedicated binary beside the running host
+    <dir>/cloud         the multi-call binary beside it, with --enable=<name>
+    CLOUD_PLUGINS       the release index (manifest/release.go) — a host whose
+                        image carries NO plugin binaries at all
+
+`<NAME>` upper-cases the app name and folds `-` to `_`. On-disk wins over the
+index because it is what this host was BUILT with; a dedicated binary wins over
+the multi-call one because its presence is someone's explicit intent. Both link
+modes stay: a developer builds the single lean plugin they are editing and the
+host prefers it (1.3s), a release ships the unified binary and the host falls
+through to it.
+
+**Eager vs lazy is a property of the WORK, not of the app.** `apps.go`'s `eager`
+map (apps/apps.go:631) names the four subsystems that must start WITH the host —
+`o11y` (its OTLP collector must accept spans before anything has one to send),
+`pubsub` (NATS :4222), `kafka` (:9092), and `catalogsync` (a pure bus consumer
+that registers no route at all, so lazily it would wait forever for a request
+that never arrives). Everything absent from that map is lazy, and that is what
+makes a 100+-service binary cheap: an app nobody calls costs a route entry and a
+struct, not a process. The generator stamps `Eager` onto every manifest row from
+this one map.
+
+### The S3 plugin lane: `hanzo.yml binaries:` → `binaries.json` → verified fetch
+
+`hanzo.yml` declares ONE entry for the whole fleet (hanzo.yml:32-35): `name:
+cloud`, `main: ./cmd/cloud`, both linux platforms. That is deliberate and it is
+the same fact the ladder rests on — every app resolves to the multi-call binary
+with a different `--enable`, so the index names it once: 195 MiB published against
+4520 MiB for a binary per app. `bucket: plugins` (hanzo.yml:41) publishes to
+hanzoai/s3, NOT a GitHub release: artifacts and the `binaries.json` naming them
+land under `<bucket>/<repo>/<tag>/`, so `CLOUD_PLUGINS` is one immutable URL per
+tag and 400 MiB a release never touches a storage quota we do not own.
+
+This lane is NOT a second builder of the cloud image. The image's `/cloud` is
+cgo + libsqlcipher; a plugin runs on whatever base its host happens to be, so the
+published binary is the static one (hanzo.yml:23-26).
+
+- **No digest, no trust.** `fetch` drops any index entry missing `url` or
+  `sha256` (manifest/release.go:82), and `remote` returns a `zip.Plugin` with
+  both `URL` and `Sum` set (release.go:113-119). zip verifies before `chmod`, so
+  fetching code stays safe to execute, and it caches BY DIGEST — restart and
+  rollback touch no network.
+- **A dedicated index entry beats the multi-call baseline**, same order as on
+  disk: `remote` looks up `name/os/arch` first and only falls back to
+  `MultiCall/os/arch` with `--enable` (release.go:103-107). Pinned by
+  `TestRemote_DedicatedBeatsMultiCall` (manifest/release_test.go:177).
+- **`fetch` caches SUCCESS for the life of the process, and that is a
+  cache-invalidation contract, not an optimisation** (release.go:43-59). A hundred-plus apps
+  resolving through here must not become a request each. Failure is deliberately
+  NOT cached: a lazy plugin can first resolve minutes after boot, so caching one
+  blip while the network came up would disable every plugin for the life of the
+  process. So: **rewriting an index a live host has already read changes nothing
+  for that host — publishing cannot push.** New bits
+  reach a running process exactly two ways: restart it, or
+  `zip.App.ReloadTo(name, Plugin{URL, Sum})` via
+  `POST /v1/admin/plugins/:name/reload`. Any on-demand or per-org upgrade path
+  must drive one of those two.
+- **Reload is SuperAdmin-gated, and audited BEFORE it acts.** `clients/plugin`
+  mounts four routes (clients/plugin/plugin.go:78-81): list, reload, enable, disable. Every
+  mutation is SuperAdmin-gated and written to the hash-chained audit trail BEFORE
+  it is reported as done; a deployment with NO durable audit store REFUSES the
+  operation rather than performing an unrecorded one (clients/plugin/fleet.go:154-155).
+  Reload starts the replacement and proves it LISTENING before any traffic moves,
+  so a bad build leaves the old one serving and returns an error rather than a
+  hole; naming a digest this host has run before IS the rollback, and costs no
+  network because the digest is the cache key. Fleet scope applies one host at a
+  time and STOPS at the first failure, so a build that cannot come up reaches
+  exactly one host.
+- **`disable` answers 503, never 404, and routes never unregister.** Removing
+  routes would mutate the route table and re-adding them on enable would grow it
+  without bound across cycles — keeping them registered is the invariant that
+  makes reloads flat in memory. It is also the truer answer: 404 says "no such
+  API" and a client may cache it and stop retrying; 503 says "this API exists and
+  is down right now", which is retryable.
 
 ## Credentials: one key for the deployment, one scope per app (`credz`)
 
@@ -304,11 +421,22 @@ is exactly the bug this replaced.
 
 `clients/<app>/Makefile` is two lines — `APPS := <name>` and
 `include ../../mk/plugin.mk`. Everything an app can be asked to do lives in that
-one included file: `generate` (zipdoc lifts handler prose into the untracked
-`zipdoc_gen.go`; a prerequisite of `build` because it is compiled IN), `build`
-(its own lean binary into `./bin`), `test`, `vet`, `openapi` (its own spec
-subset), `clean`, `help`. A target written once per app would be one place per
-app for them to disagree, and nobody edits a hundred files at once.
+one included file: `generate` (zipdoc lifts handler prose into `zipdoc_gen.go`;
+a prerequisite of `build` — mk/plugin.mk:62 — because it is compiled IN, so
+running it after the build would be too late), `build` (its own lean binary into
+`./bin`), `test`, `vet`, `openapi` (its own spec subset; `openapi: build`, since
+a spec generated from a stale binary is a lie), `clean`, `help`. A target written
+once per app would be one place per app for them to disagree, and nobody edits a
+hundred files at once. `clean` removes binaries only: `cmd/<app>/openapi.json` is
+a committed artifact, like the fleet's `openapi.yaml`, and clean removes what a
+build wrote, not what a build publishes.
+
+**The per-app path is the one that has always regenerated zipdoc**, and the root
+build targets do NOT (`build`, `host`, `ship`, `plugin`, `monolith`). The only
+root target that runs it is `openapi` (Makefile:214); the Dockerfile carries its
+own standalone pass at line 178. See "Generated and frozen artifacts" below —
+this asymmetry is still live, and it is why the 15 `zipdoc_gen.go` files are
+committed.
 
 Both invocations work — `make -C clients/tasks openapi` from the root and
 `cd clients/tasks && make openapi` — because `mk/plugin.mk` derives every path
@@ -329,32 +457,83 @@ disk, `-p=2`, the dev KMS key, the FTS5 tag).
 One way to do everything. Composable, orthogonal, DRY. A new subsystem is a
 package under `clients/<name>` that obeys these seams — nothing more.
 
-- **Subsystem shape.** A subsystem exposes `func Mount(app *zip.App, deps cloud.Deps) error`
-  and is listed in `apps.Wire()` as a `cloud.MountSpec{Name, Mount: cloud.Typed(Mount)}`
-  (plus `Shutdown`/`OwnsHealth` where it owns them). `Mount` wires that subsystem's
-  `/v1/<name>/*` routes onto the shared `*zip.App`; `cloud.Deps` carries the
-  process-wide handles (Logger, DataDir, the subsystem `Client` seams). No
-  subsystem reaches into another's internals. There is no init()-registry and no
-  `cloud.Register` — subsystems do NOT self-register.
+- **Subsystem shape.** A subsystem exposes
+  `func Mount(app cloud.Router, deps cloud.Deps) error` — `MountFunc`
+  (build.go:1002) — and is listed in `apps.Wire()` as
+  `cloud.MountSpec{Name, Price, Mount}` (plus `Shutdown`/`OwnsHealth`/`Prefixes`
+  where it owns them). `app` is a **Router, not the concrete `*zip.App`**, and
+  that is the whole safety property: middleware a subsystem installs lands on the
+  subtrees its spec declares, never over the binary. Routes still register at
+  absolute paths with the same precedence. `cloud.Deps` carries the process-wide
+  handles (Logger, DataDir, the subsystem `Client` seams). No subsystem reaches
+  into another's internals. There is no init()-registry and no `cloud.Register` —
+  subsystems do NOT self-register.
+- **The field IS the grant — `App` instead of `Mount`.** A subsystem that
+  genuinely gates everything sets `App func(*zip.App, Deps) error` and receives
+  the bare app (`{Name: "authz", Price: cloud.Free, App: authz.Mount}`).
+  `MountAll` refuses a spec carrying BOTH (build.go:1103), so scoped-or-global
+  stays a decision someone made in writing. **`cloud.Global` is DELETED**
+  (62c7f52d): it was a wrapper that asserted `Router` was `*zip.App` and, when it
+  was not, told you to also set `Global: true` — wrapper and flag were the same
+  fact, exactly 6 and 6, and the wrapper could not work without the flag. Do not
+  reintroduce either. Two failure modes went with it: mounting a plugin on a
+  scoped Router, and forgetting the flag, are now unrepresentable rather than
+  tested.
+- **`Price` is part of the declaration, and it is REQUIRED.** Every spec states
+  what ONE request to its surface costs at the edge — `cloud.Free`,
+  `cloud.Metered`, or a positive number of cents (price.go). The zero value is
+  `Undeclared` and `apps.TestPriceDeclared` fails on it, so a new subsystem
+  cannot reach main until someone answers the question in the same diff that adds
+  its routes. `DefaultPrice` reads this and keeps NO table of its own.
 - **Out-of-process variant.** A subsystem may run as its OWN binary without
-  changing anything about it: `cloud.PluginSpec(name, zip.Plugin{…}, prefixes…)`
+  changing anything about it:
+  `cloud.PluginSpec(name, price, zip.Plugin{…}, prefixes…)` (plugin_spec.go:40)
   returns an ordinary `MountSpec`, so where a subsystem runs stops being a
-  property of its source and becomes one line at the composition root. zip starts
-  `cmd/<name>` as a child on a private unix socket and forwards the path
-  UNCHANGED. Today `o11y` is the only one — it is the heaviest graph in the tree
-  (otel-collector, prometheus, gonum) and imported by nothing else, so unlinking
-  it is pure subtraction.
-  - `prefixes` is variadic because ONE plugin commonly owns several subtrees
-    (`o11y` answers `/v1/o11y` AND `/v1/sentry`). Naming only the first 404s the
-    rest AT THE HOST — the request never reaches the child — while the host
-    starts and reports healthy. Both readers take the same list: zip routes on
-    it, and `indexSubsystems` reports it to `/v1/admin/subsystems` and to the
-    per-request subsystem attribution tracing hangs off.
+  property of its source and becomes one line at the composition root. `zip.Load`
+  returns a `zip.Service` — the same type a linked-in service is — so nothing
+  downstream (routing, health, shutdown ordering) can tell the difference. zip
+  starts the child on a private unix socket and forwards the path UNCHANGED.
+  Today `o11y` is the only one — the heaviest graph in the tree (otel-collector,
+  prometheus, gonum), imported by nothing else, so unlinking it is pure
+  subtraction. **Unlinking means deleting the IMPORT, not just the mount**:
+  `apps/apps.go` carries a standing comment where `clients/o11y` would be
+  imported, because an import there would keep its 2.7k-package graph linked
+  whether or not any Wire entry referenced it.
+  - `price` is POSITIONAL, ahead of the variadic prefixes, and that placement is
+    forced rather than chosen. A plugin serves its prefixes from another process
+    and NOTHING downstream of the spec can see what happens in there, so what the
+    surface costs has to be stated by whoever decides to mount it — exactly as
+    for a linked-in subsystem.
+  - `prefixes` is variadic because ONE service commonly owns several route
+    subtrees (`o11y` answers `/v1/o11y` AND `/v1/sentry`, both registered by the
+    same `MountO11y` the child runs). Naming only the first 404s the rest AT THE
+    HOST — the request never reaches the child — while the host starts and
+    reports healthy. **The plugin is the unit of deployment; the subtrees it owns
+    are a property of it, not a reason to declare it twice.** Nothing is
+    defaulted or validated in `PluginSpec`: `zip.Load` already rejects an empty
+    list by name, and restating that would put one rule in two places.
+  - `PluginSpec` sets `App`, not `Mount`, because `zip.Load` registers under the
+    prefixes it was given — handing it a scoped Router would nest them under the
+    subsystem name and the routes would answer somewhere nobody is asking. The
+    consequence: it does NOT narrow middleware, since `MountAll` builds a scope
+    only for a spec that supplies `Mount`.
+  - `Prefixes` is still stated on the spec, and reaches both readers from one
+    place: zip routes on it, and `Declare` reads it for the boot inventory
+    (`/v1/admin/subsystems`) and the per-request subsystem attribution tracing
+    hangs off. Leaving it empty falls back to the `/v1/<name>` convention — which
+    for a plugin owning a second subtree means that subtree's traffic is
+    attributed to NOBODY.
   - The image must actually CONTAIN the binary: `zip.Load` fork/execs a sibling
     of `/cloud`, so a missing one aborts the mount and cloud never listens
     (`fork/exec /o11y: no such file`). The Dockerfile DERIVES the list by grepping
     `PluginSpec("…"` out of `apps/apps.go` rather than keeping a second copy —
-    unlinking o11y without adding a build step once cost five consecutive releases.
+    unlinking o11y without adding a build step once cost five consecutive
+    releases — and FAILS the build if a declared plugin has no `cmd/<name>`,
+    rather than at a pod's first boot. **Unlinking a subsystem means building it
+    somewhere else, not just deleting the import.** This is only for `PluginSpec`
+    apps: under `cmd/host`, every OTHER app has no dedicated binary in the image
+    and resolves down the ladder to `/cloud --enable=<name>`, which is why that
+    path needs no per-app build step at all.
 - **Client seams.** Cross-subsystem calls go through a narrow in-process interface
   published in `types` and aliased at the provider, e.g. `commerce.Client =
   types.CommerceClient` (`GetOrgConfig` + `CheckEntitlement`). Consumers depend on
@@ -364,8 +543,20 @@ package under `clients/<name>` that obeys these seams — nothing more.
   linked subsystem, in mount order, as ONE explicit slice read top-to-bottom.
   Slice position IS the order: there is no `Order` field and `MountAll`
   (build.go) does NOT sort; it iterates as-given and mounts each ENABLED spec
-  (`cfg.Enabled`). To add a subsystem you add one line to `Wire()`.
-  `apps/wire_test.go` freezes the sequence, so a reorder/drop/add fails there.
+  (`cfg.Enabled`). To add a subsystem you add one line to `Wire()`, and teardown
+  needs no separate gate: `MountAll` registers each `Shutdown` via
+  `app.OnShutdown` right after that subsystem mounts, and zip drains hooks LIFO
+  after the listeners stop — so registration-at-mount yields reverse-mount
+  teardown with nothing torn down while a request still uses it.
+  `apps/wire_test.go` freezes the sequence (name, `OwnsHealth`, has-`Shutdown`,
+  global), so a reorder/drop/add fails there. **That test is a FROZEN GOLDEN, not
+  an invariant: when `Wire()` legitimately changes, the fix is to update `frozen`
+  in the same diff.** `meet` was added RED and then frozen; `rollingcap` says so
+  in its row ("golden drifted — refrozen"). Each row carries the deleted
+  order-int as provenance, and a deliberate flag change is annotated in place
+  rather than silently edited — o11y's `hasShutdown` flipped true→false when it
+  became a plugin, and the row explains that the host no longer owns any o11y
+  resource to close.
 - **Route precedence.** The router is zap-proto/fiber (zip v1.8.3). Most-specific
   route wins regardless of mount order, so subsystems may mount in any order and
   still compose deterministically. But precedence is NOT a conflict guard: two
@@ -445,10 +636,18 @@ embedded underneath.
 (zapface), the console RENDERS them, and `GET /v1/openapi.json` DESCRIBES them
 (`openapi.Mount`). None holds a second copy of anything; none can drift.
 
+(The document itself now has four SINKS — the live endpoint, the committed
+`openapi.yaml` golden, each app binary's own subset, and the weave of those
+subsets. They are four renderings of one value, not four projections; see "The
+document pipeline" below.)
+
 - **The spec IS the router.** `openapi.Live(app)` reads
   `app.Fiber().GetRoutes(true)` — fiber's own filter drops `Use()` middleware —
   and every other function in `openapi/` is a pure function of that `[]Route`.
-  There is NO checked-in spec file to hand-maintain and no second registry. The
+  There is no HAND-MAINTAINED spec and no second route registry. (`openapi.yaml`
+  at the root is a checked-in GOLDEN — written by the same code path that serves
+  the live document, verified on every `make test`. It is a rendering, not a
+  source; `openapi.Register` adds a registry of BODIES, never of routes.) The
   drift guard is `cmd/cloud/openapi_test.go`: a BIJECTION over the fully-mounted
   `apps.Wire()` — every live route appears as an operation, every operation is
   backed by a live route. It is the only test whose failure means the document
@@ -474,18 +673,212 @@ embedded underneath.
   `func(*zip.Ctx) error`; the request type is a LOCAL inside the handler
   (`var req secretPutRequest; json.Unmarshal(ctx.Body(), &req)`), and Go cannot
   reflect from a func value into its body. `cloud.Handle[S]` does not help — `S`
-  is the SERVICE (service.go:90), not the payload; `cloud.Typed` is an
-  `any→*zip.App` mount adapter. The ONE path to schemas is zip's typed ops
-  (`zip.Get[In,Out]`), which carry the In/Out types and also yield an MCP tool
-  from the same registry (zip/openapi.go, zip/mcp.go — today `len(a.ops) == 0`,
-  so zip's own generator emits nothing here). `GetRoutes()` is a superset of
-  `app.ops`, so migrating a handler to a typed op adds schema without changing
-  this pipeline.
+  is the SERVICE (service.go:90), not the payload. The ONE path to schemas is
+  zip's typed ops (`zip.Get[In,Out]`), which carry the In/Out types and also
+  yield an MCP tool and a CLI command from the same registry entry.
+  `GetRoutes()` is a strict SUPERSET of `app.ops`, so migrating a handler to a
+  typed op adds schema without changing this pipeline — and it needs no generator
+  change, because `Fold` picks it up on the next run. **That registry is no
+  longer empty**: 165 ops across 15 packages carry types today. See "The document
+  pipeline" and "The typed migration" below.
+  (Note: `cloud.Typed` is NOT a mount adapter — it is the per-request seam that
+  carries the validated org, the request and the response status across the typed
+  signature, which drops all three. typed.go.)
 - **Catch-alls are opaque, by construction.** `app.Post("/v1/billing/*")` proxies
   to another service, so `POST /v1/billing/deposit` is NOT a route in this process
   and cannot appear. Measured on the live table: 3 products are wholly opaque
   (`bot`, `licensing`, `sentry` — the catch-all IS the product) and 12 more mix
   concrete ops with a catch-all hiding an unknown remainder.
+
+## The document pipeline: ONE registry, N projections
+
+A typed op is ONE registry entry with N projections. `zip.Get[In,Out]` (and its
+Post/Put/Patch/Delete siblings) is the single registration every consumer reads —
+the REST route, the OpenAPI operation's DETAIL, the MCP tool, the CLI command and
+the generated SDK method all come from that one entry. An untyped route still
+gets a route and a bare operation (method, path, product — all the router knows),
+and nothing else: **no schema, no prose, no MCP tool, no CLI command, no SDK
+method.** Nothing here is a second source; each stage is a pure function of the
+one before it.
+
+    handler doc comments  ──zipdoc─▶  zipdoc_gen.go  ──init─▶  zip.Describe
+    zip.Get[In,Out]       ──────────────▶  zip's typed-op registry (app.ops)
+                          ──────────────▶  a fiber route (so GetRoutes ⊇ app.ops)
+
+    live fiber router  ──Live─▶  []Route   ──From─▶  Document   (shape)
+    typed registry     ──Typed─▶ Registry  ──Fold─▶  Document   (detail)
+                                                    │
+      GET /v1/openapi.json · openapi.yaml · `<app> openapi` · Weave
+
+- **`Spec` = `From` ∘ `Live`, then `Fold` over `Typed`** (openapi/openapi.go:489).
+  `GetRoutes()` is a strict superset of `app.ops` — registering a typed op
+  registers a fiber route too — so the router gives the TOTAL set of operations
+  and the registry gives DETAIL for the subset that has any. One document, no
+  gaps and no invention. The two are not rivals and never disagree, because one
+  is a subset of the other by construction.
+- **`openapi.Register` (openapi/register.go) is the reflection seam for untyped
+  routes.** A subsystem that has not migrated can still DECLARE the payload types
+  the router cannot derive: `openapi.Register(path, method, req, resp)` from its
+  init, next to its route table, passing the zero value of the handler's own
+  binding struct. The schema is derived by reflection from those very structs
+  (json tags), so there is no hand-written schema to fall out of sync — change
+  the struct and the document follows. **The registry cannot add an operation**:
+  a registration whose route is not in the router simply never renders, so the
+  document still cannot disagree with the router. Schemas are additive metadata
+  on routes that exist. A duplicate registration for one `(method, path)` panics
+  at init rather than letting two declarations race. Seven declarations live
+  there today, all `clients/platform` (platform.go:248-254) — this is a bridge,
+  not the destination; the destination is the typed op.
+- **zipdoc is why the prose exists at all.** Go drops comments at compile time,
+  so the build-time pass is the ONLY way a handler's doc comment, its field
+  descriptions and its `Example:`/`Response:` lines reach the document.
+  `//go:generate go run github.com/zap-proto/zip/cmd/zipdoc` sits in each typed
+  package (15 of them); the tool walks the typed registrations, harvests the
+  comments, and emits `zipdoc_gen.go` — `zip.Describe` calls that run at `init`
+  and are therefore **compiled INTO every binary**. That is why it is a
+  prerequisite of `build` and not of `openapi`: running it after the build is too
+  late.
+  - The Dockerfile now runs `go generate -run zipdoc ./...` before every build
+    (Dockerfile:178). It did not, and the omission was measurable in production:
+    **api.hanzo.ai served 1441 operations with ZERO descriptions** — exactly the
+    binary `mk/plugin.mk` warns about. The SDK repos and the CLI read that
+    document, so the prose never reached any of them either. `-run zipdoc` picks
+    the directives out of `./...` by name, so a typed op added anywhere is
+    covered and no unrelated generator fires.
+- **Each app describes ITSELF: `<binary> openapi <file>`** (openapi_dump.go). An
+  app's subset is generated from the app's OWN live router by the SAME
+  `openapi.FleetSpec` the whole document is, over an app with only that subsystem
+  mounted. It is never sliced out of the fleet spec by prefix — that would make
+  the fleet the source and the app a derivative, which is backwards, and is
+  exactly how a catch-all silently swallows a neighbour's routes. **Compose
+  upward, never carve downward.** The mode lives on `Serve` because `Serve` is
+  the single entry every app binary shares, so every one of them gets the target
+  at a cost of zero per-app code. It writes a FILE, never stdout: a subsystem's own
+  dependencies print to stdout at mount (hanzoai/commerce emits a sqlite-vec
+  warning and GORM debug lines), which a `> file` redirect splices into the front
+  of the document — 71 KB of invalid JSON. A writer whose output an unrelated
+  library can corrupt is not a writer.
+- **`openapi.Weave` composes the subsets, and its only contribution is the
+  REFUSAL** (openapi/weave.go). Two apps may not claim one address, and two apps
+  may not mean different things by one schema name. That refusal is not
+  hypothetical: `clients/git`'s `/:org/:repo` catch-all was swallowing other
+  apps' routes, and the manifest's call-graph walk is what caught it. The routing
+  order in `Wire()` is load-bearing precisely because overlapping claims exist.
+  A merge that took last-write-wins would produce a perfectly valid
+  document describing a fleet nobody deploys — every generated SDK wrong, in a
+  way no test could see. **A document that cannot be woven is a fleet that cannot
+  be routed.** Weave does NOT arbitrate, because there is no policy for who
+  should win: an overlap is a bug at the composition root, and the fix is in
+  `Wire()`. `TestFleetIsTheWeaveOfItsApps` (weave_test.go:130) proves the
+  composition against the golden, admitting exactly ONE class of difference —
+  routes behind a PLUGIN's catch-all, which the monolith's router cannot see and
+  the app's own binary can. `TestWeaveRefusesTwoAppsAtOneAddress`,
+  `…OneSchemaNameWithTwoShapes` and `…CollidingOperationIDs` pin the refusals.
+- **The document's IDENTITY is a value, not a literal** (openapi/fleet.go). Four
+  producers write documents that must compare equal, so title/version/server live
+  once and all four read them; an info block that differed would make two
+  documents OF THE SAME API compare unequal over a title string. `Version` is the
+  API CONTRACT version — `v1` forever, house law — never the build's:
+  `cloud.Version` here would make every build differ from the committed golden.
+- **`openapi.yaml` is a GOLDEN of the live router, and the ONE artifact cloud
+  publishes.** `make openapi` writes it (`-update`); `make test`, and therefore
+  CI, verifies it with the same test and no flag (`TestOpenAPIYAML`,
+  cmd/cloud/openapi_yaml_test.go). Same code path both ways — there is no second
+  generator to disagree with, and no way to change a route without either
+  regenerating the file or turning the build red. It is serialised through JSON
+  because JSON is what the document IS (the same value served at
+  `/v1/openapi.json`); YAML is a rendering, and `encoding/json` orders object
+  keys so the bytes are stable run to run.
+- **SDK repos PULL; cloud does not push.** A stale spec does not stop at cloud —
+  it ships wrong clients to four package registries. The repos read
+  `openapi.yaml`, regenerate, and release on their own cadence.
+  `make openapi OPENAPI_DIR=<checkout>` additionally drops the same document into
+  a hanzoai/openapi checkout as `generated/hanzo.json`, where that repo
+  aggregates, audits and generates from it. The drop is the same document written
+  by the same run — one value in two places, not two sources of truth. It is
+  named `hanzo`, not `cloud`, because the binary serves the WHOLE /v1 surface.
+
+## The typed migration: one registry entry, or a route and nothing else
+
+Measured at `b3ba3f11`, and re-measurable — do not trust these numbers past the
+next few merges, run the commands:
+
+    # typed ops (the generic package-level registrars; types are INFERRED,
+    # so they read as ordinary calls — bracket syntax appears only in comments)
+    grep -rEn 'zip\.(Get|Post|Put|Patch|Delete)\(' --include='*.go' . \
+      | grep -v _test | grep -vE ':[0-9]+:[[:space:]]*//'          # 165, 15 pkgs
+
+    # untyped: a METHOD call on a router/group value
+    grep -rEn '\.(Get|Post|Put|Patch|Delete)\("/' --include='*.go' . \
+      | grep -v _test | grep -vE ':[0-9]+:[[:space:]]*//'          # ~900, ~95 pkgs
+
+The discriminator is `zip.X(` (package-qualified generic) versus `<receiver>.X(`
+(method on `*zip.App`/Router) — NOT the presence of square brackets. The
+published document is the honest denominator: `openapi.yaml` carries **1396
+operations across 982 paths, of which 164 have a description.** The other ~1230
+are route only — no MCP tool, no CLI command, no SDK method, no schema, no
+prose.
+
+The typed 15 are `clients/admin` and its eight sub-packages, plus `clients/git`,
+`clients/integrations`, `clients/marketing`, `clients/plugin`, `clients/search`,
+`clients/visor`. `clients/admin/core/typed.go` states the rule for that surface:
+every `/v1/admin/*` route is a typed op.
+
+**What compensates today, and how it dies.** hanzoai/openapi carries an AUTHORED
+master, `hanzo.yaml`, which is the only source of request-body and query-parameter
+SHAPE for the untyped majority — because those handlers are raw fiber handlers
+and the registry has no Go type to read a schema off. The Rust CLI's
+`genspec` (`~/work/hanzo/cli/src/bin/genspec.rs`) joins the two documents that
+are each authoritative about half an operation: cloud's live table says WHAT IS
+SERVED, the authored master says WHAT IT TAKES.
+
+Its rule is **refute-only, at PRODUCT granularity**: if cloud's table has any
+route under `/v1/<product>/`, cloud owns that product and its table is complete
+for it — an authored operation the table lacks is not served, and is dropped. If
+the table is SILENT about a product, cloud is not the authority over it (the
+inference surface `/v1/models`, `/v1/chat/completions` is answered at the edge by
+the gateway, not by this router), so nothing is refuted and the authored
+operation stands. That rule is what retired the hand-maintained "this one 404s"
+list: the `gateway` subtree drops out because the registry serves none of it, not
+because a list says so.
+
+**As ops go typed, their schemas appear in the registry document and the authored
+half shrinks. When it reaches zero the master is dead.** Do NOT delete it first —
+it is load-bearing for every product still untyped, and removing it ahead of the
+migration silently strips request shapes from every generated CLI and SDK.
+
+## Generated and frozen artifacts: what goes stale, and how you find out
+
+- **15 `zipdoc_gen.go` files are COMMITTED, and `mk/plugin.mk:45-46` still says
+  they are not.** They are tracked, not gitignored, one per typed package, 1:1
+  with the `//go:generate` directives. The comment is stale prose, not a bug —
+  but the reason they are committed IS live: the root build targets (`build`,
+  `host`, `ship`, `plugin`, `monolith`) do not regenerate them, so a binary built
+  from a fresh checkout by any of those paths would otherwise ship with no
+  descriptions at all. Only `make openapi` (Makefile:214), the per-app
+  `mk/plugin.mk build` chain, and the Dockerfile (line 178) run the pass.
+  **Untrack them only after every build path regenerates them** — not before.
+  zipdoc has a `-check` mode that writes nothing and errors on a stale file; no
+  gate in this repo uses it yet, which is the other half of the same gap.
+- **The wire freeze test must be updated in the same diff as `Wire()`.** It is a
+  golden, not an invariant. A new subsystem lands RED until `frozen` names it.
+  That is the design — the failure is the review prompt — but do not "fix" it by
+  loosening the test.
+- **Committed per-app subsets (`cmd/<app>/openapi.json`) go stale when routes
+  change.** The weave gate catches it: `TestFleetIsTheWeaveOfItsApps` compares the
+  composition against `openapi.yaml`, so an app whose subset no longer matches its
+  routes fails there — and a MISSING subset fails immediately, naming the file.
+  The fix is to re-emit: `make -C clients/<app> openapi` for one,
+  `make -f mk/fleet.mk openapi-apps` for all of them. Never edit the JSON, and
+  never relax the gate. The same test also LOGS `UNROUTED: <app> serves <path>,
+  which the fleet routes nowhere` — reported rather than refused, because that one
+  is a composition-root defect (a prefix missing from a `Wire()` entry) and the
+  honest fleet document is the one without the route. Read those log lines; they
+  are the early warning for a subtree the host will 404.
+- **A count quoted in prose is stale the next week.** api.hanzo.ai once measured
+  1467 operations / 1064 paths / 167 products against a doc still claiming
+  983/692/109. Every number in this file is tagged with how to re-measure it;
+  keep it that way.
 
 ## Cross-subsystem seams that are values, not places
 
