@@ -125,7 +125,7 @@ export E2E_CLIENT_SECRET="$CLIENT_SECRET"        # ${VAR} substitution in init_d
 export E2E_REDIRECT_URI="$BASE/auth/callback"
 
 say "booting cloud on $BASE (data: $DATA_DIR)"
-./bin/cloud --enable=iam,base,kms,marketing,notify --brand=hanzo --listen=":$HTTP_PORT" >"$LOG" 2>&1 &
+./bin/cloud --enable=iam,base,kms,marketing,notify,billing --brand=hanzo --listen=":$HTTP_PORT" >"$LOG" 2>&1 &
 CLOUD_PID=$!
 
 # Readiness is the health LISTENER answering ok — not the HTTP port, which 404s
