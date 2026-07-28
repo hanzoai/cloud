@@ -1,0 +1,114 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "logs"
+    },
+    {
+      "name": "metrics"
+    },
+    {
+      "name": "traces"
+    }
+  ],
+  "paths": {
+    "/v1/logs/health": {
+      "get": {
+        "operationId": "get_v1_logs_health",
+        "tags": [
+          "logs"
+        ]
+      }
+    },
+    "/v1/logs/query": {
+      "get": {
+        "operationId": "get_v1_logs_query",
+        "tags": [
+          "logs"
+        ]
+      }
+    },
+    "/v1/logs/write": {
+      "post": {
+        "operationId": "post_v1_logs_write",
+        "tags": [
+          "logs"
+        ]
+      }
+    },
+    "/v1/metrics/batch": {
+      "post": {
+        "operationId": "post_v1_metrics_batch",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/v1/metrics/health": {
+      "get": {
+        "operationId": "get_v1_metrics_health",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/v1/metrics/query": {
+      "get": {
+        "operationId": "get_v1_metrics_query",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/v1/metrics/write": {
+      "post": {
+        "operationId": "post_v1_metrics_write",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/v1/traces/health": {
+      "get": {
+        "operationId": "get_v1_traces_health",
+        "tags": [
+          "traces"
+        ]
+      }
+    },
+    "/v1/traces/query": {
+      "get": {
+        "operationId": "get_v1_traces_query",
+        "tags": [
+          "traces"
+        ]
+      }
+    },
+    "/v1/traces/trace": {
+      "get": {
+        "operationId": "get_v1_traces_trace",
+        "tags": [
+          "traces"
+        ]
+      }
+    },
+    "/v1/traces/write": {
+      "post": {
+        "operationId": "post_v1_traces_write",
+        "tags": [
+          "traces"
+        ]
+      }
+    }
+  }
+}

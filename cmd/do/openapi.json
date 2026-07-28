@@ -1,0 +1,119 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "load-balancers"
+    },
+    {
+      "name": "vpcs"
+    }
+  ],
+  "paths": {
+    "/v1/load-balancers": {
+      "get": {
+        "operationId": "get_v1_load-balancers",
+        "tags": [
+          "load-balancers"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_load-balancers",
+        "tags": [
+          "load-balancers"
+        ]
+      }
+    },
+    "/v1/load-balancers/{id}": {
+      "delete": {
+        "operationId": "delete_v1_load-balancers_by_id",
+        "tags": [
+          "load-balancers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_load-balancers_by_id",
+        "tags": [
+          "load-balancers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/vpcs": {
+      "get": {
+        "operationId": "get_v1_vpcs",
+        "tags": [
+          "vpcs"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_vpcs",
+        "tags": [
+          "vpcs"
+        ]
+      }
+    },
+    "/v1/vpcs/{id}": {
+      "delete": {
+        "operationId": "delete_v1_vpcs_by_id",
+        "tags": [
+          "vpcs"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_vpcs_by_id",
+        "tags": [
+          "vpcs"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

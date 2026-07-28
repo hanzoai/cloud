@@ -1,0 +1,55 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "admin"
+    },
+    {
+      "name": "referrals"
+    }
+  ],
+  "paths": {
+    "/v1/admin/referrals/bonuses": {
+      "get": {
+        "operationId": "get_v1_admin_referrals_bonuses",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/referrals/sweep": {
+      "post": {
+        "operationId": "post_v1_admin_referrals_sweep",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/referrals": {
+      "get": {
+        "operationId": "get_v1_referrals",
+        "tags": [
+          "referrals"
+        ]
+      }
+    },
+    "/v1/referrals/claim": {
+      "post": {
+        "operationId": "post_v1_referrals_claim",
+        "tags": [
+          "referrals"
+        ]
+      }
+    }
+  }
+}

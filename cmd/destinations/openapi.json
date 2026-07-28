@@ -1,0 +1,96 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "destinations"
+    }
+  ],
+  "paths": {
+    "/v1/destinations/": {
+      "get": {
+        "operationId": "get_v1_destinations",
+        "tags": [
+          "destinations"
+        ]
+      }
+    },
+    "/v1/destinations/{platform}": {
+      "delete": {
+        "operationId": "delete_v1_destinations_by_platform",
+        "tags": [
+          "destinations"
+        ],
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_destinations_by_platform",
+        "tags": [
+          "destinations"
+        ],
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_destinations_by_platform",
+        "tags": [
+          "destinations"
+        ],
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/destinations/{platform}/test": {
+      "post": {
+        "operationId": "post_v1_destinations_by_platform_test",
+        "tags": [
+          "destinations"
+        ],
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

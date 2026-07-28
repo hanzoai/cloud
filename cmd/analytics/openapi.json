@@ -1,0 +1,139 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "analytics"
+    },
+    {
+      "name": "errors"
+    },
+    {
+      "name": "event"
+    },
+    {
+      "name": "ingest"
+    },
+    {
+      "name": "insights"
+    },
+    {
+      "name": "tracker"
+    }
+  ],
+  "paths": {
+    "/v1/analytics": {
+      "post": {
+        "operationId": "post_v1_analytics",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/v1/analytics/batch": {
+      "post": {
+        "operationId": "post_v1_analytics_batch",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/v1/analytics/health": {
+      "get": {
+        "operationId": "get_v1_analytics_health",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/v1/analytics/overview": {
+      "get": {
+        "operationId": "get_v1_analytics_overview",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/v1/analytics/timeseries": {
+      "get": {
+        "operationId": "get_v1_analytics_timeseries",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/v1/analytics/top": {
+      "get": {
+        "operationId": "get_v1_analytics_top",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/v1/errors": {
+      "get": {
+        "operationId": "get_v1_errors",
+        "tags": [
+          "errors"
+        ]
+      }
+    },
+    "/v1/event": {
+      "post": {
+        "operationId": "post_v1_event",
+        "tags": [
+          "event"
+        ]
+      }
+    },
+    "/v1/ingest": {
+      "post": {
+        "operationId": "post_v1_ingest",
+        "tags": [
+          "ingest"
+        ]
+      }
+    },
+    "/v1/insights/e": {
+      "post": {
+        "operationId": "post_v1_insights_e",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
+    "/v1/insights/events": {
+      "get": {
+        "operationId": "get_v1_insights_events",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
+    "/v1/insights/health": {
+      "get": {
+        "operationId": "get_v1_insights_health",
+        "tags": [
+          "insights"
+        ]
+      }
+    },
+    "/v1/tracker": {
+      "post": {
+        "operationId": "post_v1_tracker",
+        "tags": [
+          "tracker"
+        ]
+      }
+    }
+  }
+}

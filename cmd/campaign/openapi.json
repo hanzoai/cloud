@@ -1,0 +1,190 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "campaign"
+    }
+  ],
+  "paths": {
+    "/v1/campaign": {
+      "get": {
+        "operationId": "get_v1_campaign",
+        "tags": [
+          "campaign"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_campaign",
+        "tags": [
+          "campaign"
+        ]
+      }
+    },
+    "/v1/campaign/summary": {
+      "get": {
+        "operationId": "get_v1_campaign_summary",
+        "tags": [
+          "campaign"
+        ]
+      }
+    },
+    "/v1/campaign/{id}": {
+      "delete": {
+        "operationId": "delete_v1_campaign_by_id",
+        "tags": [
+          "campaign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_campaign_by_id",
+        "tags": [
+          "campaign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_campaign_by_id",
+        "tags": [
+          "campaign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/campaign/{id}/channels": {
+      "post": {
+        "operationId": "post_v1_campaign_by_id_channels",
+        "tags": [
+          "campaign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/campaign/{id}/channels/{kind}": {
+      "delete": {
+        "operationId": "delete_v1_campaign_by_id_channels_by_kind",
+        "tags": [
+          "campaign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/campaign/{id}/launch": {
+      "post": {
+        "operationId": "post_v1_campaign_by_id_launch",
+        "tags": [
+          "campaign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/campaign/{id}/metrics": {
+      "get": {
+        "operationId": "get_v1_campaign_by_id_metrics",
+        "tags": [
+          "campaign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/campaign/{id}/pause": {
+      "post": {
+        "operationId": "post_v1_campaign_by_id_pause",
+        "tags": [
+          "campaign"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

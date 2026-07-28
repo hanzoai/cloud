@@ -1,0 +1,119 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "billing"
+    },
+    {
+      "name": "finance"
+    }
+  ],
+  "paths": {
+    "/v1/billing/balance": {
+      "get": {
+        "operationId": "get_v1_billing_balance",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/gpu-charge": {
+      "post": {
+        "operationId": "post_v1_billing_gpu-charge",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/gpu-eligibility": {
+      "get": {
+        "operationId": "get_v1_billing_gpu-eligibility",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/payment-methods": {
+      "get": {
+        "operationId": "get_v1_billing_payment-methods",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/usage": {
+      "get": {
+        "operationId": "get_v1_billing_usage",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/usage/accounts": {
+      "get": {
+        "operationId": "get_v1_billing_usage_accounts",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/finance/balance": {
+      "get": {
+        "operationId": "get_v1_finance_balance",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/v1/finance/credits": {
+      "get": {
+        "operationId": "get_v1_finance_credits",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/v1/finance/invoices": {
+      "get": {
+        "operationId": "get_v1_finance_invoices",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/v1/finance/ledger": {
+      "get": {
+        "operationId": "get_v1_finance_ledger",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/v1/finance/payment-methods": {
+      "get": {
+        "operationId": "get_v1_finance_payment-methods",
+        "tags": [
+          "finance"
+        ]
+      }
+    },
+    "/v1/finance/usage": {
+      "get": {
+        "operationId": "get_v1_finance_usage",
+        "tags": [
+          "finance"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "flags"
+    }
+  ],
+  "paths": {
+    "/v1/flags": {
+      "post": {
+        "operationId": "post_v1_flags",
+        "tags": [
+          "flags"
+        ]
+      }
+    },
+    "/v1/flags/activity": {
+      "get": {
+        "operationId": "get_v1_flags_activity",
+        "tags": [
+          "flags"
+        ]
+      }
+    },
+    "/v1/flags/decide": {
+      "post": {
+        "operationId": "post_v1_flags_decide",
+        "tags": [
+          "flags"
+        ]
+      }
+    },
+    "/v1/flags/defs": {
+      "get": {
+        "operationId": "get_v1_flags_defs",
+        "tags": [
+          "flags"
+        ]
+      }
+    },
+    "/v1/flags/defs/{key}": {
+      "delete": {
+        "operationId": "delete_v1_flags_defs_by_key",
+        "tags": [
+          "flags"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_flags_defs_by_key",
+        "tags": [
+          "flags"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_flags_defs_by_key",
+        "tags": [
+          "flags"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/flags/health": {
+      "get": {
+        "operationId": "get_v1_flags_health",
+        "tags": [
+          "flags"
+        ]
+      }
+    }
+  }
+}

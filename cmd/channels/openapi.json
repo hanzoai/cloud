@@ -1,0 +1,84 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "channels"
+    }
+  ],
+  "paths": {
+    "/v1/channels": {
+      "get": {
+        "operationId": "get_v1_channels",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/v1/channels/allowlist": {
+      "get": {
+        "operationId": "get_v1_channels_allowlist",
+        "tags": [
+          "channels"
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_channels_allowlist",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/v1/channels/inbox": {
+      "get": {
+        "operationId": "get_v1_channels_inbox",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/v1/channels/pairing": {
+      "get": {
+        "operationId": "get_v1_channels_pairing",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/v1/channels/pairing/approve": {
+      "post": {
+        "operationId": "post_v1_channels_pairing_approve",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/v1/channels/{channel}/send": {
+      "post": {
+        "operationId": "post_v1_channels_by_channel_send",
+        "tags": [
+          "channels"
+        ],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -84,6 +84,48 @@ test:
         exit 1
       fi
       echo "OK: cmd/host links $(go list -deps ./cmd/host | wc -l) packages and no subsystem"
+  - name: openapi-composed
+    # The fleet spec must BE the composition of its apps' own specs. Each app
+    # binary emits its own subset from its own router (`<app> openapi`), and
+    # openapi/weave.go puts them back together — refusing, loudly, when two apps
+    # claim one path+method or mean different things by one schema name. Silent
+    # last-write-wins is exactly the class of bug the manifest's call-graph walk
+    # caught when clients/git's /:org/:repo was swallowing its neighbours.
+    #
+    # It also pins FRESHNESS in both directions, which is why it earns its own
+    # entry rather than riding go-unit: openapi.yaml is verified against the live
+    # router by TestOpenAPIYAML, and this verifies the woven subsets against
+    # openapi.yaml — so a route change that regenerates one and not the other
+    # goes red here, in seconds, instead of shipping a wrong SDK. Links no
+    # subsystem and mounts nothing but the openapi endpoint itself.
+    run: |
+      set -e
+      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      go test -count=1 ./openapi
+  - name: app-contract
+    # Every app builds, tests and describes itself through ONE shared file
+    # (mk/plugin.mk), and this is the only gate that proves every per-app binary
+    # still LINKS and still MOUNTS ALONE — the property the whole host+plugin
+    # model rests on and that nothing else here checks. It is the per-app
+    # `openapi` target run across the fleet, so the artifacts it regenerates must
+    # come back identical: a dirty tree means an app's routes moved without its
+    # subset being regenerated.
+    #
+    # Slow by construction (one link per app, sequential, GOFLAGS=-p=2 — each
+    # link peaks in the GiBs). It runs after the cheap gates on purpose.
+    run: |
+      set -e
+      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      make -f mk/fleet.mk openapi-apps
+      # --porcelain, not `git diff`: a NEW app produces a NEW subset, which is
+      # untracked and therefore invisible to a diff. Scoped to the files the
+      # per-app target owns.
+      stale=$(git status --porcelain -- 'cmd/*/openapi.json')
+      if [ -n "$stale" ]; then
+        echo "::error::an app's published subset is stale — its routes changed without 'make -C clients/<app> openapi'. Run 'make -f mk/fleet.mk openapi-apps' and commit."
+        echo "$stale"
+        exit 1
+      fi
   - name: go-unit
     run: |
       set -e

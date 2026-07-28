@@ -1,0 +1,294 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "tasks"
+    }
+  ],
+  "paths": {
+    "/tasks": {
+      "delete": {
+        "operationId": "delete_tasks"
+      },
+      "get": {
+        "operationId": "get_tasks"
+      },
+      "options": {
+        "operationId": "options_tasks"
+      },
+      "patch": {
+        "operationId": "patch_tasks"
+      },
+      "post": {
+        "operationId": "post_tasks"
+      },
+      "put": {
+        "operationId": "put_tasks"
+      },
+      "trace": {
+        "operationId": "trace_tasks"
+      }
+    },
+    "/tasks/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_tasks_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_tasks_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "options": {
+        "operationId": "options_tasks_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_tasks_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_tasks_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_tasks_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "trace": {
+        "operationId": "trace_tasks_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/tasks": {
+      "delete": {
+        "operationId": "delete_v1_tasks",
+        "tags": [
+          "tasks"
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_tasks",
+        "tags": [
+          "tasks"
+        ]
+      },
+      "options": {
+        "operationId": "options_v1_tasks",
+        "tags": [
+          "tasks"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_tasks",
+        "tags": [
+          "tasks"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_tasks",
+        "tags": [
+          "tasks"
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_tasks",
+        "tags": [
+          "tasks"
+        ]
+      },
+      "trace": {
+        "operationId": "trace_v1_tasks",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/v1/tasks/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_v1_tasks_by_wildcard1",
+        "tags": [
+          "tasks"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_tasks_by_wildcard1",
+        "tags": [
+          "tasks"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "options": {
+        "operationId": "options_v1_tasks_by_wildcard1",
+        "tags": [
+          "tasks"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_tasks_by_wildcard1",
+        "tags": [
+          "tasks"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_tasks_by_wildcard1",
+        "tags": [
+          "tasks"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_tasks_by_wildcard1",
+        "tags": [
+          "tasks"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "trace": {
+        "operationId": "trace_v1_tasks_by_wildcard1",
+        "tags": [
+          "tasks"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

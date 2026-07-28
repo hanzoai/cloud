@@ -1,0 +1,120 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "wallets"
+    }
+  ],
+  "paths": {
+    "/v1/wallets": {
+      "get": {
+        "operationId": "get_v1_wallets",
+        "tags": [
+          "wallets"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_wallets",
+        "tags": [
+          "wallets"
+        ]
+      }
+    },
+    "/v1/wallets/accounts": {
+      "get": {
+        "operationId": "get_v1_wallets_accounts",
+        "tags": [
+          "wallets"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_wallets_accounts",
+        "tags": [
+          "wallets"
+        ]
+      }
+    },
+    "/v1/wallets/{id}": {
+      "get": {
+        "operationId": "get_v1_wallets_by_id",
+        "tags": [
+          "wallets"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/wallets/{id}/keys": {
+      "post": {
+        "operationId": "post_v1_wallets_by_id_keys",
+        "tags": [
+          "wallets"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/wallets/{id}/safe-tx": {
+      "post": {
+        "operationId": "post_v1_wallets_by_id_safe-tx",
+        "tags": [
+          "wallets"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/wallets/{id}/sign": {
+      "post": {
+        "operationId": "post_v1_wallets_by_id_sign",
+        "tags": [
+          "wallets"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

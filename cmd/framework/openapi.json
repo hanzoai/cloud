@@ -1,0 +1,336 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "framework"
+    }
+  ],
+  "paths": {
+    "/v1/framework/doctypes": {
+      "get": {
+        "operationId": "get_v1_framework_doctypes",
+        "tags": [
+          "framework"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_framework_doctypes",
+        "tags": [
+          "framework"
+        ]
+      }
+    },
+    "/v1/framework/doctypes/{name}": {
+      "delete": {
+        "operationId": "delete_v1_framework_doctypes_by_name",
+        "tags": [
+          "framework"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_framework_doctypes_by_name",
+        "tags": [
+          "framework"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_framework_doctypes_by_name",
+        "tags": [
+          "framework"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/framework/modules": {
+      "get": {
+        "operationId": "get_v1_framework_modules",
+        "tags": [
+          "framework"
+        ]
+      }
+    },
+    "/v1/framework/modules/{module}": {
+      "get": {
+        "operationId": "get_v1_framework_modules_by_module",
+        "tags": [
+          "framework"
+        ],
+        "parameters": [
+          {
+            "name": "module",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/framework/modules/{module}/install": {
+      "post": {
+        "operationId": "post_v1_framework_modules_by_module_install",
+        "tags": [
+          "framework"
+        ],
+        "parameters": [
+          {
+            "name": "module",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/framework/roles": {
+      "get": {
+        "operationId": "get_v1_framework_roles",
+        "tags": [
+          "framework"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_framework_roles",
+        "tags": [
+          "framework"
+        ]
+      }
+    },
+    "/v1/framework/roles/{user}/{role}": {
+      "delete": {
+        "operationId": "delete_v1_framework_roles_by_user_by_role",
+        "tags": [
+          "framework"
+        ],
+        "parameters": [
+          {
+            "name": "user",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/framework/summary": {
+      "get": {
+        "operationId": "get_v1_framework_summary",
+        "tags": [
+          "framework"
+        ]
+      }
+    },
+    "/v1/framework/{doctype}": {
+      "get": {
+        "operationId": "get_v1_framework_by_doctype",
+        "tags": [
+          "framework"
+        ],
+        "parameters": [
+          {
+            "name": "doctype",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_framework_by_doctype",
+        "tags": [
+          "framework"
+        ],
+        "parameters": [
+          {
+            "name": "doctype",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/framework/{doctype}/{name}": {
+      "delete": {
+        "operationId": "delete_v1_framework_by_doctype_by_name",
+        "tags": [
+          "framework"
+        ],
+        "parameters": [
+          {
+            "name": "doctype",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_framework_by_doctype_by_name",
+        "tags": [
+          "framework"
+        ],
+        "parameters": [
+          {
+            "name": "doctype",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_framework_by_doctype_by_name",
+        "tags": [
+          "framework"
+        ],
+        "parameters": [
+          {
+            "name": "doctype",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/framework/{doctype}/{name}/cancel": {
+      "post": {
+        "operationId": "post_v1_framework_by_doctype_by_name_cancel",
+        "tags": [
+          "framework"
+        ],
+        "parameters": [
+          {
+            "name": "doctype",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/framework/{doctype}/{name}/submit": {
+      "post": {
+        "operationId": "post_v1_framework_by_doctype_by_name_submit",
+        "tags": [
+          "framework"
+        ],
+        "parameters": [
+          {
+            "name": "doctype",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
