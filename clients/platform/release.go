@@ -289,7 +289,7 @@ func releaseFor(s *cloud.Service[state], repoURL, sha, image, tag, dockerfile, b
 // step, reached only AFTER the tag receipt is minted (build + smoke passed).
 //
 // ONE WRITER: patch the operator hanzo.ai/v1 Service CR's spec.image
-// (cloud.OnServiceRelease → clients/paas releaseService) and let the operator
+// (cloud.OnServiceRelease → rollout.go releaseService) and let the operator
 // reconcile the Deployment. No ArgoCD, no repository_dispatch, no git round-trip.
 //
 // It used to write TWICE — the CR patch plus a repository_dispatch mirror at
@@ -307,7 +307,7 @@ func releaseFor(s *cloud.Service[state], repoURL, sha, image, tag, dockerfile, b
 // live, and a release that says otherwise is worse than one that fails.
 func rolloutRelease(s *cloud.Service[state], ctx context.Context, image, sha string) error {
 	if !cloud.ServiceReleaserRegistered() {
-		return fmt.Errorf("paas control plane not co-resident: no CR releaser registered, image %s is tagged but NOT live", image)
+		return fmt.Errorf("fleet board not co-resident: no CR releaser registered, image %s is tagged but NOT live", image)
 	}
 	if err := cloud.OnServiceRelease(ctx, cloud.ServiceReleaseEvent{Service: releaseServiceName, Image: image, SHA: sha}); err != nil {
 		return fmt.Errorf("roll out %s via operator CR patch: %w", releaseServiceName, err)

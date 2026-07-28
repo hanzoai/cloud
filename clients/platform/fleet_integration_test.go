@@ -13,7 +13,7 @@
 //   - an IDEMPOTENT same-image merge-patch on a low-risk service (pricing) proves
 //     the write path reaches the operator WITHOUT changing what runs (same tag =
 //     no rollout). It never mutates a tag, so it cannot perturb live state.
-package paas
+package platform
 
 import (
 	"context"
@@ -30,18 +30,18 @@ import (
 
 const itService = "pricing" // low-risk service CLAUDE.md already validated
 
-func itClient(t *testing.T) *cloud.Service[state] {
+func itClient(t *testing.T) *cloud.Service[fleetState] {
 	t.Helper()
 	if os.Getenv("PAAS_IT") != "1" {
 		t.Skip("set PAAS_IT=1 to run the live-cluster integration probe")
 	}
-	dyn, err := newDynamic()
+	dyn, err := newFleetDynamic()
 	if err != nil {
 		t.Fatalf("newDynamic (needs a live KUBECONFIG): %v", err)
 	}
-	return &cloud.Service[state]{
+	return &cloud.Service[fleetState]{
 		Base:  cloud.NewBase(cloud.Deps{Logger: luxlog.New("paas-it")}, "paas"),
-		State: state{dyn: dyn},
+		State: fleetState{dyn: dyn},
 	}
 }
 
