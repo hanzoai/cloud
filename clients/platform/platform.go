@@ -436,6 +436,12 @@ type createAppReq struct {
 // routes verify project existence before touching platform's app tree.
 func requireProject(s *cloud.Service[state], c *zip.Ctx, org string) (string, error) {
 	project := projectParam(c)
+	// The DEFAULT project is implicit — part of what an org IS. Its row is owed
+	// by IAM provisioning, and no surface (run, apps under it) fails an org for
+	// a row IAM owes it. Every other project must exist in IAM.
+	if project == principal.DefaultProject {
+		return project, nil
+	}
 	ok, err := s.State.projects.Exists(c.Context(), org, project)
 	if err != nil {
 		return "", zip.Errorf(http.StatusInternalServerError, "get project: %v", err)
