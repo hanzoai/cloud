@@ -38,6 +38,7 @@ import (
 	commercemid "github.com/hanzoai/commerce/middleware"
 	"github.com/hanzoai/commerce/middleware/iammiddleware"
 	commercensctx "github.com/hanzoai/commerce/util/nscontext"
+	sqlitedrv "github.com/hanzoai/sqlite"
 	log "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -95,6 +96,51 @@ var commercePrefixes = []string{
 	"/v1/billing/auto-recharge",
 }
 
+// commerceMasterKey answers ONE question — can this build actually use the key we
+// have? — and it is the only place cloud decides commerce's at-rest posture.
+//
+// ONE KEY for one process. commerce encrypts its per-tenant money stores under a
+// 32-byte KEK, and cloud already resolves one (CLOUD_KMS_MASTER_KEY_REF, the same
+// master durableCipher and cek derive from), so it hands that over rather than a
+// SECOND key being provisioned for the same process through commerce's own env var.
+//
+// That is not a convenience. Without a key commerce refuses to boot on a
+// libsqlcipher-linked build — correctly, it will not open money data unencrypted —
+// and the refusal is silent from out here: Mount never reaches transport.SetApp, so
+// every S2S billing read falls through to the network and DNS-resolves the
+// in-process placeholder. On 2026-07-27 that read as "Insufficient balance" on
+// funded accounts, fleet-wide.
+//
+// But a key this build CANNOT USE is its own failure, in the opposite direction.
+// commerce's stores need the LIVE libsqlcipher codec: its dual pool opens a
+// concurrent read pool and a serialized write pool on the same file, which the
+// pure-Go codec envelope (a single writer) cannot serve. So on a pure-Go build an
+// injected key is not a stricter posture, it is a hard refusal — commerce cannot
+// boot at all, and the whole money plane is 503 in every local dev build and every
+// `go test`. That is the state this function exists to end.
+//
+// CodecLinked is the SAME predicate commerce's own resolveMasterKey gates on, and
+// the same one cek.EnsureDevKey uses for cloud's stores, so asking it here keeps ONE
+// posture decision across the process rather than three that can disagree:
+//
+//   - codec linked (the production image: CGO_ENABLED=1 -tags libsqlite3) → inject.
+//     commerce encrypts, and its resolveMasterKey still fails closed if the key is
+//     absent, so a production build can never quietly write plaintext money data.
+//   - codec not linked (a pure-Go dev/CI build) → nil, which hands the decision back
+//     to commerce's own env, whose documented answer is a zero-config unencrypted
+//     dev store. Such a build has no encrypted path to fall back to; the choice is
+//     between an unencrypted dev store and no money plane at all.
+func commerceMasterKey(master []byte, lg log.Logger) []byte {
+	if sqlitedrv.CodecLinked() {
+		return master
+	}
+	if len(master) > 0 {
+		lg.Warn("commerce: pure-Go build cannot open its dual pool encrypted — using commerce's unencrypted dev store; the production image links libsqlcipher and encrypts",
+			"codec_linked", false)
+	}
+	return nil
+}
+
 // mountCommerce boots commerce ON the shared zip app (native co-residence).
 // commerce's own setupRoutes registers /v1/commerce/* and /_/commerce/*
 // directly; the standalone-only surfaces (bare /healthz, legacy /admin SPA,
@@ -132,7 +178,8 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 	}
 
 	embedded, err := commercemod.Embed(context.Background(), commercemod.EmbedConfig{
-		DataDir: dataDir,
+		DataDir:   dataDir,
+		MasterKey: commerceMasterKey(deps.MasterKey, lg),
 		// RequireIdentity stays gateway-owned: the gateway in front of the cloud
 		// binary is the trust boundary per HIP-0026.
 		RequireIdentity: false,
@@ -146,22 +193,6 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 		// its own datastore (standalone), but in this unified binary finance is
 		// co-resident, so we inject the finance-backed ledger adapter.
 		Ledger: ledger{},
-		// ONE KEY for one process. commerce encrypts its per-tenant money stores
-		// under a 32-byte KEK; cloud already resolves one (CLOUD_KMS_MASTER_KEY_REF,
-		// the same master durableCipher and cek derive from), so it hands that over
-		// rather than a SECOND key being provisioned for the same process through
-		// commerce's own env var.
-		//
-		// It is not a convenience. Without a key commerce refuses to boot on a
-		// libsqlcipher-linked build — correctly, it will not open money data
-		// unencrypted — and that refusal is silent from out here: Mount never
-		// reaches transport.SetApp, so every S2S billing read falls through to the
-		// network and DNS-resolves the in-process placeholder. On 2026-07-27 that
-		// read as "Insufficient balance" on funded accounts, fleet-wide.
-		//
-		// Empty ref ⇒ nil ⇒ commerce reads its own env, unchanged, which is the
-		// standalone and pure-Go dev path.
-		MasterKey: deps.MasterKey,
 	})
 	if err != nil {
 		lg.Error("commerce embed failed — serving fail-closed 503 (cloud stays up)", "err", err)

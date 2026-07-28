@@ -23,6 +23,7 @@ package projects
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -791,5 +792,216 @@ func TestRelease_PlatformSurfaceIsTheSameEngine(t *testing.T) {
 	}
 	if got := getProject(t, "acme", "shop").CurrentRelease; got != id {
 		t.Fatalf("pointer not flipped across surfaces: %q", got)
+	}
+}
+
+// ── vector 9: RETENTION — releases are reclaimed, but never the live one ──
+//
+// promote writes a NEW immutable prefix per distinct content, and before
+// retention nothing ever removed one: a site that publishes on every commit grew
+// its object store forever, and DeleteReleases (project delete) was the only
+// thing that ever freed a byte. These prove the bound holds, that the release a
+// site is SERVING is outside it at any depth, and that activation now verifies
+// the bytes rather than trusting the row — the invariant retention broke.
+
+// stagedRelease promotes a source WITHOUT activating it (the staged half), so a
+// site can accumulate releases while the pointer stays put.
+func stagedRelease(t *testing.T, app *zip.App, org, slug, source string) string {
+	t.Helper()
+	code, body := doSite(t, app, http.MethodPost, "/v1/sites/"+slug+"/releases", org,
+		map[string]any{"source": source})
+	if code != http.StatusCreated {
+		t.Fatalf("staged release from %q: want 201, got %d (%s)", source, code, body)
+	}
+	return decodeRelease(t, body).ReleaseID
+}
+
+// releaseRows reads a site's release rows straight from the store — the rollback
+// menu, unpaginated by any HTTP limit.
+func releaseRows(t *testing.T, org, slug string) []Release {
+	t.Helper()
+	rows, err := mounted.State.store.ListReleases(t.Context(), org, slug, 1000)
+	if err != nil {
+		t.Fatalf("list releases: %v", err)
+	}
+	return rows
+}
+
+// TestRelease_RetentionReclaimsBeyondTheDepth: every publish reclaims what fell
+// past the retention depth — ROWS and BYTES both — so a site's release space is
+// bounded by keepReleases (+1 for the live release) no matter how often it
+// ships. What is still in the rollback menu keeps every one of its objects.
+func TestRelease_RetentionReclaimsBeyondTheDepth(t *testing.T) {
+	f, app := releaseHarness(t)
+	const extra = 3
+	ids := make([]string, 0, keepReleases+extra)
+	for i := 0; i < keepReleases+extra; i++ {
+		src := fmt.Sprintf("builds/v%d", i)
+		seedBuild(f, "acme", src, fmt.Sprintf("build-%d", i))
+		code, body := publish(t, app, "acme", "shop", src)
+		if code != http.StatusOK {
+			t.Fatalf("publish %d want 200, got %d (%s)", i, code, body)
+		}
+		ids = append(ids, decodeRelease(t, body).ReleaseID)
+	}
+	// The live release plus keepReleases superseded ones, and not one more.
+	if rows := releaseRows(t, "acme", "shop"); len(rows) != keepReleases+1 {
+		t.Fatalf("retention depth: want %d rows, got %d", keepReleases+1, len(rows))
+	}
+	// The oldest are gone from the store AND from the object store. Rows first,
+	// bytes after, so a surviving row can never name a reclaimed prefix.
+	for _, id := range ids[:extra-1] {
+		if _, err := mounted.State.store.GetRelease(t.Context(), "acme", "shop", id); !errors.Is(err, errNotFound) {
+			t.Fatalf("release %s beyond the depth still has a row (err=%v)", id, err)
+		}
+		if n := f.count(testBucket + "/" + releasePrefix("acme", "shop", id)); n != 0 {
+			t.Fatalf("release %s beyond the depth still holds %d objects", id, n)
+		}
+	}
+	// Everything still in the menu is intact — retention frees only what fell off.
+	for _, id := range ids[extra-1:] {
+		if n := f.count(testBucket + "/" + releasePrefix("acme", "shop", id)); n != 2 {
+			t.Fatalf("retained release %s: want 2 objects, got %d", id, n)
+		}
+	}
+	// And the site still serves the release it is pointed at.
+	live := ids[len(ids)-1]
+	if got := getProject(t, "acme", "shop").CurrentRelease; got != live {
+		t.Fatalf("pointer = %q, want the last published release %q", got, live)
+	}
+	if body, ok := f.body(testBucket, releasePrefix("acme", "shop", live)+"/index.html"); !ok ||
+		!strings.Contains(body, fmt.Sprintf("build-%d", keepReleases+extra-1)) {
+		t.Fatalf("live release lost its bytes (ok=%v, body=%q)", ok, body)
+	}
+}
+
+// TestRelease_RetentionNeverPrunesTheLiveRelease: the release a site is SERVING
+// is not a retention candidate at any depth — it does not even count against the
+// budget. A site parked on an old release (a rollback that stuck) keeps serving
+// it however many releases are published on top.
+func TestRelease_RetentionNeverPrunesTheLiveRelease(t *testing.T) {
+	f, app := releaseHarness(t)
+	seedBuild(f, "acme", "builds/first", "first")
+	code, body := publish(t, app, "acme", "shop", "builds/first")
+	if code != http.StatusOK {
+		t.Fatalf("first publish want 200, got %d (%s)", code, body)
+	}
+	live := decodeRelease(t, body).ReleaseID
+
+	// Stage far past the depth WITHOUT activating: the pointer stays on the
+	// oldest release of all while newer ones pile up and prune runs on each.
+	for i := 0; i < keepReleases+2; i++ {
+		src := fmt.Sprintf("builds/staged%d", i)
+		seedBuild(f, "acme", src, fmt.Sprintf("staged-%d", i))
+		stagedRelease(t, app, "acme", "shop", src)
+	}
+	if _, err := mounted.State.store.GetRelease(t.Context(), "acme", "shop", live); err != nil {
+		t.Fatalf("the LIVE release was pruned: %v", err)
+	}
+	if n := f.count(testBucket + "/" + releasePrefix("acme", "shop", live)); n != 2 {
+		t.Fatalf("the LIVE release lost bytes: %d objects left", n)
+	}
+	// It is kept ON TOP of the depth, not out of it.
+	if rows := releaseRows(t, "acme", "shop"); len(rows) != keepReleases+1 {
+		t.Fatalf("want %d rows (live + depth), got %d", keepReleases+1, len(rows))
+	}
+	// It still serves, and re-activating it is still a 200.
+	if got := getProject(t, "acme", "shop").CurrentRelease; got != live {
+		t.Fatalf("pointer moved off the live release: %q", got)
+	}
+	code, body = doSite(t, app, http.MethodPost, "/v1/sites/shop/releases/"+live+"/activate", "acme", nil)
+	if code != http.StatusOK {
+		t.Fatalf("re-activating the live release want 200, got %d (%s)", code, body)
+	}
+}
+
+// TestRelease_ActivateRefusesAReleaseWhoseBytesAreGone is the invariant
+// retention broke, stated as a test. ActivateRelease's `WHERE EXISTS (release
+// row)` was a sufficient guard only while NOTHING could remove bytes from under
+// a row; now that bytes can be reclaimed — by retention, an operator purge, or a
+// bucket lifecycle rule — flipping on the row alone would point a live site at
+// an empty prefix and serve 404s. Activation stats the bytes first: the caller
+// gets 410 GONE and the site keeps serving what it was already serving.
+func TestRelease_ActivateRefusesAReleaseWhoseBytesAreGone(t *testing.T) {
+	f, app := releaseHarness(t)
+	seedBuild(f, "acme", "builds/old", "old")
+	_, body := publish(t, app, "acme", "shop", "builds/old")
+	old := decodeRelease(t, body).ReleaseID
+	seedBuild(f, "acme", "builds/new", "new")
+	_, body = publish(t, app, "acme", "shop", "builds/new")
+	current := decodeRelease(t, body).ReleaseID
+
+	// Reclaim the rollback target's bytes out from under its row.
+	f.remove(testBucket, releasePrefix("acme", "shop", old)+"/index.html")
+
+	code, body := doSite(t, app, http.MethodPost, "/v1/sites/shop/releases/"+old+"/activate", "acme", nil)
+	if code != http.StatusGone {
+		t.Fatalf("activating a release whose bytes are gone want 410, got %d (%s)", code, body)
+	}
+	if got := getProject(t, "acme", "shop").CurrentRelease; got != current {
+		t.Fatalf("pointer moved to a release with no bytes: %q", got)
+	}
+	// The site is still serving real content, not an empty prefix.
+	if _, ok := f.body(testBucket, releasePrefix("acme", "shop", current)+"/index.html"); !ok {
+		t.Fatalf("live release lost its bytes")
+	}
+}
+
+// TestRelease_PruneNeverDeletesTheRowUnderAnActivation: retention and a rollback
+// are two writers racing over the same pointer. Prune picks its victims from a
+// scan, so an activation can land on a doomed release AFTER that scan — which is
+// why every prune DELETE re-checks current_release at delete time. The invariant
+// under any interleaving: whatever the pointer names, its row (and therefore its
+// bytes) is still there.
+func TestRelease_PruneNeverDeletesTheRowUnderAnActivation(t *testing.T) {
+	f, app := releaseHarness(t)
+	var ids []string
+	for i := 0; i < 3; i++ {
+		src := fmt.Sprintf("builds/r%d", i)
+		seedBuild(f, "acme", src, fmt.Sprintf("r-%d", i))
+		ids = append(ids, stagedRelease(t, app, "acme", "shop", src))
+	}
+	store := mounted.State.store
+	for round := 0; round < 200; round++ {
+		// Re-seat the rows each round (PutRelease is an idempotent insert), so every
+		// round races the same fully-populated menu.
+		for _, id := range ids {
+			r, err := store.GetRelease(t.Context(), "acme", "shop", id)
+			if errors.Is(err, errNotFound) {
+				r = Release{ID: id, Org: "acme", Slug: "shop", Prefix: releasePrefix("acme", "shop", id), CreatedAt: 1}
+			} else if err != nil {
+				t.Fatalf("get release: %v", err)
+			}
+			if err := store.PutRelease(t.Context(), r); err != nil {
+				t.Fatalf("put release: %v", err)
+			}
+		}
+		target := ids[round%len(ids)]
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			// A rollback to a release the prune scan may already have condemned.
+			if err := store.ActivateRelease(t.Context(), "acme", "shop", target, int64(round)); err != nil &&
+				!errors.Is(err, errNotFound) {
+				t.Errorf("activate: %v", err)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			// keep=1 makes every non-live release a candidate.
+			if _, err := store.PruneReleases(t.Context(), "acme", "shop", 1); err != nil {
+				t.Errorf("prune: %v", err)
+			}
+		}()
+		wg.Wait()
+		p := getProject(t, "acme", "shop")
+		if p.CurrentRelease == "" {
+			continue // the flip lost the race outright; nothing is pointed at
+		}
+		if _, err := store.GetRelease(t.Context(), "acme", "shop", p.CurrentRelease); err != nil {
+			t.Fatalf("round %d: the site points at %s but retention deleted its row: %v",
+				round, p.CurrentRelease, err)
+		}
 	}
 }

@@ -24,8 +24,10 @@ package sites
 
 import (
 	"context"
+	"encoding/json"
 	"mime"
 	"net/http"
+	"net/url"
 	"path"
 	"regexp"
 	"strings"
@@ -168,6 +170,10 @@ func New(cfg Config, log luxlog.Logger) *Server {
 		seen[d] = true
 		self = append(self, d)
 	}
+	// Publish the SAME set to the shared source, so the claim gate refuses what the
+	// serve gate would refuse. Registered here, next to SetReservedExtra, for the
+	// identical reason: one source, no drift between enforcement points.
+	SetSelfDomains(self)
 	// First-party apex (internal, opt-in sites) — normalize, force it to be a self
 	// domain (a first-party site host is never a customer custom-domain candidate),
 	// and build the explicit allowlist. Empty apex or empty allowlist ⇒ disabled.
@@ -233,9 +239,10 @@ func isBasePath(p string) bool {
 		p == "/_" || strings.HasPrefix(p, "/_/")
 }
 
-// analyticsHostHandler ingests a published site's OWN analytics beacon (the
-// anonymous POST a page emits on unload) on the site host — host-as-project-ref
-// (HIP-0014), the exact twin of baseHostHandler. Nil (the default) leaves a site
+// analyticsHost is the site-host analytics-beacon carve: the EXACT set of ingest
+// paths, each already bound to the handler that ingests a published site's OWN
+// beacon (the anonymous POST a page emits on unload) — host-as-project-ref
+// (HIP-0014), the exact twin of baseHostHandler. Empty (the default) leaves a site
 // host 405-ing a beacon POST; analytics.Mount installs it. The org comes ONLY from
 // the resolved Site (the subdomain / bound custom host), never the caller — the
 // SAME server-supplied tenant key the file plane and the base carve trust, so a
@@ -243,16 +250,14 @@ func isBasePath(p string) bool {
 // body/header claim. The authenticated GET read lenses on api.hanzo.ai
 // (/v1/analytics/overview|timeseries|top) are untouched: this carve is POST-only
 // and never runs on an API host.
-var analyticsHostHandler func(org string, c *zip.Ctx) error
-
-// SetAnalyticsHostHandler installs the per-org analytics ingest handler (see
-// analyticsHostHandler).
-func SetAnalyticsHostHandler(h func(org string, c *zip.Ctx) error) { analyticsHostHandler = h }
-
-// analyticsPaths is the EXACT set of site-host analytics-beacon INGEST paths: the
-// canonical door at /v1/event, the deprecated Segment/beacon wire at
-// /v1/analytics{,/batch}, and the deprecated PostHog wire at /v1/insights/e (kept so
-// beacons already deployed on published sites don't break mid-migration).
+//
+// ONE map, because the carve asks one question — "is this an ingest door, and which
+// one?" — and a lookup answers both halves at once. This file used to answer the
+// first half from a path literal of its own while analytics answered the second,
+// and the two had drifted: /v1/tracker and /v1/ingest were routed ingest doors this
+// set did not name, so the same beacon was admitted on an API host and refused here.
+// The set now arrives from the package that owns ingest, derived from the same list
+// it registers its routes from, so the two surfaces cannot disagree again.
 //
 // It is an exact set and not a prefix. `HasPrefix(p, "/v1/analytics")` also swallowed
 // every READ lens — /v1/analytics/overview, /timeseries, /top, /health — leaving the
@@ -262,16 +267,34 @@ func SetAnalyticsHostHandler(h func(org string, c *zip.Ctx) error) { analyticsHo
 // carve silently starts routing it to the beacon handler with a host-derived org. The
 // set names what ingest actually is, so the method check is a second line rather than
 // the only one, and a new /v1/analytics/* route is out by default.
-var analyticsPaths = map[string]bool{
-	"/v1/event":           true,
-	"/v1/analytics":       true,
-	"/v1/analytics/batch": true,
-	"/v1/insights/e":      true,
-}
+var analyticsHost map[string]func(org string, c *zip.Ctx) error
 
-// isAnalyticsPath reports whether a path targets the site-host analytics-beacon
-// ingest (analyticsPaths). The Middleware carve additionally gates on POST.
-func isAnalyticsPath(p string) bool { return analyticsPaths[p] }
+// SetAnalyticsHost installs the site-host ingest carve (see analyticsHost): the
+// ingest paths bound to their handlers. A nil or empty map disables the carve.
+func SetAnalyticsHost(h map[string]func(org string, c *zip.Ctx) error) { analyticsHost = h }
+
+// analyticsIngest returns the site-host ingest handler for a request, and whether
+// this request is site-host ingest at all. POST is a second, independent line: a
+// read lens that grows a POST still has to be named a door to be carved.
+//
+// The match is BYTE-EXACT on the raw request target (resolveKey documents that
+// c.Path() is unescaped and unnormalized by anything upstream), and deliberately
+// stricter than the router: an encoded or denormalized spelling of a door — %65vent,
+// a trailing slash, a dot segment — misses and is served as static, even where Fiber
+// would still route it. This carve hands a request a tenant derived from its Host, so
+// it admits only the exact strings it was handed; every near-miss fails to the static
+// serve rather than into ingest.
+func analyticsIngest(c *zip.Ctx) (func(org string, c *zip.Ctx) error, bool) {
+	if c.Method() != http.MethodPost {
+		return nil, false
+	}
+	h, ok := analyticsHost[c.Path()]
+	// A present-but-nil handler is not a door. The map arrives across a package
+	// boundary, so "the key exists" and "there is something to call" are two facts
+	// here, and dispatching on the first alone panics the request instead of
+	// serving it as static — the carve must fail to the serve path, never fail open.
+	return h, ok && h != nil
+}
 
 func (s *Server) Middleware() zip.Handler {
 	return func(c *zip.Ctx) error {
@@ -282,9 +305,9 @@ func (s *Server) Middleware() zip.Handler {
 					return baseHostHandler(site.Org, c)
 				}
 			}
-			if analyticsHostHandler != nil && c.Method() == http.MethodPost && isAnalyticsPath(c.Path()) {
+			if h, ok := analyticsIngest(c); ok {
 				if site, ok := s.resolveLivePinned(c.Context(), slug, firstParty); ok {
-					return analyticsHostHandler(site.Org, c)
+					return h(site.Org, c)
 				}
 			}
 			return s.serve(c, slug, firstParty)
@@ -294,8 +317,8 @@ func (s *Server) Middleware() zip.Handler {
 				if baseHostHandler != nil && isBasePath(c.Path()) {
 					return baseHostHandler(site.Org, c)
 				}
-				if analyticsHostHandler != nil && c.Method() == http.MethodPost && isAnalyticsPath(c.Path()) {
-					return analyticsHostHandler(site.Org, c)
+				if h, ok := analyticsIngest(c); ok {
+					return h(site.Org, c)
 				}
 				return s.serveCustom(c, site)
 			}
@@ -320,15 +343,7 @@ func hostOnly(host string) string {
 // lookup and makes it structurally impossible for a customer binding to shadow a
 // real Hanzo host — only genuinely external domains reach the binding resolver.
 func (s *Server) customCandidate(host string) bool {
-	if host == "" || !strings.Contains(host, ".") {
-		return false
-	}
-	for _, d := range s.selfDomains {
-		if host == d || strings.HasSuffix(host, "."+d) {
-			return false
-		}
-	}
-	return true
+	return host != "" && strings.Contains(host, ".") && !IsSelfHost(host)
 }
 
 // resolveLive resolves a key (a subdomain slug OR a full custom host) to a LIVE
@@ -599,11 +614,44 @@ func (s *Server) streamObject(c *zip.Ctx, site Site, obj *s3.Object, size int64,
 // default 404. The 404.html is fetched from the SAME prefix (tenant-bounded) and
 // streamed, not buffered.
 func (s *Server) notFound(c *zip.Ctx, cli *s3.Client, site Site) error {
+	// A missing DATA asset is answered in the media type it asked for, never with
+	// markup. A single-page app fetches its data files and calls .json() on the
+	// result; handing that call an HTML page (the site's 404.html, or ours) turns
+	// "the file is not deployed" into
+	//
+	//     Unexpected token '<', "<!doctype "... is not valid JSON
+	//
+	// thrown from inside minified vendor code with no URL attached — which is the
+	// error hanzo-team (a missing /config.json) and edge (a missing
+	// presets/wigglewobble.json) BOTH surfaced, from two unrelated causes. The
+	// status was always an honest 404; only the body lied about its type. Answering
+	// in-type makes .json() succeed and hands the app the path that is missing, so
+	// the next person reads the cause instead of a parser's opinion of an HTML
+	// doctype. 404.html is for humans reading a page, so a data request never gets
+	// it. Keyed off the SAME contentType() the 200 path uses — one type table.
+	if isJSON(contentType(resolveKey(c.Path()))) {
+		c.SetHeader("Content-Type", "application/json; charset=utf-8")
+		c.SetHeader("Cache-Control", "no-cache")
+		body, err := json.Marshal(map[string]string{"error": "not found", "path": c.Path()})
+		if err != nil { // unreachable: two strings always marshal
+			return s.errorPage(c, http.StatusNotFound, "page not found")
+		}
+		return c.Bytes(http.StatusNotFound, body)
+	}
 	obj, info, ok := s.open(c.Context(), cli, site.Bucket, objectKey(site.Prefix, "404.html"))
 	if ok {
 		return s.streamObject(c, site, obj, info.Size, "text/html; charset=utf-8", "no-cache", http.StatusNotFound)
 	}
 	return s.errorPage(c, http.StatusNotFound, "page not found")
+}
+
+// isJSON reports whether a media type is JSON — the bare type or any +json
+// structured suffix (application/manifest+json, application/ld+json), which are
+// all parsed with JSON.parse by the code that fetched them.
+func isJSON(ct string) bool {
+	base, _, _ := strings.Cut(ct, ";")
+	base = strings.TrimSpace(base)
+	return base == "application/json" || base == "text/json" || strings.HasSuffix(base, "+json")
 }
 
 // errorPage renders a minimal, honest HTML status page. It never leaks internal
@@ -618,14 +666,24 @@ func (s *Server) errorPage(c *zip.Ctx, status int, msg string) error {
 }
 
 // resolveKey turns a request path into a cleaned, tenant-relative key fragment.
-// This is the traversal boundary: it roots the path at "/", runs path.Clean
-// (which resolves every "." and ".." segment against that root), then strips the
-// leading "/". The result provably contains no ".." segment, so joining it under
-// a fixed prefix can never escape that prefix — regardless of how many "..",
-// backslashes, or percent-encoded dots the client sends (fasthttp has already
-// percent-decoded + normalized c.Path(); this re-clean is the defensive guarantee
-// that does not depend on that normalization).
+// This is the traversal boundary: it percent-decodes, roots the path at "/",
+// runs path.Clean (which resolves every "." and ".." segment against that root),
+// then strips the leading "/". The result provably contains no ".." segment, so
+// joining it under a fixed prefix can never escape that prefix — regardless of
+// how many "..", backslashes, or percent-encoded dots the client sends.
+//
+// Decoding is FIRST and it is not optional. c.Path() is the RAW request target —
+// zip hands back Fiber's path verbatim, nothing upstream unescapes it — while an
+// object key is stored decoded, so an encoded request could never match its own
+// file. Next.js names a dynamic route's chunk after the literal segment
+// (app/blog/[slug]/page-*.js), every browser sends that as %5Bslug%5D, and so
+// every dynamic page on hanzo.app 404'd its own JS and rendered without ever
+// hydrating. Decoding before Clean also means "%2e%2e" is collapsed as the
+// traversal it is, rather than surviving as an opaque literal.
 func resolveKey(reqPath string) string {
+	if dec, err := url.PathUnescape(reqPath); err == nil {
+		reqPath = dec // malformed escapes stay verbatim: a miss, never an error
+	}
 	p := strings.ReplaceAll(reqPath, `\`, "/")
 	if !strings.HasPrefix(p, "/") {
 		p = "/" + p
@@ -721,7 +779,13 @@ func CacheControlFor(key, htmlOverride string) string {
 		}
 		return "public, max-age=60, s-maxage=86400"
 	case ".js", ".mjs", ".css", ".woff", ".woff2", ".png", ".jpg", ".jpeg",
-		".gif", ".svg", ".webp", ".avif", ".ico", ".ttf", ".otf", ".wasm":
+		".gif", ".svg", ".webp", ".avif", ".ico", ".ttf", ".otf", ".wasm",
+		// Game-engine payloads. gameAssetType already teaches this file that a
+		// site can be a WebGL build; the cache policy has to know it too, or the
+		// biggest object in the deploy (Unity's .data, Godot's .pck — megabytes
+		// each) is the ONLY fingerprinted asset that still gets re-fetched every
+		// hour. Same rule, same reason: a content-hashed name cannot go stale.
+		".data", ".pck", ".unityweb", ".mem":
 		if isFingerprinted(key) {
 			return "public, max-age=31536000, immutable"
 		}
