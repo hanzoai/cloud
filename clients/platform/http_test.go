@@ -1,7 +1,6 @@
 package platform
 
 import (
-	"sync"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -10,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/hanzoai/cloud"

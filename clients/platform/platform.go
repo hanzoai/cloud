@@ -36,6 +36,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/hanzoai/cloud/clients/k8s"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -300,7 +303,7 @@ func tenant(s *cloud.Service[state], c *zip.Ctx) (string, bool) {
 
 // ── HTTP views (the published contract; mirrors the Goa design result types) ──
 
-type repoView struct {
+type gitSource struct {
 	URL      string `json:"url,omitempty"`
 	Branch   string `json:"branch,omitempty"`
 	Provider string `json:"provider,omitempty"`
@@ -320,7 +323,7 @@ type appView struct {
 	Description         string       `json:"description,omitempty"`
 	Environment         string       `json:"environment"`
 	Source              string       `json:"source"`
-	Repo                repoView     `json:"repo"`
+	Repo                gitSource     `json:"repo"`
 	Image               imageView    `json:"image"`
 	BuildType           string       `json:"buildType,omitempty"`
 	Dockerfile          string       `json:"dockerfile,omitempty"`
@@ -358,7 +361,7 @@ func toAppView(a Application) appView {
 	return appView{
 		ID: a.ID, Org: a.Org, ProjectID: a.ProjectID, Slug: a.Slug, Name: a.Name,
 		Description: a.Description, Environment: a.Environment, Source: a.Source,
-		Repo:      repoView{URL: a.RepoURL, Branch: a.RepoBranch, Provider: a.RepoProvider},
+		Repo:      gitSource{URL: a.RepoURL, Branch: a.RepoBranch, Provider: a.RepoProvider},
 		Image:     imageView{Repository: a.ImageRepo, Tag: a.ImageTag},
 		BuildType: a.BuildType, Dockerfile: a.Dockerfile, Env: env, Port: a.Port,
 		Replicas: a.Replicas, StorageGB: a.StorageGB, Domains: domains, Status: a.Status, Namespace: a.Namespace,
@@ -576,7 +579,7 @@ func createApp(s *cloud.Service[state], c *zip.Ctx) error {
 		RepoProvider: providerFromURL(body.Repo.URL), ImageRepo: strings.TrimSpace(body.Image.Repository), ImageTag: strings.TrimSpace(body.Image.Tag),
 		BuildType: buildType, Dockerfile: strings.TrimSpace(body.Dockerfile), Port: portOr(body.Port), Replicas: s.State.k8s.limits.clampReplicas(body.Replicas),
 		StorageGB: s.State.k8s.limits.clampStorage(body.StorageGB),
-		EnvJSON: string(envJSON), DomainsJSON: string(domainsJSON), Status: "draft", Namespace: tenantNamespace(org),
+		EnvJSON:   string(envJSON), DomainsJSON: string(domainsJSON), Status: "draft", Namespace: tenantNamespace(org),
 		CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.State.store.CreateApplication(c.Context(), a); err != nil {
