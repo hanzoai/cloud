@@ -26,6 +26,8 @@ scored on the exit code of a build error.
 
 MUTATE_ROOT overrides the tree that gets mutated (default: this repo), which is how
 a new assertion is shown SURVIVING on a pristine checkout and KILLED on the branch.
+MUTATE_RUN=. widens each row's -run to the whole package, which asks whether ANYTHING
+catches the mutant rather than whether its paired test does.
 """
 import os
 import re
@@ -35,6 +37,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(os.environ.get("MUTATE_ROOT", Path(__file__).resolve().parents[1]))
+RUN = os.environ.get("MUTATE_RUN", "")  # "." = ask the whole package, not just the pair
 GO = "/usr/local/go/bin/go"
 TAGS = "sqlite_fts5"  # the tag `make test` carries, so the same schema surface builds
 
@@ -131,9 +134,21 @@ MUTANTS = [
             '\treturn publicIngest(c, d.decode, publicTenant, d.source)')],
      "TestSiteHostLaneWritesTheResolvedSiteOrg", PA),
 
-    ("carve: take the tenant from the caller's header, not the Site", [
-        (S, '\t\t\t\t\treturn h(site.Org, c)', '\t\t\t\t\t_ = site\n\t\t\t\t\treturn h(c.Org(), c)')],
+    # Middleware dispatches the carve from TWO branches with a byte-identical line
+    # (sites.go:310 slug host, :321 bound custom domain), so one anchor of that line
+    # alone silently mutates only the first and leaves the other unproven. One row per
+    # branch, each anchored on the `if` above it, is what makes both facts.
+    ("carve: the SLUG host takes the tenant from the caller's header", [
+        (S, '\t\t\t\tif site, ok := s.resolveLivePinned(c.Context(), slug, firstParty); ok {\n\t\t\t\t\treturn h(site.Org, c)',
+            '\t\t\t\tif site, ok := s.resolveLivePinned(c.Context(), slug, firstParty); ok {\n\t\t\t\t\t_ = site\n\t\t\t\t\treturn h(c.Org(), c)')],
      "TestSiteHostLaneWritesTheResolvedSiteOrg", PA),
+
+    # Guarded in clients/sites, which owns host→org resolution, and NOT in analytics:
+    # the analytics test on this host shape proves the carve fires, not who it fires for.
+    ("carve: the CUSTOM DOMAIN takes the tenant from the caller's header", [
+        (S, '\t\t\t\tif h, ok := analyticsIngest(c); ok {\n\t\t\t\t\treturn h(site.Org, c)',
+            '\t\t\t\tif h, ok := analyticsIngest(c); ok {\n\t\t\t\t\treturn h(c.Org(), c)')],
+     "TestMiddlewareAnalyticsCarveCustomDomain", PS),
 
     ("door.anon: consult handle on the site-host lane", [
         (E, '\treturn publicIngest(c, d.decode, org, d.source)', '\t_ = org\n\treturn handle(c, d.decode, d.source)')],
@@ -159,9 +174,12 @@ MUTANTS = [
         (C, '\twarehouseReady = datastore.Ready', '\twarehouseReady = func() bool { return true }')],
      "TestWritePathSeamsDefaultToTheRealThing", PA),
 
+    # The blank var is load-bearing: OrgForKey is capture.go's only use of the cloud
+    # package, so substituting it also orphans the import. That made this mutant
+    # NO-COMPILE — an exit code the old scoring would have counted as a kill.
     ("seam: resolveKeyOrg defaults to a resolver that admits any key", [
         (C, 'var resolveKeyOrg = cloud.OrgForKey',
-            'var resolveKeyOrg = func(context.Context, string) (string, bool) { return "acme", true }')],
+            'var resolveKeyOrg = func(context.Context, string) (string, bool) { return "acme", true }\n\nvar _ = cloud.OrgForKey')],
      "TestWritePathSeamsDefaultToTheRealThing", PA),
 
     # ── the PII scrub's CALL SITE, not the scrub ──────────────────────────────
@@ -218,7 +236,9 @@ def score(name, edits, test, pkg):
             return "NO-COMPILE", " / ".join(l.strip() for l in vet.stderr.splitlines()[:3])[:200]
 
         # 2. run the paired tests VERBOSE, so "they ran" is observed, not assumed.
-        p = subprocess.run([GO, "test", "-tags", TAGS, pkg, "-run", test, "-count=1", "-v"],
+        # MUTATE_RUN=. widens that to the whole package, which asks the stronger
+        # question: does anything AT ALL catch this, or only the test we paired it with.
+        p = subprocess.run([GO, "test", "-tags", TAGS, pkg, "-run", RUN or test, "-count=1", "-v"],
                            cwd=ROOT, env=ENV, capture_output=True, text=True, timeout=900)
         out = p.stdout + p.stderr
         ran = set(RUN_RE.findall(out))
@@ -227,9 +247,16 @@ def score(name, edits, test, pkg):
         if p.returncode == 0:
             return "SURVIVED", f"{len(ran)} test(s) ran and stayed GREEN — nothing guards this"
         fails = FAIL_RE.findall(out)
-        if not fails:
-            return "NO-COMPILE", "non-zero exit with no --- FAIL — not an assertion failure"
-        return "KILLED", f"{len(ran)} ran, RED: {', '.join(sorted(set(fails))[:4])}"
+        if fails:
+            return "KILLED", f"{len(ran)} ran, RED: {', '.join(sorted(set(fails))[:4])}"
+        # A panic is a kill too, and it prints NO `--- FAIL` summary because it takes
+        # the test binary down first — so it must be recognised explicitly or it lands
+        # in the fallback below and reads as a build failure. Said out loud in the
+        # detail, because a crash proves the mutant is DETECTABLE where an assertion
+        # proves a named test detects it.
+        if "panic:" in out:
+            return "KILLED", f"{len(ran)} ran, RED by PANIC (the mutant crashes the request)"
+        return "NO-COMPILE", "non-zero exit with no --- FAIL and no panic — not a test failure"
     finally:
         for f in files:
             shutil.move(ROOT / (f + ".mutbak"), ROOT / f)
