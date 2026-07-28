@@ -138,6 +138,17 @@ func init() {
 		Example:  json.RawMessage(`{"name":"widgets"}`),
 		Response: json.RawMessage(`{"data":[{"id":"mir_2d90","repo":"widgets","host":"github.com","url":"https://github.com/acme/widgets.git","createdAt":"2026-07-01T10:00:00Z"}]}`),
 	})
+	zip.Describe("GET /v1/git/repos/:name/paths", zip.Doc{
+		Description: "browsePaths lists every file a glob selects at one revision, plus the revision\nit resolved to. It is the read a delivery generator makes: one call answers\n\"what is the inventory at this commit\", where walking the tree a level at a\ntime would be a request per directory.\n\nReturning the resolved revision matters as much as the paths. A generator that\nlists at `main` and then reads files at `main` can straddle a push and build\nfrom two different commits; pinning the returned rev makes the whole read\nconsistent.",
+		Fields: map[string]string{
+			"globRef.glob":    "Glob selects files, matched segment by segment so `*` never crosses a `/`.\n`**` matches zero or more whole segments.",
+			"globRef.name":    "Name is the repo to read, from the :name path segment.",
+			"globRef.ref":     "Ref is a branch, tag or commit; empty means the repo's HEAD.",
+			"pathsJSON.paths": "Paths are repo-relative file paths, sorted. Directories are never returned.",
+			"pathsJSON.rev":   "Rev is the full revision the ref resolved to — pin follow-up reads to it.",
+		},
+		Example: json.RawMessage(`{"name":"universe","ref":"main","glob":"charts/app/values/*/*.yaml"}`),
+	})
 	zip.Describe("GET /v1/git/repos/:name/readme", zip.Doc{
 		Description: "browseReadme returns the README at the tree root as plain text — unrendered, so\nthe caller decides how to present it. A repo with no README is not found.",
 		Fields: map[string]string{
