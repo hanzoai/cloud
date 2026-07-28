@@ -7,7 +7,7 @@
 // so a project created at /v1/iam was invisible to the PaaS and vice versa.
 //
 // This client reads the canonical store over HTTP, authenticated AS THE ORG:
-// each read runs on a client_credentials token for that org's own
+// each read presents client_secret_basic for that org's own
 // "<org>-platform-kms" identity — the same credential the KMS sync uses, minted
 // on first need by kmsOrgIdentity — and IAM's authorize admits exactly that
 // identity, read-only, own-org-only (iam internal/authz). One identity per
@@ -47,13 +47,13 @@ func newProjectStore(iamIssuer string, ident tenantKMSIdentity) ProjectStore {
 		base:  base,
 		ident: ident,
 		hc:    &http.Client{Timeout: 10 * time.Second},
-		toks:  map[string]orgToken{},
+		creds: map[string]orgCred{},
 	}
 }
 
-type orgToken struct {
-	bearer string
-	exp    time.Time
+type orgCred struct {
+	id, secret string
+	exp        time.Time
 }
 
 type canonicalProjects struct {
@@ -61,59 +61,35 @@ type canonicalProjects struct {
 	ident tenantKMSIdentity
 	hc    *http.Client
 
-	mu   sync.Mutex
-	toks map[string]orgToken
+	mu    sync.Mutex
+	creds map[string]orgCred
 }
 
-// token returns a live bearer for the org's own machine identity, minting the
-// identity itself on first use (EnsureOrgIdentity provisions when configured).
-func (c *canonicalProjects) token(ctx context.Context, org string) (string, error) {
+// cred returns the org's machine credential, minting the identity itself on
+// first use (EnsureOrgIdentity provisions when configured) and caching briefly
+// so a burst of reads is one KMS read, not many.
+func (c *canonicalProjects) cred(ctx context.Context, org string) (string, string, error) {
 	c.mu.Lock()
-	if t, ok := c.toks[org]; ok && time.Now().Before(t.exp) {
+	if cr, ok := c.creds[org]; ok && time.Now().Before(cr.exp) {
 		c.mu.Unlock()
-		return t.bearer, nil
+		return cr.id, cr.secret, nil
 	}
 	c.mu.Unlock()
-
 	if c.ident == nil {
-		return "", fmt.Errorf("projects: no identity provider for org %q (KMS plane absent)", org)
+		return "", "", fmt.Errorf("projects: no identity provider for org %q (KMS plane absent)", org)
 	}
 	id, secret, err := c.ident.EnsureOrgIdentity(ctx, org)
 	if err != nil {
-		return "", fmt.Errorf("projects: org identity: %w", err)
+		return "", "", fmt.Errorf("projects: org identity: %w", err)
 	}
-	form := url.Values{
-		"grant_type":    {"client_credentials"},
-		"client_id":     {id},
-		"client_secret": {secret},
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.base+"/v1/iam/oauth/token", strings.NewReader(form.Encode()))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := c.hc.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("projects: mint token: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	var out struct {
-		AccessToken string `json:"access_token"`
-		ExpiresIn   int    `json:"expires_in"`
-	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out); err != nil || out.AccessToken == "" {
-		return "", fmt.Errorf("projects: mint token: status %d", resp.StatusCode)
-	}
-	exp := time.Now().Add(time.Duration(max1(out.ExpiresIn-60)) * time.Second)
 	c.mu.Lock()
-	c.toks[org] = orgToken{bearer: out.AccessToken, exp: exp}
+	c.creds[org] = orgCred{id: id, secret: secret, exp: time.Now().Add(time.Minute)}
 	c.mu.Unlock()
-	return out.AccessToken, nil
+	return id, secret, nil
 }
 
 func (c *canonicalProjects) do(ctx context.Context, org, method, path string, body any, out any) (int, error) {
-	tok, err := c.token(ctx, org)
+	id, secret, err := c.cred(ctx, org)
 	if err != nil {
 		return 0, err
 	}
@@ -126,7 +102,12 @@ func (c *canonicalProjects) do(ctx context.Context, org, method, path string, bo
 	if err != nil {
 		return 0, err
 	}
-	req.Header.Set("Authorization", "Bearer "+tok)
+	// client_secret_basic, not a minted bearer: IAM's app() path resolves this
+	// to Principal{App: name, Org: served-org} — exactly the shape the
+	// projects-read grant admits. A client_credentials BEARER resolves its org
+	// from the SUBJECT's owner half (the app row's owner, "admin"), which the
+	// grant rightly refuses — measured live before this client switched.
+	req.SetBasicAuth(id, secret)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
