@@ -190,6 +190,10 @@ TEST_ENV = CLOUD_KMS_MASTER_KEY_REF="$${CLOUD_KMS_MASTER_KEY_REF:-$(DEV_KMS_KEY)
 TEST_TAGS := sqlite_fts5
 
 test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ships).
+	# The lifted prose is COMMITTED (zipdoc_gen.go) because bare `go build` cannot
+	# regenerate it; -check writes nothing and goes red when a lift no longer
+	# matches its source, which is the drift being committed makes possible.
+	$(GO) run github.com/zap-proto/zip/cmd/zipdoc -check ./... || { echo "zipdoc_gen.go is stale — run: go generate -run zipdoc ./..."; exit 1; }
 	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -tags "$(TEST_TAGS)" ./...
 
 # THE spec, in one command. Three steps, in the only order they work in:
