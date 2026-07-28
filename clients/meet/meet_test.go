@@ -73,9 +73,17 @@ func mountWithKeyFile(t *testing.T, team, path string) *zip.App {
 	return app
 }
 
+// session mints a workspace token the way selectWorkspace does. The role defaults to
+// member because that is the ordinary caller; pass extra{"role": "guest"} for a guest
+// and extra{"role": ""} to model a token that never proved a role (a pre-workspace
+// session token, or one minted before the claim existed).
 func session(t *testing.T, ws, secret string, extra map[string]any, exp int64) string {
 	t.Helper()
-	tok, err := token.Generate(account, ws, extra, exp, secret)
+	e := map[string]any{"role": token.RoleMember}
+	for k, v := range extra {
+		e[k] = v
+	}
+	tok, err := token.Generate(account, ws, e, exp, secret)
 	if err != nil {
 		t.Fatalf("token.Generate: %v", err)
 	}
@@ -245,11 +253,25 @@ func TestMintRefusals(t *testing.T) {
 		{"separator-less room, unbound session", "lobby", func(t *testing.T) string {
 			return session(t, "", teamSecret, nil, hour)
 		}},
-		{"guest session", roomIn(workspaceA), func(t *testing.T) string {
-			return session(t, workspaceA, teamSecret, map[string]any{"guest": "true"}, hour)
+		// The REAL reduced principal: the signed workspace role. These rows used to
+		// set extra.guest/extra.readonly, which NOTHING in this repo mints — so they
+		// passed against a token production never produces while every actual guest
+		// was admitted.
+		{"guest role", roomIn(workspaceA), func(t *testing.T) string {
+			return session(t, workspaceA, teamSecret, map[string]any{"role": token.RoleGuest}, hour)
 		}},
-		{"readonly session", roomIn(workspaceA), func(t *testing.T) string {
-			return session(t, workspaceA, teamSecret, map[string]any{"readonly": "true"}, hour)
+		// FAIL-CLOSED on an unproven role: a token with no role claim has not shown it
+		// is a member, so it does not get a seat.
+		{"no role claim", roomIn(workspaceA), func(t *testing.T) string {
+			return session(t, workspaceA, teamSecret, map[string]any{"role": ""}, hour)
+		}},
+		{"unknown future role", roomIn(workspaceA), func(t *testing.T) string {
+			return session(t, workspaceA, teamSecret, map[string]any{"role": "observer"}, hour)
+		}},
+		// The claims the old guards read are now meaningless — asserting that keeps
+		// anyone from "restoring" them and believing they do something.
+		{"inert extra.guest does not reduce a member", roomIn(workspaceA), func(t *testing.T) string {
+			return session(t, workspaceB, teamSecret, map[string]any{"guest": "true"}, hour)
 		}},
 	}
 	for _, c := range cases {
@@ -374,6 +396,12 @@ func TestKeyFileRefusals(t *testing.T) {
 		{"two api keys", apiKey + ": " + apiSecret + "\nAPIsecond: another-secret\n"},
 		{"not a map", "- just\n- a list\n"},
 		{"whitespace-only secret", apiKey + ": \"   \"\n"},
+		// RESTORED. This case failed once and the failure was information: it proved
+		// the parser was coercing scalars. Deleting it (and keeping a comment that
+		// claimed the opposite) turned a caught bug into a false assurance. With
+		// yaml.v3 a duplicated key is a hard error, which is what the LiveKit server
+		// does with the same bytes.
+		{"duplicate api key", apiKey + ": v1\n" + apiKey + ": v2\n"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -476,11 +504,12 @@ func TestGrantRefusesEmptySigningKey(t *testing.T) {
 // api key is LiveKit's `iss` and the secret IS the HMAC key, so a single stripped
 // space mints a token that looks perfect and verifies nowhere.
 //
-// Note on types: sigs.k8s.io/yaml coerces a scalar to the target type, so a secret
-// written as a bare number decodes as its string form rather than erroring. That is
-// not a divergence risk in practice — a bare-number secret would have to survive the
-// LiveKit server's own startup first — and it is why the refusal table above tests
-// emptiness and ambiguity, which are the failures that actually occur.
+// The parser is gopkg.in/yaml.v3 into map[string]string — the exact library and target
+// type the LiveKit server uses (livekit/pkg/config), so byte-exactness is by
+// construction rather than by hope. It matters: measured on real input,
+// sigs.k8s.io/yaml turned 0123456789 into "1.2345679e+08", yes into "true", 0x1f into
+// "31", and silently kept the LAST of a duplicated key. Every one of those mints a
+// token that verifies nowhere while the boot log says "mounted".
 func TestKeyFileValuesAreByteExact(t *testing.T) {
 	cases := []struct{ name, body, wantKey, wantSecret string }{
 		{"plain scalars", "K: abc123\n", "K", "abc123"},
@@ -489,6 +518,14 @@ func TestKeyFileValuesAreByteExact(t *testing.T) {
 		{"quoted, LEADING space preserved", "K: \" abc\"\n", "K", " abc"},
 		{"base64-ish with padding", "APIxY9: aGVsbG8td29ybGQ=\n", "APIxY9", "aGVsbG8td29ybGQ="},
 		{"secret containing a colon", "K: \"a:b\"\n", "K", "a:b"},
+		// The scalars sigs.k8s.io/yaml mangled. Each of these is a token that would
+		// have minted cleanly and verified nowhere.
+		{"leading-zero digits stay a string", "K: 0123456789\n", "K", "0123456789"},
+		{"yes is not a bool", "K: yes\n", "K", "yes"},
+		{"no is not a bool", "K: no\n", "K", "no"},
+		{"exponent notation stays literal", "K: 1e5\n", "K", "1e5"},
+		{"hex notation stays literal", "K: 0x1f\n", "K", "0x1f"},
+		{"double zero stays literal", "K: 00\n", "K", "00"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -524,5 +561,156 @@ func TestSigningUsesTheFilesSecretVerbatim(t *testing.T) {
 	mac.Write([]byte(parts[0] + "." + parts[1]))
 	if hmac.Equal([]byte(parts[2]), []byte(base64.RawURLEncoding.EncodeToString(mac.Sum(nil)))) {
 		t.Fatal("the trimmed secret also verifies — the test cannot distinguish trimming")
+	}
+}
+
+// ── the tenant boundary, at the level that enforces it ───────────────────────
+
+// TestAdmitsBindsRoomToTheSignedWorkspace tests `admits`, NOT the workspace() helper.
+// That distinction is the whole point: TestWorkspaceOfRoom pins the parse in isolation
+// and constrains nothing about how admits USES it, so mutating the comparison from
+// exact-segment to prefix survived the entire suite.
+//
+// Room names are chosen by the client, so this comparison is the ONLY thing standing
+// between a workspace member and a room in someone else's workspace.
+func TestAdmitsBindsRoomToTheSignedWorkspace(t *testing.T) {
+	hour := time.Now().Add(time.Hour).Unix()
+	st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret}
+	member := func(ws string) string {
+		return "Bearer " + session(t, ws, teamSecret, nil, hour)
+	}
+	// A UUID cannot be a proper prefix of another UUID (token.Generate enforces
+	// uuid.Validate, so both are 36 chars), but the room's segment 0 is arbitrary
+	// client text. A PREFIX comparison would admit all of these; exact-segment does not.
+	for _, room := range []string{
+		workspaceA + "x_standup_1",              // one extra char before the separator
+		workspaceA + "-evil_standup_1",          // suffixed segment
+		workspaceA + workspaceA + "_standup_1",  // segment 0 starts with the real uuid
+	} {
+		if st.admits(room, member(workspaceA)) {
+			t.Errorf("admitted room %q for workspace %q — segment 0 is not an exact match", room, workspaceA)
+		}
+	}
+	// The exact segment is admitted, so the test discriminates rather than always failing.
+	if !st.admits(roomIn(workspaceA), member(workspaceA)) {
+		t.Fatal("refused the exact-workspace room; the check is not discriminating")
+	}
+	// And the converse direction: a member of A cannot enter B's room.
+	if st.admits(roomIn(workspaceB), member(workspaceA)) {
+		t.Error("a member of workspace A was admitted to a workspace B room")
+	}
+}
+
+// TestAdmitsRefusesUnboundSession is load-bearing on its own: without the
+// Workspace=="" refusal, a token that never selected a workspace (workspace claim
+// empty) matches any room whose name STARTS with '_' — segment 0 is then the empty
+// string and the comparison succeeds.
+func TestAdmitsRefusesUnboundSession(t *testing.T) {
+	hour := time.Now().Add(time.Hour).Unix()
+	st := state{teamSecret: teamSecret, apiKey: apiKey, apiSecret: apiSecret}
+	unbound := "Bearer " + session(t, "", teamSecret, nil, hour)
+	for _, room := range []string{"_standup_1", "_", "_anything"} {
+		if st.admits(room, unbound) {
+			t.Errorf("an unbound session was admitted to %q", room)
+		}
+	}
+	// It is also refused for a normal room, and a BOUND session is admitted — so the
+	// refusal is about the empty claim, not about rooms in general.
+	if st.admits(roomIn(workspaceA), unbound) {
+		t.Error("an unbound session was admitted to a real workspace room")
+	}
+	if !st.admits(roomIn(workspaceA), "Bearer "+session(t, workspaceA, teamSecret, nil, hour)) {
+		t.Fatal("a bound member was refused; the test is not discriminating")
+	}
+}
+
+// TestMultipleApiKeysSelectByName: a LiveKit key file is a map because a server may
+// hold several keys. Ambiguity is refused, but LIVEKIT_API_KEY resolves it — so a
+// multi-key file is an operator setting, not a permanent outage.
+func TestMultipleApiKeysSelectByName(t *testing.T) {
+	body := "APIfirst: secret-one\nAPIsecond: secret-two\n"
+	path := keyFileWith(t, body)
+
+	// No selector ⇒ refused, and the message lists what is available AND names the
+	// env var to set, so the log is actionable rather than just negative.
+	_, _, err := readKeys(path)
+	if err == nil {
+		t.Fatal("a two-key file was accepted with no selector")
+	}
+	for _, want := range []string{"APIfirst", "APIsecond", apiKeyEnv, "livekit-keys"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal %q does not mention %q", err, want)
+		}
+	}
+
+	// Selector ⇒ that exact pair, and signing uses it end to end.
+	t.Setenv(apiKeyEnv, "APIsecond")
+	key, secret, err := readKeys(path)
+	if err != nil {
+		t.Fatalf("readKeys with a selector: %v", err)
+	}
+	if key != "APIsecond" || secret != "secret-two" {
+		t.Fatalf("selected (%q,%q), want (APIsecond, secret-two)", key, secret)
+	}
+	app := mountWithKeyFile(t, teamSecret, path)
+	bearer := session(t, workspaceA, teamSecret, nil, time.Now().Add(time.Hour).Unix())
+	code, tok := ask(t, app, roomIn(workspaceA), "person-42", bearer)
+	if code != http.StatusOK {
+		t.Fatalf("mint = %d %s, want 200", code, tok)
+	}
+	if claims := verify(t, tok, "secret-two"); claims["iss"] != "APIsecond" {
+		t.Errorf("iss = %v, want APIsecond", claims["iss"])
+	}
+
+	// A selector naming a key the file does not have is refused, and the refusal must
+	// SAY SO. Dropping the membership check does not open a hole — the blank-value
+	// check catches it downstream — but it degrades the message to a generic "empty api
+	// key or secret", which sends an operator hunting the Secret's contents instead of
+	// the one env var that is wrong. Asserting the message keeps the diagnostic honest,
+	// and is what makes that mutation observable at all.
+	t.Setenv(apiKeyEnv, "APIabsent")
+	_, _, err = readKeys(path)
+	if err == nil {
+		t.Fatal("a selector naming an absent key was accepted")
+	}
+	for _, want := range []string{apiKeyEnv, "APIabsent", "APIfirst", "APIsecond"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal %q does not mention %q — an operator cannot tell which knob is wrong", err, want)
+		}
+	}
+}
+
+// TestHealthSurfacesTheReason: "meet is unconfigured" has to be a dashboard fact, not
+// a grep of a rotated boot log. The operator surface carries the reason; the
+// unauthenticated mint path still does not.
+func TestHealthSurfacesTheReason(t *testing.T) {
+	app := mount(t, teamSecret, "", "")
+	req := httptest.NewRequest(http.MethodGet, "/v1/meet/health", nil)
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("GET /v1/meet/health: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("health = %d, want 503 when unconfigured", resp.StatusCode)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("health body not JSON: %s", b)
+	}
+	if got["ready"] != false || got["status"] != "degraded" {
+		t.Errorf("health = %v, want ready:false status:degraded", got)
+	}
+	if s, _ := got["error"].(string); !strings.Contains(s, "livekit-keys") {
+		t.Errorf("health error %q does not name the Secret to fix", s)
+	}
+	// Configured ⇒ 200 + ready, so the probe distinguishes.
+	ok := mount(t, teamSecret, apiKey, apiSecret)
+	req2 := httptest.NewRequest(http.MethodGet, "/v1/meet/health", nil)
+	resp2, _ := ok.Fiber().Test(req2)
+	defer func() { _ = resp2.Body.Close() }()
+	if resp2.StatusCode != http.StatusOK {
+		t.Errorf("configured health = %d, want 200", resp2.StatusCode)
 	}
 }
