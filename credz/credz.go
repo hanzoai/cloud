@@ -21,10 +21,26 @@
 // appears in /proc/<pid>/environ, which is the kernel's snapshot of the argument
 // page as it was passed. Same interface, none of the exposure.
 //
-// IDENTITY IS THE KERNEL'S, NOT THE CALLER'S. A client sends no name and no
-// token. The broker reads SO_PEERCRED off the connection and resolves the peer's
-// argv through /proc — see scope.go. There is no credential to steal because
-// there is no credential.
+// IDENTITY IS NOT YET SOUND — READ THIS BEFORE RELYING ON THE SCOPE.
+// A client sends no name and no token; the broker reads SO_PEERCRED off the
+// connection and resolves the peer's argv through /proc (see scope.go).
+// SO_PEERCRED is kernel-authenticated for pid/uid, but ARGV IS NOT: a process
+// chooses its own argv[0] at execve, so any same-uid process can present itself
+// as any app and receive that app's bundle. Demonstrated: a binary named
+// `spoof` was granted `billing`'s and then `ai`'s bundle, and the broker logged
+// both as legitimate grants.
+//
+// So the per-app scope below is a partition against ACCIDENT — a subsystem
+// cannot read a credential it was never given, and 107 processes stop carrying
+// secrets they never use — but it is NOT a boundary against a compromised
+// process running code of its own. Treat every plugin in a pod as holding
+// everything any plugin can ask for until the launcher asserts identity.
+//
+// THE FIX, which needs the spawner: only the launcher knows which app it started
+// as which pid, so identity has to come from the launcher's own spawn record and
+// not from the child's self-report — a per-plugin nonce set in zip.Plugin.Env,
+// or a pre-connected socket passed as an ExtraFile. Both live in
+// manifest/plugin.go + cmd/host, which is why they are not done here.
 //
 // THE THREE POSTURES, resolved once at Boot:
 //
