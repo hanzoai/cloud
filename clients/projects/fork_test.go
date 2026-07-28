@@ -116,11 +116,14 @@ func TestForkCreatesProjectFromTemplate(t *testing.T) {
 	if p.Framework != "next" { // "Next.js 14.2 + TS" → next
 		t.Fatalf("fork framework want next, got %q", p.Framework)
 	}
-	if p.Repo.URL != "https://gallery.hanzo.ai/templates/synapse" {
-		t.Fatalf("fork repo url want gallery source, got %q", p.Repo.URL)
+	// The seeded remote is the REPOSITORY the template lives in. It used to be
+	// the template's gallery page, which is an HTML 404 — a build can do nothing
+	// with that, and the provider came out "git" because the host was not a forge.
+	if p.Repo.URL != "https://github.com/hanzo-templates/synapse" {
+		t.Fatalf("fork repo url want the template repository, got %q", p.Repo.URL)
 	}
-	if p.Repo.Provider != "git" { // gallery.hanzo.ai is not github/gitlab/bitbucket
-		t.Fatalf("fork repo provider want git, got %q", p.Repo.Provider)
+	if p.Repo.Provider != "github" {
+		t.Fatalf("fork repo provider want github, got %q", p.Repo.Provider)
 	}
 	if p.Status != "draft" {
 		t.Fatalf("fork status want draft, got %q", p.Status)
@@ -154,7 +157,7 @@ func TestForkVariantSelection(t *testing.T) {
 	if p.Slug != "prism-react" { // a non-default shape carries its id into the slug
 		t.Fatalf("prism/react slug want prism-react, got %q", p.Slug)
 	}
-	if p.Repo.URL != "https://gallery.hanzo.ai/templates/prism-react" {
+	if p.Repo.URL != "https://github.com/hanzo-templates/prism-react" {
 		t.Fatalf("prism/react repo want the variant source, got %q", p.Repo.URL)
 	}
 	if p.ForkedFrom != "prism" { // lineage is the template, not the shape
