@@ -1,6 +1,6 @@
 module github.com/hanzoai/cloud
 
-go 1.26.4
+go 1.26.5
 
 // Dependencies will be added as subsystems are mounted per HIP-0106.
 
