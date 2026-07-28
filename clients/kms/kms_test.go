@@ -225,13 +225,13 @@ func TestRESTRoundtripOrgScoped(t *testing.T) {
 
 	// hanzo caller stores a secret in its own org.
 	body, _ := json.Marshal(map[string]string{"name": "API_KEY", "value": "hk-abc123", "env": "main"})
-	resp := do(t, app, "POST", "/v1/kms/orgs/hanzo/secrets", "hanzo", string(body), false, nil)
+	resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, nil)
 	if resp.StatusCode != 200 {
 		t.Fatalf("POST secret (own org) = %d, want 200: %s", resp.StatusCode, readAll(resp.Body))
 	}
 
 	// Same caller reads it back.
-	resp = do(t, app, "GET", "/v1/kms/orgs/hanzo/secrets/API_KEY?env=main", "hanzo", "", false, nil)
+	resp = do(t, app, "GET", "/v1/kms/secrets/API_KEY?env=main", "hanzo", "", false, nil)
 	if resp.StatusCode != 200 {
 		t.Fatalf("GET secret (own org) = %d, want 200", resp.StatusCode)
 	}
@@ -240,19 +240,19 @@ func TestRESTRoundtripOrgScoped(t *testing.T) {
 	}
 
 	// A different org (evil) may NOT read hanzo's secret.
-	resp = do(t, app, "GET", "/v1/kms/orgs/hanzo/secrets/API_KEY?env=main", "evil", "", false, nil)
+	resp = do(t, app, "GET", "/v1/kms/secrets/API_KEY?env=main", "evil", "", false, nil)
 	if resp.StatusCode != 403 {
 		t.Errorf("cross-org GET = %d, want 403 (org isolation)", resp.StatusCode)
 	}
 
 	// A SuperAdmin may read any org.
-	resp = do(t, app, "GET", "/v1/kms/orgs/hanzo/secrets/API_KEY?env=main", "admin", "", true, nil)
+	resp = do(t, app, "GET", "/v1/kms/secrets/API_KEY?env=main", "admin", "", true, nil)
 	if resp.StatusCode != 200 {
 		t.Errorf("admin cross-org GET = %d, want 200", resp.StatusCode)
 	}
 
 	// An unauthenticated caller (no org, not admin) is refused.
-	resp = do(t, app, "GET", "/v1/kms/orgs/hanzo/secrets/API_KEY?env=main", "", "", false, nil)
+	resp = do(t, app, "GET", "/v1/kms/secrets/API_KEY?env=main", "", "", false, nil)
 	if resp.StatusCode != 403 {
 		t.Errorf("anonymous GET = %d, want 403", resp.StatusCode)
 	}
@@ -265,7 +265,7 @@ func TestRESTSecretOpsFailClosedWithoutKey(t *testing.T) {
 	// env is required on writes; supply it so the request reaches the
 	// master-key gate this test exercises (rather than 400-ing on input).
 	body, _ := json.Marshal(map[string]string{"name": "X", "value": "y", "env": "main"})
-	resp := do(t, app, "POST", "/v1/kms/orgs/hanzo/secrets", "hanzo", string(body), false, nil)
+	resp := do(t, app, "POST", "/v1/kms/secrets", "hanzo", string(body), false, nil)
 	if resp.StatusCode != 503 {
 		t.Fatalf("POST secret (no key) = %d, want 503 (fail-closed)", resp.StatusCode)
 	}
