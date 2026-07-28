@@ -85,13 +85,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// the public issuer as a last resort (single-process / no split-horizon deploys).
 	tokenURL := strings.TrimSpace(os.Getenv("CLOUD_KMS_IAM_TOKEN_URL"))
 	if tokenURL == "" {
-		if base := strings.TrimRight(strings.TrimSpace(os.Getenv("IAM_URL")), "/"); base != "" {
+		if base := cloud.IAMBaseURL(deps.IAMIssuer); base != "" {
 			tokenURL = base + "/v1/iam/oauth/token"
-		}
-	}
-	if tokenURL == "" {
-		if iss := strings.TrimRight(strings.TrimSpace(deps.IAMIssuer), "/"); iss != "" {
-			tokenURL = iss + "/v1/iam/oauth/token"
 		}
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "kms"), State: state{kms: kc, iamTokenURL: tokenURL}}

@@ -120,7 +120,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "platform"),
-		State: state{store: store, projects: iamProjects{}, k8s: k, kmsIdentity: newKMSOrgIdentity(deps.KMS),
+		State: state{store: store, projects: iamProjects{}, k8s: k, kmsIdentity: newKMSOrgIdentity(deps.KMS, deps.IAMIssuer, deps.Brand),
 			sitesHost: getenv("CLOUD_PLATFORM_SITES_HOST", "hanzo.app")}}
 	mounted = s
 	// UNIFIED PAYWALL (server-side enforcement). To gate the /v1/platform surface
