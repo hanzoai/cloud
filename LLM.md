@@ -685,14 +685,35 @@ A parallel `clients/cd` + `clients/site` lifecycle (kind-agnostic `Target`, a
 `CURRENT` pointer object next to the bundles) was built and then DELETED unmerged: it
 re-implemented all of the above with a weaker pointer — a `v<N>` counter instead of a
 content digest, and a plain PUT that could name a release whose row does not exist.
-Its one genuinely new finding is recorded as a gap below, not as a second system.
+Its one genuinely new finding was a gap in THIS lifecycle, closed below rather than
+answered with a second system.
 
-**Known gap: releases are never garbage-collected.** `promote` writes a new immutable
-prefix per distinct content and nothing prunes them; `DeleteReleases` only runs on
-project delete. Retention belongs in `clients/projects` next to `promote`. When it is
-added, `activate` must also verify the bytes still exist before flipping — today
-`ActivateRelease` proves only that the ROW exists, which is sufficient only while
-nothing can prune the bytes out from under it.
+**Retention is bounded, and it lives next to `promote`.** Releases used to
+accumulate forever — `promote` wrote a new immutable prefix per distinct content,
+nothing pruned them, and `DeleteReleases` only ran on project delete. Now every
+promote that records a row calls `pruneReleases`, which reclaims what fell past
+`keepReleases` (10 superseded, plus the live one). Retention at the one event that
+GROWS the set means no sweeper, no schedule, and no second notion of which releases
+exist. It is best-effort: a prune failure is logged and recomputed by the next
+publish, never turned into a failed publish.
+
+Two consequences, both load-bearing:
+
+- **The live release is not a candidate at any depth.** It is excluded from the
+  prune scan (so it never counts against the budget — a site parked on an ancient
+  release keeps it), AND every prune `DELETE` re-checks `current_release` at delete
+  time, so a rollback landing after the scan makes that delete match zero rows. Rows
+  go first, bytes after — `promote`'s ordering run backwards — so a surviving row
+  still means "the prefix is complete", and a crash between the two leaks objects
+  nothing points at rather than serving a 404.
+- **`activate` verifies BYTES, not just the row.** `ActivateRelease`'s
+  `WHERE EXISTS (release row)` was sufficient only while nothing could prune bytes
+  out from under a row. It now stats the release's `index.html` before the flip:
+  missing row → 404 (no cross-tenant oracle), missing bytes → **410 Gone**. Without
+  it, activating a reclaimed release returns 200 and takes a live site down.
+  `ListReleases` and `PruneReleases` share one order (`created_at DESC, rowid DESC`)
+  because `created_at` is second-granular and the menu a caller sees must be exactly
+  the set retention keeps.
 
 **Three transports, one trigger.** A push reaches `cloud.OnGitPush` — the
 single-registrant seam, never a second CI — from the embedded git server
