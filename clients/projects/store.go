@@ -214,10 +214,25 @@ CREATE INDEX IF NOT EXISTS ix_deployments_project_created ON deployments(project
 -- separate table is what makes a bare subdomain resolve deterministically to one
 -- org — the authoritative binding the site server keys on. First-come wins;
 -- the PK enforces one owner per host.
+--
+-- status separates HOLDING a name from SERVING it, so an org can claim a BYO
+-- custom domain before it has proven it owns one:
+--
+--   verified  the row routes. ResolveHost returns it; the edge serves it.
+--   pending   the row holds the name against the PK (nobody else may claim it)
+--             and carries the challenge token, but NEVER routes.
+--
+-- A pending row that routed would be a hostname hijack — claim yourco.com, serve
+-- it immediately — so ResolveHost filters on status and that filter is the whole
+-- boundary. Structural subdomain binds are verified by construction: the org owns
+-- its own slug, so there is nothing to prove.
 CREATE TABLE IF NOT EXISTS site_hosts (
   host        TEXT PRIMARY KEY,
   org         TEXT NOT NULL,
   slug        TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'verified',
+  token       TEXT NOT NULL DEFAULT '',
+  verified_at INTEGER NOT NULL DEFAULT 0,
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL
 );
@@ -259,6 +274,13 @@ CREATE INDEX IF NOT EXISTS ix_releases_org_slug_created ON releases(org, slug, c
 		// too; space_id backfills empty and the deploy/serve paths re-derive it.
 		`ALTER TABLE projects ADD COLUMN analytics INTEGER NOT NULL DEFAULT 1`,
 		`ALTER TABLE projects ADD COLUMN space_id TEXT NOT NULL DEFAULT ''`,
+		// Every site_hosts row that exists when this migration runs is ALREADY
+		// SERVING, so the default must be 'verified'. Defaulting to 'pending'
+		// would take every live custom domain and subdomain off the air the
+		// moment the new binary boots.
+		`ALTER TABLE site_hosts ADD COLUMN status TEXT NOT NULL DEFAULT 'verified'`,
+		`ALTER TABLE site_hosts ADD COLUMN token TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE site_hosts ADD COLUMN verified_at INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := s.db.Exec(alter); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 			return fmt.Errorf("migrate alter: %w", err)
@@ -446,11 +468,49 @@ func (s *Store) GetDeployment(ctx context.Context, org, projectID, id string) (D
 	return d, nil
 }
 
-// BindHost claims the global public host for (org, slug), first-come. It is
-// idempotent for the SAME owner (a re-deploy just refreshes updated_at). If host
-// is already bound to a DIFFERENT project it returns errHostTaken WITHOUT
-// overwriting — a losing bind must never hijack another org's live subdomain.
+// Host statuses. A row is either serving or merely held; see the site_hosts DDL.
+const (
+	HostVerified = "verified"
+	HostPending  = "pending"
+)
+
+// HostClaim is one row of the public-hostname namespace as reported to its owner.
+// Token is the DNS challenge value for a pending claim, and empty once verified —
+// the proof has been consumed and the record can be retired.
+type HostClaim struct {
+	Host       string
+	Org        string
+	Slug       string
+	Status     string
+	Token      string
+	CreatedAt  int64
+	VerifiedAt int64
+}
+
+// BindHost binds the global public host to (org, slug) as VERIFIED — the
+// structural path: an org's own subdomain, or a custom host an operator has
+// vouched for. First-come; idempotent for the SAME owner (a re-deploy just
+// refreshes updated_at). If host is already held by a DIFFERENT project it
+// returns errHostTaken WITHOUT overwriting — a losing bind must never hijack
+// another org's live subdomain. A pending claim by the SAME owner is promoted.
 func (s *Store) BindHost(ctx context.Context, host, org, slug string, now int64) error {
+	return s.bindHost(ctx, host, org, slug, HostVerified, "", now)
+}
+
+// ClaimHost records a PENDING claim on host for (org, slug), carrying the DNS
+// challenge token the owner must publish. It takes the name against the PK, so a
+// claim blocks anyone else from claiming it, but the row does NOT route until
+// VerifyHost promotes it.
+//
+// Re-claiming keeps the EXISTING token, so a repeat call returns the same
+// challenge rather than invalidating a record the customer already published. A
+// claim over an ALREADY-VERIFIED row of the same owner is a no-op: verification
+// is never walked backwards, or a re-claim would take a live host off the air.
+func (s *Store) ClaimHost(ctx context.Context, host, org, slug, token string, now int64) error {
+	return s.bindHost(ctx, host, org, slug, HostPending, token, now)
+}
+
+func (s *Store) bindHost(ctx context.Context, host, org, slug, status, token string, now int64) error {
 	// A reserved label may never enter site_hosts, whatever the caller — the
 	// storage invariant that makes the serve-time reserved gate a mere backstop.
 	if sites.IsReserved(host) {
@@ -462,13 +522,18 @@ func (s *Store) BindHost(ctx context.Context, host, org, slug string, now int64)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	var curOrg, curSlug string
-	row := tx.QueryRowContext(ctx, `SELECT org, slug FROM site_hosts WHERE host=?`, host)
-	switch err := row.Scan(&curOrg, &curSlug); {
+	var curOrg, curSlug, curStatus string
+	row := tx.QueryRowContext(ctx, `SELECT org, slug, status FROM site_hosts WHERE host=?`, host)
+	switch err := row.Scan(&curOrg, &curSlug, &curStatus); {
 	case errors.Is(err, sql.ErrNoRows):
+		verifiedAt := int64(0)
+		if status == HostVerified {
+			verifiedAt = now
+		}
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO site_hosts (host, org, slug, created_at, updated_at) VALUES (?,?,?,?,?)`,
-			host, org, slug, now, now); err != nil {
+			`INSERT INTO site_hosts (host, org, slug, status, token, verified_at, created_at, updated_at)
+			 VALUES (?,?,?,?,?,?,?,?)`,
+			host, org, slug, status, token, verifiedAt, now, now); err != nil {
 			return fmt.Errorf("bind host: %w", err)
 		}
 	case err != nil:
@@ -477,11 +542,90 @@ func (s *Store) BindHost(ctx context.Context, host, org, slug string, now int64)
 		if curOrg != org || curSlug != slug {
 			return errHostTaken
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE site_hosts SET updated_at=? WHERE host=?`, now, host); err != nil {
+		// Never walk a verified host back to pending: a re-claim of a host that
+		// is already serving must not take it off the air.
+		if status == HostPending && curStatus == HostVerified {
+			status = HostVerified
+		}
+		if status == HostVerified {
+			if _, err := tx.ExecContext(ctx,
+				`UPDATE site_hosts SET status=?, token='', verified_at=CASE WHEN verified_at=0 THEN ? ELSE verified_at END, updated_at=?
+				 WHERE host=?`, HostVerified, now, now, host); err != nil {
+				return fmt.Errorf("touch host: %w", err)
+			}
+			break
+		}
+		// Still pending: keep whatever token the customer is already publishing.
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE site_hosts SET token=CASE WHEN token='' THEN ? ELSE token END, updated_at=? WHERE host=?`,
+			token, now, host); err != nil {
 			return fmt.Errorf("touch host: %w", err)
 		}
 	}
 	return tx.Commit()
+}
+
+// VerifyHost promotes (org, slug)'s pending claim on host to verified, so it
+// begins routing. Scoped to the owner: another org's row is never touched, and a
+// host that is not claimed by this project is errNotFound. Idempotent — verifying
+// an already-verified host succeeds without moving verified_at.
+func (s *Store) VerifyHost(ctx context.Context, host, org, slug string, now int64) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE site_hosts SET status=?, token='', verified_at=CASE WHEN verified_at=0 THEN ? ELSE verified_at END, updated_at=?
+		 WHERE host=? AND org=? AND slug=?`, HostVerified, now, now, host, org, slug)
+	if err != nil {
+		return fmt.Errorf("verify host: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("verify host: %w", err)
+	}
+	if n == 0 {
+		return errNotFound
+	}
+	return nil
+}
+
+// HostClaimFor returns (org, slug)'s claim on host. Scoped to the owner, so a
+// host held by another org reads as errNotFound — existence is never confirmed
+// across a tenant boundary.
+func (s *Store) HostClaimFor(ctx context.Context, host, org, slug string) (HostClaim, error) {
+	var h HostClaim
+	row := s.db.QueryRowContext(ctx,
+		`SELECT host, org, slug, status, token, created_at, verified_at FROM site_hosts
+		 WHERE host=? AND org=? AND slug=?`, host, org, slug)
+	switch err := row.Scan(&h.Host, &h.Org, &h.Slug, &h.Status, &h.Token, &h.CreatedAt, &h.VerifiedAt); {
+	case errors.Is(err, sql.ErrNoRows):
+		return HostClaim{}, errNotFound
+	case err != nil:
+		return HostClaim{}, fmt.Errorf("host claim: %w", err)
+	}
+	return h, nil
+}
+
+// ListHostClaims returns every host a project holds, verified and pending alike,
+// for the domains panel. ListHostsForProject is the routing view (verified only);
+// this is the ownership view.
+func (s *Store) ListHostClaims(ctx context.Context, org, slug string) ([]HostClaim, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT host, org, slug, status, token, created_at, verified_at FROM site_hosts
+		 WHERE org=? AND slug=? ORDER BY created_at ASC, host ASC`, org, slug)
+	if err != nil {
+		return nil, fmt.Errorf("list host claims: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []HostClaim
+	for rows.Next() {
+		var h HostClaim
+		if err := rows.Scan(&h.Host, &h.Org, &h.Slug, &h.Status, &h.Token, &h.CreatedAt, &h.VerifiedAt); err != nil {
+			return nil, fmt.Errorf("list host claims: %w", err)
+		}
+		out = append(out, h)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list host claims: %w", err)
+	}
+	return out, nil
 }
 
 // UnbindHost releases a host binding, but only the row owned by (org, slug) — so
@@ -499,9 +643,16 @@ func (s *Store) UnbindHost(ctx context.Context, host, org, slug string) error {
 // site_hosts binding to the org-scoped project. This is the authoritative
 // slug→project resolution the site server uses; the org and bucket come ONLY from
 // here, never from the request. Missing binding OR missing project ⇒ errNotFound.
+//
+// The status filter is THE hostname-hijack boundary and the only read that
+// enforces it: a pending claim holds its name against the PK but must never
+// serve, or claiming yourco.com would be enough to answer for it. It is the sole
+// routing read of site_hosts — ResolveUniqueLiveSlug resolves bare slugs out of
+// `projects` and never sees this table — so gating it here gates everything.
 func (s *Store) ResolveHost(ctx context.Context, host string) (Project, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT `+prefixCols("p")+` FROM site_hosts h JOIN projects p ON p.org=h.org AND p.slug=h.slug WHERE h.host=?`, host)
+		`SELECT `+prefixCols("p")+` FROM site_hosts h JOIN projects p ON p.org=h.org AND p.slug=h.slug
+		 WHERE h.host=? AND h.status='verified'`, host)
 	p, err := scanProject(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Project{}, errNotFound
@@ -562,12 +713,15 @@ func (s *Store) ResolveOrgLiveSlug(ctx context.Context, org, slug string) (Proje
 	return p, nil
 }
 
-// ListHostsForProject returns every public host bound to (org, slug), oldest
-// first. It powers GET .../domains so a console/user can see which hostnames the
-// site serves — its `<slug>.hanzo.app` subdomain plus any bound custom domains.
+// ListHostsForProject returns every public host that (org, slug) actually SERVES,
+// oldest first — its `<slug>.hanzo.app` subdomain plus any verified custom
+// domains. This is the routing view, so it excludes pending claims: reporting a
+// name the edge will not answer for as a "domain" would be a lie the customer
+// debugs for an hour. ListHostClaims is the ownership view that shows both.
 func (s *Store) ListHostsForProject(ctx context.Context, org, slug string) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT host FROM site_hosts WHERE org=? AND slug=? ORDER BY created_at ASC, host ASC`, org, slug)
+		`SELECT host FROM site_hosts WHERE org=? AND slug=? AND status='verified'
+		 ORDER BY created_at ASC, host ASC`, org, slug)
 	if err != nil {
 		return nil, fmt.Errorf("list hosts: %w", err)
 	}
