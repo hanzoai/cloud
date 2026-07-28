@@ -73,24 +73,29 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	logger = logger.New("subsystem", "crawl")
 
-	direct := zip.AdaptNetHTTP(http.HandlerFunc(handle))
-	keyed := zip.AdaptNetHTTP(guard(http.HandlerFunc(handle)))
+	// Bind the corpus to the ONE object seam the binary already has. A deployment
+	// with no object store keeps crawling and keeps nothing — see Bind.
+	Bind(deps.VFS)
+
+	// The scope is resolved per request at the zip layer, where the verified
+	// principal lives, and captured in the handler — it cannot be read off the
+	// net/http request below, and reading it from the BODY would let a caller name
+	// another tenant's corpus prefix.
+	serve := func(c *zip.Ctx) error {
+		s := scope(c)
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handleScoped(w, r, s) })
+		if principal.Validated(c) {
+			return zip.AdaptNetHTTP(h)(c)
+		}
+		return zip.AdaptNetHTTP(guard(h))(c)
+	}
 
 	g := app.Group("/v1/crawl")
-	g.Post("", func(c *zip.Ctx) error {
-		if principal.Validated(c) {
-			return direct(c)
-		}
-		return keyed(c)
-	})
-	g.Post("/", func(c *zip.Ctx) error {
-		if principal.Validated(c) {
-			return direct(c)
-		}
-		return keyed(c)
-	})
+	g.Post("", serve)
+	g.Post("/", serve)
 
-	logger.Info("crawl surface mounted (native in-process fetch + extract; no external crawler)")
+	logger.Info("crawl surface mounted (native in-process fetch + extract; no external crawler)",
+		"archive", deps.VFS != nil)
 	return nil
 }
 
@@ -119,14 +124,28 @@ func guard(next http.Handler) http.Handler {
 	})
 }
 
-func handle(w http.ResponseWriter, r *http.Request) {
+// scope reads the caller's corpus scope from the VERIFIED principal.
+//
+// A service caller (the chat server, holding the shared key) has no user
+// principal and therefore no org — its pages land in the shared "_" prefix that
+// seg() produces for an empty segment. That is deliberate: a service-wide corpus
+// is the honest home for pages fetched on nobody's behalf, and inventing an org
+// for it would file them under a tenant that did not ask.
+func scope(c *zip.Ctx) Scope {
+	org, _ := principal.Org(c)
+	return Scope{Org: org, Project: principal.Project(c)}
+}
+
+// handleScoped serves one crawl under a caller scope. The scope selects the corpus
+// prefix, so it comes from the VERIFIED principal and never from the body.
+func handleScoped(w http.ResponseWriter, r *http.Request, s Scope) {
 	var req Request
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil || strings.TrimSpace(req.URL) == "" {
 		writeJSON(w, http.StatusBadRequest, Response{Error: "missing url"})
 		return
 	}
 
-	page, err := Fetch(r.Context(), req.URL)
+	page, err := Read(r.Context(), s, req.URL)
 	if err != nil {
 		// 200 with Success:false — see the note on Response. The message is the
 		// error verbatim: a caller debugging a failed crawl needs to know whether the
