@@ -22,7 +22,7 @@ var frozen = []struct {
 	name        string
 	ownsHealth  bool
 	hasShutdown bool
-	global      bool // receives the bare *zip.App — see MountSpec.Global
+	global      bool // receives the bare *zip.App — see MountSpec.App
 }{
 	{"pubsub", false, true, false},          // was order 5
 	{"kafka", false, true, false},           // was order 6
@@ -39,7 +39,7 @@ var frozen = []struct {
 	// longer owns any o11y resource to close. The collector/sink/Datastore moved into
 	// the child, which flushes them in its OWN app.OnShutdown, and zip.Load registers
 	// the host-side hook that stops the child. A Shutdown on this spec would now be a
-	// host closing something it does not have. Name/OwnsHealth/Global are UNCHANGED —
+	// host closing something it does not have. Name/OwnsHealth/App are UNCHANGED —
 	// position, health routing and the app-wide grant are all still pinned here.
 	{"o11y", false, false, true},            // ONE observability subsystem (was co-owned orders 69+70), now out-of-process. OwnsHealth=false keeps /v1/o11y/health the generic always-ok route, which Serve registers before MountAll and therefore ahead of the plugin's /v1/o11y/* mount.
 	{"authz", false, false, true},           // was order 70
@@ -160,14 +160,14 @@ func TestWireOrderMatchesFrozen(t *testing.T) {
 		if (s.Shutdown != nil) != w.hasShutdown {
 			t.Errorf("position %d (%s): hasShutdown = %v, frozen = %v", i, s.Name, s.Shutdown != nil, w.hasShutdown)
 		}
-		// Global hands a subsystem the bare *zip.App, and with it the ability to
-		// gate every route in the binary. Freezing it here means a new grant cannot
+		// App hands a subsystem the bare *zip.App, and with it the ability to gate
+		// every route in the binary. Freezing it here means a new grant cannot
 		// arrive as a quiet field on one line of a 128-entry literal.
-		if s.Global != w.global {
-			t.Errorf("position %d (%s): Global = %v, frozen = %v — an app-wide capability changed", i, s.Name, s.Global, w.global)
+		if (s.App != nil) != w.global {
+			t.Errorf("position %d (%s): App = %v, frozen = %v — an app-wide capability changed", i, s.Name, s.App != nil, w.global)
 		}
-		if s.Mount == nil {
-			t.Errorf("position %d (%s): Mount is nil", i, s.Name)
+		if (s.Mount == nil) == (s.App == nil) {
+			t.Errorf("position %d (%s): needs exactly one of Mount or App", i, s.Name)
 		}
 	}
 }

@@ -18,9 +18,8 @@ import (
 // link. The same app still mounts into the unified cloud binary via apps.Wire().
 func main() {
 	if err := cloud.Serve([]cloud.MountSpec{{
-		Name:   "authz",
-		Mount:  cloud.Global(authz.Mount),
-		Global: true,
+		Name: "authz",
+		App:  authz.Mount,
 	}}, []string{"authz"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

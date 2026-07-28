@@ -19,9 +19,8 @@ import (
 func main() {
 	if err := cloud.Serve([]cloud.MountSpec{{
 		Name:     "commerce",
-		Mount:    cloud.Global(commerce.Mount),
+		App:      commerce.Mount,
 		Prefixes: commerce.Prefixes,
-		Global:   true,
 	}}, []string{"commerce"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

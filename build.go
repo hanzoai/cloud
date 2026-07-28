@@ -978,7 +978,7 @@ func pickVaultClient(cfg *Config, log luxlog.Logger) VaultClient {
 // property: middleware a subsystem installs lands on the subtrees its MountSpec
 // declares, never over the binary. Routes register exactly as before — absolute
 // paths, same precedence. See scope.go. A subsystem that genuinely gates
-// everything says so with Global: true and gets the bare app.
+// everything sets App instead and gets the bare app.
 type MountFunc func(app Router, deps Deps) error
 
 // ShutdownFunc releases a subsystem's process-lifetime resources (background
@@ -1038,18 +1038,16 @@ type MountSpec struct {
 	// routes still register at absolute paths anywhere, as they always have.
 	Prefixes []string
 
-	// Global says this subsystem gates the whole binary and receives the bare
-	// *zip.App. It is the one way to reach app-wide middleware, so every grant is a
-	// decision someone made in writing, and apps.TestWireFrozen fails on a new one.
-	// Today it is held only by linked modules whose own Mount still takes *zip.App
-	// (see cloud.Global) — none of which installs middleware.
-	Global bool
+	// App mounts against the whole binary instead of a scope, for a subsystem
+	// that gates everything. Set App or Mount, never both — the field IS the
+	// grant, so it is stated once and apps.TestWireFrozen fails on a new one.
+	App func(*zip.App, Deps) error
 }
 
 // MountAll mounts every ENABLED subsystem in specs, in slice order — the order is
 // the composition root's (apps.Wire()); MountAll does NOT sort.
 //
-// app is the concrete *zip.App from Serve. A Global spec receives it. Everyone else
+// app is the concrete *zip.App from Serve. An App spec receives it. Everyone else
 // receives a scope bound to their declared Prefixes, so a subsystem's middleware
 // reaches its own subtrees and nothing else, whatever its slice position. A
 // subsystem that installs middleware outside them fails the mount — the binary
@@ -1069,14 +1067,19 @@ func MountAll(app *zip.App, specs []MountSpec, cfg *Config, deps Deps) error {
 			logger.Debug("subsystem disabled", "name", spec.Name)
 			continue
 		}
-		var router Router = app
-		var sc *scope
-		if !spec.Global {
-			sc = newScope(app, spec.Name, spec.Prefixes)
-			router = sc
+		if spec.App != nil && spec.Mount != nil {
+			return fmt.Errorf("mount %s: has both App and Mount — a subsystem is scoped or global, not both", spec.Name)
 		}
-		if err := spec.Mount(router, deps); err != nil {
-			return fmt.Errorf("mount %s: %w", spec.Name, err)
+		var sc *scope
+		if spec.App != nil {
+			if err := spec.App(app, deps); err != nil {
+				return fmt.Errorf("mount %s: %w", spec.Name, err)
+			}
+		} else {
+			sc = newScope(app, spec.Name, spec.Prefixes)
+			if err := spec.Mount(sc, deps); err != nil {
+				return fmt.Errorf("mount %s: %w", spec.Name, err)
+			}
 		}
 		if sc != nil {
 			if err := sc.err(); err != nil {

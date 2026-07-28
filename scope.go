@@ -13,7 +13,7 @@ package cloud
 //	app.Group("/x", mw)         // matches every path under /x
 //
 // Both go through Router, and Router is the only thing MountAll hands a subsystem
-// that is not Global. Everything else — leaf routes, bare Groups, the *fiber.App
+// that is not global. Everything else — leaf routes, bare Groups, the *fiber.App
 // escape — passes through untouched, so absolute paths and fiber's most-specific-
 // wins precedence are exactly what they were.
 //
@@ -31,11 +31,11 @@ import (
 // Router is the surface a subsystem mounts on: zip's routing methods, plus the
 // *fiber.App escape the in-process dispatchers need (fiber.Test, GetRoutes,
 // adaptor.FiberApp). *zip.App satisfies it as-is, so Serve can hand the bare app
-// to a Global subsystem and tests can pass a raw app.
+// to a global subsystem and tests can pass a raw app.
 //
 // Fiber() is a deliberate, named hole: it is the concrete engine, and middleware
 // installed through it is app-wide. It is promoted onto the scoped Router rather
-// than granting those subsystems Global — the alternative was four more Globals for
+// than granting those subsystems App — the alternative was four more of them for
 // four read-only uses. Its callers are greppable and none of them registers
 // middleware.
 type Router interface {
@@ -55,7 +55,27 @@ type Router interface {
 	Fiber() *fiber.App
 }
 
-// scope is the Router a non-Global subsystem mounts on. It holds the subsystem's
+// ZipApp recovers the concrete *zip.App behind a Router. It is what zip's TYPED
+// registrars (zip.Get[In, Out] and friends) take, because a typed op is a route
+// PLUS a registry entry — the one value the OpenAPI document, the MCP tool list
+// and the CLI are all projected from — and that registry lives on the App.
+//
+// This is the same deliberate hole as Fiber(), one level up, and it is safe for
+// the same reason: registering an op is route registration, which scope has
+// never bounded (it bounds middleware). nil means the Router is neither an App
+// nor a scope, which no caller should paper over — a subsystem that cannot reach
+// the registry must fail its mount rather than serve routes no projection knows.
+func ZipApp(r Router) *zip.App {
+	switch v := r.(type) {
+	case *zip.App:
+		return v
+	case *scope:
+		return v.app
+	}
+	return nil
+}
+
+// scope is the Router a scoped subsystem mounts on. It holds the subsystem's
 // declared prefixes and refuses to install middleware outside them.
 type scope struct {
 	app      *zip.App
@@ -128,21 +148,6 @@ func (s *scope) err() error {
 		return nil
 	}
 	return fmt.Errorf(
-		"%s installed middleware at %s, outside the prefixes it owns (%s) — declare those prefixes in its MountSpec, or Global: true if it really gates the whole binary",
+		"%s installed middleware at %s, outside the prefixes it owns (%s) — declare those prefixes in its MountSpec, or set App instead if it really gates the whole binary",
 		s.name, strings.Join(*s.escaped, ", "), strings.Join(s.prefixes, ", "))
-}
-
-// Global adapts a subsystem whose Mount still takes the concrete *zip.App into a
-// MountFunc. It exists for the linked modules cloud does not own — they cannot take
-// cloud.Router until their own module takes it — and it only works on a spec that
-// also declares Global: true, because the bare app is the only Router that IS a
-// *zip.App. Anything else fails the mount at boot rather than silently.
-func Global(fn func(*zip.App, Deps) error) MountFunc {
-	return func(r Router, deps Deps) error {
-		app, ok := r.(*zip.App)
-		if !ok {
-			return fmt.Errorf("this subsystem takes the bare *zip.App; its MountSpec needs Global: true")
-		}
-		return fn(app, deps)
-	}
 }
