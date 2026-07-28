@@ -188,12 +188,10 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"ran": res.Ran, "skipped": res.Skipped})
 }
 
-// isBotActor reports whether a GitHub login is an App/bot identity (GitHub suffixes
-// App-authored actors with "[bot]"). Our own outbound mirror pushes AS the App bot, so
-// this is the automation-plane loop-guard: a bot-authored push never re-fires automations.
-func isBotActor(login string) bool {
-	return strings.HasSuffix(login, "[bot]")
-}
+// isBotActor is cloud.IsBotActor — the ONE bot predicate every push transport
+// shares. Our own outbound mirror pushes AS the App bot, so this is the
+// automation-plane loop-guard: a bot-authored push never re-fires automations.
+var isBotActor = cloud.IsBotActor
 
 // actorOf returns the login that pushed on GitHub — the App/bot for a push our own
 // outbound mirror made (the loop-guard fast-path; cursor idempotency is the real

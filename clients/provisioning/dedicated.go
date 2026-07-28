@@ -374,7 +374,7 @@ func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, k
 	// Seal the instance admin credential in KMS (durable + audited). The password
 	// is ALSO returned once in this response and projected as the namespace Secret
 	// below — but NEVER stored in plaintext at rest here.
-	secretRef := fmt.Sprintf("org/%s/%s/%s", org, kind, name)
+	secretRef := fmt.Sprintf("orgs/%s/%s/%s", org, kind, name)
 	storedRef := ""
 	if s.State.sec.Enabled() {
 		if err := s.State.sec.Put(secretRef, []byte(pw)); err != nil {

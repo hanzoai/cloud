@@ -1,4 +1,4 @@
-package writerpin
+package lease
 
 import (
 	"context"
@@ -13,8 +13,8 @@ import (
 // that property and the misconfigurations that would quietly break it — not that
 // the wrapper compiles.
 
-func testOpts(identity string) LeaseOptions {
-	return LeaseOptions{
+func testOpts(identity string) Options {
+	return Options{
 		Namespace:     "hanzo",
 		Name:          "cloud-writer",
 		Identity:      identity,
@@ -28,11 +28,11 @@ func testOpts(identity string) LeaseOptions {
 func TestLeasePin_OnlyOneHolderAtATime(t *testing.T) {
 	client := fake.NewSimpleClientset()
 
-	a, err := NewLeasePin(client, testOpts("pod-a"))
+	a, err := New(client, testOpts("pod-a"))
 	if err != nil {
 		t.Fatalf("pin a: %v", err)
 	}
-	b, err := NewLeasePin(client, testOpts("pod-b"))
+	b, err := New(client, testOpts("pod-b"))
 	if err != nil {
 		t.Fatalf("pin b: %v", err)
 	}
@@ -64,8 +64,8 @@ func TestLeasePin_OnlyOneHolderAtATime(t *testing.T) {
 func TestLeasePin_ReleaseLetsTheNextWriterIn(t *testing.T) {
 	client := fake.NewSimpleClientset()
 
-	a, _ := NewLeasePin(client, testOpts("pod-a"))
-	b, _ := NewLeasePin(client, testOpts("pod-b"))
+	a, _ := New(client, testOpts("pod-a"))
+	b, _ := New(client, testOpts("pod-b"))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -94,7 +94,7 @@ func TestLeasePin_ReleaseLetsTheNextWriterIn(t *testing.T) {
 // a closed channel.
 func TestLeasePin_ReleaseIsIdempotent(t *testing.T) {
 	client := fake.NewSimpleClientset()
-	p, _ := NewLeasePin(client, testOpts("pod-a"))
+	p, _ := New(client, testOpts("pod-a"))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -114,13 +114,13 @@ func TestLeasePin_RefusesUnsafeTimings(t *testing.T) {
 
 	bad := testOpts("pod-a")
 	bad.RenewDeadline = bad.LeaseDuration
-	if _, err := NewLeasePin(client, bad); err == nil {
+	if _, err := New(client, bad); err == nil {
 		t.Fatal("RenewDeadline == LeaseDuration must be refused (split-brain window)")
 	}
 
 	bad = testOpts("pod-a")
 	bad.RetryPeriod = bad.RenewDeadline
-	if _, err := NewLeasePin(client, bad); err == nil {
+	if _, err := New(client, bad); err == nil {
 		t.Fatal("RetryPeriod == RenewDeadline must be refused")
 	}
 }
@@ -130,18 +130,18 @@ func TestLeasePin_RefusesUnsafeTimings(t *testing.T) {
 func TestLeasePin_RequiresIdentityAndTarget(t *testing.T) {
 	client := fake.NewSimpleClientset()
 
-	for name, mutate := range map[string]func(*LeaseOptions){
-		"no identity":  func(o *LeaseOptions) { o.Identity = "" },
-		"no namespace": func(o *LeaseOptions) { o.Namespace = "" },
-		"no name":      func(o *LeaseOptions) { o.Name = "" },
+	for name, mutate := range map[string]func(*Options){
+		"no identity":  func(o *Options) { o.Identity = "" },
+		"no namespace": func(o *Options) { o.Namespace = "" },
+		"no name":      func(o *Options) { o.Name = "" },
 	} {
 		o := testOpts("pod-a")
 		mutate(&o)
-		if _, err := NewLeasePin(client, o); err == nil {
+		if _, err := New(client, o); err == nil {
 			t.Fatalf("%s must be refused", name)
 		}
 	}
-	if _, err := NewLeasePin(nil, testOpts("pod-a")); err == nil {
+	if _, err := New(nil, testOpts("pod-a")); err == nil {
 		t.Fatal("a nil client must be refused")
 	}
 }
@@ -150,47 +150,11 @@ func TestLeasePin_RequiresIdentityAndTarget(t *testing.T) {
 // hands out a pin nobody is renewing.
 func TestLeasePin_RespectsCancelledContext(t *testing.T) {
 	client := fake.NewSimpleClientset()
-	p, _ := NewLeasePin(client, testOpts("pod-a"))
+	p, _ := New(client, testOpts("pod-a"))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := p.Acquire(ctx); err == nil {
 		t.Fatal("Acquire must refuse a cancelled context")
-	}
-}
-
-// Resolve must never half-configure an election: every incomplete combination
-// falls back to SingleWriter and SAYS SO, because a silent fallback is how a
-// cluster ends up believing it elects when it does not.
-func TestResolve_FallsBackAndExplains(t *testing.T) {
-	cases := map[string]map[string]string{
-		"lease off":      {},
-		"no downward":    {"CLOUD_WRITER_LEASE": "1"},
-		"no pod name":    {"CLOUD_WRITER_LEASE": "1", "POD_NAMESPACE": "hanzo"},
-		"no namespace":   {"CLOUD_WRITER_LEASE": "1", "POD_NAME": "cloud-0"},
-		"not in-cluster": {"CLOUD_WRITER_LEASE": "1", "POD_NAMESPACE": "hanzo", "POD_NAME": "cloud-0"},
-	}
-	for name, env := range cases {
-		pin, reason := resolve(func(k string) string { return env[k] })
-		if pin.Kind() != "single-writer" {
-			t.Fatalf("%s: kind = %q, want single-writer", name, pin.Kind())
-		}
-		if reason == "" {
-			t.Fatalf("%s: fallback gave no reason", name)
-		}
-	}
-}
-
-// The opt-in switch itself: only explicit truthy values arm the lease.
-func TestResolve_OptInIsExplicit(t *testing.T) {
-	for _, v := range []string{"1", "true", "TRUE", "yes", "on"} {
-		if !truthy(v) {
-			t.Fatalf("%q must arm the lease", v)
-		}
-	}
-	for _, v := range []string{"", "0", "false", "no", "off", "maybe"} {
-		if truthy(v) {
-			t.Fatalf("%q must NOT arm the lease", v)
-		}
 	}
 }

@@ -72,6 +72,7 @@ import (
 	"github.com/hanzoai/cloud/clients/billing"
 	"github.com/hanzoai/cloud/clients/blueprint"
 	"github.com/hanzoai/cloud/clients/books"
+	"github.com/hanzoai/cloud/clients/bot"
 	"github.com/hanzoai/cloud/clients/bots"
 	"github.com/hanzoai/cloud/clients/campaign"
 	"github.com/hanzoai/cloud/clients/captable"
@@ -255,11 +256,13 @@ func Wire() []cloud.MountSpec {
 		// otel-collector, prometheus and gonum are here and nowhere else — and it is
 		// imported by NOTHING but this line, so unlinking it is a pure subtraction.
 		//
-		// KNOWN GAP, see the branch report: o11y also owns /v1/sentry/* (mountSentry),
-		// which is a SECOND public prefix. zip.Load takes one, so /v1/sentry/* is not
-		// mounted on the host by this line and 404s until zip.Plugin can name more than
-		// one prefix. Do not merge this to main before that is closed.
-		cloud.PluginSpec("o11y", "/v1/o11y", o11yPlugin()),
+		// TWO prefixes, because o11y owns two public subtrees: the observability
+		// wildcard and the Sentry product face (mountSentry). Both are registered by
+		// the same MountO11y the child runs, so naming only the first left
+		// /v1/sentry/* unmounted ON THE HOST — the request 404'd before it ever
+		// reached the child, while the host looked healthy. The unit of deployment is
+		// the plugin; the subtrees are a property of it.
+		cloud.PluginSpec("o11y", o11yPlugin(), "/v1/o11y", "/v1/sentry"),
 		{Name: "authz", Mount: cloud.Global(authz.Mount), Global: true},
 		// Embedded commerce plane /v1/commerce/*, /_/commerce/* — the hanzoai/commerce
 		// MODULE via the adapter in commerce.go (un-forked; the in-process
@@ -444,6 +447,18 @@ func Wire() []cloud.MountSpec {
 		// hanzoai/ai RAG plane, and the collision silently ate two routes.
 		{Name: "index", Mount: index.Mount, Shutdown: ctxShutdown(index.Shutdown), OwnsHealth: true},
 		{Name: "world", Mount: world.Mount, Shutdown: ctxShutdown(world.Shutdown)},
+		// The NODE control plane: /v1/bot/connect (the socket a node dials and holds
+		// open), /v1/bot/nodes, /v1/bot/nodes/{id}/invoke, and the replica-to-replica
+		// forward at /v1/bot/peer/invoke. Mounts BEFORE "runtime" so these specific
+		// routes win Fiber's in-order match over that subsystem's /v1/bot/* relay.
+		// Shutdown ends the presence-renew loop, which releases this replica's node
+		// claims so peers stop forwarding into a pod that is draining.
+		//
+		// OwnsHealth: /v1/bot/health is ALREADY a real probe — the runtime relay
+		// answers it from the bot runtime itself — and the generic always-ok route
+		// would shadow it with one that cannot fail. This subsystem does not claim
+		// that path; it declines to break it.
+		{Name: "bot", Mount: bot.Mount, Shutdown: bot.Shutdown, OwnsHealth: true},
 		// The bot runtime's ops face (/v1/bot/*). The transport itself is domain-free;
 		// the run control plane is "bots" below.
 		{Name: "runtime", Mount: runtime.Mount},
