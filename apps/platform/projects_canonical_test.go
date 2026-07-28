@@ -21,8 +21,12 @@ func (f fixedIdent) EnsureOrgIdentity(context.Context, string) (string, string, 
 
 // canonIAM fakes the canonical IAM: a client_credentials token endpoint plus the
 // two project reads, enforcing the machine-identity contract the real authz does.
+// Its POST /v1/iam/projects/get answers 403 unconditionally — the LIVE grant is
+// GET-only, and the fake refuses the same verb the real wall refuses, so a
+// client that reaches for the POST fails here before it 403s in production.
 type canonIAM struct {
 	tokenCalls atomic.Int32
+	postGets   atomic.Int32
 	projects   map[string]bool // "org/name"
 }
 
@@ -52,18 +56,9 @@ func (m *canonIAM) handler(t *testing.T) http.Handler {
 		_ = json.NewEncoder(w).Encode(map[string]any{"projects": out, "total": len(out)})
 	})
 	mux.HandleFunc("POST /v1/iam/projects/get", func(w http.ResponseWriter, r *http.Request) {
-		if !authed(r) {
-			w.WriteHeader(401)
-			return
-		}
-		var ref struct{ Owner, Name string }
-		_ = json.NewDecoder(r.Body).Decode(&ref)
-		if !m.projects[ref.Owner+"/"+ref.Name] {
-			w.WriteHeader(404)
-			_, _ = w.Write([]byte(`{"status":404,"error":"not found"}`))
-			return
-		}
-		_ = json.NewEncoder(w).Encode(map[string]string{"owner": ref.Owner, "name": ref.Name})
+		m.postGets.Add(1)
+		w.WriteHeader(403)
+		_, _ = w.Write([]byte(`{"status":403,"error":"the machine grant is GET-only"}`))
 	})
 	return mux
 }
@@ -104,6 +99,13 @@ func TestCanonicalProjectsRoundTrip(t *testing.T) {
 	ok, err = c.Exists(ctx, "acme", "ghost")
 	if err != nil || ok {
 		t.Fatalf("Exists(ghost) = %v, %v", ok, err)
+	}
+	// The grant contract: every read above rode GET /v1/iam/projects. A single
+	// POST to the single-project endpoint means Get regressed onto the verb the
+	// live authz refuses — the reaper then sees 403 every cycle and treats the
+	// canonical store as unavailable.
+	if n := m.postGets.Load(); n != 0 {
+		t.Fatalf("client issued %d POST /v1/iam/projects/get calls; the machine grant admits only GET", n)
 	}
 	// Basic rides every request; what must be ONE is the identity resolution
 	// (EnsureOrgIdentity → KMS), covered by the cred cache — asserted via the
