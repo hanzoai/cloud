@@ -2,7 +2,7 @@ package platform
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"net/http"
 	"sync"
 	"testing"
@@ -81,51 +81,53 @@ func (f *fakeProjects) Exists(_ context.Context, org, name string) (bool, error)
 	return ok, nil
 }
 
-// TestProjectLifecycleDelegatesToIAM proves platform OWNS no project: create,
-// list, delete of the bare project route through the ProjectStore (IAM), and a
-// project delete cascades ONLY platform's own app tree — apps-in-project stays
-// platform's job.
-func TestProjectLifecycleDelegatesToIAM(t *testing.T) {
+// TestPlatformOwnsAppsNotProjects proves the boundary: the platform serves no
+// project lifecycle at all — a project is created and deleted at /v1/iam/projects
+// — while apps under a project stay platform's, and an app under a project IAM
+// does not have is refused rather than invented.
+func TestPlatformOwnsAppsNotProjects(t *testing.T) {
 	app, s := mountSvcK8s(t, &k8sClient{initErr: "no cluster (test)", limits: testLimits()})
 	fp := s.State.projects.(*fakeProjects)
 
-	// Create delegates to the ProjectStore, not platform's store.
-	if code, _ := do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "Web", "slug": "web"}); code != http.StatusCreated {
-		t.Fatalf("create want 201")
+	// No project lifecycle on this surface. Both verbs are simply absent.
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodPost, "/v1/platform/projects"},
+		{http.MethodDelete, "/v1/platform/projects/web"},
+	} {
+		code, _ := do(t, app, tc.method, tc.path, "maxpower", map[string]any{"name": "Web", "slug": "web"})
+		if code == http.StatusCreated || code == http.StatusNoContent || code == http.StatusOK {
+			t.Fatalf("%s %s succeeded (%d): platform must not manage projects", tc.method, tc.path, code)
+		}
 	}
-	if len(fp.creates) != 1 || fp.creates[0] != "maxpower/web" {
-		t.Fatalf("create must delegate to the IAM-backed ProjectStore, got %v", fp.creates)
+	if len(fp.creates) != 0 || len(fp.deletes) != 0 {
+		t.Fatalf("platform touched the project lifecycle: creates=%v deletes=%v", fp.creates, fp.deletes)
 	}
 
-	// An app can be created under the delegated project (existence checked via the store).
+	// Given a project that exists in IAM, platform creates the app under it.
+	seedProject(t, app, "maxpower", "web")
 	if code, _ := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
 		"name": "api", "source": "image", "image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1"},
 	}); code != http.StatusCreated {
-		t.Fatalf("create app under delegated project want 201")
+		t.Fatalf("create app under an existing project want 201")
 	}
-	// An app under a project that does NOT exist in IAM is refused 404.
+
+	// An app under a project IAM does not have is refused, never invented.
 	if code, _ := do(t, app, http.MethodPost, "/v1/platform/projects/ghost/apps", "maxpower", map[string]any{
 		"name": "x", "source": "image", "image": map[string]any{"repository": "ghcr.io/x/y", "tag": "1"},
 	}); code != http.StatusNotFound {
 		t.Fatalf("create app under missing project want 404, got %d", code)
 	}
-	// A duplicate project name is the delegated 409.
-	if code, _ := do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "Web", "slug": "web"}); code != http.StatusConflict {
-		t.Fatalf("duplicate create want 409")
-	}
 
-	// Delete delegates to the ProjectStore AND cascades platform's app tree.
-	if code, _ := do(t, app, http.MethodDelete, "/v1/platform/projects/web", "maxpower", nil); code != http.StatusNoContent {
-		t.Fatalf("delete want 204")
+	// The read that survives is a PROJECTION IAM cannot serve: project + app count.
+	code, body := do(t, app, http.MethodGet, "/v1/platform/projects", "maxpower", nil)
+	if code != http.StatusOK {
+		t.Fatalf("list want 200, got %d", code)
 	}
-	if len(fp.deletes) != 1 || fp.deletes[0] != "maxpower/web" {
-		t.Fatalf("delete must delegate to the IAM-backed ProjectStore, got %v", fp.deletes)
+	var views []projectView
+	if err := json.Unmarshal(body, &views); err != nil {
+		t.Fatalf("decode: %v", err)
 	}
-	if _, err := s.State.store.GetApplication(context.Background(), "maxpower", "web", "api"); !errors.Is(err, errNotFound) {
-		t.Fatalf("project delete must cascade platform apps, got %v", err)
-	}
-	// Deleting a project that is not in IAM → 404 (no fabricated success).
-	if code, _ := do(t, app, http.MethodDelete, "/v1/platform/projects/web", "maxpower", nil); code != http.StatusNotFound {
-		t.Fatalf("delete missing project want 404, got %d", code)
+	if len(views) != 1 || views[0].Applications != 1 {
+		t.Fatalf("want one project carrying its app count, got %+v", views)
 	}
 }
