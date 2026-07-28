@@ -3,6 +3,7 @@ package catalog
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -206,40 +207,60 @@ func isWordByte(b byte) bool {
 }
 
 // repos pages one org's public repos. GH_PAT is used when present (the same token
-// the git mirror already holds) purely for rate limit; the corpus is public
-// either way, so an unset token degrades to a smaller hourly budget, not to a
-// different answer.
+// the git mirror already holds) purely for rate limit; the corpus is PUBLIC, so
+// the token changes the hourly budget, never the answer — which is exactly why an
+// expired or wrong-scoped token must not be able to empty the catalog. A 401/403
+// is therefore retried once anonymously rather than reported as a failed source.
 func repos(ctx context.Context, org string) ([]ghRepo, error) {
 	var out []ghRepo
 	for page := 1; page <= maxPages; page++ {
-		url := fmt.Sprintf("https://api.github.com/orgs/%s/repos?per_page=%d&type=public&page=%d", org, perPage, page)
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-		if err != nil {
-			return out, err
-		}
-		req.Header.Set("Accept", "application/vnd.github+json")
-		if tok := getenv("GH_PAT", ""); tok != "" {
-			req.Header.Set("Authorization", "Bearer "+tok)
-		}
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			return out, err
-		}
-		var page1 []ghRepo
-		err = json.NewDecoder(resp.Body).Decode(&page1)
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return out, fmt.Errorf("catalog: github %s: %s", org, resp.Status)
+		rows, err := repoPage(ctx, org, page, getenv("GH_PAT", ""))
+		if isAuth(err) {
+			rows, err = repoPage(ctx, org, page, "")
 		}
 		if err != nil {
 			return out, err
 		}
-		out = append(out, page1...)
-		if len(page1) < perPage {
+		out = append(out, rows...)
+		if len(rows) < perPage {
 			break
 		}
 	}
 	return out, nil
+}
+
+// errAuth marks a credential rejection, the one failure worth retrying without one.
+var errAuth = errors.New("catalog: github rejected the credential")
+
+func isAuth(err error) bool { return errors.Is(err, errAuth) }
+
+func repoPage(ctx context.Context, org string, page int, token string) ([]ghRepo, error) {
+	url := fmt.Sprintf("https://api.github.com/orgs/%s/repos?per_page=%d&type=public&page=%d", org, perPage, page)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return nil, fmt.Errorf("%w: %s: %s", errAuth, org, resp.Status)
+	default:
+		return nil, fmt.Errorf("catalog: github %s: %s", org, resp.Status)
+	}
+	var rows []ghRepo
+	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
