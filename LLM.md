@@ -140,6 +140,25 @@ package under `clients/<name>` that obeys these seams — nothing more.
   process-wide handles (Logger, DataDir, the subsystem `Client` seams). No
   subsystem reaches into another's internals. There is no init()-registry and no
   `cloud.Register` — subsystems do NOT self-register.
+- **Out-of-process variant.** A subsystem may run as its OWN binary without
+  changing anything about it: `cloud.PluginSpec(name, zip.Plugin{…}, prefixes…)`
+  returns an ordinary `MountSpec`, so where a subsystem runs stops being a
+  property of its source and becomes one line at the composition root. zip starts
+  `cmd/<name>` as a child on a private unix socket and forwards the path
+  UNCHANGED. Today `o11y` is the only one — it is the heaviest graph in the tree
+  (otel-collector, prometheus, gonum) and imported by nothing else, so unlinking
+  it is pure subtraction.
+  - `prefixes` is variadic because ONE plugin commonly owns several subtrees
+    (`o11y` answers `/v1/o11y` AND `/v1/sentry`). Naming only the first 404s the
+    rest AT THE HOST — the request never reaches the child — while the host
+    starts and reports healthy. Both readers take the same list: zip routes on
+    it, and `indexSubsystems` reports it to `/v1/admin/subsystems` and to the
+    per-request subsystem attribution tracing hangs off.
+  - The image must actually CONTAIN the binary: `zip.Load` fork/execs a sibling
+    of `/cloud`, so a missing one aborts the mount and cloud never listens
+    (`fork/exec /o11y: no such file`). The Dockerfile DERIVES the list by grepping
+    `PluginSpec("…"` out of `apps/apps.go` rather than keeping a second copy —
+    unlinking o11y without adding a build step once cost five consecutive releases.
 - **Client seams.** Cross-subsystem calls go through a narrow in-process interface
   published in `types` and aliased at the provider, e.g. `commerce.Client =
   types.CommerceClient` (`GetOrgConfig` + `CheckEntitlement`). Consumers depend on
@@ -428,7 +447,8 @@ repoints by changing one host. It replaced the standalone Meilisearch containers
 
 **Four different things, four names — do not merge them.** `hanzoai/search` is the
 SEARCH PRODUCT (our own Meilisearch build, serving `search.hanzo.ai` and the docs
-corpus). `clients/websearch` queries the OUTSIDE world. `hanzoai/crawl` fetches it.
+corpus). `clients/websearch` queries the OUTSIDE world. `clients/crawl` fetches it
+(in-binary — see below; the standalone `hanzoai/crawl` service it used to call is gone).
 `clients/index` is the storage primitive an application writes documents into and
 queries back. It is NOT at `/v1/search`: that path belongs to the `hanzoai/ai` RAG
 plane, whose `/v1/search/{name}` pattern silently swallowed this subsystem's
@@ -455,6 +475,43 @@ The store is `{DataDir}/index.db`, and a rename must carry the WHOLE family: cek
 keeps the wrapped data key beside it as `<path>.dek`, so moving the `.db` alone
 strands the key and every document becomes undecryptable — data loss that presents
 as an empty index.
+
+## Fetching the web (`clients/crawl`, `/v1/crawl`)
+
+In-binary fetch + extract + markdown. It replaced a call to a standalone crawler
+at `crawl.hanzo.svc.cluster.local:11235` — a name that had stopped resolving, which
+nothing noticed because every caller is allowed to degrade: the answer engine's read
+stage falls back to the ~600-char search snippet, so research answers silently
+grounded on snippets and looked fine.
+
+**`Fetch` and `Read` are different doors, deliberately.** `Fetch` is the pure network
+primitive (URL in, `Page` out, no IO beyond the request) — testable with no store.
+`Read` is what callers use: archive first, network second, keep what came back. One
+door, so no caller has to remember to persist and no two can disagree about where
+pages live.
+
+Kept pages ride the ONE object seam the binary already has (`types.VFSClient` over
+the shared S3 gateway) — no second client, no second bucket, no second credential.
+Key is `crawl/<org>/<project>/<sha256(url)>.json`, and both halves of that path are
+load-bearing:
+
+- The URL is HASHED, never spliced in. A URL carries `/`, `?`, `#`, `%` and arbitrary
+  unicode; embedding one lets a crafted URL walk out of its prefix into another
+  tenant's, which is the whole isolation boundary.
+- Scope comes from the VERIFIED principal, never the body, because it selects that
+  prefix.
+- Keyed by the REQUESTED url, not `Page.URL` (where it landed after redirects) —
+  filing under the latter means a cache that never hits for exactly the pages that
+  redirect.
+- The scope segments are readable + digest, because sanitising alone is LOSSY:
+  fold-to-`-` maps `a/b` and `a-b` onto one segment, and two orgs that collide share
+  a corpus prefix. The digest decides identity; the readable half is for browsing.
+
+SSRF is guarded IN THE DIALER, not by inspecting the hostname: a name check is
+TOCTOU (DNS rebinding), and redirects re-enter the same dialer for free. The dialer
+resolves, refuses if ANY resolved address is non-public, and dials the address it
+checked. Storage failures are best-effort throughout — a store that is down costs a
+cache hit, never the page.
 
 ## Releases are cut by a merge to main
 
