@@ -616,9 +616,12 @@ func Serve(specs []MountSpec, enable []string) error {
 // already in use". zip.Addr is the whole plugin side of that contract and this
 // is the one place cloud honours it, which is what makes every generated
 // cmd/<app> binary a valid plugin without a line of its own.
-func listenOn(cfg *Config, specs []MountSpec) (addrs []string, ops string) {
+func listenOn(cfg *Config, _ []MountSpec) (addrs []string, ops string) {
 	if sock := zip.Addr(""); sock != "" {
-		return append([]string{sock}, peerSockets(specs)...), ""
+		// The host's private socket only. The peer plane's {run}/<app>.sock is
+		// bound by rpc.go's Listen in Serve — handing it to app.Listen too
+		// double-binds the path (see the note at the return below).
+		return []string{sock}, ""
 	}
 	// ONE app, MANY transports, all serving the identical route surface, so /v1/*
 	// answers over any of them and WS/SSE keep working on the HTTP one:
@@ -626,38 +629,13 @@ func listenOn(cfg *Config, specs []MountSpec) (addrs []string, ops string) {
 	//	peer sockets — ZAP over UDS, how a co-located app is called (dial.go)
 	//	:9653        — ZAP over TCP, the machine transport across hosts
 	//	:8080        — HTTP, the edge/browser leg (and WS + SSE)
-	return append(peerSockets(specs), cfg.ZAPListenAddr, "http://"+cfg.ListenAddr), cfg.HealthListenAddr
-}
-
-// peerSockets is the canonical UDS this process serves — one per app it mounts,
-// at the path its callers already look for (dial.go's PeerSocket). Binding them
-// here is what makes a peer call local: without a socket on disk Dial has no way
-// to know an app is co-located and falls out to the public edge, so the whole
-// inner plane silently degrades to a round trip through the internet.
-//
-// A bare path is ZAP by zip's convention, so these carry ZAP frames — no port to
-// allocate, nothing on a network interface, and no clash between co-located apps
-// because each name is its own path.
-//
-// A stale socket from a killed process would make Bind fail with "address in
-// use", so each is removed first. That is safe precisely because the path is
-// canonical and per-app: this process is the one that owns that name, and it is
-// about to serve it.
-func peerSockets(specs []MountSpec) []string {
-	dir := runDir()
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil // no run dir: peers fall back to the network, which still works
-	}
-	out := make([]string, 0, len(specs))
-	for _, s := range specs {
-		if s.Name == "" {
-			continue
-		}
-		p := sock(s.Name)
-		_ = os.Remove(p)
-		out = append(out, p)
-	}
-	return out
+	// Peer sockets are NOT in this list: rpc.go's Listen already binds
+	// {run}/<app>.sock (Serve, above), and handing the same paths to app.Listen
+	// double-binds them — peerSockets removed each path first, which unlinked
+	// the LIVE rpc listener and left zip's framing answering rpc's callers. One
+	// socket, one server, one wire. Folding the peer plane into zip's transport
+	// is a designed change (zip.Mount is built for it), not a boot-order race.
+	return append([]string{}, cfg.ZAPListenAddr, "http://"+cfg.ListenAddr), cfg.HealthListenAddr
 }
 
 // healthMux is the liveness/readiness + metrics contract on the ops port
