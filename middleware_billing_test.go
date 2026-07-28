@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/account"
-	"github.com/hanzoai/cloud/clients/metering"
-	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 

@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/security"
+	"github.com/hanzoai/cloud/apps/security"
 )
 
 // Standalone entry for the security app.

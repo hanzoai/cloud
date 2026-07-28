@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/venue"
+	"github.com/hanzoai/cloud/apps/venue"
 )
 
 // Standalone entry for the venue app.

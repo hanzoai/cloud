@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/affiliates"
+	"github.com/hanzoai/cloud/apps/affiliates"
 )
 
 // Standalone entry for the affiliates app.

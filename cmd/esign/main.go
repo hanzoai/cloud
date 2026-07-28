@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/esign"
+	"github.com/hanzoai/cloud/apps/esign"
 )
 
 // Standalone entry for the esign app.

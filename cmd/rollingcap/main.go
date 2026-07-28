@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/rollingcap"
+	"github.com/hanzoai/cloud/apps/rollingcap"
 )
 
 // Standalone entry for the rollingcap app.

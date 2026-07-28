@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/clients/gateway/edge"
+	"github.com/hanzoai/cloud/apps/gateway/edge"
 	"github.com/zap-proto/zip"
 )
 

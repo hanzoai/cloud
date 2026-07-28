@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/legal"
+	"github.com/hanzoai/cloud/apps/legal"
 )
 
 // Standalone entry for the legal app.

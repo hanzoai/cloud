@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/channels"
+	"github.com/hanzoai/cloud/apps/channels"
 )
 
 // Standalone entry for the channels app.

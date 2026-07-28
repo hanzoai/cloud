@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/prefs"
+	"github.com/hanzoai/cloud/apps/prefs"
 )
 
 // Standalone entry for the prefs app.

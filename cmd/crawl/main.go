@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/crawl"
+	"github.com/hanzoai/cloud/apps/crawl"
 )
 
 // Standalone entry for the crawl app.

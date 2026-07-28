@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/graph"
+	"github.com/hanzoai/cloud/apps/graph"
 )
 
 // Standalone entry for the graph app.

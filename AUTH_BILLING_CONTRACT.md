@@ -139,20 +139,20 @@ Metering+gating coverage (each meters its OWN org, debits on success):
 
 | Product | provider label | fee knob | code |
 |---|---|---|---|
-| functions | `functions` | `CLOUD_FUNCTIONS_FEE_CENTS` | `clients/functions/invoke.go` |
+| functions | `functions` | `CLOUD_FUNCTIONS_FEE_CENTS` | `apps/functions/invoke.go` |
 | s3 | `s3` | `S3_*` | `clients/s3/s3.go` |
-| agents | `agent` | `CLOUD_AGENT_FEE_CENTS` | `clients/agents/agents.go` |
-| compute / GPU | `compute` | provision knobs | `clients/ml/ml.go`, `clients/visor/*` |
-| provisioning (sql/kv/vector/docdb) | `provisioning` | `CLOUD_PROVISION_FEE_CENTS[_KIND]` | `clients/provisioning/*` |
-| automations | `automations` | `CLOUD_AUTOMATIONS_FEE_CENTS` | `clients/automations/automations.go` |
-| tracker | `tracker` | fee knob | `clients/tracker/tracker.go` |
-| security | `security.scan` | — | `clients/security/security.go` |
+| agents | `agent` | `CLOUD_AGENT_FEE_CENTS` | `apps/agents/agents.go` |
+| compute / GPU | `compute` | provision knobs | `apps/ml/ml.go`, `apps/visor/*` |
+| provisioning (sql/kv/vector/docdb) | `provisioning` | `CLOUD_PROVISION_FEE_CENTS[_KIND]` | `apps/provisioning/*` |
+| automations | `automations` | `CLOUD_AUTOMATIONS_FEE_CENTS` | `apps/automations/automations.go` |
+| tracker | `tracker` | fee knob | `apps/tracker/tracker.go` |
+| security | `security.scan` | — | `apps/security/security.go` |
 
 **Product/agent read axes.** The console's per-product Metrics dashboard groups on
 `metadata.product` (and `metadata.agent`). Commerce's `RecordUsage` persists the
 metering SURFACE (`provider`) and billed UNIT (`model`) but has **no `product`
 field** (its `usageRequest` drops `project`/`service`/`product`/`agent`). So the
-customer read handler `clients/billing/usage.go` is the ONE read-side adapter:
+customer read handler `apps/billing/usage.go` is the ONE read-side adapter:
 `usage()` fetches the org-scoped ledger and, on 200, injects a canonical
 `metadata.product` onto every row (`productOf`: `agent→agents`,
 `provisioning→<kind>`, token-metered→`inference`, else `provider`) so the
@@ -178,7 +178,7 @@ no-op when the meter/commerce persist them natively (forward-compatible).
    until commerce persists an `agent` field the agents meter sets to `a.Name`.
 3. **compute split** — `ml` (predict) and `visor` (GPU) both meter `provider=compute`;
    read-side can't split `inference` vs `gpus`. Needs (1) so each sets its product id.
-4. **exec / containers** (`clients/exec`, Code Interpreter) — authed by a shared
+4. **exec / containers** (`apps/exec`, Code Interpreter) — authed by a shared
    service key (X-API-Key), NO per-org identity, so it can't meter per-org; its
    compute is billed upstream at the chat/agent layer that invokes it.
 5. **playground** — routes to `/v1/ai/*`, already metered as AI inference.

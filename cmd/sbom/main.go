@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/sbom"
+	"github.com/hanzoai/cloud/apps/sbom"
 )
 
 // Standalone entry for the sbom app.

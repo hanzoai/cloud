@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/wallets"
+	"github.com/hanzoai/cloud/apps/wallets"
 )
 
 // Standalone entry for the wallets app.

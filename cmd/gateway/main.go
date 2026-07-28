@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/gateway"
+	"github.com/hanzoai/cloud/apps/gateway"
 )
 
 // Standalone entry for the gateway app.
