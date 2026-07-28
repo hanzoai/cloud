@@ -111,6 +111,11 @@ type Entry struct {
 	// corpus, "org" for one only this caller can see. A UI that cannot tell them
 	// apart cannot warn before sharing a link.
 	Scope string `json:"scope"`
+	// Note is why a row is NOT in the published catalog, set by the admission gate
+	// (gate.go) on the sites it holds back. It is the difference between a demo
+	// that silently vanished from the public lens and one whose owner can read the
+	// reason and fix it. A published row never carries one.
+	Note string `json:"note,omitempty"`
 }
 
 // Response is the ONE result shape. Facets ship with every response because
