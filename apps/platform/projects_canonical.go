@@ -138,23 +138,29 @@ func (c *canonicalProjects) List(ctx context.Context, org string) ([]*model.Proj
 	return out.Projects, nil
 }
 
-// Get returns nil (no error) when the project does not exist — IAM's convention,
-// preserved so requireProject's 404 mapping is unchanged.
+// Get returns nil (no error) when the project does not exist — the convention
+// requireProject's 404 mapping depends on.
+//
+// It is derived from List, not from IAM's POST /v1/iam/projects/get: the
+// machine grant this client authenticates under admits exactly one thing —
+// GET on the org's own projects — and IAM frames its single-project read as a
+// POST, which that grant rightly refuses. The reaper logged the result every
+// cycle ("projects: get hanzo/index: status 403"): the client tripping the
+// wall it came through. Widening the grant to a POST would hand the identity
+// a write-shaped door; reading through the one granted verb keeps the wall
+// exactly as narrow as its negatives pin. Org project counts are small and
+// the credential is cached, so the extra rows cost nothing.
 func (c *canonicalProjects) Get(ctx context.Context, org, name string) (*model.Project, error) {
-	var p model.Project
-	code, err := c.do(ctx, org, http.MethodPost, "/v1/iam/projects/get",
-		map[string]string{"owner": org, "name": name}, &p)
+	rows, err := c.List(ctx, org)
 	if err != nil {
 		return nil, err
 	}
-	switch code {
-	case http.StatusOK:
-		return &p, nil
-	case http.StatusNotFound:
-		return nil, nil
-	default:
-		return nil, fmt.Errorf("projects: get %s/%s: status %d", org, name, code)
+	for _, p := range rows {
+		if p != nil && p.Name == name {
+			return p, nil
+		}
 	}
+	return nil, nil
 }
 
 func (c *canonicalProjects) Exists(ctx context.Context, org, name string) (bool, error) {
