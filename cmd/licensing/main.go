@@ -18,9 +18,8 @@ import (
 // link. The same app still mounts into the unified cloud binary via apps.Wire().
 func main() {
 	if err := cloud.Serve([]cloud.MountSpec{{
-		Name:   "licensing",
-		Mount:  cloud.Global(licensing.Mount),
-		Global: true,
+		Name: "licensing",
+		App:  licensing.Mount,
 	}}, []string{"licensing"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

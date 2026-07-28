@@ -113,5 +113,5 @@ var Apps = []App{
 	{Name: "ask", Prefixes: []string{"/v1/ask"}},
 	{Name: "translate", Prefixes: []string{"/v1/translate"}},
 	{Name: "ai", Prefixes: []string{"/v1"}},
-	{Name: "plugins", Prefixes: []string{"/v1/plugins"}},
+	{Name: "plugins", Prefixes: []string{"/v1/admin/plugins"}},
 }

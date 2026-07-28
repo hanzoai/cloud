@@ -220,7 +220,7 @@ func Wire() []cloud.MountSpec {
 		// hanzoai/metrics — native o11y. It declares its OWN narrow metrics.Deps (no
 		// hanzoai/cloud import), so Typed cannot adapt it; cloud.MountMetrics builds that
 		// Deps from cloud.Deps and calls metrics.Mount explicitly.
-		{Name: "metrics", Mount: cloud.Global(cloud.MountMetrics), Global: true},
+		{Name: "metrics", App: cloud.MountMetrics},
 		// Embedded runtime edge (/v1/ingress/*). STAGED — edge listeners stay off unless
 		// the operator names "ingress" in CLOUD_ENABLE.
 		{Name: "ingress", Mount: ingress.Mount, Shutdown: ingress.Shutdown},
@@ -260,12 +260,12 @@ func Wire() []cloud.MountSpec {
 		// mounted on the host by this line and 404s until zip.Plugin can name more than
 		// one prefix. Do not merge this to main before that is closed.
 		cloud.PluginSpec("o11y", where("o11y"), "/v1/o11y"),
-		{Name: "authz", Mount: cloud.Global(authz.Mount), Global: true},
+		{Name: "authz", App: authz.Mount},
 		// Embedded commerce plane /v1/commerce/*, /_/commerce/* — the hanzoai/commerce
 		// MODULE via the adapter in commerce.go (un-forked; the in-process
 		// CommerceClient is wired directly in pickCommerceClient).
-		{Name: "commerce", Mount: cloud.Global(commerce.Mount), Prefixes: commerce.Prefixes, Global: true},
-		{Name: "licensing", Mount: cloud.Global(licensing.Mount), Global: true},
+		{Name: "commerce", App: commerce.Mount, Prefixes: commerce.Prefixes},
+		{Name: "licensing", App: licensing.Mount},
 		// clients/plan.Mount. Enable id normalized "plans" -> "plan" to match the
 		// package + generated cmd/plan (one subsystem, one name). Its product routes
 		// stay /v1/plans/* (incl. the OwnsHealth /v1/plans/health probe) — unchanged.
@@ -524,7 +524,7 @@ func Wire() []cloud.MountSpec {
 		// catch-all so /v1/chat resolves here (Fiber first-match); the ai module's
 		// beego /v1/chat alias behind its /v1/* glob is thereby shadowed, while ai
 		// keeps /v1/chat/completions + /v1/completions.
-		{Name: "agent", Mount: cloud.Global(agent.Mount), Global: true},
+		{Name: "agent", App: agent.Mount},
 		// The UNIFIED GROUNDED ADVISOR — POST /v1/ask. DISTINCT from /v1/chat/completions
 		// (ai's RAW model) and /v1/agent (tool-calling): it routes a plain-language question
 		// to the domain(s) that can GROUND it, reads the REAL figures from each domain's own
@@ -550,7 +550,7 @@ func Wire() []cloud.MountSpec {
 		// other model and the /v1/models list. Order is load-bearing — Claim must
 		// run before ai's catch-all. (See hip-00NN.)
 		{Name: "zen", Mount: zen.Mount, Prefixes: []string{"/v1"}},
-		{Name: "ai", Mount: cloud.Global(ai.Mount), Prefixes: []string{"/v1"}, Global: true},
+		{Name: "ai", App: ai.Mount, Prefixes: []string{"/v1"}},
 		// Runtime wasm/proxy plugins — mounts dead last.
 		{Name: "plugins", Mount: plugin.Mount},
 	}

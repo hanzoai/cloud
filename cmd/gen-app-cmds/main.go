@@ -110,7 +110,7 @@ type spec struct {
 	// root's own statement of the subtrees this subsystem owns. The manifest reads
 	// it; the generated main copies its text like any other field.
 	prefixes ast.Expr
-	// mount is the Mount field's expression. The manifest reads the FUNCTION out
+	// mount is the Mount or App field's expression. The manifest reads the FUNCTION out
 	// of it, because two Wire entries can share one package (account) and only
 	// the function distinguishes what each of them serves.
 	mount ast.Expr
@@ -187,7 +187,9 @@ func capture(fset *token.FileSet, paths map[string]string, cl *ast.CompositeLit)
 		if key.Name == "Prefixes" {
 			s.prefixes = kv.Value
 		}
-		if key.Name == "Mount" {
+		// Mount (scoped) and App (whole-binary) are the same fact for this
+		// generator: the expression naming the registrar.
+		if key.Name == "Mount" || key.Name == "App" {
 			s.mount = kv.Value
 		}
 		text, err := source(fset, kv.Value)
