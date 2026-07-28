@@ -12,6 +12,9 @@ import (
 	"net/http"
 	"reflect"
 	"testing"
+
+	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/datastore"
 )
 
 // doors_test.go — the ingest SURFACE is one set, and these are its proofs.
@@ -49,13 +52,18 @@ var wantDoors = []door{
 	{path: "/v1/tracker", decode: decodeIngest, source: sourceCapture},
 }
 
-// sameWire reports whether two decoders are the same function. Comparing the code
-// pointer is exact for the package-level decoders doors binds, which is what the
-// contract needs: not "behaves similarly on the bodies I thought to try", but "is
-// the same wire".
-func sameWire(a, b decode) bool {
+// samePtr reports whether two func values are the SAME function, by code pointer.
+// It is the ONE mechanism in this package for asking that question — not "behaves
+// similarly on the inputs I thought to try", but "is the same function". Used for the
+// wire bindings (sameWire) and for the write path's seam defaults, whose signatures
+// differ, so the mechanism is untyped and each caller names its own question.
+func samePtr(a, b any) bool {
 	return reflect.ValueOf(a).Pointer() == reflect.ValueOf(b).Pointer()
 }
+
+// sameWire asks samePtr's question about two decoders, typed: only a decode can be
+// compared to a decode, which is what the doors contract needs.
+func sameWire(a, b decode) bool { return samePtr(a, b) }
 
 // retiredDoors are paths that WERE ingest doors and must now be gone from every
 // surface — not routed, and not carved on a site host either. /v1/ingest was the
@@ -125,6 +133,43 @@ func fakeWarehouse(t *testing.T) *warehouse {
 		eventsTableReady.Store(false)
 	})
 	return w
+}
+
+// TestWritePathSeamsDefaultToTheRealThing pins what fakeWarehouse and stubResolver
+// SUBSTITUTE: that in production each of these vars holds the real dependency.
+//
+// A seam is a var, so it is exactly as easy to rebind at the DECLARATION as it is in a
+// test. Rebinding warehouseExec to a func returning nil discards every INSERT while
+// the caller still gets its 200 {accepted:N} receipt, and rebinding warehouseReady to
+// `true` removes the gate that would otherwise turn that into an honest 503 — silent
+// data loss behind a success receipt, and NOTHING else in this package notices,
+// because every test that reads a written row installs its own fake first and every
+// test that does not read one only ever asserts a status code. resolveKeyOrg is the
+// same shape on the admission side: bound to a func returning ("", false) it fails
+// closed, but bound to one returning ("acme", true) any key at all buys a real org.
+//
+// So the default is asserted directly, by code pointer (samePtr) rather than by
+// behaviour — the point is the IDENTITY of the callee, and calling the real
+// datastore/IAM to observe its behaviour is exactly what a unit test cannot do.
+//
+// It also holds the fakes honest in the other direction: every substitution in this
+// package restores through t.Cleanup, so if one ever leaks past its test this
+// assertion is what notices.
+func TestWritePathSeamsDefaultToTheRealThing(t *testing.T) {
+	for _, s := range []struct {
+		name string
+		got  any
+		want any
+	}{
+		{"warehouseReady", warehouseReady, datastore.Ready},
+		{"warehouseExec", warehouseExec, datastore.Exec},
+		{"resolveKeyOrg", resolveKeyOrg, cloud.OrgForKey},
+	} {
+		if !samePtr(s.got, s.want) {
+			t.Errorf("%s does not default to the real dependency — a substituted write seam "+
+				"discards rows behind a 200 receipt, and a substituted key seam decides admission", s.name)
+		}
+	}
 }
 
 // col reads one column of one written row by NAME, so these tests bind to the
@@ -286,6 +331,16 @@ func TestIngestSurfaceIsExactlyTheContract(t *testing.T) {
 // contract above pins the table, this pins that the value declared there is the value
 // that reaches the ROW. Without it, source could be pinned in the table and dropped on
 // the way to the warehouse and both halves would still look right.
+//
+// It quantifies over doors × HANDLERS, because a door has two of them and they stamp
+// $source independently: ingest (the API host, via handle) and anon (the site host,
+// which calls publicIngest directly). Driving only the ingest half left the anon half
+// free to stamp a CONSTANT, and $source is precisely the signal the alias sunset is
+// decided on — the documented rule is that a door may be retired when its $source
+// volume reaches zero, so an anon lane that stamped 'event' for every door would read
+// as "/v1/tracker is dead" while site-host callers were still beaconing it. The
+// sunset is a delete-the-route decision made on this column; it has to be true on
+// EVERY lane that writes it, not just the one a test happened to drive.
 func TestEveryDoorStampsItsOwnSource(t *testing.T) {
 	tightenPublicRate(t, 1_000_000, 1_000_000)
 	for _, d := range doors {
@@ -295,7 +350,17 @@ func TestEveryDoorStampsItsOwnSource(t *testing.T) {
 			t.Fatalf("door %s = %d (%s), want 200 (written to the fake warehouse)", d.path, code, body)
 		}
 		if got := w.sources(t); len(got) != 1 || got[0] != d.source {
-			t.Errorf("door %s wrote $source %v, want [%s]", d.path, got, d.source)
+			t.Errorf("door %s ingest lane wrote $source %v, want [%s]", d.path, got, d.source)
+		}
+
+		w = fakeWarehouse(t)
+		site := carveApp(t, "hanzo")
+		if code := postHost(t, site, "yadota.hanzo.app", d.path, pageviewFor(t, d), nil); code != http.StatusOK {
+			t.Fatalf("site-host door %s = %d, want 200 (admitted and written)", d.path, code)
+		}
+		if got := w.sources(t); len(got) != 1 || got[0] != d.source {
+			t.Errorf("door %s anon lane wrote $source %v, want [%s] — the sunset metric must name "+
+				"the door the beacon actually arrived through, on this lane too", d.path, got, d.source)
 		}
 	}
 }
