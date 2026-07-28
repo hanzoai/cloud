@@ -61,6 +61,22 @@ FROM ${SKILLS_IMAGE} AS skills
 FROM ${FLAGS_IMAGE} AS flagslib
 
 FROM ghcr.io/hanzoai/mirror/golang:1.26-alpine3.22@sha256:47d47cb5cc3c7dac409dcb6c3a98a6263571218046cd02d709527feef804a77c AS build
+# go.mod is the ONE place the Go version is declared.
+#
+# The golang image ships GOTOOLCHAIN=local, which makes the image's own Go the
+# authority and refuses to honour a newer `go` directive. That put the version in
+# TWO places that had to be kept in agreement by hand — this digest pin and
+# go.mod — and they drifted: go.mod went to 1.26.5 while this digest stayed on
+# 1.26.4, and every release then died at `go mod download` with
+#   go: go.mod requires go >= 1.26.5 (running go 1.26.4; GOTOOLCHAIN=local)
+# after the image had already built for a minute. Tags were not minted, so
+# nothing shipped broken — releases simply stopped, quietly, for everyone.
+#
+# `auto` makes go.mod authoritative and this pin a floor: bumping the directive
+# is now a one-line change that cannot desync. The toolchain is fetched into
+# GOMODCACHE, which the `go mod download` step below already mounts as a shared
+# build cache, so it costs one download per cache generation and nothing after.
+ENV GOTOOLCHAIN=auto
 # CIPHER-FORMAT FREEZE (cek depends on this). The data-plane stores are
 # SQLCipher pages in a fixed on-disk format (cipher_compatibility 4). An at-open
 # compat pin is infeasible (mattn keys via URI before any pragma), so the format
