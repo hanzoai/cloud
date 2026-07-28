@@ -156,7 +156,12 @@ type Payout struct {
 	Method      string `json:"method"`
 	Reference   string `json:"reference"`
 	Txn         string `json:"txn,omitempty"`
-	CreatedAt   int64  `json:"createdAt"`
+	// Settlement is where the money landed — settlementTreasury (internal: a
+	// first-party author's royalty realized into our own reserve), settlementWallet
+	// (a commerce grant to an external author), or settlementCash. Captured at
+	// reservation, so the books say plainly which payouts were paid to ourselves.
+	Settlement string `json:"settlement,omitempty"`
+	CreatedAt  int64  `json:"createdAt"`
 }
 
 // Store is the authors database. ONE SQLite file holds every org's author record,
@@ -261,6 +266,12 @@ CREATE TABLE IF NOT EXISTS author_payouts (
   method       TEXT NOT NULL,
   reference    TEXT NOT NULL DEFAULT '',
   txn          TEXT NOT NULL DEFAULT '',
+  -- settlement is WHERE the money landed, captured at reservation time: treasury
+  -- (a first-party author's royalty realized into our own reserve — internal
+  -- accounting), wallet (a commerce grant into an external author's balance), or
+  -- cash (a recorded external disbursement). Stored, never re-derived, so a house
+  -- settlement can never later be read as third-party earnings.
+  settlement   TEXT NOT NULL DEFAULT '',
   created_at   INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_author_payouts_author ON author_payouts(author_id, created_at);
@@ -285,6 +296,13 @@ CREATE INDEX IF NOT EXISTS ix_author_ledger_author ON author_ledger(author_id, c
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("authors migrate: %w", err)
+	}
+	// Additive column migration for existing databases (SQLite has no ADD COLUMN IF
+	// NOT EXISTS): ignore the duplicate-column error. Rows written before this
+	// column existed keep the empty default — honestly "unrecorded", never guessed.
+	if _, err := s.db.Exec(`ALTER TABLE author_payouts ADD COLUMN settlement TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("authors migrate alter: %w", err)
 	}
 	return nil
 }
@@ -1041,7 +1059,7 @@ func authorColsPrefixed(alias string) string {
 // (RowsAffected 0 → errInsufficientPending). The commerce grant (credits payout)
 // happens AFTER, outside the tx; SetPayoutTxn records the receipt. errNotFound if the
 // author is missing.
-func (s *Store) RecordPayout(ctx context.Context, payoutID, authorID string, amountCents int64, method, reference string, now int64) (Payout, error) {
+func (s *Store) RecordPayout(ctx context.Context, payoutID, authorID string, amountCents int64, method, reference, settlement string, now int64) (Payout, error) {
 	if amountCents <= 0 {
 		return Payout{}, errInsufficientPending
 	}
@@ -1065,16 +1083,16 @@ func (s *Store) RecordPayout(ctx context.Context, payoutID, authorID string, amo
 		return Payout{}, errInsufficientPending
 	}
 	if _, err = tx.ExecContext(ctx,
-		`INSERT INTO author_payouts (id, author_id, amount_cents, method, reference, created_at)
-		 VALUES (?,?,?,?,?,?)`,
-		payoutID, authorID, amountCents, method, reference, now); err != nil {
+		`INSERT INTO author_payouts (id, author_id, amount_cents, method, reference, settlement, created_at)
+		 VALUES (?,?,?,?,?,?,?)`,
+		payoutID, authorID, amountCents, method, reference, settlement, now); err != nil {
 		_ = tx.Rollback()
 		return Payout{}, fmt.Errorf("insert payout: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return Payout{}, fmt.Errorf("payout commit: %w", err)
 	}
-	return Payout{ID: payoutID, AuthorID: authorID, AmountCents: amountCents, Method: method, Reference: reference, CreatedAt: now}, nil
+	return Payout{ID: payoutID, AuthorID: authorID, AmountCents: amountCents, Method: method, Reference: reference, Settlement: settlement, CreatedAt: now}, nil
 }
 
 // VoidPayout reverses a RecordPayout that could not be BACKED by the treasury
@@ -1112,11 +1130,11 @@ func (s *Store) SetPayoutTxn(ctx context.Context, payoutID, txn string) error {
 	return nil
 }
 
-const payoutCols = `id,author_id,amount_cents,method,reference,txn,created_at`
+const payoutCols = `id,author_id,amount_cents,method,reference,txn,settlement,created_at`
 
 func scanPayout(sc interface{ Scan(...any) error }) (Payout, error) {
 	var p Payout
-	err := sc.Scan(&p.ID, &p.AuthorID, &p.AmountCents, &p.Method, &p.Reference, &p.Txn, &p.CreatedAt)
+	err := sc.Scan(&p.ID, &p.AuthorID, &p.AmountCents, &p.Method, &p.Reference, &p.Txn, &p.Settlement, &p.CreatedAt)
 	return p, err
 }
 
