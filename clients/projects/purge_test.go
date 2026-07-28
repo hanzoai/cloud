@@ -108,3 +108,25 @@ func TestPurge_OrgScoped(t *testing.T) {
 		t.Fatalf("unknown-slug purge want 404, got %d", code)
 	}
 }
+
+// TestPurgePrefix_RefusesAnUnscopedPrefix: purgePrefix is the one primitive that
+// deletes objects, and retention now hands it a prefix READ FROM A ROW. An empty
+// or root prefix would enumerate the whole bucket and delete it, so the primitive
+// refuses instead of trusting its caller — one corrupt row cannot become a wipe.
+func TestPurgePrefix_RefusesAnUnscopedPrefix(t *testing.T) {
+	f := startFakeS3(t)
+	f.seed(testBucket, "acme/shop/index.html", "<!doctype html>")
+	b := openBlobStore()
+	cli, err := b.client()
+	if err != nil {
+		t.Fatalf("client: %v", err)
+	}
+	for _, prefix := range []string{"", "/", "//"} {
+		if err := purgePrefix(t.Context(), cli, testBucket, prefix); err == nil {
+			t.Fatalf("purgePrefix(%q) must be refused", prefix)
+		}
+	}
+	if _, ok := f.body(testBucket, "acme/shop/index.html"); !ok {
+		t.Fatal("an unscoped purge deleted real objects")
+	}
+}
