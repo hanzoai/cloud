@@ -172,6 +172,24 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -ldflags="-s -w" -o /smoke ./cmd/smoke
+# The o11y app (cmd/o11y) — the first subsystem that is NOT linked into /cloud.
+# apps.Wire loads it at run time via zip.Load, which fork/execs this path, so the
+# binary has to be IN the image or the mount fails and cloud never reaches
+# listening:
+#
+#   cloud: mount: mount o11y: zip: Load(o11y): start: fork/exec /o11y: no such file
+#
+# That is exactly what happened: unlinking o11y (deleting its import so its 2.7k
+# package graph — otel-collector, prometheus, gonum — stops being linked into
+# cloud) shipped without the build step that produces the separate binary, and
+# every release after it failed the boot smoke. Unlinking a subsystem means
+# building it somewhere else, not just deleting the import.
+#
+# CGO_ENABLED=0 like /smoke: cmd/o11y touches no sqlite, so it needs no libc and
+# a static binary is one less thing that can disagree with the runtime image.
+RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
+    CGO_ENABLED=0 go build -ldflags="-s -w" -o /o11y ./cmd/o11y
 # Prove the SHIPPED binary binds sqlite3_* to libsqlcipher, not a plaintext libsqlite3.
 RUN readelf -d /cloud | grep -qE 'NEEDED.*(sqlcipher|sqlite3)' || { echo "FATAL: /cloud links no sqlite/sqlcipher .so"; exit 1; }; \
     ! ldd /cloud 2>/dev/null | grep -E 'libsqlite3' | grep -vq 'libsqlcipher' || { echo "FATAL: /cloud resolves a NON-sqlcipher libsqlite3 (plaintext risk)"; exit 1; }
@@ -215,6 +233,9 @@ COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /etc/group /etc/group
 COPY --from=build /cloud /cloud
 COPY --from=build /smoke /smoke
+# The out-of-process o11y app. zip.Load fork/execs /o11y at mount time, so this
+# COPY is load-bearing: without it cloud aborts during mount, before listening.
+COPY --from=build /o11y /o11y
 EXPOSE 8080 9090 9653
 USER 65532:65532
 # tini as PID 1 forwards signals to /cloud unchanged (so SIGTERM still drains
