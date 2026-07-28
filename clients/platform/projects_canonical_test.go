@@ -28,17 +28,14 @@ type canonIAM struct {
 
 func (m *canonIAM) handler(t *testing.T) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /v1/iam/oauth/token", func(w http.ResponseWriter, r *http.Request) {
-		m.tokenCalls.Add(1)
-		_ = r.ParseForm()
-		if r.Form.Get("grant_type") != "client_credentials" || r.Form.Get("client_id") == "" {
-			w.WriteHeader(400)
-			return
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "tok-" + r.Form.Get("client_id"), "expires_in": 3600})
-	})
+	// client_secret_basic — the transport IAM's app() resolves to an app
+	// principal; the fake enforces the same contract-named identity.
 	authed := func(r *http.Request) bool {
-		return strings.HasPrefix(r.Header.Get("Authorization"), "Bearer tok-")
+		id, secret, ok := r.BasicAuth()
+		if ok {
+			m.tokenCalls.Add(1)
+		}
+		return ok && strings.HasSuffix(id, "-platform-kms") && secret != ""
 	}
 	mux.HandleFunc("GET /v1/iam/projects", func(w http.ResponseWriter, r *http.Request) {
 		if !authed(r) {
@@ -77,7 +74,7 @@ func canonFor(url string) (*canonicalProjects, *canonIAM) {
 		base:  url,
 		ident: fixedIdent{id: "acme-platform-kms", secret: "s"},
 		hc:    &http.Client{Timeout: 5 * time.Second},
-		toks:  map[string]orgToken{},
+		creds: map[string]orgCred{},
 	}, m
 }
 
@@ -108,9 +105,9 @@ func TestCanonicalProjectsRoundTrip(t *testing.T) {
 	if err != nil || ok {
 		t.Fatalf("Exists(ghost) = %v, %v", ok, err)
 	}
-	if n := m.tokenCalls.Load(); n != 1 {
-		t.Fatalf("token minted %d times across 4 reads, want 1 (cached)", n)
-	}
+	// Basic rides every request; what must be ONE is the identity resolution
+	// (EnsureOrgIdentity → KMS), covered by the cred cache — asserted via the
+	// counting ident below rather than the wire.
 }
 
 // TestCanonicalProjectsIAMDownIsAnError: an unreachable canonical store must
@@ -132,7 +129,7 @@ func TestCanonicalProjectsNoIdentityFailsClosed(t *testing.T) {
 	m := &canonIAM{projects: map[string]bool{}}
 	srv := httptest.NewServer(m.handler(t))
 	defer srv.Close()
-	c := &canonicalProjects{base: srv.URL, ident: nil, hc: &http.Client{Timeout: time.Second}, toks: map[string]orgToken{}}
+	c := &canonicalProjects{base: srv.URL, ident: nil, hc: &http.Client{Timeout: time.Second}, creds: map[string]orgCred{}}
 	if _, err := c.List(context.Background(), "acme"); err == nil {
 		t.Fatal("nil identity provider must fail closed")
 	}
@@ -152,5 +149,31 @@ func TestNewProjectStoreSelector(t *testing.T) {
 	t.Setenv("IAM_URL", "http://iam.hanzo.svc")
 	if _, ok := newProjectStore("https://hanzo.id", nil).(*canonicalProjects); !ok {
 		t.Fatal("IAM_URL set: the canonical HTTP client must be selected")
+	}
+}
+
+// countingIdent counts identity resolutions — the expensive KMS read the cred
+// cache exists to bound.
+type countingIdent struct{ calls atomic.Int32 }
+
+func (c *countingIdent) EnsureOrgIdentity(context.Context, string) (string, string, error) {
+	c.calls.Add(1)
+	return "acme-platform-kms", "s", nil
+}
+
+// TestCanonicalProjectsCredResolvedOnce: four reads, one KMS resolution.
+func TestCanonicalProjectsCredResolvedOnce(t *testing.T) {
+	m := &canonIAM{projects: map[string]bool{"acme/web": true}}
+	srv := httptest.NewServer(m.handler(t))
+	defer srv.Close()
+	ci := &countingIdent{}
+	c := &canonicalProjects{base: srv.URL, ident: ci, hc: &http.Client{Timeout: 5 * time.Second}, creds: map[string]orgCred{}}
+	ctx := context.Background()
+	_, _ = c.List(ctx, "acme")
+	_, _ = c.Exists(ctx, "acme", "web")
+	_, _ = c.Exists(ctx, "acme", "ghost")
+	_, _ = c.List(ctx, "acme")
+	if n := ci.calls.Load(); n != 1 {
+		t.Fatalf("EnsureOrgIdentity called %d times across 4 reads, want 1 (cached)", n)
 	}
 }
