@@ -323,6 +323,32 @@ embedded underneath.
   "stopped" runs that were never started. Isolation holds because the org is the
   validated one cloud sends, never a client's, and the runtime keys every run
   under `tenants/{org}/`.
+- **Nouns, one owner each (2026-07-28).** IAM owns orgs and Projects
+  (`/v1/iam/projects`); platform makes APPS and SITES under them and its
+  `ProjectStore` is READ-ONLY (List/Get/Exists — re-adding Create breaks the
+  build). `/v1/run` RESOLVES the org's default project (424 → IAM when absent),
+  never mints one. Apps whose IAM project is gone are removed by the orphan
+  reaper (`clients/platform/orphans.go`) — fails SAFE (IAM unreachable ⇒ reap
+  nothing), one existence question per (org,project), volumes left behind.
+- **An app declares storage** (`storageGb` on the platform Application): the
+  deploy ensures an RWO claim `<slug>-data`, mounts it at `/data`, and forces
+  `strategy: Recreate` (an RWO volume + rolling update deadlocks on
+  Multi-Attach). The claim is never patched or deleted with the app. Stateful
+  binaries should keep their store in a SUBDIRECTORY (`/data/<name>`) — the
+  volume root carries ext4 `lost+found`, which version-sniffing stores reject.
+- **No KMS URL names an org.** The tenant surface is `/v1/kms/secrets`; the org
+  comes from the validated principal (for a switched-in SuperAdmin, X-Org-Id —
+  the same one-predicate switch every subsystem honors). Cross-org over HTTP
+  does not exist; in-process callers (which hold the master key) are the only
+  cross-org readers. The org remains the STORE partition (`/orgs/<org>/…`).
+- **Per-tenant KMS identity is minted, not runbooked.** On a missing
+  `orgs/<org>/kms-auth/*` credential and with `IAM_SERVICE_TOKEN` set,
+  `clients/platform` calls IAM's idempotent bootstrap upsert to create
+  `<org>-platform-kms` (clientId==name==audience; a surprise clientId is
+  refused, never sealed; the upsert must carry `cert-<brand>` or the minted app
+  cannot SIGN and its tokens 500), seals both fields, and the sync proceeds.
+  In-cluster IAM base resolution is `cloud.IAMBaseURL` — the split-horizon
+  policy stated once (Cloudflare 403s server-side POSTs to the public issuer).
 - **A customer IS an IAM user; marketing keeps no contact list.** Who to email is
   read IN-PROCESS from the embedded IAM (`clients/marketing/roster.go` →
   `iam/pkg/store.GetMailableUsers` over `clients/iam.DB()`), the same seam
