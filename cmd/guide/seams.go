@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/hanzoai/cloud/clients/framework"
-	"github.com/hanzoai/cloud/clients/guide"
-	"github.com/hanzoai/cloud/clients/integrations"
+	"github.com/hanzoai/cloud/apps/framework"
+	"github.com/hanzoai/cloud/apps/guide"
+	"github.com/hanzoai/cloud/apps/integrations"
 )
 
 // The growth-OBSERVE seam guide owns, wired in ITS OWN composition root.
