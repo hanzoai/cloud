@@ -20,7 +20,7 @@ import (
 // `.hanzo/workflows/*.yml` (native-first), or the root `hanzo.yml` (the SAME schema,
 // GitHub-Actions-compatible location) as a fallback, at the pushed commit — then
 // enqueues each declared image to platform.hanzo.ai's in-cluster BuildKit via the
-// ONE direct-build front door (`/v1/arcd/enqueue`). That is the SAME build muscle
+// ONE direct-build front door (`/v1/runner`). That is the SAME build muscle
 // the platform GitHub-App webhook and the `hanzoai/ci mode:delegate` path drive:
 // platform builds, pushes to the registry, and patches the operator Service CR, and
 // the operator deploys. One build path — now with a THIRD front door: a native push.
@@ -52,7 +52,7 @@ const (
 	nativeCICDEnabledEnv = "CLOUD_NATIVE_CICD_ENABLED"
 
 	// enqueueTokenEnv is the machine-to-machine bearer for platform's direct build
-	// webhook — the SAME credential name `/v1/arcd/enqueue` and `/v1/build-callback`
+	// webhook — the SAME credential name `/v1/runner` and `/v1/build-callback`
 	// check (PLATFORM_BUILD_CALLBACK_TOKEN), KMS-sourced into the CR env, never
 	// hardcoded. Absent ⇒ the orchestrator stays dormant (no unauthenticated POST).
 	enqueueTokenEnv = "PLATFORM_BUILD_CALLBACK_TOKEN"
@@ -60,7 +60,7 @@ const (
 	// enqueueURLEnv overrides the platform direct-build endpoint; defaults to the
 	// production front door. One URL, one build path.
 	enqueueURLEnv     = "CLOUD_NATIVE_CICD_ENQUEUE_URL"
-	defaultEnqueueURL = "https://platform.hanzo.ai/v1/arcd/enqueue"
+	defaultEnqueueURL = "https://platform.hanzo.ai/v1/runner"
 )
 
 // pipeline is the slice of the `hanzo.yml` / `.hanzo/workflows/*.yml` schema the
@@ -83,7 +83,7 @@ type pipelineImage struct {
 	TagSuffix  string `yaml:"tag-suffix"` // default = name
 }
 
-// enqueueReq is platform's /v1/arcd/enqueue body (EnqueueBody). Field-for-field the
+// enqueueReq is platform's /v1/runner body (EnqueueBody). Field-for-field the
 // same shape the `hanzoai/ci mode:delegate` step POSTs, so a native-push build and a
 // delegated GitHub-Actions build are byte-identical downstream — one build path.
 type enqueueReq struct {
