@@ -775,7 +775,34 @@ the final bearer fallback — no `--platform-token`). The ONE contract, no TS-Do
   RESTART (stamps the Deployment pod-template `hanzo.ai/restartedAt` annotation; never
   changes the declared TAG — that stays a git commit CD reconciles). `--env` picks the ns.
 - `hanzo clusters list|get` → `GET /v1/clusters`  (`clients/visor`, tenant-scoped)
-- `hanzo build`          → `POST /v1/runner`  (native buildkit fabric)
+- `hanzo build`          → `POST /v1/runner`  (native buildkit fabric). With `--image` it
+  builds a container image; with NO `--image` it reads the repo's own `hanzo.yml`
+  (`binaries:` + `bucket:`) and builds the ARTIFACT lane instead — see below.
+
+### `/v1/runner` builds ANY project, not only a Dockerfile
+
+`/v1/runner` has two lanes, and a request is in exactly one of them:
+
+- **image** (`image:`) → `launchDirectBuild` → rootless BuildKit → a pushed OCI ref.
+- **artifact** (`binaries:`) → `launchArtifactBuild` (`clients/platform/artifact.go`) → a
+  Job whose initContainers are ONE PER RECIPE ENTRY, each in that entry's toolchain image
+  (`image:`, default `golang:1.26-bookworm`), sharing `/w`; then a publisher that hashes
+  everything the recipe left in `/w/dist`, PUTs it to hanzoai/s3 and writes `binaries.json`
+  last. Output: `https://s3.hanzo.ai/<bucket>/<owner>/<repo>/<tag>/binaries.json`, the same
+  layout hanzoai/ci publishes to — one index, two front doors.
+
+The recipe is the EXISTING `hanzo.yml` contract, extended by exactly two optional fields:
+`run:` (a build command for any toolchain that is not Go) and `out:` (the glob of what it
+produced). `main:` stays the zero-config Go lane. Nothing here is a second recipe format.
+
+Why the split in the Job matters: `run:` is arbitrary shell by design (same trust as a
+Dockerfile `RUN`), so it must never see a credential — the initContainers carry no
+object-store env and no service-account token; only the publisher, which runs a constant
+script, mounts `artifact-s3` (a KMSSecret; cloud holds no secrets grant in `hanzo-build`).
+The publisher writes over the INTERNAL endpoint (`s3.hanzo.svc:9000`) and records the
+PUBLIC URL, because `s3.hanzo.ai` is this cluster's own LoadBalancer and does not hairpin —
+a pod dialling it times out. Its egress hole is `artifact-publish-egress` in universe,
+selecting the pod label `hanzo.ai/publish=artifact`.
 
 `/v1/paas/*` auth mirrors `/v1/runner` (`clients/platform/runner.go`): the `guard` admits a
 validated principal who is SuperAdmin OR OrgAdmin, then each handler CONFINES a non-super
