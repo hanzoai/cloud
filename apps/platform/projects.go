@@ -12,7 +12,7 @@
 // used verbatim, never cloned into a platform-local struct. This couples platform to
 // the embedded IAM runtime: a cloud deployment that enables "platform" MUST also
 // enable "iam" (both are single-binary co-residents by design), else clients/iam.DB()
-// is nil and a project call fails closed (503). The retired Casdoor iam-v1 object
+// is nil and a project call fails closed (503). The retired iam-v1 object
 // store is GONE.
 package platform
 

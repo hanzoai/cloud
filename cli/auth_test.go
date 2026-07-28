@@ -52,7 +52,7 @@ func TestCredsFromToken(t *testing.T) {
 
 func TestPasswordGrant(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/iam/oauth/access_token" {
+		if r.URL.Path != "/v1/iam/oauth/token" {
 			t.Errorf("path = %s", r.URL.Path)
 		}
 		_ = r.ParseForm()

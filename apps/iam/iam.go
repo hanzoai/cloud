@@ -2,20 +2,20 @@
 // in-process subsystem (HIP-0106) — the LAST binary-consolidation piece:
 // "one Go binary (hanzoai/cloud) embeds IAM + KMS + o11y".
 //
-// CLEAN IAM (v2), NOT CASDOOR. This subsystem embeds github.com/hanzoai/iam —
+// CLEAN IAM (v2). This subsystem embeds github.com/hanzoai/iam —
 // the clean-room identity rewrite on the native Hanzo stack (zip + hanzoai/orm +
-// hanzoai/sqlite). The retired Casdoor/Beego fork (github.com/hanzoai/iam-v1) is
+// hanzoai/sqlite). The retired Beego fork (github.com/hanzoai/iam-v1) is
 // GONE from cloud's graph: there is no beego process-global to corrupt, no
 // InitEmbed, no session-manager hook, no shared-AppConfig co-residence hazard with
-// the sibling `ai` casdoor fork. iamserver.Route registers the whole IAM v2 surface
+// the sibling `ai` legacy fork. iamserver.Route registers the whole IAM v2 surface
 // (OIDC discovery/JWKS, oauth authorize/token/userinfo/introspect/revoke,
-// get-app-login, signin, the v2 entity CRUD, and the Casdoor verb-alias compat
+// get-app-login, signin, the v2 entity CRUD, and the legacy verb-alias compat
 // layer) ZIP-NATIVELY onto cloud's shared app — no net/http adaptor round-trip. The
 // specific self-service routes layered in front (account, agentskills) still win by
 // Fiber's in-order match, so the fold is collision-free.
 //
 // The store is embedded SQLite under {DataDir}/iam (server.OpenSQLite, WAL) — this
-// embed owns its OWN orm.DB outright, so the old Casdoor-fork "ai bootstrap unable to
+// embed owns its OWN orm.DB outright, so the old fork's "ai bootstrap unable to
 // open database file (14)" crash is gone. Config (orgs/apps/providers/signing certs) is
 // seeded from the same init_data.json the deployment already provides (server.Seed,
 // new-only + idempotent), so hanzo.id's OAuth/OIDC semantics are preserved.
@@ -36,7 +36,7 @@
 //
 //	/v1/iam/*      OIDC/OAuth2 (/v1/iam/oauth/{authorize,token,userinfo,introspect,
 //	               revoke,...}) + OIDC discovery (/v1/iam/.well-known/*) + signin +
-//	               get-app-login + the v2 entity CRUD + the Casdoor verb-alias compat
+//	               get-app-login + the v2 entity CRUD + the legacy verb-alias compat
 //	/login/oauth/* browser authorize surface (the /v1/iam/oauth/authorize 302 target)
 //
 // STAGING (security-critical): activation is the standard enable-list gate — the
@@ -65,7 +65,7 @@ import (
 
 // Prefixes are the canonical absolute prefixes the IAM identity surface owns —
 // the ONE list. It registers the real routes (safeMount), serves the fail-closed 503
-// when IAM cannot boot, and is the MountSpec.Prefixes apps.Wire() hands MountAll, so
+// when IAM cannot boot, and is the App.Prefixes apps.Wire() hands MountAll, so
 // IAM's middleware can only ever land on identity's own subtrees. Everything outside
 // them belongs to cloud, so the console catch-all keeps serving the SPA.
 //
@@ -74,7 +74,7 @@ import (
 // identity outage. It is also why iam2 must not be co-mingled: iam2 serves its OWN
 // /healthz, which silently took over the shared binary's.
 var Prefixes = []string{
-	"/v1/iam",      // OIDC/OAuth2 + entity CRUD + the Casdoor verb-alias compat layer
+	"/v1/iam",      // OIDC/OAuth2 + entity CRUD + the legacy verb-alias compat layer
 	"/login/oauth", // browser authorize surface (the /v1/iam/oauth/authorize 302 target)
 }
 
@@ -141,7 +141,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return nil
 	}
 
-	log.Info("iam embedded in-process (clean iam-v2, zip-native + hanzoai/orm — Casdoor iam-v1 retired)", "db", dbPath, "prefixes", Prefixes)
+	log.Info("iam embedded in-process (clean iam-v2, zip-native + hanzoai/orm — iam-v1 retired)", "db", dbPath, "prefixes", Prefixes)
 	return nil
 }
 

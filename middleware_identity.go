@@ -462,7 +462,7 @@ func validatedPrincipal(c *zip.Ctx, v *identityValidator) *idClaims {
 
 // sessionAccessToken used to map a first-party session cookie to the JWT the
 // in-process IAM had stored server-side, by reading Beego's global session
-// manager (web.GlobalSessions) that the Casdoor iam-v1 embed wired up.
+// manager (web.GlobalSessions) that the retired iam-v1 embed wired up.
 //
 // That embed is retired. IAM v2 (github.com/hanzoai/iam) is zip-native on
 // hanzoai/orm + hanzoai/sqlite and registers its surface directly on cloud's

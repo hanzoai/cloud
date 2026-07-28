@@ -160,6 +160,6 @@ func (s *scope) err() error {
 		return nil
 	}
 	return fmt.Errorf(
-		"%s installed middleware at %s, outside the prefixes it owns (%s) — declare those prefixes in its MountSpec, or set App instead if it really gates the whole binary",
+		"%s installed middleware at %s, outside the prefixes it owns (%s) — declare those prefixes in its App, or set App instead if it really gates the whole binary",
 		s.name, strings.Join(*s.escaped, ", "), strings.Join(s.prefixes, ", "))
 }
