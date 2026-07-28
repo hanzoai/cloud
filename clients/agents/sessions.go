@@ -93,6 +93,10 @@ type sessionView struct {
 	Target   string `json:"target,omitempty"`
 	Provider string `json:"provider,omitempty"`
 	Account  string `json:"account,omitempty"`
+	// The readable build: the product this session built and whether its story
+	// is public (provenance.go).
+	Project   string `json:"project,omitempty"`
+	Published bool   `json:"published,omitempty"`
 
 	Events    int    `json:"events"`
 	Children  int    `json:"children"`
@@ -160,6 +164,7 @@ func toSessionView(x Session, events, children int) sessionView {
 		TaskWorkflowID: x.TaskWorkflowID, TaskRunID: x.TaskRunID,
 		Host: x.Host, Cwd: x.Cwd, Repo: x.Repo, Target: x.Target,
 		Provider: x.Provider, Account: x.Account,
+		Project: x.Project, Published: x.Published,
 		Events: events, Children: children,
 		StartedAt: rfc3339(x.StartedAt), EndedAt: rfc3339(x.EndedAt),
 		CreatedAt: rfc3339(x.CreatedAt), UpdatedAt: rfc3339(x.UpdatedAt),
@@ -195,6 +200,13 @@ func mountSessions(s *cloud.Service[state], app cloud.Router) {
 	g.Post("/sessions/:id/resume", cloud.Handle(s, resumeSession))
 	g.Post("/sessions/:id/stop", cloud.Handle(s, stopSession))
 	g.Post("/sessions/:id/message", cloud.Handle(s, messageSession))
+
+	// The readable build (provenance.go). PUBLIC — no tenancy — because the only
+	// rows either route can reach are ones an author explicitly published. A
+	// visitor opening a product follows the session that produced it; the owner
+	// reads the same session through the org-scoped /sessions routes above.
+	g.Get("/builds", cloud.Handle(s, listBuilds))
+	g.Get("/builds/:org/:project", cloud.Handle(s, readBuild))
 }
 
 func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
@@ -217,6 +229,10 @@ type registerReq struct {
 	// Account tag — the linked AI account this session ran under (login manager).
 	Provider string `json:"provider"`
 	Account  string `json:"account"`
+	// The readable build (provenance.go): which product this session builds, and
+	// whether its story may be read by the world.
+	Project   string `json:"project"`
+	Published bool   `json:"published"`
 }
 
 func registerSession(s *cloud.Service[state], c *zip.Ctx) error {
@@ -267,6 +283,13 @@ func registerSession(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(account) > maxAccount {
 		return zip.ErrBadRequest("account too long")
 	}
+	project := strings.TrimSpace(body.Project)
+	if len(project) > maxProject {
+		return zip.ErrBadRequest("project too long")
+	}
+	if body.Published && project == "" {
+		return zip.ErrBadRequest("published requires a project — a build with no product is not a story anyone can open")
+	}
 
 	id, err := genID("sess")
 	if err != nil {
@@ -280,6 +303,7 @@ func registerSession(s *cloud.Service[state], c *zip.Ctx) error {
 		TaskRunID:      strings.TrimSpace(body.TaskRunID),
 		Host:           host, Cwd: cwd, Repo: repo, Target: target,
 		Provider: provider, Account: account,
+		Project: project, Published: body.Published,
 		StartedAt: now, CreatedAt: now, UpdatedAt: now,
 	}
 	if isTerminalStatus(status) {
@@ -353,10 +377,11 @@ func listSessions(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
 	f := SessionFilter{
-		Root:   trimField(c.Query("root")),
-		Parent: trimField(c.Query("parent")),
-		Status: trimField(c.Query("status")),
-		Limit:  queryInt(c, "limit"),
+		Root:    trimField(c.Query("root")),
+		Parent:  trimField(c.Query("parent")),
+		Status:  trimField(c.Query("status")),
+		Project: trimField(c.Query("project")),
+		Limit:   queryInt(c, "limit"),
 	}
 	if f.Status != "" && !validStatus(f.Status) {
 		return zip.ErrBadRequest("status must be running|paused|done|error")
@@ -486,6 +511,11 @@ type patchSessionReq struct {
 	Title  *string `json:"title"`
 	// Target re-dispatches a session to a run-target (the #48 association). "" detaches.
 	Target *string `json:"target"`
+	// Project tags the product this session built; Published is the author's
+	// decision to let anyone read the story (provenance.go). Both are pointers so
+	// "absent" and "cleared" are different requests.
+	Project   *string `json:"project"`
+	Published *bool   `json:"published"`
 }
 
 func patchSession(s *cloud.Service[state], c *zip.Ctx) error {
@@ -525,6 +555,22 @@ func patchSession(s *cloud.Service[state], c *zip.Ctx) error {
 			return zip.ErrBadRequest("title too long")
 		}
 		x.Title = strings.TrimSpace(*body.Title)
+	}
+	if body.Project != nil {
+		np := strings.TrimSpace(*body.Project)
+		if len(np) > maxProject {
+			return zip.ErrBadRequest("project too long")
+		}
+		x.Project = np
+	}
+	if body.Published != nil {
+		// Publishing is the author's act and it is what makes the PUBLIC build
+		// route answer at all, so it is refused unless the session names the
+		// product it built — /v1/agents/builds is keyed on (org, project).
+		if *body.Published && x.Project == "" {
+			return zip.ErrBadRequest("published requires a project — a build with no product is not a story anyone can open")
+		}
+		x.Published = *body.Published
 	}
 	if body.Target != nil {
 		nt := strings.TrimSpace(*body.Target)
@@ -587,6 +633,13 @@ func appendSessionEvent(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	if len(body.Payload) > 0 && !json.Valid(body.Payload) {
 		return zip.ErrBadRequest("payload must be valid JSON")
+	}
+	// The guard gate. A transcript turn is stored ONLY after it is proved free of
+	// credentials — the same engine the code-security surface runs, at the write
+	// boundary, refusing loudly. See guardEvent in provenance.go for why this
+	// refuses rather than redacts.
+	if leaks := guardEvent(string(body.Payload)); leaks != nil {
+		return refuseLeak(c, leaks)
 	}
 	actor := strings.TrimSpace(body.Actor)
 	if actor == "" {
@@ -665,6 +718,13 @@ func control(s *cloud.Service[state], c *zip.Ctx, command string) error {
 	}
 	if len(body.Payload) > 0 && !json.Valid(body.Payload) {
 		return zip.ErrBadRequest("payload must be valid JSON")
+	}
+	// The guard gate. A transcript turn is stored ONLY after it is proved free of
+	// credentials — the same engine the code-security surface runs, at the write
+	// boundary, refusing loudly. See guardEvent in provenance.go for why this
+	// refuses rather than redacts.
+	if leaks := guardEvent(string(body.Payload)); leaks != nil {
+		return refuseLeak(c, leaks)
 	}
 	if command == CmdMessage && strings.TrimSpace(body.Message) == "" && len(body.Payload) == 0 {
 		return zip.ErrBadRequest("message requires a 'message' or 'payload'")

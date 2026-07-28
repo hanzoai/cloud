@@ -336,7 +336,7 @@ func reverseSLE(ctx context.Context, ev *framework.Event, date string, moves []s
 	return writeSLE(ctx, ev, date, rev, "slerev")
 }
 
-// writeSLE appends the movements as immutable erp-stock-ledger-entry rows with
+// writeSLE appends the movements as immutable erp-stock-ledger rows with
 // DETERMINISTIC names (voucher-<kind>-<index>) — idempotent under concurrency/retry.
 func writeSLE(ctx context.Context, ev *framework.Event, date string, moves []sleMove, kind string) error {
 	sleDT, err := ev.Store.GetDocType(ctx, ev.Org, dtStockLedger)
