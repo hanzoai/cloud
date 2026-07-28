@@ -36,12 +36,12 @@ import (
 // what they asked for, with no second write to get wrong.
 
 const (
-	// VisibilityPublic is the default: the project appears in the community
+	// Public is the default: the project appears in the community
 	// catalogue and its source is mirrored to hanzo-community on git.hanzo.ai.
-	VisibilityPublic = "public"
-	// VisibilityPrivate hides a project from the catalogue at the publisher's own
-	// request. Paid: see visibilityFor.
-	VisibilityPrivate = "private"
+	Public = "public"
+	// Private hides a project from the catalogue at the publisher's own
+	// request. Paid: see resolve.
+	Private = "private"
 
 	// privateKind is the metering unit for keeping a project private. It shares
 	// the ONE cloud.ResourceMeter every other paid surface uses (hosting, agents,
@@ -51,27 +51,27 @@ const (
 	privateKind = "private"
 )
 
-// visibilityFor resolves the visibility a create/update request asks for, and
+// resolve resolves the visibility a create/update request asks for, and
 // enforces the ONE rule: public is free, private requires a funded org.
 //
 // An empty request means public — a caller that says nothing gets the default
 // the platform wants, not an error. An unfunded org asking for private is
 // REFUSED (402), never silently published as public: quietly making somebody's
 // private project public is the one failure mode here that cannot be undone.
-func visibilityFor(s *cloud.Service[state], c *zip.Ctx, want string) (string, error) {
+func resolve(s *cloud.Service[state], c *zip.Ctx, want string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(want)) {
-	case "", VisibilityPublic:
-		return VisibilityPublic, nil
-	case VisibilityPrivate:
+	case "", Public:
+		return Public, nil
+	case Private:
 		fee := cloud.ResourceFeeCents(deployFeeEnvPrefix, privateKind)
 		project, validated := principal.ValidatedProject(c)
 		if err := s.State.bill.Gate(c.Context(), principal.Ledger(c), project, validated, privateKind, fee); err != nil {
 			return "", err
 		}
-		return VisibilityPrivate, nil
+		return Private, nil
 	default:
 		return "", zip.Errorf(http.StatusBadRequest,
-			"visibility must be %q or %q", VisibilityPublic, VisibilityPrivate)
+			"visibility must be %q or %q", Public, Private)
 	}
 }
 
@@ -80,10 +80,10 @@ func visibilityFor(s *cloud.Service[state], c *zip.Ctx, want string) (string, er
 // plain values on the row, so this is the whole rule and there is nowhere else
 // for a second copy of it to drift.
 func (p Project) listed() bool {
-	return p.Visibility == VisibilityPublic && !p.Hidden
+	return p.Visibility == Public && !p.Hidden
 }
 
-// publishCommunity pushes a project's resolved visibility to the canonical git
+// publish pushes a project's resolved visibility to the canonical git
 // plane, which gives it a repo at git.hanzo.ai/<org>/<slug>, world-readable
 // exactly when the project is.
 //
@@ -93,11 +93,11 @@ func (p Project) listed() bool {
 // logged, never returned — because the project row is the source of truth and a
 // git plane that is down (or simply not co-resident in this binary) must not
 // fail a publish. The next update reconciles it.
-func publishCommunity(s *cloud.Service[state], ctx context.Context, p Project) {
-	if !cloud.CommunityPublisherRegistered() {
+func share(s *cloud.Service[state], ctx context.Context, p Project) {
+	if !cloud.PublisherRegistered() {
 		return
 	}
-	if err := cloud.OnCommunityPublish(ctx, cloud.CommunityEvent{
+	if err := cloud.Publish(ctx, cloud.Visibility{
 		Org: p.Org, Slug: p.Slug, Name: p.Name, Description: p.Description,
 		Listed: p.listed(),
 	}); err != nil {

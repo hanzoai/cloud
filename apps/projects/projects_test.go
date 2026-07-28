@@ -29,7 +29,7 @@ func mkProject(org, slug, name string) Project {
 		// Public is what the API's own default resolves to, so a seeded row that
 		// skips the handler must carry it too — otherwise a fixture would be
 		// invisible to the catalogue for a reason no production row can have.
-		Visibility: VisibilityPublic,
+		Visibility: Public,
 		CreatedAt:  100, UpdatedAt: 100,
 	}
 }

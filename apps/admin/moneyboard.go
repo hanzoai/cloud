@@ -169,7 +169,7 @@ func (o ops) Money(ctx context.Context, _ *core.None) (*MoneyOut, error) {
 // reserveCents reads the platform reserve fund. Not mounted ⇒ 0, which is the truth:
 // there is no reserve on this deployment.
 func reserveCents(ctx context.Context) money.Cents {
-	cents, _ := cloud.ReserveCents(ctx)
+	cents, _ := cloud.Reserve(ctx)
 	return money.Cents(cents)
 }
 
