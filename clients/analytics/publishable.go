@@ -12,19 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// publishable.go — the public capture path: a PUBLISHABLE KEY (pk-…) attributes
-// a browser beacon to its tenant and writes straight to the datastore.
+// publishable.go — the PUBLISHABLE KEY (pk-…): how a browser beacon carrying no
+// bearer still attributes to its tenant, and the error lens that reads those rows
+// back.
 //
-//	POST /v1/ingest   body: {batch:[WireEvent]}   auth: pk-…   -> {accepted,dropped}
-//	GET  /v1/errors   recent type:'error' events for the org (read lens)
+//	GET /v1/errors   recent type:'error' events for the org (read lens)
 //
 // ONE publishable key, and IAM issues it. pk- is publishable, sk- is secret, and
-// there is no third thing.
+// there is no third thing. It has no door of its own: ingestKey below is one of the
+// carriers eventTenant consults, so a pk- caller presents it to /v1/event like every
+// other credential. There used to be a POST /v1/ingest that existed only to say
+// "pk- goes here"; @hanzo/event 0.3.0 repointed onto /v1/event and it was deleted.
 //
 // This file used to mint and verify its OWN pk_ (underscore) under an
-// HMAC of CLOUD_INGEST_KEY_SECRET, with its own mint endpoint at
-// /v1/ingest/keys — a second publishable-key family sitting beside the one IAM
-// already owned. The underscore was load-bearing back then: pk_ was deliberately
+// HMAC of CLOUD_INGEST_KEY_SECRET, with its own mint endpoint — a second
+// publishable-key family sitting beside the one IAM already owned. The underscore
+// was load-bearing back then: pk_ was deliberately
 // kept OUT of isAPIKey's set, because anything isAPIKey resolved into "the same
 // principal a JWT yields", and a key meant for a browser bundle must not read.
 //
@@ -51,26 +54,10 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// ingestKeySecretEnv names the KMS-injected HMAC secret that seals a publishable
-
 // publishablePrefix marks a write-only ingest key. Underscore (not the dash of
 // the isAPIKey family) is load-bearing: it keeps pk- OUT of the bearer/principal
 // path, so a publishable key is structurally read-incapable.
 const publishablePrefix = cloud.PublishablePrefix
-
-// sourceIngest tags rows that arrived via the publishable-key direct ingest, so
-// the ONE hanzo.events table stays honest about origin (queryable as
-// properties.$source) without a second table — same mechanism as the other
-// adapters (sourceEvent/sourcePostHog/sourceCapture).
-const sourceIngest = "ingest"
-
-// sigBytes is the HMAC truncation length (128 bits) — ample against forgery while
-
-// ── key codec (pure) ─────────────────────────────────────────────────────────
-
-// maxIngestOrgLen bounds a decoded org (it becomes a warehouse partition key),
-// mirroring the cap OrgForKey applies to an IAM-resolved owner.
-const maxIngestOrgLen = 128
 
 // ── request key extraction ───────────────────────────────────────────────────
 
@@ -137,18 +124,6 @@ func foldException(e CaptureEvent) CaptureEvent {
 }
 
 // ── handlers ─────────────────────────────────────────────────────────────────
-
-// ingest answers POST /v1/ingest — a THIN DEPRECATED ALIAS of the canonical door.
-// Since /v1/event now natively accepts the publishable key (pk-…, via eventTenant)
-// AND the {batch:[…]} wire (via decodeIngest), /v1/ingest is redundant: it delegates
-// to the EXACT canonical pipeline (handle) — the SAME admission decision, tolerant
-// decode, error-fold, and ONE write core — differing only in a one-shot deprecation
-// log and the $source=ingest origin tag for the migration signal. Existing pk- callers
-// keep working unchanged; there is ONE implementation.
-func ingest(s *cloud.Service[state], c *zip.Ctx) error {
-	deprecated(s, c, "/v1/event")
-	return handle(c, decodeIngest, sourceIngest)
-}
 
 // errorsLens answers GET /v1/errors — the error-tracking read view: recent
 // type:'error' events for the org, newest first. Tenant-scoped server-side and
