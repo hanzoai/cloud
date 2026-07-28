@@ -256,11 +256,13 @@ func Wire() []cloud.MountSpec {
 		// otel-collector, prometheus and gonum are here and nowhere else — and it is
 		// imported by NOTHING but this line, so unlinking it is a pure subtraction.
 		//
-		// KNOWN GAP, see the branch report: o11y also owns /v1/sentry/* (mountSentry),
-		// which is a SECOND public prefix. zip.Load takes one, so /v1/sentry/* is not
-		// mounted on the host by this line and 404s until zip.Plugin can name more than
-		// one prefix. Do not merge this to main before that is closed.
-		cloud.PluginSpec("o11y", "/v1/o11y", o11yPlugin()),
+		// TWO prefixes, because o11y owns two public subtrees: the observability
+		// wildcard and the Sentry product face (mountSentry). Both are registered by
+		// the same MountO11y the child runs, so naming only the first left
+		// /v1/sentry/* unmounted ON THE HOST — the request 404'd before it ever
+		// reached the child, while the host looked healthy. The unit of deployment is
+		// the plugin; the subtrees are a property of it.
+		cloud.PluginSpec("o11y", o11yPlugin(), "/v1/o11y", "/v1/sentry"),
 		{Name: "authz", Mount: cloud.Global(authz.Mount), Global: true},
 		// Embedded commerce plane /v1/commerce/*, /_/commerce/* — the hanzoai/commerce
 		// MODULE via the adapter in commerce.go (un-forked; the in-process
