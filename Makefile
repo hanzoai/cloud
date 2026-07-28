@@ -58,7 +58,7 @@ APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
 # disk by default; override for a box where /tmp is real.
 export TMPDIR ?= $(HOME)/.cache/go-tmp
 
-.PHONY: help native webui deploy-ui agentskills build host plugins plugin generate openapi run smoke test test-cgo test-codec vet tidy docker docker-push clean monolith monolith-standalone
+.PHONY: help native webui deploy-ui agentskills build host ship plugins plugin generate openapi run smoke test test-cgo test-codec vet tidy docker docker-push clean monolith monolith-standalone
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -128,6 +128,17 @@ plugins: ## Build every app the manifest mounts into ./bin — the host's plugin
 	  GOFLAGS=-p=2 CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$$a ./cmd/$$a || exit 1; \
 	done
 	@echo ">> $(words $(APPS)) plugins in ./bin"
+
+# THE RELEASE LAYOUT, and the reason `plugins` above is a development target
+# rather than a shipping one. A dedicated plugin is ~40MB of which ~35MB is the
+# core every other plugin also links, so 108 of them are 4.5GB of duplicated
+# code (already stripped — -s -w is the default LDFLAGS, there is no symbol win
+# left in it). The unified binary is that core ONCE and serves any app via
+# `cloud --enable=<name>`, which manifest.App.Plugin falls through to when no
+# dedicated binary sits beside the host. Same contract, same child, 20x less to
+# ship.
+ship: host monolith ## Build the RELEASE layout into ./bin: the host + the one multi-call binary that serves all $(words $(APPS)) apps.
+	@echo ">> ship: host $$(du -h bin/host | cut -f1) + cloud $$(du -h bin/cloud | cut -f1) = $$(du -ch bin/host bin/cloud | tail -1 | cut -f1) for $(words $(APPS)) apps"
 
 plugin: ## Build ONE app into ./bin: make plugin APP=wallets.
 	@test -n "$(APP)" || { echo "usage: make plugin APP=<name>"; echo "apps: $(APPS)"; exit 1; }
