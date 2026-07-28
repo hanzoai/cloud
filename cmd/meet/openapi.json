@@ -1,0 +1,36 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "meet"
+    }
+  ],
+  "paths": {
+    "/v1/meet/getToken": {
+      "post": {
+        "operationId": "post_v1_meet_gettoken",
+        "tags": [
+          "meet"
+        ]
+      }
+    },
+    "/v1/meet/health": {
+      "get": {
+        "operationId": "get_v1_meet_health",
+        "tags": [
+          "meet"
+        ]
+      }
+    }
+  }
+}

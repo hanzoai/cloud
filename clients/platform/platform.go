@@ -46,6 +46,7 @@ import (
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/provisioning"
 	"github.com/hanzoai/cloud/internal/fqdn"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -236,6 +237,21 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// token-gated + image-ref allowlisted (runner.go). `hanzo build`, the
 	// git-push-to-deploy hook, and cloud's own self-release all POST here.
 	app.Post("/v1/runner", cloud.Handle(s, runnerBuild))
+}
+
+// The platform surface's declared bodies, adjacent to the route table above so
+// path and payload are read (and changed) together. Each entry names the exact
+// struct the matching handler binds or serves — openapi reflects the schema from
+// it, so the published contract follows the code. A declaration renders only
+// while its route is live (openapi.Register), so this list can never add a path.
+func init() {
+	openapi.Register("/v1/platform/projects", "GET", nil, []projectView{})
+	openapi.Register("/v1/platform/projects/:project", "GET", nil, projectView{})
+	openapi.Register("/v1/platform/projects/:project/apps", "GET", nil, []appView{})
+	openapi.Register("/v1/platform/projects/:project/apps", "POST", createAppReq{}, appView{})
+	openapi.Register("/v1/platform/projects/:project/apps/:app", "GET", nil, appView{})
+	openapi.Register("/v1/platform/projects/:project/apps/:app/env", "PUT", setEnvReq{}, appView{})
+	openapi.Register("/v1/run", "POST", runReq{}, runView{})
 }
 
 // ── tenancy ──────────────────────────────────────────────────────────────────

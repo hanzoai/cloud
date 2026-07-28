@@ -1248,3 +1248,96 @@ repo→Slack-channel subscription and a repo→downstream mirror target. Those a
 reactor config, org-scoped like every repo route. The code index is also per-repo and
 indexes the default branch only — a feature-branch push is skipped so it cannot
 clobber the canonical index. None of these decide whether a ref syncs.
+
+## The money plane runs locally, and `make e2e` proves the prepaid cycle
+
+`commerce` is co-resident (`apps/commerce.go` → `commercemod.Embed` on cloud's own zip
+app), so the billing surface, the ledger, and the gate are all one process. Two facts
+about running it that are easy to get wrong in opposite directions:
+
+**At-rest posture is a CAPABILITY question, answered once.** commerce's per-tenant money
+stores open a concurrent read pool AND a serialized write pool on the same file, which
+needs the LIVE libsqlcipher codec — the pure-Go codec envelope is single-writer and
+cannot serve that shape. So `commerceMasterKey` gates on `sqlitedrv.CodecLinked()`, the
+same predicate `cek.EnsureDevKey` uses:
+
+- codec linked (the image: `CGO_ENABLED=1 -tags "libsqlite3 sqlite_fts5"`) ⇒ inject
+  cloud's master key; commerce encrypts, and its own `resolveMasterKey` still fails
+  closed if the key is absent, so production can never quietly write plaintext.
+- not linked (`make build`, which is `CGO_ENABLED=0`) ⇒ hand over nothing, and commerce
+  opens its documented zero-config unencrypted dev store.
+
+Injecting regardless is not a stricter posture — on a pure-Go build it is a hard refusal
+from `resolveDEK`, `Mount` never reaches `transport.SetApp`, and every S2S billing read
+then falls through to the network and DNS-resolves the in-process placeholder. That is
+the failure `clients/commerce/transport` documents: balance reads that answer
+"Insufficient balance" on funded accounts, with DNS named as the cause.
+
+**The gate only enforces on a kind that costs something.** `ResourceMeter.Gate`
+short-circuits to allow for `costCents <= 0`, and most per-kind fees default to 0, so a
+suite that does not price a kind proves nothing about billing. `e2e/run.sh` prices one
+(`CLOUD_TRACKER_FEE_CENTS`) and passes the SAME number to the suite as
+`E2E_TRACKER_FEE_CENTS`; spec 136 refuses to run at 0 rather than passing emptily.
+`tracker` is the seam because its gated create depends on nothing but the local store —
+a 402 there is the billing gate, not object storage or an exec runtime answering first
+(both of which precede the gate on the deploy and invoke paths).
+
+**A customer org arrives funded, by policy.** A new customer org holds the $5 starter
+credit (`commerce billing/credit`.StarterCreditCents — the same "$5 free credit" the
+developer plan advertises, a non-cash TRIAL grant tagged `starter-credit` and spendable
+on non-premium metered usage only). That is why the local suite can exercise the funded
+path without seeding a balance: it is the real self-service path, where a fresh org can
+buy work the moment it signs up. Note the billing SUBJECT differs by org kind — a
+customer org pools at the org (`acme`), while the brand org resolves per-user
+(`hanzo/z`), which is `principal.Subject` → `account.Payer`, not an inconsistency.
+
+What `make e2e` now holds: an org below the fee is refused **before** the work runs and
+is not charged for the refusal; an org that can cover it is admitted and debited exactly
+the fee, with exactly one usage row; draining the balance re-arms the refusal (which is
+what proves the debit is real rather than cosmetic); and one org's spend never moves
+another's ledger. The specs are `describe.configure({mode:'serial'})` — not by
+preference, but because they all move the same balance and the suite is otherwise
+`fullyParallel`.
+
+## Encryption at rest: cek is the gate, and per-principal binding is not done yet
+
+`cek.Open` is the ONE encryption-at-rest gate — ~50 stores, plus IAM's identity store
+(`clients/iam.openStore`, which previously opened through `iamserver.OpenSQLite` and
+left `iam/iam2.db` beginning with the literal `SQLite format 3` magic). If you add a
+store, open it through cek; if a store is not in the envelope it has no `.dek` sidecar
+beside it, and that absence is the check worth running on any new data dir:
+
+    find $DATA_DIR -name '*.db' -printf '%P\n' | while read -r r; do
+      printf '%-40s dek=%s\n' "$r" "$([ -f "$DATA_DIR/$r.dek" ] && echo yes || echo NO)"; done
+
+**What cek binds today, and what it does not.** The KEK derives from a random per-file
+id, NOT from the principal:
+
+    KEK = HKDF-SHA256(master, lp("global") || lp(hex(fileID)))
+
+`PrincipalOrg` and `PrincipalUser` — which `hanzoai/sqlite` provides and `commerce`
+uses — appear ZERO times in cloud; `const principalType = sqlitedrv.PrincipalGlobal`
+is the only one. So confidentiality between orgs DOES hold (every file has its own
+random DEK under its own KEK, and one org's key cannot read another's file), but there
+is no BINDING: `OrgDB` knows the validated org slug and discards it one call later at
+`openOrgDB → cek.Open(path)`. A `{db,.dek}` pair is therefore valid in any org's
+directory, so a PV-write adversary could swap two of our own stores between tenants.
+cek's header names this as a deliberate non-goal; it stops being one the moment
+tenant-isolation-under-node-compromise is in scope.
+
+**The shape of the fix, when it is taken up.** Bind BOTH principal and file, so the
+per-file KEK survives:
+
+    KEK = DeriveKey(master, PrincipalOrg, orgSlug + "/" + hex(fileID))
+    AAD = PrincipalAAD(same)
+
+(`SanitizeOrg` guarantees the slug has no "/", so the id stays injective.) It cannot be
+a flag day: every existing sidecar is wrapped under the legacy global derivation, so
+open must try the principal-bound derivation, fall back to legacy on unwrap failure,
+and rewrap the sidecar on success. That is safe because rewrapping touches only the
+sidecar — the DEK and fileID never change and no page is rewritten, the same property
+master-key rotation already relies on — and because a half-migrated fleet reads either
+form. `cek.Open` grows a principal parameter (~50 call sites pass an explicit Global).
+
+**Still outside the envelope:** `tasks/_/default.db`. `hanzoai/tasks`'s `EmbedConfig`
+has no key field, so that one is an upstream change, not a cloud one.

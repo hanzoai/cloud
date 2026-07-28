@@ -95,23 +95,52 @@ func (e Event) toCapture() CaptureEvent {
 	}
 }
 
-// eventTenant resolves the tenant for the canonical door — PLUGGABLE auth,
-// FAIL-CLOSED, in strict trust order:
+// admission is a RESOLVED credential: the org it names and the capability it carries.
+// Capability is a property of the CREDENTIAL, which is why it lives here and not on a
+// door — a door still cannot ask for anything. Two levels, because the platform mints
+// two kinds of principal:
 //
-//  1. a validated IAM bearer principal wins (its owner org);
-//  2. else a presented write-only publishable key (pk_…) is HMAC-verified to its
-//     org with no IAM/DB hop (the SAME verifier publishable.go's /v1/ingest used —
-//     folded in here so a pk_ caller uses /v1/event directly);
+//	full  ⇒ the unprojected write into org. Every API credential, and a workspace
+//	        member's session.
+//	!full ⇒ the PROJECTED write into org (publicIngest with org as the tenant — the
+//	        same lane the site-host carve uses). A reduced principal: it has proven
+//	        which org it belongs to, so its pageviews and errors belong there, but it
+//	        may not write the revenue/personId/groupId columns or an arbitrary event
+//	        kind.
+//
+// The middle level is not a nicety. Without it a guest is either trusted with the
+// whole custom product/billing surface of an org it was invited into for one channel,
+// or has its telemetry filed under $public where that org cannot read it. Both are
+// wrong, and the projection is exactly the shape that is right.
+type admission struct {
+	org  string
+	full bool
+	// subject is the credential's OWN signed identity. It is only consulted on the
+	// reduced lane, where it REPLACES the caller-supplied distinctId — see handle. It
+	// is empty for the full-capability credentials, which are trusted to attribute
+	// their own writes.
+	subject string
+}
+
+// eventTenant resolves the credential for every door — PLUGGABLE auth, FAIL-CLOSED,
+// in strict trust order:
+//
+//  1. a validated IAM bearer principal wins (its owner org), at FULL capability;
+//  2. else a presented write-only publishable key (pk_…) is HMAC-verified to its org
+//     with no IAM/DB hop (the SAME verifier publishable.go's /v1/ingest used — folded
+//     in here so a pk_ caller uses /v1/event directly), at FULL capability;
 //  3. else a presented out-of-band IAM access key (hk-/sk-…) is resolved to its org
-//     through the ONE key seam (resolveKeyOrg → cloud.OrgForKey).
+//     through the ONE key seam (resolveKeyOrg → cloud.OrgForKey), at FULL capability;
+//  4. else a verified Hanzo Team workspace token — at FULL capability for a member,
+//     and at REDUCED capability for a guest (teamTenant, team.go).
 //
-// None matches ⇒ ("", false), which handle answers by refusing a presented-but-
-// unresolvable credential and otherwise taking the anonymous lane. There is NO
-// host fallback on ANY door, so a full-capability tenant is only ever IAM or a
-// signed/resolvable key — never the request Host.
-func eventTenant(c *zip.Ctx) (string, bool) {
+// None matches ⇒ (admission{}, false), which handle answers by refusing a presented-
+// but-unresolvable credential and otherwise taking the anonymous lane. There is NO
+// host fallback on ANY door, so a tenant is only ever IAM, a signed/resolvable key, or
+// a signed team claim — never the request Host.
+func eventTenant(c *zip.Ctx) (admission, bool) {
 	if org, ok := tenant(c); ok {
-		return org, true
+		return admission{org: org, full: true}, true
 	}
 	// ONE publishable key, and IAM issues it. A pk- on any ingest-shaped carrier
 	// (Bearer, x-hanzo-ingest-key, ?ingest_key= for sendBeacon, which cannot set
@@ -124,15 +153,29 @@ func eventTenant(c *zip.Ctx) (string, bool) {
 	// refuses it, so it attributes a write and never mints a reading principal.
 	if key := ingestKey(c); key != "" {
 		if org, ok := resolveKeyOrg(c.Context(), key); ok {
-			return org, true
+			return admission{org: org, full: true}, true
 		}
 	}
 	if key := projectKey(c); key != "" {
 		if org, ok := resolveKeyOrg(c.Context(), key); ok {
-			return org, true
+			return admission{org: org, full: true}, true
 		}
 	}
-	return "", false
+	// A Hanzo Team workspace token (HS256 over SERVER_SECRET, org and role in the
+	// signed extra) — the credential the team SPA already holds. It is a PLATFORM
+	// credential, so it belongs in the trust order rather than on the door that
+	// happens to need it, and it therefore works on every door (team.go). It is the
+	// ONLY entry that can resolve at reduced capability, because it is the only one
+	// the platform issues to a principal weaker than "holds an API key".
+	//
+	// It is LAST because it is the narrowest: the other three are issued to BE API
+	// credentials, while this one is a browser session a user's tab carries. Ordering
+	// it after them means a request holding both is attributed to the deliberate API
+	// credential, never to whatever tab it came from.
+	if a, ok := teamTenant(c); ok {
+		return a, true
+	}
+	return admission{}, false
 }
 
 // firstNonWS returns the index of the first non-JSON-whitespace byte, or len(body)
@@ -246,12 +289,33 @@ func ingestDecoded(c *zip.Ctx, org, source string, evs []CaptureEvent, dropped i
 	return c.JSON(http.StatusOK, res)
 }
 
-// presented reports whether the request PRESENTED an ingest credential at all,
+// presented reports whether the request PRESENTED an IDENTIFIABLE credential at all,
 // independent of whether it resolved. It is the discriminator between "misconfigured"
 // (refuse) and "anonymous" (project), and it names exactly the carriers eventTenant
-// consults for a key, so the two can never disagree about what "presented" means.
+// consults, so the two can never disagree about what "presented" means. When
+// eventTenant learned about team tokens and this did not, they DID disagree, and the
+// result was the precise failure the team door exists to prevent: an expired team
+// token answered 200 with its rows filed under $public, a partition its org cannot
+// read.
+//
+// WHY A KEY AND A TEAM TOKEN REFUSE, AND A STALE IAM BEARER DOES NOT. The asymmetry is
+// a fact about what is DECIDABLE, not a preference:
+//
+//   - an ingest key is self-identifying by PREFIX (pk-/hk-/sk-), and a team token is
+//     self-identifying by STRUCTURE (it carries an `account` claim, which an IAM token
+//     does not). For both, "the caller presented THIS kind of credential" is answerable
+//     without trusting anything, so a failure to resolve is unambiguously a
+//     misconfiguration and 403 is the honest answer.
+//   - an arbitrary `Authorization: Bearer <jwt>` is not distinguishable from a bearer
+//     minted for some other audience entirely. IdentityMiddleware already declines to
+//     401 it (validatedPrincipal returns nil rather than refusing), so treating its
+//     mere presence as "presented" here would turn every stale or foreign bearer that
+//     reaches an ingest door into a 403 — a refusal on evidence we do not have.
+//
+// So: identifiable credential that fails ⇒ 403. Unidentifiable bearer ⇒ the anonymous
+// lane, exactly as before this file learned about team tokens.
 func presented(c *zip.Ctx) bool {
-	return ingestKey(c) != "" || projectKey(c) != ""
+	return ingestKey(c) != "" || projectKey(c) != "" || teamPresented(c)
 }
 
 // handle is THE ingest pipeline and the ONE place in this package where trust level is
@@ -275,12 +339,29 @@ func presented(c *zip.Ctx) bool {
 // because the functions that used to take an org and write at full capability
 // (ingestBody / eventWithOrg / captureWithOrg / insightsWithOrg) no longer exist.
 func handle(c *zip.Ctx, dec decode, source string) error {
-	if org, ok := eventTenant(c); ok {
+	if a, ok := eventTenant(c); ok {
+		if !a.full {
+			// A REDUCED principal: it proved WHICH org it belongs to, so its rows land
+			// in that org — but through the projection, so it cannot write revenue,
+			// personId, groupId or an arbitrary event kind into a tenant it was
+			// invited into for one channel.
+			//
+			// AND IT DOES NOT NAME THE PERSON. The projection was designed for an
+			// ANONYMOUS caller writing to $public, where a forged distinctId is
+			// meaningless. Aimed at a REAL org the same field changes meaning: it is
+			// the join key every person-level lens groups by, and the team SPA puts the
+			// account identifier there, so a guest could attribute pageviews and errors
+			// to a named colleague inside the host org. The projection cannot strip it —
+			// it is what makes the lane useful — so the fix is to stop taking it from
+			// the caller: on this lane the SIGNED account is the identity. A reduced
+			// principal does not name the person; its token does.
+			return publicIngest(c, dec, a.org, source, a.subject)
+		}
 		evs, err := dec(c.Body())
 		if err != nil {
 			return zip.ErrBadRequest("malformed event payload")
 		}
-		return ingestDecoded(c, org, source, evs, 0)
+		return ingestDecoded(c, a.org, source, evs, 0)
 	}
 	if presented(c) {
 		return zip.ErrForbidden("valid bearer or a resolvable ingest key required")
@@ -318,9 +399,9 @@ type door struct {
 //
 //     ALMOST NOTHING CALLS THIS PATH DIRECTLY. Its live traffic arrives through the
 //     insights-cloud-ingest-rewrite middleware on insights.hanzo.ai (universe
-//     infra/k8s/ingress/routes.yaml), which matches EIGHT SDK spellings — /e, /batch,
-//     /capture and each one's trailing-slash form, the forms real PostHog SDKs
-//     actually send — and replacePath's them all to this one literal. Two things
+//     infra/k8s/ingress/routes.yaml), which matches EIGHT SDK spellings — /e, /v1/e,
+//     /batch, /capture and each one's trailing-slash form, the forms real PostHog
+//     SDKs actually send — and replacePath's them all to this one literal. Two things
 //     follow. This door must NEVER be sunset on a $source count: its callers do not
 //     name it, so $source='posthog' would not decay even after every SDK moved. And
 //     if that middleware is dropped or reordered below the catch-all, eight live
@@ -355,6 +436,13 @@ var doors = []door{
 	{path: "/v1/analytics", decode: decodeIngest, source: sourceCapture},
 	{path: "/v1/analytics/batch", decode: decodeIngest, source: sourceCapture},
 	{path: "/v1/tracker", decode: decodeIngest, source: sourceCapture},
+	// The Hanzo Team SPA's wire. A THIRD wire, in the same sense /v1/insights/e is a
+	// second one: the SPA is a published bundle that POSTs a bare array of
+	// {event, properties, timestamp(ms), distinct_id}, which decodeIngest ACCEPTS and
+	// then drops whole (canonicalType("") is "event", not in publicKinds). The
+	// /collect suffix is the caller's — it appends it to ANALYTICS_COLLECTOR_URL.
+	// This retired the standalone team-analytics pod.
+	{path: "/v1/event/collect", decode: decodeTeam, source: sourceTeam},
 }
 
 // ingest is the door's API-host handler: admission (handle) over the door's wire.
