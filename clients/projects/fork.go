@@ -14,6 +14,10 @@ import (
 type forkReq struct {
 	Slug string `json:"slug"` // parent slug to fork — catalog template or published project (required)
 	Name string `json:"name"` // target project name (optional; defaults to the parent's title)
+	// Variant picks a template's format/page/theme (optional; defaults to the
+	// template's first shape). This is the axis the catalog used to spend
+	// sibling slugs on, so it is expressed here, where the user's preference is.
+	Variant string `json:"variant"`
 	// Target overrides the derived project slug (optional; defaults to the
 	// parent slug). Kept distinct from Slug so callers can rename on fork.
 	Target string `json:"target"`
@@ -40,7 +44,7 @@ func fork(s *cloud.Service[state], c *zip.Ctx) error {
 	if slug == "" {
 		return zip.ErrBadRequest("slug is required")
 	}
-	req, err := seedFrom(s, c, slug)
+	req, err := seedFrom(s, c, slug, strings.TrimSpace(body.Variant))
 	if err != nil {
 		return err
 	}
@@ -63,14 +67,28 @@ func fork(s *cloud.Service[state], c *zip.Ctx) error {
 // A live parent contributes its repo, so the child builds from the same source;
 // the parent's deployed BYTES are never copied — releases are per-tenant by
 // design, so the fork publishes its own.
-func seedFrom(s *cloud.Service[state], c *zip.Ctx, slug string) (createReq, error) {
+func seedFrom(s *cloud.Service[state], c *zip.Ctx, slug, variant string) (createReq, error) {
 	if t, found := templates.Get(slug); found {
+		// One template, one slug: the format/page/theme it ships in is chosen
+		// here, from the catalog's own options.
+		v, ok := t.Variant(variant)
+		if !ok {
+			return createReq{}, zip.ErrNotFound("template variant not found")
+		}
 		req := createReq{
 			Name: t.Title, Slug: t.Slug, Description: t.Description,
-			Framework: mapFramework(t.Framework), ForkedFrom: t.Slug,
+			Framework: mapFramework(v.Framework), ForkedFrom: t.Slug,
 		}
-		req.Repo.URL = t.Source
+		// A non-default shape carries its id into the derived slug, so two
+		// shapes of one template can live side by side in the same org.
+		if len(t.Variants) > 0 && v.ID != t.Variants[0].ID {
+			req.Slug += "-" + v.ID
+		}
+		req.Repo.URL = v.Source
 		return req, nil
+	}
+	if variant != "" {
+		return createReq{}, zip.ErrNotFound("template variant not found")
 	}
 	p, err := s.State.store.ResolveUniqueLiveSlug(c.Context(), slug)
 	if err != nil {
