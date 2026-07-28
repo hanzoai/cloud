@@ -20,6 +20,26 @@ images:
     dockerfile: native/flags/Dockerfile
     repo: ghcr.io/hanzoai/cloud-flags
 
+# The plugin lane, and NOT a second builder of the image above: this is the
+# static binary a host with no plugins in its image fetches at run time
+# (manifest/release.go), which the image's cgo+libsqlcipher /cloud cannot be —
+# a plugin runs on whatever base its host happens to be.
+#
+# ONE entry for 108 apps. manifest.MultiCall is this binary, and every app
+# resolves to it with a different --enable, so the index names it once: 195MiB
+# published against 4520MiB for a binary per app, of which 35MiB each is the
+# core all of them link.
+binaries:
+  - name: cloud
+    main: ./cmd/cloud
+    platforms: [linux/amd64, linux/arm64]
+
+# Where binaries: publishes — hanzoai/s3, not a GitHub release. Artifacts and
+# the binaries.json naming them land under <bucket>/<repo>/<tag>/, so
+# CLOUD_PLUGINS is one immutable URL per tag and 400MiB a release never touches
+# a storage quota we do not own.
+bucket: plugins
+
 test:
   - name: native-flags
     # The flags evaluator staticlib clients/flags links under CGO=1.

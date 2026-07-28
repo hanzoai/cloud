@@ -46,6 +46,13 @@ func key(name, goos, goarch string) string { return name + "/" + goos + "/" + go
 // through here must not become 108 requests, but a lazy plugin can first
 // resolve minutes after boot: caching a failure would let one blip while the
 // network was still coming up disable every plugin for the life of the process.
+//
+// Success, though, is cached FOREVER, and that is a cache-invalidation contract
+// rather than a mere optimisation: rewriting the index a live host has already
+// read changes nothing for that host. New bits reach a running process by
+// restarting it, or by zip.App.ReloadTo(name, Plugin{URL, Sum}) — which
+// clients/plugin already exposes, audited and SuperAdmin-gated. An on-demand or
+// per-org upgrade path must drive one of those two; publishing cannot push.
 func fetch() (map[string]struct{ url, sum string }, error) {
 	index.mu.Lock()
 	defer index.mu.Unlock()

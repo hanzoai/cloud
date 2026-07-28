@@ -27,6 +27,12 @@ name: CI/CD
 on:
   push:
     branches: [main]
+    # v* is what publishes the plugin binary (hanzo.yml `binaries:` → bucket:).
+    # ci builds it on every push and publishes only on a tag, and the tag here is
+    # release.go's receipt for an image that already built and smoked — so the
+    # artifact a host installs unattended can only come from a proven commit,
+    # and this still mints no tag of its own.
+    tags: ["v*"]
   pull_request:
   # The sync (sync-from-github.yml) dispatches this workflow by name after a
   # fast-forward: a push made with the workflow token does not trigger workflows,
@@ -40,6 +46,11 @@ jobs:
   # Test gate + the decoupled native flags staticlib image, driven by hanzo.yml.
   gate:
     uses: hanzoai/ci/.hanzo/workflows/build.yml@v2
+    with:
+      # Not on a tag: release.go mints v* only after that SHA passed this gate
+      # on main and built and smoked, so a tag build re-tests a proven commit —
+      # and app-contract alone is 108 links. Run it once, not twice.
+      tests: ${{ github.ref_type != 'tag' }}
     secrets: inherit
 
   # Guards the Stage-1 byzantine ceremony containment (clients/controlplane,
