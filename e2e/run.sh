@@ -2,7 +2,7 @@
 # run.sh — boot THIS repo's cloud binary locally and drive it with the real
 # Playwright suite. The whole of `make e2e`.
 #
-#   build (rust staticlib + binary) → boot on isolated ports with a fresh data dir
+#   build the binary → boot on isolated ports with a fresh data dir
 #   → wait for readiness → seed identity → run the specs → tear down
 #
 # Exits non-zero if any step or any spec fails. Needs no cluster, no KMS, no
@@ -86,12 +86,6 @@ done
 [ -d "$SUITE" ] || fail "Playwright suite not found at $SUITE — set SUITE=<path to universe/e2e>"
 
 # ── build ────────────────────────────────────────────────────────────────────
-# cargo lives in ~/.cargo/bin and is not on a default PATH; the staticlib it
-# produces is what makes `go build ./...` succeed repo-wide.
-export PATH="$HOME/.cargo/bin:$PATH"
-command -v cargo >/dev/null || fail "cargo not found — install Rust (the native flags staticlib is required to link)"
-say "building native/flags staticlib"
-make native >/dev/null
 say "building bin/cloud"
 make build >/dev/null
 

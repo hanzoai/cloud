@@ -2,7 +2,7 @@ package flags
 
 // /v1/flags — the product flag API, org-scoped through the gateway principal
 // (HIP-0026) and project-scoped through the principal's project. Evaluation is
-// the embedded native engine over the caller's own SQLite definitions; responses
+// the embedded evaluator over the caller's own SQLite definitions; responses
 // are PostHog-shaped so existing SDK consumers port 1:1.
 
 import (
@@ -41,7 +41,6 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{
 		"ok":     true,
 		"engine": "hanzo-flags",
-		"native": engineAvailable,
 	})
 }
 
@@ -54,9 +53,6 @@ func evaluateFlags(s *cloud.Service[state], c *zip.Ctx) error {
 	org, project, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
-	}
-	if !engineAvailable {
-		return zip.Errorf(http.StatusServiceUnavailable, "native flags engine not built")
 	}
 	var body struct {
 		DistinctID       string          `json:"distinct_id"`
