@@ -38,11 +38,16 @@
 package platform
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -290,17 +295,104 @@ func kmsAuthRef(org, field string) string {
 // fail-closed pending — never a shared reader, never a fabricated credential.
 type kmsOrgIdentity struct {
 	kms cloud.KMSClient
+	// mint provisions the org's dedicated IAM application when the sealed
+	// credential is absent — nil means read-only (no service token configured),
+	// which keeps today's fail-closed pending behavior byte for byte.
+	mint *identityMinter
+}
+
+// identityMinter turns the absent-credential case into a converged one: it calls
+// IAM's idempotent bootstrap upsert (the SAME endpoint the K8s operator uses) to
+// create-or-fetch the org's dedicated `<org>-platform-kms` application, then seals
+// the returned credential at kmsAuthRef so every later call is a pure read. This
+// replaces a runbook: the exact upsert-then-seal sequence was executed by hand
+// once (org hanzo) and is code from then on — the next org needs nothing.
+type identityMinter struct {
+	upsertURL    string // {iam-base}/v1/iam/admin/applications/upsert
+	serviceToken string // the unified service token the upsert self-authenticates with
+	cert         string // signing cert the minted app references ("cert-<brand>");
+	// an app without one exists but cannot SIGN, so its tokens 500 — found live.
+	hc *http.Client
 }
 
 // newKMSOrgIdentity returns the KMS-backed identity provider, or a TRUE nil interface
 // when no KMS plane is wired (deps.KMS absent) so ensureTenantKMSAuth's nil
 // short-circuit still holds. Returning the interface type (not the concrete pointer)
 // keeps the nil an untyped nil interface, which the `kmsIdentity == nil` guard needs.
-func newKMSOrgIdentity(kms cloud.KMSClient) tenantKMSIdentity {
+//
+// Provisioning activates only when BOTH an IAM base and IAM_SERVICE_TOKEN are
+// present; otherwise the provider is read-only and an unprovisioned org stays
+// fail-closed pending, exactly as before.
+func newKMSOrgIdentity(kms cloud.KMSClient, iamIssuer, brand string) tenantKMSIdentity {
 	if kms == nil {
 		return nil
 	}
-	return &kmsOrgIdentity{kms: kms}
+	id := &kmsOrgIdentity{kms: kms}
+	token := strings.TrimSpace(os.Getenv("IAM_SERVICE_TOKEN"))
+	if base := cloud.IAMBaseURL(iamIssuer); base != "" && token != "" {
+		id.mint = &identityMinter{
+			upsertURL:    base + "/v1/iam/admin/applications/upsert",
+			serviceToken: token,
+			cert:         "cert-" + brand,
+			hc:           &http.Client{Timeout: 10 * time.Second},
+		}
+	}
+	return id
+}
+
+// mintOrgIdentity provisions the org's dedicated application and seals its
+// credential. Every failure is an error to the caller — the sync stays pending —
+// and NOTHING is sealed unless IAM answered with exactly the identity asked for:
+// a credential is never fabricated, and a surprise clientId is never trusted.
+func (p *kmsOrgIdentity) mintOrgIdentity(ctx context.Context, org string) (string, string, error) {
+	want := cloud.KMSMachineClientID(org)
+	body, _ := json.Marshal(map[string]any{
+		"organization": org,
+		"name":         want, // the server defaults clientId == name; verified below
+		"grantTypes":   []string{"client_credentials"},
+		"cert":         p.mint.cert,
+		"displayName":  "PaaS KMS sync (" + org + ")",
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.mint.upsertURL, bytes.NewReader(body))
+	if err != nil {
+		return "", "", fmt.Errorf("mint %s: %w", want, err)
+	}
+	req.Header.Set("Authorization", "Bearer "+p.mint.serviceToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := p.mint.hc.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("mint %s: %w", want, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("mint %s: IAM upsert status %d", want, resp.StatusCode)
+	}
+	var out struct {
+		Status string `json:"status"`
+		Data   struct {
+			ClientID     string `json:"clientId"`
+			ClientSecret string `json:"clientSecret"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out); err != nil {
+		return "", "", fmt.Errorf("mint %s: decode: %w", want, err)
+	}
+	if out.Status != "ok" || out.Data.ClientSecret == "" {
+		return "", "", fmt.Errorf("mint %s: IAM refused (status %q)", want, out.Status)
+	}
+	if out.Data.ClientID != want {
+		// The audience contract (auth_identity.go) is aud == clientId ==
+		// "<org>-platform-kms". A different clientId is a different identity;
+		// sealing it would bind this org's sync to something unverified.
+		return "", "", fmt.Errorf("mint %s: IAM returned clientId %q", want, out.Data.ClientID)
+	}
+	if err := p.kms.PutSecret(ctx, kmsAuthRef(org, "clientId"), []byte(out.Data.ClientID)); err != nil {
+		return "", "", fmt.Errorf("seal %s clientId: %w", want, err)
+	}
+	if err := p.kms.PutSecret(ctx, kmsAuthRef(org, "clientSecret"), []byte(out.Data.ClientSecret)); err != nil {
+		return "", "", fmt.Errorf("seal %s clientSecret: %w", want, err)
+	}
+	return out.Data.ClientID, out.Data.ClientSecret, nil
 }
 
 // EnsureOrgIdentity reads the org's provisioned clientId/clientSecret from KMS. It is
@@ -311,7 +403,14 @@ func newKMSOrgIdentity(kms cloud.KMSClient) tenantKMSIdentity {
 func (p *kmsOrgIdentity) EnsureOrgIdentity(ctx context.Context, org string) (string, string, error) {
 	id, err := p.kms.GetSecret(ctx, kmsAuthRef(org, "clientId"))
 	if err != nil {
-		return "", "", fmt.Errorf("no per-tenant KMS credential provisioned for org %q (seal %s): %w", org, kmsAuthRef(org, "clientId"), err)
+		// Absent. With a minter configured this is the one moment provisioning
+		// happens: mint the org's dedicated application at IAM and seal it, so
+		// every later call takes the read path above. Without one, stay
+		// fail-closed pending exactly as before.
+		if p.mint != nil {
+			return p.mintOrgIdentity(ctx, org)
+		}
+		return "", "", fmt.Errorf("no per-tenant KMS credential provisioned for org %q (seal %s, or set IAM_SERVICE_TOKEN to let cloud provision it): %w", org, kmsAuthRef(org, "clientId"), err)
 	}
 	secret, err := p.kms.GetSecret(ctx, kmsAuthRef(org, "clientSecret"))
 	if err != nil {
