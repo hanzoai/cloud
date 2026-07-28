@@ -218,8 +218,21 @@ func TestSignFailsClosedNoMPC(t *testing.T) {
 }
 
 // TestRESTRoundtripOrgScoped: the /v1/kms REST surface upserts + reads a secret
-// for the caller's own org (simulated validated principal), and rejects a
-// cross-org read with 403 — the org-isolation boundary.
+// for the caller's own org (simulated validated principal), and hides another
+// org's secret behind a 404 — the org-isolation boundary.
+//
+// WHY 404 AND NOT 403. The org used to be a path segment that had to equal the
+// caller's, so a mismatch was a FORBIDDEN request for a nameable resource. The org
+// is now read from the validated principal and is UNSPELLABLE in a URL
+// (mount.go reqOrg), and it is folded into a per-org store partition. A caller
+// therefore cannot form a request for another org's secret at all: the request it
+// does form resolves inside its OWN namespace, where the record is simply absent.
+// NOT-FOUND is the correct — and strictly stronger — signal: 403 conceded that the
+// resource existed and merely refused it, which is an existence oracle across
+// tenants (pinned closed by TestVector4_NoCrossOrgExistenceOracle). Every
+// assertion below reads the BODY as well as the status, because after the reshape
+// both tenants spell the identical URL and a status alone cannot distinguish
+// "refused" from "served the caller its own record".
 func TestRESTRoundtripOrgScoped(t *testing.T) {
 	app, _ := newApp(t, baseCfg(t, masterKeyB64(t)))
 
@@ -239,22 +252,50 @@ func TestRESTRoundtripOrgScoped(t *testing.T) {
 		t.Errorf("GET secret value = %q, want hk-abc123", v)
 	}
 
-	// A different org (evil) may NOT read hanzo's secret.
+	// A different org (evil) sends the IDENTICAL request and gets not-found: its
+	// org resolves it into evil's own namespace, which holds nothing. The body
+	// check is the isolation assertion — the status only says "no record here".
 	resp = do(t, app, "GET", "/v1/kms/secrets/API_KEY?env=main", "evil", "", false, nil)
-	if resp.StatusCode != 403 {
-		t.Errorf("cross-org GET = %d, want 403 (org isolation)", resp.StatusCode)
+	if resp.StatusCode != 404 {
+		t.Errorf("cross-org GET = %d, want 404 (org unspellable in URL ⇒ resolves in the "+
+			"caller's own namespace ⇒ not-found, which hides existence rather than confirming it)", resp.StatusCode)
+	}
+	if b := readAll(resp.Body); strings.Contains(b, "hk-abc123") {
+		t.Fatalf("LEAK: cross-org GET returned hanzo's secret: %s", b)
 	}
 
-	// A SuperAdmin may read any org.
+	// A SuperAdmin gets the SAME answer here, and that is the whole point: this
+	// harness omits SanitizeIdentity, so `admin`+isAdmin is just an org header, and
+	// there is no URL in which an admin can name another org.
+	//
+	// DECISION PENDING — the admin cross-org READ was not deleted, it MOVED. This
+	// line used to assert 200 via URL traversal (/v1/kms/orgs/{org}/…), a route
+	// that no longer exists. The capability survives on the identity instead:
+	// SanitizeIdentity's SuperAdmin arm honors X-Org-Id as the effective org
+	// (middleware_identity.go `effOrg = cliOrg`), gated on membership of the
+	// reserved admin org AND !isMachinePrincipal. That claim-bound org-switch is
+	// pinned end-to-end, WITH the switched-into tenant's plaintext asserted, by
+	// TestRedIso_C_AdminCrossOrg. Flagged for z: keep the org-switch as the one
+	// admin impersonation path (current behavior), or remove platform sudo from
+	// KMS entirely? Until that is answered this asserts what the code does.
 	resp = do(t, app, "GET", "/v1/kms/secrets/API_KEY?env=main", "admin", "", true, nil)
-	if resp.StatusCode != 200 {
-		t.Errorf("admin cross-org GET = %d, want 200", resp.StatusCode)
+	if resp.StatusCode != 404 {
+		t.Errorf("admin cross-org GET = %d, want 404 (no URL names an org, admin or not; "+
+			"the retained admin path is the claim-bound org-switch — see TestRedIso_C_AdminCrossOrg)", resp.StatusCode)
+	}
+	if b := readAll(resp.Body); strings.Contains(b, "hk-abc123") {
+		t.Fatalf("LEAK: admin URL-traversal GET returned hanzo's secret: %s", b)
 	}
 
-	// An unauthenticated caller (no org, not admin) is refused.
+	// An unauthenticated caller (no principal) is refused BEFORE the store is
+	// touched — 403, distinct from the 404 above, because the failure is the
+	// credential, not the coordinate.
 	resp = do(t, app, "GET", "/v1/kms/secrets/API_KEY?env=main", "", "", false, nil)
 	if resp.StatusCode != 403 {
 		t.Errorf("anonymous GET = %d, want 403", resp.StatusCode)
+	}
+	if b := readAll(resp.Body); strings.Contains(b, "hk-abc123") {
+		t.Fatalf("LEAK: anonymous GET returned hanzo's secret: %s", b)
 	}
 }
 

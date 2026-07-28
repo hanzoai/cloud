@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -132,6 +133,15 @@ func getWithBearer(t *testing.T, app *zip.App, path, token string) *http.Respons
 	return resp
 }
 
+// TestPaaSSyncMachineTokenEndToEnd drives the real signed-token pipeline.
+//
+// THE PATH NO LONGER NAMES A TENANT, so "acme's path" and "maxpower's path" are one
+// string and every cross-tenant assertion here has to be made on the VALUE returned,
+// not the status. Both orgs are therefore seeded at the identical coordinate with
+// distinct plaintexts: whichever string comes back names the org that was actually
+// served, which is the only unambiguous evidence of scope. A cross-tenant attempt
+// answers 404 (or the caller's own record), never 403 — the caller cannot express a
+// request for another tenant's secret, so there is nothing to forbid.
 func TestPaaSSyncMachineTokenEndToEnd(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -155,11 +165,30 @@ func TestPaaSSyncMachineTokenEndToEnd(t *testing.T) {
 		t.Fatalf("read value=%v, want the sealed secret", got)
 	}
 
-	// (2) Cross-tenant: acme's REAL machine token cannot read maxpower's secret → 403.
-	// SanitizeIdentity pins owner=acme from the signed claim; the guard denies.
+	// (2) Cross-tenant: acme's REAL machine token, at the SAME URL, gets acme's own
+	// namespace — empty — and never maxpower's plaintext. SanitizeIdentity pins
+	// owner=acme from the signed claim, so the coordinate resolves under acme.
 	cross := mintMachineToken(t, key, paasOrgB, paasOrgB+"-platform-kms", future) // paasOrgB == "acme"
-	if resp := getWithBearer(t, app, aPath, cross); resp.StatusCode != 403 {
-		t.Fatalf("cross-tenant machine token (acme→maxpower) = %d, want 403", resp.StatusCode)
+	resp := getWithBearer(t, app, aPath, cross)
+	if resp.StatusCode != 404 {
+		t.Fatalf("cross-tenant machine token (acme at maxpower's URL) = %d, want 404 "+
+			"(the org rides on the token, so acme's request resolves inside acme)", resp.StatusCode)
+	}
+	if b := readAll(resp.Body); strings.Contains(b, paasValueA) {
+		t.Fatalf("LEAK: acme's machine token received maxpower's secret: %s", b)
+	}
+
+	// (2b) Give acme its OWN secret at the identical coordinate and re-issue the
+	// byte-identical request: each machine token must receive its own tenant's
+	// plaintext. This is the assertion a status-only check cannot make, and the one
+	// that fails if the per-org partition ever breaks.
+	const valueB = "s3kr3t-of-acme-e2e"
+	sealPlatformSecret(t, deps.KMS, paasOrgB, valueB)
+	if got := decode(t, getWithBearer(t, app, aPath, cross).Body)["value"]; got != valueB {
+		t.Fatalf("PARTITION BREAK: acme's token read %v, want %q", got, valueB)
+	}
+	if got := decode(t, getWithBearer(t, app, aPath, own).Body)["value"]; got != paasValueA {
+		t.Fatalf("PARTITION BREAK: maxpower's token read %v, want %q", got, paasValueA)
 	}
 
 	// (3) Audience is not a gate: a token with a brand-new, never-registered aud still
@@ -169,11 +198,19 @@ func TestPaaSSyncMachineTokenEndToEnd(t *testing.T) {
 		t.Fatalf("never-registered aud reading OWN org = %d, want 200 (aud is not a gate)", resp.StatusCode)
 	}
 
-	// (4) …and the aud still cannot cross tenants: owner=maxpower bearing acme's machine
-	// aud reading ACME's path is denied by owner-scope → 403 (owner governs, not aud).
-	bPath := "/v1/kms" + paasEnvPath
-	if resp := getWithBearer(t, app, bPath, mintMachineToken(t, key, paasOrgA, paasOrgB+"-platform-kms", future)); resp.StatusCode != 403 {
-		t.Fatalf("owner=maxpower token reading acme path = %d, want 403 (owner scopes, not aud)", resp.StatusCode)
+	// (4) …and the aud still cannot cross tenants. Carrying the VICTIM's machine aud
+	// is the sharpest form of the attack, and the answer is decided entirely by the
+	// owner claim: maxpower bearing ACME's machine aud is served MAXPOWER's value.
+	// The status is 200 either way, so only the value distinguishes "owner governs"
+	// from "aud widened reach" — which is why this assertion is on the body.
+	audCross := mintMachineToken(t, key, paasOrgA, paasOrgB+"-platform-kms", future)
+	if got := decode(t, getWithBearer(t, app, aPath, audCross).Body)["value"]; got != paasValueA {
+		t.Fatalf("AUD WIDENED REACH: owner=maxpower bearing acme's machine aud read %v, want %q "+
+			"(owner scopes, not aud)", got, paasValueA)
+	}
+	audCrossB := mintMachineToken(t, key, paasOrgB, paasOrgA+"-platform-kms", future)
+	if got := decode(t, getWithBearer(t, app, aPath, audCrossB).Body)["value"]; got != valueB {
+		t.Fatalf("AUD WIDENED REACH: owner=acme bearing maxpower's machine aud read %v, want %q", got, valueB)
 	}
 
 	// (5) An expired machine token is anonymous → 403 (fail closed on expiry).

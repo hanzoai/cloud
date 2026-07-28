@@ -45,31 +45,67 @@ func TestVector1_OrgCaseFoldCollision(t *testing.T) {
 	t.Logf("cross-case GET blocked with status=%d (breach requires IAM to issue case-distinct owners)", resp.StatusCode)
 }
 
-// TestVector1b: the guard is EXACT-match (==), NOT EqualFold — so a tenant whose
-// validated owner is "AcmeCorp" is REFUSED on any casing-mismatched :org param
-// (403), because the store path keys on :org verbatim and a case-insensitive
-// authz check would let "Acme" reach "acme"'s namespace. Confirm the exact-match
-// closes the split-namespace hazard: a lowercased :org for a mixed-case owner is
-// denied outright (not silently split into a second bucket).
+// TestVector1b: case-distinct owners are DISTINCT TENANTS, end to end.
+//
+// The hazard this vector names — "Acme" reaching "acme"'s namespace — used to live
+// in the guard, which compared a caller's owner against an :org PATH PARAM and so
+// had to get the comparison's case-sensitivity exactly right. That comparison is
+// gone: there is no :org to mismatch, and the org folded into the store path is the
+// caller's own, taken VERBATIM (never lowercased — principal.Org, mount.go orgPath).
+//
+// The hazard did not vanish with it, it MOVED DOWN a layer: two case-distinct
+// owners must still land on two different store partitions, or the fold itself
+// re-creates the collision with no forged header required. cloud.SanitizeOrg is the
+// injective map that closes it (a non-lowercase owner is not the identity — it gets
+// a SHA-256-derived suffix — so "AcmeCorp" and "acmecorp" never share a file). So
+// this test now asserts the PROPERTY (distinct tenants, distinct data) rather than
+// the old mechanism's 403, and it asserts VALUES: the only honest evidence that two
+// namespaces are separate is that each caller gets its own bytes.
 func TestVector1b_ExactOrgMatchNoSplit(t *testing.T) {
 	app, _ := newApp(t, baseCfg(t, masterKeyB64(t)))
 	const owner = "AcmeCorp"
+	const lower = "acmecorp"
 
-	// Owner uses its exact casing — allowed.
+	// Mixed-case owner writes in its own namespace.
 	body, _ := json.Marshal(map[string]string{"name": "K", "value": "written-mixedcase", "env": "default"})
 	if r := do(t, app, "POST", "/v1/kms/secrets", owner, string(body), false, nil); r.StatusCode != 200 {
 		t.Fatalf("POST exact-case = %d, want 200", r.StatusCode)
 	}
-	// Same owner, lowercased :org — EXACT match fails → 403. No second bucket.
+	// …and reads it back. There is no casing to mismatch: the org came from the
+	// principal, so the write and the read address one namespace by construction.
 	r := do(t, app, "GET", "/v1/kms/secrets/K", owner, "", false, nil)
-	if r.StatusCode != 403 {
-		t.Fatalf("BREACH: lowercased :org for owner %q = %d, want 403 (exact-match guard)", owner, r.StatusCode)
+	if r.StatusCode != 200 {
+		t.Fatalf("owner %q reading its OWN secret = %d, want 200", owner, r.StatusCode)
 	}
-	r = do(t, app, "POST", "/v1/kms/secrets", owner, string(body), false, nil)
-	if r.StatusCode != 403 {
-		t.Fatalf("BREACH: owner %q could write a lowercased bucket = %d, want 403", owner, r.StatusCode)
+	if v, _ := decode(t, r.Body)["value"].(string); v != "written-mixedcase" {
+		t.Fatalf("owner %q read %q, want its own value", owner, v)
 	}
-	t.Logf("exact-match guard: owner %q cannot touch /orgs/acmecorp (403) — no case-split namespace", owner)
+
+	// THE ATTACK: a SEPARATE tenant whose owner is the lowercase spelling issues the
+	// identical request. It must see its own (empty) namespace — never the
+	// mixed-case tenant's record.
+	r = do(t, app, "GET", "/v1/kms/secrets/K", lower, "", false, nil)
+	if r.StatusCode != 404 {
+		t.Fatalf("CASE-FOLD BREACH: tenant %q reading tenant %q's coordinate = %d, want 404 "+
+			"(distinct owners must be distinct namespaces)", lower, owner, r.StatusCode)
+	}
+	if b := readAll(r.Body); strings.Contains(b, "written-mixedcase") {
+		t.Fatalf("CASE-FOLD BREACH: tenant %q received tenant %q's value: %s", lower, owner, b)
+	}
+
+	// The converse: the lowercase tenant's own write must not overwrite or shadow
+	// the mixed-case tenant's record at the same coordinate.
+	lowBody, _ := json.Marshal(map[string]string{"name": "K", "value": "written-lowercase", "env": "default"})
+	if r := do(t, app, "POST", "/v1/kms/secrets", lower, string(lowBody), false, nil); r.StatusCode != 200 {
+		t.Fatalf("POST lowercase tenant = %d, want 200", r.StatusCode)
+	}
+	for _, tc := range []struct{ org, want string }{{owner, "written-mixedcase"}, {lower, "written-lowercase"}} {
+		got, _ := decode(t, do(t, app, "GET", "/v1/kms/secrets/K", tc.org, "", false, nil).Body)["value"].(string)
+		if got != tc.want {
+			t.Fatalf("CASE-FOLD BREACH: tenant %q read %q, want %q (namespaces collided)", tc.org, got, tc.want)
+		}
+	}
+	t.Logf("case-distinct owners %q and %q hold distinct records — SanitizeOrg fold is injective", owner, lower)
 }
 
 // ── VECTOR 2: AAD relocation — name-only DEK-wrap AAD ──────────────────────────
@@ -227,10 +263,17 @@ func TestDeepB_SiblingOrgListPrefix(t *testing.T) {
 	t.Logf("no sibling prefix leak: org x sees exactly its own secret")
 }
 
-// TestDeepC: does the REST list endpoint honor the org guard for a sibling-prefix
-// attacker? Attacker org "x" tries to list victim "xy" by exploiting that "x" is
-// a string-prefix of "xy" — but the guard is EXACT (==), so :org=xy with org=x
-// caller is 403, and :org=x only lists /orgs/x.
+// TestDeepC: does the REST list endpoint leak to a sibling-prefix attacker?
+// Attacker org "x" wants victim "xy"'s secret names, exploiting that "x" is a
+// string-prefix of "xy".
+//
+// The old escalation route — naming :org=xy in the URL — is gone, so the attacker
+// can only list, and the list it gets is whatever its OWN org resolves to. The
+// question therefore stops being "what STATUS does a cross-org list get" (it is a
+// perfectly ordinary 200 for the attacker's own org) and becomes "what is IN it".
+// That is the only assertion that can still catch a prefix leak, so the check moved
+// from the status to the CONTENTS: org "x" must see exactly its own records, and
+// never a name belonging to "xy".
 func TestDeepC_RESTListNoPrefixEscalation(t *testing.T) {
 	app, _ := newApp(t, baseCfg(t, masterKeyB64(t)))
 	// victim xy stores a secret.
@@ -238,17 +281,35 @@ func TestDeepC_RESTListNoPrefixEscalation(t *testing.T) {
 	if r := do(t, app, "POST", "/v1/kms/secrets", "xy", string(body), false, nil); r.StatusCode != 200 {
 		t.Fatalf("seed = %d", r.StatusCode)
 	}
-	// attacker "x" tries to list xy → 403 (exact org mismatch).
+	// attacker "x" lists — it can only ever list /orgs/x, and that is empty.
 	r := do(t, app, "GET", "/v1/kms/secrets", "x", "", false, nil)
-	if r.StatusCode != 403 {
-		t.Fatalf("BREACH: prefix-attacker x listed xy = %d, want 403", r.StatusCode)
+	if r.StatusCode != 200 {
+		t.Fatalf("prefix-attacker listing its OWN org = %d, want 200", r.StatusCode)
 	}
-	// attacker "x" lists its OWN org with a crafted ?path= trying to climb — validSubpath blocks "..".
+	listed := readAll(r.Body)
+	if strings.Contains(listed, "VICT") {
+		t.Fatalf("PREFIX BREACH: org x's list surfaced victim xy's secret name: %s", listed)
+	}
+	if !strings.Contains(listed, `"total":0`) {
+		t.Fatalf("PREFIX BREACH: org x's list is not empty: %s", listed)
+	}
+	// The victim still sees its own — the empty list above is isolation, not a
+	// broken endpoint.
+	if v := readAll(do(t, app, "GET", "/v1/kms/secrets", "xy", "", false, nil).Body); !strings.Contains(v, "VICT") {
+		t.Fatalf("victim xy cannot see its OWN secret: %s", v)
+	}
+	// attacker "x" lists its OWN org with a crafted ?path= trying to climb — ValidSubpath blocks "..".
 	r = do(t, app, "GET", "/v1/kms/secrets?path=../xy", "x", "", false, nil)
 	if r.StatusCode != 400 {
 		t.Fatalf("BREACH: ?path=../xy climb = %d, want 400", r.StatusCode)
 	}
-	t.Logf("REST list: prefix-attacker blocked (403 cross-org, 400 on ?path climb)")
+	// …and a climb-free subpath naming the victim lands strictly UNDER x
+	// (/orgs/x/xy), because orgPath prefixes the caller's org unconditionally.
+	r = do(t, app, "GET", "/v1/kms/secrets?path=xy", "x", "", false, nil)
+	if v := readAll(r.Body); r.StatusCode != 200 || strings.Contains(v, "VICT") {
+		t.Fatalf("PREFIX BREACH: ?path=xy reached the victim: %d %s", r.StatusCode, v)
+	}
+	t.Logf("REST list: prefix-attacker sees only its own namespace (400 on ?path climb, empty otherwise)")
 }
 
 // TestDeepD: legitimate same-org, same-name, DIFFERENT-path relocation. Because
@@ -274,12 +335,21 @@ func TestDeepD_IntraOrgPathBinding(t *testing.T) {
 	}
 }
 
-// ── VECTOR 4: enumeration oracle — 404 vs 403 vs 503 across orgs ───────────────
+// ── VECTOR 4: enumeration oracle — is any answer different across orgs? ────────
 //
-// Does the response code distinguish "secret exists in another org" from "does
-// not exist"? The guard 403s a cross-org caller BEFORE the store is touched, so
-// existence should be indistinguishable. Probe: cross-org GET of an existing vs
-// non-existing secret must return the SAME status (403), leaking nothing.
+// Does the response distinguish "this secret NAME exists in another org" from "it
+// exists nowhere"? If it does, an attacker enumerates every tenant's key names for
+// free. The two probes must be INDISTINGUISHABLE.
+//
+// The uniform answer is now 404, not 403, and the change is a strengthening rather
+// than a regression. 403 was only ever safe here because the guard refused before
+// touching the store — it was a promise about ORDER OF OPERATIONS, and any future
+// handler that read first would have re-opened the oracle. The reshape replaces
+// that promise with a structural fact: the attacker's org is folded into the
+// coordinate, so its probe addresses ITS OWN namespace and the store honestly
+// answers "not here". There is nothing left for the response to be a function of
+// except the attacker's own data. Bodies are compared too, not just codes — a
+// differing error string is an oracle exactly as much as a differing status.
 func TestVector4_NoCrossOrgExistenceOracle(t *testing.T) {
 	app, _ := newApp(t, baseCfg(t, masterKeyB64(t)))
 
@@ -289,19 +359,26 @@ func TestVector4_NoCrossOrgExistenceOracle(t *testing.T) {
 		t.Fatalf("seed = %d", r.StatusCode)
 	}
 
-	// attacker org probes an EXISTING secret in victim's org.
+	// attacker org probes a name that EXISTS in the victim's org.
 	rExist := do(t, app, "GET", "/v1/kms/secrets/REAL", "attacker", "", false, nil)
-	// attacker org probes a NON-EXISTING secret in victim's org.
+	bExist := readAll(rExist.Body)
+	// attacker org probes a name that exists NOWHERE.
 	rMiss := do(t, app, "GET", "/v1/kms/secrets/NOPE", "attacker", "", false, nil)
+	bMiss := readAll(rMiss.Body)
 
-	if rExist.StatusCode != rMiss.StatusCode {
-		t.Fatalf("EXISTENCE ORACLE: existing→%d vs missing→%d differ (attacker learns victim's keys)",
-			rExist.StatusCode, rMiss.StatusCode)
+	if rExist.StatusCode != rMiss.StatusCode || bExist != bMiss {
+		t.Fatalf("EXISTENCE ORACLE: existing→(%d %s) vs missing→(%d %s) differ (attacker learns victim's key names)",
+			rExist.StatusCode, bExist, rMiss.StatusCode, bMiss)
 	}
-	if rExist.StatusCode != 403 {
-		t.Errorf("cross-org probe status=%d, want 403 (touch store only after authz)", rExist.StatusCode)
+	if rExist.StatusCode != 404 {
+		t.Errorf("cross-org probe status=%d, want 404 (the org is unspellable, so the probe resolves "+
+			"in the attacker's own namespace — existence elsewhere is not merely refused, it is unobservable)",
+			rExist.StatusCode)
 	}
-	t.Logf("no existence oracle: both cross-org probes = %d", rExist.StatusCode)
+	if strings.Contains(bExist, `"v"`) {
+		t.Fatalf("LEAK: cross-org probe echoed the victim's value: %s", bExist)
+	}
+	t.Logf("no existence oracle: both cross-org probes = %d %s", rExist.StatusCode, bExist)
 }
 
 // ── VECTOR 7: input validation at the boundary ─────────────────────────────────
