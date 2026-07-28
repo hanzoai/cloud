@@ -1,1241 +1,1401 @@
 [
- {
-  "slug": "synapse",
-  "title": "Synapse",
-  "category": "AI/SaaS",
-  "description": "Modern AI SaaS platform with chat, audio/video processing, and photo editing capabilities.",
-  "framework": "Next.js 14.2 + TS",
-  "features": [
-   "AI Chat",
-   "Audio/Video",
-   "Photo Edit",
-   "Pricing",
-   "Responsive"
-  ],
-  "useCase": "AI SaaS platforms",
-  "tier": 1,
-  "rating": 5,
-  "source": "https://gallery.hanzo.ai/templates/synapse",
-  "preview": "https://gallery.hanzo.ai/screenshots/synapse.png",
-  "demo": "https://synapse.hanzo.app"
- },
- {
-  "slug": "circle",
-  "title": "Circle",
-  "category": "Social Media",
-  "description": "",
-  "framework": "Next.js 14.2 + TS",
-  "features": [
-   "Posts",
-   "Messages",
-   "Profiles",
-   "Notifications",
-   "Responsive"
-  ],
-  "useCase": "Social media platforms",
-  "tier": 1,
-  "rating": 5,
-  "source": "https://gallery.hanzo.ai/templates/circle",
-  "preview": "https://gallery.hanzo.ai/screenshots/circle.png"
- },
- {
-  "slug": "metrics",
-  "title": "Metrics",
-  "category": "Dashboard",
-  "description": "",
-  "framework": "Next.js 13.3 + TS",
-  "features": [
-   "Analytics",
-   "CRM",
-   "Finance",
-   "Projects",
-   "Responsive"
-  ],
-  "useCase": "Admin dashboards",
-  "tier": 1,
-  "rating": 5,
-  "source": "https://gallery.hanzo.ai/templates/metrics",
-  "preview": "https://gallery.hanzo.ai/screenshots/metrics.png",
-  "demo": "https://metrics-template.hanzo.app"
- },
- {
-  "slug": "kinetic",
-  "title": "Kinetic",
-  "category": "Portfolio",
-  "description": "",
-  "framework": "Next.js 14.2 + TS",
-  "features": [
-   "GSAP",
-   "Smooth Scroll",
-   "Portfolio",
-   "Modern"
-  ],
-  "useCase": "Creative portfolios",
-  "tier": 1,
-  "rating": 5,
-  "source": "https://gallery.hanzo.ai/templates/kinetic",
-  "preview": "https://gallery.hanzo.ai/screenshots/kinetic.png",
-  "demo": "https://canvas.hanzo.app"
- },
- {
-  "slug": "quantum",
-  "title": "Quantum",
-  "category": "SaaS",
-  "description": "",
-  "framework": "Next.js 14.1",
-  "features": [
-   "Framer Motion",
-   "Landing",
-   "Modern",
-   "Responsive"
-  ],
-  "useCase": "SaaS landing pages",
-  "tier": 1,
-  "rating": 5,
-  "source": "https://gallery.hanzo.ai/templates/quantum",
-  "preview": "https://gallery.hanzo.ai/screenshots/quantum.png"
- },
- {
-  "slug": "blocks",
-  "title": "Blocks",
-  "category": "Component Library",
-  "description": "",
-  "framework": "Next.js 14 + shadcn",
-  "features": [
-   "shadcn/ui",
-   "Blocks",
-   "Components",
-   "Responsive"
-  ],
-  "useCase": "shadcn component library",
-  "tier": 1,
-  "rating": 5,
-  "source": "https://gallery.hanzo.ai/templates/blocks",
-  "preview": "https://gallery.hanzo.ai/screenshots/blocks.png",
-  "demo": "https://forge.hanzo.app"
- },
- {
-  "slug": "savor",
-  "title": "Savor",
-  "category": "E-commerce",
-  "description": "",
-  "framework": "Next.js 14.2 + TS",
-  "features": [
-   "Food",
-   "Delivery",
-   "Orders",
-   "Responsive"
-  ],
-  "useCase": "Food delivery apps",
-  "tier": 1,
-  "rating": 5,
-  "source": "https://gallery.hanzo.ai/templates/savor",
-  "preview": "https://gallery.hanzo.ai/screenshots/savor.png",
-  "demo": "https://savor.hanzo.app"
- },
- {
-  "slug": "mint",
-  "title": "Mint",
-  "category": "Portfolio",
-  "description": "",
-  "framework": "Next.js 14 + TS",
-  "features": [
-   "Portfolio",
-   "Creative",
-   "Modern",
-   "Responsive"
-  ],
-  "useCase": "Creative portfolios",
-  "tier": 1,
-  "rating": 5,
-  "source": "https://gallery.hanzo.ai/templates/mint",
-  "preview": "https://gallery.hanzo.ai/screenshots/mint.png",
-  "demo": "https://mint.hanzo.app"
- },
- {
-  "slug": "matrix",
-  "title": "Matrix",
-  "category": "Bento Cards",
-  "description": "",
-  "framework": "Next.js 14.2 + TS",
-  "features": [
-   "Bento Layout",
-   "AI Theme",
-   "Next.js",
-   "Responsive"
-  ],
-  "useCase": "AI-focused bento card layouts",
-  "tier": 1,
-  "rating": 5,
-  "source": "https://gallery.hanzo.ai/templates/matrix",
-  "preview": "https://gallery.hanzo.ai/screenshots/matrix.png",
-  "demo": "https://matrix.hanzo.app",
-  "variants": [
-   {
-    "id": "default",
-    "label": "Default",
-    "kind": "format",
-    "source": "https://gallery.hanzo.ai/templates/matrix"
-   },
-   {
-    "id": "react",
-    "label": "React",
-    "kind": "format",
-    "framework": "React 18",
-    "source": "https://gallery.hanzo.ai/templates/matrix-react"
-   }
-  ]
- },
- {
-  "slug": "mosaic",
-  "title": "Mosaic",
-  "category": "Bento Cards",
-  "description": "",
-  "framework": "Next.js 14.2 + TS",
-  "features": [
-   "Bento Layout",
-   "Multipurpose",
-   "Next.js",
-   "Responsive"
-  ],
-  "useCase": "General purpose bento card layouts",
-  "tier": 1,
-  "rating": 5,
-  "source": "https://gallery.hanzo.ai/templates/mosaic",
-  "preview": "https://gallery.hanzo.ai/screenshots/mosaic.png",
-  "demo": "https://mosaic.hanzo.app",
-  "variants": [
-   {
-    "id": "default",
-    "label": "Default",
-    "kind": "format",
-    "source": "https://gallery.hanzo.ai/templates/mosaic"
-   },
-   {
-    "id": "react",
-    "label": "React",
-    "kind": "format",
+  {
+    "slug": "synapse",
+    "title": "Synapse",
+    "category": "AI/SaaS",
+    "description": "Modern AI SaaS platform with chat, audio/video processing, and photo editing capabilities.",
+    "framework": "Next.js 14.2 + TS",
+    "features": [
+      "AI Chat",
+      "Audio/Video",
+      "Photo Edit",
+      "Pricing",
+      "Responsive"
+    ],
+    "useCase": "AI SaaS platforms",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://gallery.hanzo.ai/templates/synapse",
+    "preview": "https://gallery.hanzo.ai/screenshots/synapse.png",
+    "demo": "https://synapse.hanzo.app"
+  },
+  {
+    "slug": "circle",
+    "title": "Circle",
+    "category": "Social Media",
+    "description": "",
+    "framework": "Next.js 14.2 + TS",
+    "features": [
+      "Posts",
+      "Messages",
+      "Profiles",
+      "Notifications",
+      "Responsive"
+    ],
+    "useCase": "Social media platforms",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://gallery.hanzo.ai/templates/circle",
+    "preview": "https://gallery.hanzo.ai/screenshots/circle.png"
+  },
+  {
+    "slug": "metrics",
+    "title": "Metrics",
+    "category": "Dashboard",
+    "description": "",
+    "framework": "Next.js 13.3 + TS",
+    "features": [
+      "Analytics",
+      "CRM",
+      "Finance",
+      "Projects",
+      "Responsive"
+    ],
+    "useCase": "Admin dashboards",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://gallery.hanzo.ai/templates/metrics",
+    "preview": "https://gallery.hanzo.ai/screenshots/metrics.png",
+    "demo": "https://metrics-template.hanzo.app"
+  },
+  {
+    "slug": "kinetic",
+    "title": "Kinetic",
+    "category": "Portfolio",
+    "description": "",
+    "framework": "Next.js 14.2 + TS",
+    "features": [
+      "GSAP",
+      "Smooth Scroll",
+      "Portfolio",
+      "Modern"
+    ],
+    "useCase": "Creative portfolios",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://gallery.hanzo.ai/templates/kinetic",
+    "preview": "https://gallery.hanzo.ai/screenshots/kinetic.png",
+    "demo": "https://canvas.hanzo.app"
+  },
+  {
+    "slug": "quantum",
+    "title": "Quantum",
+    "category": "SaaS",
+    "description": "",
+    "framework": "Next.js 14.1",
+    "features": [
+      "Framer Motion",
+      "Landing",
+      "Modern",
+      "Responsive"
+    ],
+    "useCase": "SaaS landing pages",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://gallery.hanzo.ai/templates/quantum",
+    "preview": "https://gallery.hanzo.ai/screenshots/quantum.png"
+  },
+  {
+    "slug": "blocks",
+    "title": "Blocks",
+    "category": "Component Library",
+    "description": "",
+    "framework": "Next.js 14 + shadcn",
+    "features": [
+      "shadcn/ui",
+      "Blocks",
+      "Components",
+      "Responsive"
+    ],
+    "useCase": "shadcn component library",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://gallery.hanzo.ai/templates/blocks",
+    "preview": "https://gallery.hanzo.ai/screenshots/blocks.png",
+    "demo": "https://forge.hanzo.app"
+  },
+  {
+    "slug": "savor",
+    "title": "Savor",
+    "category": "E-commerce",
+    "description": "",
+    "framework": "Next.js 14.2 + TS",
+    "features": [
+      "Food",
+      "Delivery",
+      "Orders",
+      "Responsive"
+    ],
+    "useCase": "Food delivery apps",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://gallery.hanzo.ai/templates/savor",
+    "preview": "https://gallery.hanzo.ai/screenshots/savor.png",
+    "demo": "https://savor.hanzo.app"
+  },
+  {
+    "slug": "mint",
+    "title": "Mint",
+    "category": "Portfolio",
+    "description": "",
+    "framework": "Next.js 14 + TS",
+    "features": [
+      "Portfolio",
+      "Creative",
+      "Modern",
+      "Responsive"
+    ],
+    "useCase": "Creative portfolios",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://gallery.hanzo.ai/templates/mint",
+    "preview": "https://gallery.hanzo.ai/screenshots/mint.png",
+    "demo": "https://mint.hanzo.app"
+  },
+  {
+    "slug": "matrix",
+    "title": "Matrix",
+    "category": "Bento Cards",
+    "description": "",
+    "framework": "Next.js 14.2 + TS",
+    "features": [
+      "Bento Layout",
+      "AI Theme",
+      "Next.js",
+      "Responsive"
+    ],
+    "useCase": "AI-focused bento card layouts",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://gallery.hanzo.ai/templates/matrix",
+    "preview": "https://gallery.hanzo.ai/screenshots/matrix.png",
+    "demo": "https://matrix.hanzo.app",
+    "variants": [
+      {
+        "id": "default",
+        "label": "Default",
+        "kind": "format",
+        "source": "https://gallery.hanzo.ai/templates/matrix"
+      },
+      {
+        "id": "react",
+        "label": "React",
+        "kind": "format",
+        "framework": "React 18",
+        "source": "https://gallery.hanzo.ai/templates/matrix-react"
+      }
+    ]
+  },
+  {
+    "slug": "mosaic",
+    "title": "Mosaic",
+    "category": "Bento Cards",
+    "description": "",
+    "framework": "Next.js 14.2 + TS",
+    "features": [
+      "Bento Layout",
+      "Multipurpose",
+      "Next.js",
+      "Responsive"
+    ],
+    "useCase": "General purpose bento card layouts",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://gallery.hanzo.ai/templates/mosaic",
+    "preview": "https://gallery.hanzo.ai/screenshots/mosaic.png",
+    "demo": "https://mosaic.hanzo.app",
+    "variants": [
+      {
+        "id": "default",
+        "label": "Default",
+        "kind": "format",
+        "source": "https://gallery.hanzo.ai/templates/mosaic"
+      },
+      {
+        "id": "react",
+        "label": "React",
+        "kind": "format",
+        "framework": "React 18 + CRA",
+        "source": "https://gallery.hanzo.ai/templates/mosaic-react"
+      }
+    ]
+  },
+  {
+    "slug": "prism",
+    "title": "Prism",
+    "category": "Portfolio",
+    "description": "",
+    "framework": "HTML/SCSS + GSAP",
+    "features": [
+      "GSAP",
+      "Portfolio",
+      "Agency",
+      "Responsive"
+    ],
+    "useCase": "Creative agencies",
+    "tier": 3,
+    "rating": 3,
+    "source": "https://gallery.hanzo.ai/templates/prism",
+    "preview": "https://gallery.hanzo.ai/screenshots/prism.png",
+    "variants": [
+      {
+        "id": "default",
+        "label": "Default",
+        "kind": "format",
+        "source": "https://gallery.hanzo.ai/templates/prism"
+      },
+      {
+        "id": "html",
+        "label": "HTML",
+        "kind": "format",
+        "framework": "HTML/Gulp",
+        "source": "https://gallery.hanzo.ai/templates/prism-html"
+      },
+      {
+        "id": "react",
+        "label": "React",
+        "kind": "format",
+        "framework": "React 18 + Vite",
+        "source": "https://gallery.hanzo.ai/templates/prism-react"
+      }
+    ],
+    "demo": "https://edge.hanzo.app"
+  },
+  {
+    "slug": "soar",
+    "title": "Soar",
+    "category": "Fitness",
+    "description": "",
     "framework": "React 18 + CRA",
-    "source": "https://gallery.hanzo.ai/templates/mosaic-react"
-   }
-  ]
- },
- {
-  "slug": "prism",
-  "title": "Prism",
-  "category": "Portfolio",
-  "description": "",
-  "framework": "HTML/SCSS + GSAP",
-  "features": [
-   "GSAP",
-   "Portfolio",
-   "Agency",
-   "Responsive"
-  ],
-  "useCase": "Creative agencies",
-  "tier": 3,
-  "rating": 3,
-  "source": "https://gallery.hanzo.ai/templates/prism",
-  "preview": "https://gallery.hanzo.ai/screenshots/prism.png",
-  "variants": [
-   {
-    "id": "default",
-    "label": "Default",
-    "kind": "format",
-    "source": "https://gallery.hanzo.ai/templates/prism"
-   },
-   {
-    "id": "html",
-    "label": "HTML",
-    "kind": "format",
+    "features": [
+      "Fitness",
+      "Booking",
+      "Classes",
+      "Responsive"
+    ],
+    "useCase": "Fitness/wellness apps",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/soar",
+    "preview": "https://gallery.hanzo.ai/screenshots/soar.png",
+    "variants": [
+      {
+        "id": "default",
+        "label": "Default",
+        "kind": "format",
+        "source": "https://gallery.hanzo.ai/templates/soar"
+      },
+      {
+        "id": "html",
+        "label": "HTML",
+        "kind": "format",
+        "framework": "HTML/Gulp",
+        "source": "https://gallery.hanzo.ai/templates/soar-html"
+      }
+    ]
+  },
+  {
+    "slug": "cipher",
+    "title": "Cipher",
+    "category": "Dashboard",
+    "description": "",
     "framework": "HTML/Gulp",
-    "source": "https://gallery.hanzo.ai/templates/prism-html"
-   },
-   {
-    "id": "react",
-    "label": "React",
-    "kind": "format",
-    "framework": "React 18 + Vite",
-    "source": "https://gallery.hanzo.ai/templates/prism-react"
-   }
-  ],
-  "demo": "https://edge.hanzo.app"
- },
- {
-  "slug": "soar",
-  "title": "Soar",
-  "category": "Fitness",
-  "description": "",
-  "framework": "React 18 + CRA",
-  "features": [
-   "Fitness",
-   "Booking",
-   "Classes",
-   "Responsive"
-  ],
-  "useCase": "Fitness/wellness apps",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/soar",
-  "preview": "https://gallery.hanzo.ai/screenshots/soar.png",
-  "variants": [
-   {
-    "id": "default",
-    "label": "Default",
-    "kind": "format",
-    "source": "https://gallery.hanzo.ai/templates/soar"
-   },
-   {
-    "id": "html",
-    "label": "HTML",
-    "kind": "format",
-    "framework": "HTML/Gulp",
-    "source": "https://gallery.hanzo.ai/templates/soar-html"
-   }
-  ]
- },
- {
-  "slug": "cipher",
-  "title": "Cipher",
-  "category": "Dashboard",
-  "description": "",
-  "framework": "HTML/Gulp",
-  "features": [
-   "Crypto",
-   "Trading",
-   "Dashboard",
-   "Charts"
-  ],
-  "useCase": "Crypto exchanges",
-  "tier": 3,
-  "rating": 3,
-  "source": "https://gallery.hanzo.ai/templates/cipher",
-  "preview": "https://gallery.hanzo.ai/screenshots/cipher-html.png",
-  "demo": "https://cipher.hanzo.app",
-  "variants": [
-   {
-    "id": "html",
-    "label": "HTML",
-    "kind": "format",
-    "source": "https://gallery.hanzo.ai/templates/cipher-html"
-   },
-   {
-    "id": "react",
-    "label": "React",
-    "kind": "format",
-    "framework": "React 17",
-    "source": "https://gallery.hanzo.ai/templates/cipher-react"
-   },
-   {
-    "id": "cards-html",
-    "label": "Cards HTML",
-    "kind": "theme",
-    "framework": "HTML/CSS",
-    "source": "https://gallery.hanzo.ai/templates/cipher-cards-html"
-   },
-   {
-    "id": "cards-react",
-    "label": "Cards React",
-    "kind": "theme",
+    "features": [
+      "Crypto",
+      "Trading",
+      "Dashboard",
+      "Charts"
+    ],
+    "useCase": "Crypto exchanges",
+    "tier": 3,
+    "rating": 3,
+    "source": "https://gallery.hanzo.ai/templates/cipher",
+    "preview": "https://gallery.hanzo.ai/screenshots/cipher-html.png",
+    "demo": "https://cipher.hanzo.app",
+    "variants": [
+      {
+        "id": "html",
+        "label": "HTML",
+        "kind": "format",
+        "source": "https://gallery.hanzo.ai/templates/cipher-html"
+      },
+      {
+        "id": "react",
+        "label": "React",
+        "kind": "format",
+        "framework": "React 17",
+        "source": "https://gallery.hanzo.ai/templates/cipher-react"
+      },
+      {
+        "id": "cards-html",
+        "label": "Cards HTML",
+        "kind": "theme",
+        "framework": "HTML/CSS",
+        "source": "https://gallery.hanzo.ai/templates/cipher-cards-html"
+      },
+      {
+        "id": "cards-react",
+        "label": "Cards React",
+        "kind": "theme",
+        "framework": "React 18",
+        "source": "https://gallery.hanzo.ai/templates/cipher-cards-react"
+      }
+    ]
+  },
+  {
+    "slug": "launch",
+    "title": "Launch",
+    "category": "SaaS",
+    "description": "",
+    "framework": "Next.js 13",
+    "features": [
+      "Landing",
+      "SaaS",
+      "Modern",
+      "Responsive"
+    ],
+    "useCase": "SaaS landing pages",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/launch",
+    "preview": "https://gallery.hanzo.ai/screenshots/launch.png"
+  },
+  {
+    "slug": "construct",
+    "title": "Construct",
+    "category": "Landing",
+    "description": "",
+    "framework": "Next.js 14",
+    "features": [
+      "App",
+      "Landing",
+      "Modern",
+      "Responsive"
+    ],
+    "useCase": "App landing pages",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/construct",
+    "preview": "https://gallery.hanzo.ai/screenshots/construct.png"
+  },
+  {
+    "slug": "deploy",
+    "title": "Deploy",
+    "category": "Landing",
+    "description": "",
+    "framework": "Next.js 14",
+    "features": [
+      "Landing",
+      "Marketing",
+      "Modern",
+      "Responsive"
+    ],
+    "useCase": "Marketing landing pages",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/deploy",
+    "preview": "https://gallery.hanzo.ai/screenshots/deploy.png"
+  },
+  {
+    "slug": "loop",
+    "title": "Loop",
+    "category": "Bento Cards",
+    "description": "",
     "framework": "React 18",
-    "source": "https://gallery.hanzo.ai/templates/cipher-cards-react"
-   }
-  ]
- },
- {
-  "slug": "launch",
-  "title": "Launch",
-  "category": "SaaS",
-  "description": "",
-  "framework": "Next.js 13",
-  "features": [
-   "Landing",
-   "SaaS",
-   "Modern",
-   "Responsive"
-  ],
-  "useCase": "SaaS landing pages",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/launch",
-  "preview": "https://gallery.hanzo.ai/screenshots/launch.png"
- },
- {
-  "slug": "construct",
-  "title": "Construct",
-  "category": "Landing",
-  "description": "",
-  "framework": "Next.js 14",
-  "features": [
-   "App",
-   "Landing",
-   "Modern",
-   "Responsive"
-  ],
-  "useCase": "App landing pages",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/construct",
-  "preview": "https://gallery.hanzo.ai/screenshots/construct.png"
- },
- {
-  "slug": "deploy",
-  "title": "Deploy",
-  "category": "Landing",
-  "description": "",
-  "framework": "Next.js 14",
-  "features": [
-   "Landing",
-   "Marketing",
-   "Modern",
-   "Responsive"
-  ],
-  "useCase": "Marketing landing pages",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/deploy",
-  "preview": "https://gallery.hanzo.ai/screenshots/deploy.png"
- },
- {
-  "slug": "loop",
-  "title": "Loop",
-  "category": "Bento Cards",
-  "description": "",
-  "framework": "React 18",
-  "features": [
-   "Bento Layout",
-   "v3",
-   "React",
-   "Responsive"
-  ],
-  "useCase": "Bento card layouts v3",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/loop",
-  "preview": "https://gallery.hanzo.ai/screenshots/loop.png",
-  "variants": [
-   {
-    "id": "default",
-    "label": "Default",
-    "kind": "format",
-    "source": "https://gallery.hanzo.ai/templates/loop"
-   },
-   {
-    "id": "html",
-    "label": "HTML",
-    "kind": "format",
+    "features": [
+      "Bento Layout",
+      "v3",
+      "React",
+      "Responsive"
+    ],
+    "useCase": "Bento card layouts v3",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/loop",
+    "preview": "https://gallery.hanzo.ai/screenshots/loop.png",
+    "variants": [
+      {
+        "id": "default",
+        "label": "Default",
+        "kind": "format",
+        "source": "https://gallery.hanzo.ai/templates/loop"
+      },
+      {
+        "id": "html",
+        "label": "HTML",
+        "kind": "format",
+        "framework": "HTML/Gulp",
+        "source": "https://gallery.hanzo.ai/templates/loop-html"
+      }
+    ],
+    "demo": "https://blocks.hanzo.app"
+  },
+  {
+    "slug": "unfixed",
+    "title": "Unfixed",
+    "category": "Bento Cards",
+    "description": "",
+    "framework": "React 18",
+    "features": [
+      "Bento Layout",
+      "v3",
+      "Variant",
+      "Responsive"
+    ],
+    "useCase": "Bento card layouts v3 alternative",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/unfixed",
+    "preview": "https://gallery.hanzo.ai/screenshots/unfixed.png"
+  },
+  {
+    "slug": "unity",
+    "title": "Unity",
+    "category": "App",
+    "description": "",
+    "framework": "Next.js 14 + TS",
+    "features": [
+      "App",
+      "Modern",
+      "Full Stack",
+      "Responsive"
+    ],
+    "useCase": "Full-stack applications",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/unity",
+    "preview": "https://gallery.hanzo.ai/screenshots/unity.png",
+    "demo": "https://loop.hanzo.app"
+  },
+  {
+    "slug": "canvas",
+    "title": "Canvas",
+    "category": "Portfolio",
+    "description": "",
+    "framework": "HTML/SCSS + GSAP",
+    "features": [
+      "Portfolio",
+      "GSAP",
+      "Studio",
+      "Responsive"
+    ],
+    "useCase": "Design studios",
+    "tier": 3,
+    "rating": 3,
+    "source": "https://gallery.hanzo.ai/templates/canvas",
+    "preview": "https://gallery.hanzo.ai/screenshots/canvas.png",
+    "demo": "https://studio.hanzo.app"
+  },
+  {
+    "slug": "vault",
+    "title": "Vault",
+    "category": "Portfolio",
+    "description": "",
+    "framework": "HTML/CSS/JS",
+    "features": [
+      "Architecture",
+      "Portfolio",
+      "Clean",
+      "Responsive"
+    ],
+    "useCase": "Architecture portfolios",
+    "tier": 3,
+    "rating": 3,
+    "source": "https://gallery.hanzo.ai/templates/vault",
+    "preview": "https://gallery.hanzo.ai/screenshots/vault.png",
+    "demo": "https://vault.hanzo.app"
+  },
+  {
+    "slug": "studio",
+    "title": "Studio",
+    "category": "Portfolio",
+    "description": "",
+    "framework": "HTML/CSS/JS",
+    "features": [
+      "Agency",
+      "Portfolio",
+      "Digital",
+      "Responsive"
+    ],
+    "useCase": "Digital agencies",
+    "tier": 3,
+    "rating": 3,
+    "source": "https://gallery.hanzo.ai/templates/studio",
+    "preview": "https://gallery.hanzo.ai/screenshots/studio.png",
+    "demo": "https://pixel.hanzo.app"
+  },
+  {
+    "slug": "kalli",
+    "title": "Kalli",
+    "category": "Portfolio",
+    "description": "",
     "framework": "HTML/Gulp",
-    "source": "https://gallery.hanzo.ai/templates/loop-html"
-   }
-  ],
-  "demo": "https://blocks.hanzo.app"
- },
- {
-  "slug": "unfixed",
-  "title": "Unfixed",
-  "category": "Bento Cards",
-  "description": "",
-  "framework": "React 18",
-  "features": [
-   "Bento Layout",
-   "v3",
-   "Variant",
-   "Responsive"
-  ],
-  "useCase": "Bento card layouts v3 alternative",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/unfixed",
-  "preview": "https://gallery.hanzo.ai/screenshots/unfixed.png"
- },
- {
-  "slug": "unity",
-  "title": "Unity",
-  "category": "App",
-  "description": "",
-  "framework": "Next.js 14 + TS",
-  "features": [
-   "App",
-   "Modern",
-   "Full Stack",
-   "Responsive"
-  ],
-  "useCase": "Full-stack applications",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/unity",
-  "preview": "https://gallery.hanzo.ai/screenshots/unity.png",
-  "demo": "https://loop.hanzo.app"
- },
- {
-  "slug": "canvas",
-  "title": "Canvas",
-  "category": "Portfolio",
-  "description": "",
-  "framework": "HTML/SCSS + GSAP",
-  "features": [
-   "Portfolio",
-   "GSAP",
-   "Studio",
-   "Responsive"
-  ],
-  "useCase": "Design studios",
-  "tier": 3,
-  "rating": 3,
-  "source": "https://gallery.hanzo.ai/templates/canvas",
-  "preview": "https://gallery.hanzo.ai/screenshots/canvas.png",
-  "demo": "https://studio.hanzo.app"
- },
- {
-  "slug": "vault",
-  "title": "Vault",
-  "category": "Portfolio",
-  "description": "",
-  "framework": "HTML/CSS/JS",
-  "features": [
-   "Architecture",
-   "Portfolio",
-   "Clean",
-   "Responsive"
-  ],
-  "useCase": "Architecture portfolios",
-  "tier": 3,
-  "rating": 3,
-  "source": "https://gallery.hanzo.ai/templates/vault",
-  "preview": "https://gallery.hanzo.ai/screenshots/vault.png",
-  "demo": "https://vault.hanzo.app"
- },
- {
-  "slug": "studio",
-  "title": "Studio",
-  "category": "Portfolio",
-  "description": "",
-  "framework": "HTML/CSS/JS",
-  "features": [
-   "Agency",
-   "Portfolio",
-   "Digital",
-   "Responsive"
-  ],
-  "useCase": "Digital agencies",
-  "tier": 3,
-  "rating": 3,
-  "source": "https://gallery.hanzo.ai/templates/studio",
-  "preview": "https://gallery.hanzo.ai/screenshots/studio.png",
-  "demo": "https://pixel.hanzo.app"
- },
- {
-  "slug": "kalli",
-  "title": "Kalli",
-  "category": "Portfolio",
-  "description": "",
-  "framework": "HTML/Gulp",
-  "features": [
-   "Portfolio",
-   "Creative",
-   "Modern",
-   "Responsive"
-  ],
-  "useCase": "Creative portfolios",
-  "tier": 3,
-  "rating": 3,
-  "source": "https://gallery.hanzo.ai/templates/kalli",
-  "preview": "https://gallery.hanzo.ai/screenshots/kalli-html.png"
- },
- {
-  "slug": "innovise",
-  "title": "Innovise",
-  "category": "Business",
-  "description": "",
-  "framework": "HTML/CSS",
-  "features": [
-   "Agency",
-   "Business",
-   "Modern",
-   "Responsive"
-  ],
-  "useCase": "Agency websites",
-  "tier": 3,
-  "rating": 3,
-  "source": "https://gallery.hanzo.ai/templates/innovise",
-  "preview": "",
-  "demo": "https://catalyst.hanzo.app"
- },
- {
-  "slug": "drive",
-  "title": "Drive",
-  "category": "Business",
-  "description": "",
-  "framework": "HTML/CSS",
-  "features": [
-   "Automotive",
-   "Business",
-   "Modern",
-   "Responsive"
-  ],
-  "useCase": "Automotive websites",
-  "tier": 3,
-  "rating": 3,
-  "source": "https://gallery.hanzo.ai/templates/drive",
-  "preview": "https://gallery.hanzo.ai/screenshots/drive.png",
-  "demo": "https://drive.hanzo.app",
-  "variants": [
-   {
-    "id": "default",
-    "label": "Default",
-    "kind": "format",
-    "source": "https://gallery.hanzo.ai/templates/drive"
-   },
-   {
-    "id": "html",
-    "label": "HTML",
-    "kind": "format",
+    "features": [
+      "Portfolio",
+      "Creative",
+      "Modern",
+      "Responsive"
+    ],
+    "useCase": "Creative portfolios",
+    "tier": 3,
+    "rating": 3,
+    "source": "https://gallery.hanzo.ai/templates/kalli",
+    "preview": "https://gallery.hanzo.ai/screenshots/kalli-html.png"
+  },
+  {
+    "slug": "innovise",
+    "title": "Innovise",
+    "category": "Business",
+    "description": "",
+    "framework": "HTML/CSS",
+    "features": [
+      "Agency",
+      "Business",
+      "Modern",
+      "Responsive"
+    ],
+    "useCase": "Agency websites",
+    "tier": 3,
+    "rating": 3,
+    "source": "https://gallery.hanzo.ai/templates/innovise",
+    "preview": "",
+    "demo": "https://catalyst.hanzo.app"
+  },
+  {
+    "slug": "drive",
+    "title": "Drive",
+    "category": "Business",
+    "description": "",
+    "framework": "HTML/CSS",
+    "features": [
+      "Automotive",
+      "Business",
+      "Modern",
+      "Responsive"
+    ],
+    "useCase": "Automotive websites",
+    "tier": 3,
+    "rating": 3,
+    "source": "https://gallery.hanzo.ai/templates/drive",
+    "preview": "https://gallery.hanzo.ai/screenshots/drive.png",
+    "demo": "https://drive.hanzo.app",
+    "variants": [
+      {
+        "id": "default",
+        "label": "Default",
+        "kind": "format",
+        "source": "https://gallery.hanzo.ai/templates/drive"
+      },
+      {
+        "id": "html",
+        "label": "HTML",
+        "kind": "format",
+        "framework": "HTML/Gulp",
+        "source": "https://gallery.hanzo.ai/templates/drive-html"
+      }
+    ]
+  },
+  {
+    "slug": "oasis",
+    "title": "Oasis",
+    "category": "Hospitality",
+    "description": "",
+    "framework": "HTML/CSS",
+    "features": [
+      "Hospitality",
+      "Resort",
+      "Luxury",
+      "Responsive"
+    ],
+    "useCase": "Resort/hospitality sites",
+    "tier": 3,
+    "rating": 3,
+    "source": "https://gallery.hanzo.ai/templates/oasis",
+    "preview": "https://gallery.hanzo.ai/screenshots/oasis.png",
+    "demo": "https://oasis.hanzo.app"
+  },
+  {
+    "slug": "solo",
+    "title": "Solo",
+    "category": "SaaS",
+    "description": "",
     "framework": "HTML/Gulp",
-    "source": "https://gallery.hanzo.ai/templates/drive-html"
-   }
-  ]
- },
- {
-  "slug": "oasis",
-  "title": "Oasis",
-  "category": "Hospitality",
-  "description": "",
-  "framework": "HTML/CSS",
-  "features": [
-   "Hospitality",
-   "Resort",
-   "Luxury",
-   "Responsive"
-  ],
-  "useCase": "Resort/hospitality sites",
-  "tier": 3,
-  "rating": 3,
-  "source": "https://gallery.hanzo.ai/templates/oasis",
-  "preview": "https://gallery.hanzo.ai/screenshots/oasis.png",
-  "demo": "https://oasis.hanzo.app"
- },
- {
-  "slug": "solo",
-  "title": "Solo",
-  "category": "SaaS",
-  "description": "",
-  "framework": "HTML/Gulp",
-  "features": [
-   "SaaS",
-   "Landing",
-   "Simple",
-   "Responsive"
-  ],
-  "useCase": "SaaS landing pages",
-  "tier": 3,
-  "rating": 3,
-  "source": "https://gallery.hanzo.ai/templates/solo",
-  "preview": "https://gallery.hanzo.ai/screenshots/solo.png"
- },
- {
-  "slug": "forge",
-  "title": "Forge",
-  "category": "Dashboard",
-  "description": "",
-  "framework": "HTML/Gulp",
-  "features": [
-   "Dashboard",
-   "Admin",
-   "Analytics",
-   "Responsive"
-  ],
-  "useCase": "Admin dashboards",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/forge",
-  "preview": "https://gallery.hanzo.ai/screenshots/forge.png"
- },
- {
-  "slug": "beta",
-  "title": "Beta",
-  "category": "Dashboard",
-  "description": "",
-  "framework": "HTML/Gulp",
-  "features": [
-   "CRM",
-   "Dashboard",
-   "Business",
-   "Responsive"
-  ],
-  "useCase": "CRM dashboards",
-  "tier": 3,
-  "rating": 3,
-  "source": "https://gallery.hanzo.ai/templates/beta",
-  "preview": "https://gallery.hanzo.ai/screenshots/beta.png",
-  "demo": "https://beta.hanzo.app"
- },
- {
-  "slug": "hygge",
-  "title": "Hygge",
-  "category": "E-commerce",
-  "description": "",
-  "framework": "HTML/Gulp",
-  "features": [
-   "E-commerce",
-   "Shop",
-   "Clean",
-   "Responsive"
-  ],
-  "useCase": "E-commerce stores",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/hygge",
-  "preview": "https://gallery.hanzo.ai/screenshots/hygge.png",
-  "demo": "https://hygge.hanzo.app",
-  "variants": [
-   {
-    "id": "html",
-    "label": "HTML",
-    "kind": "format",
-    "source": "https://gallery.hanzo.ai/templates/hygge-html"
-   },
-   {
-    "id": "bootstrap",
-    "label": "Bootstrap",
-    "kind": "format",
-    "framework": "HTML/Gulp + Bootstrap 5",
-    "source": "https://gallery.hanzo.ai/templates/hygge-bootstrap"
-   }
-  ]
- },
- {
-  "slug": "folio",
-  "title": "Folio",
-  "category": "Portfolio",
-  "description": "",
-  "framework": "HTML/Gulp",
-  "features": [
-   "Portfolio",
-   "Multi-layout",
-   "Creative",
-   "Responsive"
-  ],
-  "useCase": "Creative portfolios",
-  "tier": 3,
-  "rating": 3,
-  "source": "https://gallery.hanzo.ai/templates/folio",
-  "preview": "https://gallery.hanzo.ai/screenshots/folio-html.png",
-  "demo": "https://folio.hanzo.app",
-  "variants": [
-   {
-    "id": "main",
-    "label": "Main",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-main"
-   },
-   {
-    "id": "index",
-    "label": "Index",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-index"
-   },
-   {
-    "id": "full",
-    "label": "Full",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-full"
-   },
-   {
-    "id": "about",
-    "label": "About",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-about"
-   },
-   {
-    "id": "contact",
-    "label": "Contact",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-contact"
-   },
-   {
-    "id": "creative-agency-1",
-    "label": "Creative Agency 1",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-creative-agency-1"
-   },
-   {
-    "id": "creative-agency-2",
-    "label": "Creative Agency 2",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-creative-agency-2"
-   },
-   {
-    "id": "creative-designer-1",
-    "label": "Creative Designer 1",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-creative-designer-1"
-   },
-   {
-    "id": "creative-designer-2",
-    "label": "Creative Designer 2",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-creative-designer-2"
-   },
-   {
-    "id": "creative-developer-1",
-    "label": "Creative Developer 1",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-creative-developer-1"
-   },
-   {
-    "id": "creative-developer-2",
-    "label": "Creative Developer 2",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-creative-developer-2"
-   },
-   {
-    "id": "details-1",
-    "label": "Details 1",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-details-1"
-   },
-   {
-    "id": "details-2",
-    "label": "Details 2",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-details-2"
-   },
-   {
-    "id": "details-3",
-    "label": "Details 3",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-details-3"
-   },
-   {
-    "id": "grid-2-columns",
-    "label": "Grid 2 Columns",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-grid-2-columns"
-   },
-   {
-    "id": "grid-3-columns",
-    "label": "Grid 3 Columns",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-grid-3-columns"
-   },
-   {
-    "id": "grid-3-fluid",
-    "label": "Grid 3 Fluid",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-grid-3-fluid"
-   },
-   {
-    "id": "grid-4-columns",
-    "label": "Grid 4 Columns",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-grid-4-columns"
-   },
-   {
-    "id": "grid-4-fluid",
-    "label": "Grid 4 Fluid",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-grid-4-fluid"
-   },
-   {
-    "id": "masonry-2-columns",
-    "label": "Masonry 2 Columns",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-masonry-2-columns"
-   },
-   {
-    "id": "masonry-3-columns",
-    "label": "Masonry 3 Columns",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-masonry-3-columns"
-   },
-   {
-    "id": "masonry-3-fluid",
-    "label": "Masonry 3 Fluid",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-masonry-3-fluid"
-   },
-   {
-    "id": "masonry-4-columns",
-    "label": "Masonry 4 Columns",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-masonry-4-columns"
-   },
-   {
-    "id": "masonry-4-fluid",
-    "label": "Masonry 4 Fluid",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-masonry-4-fluid"
-   },
-   {
-    "id": "photography-1",
-    "label": "Photography 1",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-photography-1"
-   },
-   {
-    "id": "photography-2",
-    "label": "Photography 2",
-    "kind": "page",
-    "source": "https://gallery.hanzo.ai/templates/folio-photography-2"
-   }
-  ]
- },
- {
-  "slug": "jobfinder",
-  "title": "Job Finder",
-  "category": "Mobile App",
-  "description": "",
-  "framework": "React Native",
-  "features": [
-   "Jobs",
-   "Search",
-   "Mobile",
-   "React Native"
-  ],
-  "useCase": "Job search mobile apps",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/jobfinder",
-  "preview": "https://gallery.hanzo.ai/screenshots/jobfinder.png"
- },
- {
-  "slug": "pixel",
-  "title": "Pixel",
-  "category": "Portfolio",
-  "description": "",
-  "framework": "HTML/CSS/JS",
-  "features": [
-   "Studio",
-   "Creative",
-   "Modern",
-   "Responsive"
-  ],
-  "useCase": "Creative studio sites",
-  "tier": 3,
-  "rating": 3,
-  "source": "https://gallery.hanzo.ai/templates/pixel",
-  "preview": "https://gallery.hanzo.ai/screenshots/pixel.png"
- },
- {
-  "slug": "saas-landing",
-  "title": "SaaS Landing",
-  "category": "SaaS",
-  "description": "",
-  "framework": "Next.js 14.2",
-  "features": [
-   "Landing",
-   "Pricing",
-   "Features",
-   "Responsive"
-  ],
-  "useCase": "SaaS landing pages",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/saas-landing",
-  "preview": "https://gallery.hanzo.ai/screenshots/saas-landing.png",
-  "demo": "https://saas-landing.hanzo.app"
- },
- {
-  "slug": "serif",
-  "title": "Serif",
-  "category": "Portfolio",
-  "description": "",
-  "framework": "HTML/Sass",
-  "features": [
-   "Sass",
-   "Template",
-   "Build System",
-   "Responsive"
-  ],
-  "useCase": "Portfolio/agency sites",
-  "tier": 3,
-  "rating": 3,
-  "source": "https://gallery.hanzo.ai/templates/serif",
-  "preview": "https://gallery.hanzo.ai/screenshots/serif.png",
-  "demo": "https://serif.hanzo.app"
- },
- {
-  "slug": "analytics-dashboard",
-  "title": "Analytics Dashboard",
-  "category": "Dashboard",
-  "description": "",
-  "framework": "Next.js 14.2 + TS",
-  "features": [],
-  "useCase": "",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/analytics-dashboard",
-  "preview": "",
-  "demo": "https://analytics-dashboard.hanzo.app"
- },
- {
-  "slug": "blog-platform",
-  "title": "Blog Platform",
-  "category": "Blog",
-  "description": "",
-  "framework": "Next.js 14.2 + TS",
-  "features": [],
-  "useCase": "",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/blog-platform",
-  "preview": "",
-  "demo": "https://blog-platform.hanzo.app"
- },
- {
-  "slug": "changelog",
-  "title": "Changelog",
-  "category": "Blog",
-  "description": "",
-  "framework": "Next.js 15.3 + TS",
-  "features": [],
-  "useCase": "",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/changelog",
-  "preview": "",
-  "demo": "https://changelog.hanzo.app"
- },
- {
-  "slug": "crypto-portfolio",
-  "title": "Crypto Portfolio",
-  "category": "Web3",
-  "description": "",
-  "framework": "Next.js 14.2 + TS",
-  "features": [],
-  "useCase": "",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/crypto-portfolio",
-  "preview": "",
-  "demo": "https://crypto-portfolio.hanzo.app"
- },
- {
-  "slug": "ecommerce-storefront",
-  "title": "Ecommerce Storefront",
-  "category": "E-commerce",
-  "description": "",
-  "framework": "Next.js 14.2 + TS",
-  "features": [],
-  "useCase": "",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/ecommerce-storefront",
-  "preview": "",
-  "demo": "https://ecommerce-storefront.hanzo.app"
- },
- {
-  "slug": "kanban-board",
-  "title": "Kanban Board",
-  "category": "Productivity",
-  "description": "",
-  "framework": "Next.js 14.2 + TS",
-  "features": [],
-  "useCase": "",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/kanban-board",
-  "preview": "",
-  "demo": "https://kanban-board.hanzo.app"
- },
- {
-  "slug": "markdown-editor",
-  "title": "Markdown Editor",
-  "category": "Productivity",
-  "description": "",
-  "framework": "Next.js 14.2 + TS",
-  "features": [],
-  "useCase": "",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/markdown-editor",
-  "preview": "",
-  "demo": "https://markdown-editor.hanzo.app"
- },
- {
-  "slug": "portfolio",
-  "title": "Portfolio",
-  "category": "Portfolio",
-  "description": "",
-  "framework": "Next.js 14.2 + TS",
-  "features": [],
-  "useCase": "",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/portfolio",
-  "preview": "",
-  "demo": "https://portfolio.hanzo.app"
- },
- {
-  "slug": "video-streaming",
-  "title": "Video Streaming",
-  "category": "Media",
-  "description": "",
-  "framework": "Next.js 14.2 + TS",
-  "features": [],
-  "useCase": "",
-  "tier": 2,
-  "rating": 4,
-  "source": "https://gallery.hanzo.ai/templates/video-streaming",
-  "preview": "",
-  "demo": "https://video-streaming.hanzo.app"
- },
- {
-  "slug": "mobile",
-  "title": "Hanzo Mobile",
-  "category": "Mobile",
-  "description": "Expo Router tab starter \u2014 iOS, Android and web from one tree. Feed, search, settings and a dynamic detail route.",
-  "framework": "Expo SDK 54 + expo-router 6",
-  "features": [
-   "Expo Router",
-   "Tabs",
-   "Dynamic route",
-   "Dark theme",
-   "Web target"
-  ],
-  "useCase": "Cross-platform mobile apps",
-  "tier": 1,
-  "rating": 5,
-  "source": "https://github.com/hanzo-templates/mobile",
-  "preview": "https://gallery.hanzo.ai/screenshots/mobile.png",
-  "demo": "https://mobile.hanzo.app"
- },
- {
-  "slug": "expo-chat",
-  "title": "Hanzo Chat (Expo)",
-  "category": "Mobile",
-  "description": "Streaming AI chat client on Expo Router, wired to the Hanzo /v1 API with run-time endpoint config.",
-  "framework": "Expo SDK 54 + expo-router 6",
-  "features": [
-   "SSE streaming",
-   "Hanzo /v1",
-   "Runtime config",
-   "Tabs",
-   "Web target"
-  ],
-  "useCase": "AI assistants on mobile",
-  "tier": 1,
-  "rating": 5,
-  "source": "https://github.com/hanzo-templates/expo-chat",
-  "preview": "https://gallery.hanzo.ai/screenshots/expo-chat.png",
-  "demo": "https://expo-chat.hanzo.app"
- },
- {
-  "slug": "expo-shop",
-  "title": "Hanzo Shop",
-  "category": "Mobile",
-  "description": "Storefront: product grid, detail route and a cart with a live tab badge.",
-  "framework": "Expo SDK 54 + expo-router 6",
-  "features": [
-   "Product grid",
-   "Cart",
-   "Tab badge",
-   "Dynamic route",
-   "Web target"
-  ],
-  "useCase": "Mobile commerce",
-  "tier": 1,
-  "rating": 5,
-  "source": "https://github.com/hanzo-templates/expo-shop",
-  "preview": "https://gallery.hanzo.ai/screenshots/expo-shop.png",
-  "demo": "https://expo-shop.hanzo.app"
- },
- {
-  "slug": "expo-auth",
-  "title": "Hanzo Auth",
-  "category": "Mobile",
-  "description": "OAuth 2.0 + PKCE sign-in against Hanzo IAM in the system browser, with a one-place route guard.",
-  "framework": "Expo SDK 54 + expo-auth-session",
-  "features": [
-   "PKCE",
-   "Hanzo IAM",
-   "Keychain storage",
-   "Route guard",
-   "Web target"
-  ],
-  "useCase": "Authenticated mobile apps",
-  "tier": 1,
-  "rating": 5,
-  "source": "https://github.com/hanzo-templates/expo-auth",
-  "preview": "https://gallery.hanzo.ai/screenshots/expo-auth.png",
-  "demo": "https://expo-auth.hanzo.app"
- },
- {
-  "slug": "flutter",
-  "title": "Hanzo Flutter",
-  "category": "Mobile",
-  "description": "Material 3 starter \u2014 NavigationBar over an IndexedStack, search, detail route and widget tests.",
-  "framework": "Flutter 3.44 + Material 3",
-  "features": [
-   "Material 3",
-   "NavigationBar",
-   "Search",
-   "Widget tests",
-   "Web target"
-  ],
-  "useCase": "Cross-platform mobile apps",
-  "tier": 1,
-  "rating": 5,
-  "source": "https://github.com/hanzo-templates/flutter",
-  "preview": "https://gallery.hanzo.ai/screenshots/flutter.png",
-  "demo": "https://flutter.hanzo.app"
- },
- {
-  "slug": "flutter-chat",
-  "title": "Hanzo Chat (Flutter)",
-  "category": "Mobile",
-  "description": "Streaming AI chat in Flutter, wired to the Hanzo /v1 API, with tests over the failure path.",
-  "framework": "Flutter 3.44 + http",
-  "features": [
-   "SSE streaming",
-   "Hanzo /v1",
-   "Runtime config",
-   "Widget tests",
-   "Web target"
-  ],
-  "useCase": "AI assistants on mobile",
-  "tier": 1,
-  "rating": 5,
-  "source": "https://github.com/hanzo-templates/flutter-chat",
-  "preview": "https://gallery.hanzo.ai/screenshots/flutter-chat.png",
-  "demo": "https://flutter-chat.hanzo.app"
- },
- {
-  "slug": "swiftui",
-  "title": "Hanzo SwiftUI",
-  "category": "Mobile",
-  "description": "Native iOS 17 starter \u2014 TabView, NavigationStack, @AppStorage and swift-testing. Project generated from project.yml.",
-  "framework": "SwiftUI + Swift 6 (iOS 17)",
-  "features": [
-   "TabView",
-   "NavigationStack",
-   "swift-testing",
-   "XcodeGen",
-   "Native"
-  ],
-  "useCase": "Native iOS apps",
-  "tier": 1,
-  "rating": 5,
-  "source": "https://github.com/hanzo-templates/swiftui",
-  "preview": "https://gallery.hanzo.ai/screenshots/swiftui.png"
- },
- {
-  "slug": "swiftui-chat",
-  "title": "Hanzo Chat (SwiftUI)",
-  "category": "Mobile",
-  "description": "Native streaming AI chat \u2014 @Observable, AsyncThrowingStream over URLSession.bytes, Hanzo /v1.",
-  "framework": "SwiftUI + Swift 6 (iOS 17)",
-  "features": [
-   "@Observable",
-   "AsyncThrowingStream",
-   "Hanzo /v1",
-   "swift-testing",
-   "Native"
-  ],
-  "useCase": "Native iOS apps",
-  "tier": 1,
-  "rating": 5,
-  "source": "https://github.com/hanzo-templates/swiftui-chat",
-  "preview": "https://gallery.hanzo.ai/screenshots/swiftui-chat.png"
- }
+    "features": [
+      "SaaS",
+      "Landing",
+      "Simple",
+      "Responsive"
+    ],
+    "useCase": "SaaS landing pages",
+    "tier": 3,
+    "rating": 3,
+    "source": "https://gallery.hanzo.ai/templates/solo",
+    "preview": "https://gallery.hanzo.ai/screenshots/solo.png"
+  },
+  {
+    "slug": "forge",
+    "title": "Forge",
+    "category": "Dashboard",
+    "description": "",
+    "framework": "HTML/Gulp",
+    "features": [
+      "Dashboard",
+      "Admin",
+      "Analytics",
+      "Responsive"
+    ],
+    "useCase": "Admin dashboards",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/forge",
+    "preview": "https://gallery.hanzo.ai/screenshots/forge.png"
+  },
+  {
+    "slug": "beta",
+    "title": "Beta",
+    "category": "Dashboard",
+    "description": "",
+    "framework": "HTML/Gulp",
+    "features": [
+      "CRM",
+      "Dashboard",
+      "Business",
+      "Responsive"
+    ],
+    "useCase": "CRM dashboards",
+    "tier": 3,
+    "rating": 3,
+    "source": "https://gallery.hanzo.ai/templates/beta",
+    "preview": "https://gallery.hanzo.ai/screenshots/beta.png",
+    "demo": "https://beta.hanzo.app"
+  },
+  {
+    "slug": "hygge",
+    "title": "Hygge",
+    "category": "E-commerce",
+    "description": "",
+    "framework": "HTML/Gulp",
+    "features": [
+      "E-commerce",
+      "Shop",
+      "Clean",
+      "Responsive"
+    ],
+    "useCase": "E-commerce stores",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/hygge",
+    "preview": "https://gallery.hanzo.ai/screenshots/hygge.png",
+    "demo": "https://hygge.hanzo.app",
+    "variants": [
+      {
+        "id": "html",
+        "label": "HTML",
+        "kind": "format",
+        "source": "https://gallery.hanzo.ai/templates/hygge-html"
+      },
+      {
+        "id": "bootstrap",
+        "label": "Bootstrap",
+        "kind": "format",
+        "framework": "HTML/Gulp + Bootstrap 5",
+        "source": "https://gallery.hanzo.ai/templates/hygge-bootstrap"
+      }
+    ]
+  },
+  {
+    "slug": "folio",
+    "title": "Folio",
+    "category": "Portfolio",
+    "description": "",
+    "framework": "HTML/Gulp",
+    "features": [
+      "Portfolio",
+      "Multi-layout",
+      "Creative",
+      "Responsive"
+    ],
+    "useCase": "Creative portfolios",
+    "tier": 3,
+    "rating": 3,
+    "source": "https://gallery.hanzo.ai/templates/folio",
+    "preview": "https://gallery.hanzo.ai/screenshots/folio-html.png",
+    "demo": "https://folio.hanzo.app",
+    "variants": [
+      {
+        "id": "main",
+        "label": "Main",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-main"
+      },
+      {
+        "id": "index",
+        "label": "Index",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-index"
+      },
+      {
+        "id": "full",
+        "label": "Full",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-full"
+      },
+      {
+        "id": "about",
+        "label": "About",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-about"
+      },
+      {
+        "id": "contact",
+        "label": "Contact",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-contact"
+      },
+      {
+        "id": "creative-agency-1",
+        "label": "Creative Agency 1",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-creative-agency-1"
+      },
+      {
+        "id": "creative-agency-2",
+        "label": "Creative Agency 2",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-creative-agency-2"
+      },
+      {
+        "id": "creative-designer-1",
+        "label": "Creative Designer 1",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-creative-designer-1"
+      },
+      {
+        "id": "creative-designer-2",
+        "label": "Creative Designer 2",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-creative-designer-2"
+      },
+      {
+        "id": "creative-developer-1",
+        "label": "Creative Developer 1",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-creative-developer-1"
+      },
+      {
+        "id": "creative-developer-2",
+        "label": "Creative Developer 2",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-creative-developer-2"
+      },
+      {
+        "id": "details-1",
+        "label": "Details 1",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-details-1"
+      },
+      {
+        "id": "details-2",
+        "label": "Details 2",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-details-2"
+      },
+      {
+        "id": "details-3",
+        "label": "Details 3",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-details-3"
+      },
+      {
+        "id": "grid-2-columns",
+        "label": "Grid 2 Columns",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-grid-2-columns"
+      },
+      {
+        "id": "grid-3-columns",
+        "label": "Grid 3 Columns",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-grid-3-columns"
+      },
+      {
+        "id": "grid-3-fluid",
+        "label": "Grid 3 Fluid",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-grid-3-fluid"
+      },
+      {
+        "id": "grid-4-columns",
+        "label": "Grid 4 Columns",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-grid-4-columns"
+      },
+      {
+        "id": "grid-4-fluid",
+        "label": "Grid 4 Fluid",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-grid-4-fluid"
+      },
+      {
+        "id": "masonry-2-columns",
+        "label": "Masonry 2 Columns",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-masonry-2-columns"
+      },
+      {
+        "id": "masonry-3-columns",
+        "label": "Masonry 3 Columns",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-masonry-3-columns"
+      },
+      {
+        "id": "masonry-3-fluid",
+        "label": "Masonry 3 Fluid",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-masonry-3-fluid"
+      },
+      {
+        "id": "masonry-4-columns",
+        "label": "Masonry 4 Columns",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-masonry-4-columns"
+      },
+      {
+        "id": "masonry-4-fluid",
+        "label": "Masonry 4 Fluid",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-masonry-4-fluid"
+      },
+      {
+        "id": "photography-1",
+        "label": "Photography 1",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-photography-1"
+      },
+      {
+        "id": "photography-2",
+        "label": "Photography 2",
+        "kind": "page",
+        "source": "https://gallery.hanzo.ai/templates/folio-photography-2"
+      }
+    ]
+  },
+  {
+    "slug": "jobfinder",
+    "title": "Job Finder",
+    "category": "Mobile App",
+    "description": "",
+    "framework": "React Native",
+    "features": [
+      "Jobs",
+      "Search",
+      "Mobile",
+      "React Native"
+    ],
+    "useCase": "Job search mobile apps",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/jobfinder",
+    "preview": "https://gallery.hanzo.ai/screenshots/jobfinder.png"
+  },
+  {
+    "slug": "pixel",
+    "title": "Pixel",
+    "category": "Portfolio",
+    "description": "",
+    "framework": "HTML/CSS/JS",
+    "features": [
+      "Studio",
+      "Creative",
+      "Modern",
+      "Responsive"
+    ],
+    "useCase": "Creative studio sites",
+    "tier": 3,
+    "rating": 3,
+    "source": "https://gallery.hanzo.ai/templates/pixel",
+    "preview": "https://gallery.hanzo.ai/screenshots/pixel.png"
+  },
+  {
+    "slug": "saas-landing",
+    "title": "SaaS Landing",
+    "category": "SaaS",
+    "description": "",
+    "framework": "Next.js 14.2",
+    "features": [
+      "Landing",
+      "Pricing",
+      "Features",
+      "Responsive"
+    ],
+    "useCase": "SaaS landing pages",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/saas-landing",
+    "preview": "https://gallery.hanzo.ai/screenshots/saas-landing.png",
+    "demo": "https://saas-landing.hanzo.app"
+  },
+  {
+    "slug": "serif",
+    "title": "Serif",
+    "category": "Portfolio",
+    "description": "",
+    "framework": "HTML/Sass",
+    "features": [
+      "Sass",
+      "Template",
+      "Build System",
+      "Responsive"
+    ],
+    "useCase": "Portfolio/agency sites",
+    "tier": 3,
+    "rating": 3,
+    "source": "https://gallery.hanzo.ai/templates/serif",
+    "preview": "https://gallery.hanzo.ai/screenshots/serif.png",
+    "demo": "https://serif.hanzo.app"
+  },
+  {
+    "slug": "analytics-dashboard",
+    "title": "Analytics Dashboard",
+    "category": "Dashboard",
+    "description": "",
+    "framework": "Next.js 14.2 + TS",
+    "features": [],
+    "useCase": "",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/analytics-dashboard",
+    "preview": "",
+    "demo": "https://analytics-dashboard.hanzo.app"
+  },
+  {
+    "slug": "blog-platform",
+    "title": "Blog Platform",
+    "category": "Blog",
+    "description": "",
+    "framework": "Next.js 14.2 + TS",
+    "features": [],
+    "useCase": "",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/blog-platform",
+    "preview": "",
+    "demo": "https://blog-platform.hanzo.app"
+  },
+  {
+    "slug": "changelog",
+    "title": "Changelog",
+    "category": "Blog",
+    "description": "",
+    "framework": "Next.js 15.3 + TS",
+    "features": [],
+    "useCase": "",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/changelog",
+    "preview": "",
+    "demo": "https://changelog.hanzo.app"
+  },
+  {
+    "slug": "crypto-portfolio",
+    "title": "Crypto Portfolio",
+    "category": "Web3",
+    "description": "",
+    "framework": "Next.js 14.2 + TS",
+    "features": [],
+    "useCase": "",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/crypto-portfolio",
+    "preview": "",
+    "demo": "https://crypto-portfolio.hanzo.app"
+  },
+  {
+    "slug": "ecommerce-storefront",
+    "title": "Ecommerce Storefront",
+    "category": "E-commerce",
+    "description": "",
+    "framework": "Next.js 14.2 + TS",
+    "features": [],
+    "useCase": "",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/ecommerce-storefront",
+    "preview": "",
+    "demo": "https://ecommerce-storefront.hanzo.app"
+  },
+  {
+    "slug": "kanban-board",
+    "title": "Kanban Board",
+    "category": "Productivity",
+    "description": "",
+    "framework": "Next.js 14.2 + TS",
+    "features": [],
+    "useCase": "",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/kanban-board",
+    "preview": "",
+    "demo": "https://kanban-board.hanzo.app"
+  },
+  {
+    "slug": "markdown-editor",
+    "title": "Markdown Editor",
+    "category": "Productivity",
+    "description": "",
+    "framework": "Next.js 14.2 + TS",
+    "features": [],
+    "useCase": "",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/markdown-editor",
+    "preview": "",
+    "demo": "https://markdown-editor.hanzo.app"
+  },
+  {
+    "slug": "portfolio",
+    "title": "Portfolio",
+    "category": "Portfolio",
+    "description": "",
+    "framework": "Next.js 14.2 + TS",
+    "features": [],
+    "useCase": "",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/portfolio",
+    "preview": "",
+    "demo": "https://portfolio.hanzo.app"
+  },
+  {
+    "slug": "video-streaming",
+    "title": "Video Streaming",
+    "category": "Media",
+    "description": "",
+    "framework": "Next.js 14.2 + TS",
+    "features": [],
+    "useCase": "",
+    "tier": 2,
+    "rating": 4,
+    "source": "https://gallery.hanzo.ai/templates/video-streaming",
+    "preview": "",
+    "demo": "https://video-streaming.hanzo.app"
+  },
+  {
+    "slug": "mobile",
+    "title": "Hanzo Mobile",
+    "category": "Mobile",
+    "description": "Expo Router tab starter \u2014 iOS, Android and web from one tree. Feed, search, settings and a dynamic detail route.",
+    "framework": "Expo SDK 54 + expo-router 6",
+    "features": [
+      "Expo Router",
+      "Tabs",
+      "Dynamic route",
+      "Dark theme",
+      "Web target"
+    ],
+    "useCase": "Cross-platform mobile apps",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/mobile",
+    "preview": "https://gallery.hanzo.ai/screenshots/mobile.png",
+    "demo": "https://mobile.hanzo.app"
+  },
+  {
+    "slug": "expo-chat",
+    "title": "Hanzo Chat (Expo)",
+    "category": "Mobile",
+    "description": "Streaming AI chat client on Expo Router, wired to the Hanzo /v1 API with run-time endpoint config.",
+    "framework": "Expo SDK 54 + expo-router 6",
+    "features": [
+      "SSE streaming",
+      "Hanzo /v1",
+      "Runtime config",
+      "Tabs",
+      "Web target"
+    ],
+    "useCase": "AI assistants on mobile",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/expo-chat",
+    "preview": "https://gallery.hanzo.ai/screenshots/expo-chat.png",
+    "demo": "https://expo-chat.hanzo.app"
+  },
+  {
+    "slug": "expo-shop",
+    "title": "Hanzo Shop",
+    "category": "Mobile",
+    "description": "Storefront: product grid, detail route and a cart with a live tab badge.",
+    "framework": "Expo SDK 54 + expo-router 6",
+    "features": [
+      "Product grid",
+      "Cart",
+      "Tab badge",
+      "Dynamic route",
+      "Web target"
+    ],
+    "useCase": "Mobile commerce",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/expo-shop",
+    "preview": "https://gallery.hanzo.ai/screenshots/expo-shop.png",
+    "demo": "https://expo-shop.hanzo.app"
+  },
+  {
+    "slug": "expo-auth",
+    "title": "Hanzo Auth",
+    "category": "Mobile",
+    "description": "OAuth 2.0 + PKCE sign-in against Hanzo IAM in the system browser, with a one-place route guard.",
+    "framework": "Expo SDK 54 + expo-auth-session",
+    "features": [
+      "PKCE",
+      "Hanzo IAM",
+      "Keychain storage",
+      "Route guard",
+      "Web target"
+    ],
+    "useCase": "Authenticated mobile apps",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/expo-auth",
+    "preview": "https://gallery.hanzo.ai/screenshots/expo-auth.png",
+    "demo": "https://expo-auth.hanzo.app"
+  },
+  {
+    "slug": "flutter",
+    "title": "Hanzo Flutter",
+    "category": "Mobile",
+    "description": "Material 3 starter \u2014 NavigationBar over an IndexedStack, search, detail route and widget tests.",
+    "framework": "Flutter 3.44 + Material 3",
+    "features": [
+      "Material 3",
+      "NavigationBar",
+      "Search",
+      "Widget tests",
+      "Web target"
+    ],
+    "useCase": "Cross-platform mobile apps",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/flutter",
+    "preview": "https://gallery.hanzo.ai/screenshots/flutter.png",
+    "demo": "https://flutter.hanzo.app"
+  },
+  {
+    "slug": "flutter-chat",
+    "title": "Hanzo Chat (Flutter)",
+    "category": "Mobile",
+    "description": "Streaming AI chat in Flutter, wired to the Hanzo /v1 API, with tests over the failure path.",
+    "framework": "Flutter 3.44 + http",
+    "features": [
+      "SSE streaming",
+      "Hanzo /v1",
+      "Runtime config",
+      "Widget tests",
+      "Web target"
+    ],
+    "useCase": "AI assistants on mobile",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/flutter-chat",
+    "preview": "https://gallery.hanzo.ai/screenshots/flutter-chat.png",
+    "demo": "https://flutter-chat.hanzo.app"
+  },
+  {
+    "slug": "swiftui",
+    "title": "Hanzo SwiftUI",
+    "category": "Mobile",
+    "description": "Native iOS 17 starter \u2014 TabView, NavigationStack, @AppStorage and swift-testing. Project generated from project.yml.",
+    "framework": "SwiftUI + Swift 6 (iOS 17)",
+    "features": [
+      "TabView",
+      "NavigationStack",
+      "swift-testing",
+      "XcodeGen",
+      "Native"
+    ],
+    "useCase": "Native iOS apps",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/swiftui",
+    "preview": "https://gallery.hanzo.ai/screenshots/swiftui.png"
+  },
+  {
+    "slug": "swiftui-chat",
+    "title": "Hanzo Chat (SwiftUI)",
+    "category": "Mobile",
+    "description": "Native streaming AI chat \u2014 @Observable, AsyncThrowingStream over URLSession.bytes, Hanzo /v1.",
+    "framework": "SwiftUI + Swift 6 (iOS 17)",
+    "features": [
+      "@Observable",
+      "AsyncThrowingStream",
+      "Hanzo /v1",
+      "swift-testing",
+      "Native"
+    ],
+    "useCase": "Native iOS apps",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/swiftui-chat",
+    "preview": "https://gallery.hanzo.ai/screenshots/swiftui-chat.png"
+  },
+  {
+    "slug": "desktop-tauri",
+    "title": "Hanzo Desktop",
+    "category": "Desktop",
+    "description": "Tauri v2 + React 19 desktop starter \u2014 Rust command round-trip, Hanzo Base backend, frameless chrome, one web preview build.",
+    "framework": "Tauri v2 + React 19 + Vite 7",
+    "features": [
+      "Rust core",
+      "Web fallback",
+      "Hanzo Base",
+      "Frameless",
+      "3 installers"
+    ],
+    "useCase": "Any cross-platform desktop app",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/desktop-tauri",
+    "preview": "https://desktop-tauri.hanzo.app/preview.png",
+    "demo": "https://desktop-tauri.hanzo.app"
+  },
+  {
+    "slug": "desktop-notes",
+    "title": "Notes",
+    "category": "Desktop",
+    "description": "Local-first markdown notes \u2014 one .md file per note in the OS app-data dir, split editor/preview, autosave, optional Base sync.",
+    "framework": "Tauri v2 + React 19 + marked",
+    "features": [
+      "Local-first",
+      "Markdown",
+      "Autosave",
+      "File-per-note",
+      "Base sync"
+    ],
+    "useCase": "Note-taking and journalling apps",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/desktop-notes",
+    "preview": "https://desktop-notes.hanzo.app/preview.png",
+    "demo": "https://desktop-notes.hanzo.app"
+  },
+  {
+    "slug": "desktop-chat",
+    "title": "Chat",
+    "category": "Desktop",
+    "description": "Desktop AI client \u2014 streaming SSE to any OpenAI-compatible gateway, threads and API key kept in the OS config dir, not web storage.",
+    "framework": "Tauri v2 + React 19",
+    "features": [
+      "SSE streaming",
+      "Threads",
+      "Key off-page",
+      "Model picker",
+      "Any gateway"
+    ],
+    "useCase": "AI assistants and chat clients",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/desktop-chat",
+    "preview": "https://desktop-chat.hanzo.app/preview.png",
+    "demo": "https://desktop-chat.hanzo.app"
+  },
+  {
+    "slug": "desktop-monitor",
+    "title": "Monitor",
+    "category": "Desktop",
+    "description": "Native system monitor \u2014 per-core CPU, memory, process table, disks and interfaces via sysinfo, sampled at 1 Hz.",
+    "framework": "Tauri v2 + React 19 + sysinfo",
+    "features": [
+      "Per-core CPU",
+      "Processes",
+      "Disks",
+      "Network",
+      "SVG sparklines"
+    ],
+    "useCase": "System utilities and dashboards",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/desktop-monitor",
+    "preview": "https://desktop-monitor.hanzo.app/preview.png",
+    "demo": "https://desktop-monitor.hanzo.app"
+  },
+  {
+    "slug": "desktop-editor",
+    "title": "Editor",
+    "category": "Desktop",
+    "description": "CodeMirror 6 code editor in a Tauri window \u2014 real filesystem tree, syntax highlighting, native folder picker, Cmd-S writes through.",
+    "framework": "Tauri v2 + CodeMirror 6",
+    "features": [
+      "Filesystem tree",
+      "Syntax highlight",
+      "Folder picker",
+      "Write-through",
+      "Tabs"
+    ],
+    "useCase": "Editors and developer tools",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/desktop-editor",
+    "preview": "https://desktop-editor.hanzo.app/preview.png",
+    "demo": "https://desktop-editor.hanzo.app"
+  },
+  {
+    "slug": "desktop-tray",
+    "title": "Tray",
+    "category": "Desktop",
+    "description": "Menubar/tray utility \u2014 resident clipboard history, global shortcut, close-hides-not-quits, background watcher thread in Rust.",
+    "framework": "Tauri v2 + tray-icon",
+    "features": [
+      "Tray icon",
+      "Global shortcut",
+      "Clipboard watch",
+      "Filtering",
+      "In-memory"
+    ],
+    "useCase": "Always-resident menubar utilities",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/desktop-tray",
+    "preview": "https://desktop-tray.hanzo.app/preview.png",
+    "demo": "https://desktop-tray.hanzo.app"
+  },
+  {
+    "slug": "desktop-electron",
+    "title": "Electron",
+    "category": "Desktop",
+    "description": "Electron 43 + Forge + Vite + React baseline \u2014 contextIsolated IPC allowlist, native dialogs, app metrics, frameless chrome.",
+    "framework": "Electron 43 + Forge + React 19",
+    "features": [
+      "IPC allowlist",
+      "contextIsolation",
+      "Native dialogs",
+      "App metrics",
+      "Frameless"
+    ],
+    "useCase": "Apps that need Chromium itself",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/desktop-electron",
+    "preview": "https://desktop-electron.hanzo.app/preview.png",
+    "demo": "https://desktop-electron.hanzo.app"
+  },
+  {
+    "slug": "desktop-recorder",
+    "title": "Recorder",
+    "category": "Desktop",
+    "description": "Screen recorder \u2014 desktopCapturer enumerates every screen and window with no OS prompt, MediaRecorder writes webm to disk.",
+    "framework": "Electron 43 + Forge + React 19",
+    "features": [
+      "desktopCapturer",
+      "MediaRecorder",
+      "Thumbnails",
+      "Writes to disk",
+      "webm"
+    ],
+    "useCase": "Screen capture and streaming tools",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/desktop-recorder",
+    "preview": "https://desktop-recorder.hanzo.app/preview.png",
+    "demo": "https://desktop-recorder.hanzo.app"
+  }
 ]
