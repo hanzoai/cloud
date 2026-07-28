@@ -120,6 +120,19 @@ type Project struct {
 	// badge the gallery renders; the human-visible half reads this field. Raised
 	// only for a SuperAdmin caller, so a tenant can never self-badge.
 	Official bool
+	// Upstream and License are the OTHER half of provenance: the third-party work
+	// this project was published FROM, and the terms it carries. Official answers
+	// "did we make it"; these answer "then who did, and under what licence".
+	//
+	// They are deliberately NOT admin-gated the way Official is, because the two
+	// claims point in opposite directions. Official is a claim about US — that
+	// Hanzo vouches for this app — so only we may make it. Upstream/License is a
+	// claim that the work is SOMEONE ELSE'S, which can only ever subtract credit
+	// from the publisher, so the publisher must always be free to make it. A
+	// platform that lets you claim authorship more easily than you can disclaim it
+	// is a platform that launders provenance.
+	Upstream string
+	License  string
 }
 
 // Deployment is one deploy attempt for a project, versioned monotonically per
@@ -290,6 +303,11 @@ CREATE INDEX IF NOT EXISTS ix_releases_org_slug_created ON releases(org, slug, c
 		// honest default for every pre-existing row: unknown lineage, not official.
 		`ALTER TABLE projects ADD COLUMN forked_from TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE projects ADD COLUMN official INTEGER NOT NULL DEFAULT 0`,
+		// upstream/license credit the third-party work a project was published
+		// from. Empty backfills to "no third party declared", which is the honest
+		// default: it says nothing, rather than asserting the work is ours.
+		`ALTER TABLE projects ADD COLUMN upstream TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE projects ADD COLUMN license TEXT NOT NULL DEFAULT ''`,
 		// Every site_hosts row that exists when this migration runs is ALREADY
 		// SERVING, so the default must be 'verified'. Defaulting to 'pending'
 		// would take every live custom domain and subdomain off the air the
@@ -308,7 +326,7 @@ CREATE INDEX IF NOT EXISTS ix_releases_org_slug_created ON releases(org, slug, c
 // Close closes the underlying database.
 func (s *Store) Close() error { return s.db.Close() }
 
-const projectCols = `id,org,slug,name,description,repo_url,repo_branch,repo_provider,framework,status,live_url,bucket,current_deploy,current_release,cache_control,last_purge_at,created_at,updated_at,analytics,space_id,forked_from,official`
+const projectCols = `id,org,slug,name,description,repo_url,repo_branch,repo_provider,framework,status,live_url,bucket,current_deploy,current_release,cache_control,last_purge_at,created_at,updated_at,analytics,space_id,forked_from,official,upstream,license`
 
 func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 	var p Project
@@ -316,7 +334,7 @@ func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 		&p.RepoURL, &p.RepoBranch, &p.RepoProvider, &p.Framework,
 		&p.Status, &p.LiveURL, &p.Bucket, &p.CurrentDeploy, &p.CurrentRelease,
 		&p.CacheControl, &p.LastPurgeAt, &p.CreatedAt, &p.UpdatedAt,
-		&p.Analytics, &p.SpaceId, &p.ForkedFrom, &p.Official)
+		&p.Analytics, &p.SpaceId, &p.ForkedFrom, &p.Official, &p.Upstream, &p.License)
 	return p, err
 }
 
@@ -324,12 +342,12 @@ func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 // errConflict.
 func (s *Store) CreateProject(ctx context.Context, p Project) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		p.ID, p.Org, p.Slug, p.Name, p.Description,
 		p.RepoURL, p.RepoBranch, p.RepoProvider, p.Framework,
 		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CurrentRelease,
 		p.CacheControl, p.LastPurgeAt, p.CreatedAt, p.UpdatedAt,
-		p.Analytics, p.SpaceId, p.ForkedFrom, p.Official)
+		p.Analytics, p.SpaceId, p.ForkedFrom, p.Official, p.Upstream, p.License)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return errConflict
@@ -376,10 +394,10 @@ func (s *Store) ListProjects(ctx context.Context, org string) ([]Project, error)
 // reads-modifies-writes the whole Project; org+slug+id+created_at are immutable.
 func (s *Store) UpdateProject(ctx context.Context, p Project) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE projects SET name=?,description=?,repo_url=?,repo_branch=?,repo_provider=?,framework=?,status=?,live_url=?,bucket=?,current_deploy=?,current_release=?,cache_control=?,last_purge_at=?,analytics=?,official=?,updated_at=?
+		`UPDATE projects SET name=?,description=?,repo_url=?,repo_branch=?,repo_provider=?,framework=?,status=?,live_url=?,bucket=?,current_deploy=?,current_release=?,cache_control=?,last_purge_at=?,analytics=?,official=?,upstream=?,license=?,updated_at=?
 		 WHERE org=? AND slug=?`,
 		p.Name, p.Description, p.RepoURL, p.RepoBranch, p.RepoProvider, p.Framework,
-		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CurrentRelease, p.CacheControl, p.LastPurgeAt, p.Analytics, p.Official, p.UpdatedAt, p.Org, p.Slug)
+		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CurrentRelease, p.CacheControl, p.LastPurgeAt, p.Analytics, p.Official, p.Upstream, p.License, p.UpdatedAt, p.Org, p.Slug)
 	if err != nil {
 		return fmt.Errorf("update project: %w", err)
 	}

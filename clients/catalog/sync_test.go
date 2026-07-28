@@ -165,6 +165,59 @@ func TestForkableDiscriminates(t *testing.T) {
 	}
 }
 
+// TestProvenanceSurvivesTheSync is the regression this package shipped with: the
+// projects store gated the first-party marker correctly and the sync then DROPPED
+// it, so every row arrived here indistinguishable — a Hanzo example and somebody
+// else's paid UI kit rendered identically under a page headed with our own three
+// org names. The marker has to travel, exactly as stored.
+//
+// It also pins the veto: a repo sitting in an org we own is INFERRED ours, while
+// a credit on the live project is a human STATEMENT that it is not. The statement
+// must win, or hosting a bought kit in our own template org would launder it into
+// a first-party example.
+func TestProvenanceSurvivesTheSync(t *testing.T) {
+	t.Setenv(platformOrgEnv, "hanzo")
+	t.Setenv(sourceOrgsEnv, "-")
+	restore(t, []projects.LiveSite{
+		{Org: "hanzo", Slug: "ex-kanban", Name: "Kanban", Official: true,
+			Repo: "https://github.com/hanzo-templates/ex-kanban"},
+		{Org: "hanzo", Slug: "kinetic", Name: "Fitness Pro",
+			Repo:     "https://github.com/hanzo-templates/kinetic",
+			Upstream: "UI8 — Fitness Pro: Website UI Kit", License: "UI8 commercial licence"},
+	})
+	// The kit's repo really does live in one of our orgs, and really is not a
+	// GitHub fork — so the repo half infers "ours". That is the trap.
+	kitRepo := fromRepo(ghRepo{Name: "kinetic", HTMLURL: "https://github.com/hanzo-templates/kinetic"}, "hanzo")
+
+	got := map[string]Entry{}
+	for _, e := range publish(t, []Entry{kitRepo}) {
+		got[e.ID] = e
+	}
+	if e := got["hanzo/ex-kanban"]; !e.Official || !e.Forkable {
+		t.Errorf("a first-party example must keep its marker and its fork invite: %+v", e)
+	}
+	if e := got["hanzo/kinetic"]; e.Official {
+		t.Errorf("a credited third-party kit must never read as first-party: %+v", e)
+	}
+	if e := got["hanzo/kinetic"]; e.Upstream == "" || e.License == "" {
+		t.Errorf("a third-party kit must carry its credit: %+v", e)
+	}
+	if e := got["hanzo/kinetic"]; e.Forkable {
+		t.Errorf("somebody else's paid kit is ours to show, not to hand out: %+v", e)
+	}
+}
+
+// TestRepoOfficialFollowsGitHubsOwnFork keeps the repo half honest with one fact
+// GitHub already asserts: our org's repo is ours, a fork holds upstream's code.
+func TestRepoOfficialFollowsGitHubsOwnFork(t *testing.T) {
+	if e := fromRepo(ghRepo{Name: "node"}, "lux"); !e.Official {
+		t.Error("a repo we authored in our own org is first-party")
+	}
+	if e := fromRepo(ghRepo{Name: "go-ethereum", Fork: true}, "lux"); e.Official {
+		t.Error("a fork is upstream's work; badging it first-party is the lie")
+	}
+}
+
 // publish runs the reconcile with a fixed repo set standing in for GitHub, and
 // returns the published corpus.
 func publish(t *testing.T, repos []Entry) []Entry {
