@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
@@ -291,35 +292,29 @@ func (o ops) browseFiles(ctx context.Context, in *globRef) (*filesJSON, error) {
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(in.Glob) == "" {
+	rev, files, err := coreFiles(o.s, ctx, t, in.Name, in.Ref, in.Glob)
+	switch {
+	case errors.Is(err, errBadInput):
 		return nil, zip.ErrBadRequest("glob is required")
+	case errors.Is(err, errNotFound):
+		return nil, zip.ErrNotFound("repo, ref or revision not found")
+	case err != nil:
+		return nil, zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
-	repo, rev, err := browseTarget(o.s, ctx, t, in.Name, in.Ref)
-	if err != nil {
-		return nil, err
-	}
-	paths, err := MatchPaths(ctx, repo, rev, in.Glob)
-	if err != nil {
-		return nil, err
-	}
-	out := &filesJSON{Rev: rev.String(), Files: make([]fileJSON, 0, len(paths))}
-	for _, p := range paths {
-		blob, err := repo.Blob(ctx, rev, p, maxBlobBytes)
-		if err != nil {
-			// A path the walk just listed and the read cannot open is a broken
-			// object store, not an empty file. Failing the whole read is right:
-			// a partial inventory is the dangerous answer.
-			return nil, zip.Errorf(http.StatusInternalServerError, "read %s at %s: %v", p, ShortRev(rev), err)
-		}
-		f := fileJSON{Path: p, Size: blob.Size, Encoding: "utf8", Truncated: blob.Truncated}
+	// The JSON surface carries bytes as text, or base64 when they are not valid
+	// UTF-8. The internal plane carries them verbatim — a browser needs an
+	// encoding, a peer does not.
+	out := &filesJSON{Rev: rev, Files: make([]fileJSON, 0, len(files))}
+	for _, f := range files {
+		e := fileJSON{Path: f.Path, Size: int64(len(f.Data)), Encoding: "utf8", Truncated: f.Truncated}
 		switch {
-		case blob.Truncated:
-		case blob.Binary:
-			f.Encoding, f.Content = "base64", base64.StdEncoding.EncodeToString(blob.Content)
+		case f.Truncated:
+		case !utf8.Valid(f.Data):
+			e.Encoding, e.Content = "base64", base64.StdEncoding.EncodeToString(f.Data)
 		default:
-			f.Content = string(blob.Content)
+			e.Content = string(f.Data)
 		}
-		out.Files = append(out.Files, f)
+		out.Files = append(out.Files, e)
 	}
 	return out, nil
 }

@@ -217,6 +217,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// provider can ensure/remove a repo's mirror target through the SAME store the
 	// mirror_out reactor pushes from — no sync⇆git cycle (mirror_control.go).
 	cloud.RegisterGitMirrorController(gitMirrorController{})
+	// Install the visibility subscriber so a project published on hanzo.app gets
+	// its canonical repo, world-readable exactly when the project is
+	// (community.go). Next to fall to the internal plane; until then the seam
+	// stays registered — unregistered it is a silent no-op and public projects
+	// stop getting repos.
+	cloud.RegisterPublisher(publish)
+	// Publish the delivery inventory read on the internal plane, so apps/deploy
+	// renders from a tree read instead of cloning (files.go).
+	exposeFiles()
 
 	// SSH transport: `git clone git@<sshHost>:<org>/<repo>.git`. The listener is
 	// a per-process goroutine started here and stopped by Shutdown. The host key
