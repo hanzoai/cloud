@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
@@ -27,6 +28,40 @@ import (
 // Both sources produce the same pair — objects and the revision they came from —
 // and both parse through parseManifest, so what counts as a manifest cannot
 // drift between them.
+
+// source is a desired-state renderer: objects, and the revision they came from.
+// The engine cannot tell the two implementations apart, which is the point —
+// where a repo is hosted is not a fact the reconcile loop should encode.
+type source interface {
+	render(ctx context.Context) ([]*unstructured.Unstructured, string, error)
+}
+
+// newSource picks a renderer from what the repo reference IS, not from a mode
+// flag beside it. A URL is somewhere else and has to be cloned; a bare
+// `org/repo` is ours and is read as a tree.
+//
+// Deriving it removes the failure where a flag and a URL disagree — set the
+// mode to native against a github.com URL and you get an error at reconcile
+// time, or worse, an empty desired set. There is one value, and it decides.
+func newSource(repo, ref, path string, who *zip.Ctx) source {
+	if org, name, ok := nativeRepo(repo); ok {
+		return treeSource{org: org, repo: name, ref: ref, path: path, who: who}
+	}
+	return gitSource{repo: repo, ref: ref, path: path}
+}
+
+// nativeRepo splits a bare `org/repo` reference. Anything carrying a scheme or
+// an SSH-style host is somewhere else, whatever it is named.
+func nativeRepo(s string) (org, repo string, ok bool) {
+	if s == "" || strings.Contains(s, "://") || strings.Contains(s, "@") {
+		return "", "", false
+	}
+	org, repo, found := strings.Cut(strings.Trim(s, "/"), "/")
+	if !found || org == "" || repo == "" || strings.Contains(repo, "/") {
+		return "", "", false
+	}
+	return org, strings.TrimSuffix(repo, ".git"), true
+}
 
 // gitFile is one file of the inventory, mirroring git's fileJSON.
 type gitFile struct {
