@@ -41,6 +41,14 @@ import (
 // pipeline (Recover → RequestID → Logger), and shuts down gracefully on
 // SIGINT/SIGTERM.
 func Serve(specs []MountSpec, enable []string) error {
+	// `<binary> openapi <file>` describes instead of serving. Before LoadConfig
+	// AND before credz.Boot because the document must be a function of the code
+	// alone: both read the environment, and a route set that moved with a
+	// developer's shell is a spec that cannot be a golden — see openapi_dump.go.
+	if dest, ok := SpecRequested(); ok {
+		return dumpSpec(specs, dest)
+	}
+
 	// Credentials FIRST — before config is read, before any store opens. A child
 	// the host spawned has none of its own: it pulls its scoped bundle from the
 	// credz broker here and installs it into the environment, which is what
