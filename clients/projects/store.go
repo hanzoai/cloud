@@ -320,6 +320,14 @@ CREATE INDEX IF NOT EXISTS ix_releases_org_slug_created ON releases(org, slug, c
 			return fmt.Errorf("migrate alter: %w", err)
 		}
 	}
+	// The platform's OWN examples carry the first-party badge. It is declared in
+	// source (firstparty.json), not requested — createProject's SuperAdmin gate on
+	// Official stays exactly as strict as it was, and stays unreachable by the
+	// script that publishes the catalogue. See firstparty.go for why this is a
+	// projection rather than a one-shot data fix.
+	if _, err := backfillOfficial(context.Background(), s.db); err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
 	return nil
 }
 
