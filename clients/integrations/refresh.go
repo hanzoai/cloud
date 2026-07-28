@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/zap-proto/zip"
 )
 
 // fresh returns a connector's live access material, refreshing first when the
@@ -55,7 +56,15 @@ func fresh(ctx context.Context, s *cloud.Service[state], p *Provider, conn Conne
 	ref, err := kmsGet(s, path, refreshSecret)
 	if err != nil || len(ref) == 0 {
 		// Fail closed — never guess or fall back to the (possibly dead) access token.
-		return Connector{}, nil, fmt.Errorf("no refresh token in custody")
+		//
+		// Rotatability is a property of the CONNECTION, not the provider: anthropic
+		// serves a rotating subscription and a static API key under one id, so
+		// p.Refresh != nil does not mean THIS credential can rotate. Custody
+		// holding no refresh token IS that answer, and it is the caller's 400
+		// ("you asked to rotate something unrotatable"), not a 502 — a gateway
+		// error would read as "upstream is broken" and invite a retry that can
+		// never succeed.
+		return Connector{}, nil, zip.ErrBadRequest("refresh not supported")
 	}
 	res, err := p.Refresh(ctx, string(ref))
 	if err != nil || res == nil {
