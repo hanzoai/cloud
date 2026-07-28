@@ -13,7 +13,7 @@ import "testing"
 // sequence exactly, so a reorder, drop, or add in the source fails HERE — an
 // order change becomes a deliberate edit to this list, never an accident on one
 // line of a 112-entry literal. Per-app OwnsHealth/Shutdown/App moved to each
-// cmd/<app>/main.go with the composition root; a change to one of those is now a
+// plugin/<app>/main.go with the composition root; a change to one of those is now a
 // one-line diff in that app's own file, where it is reviewed in context.
 var frozen = []string{
 	"pubsub", "kafka", "agentskills", "flags", "kms", "metrics",

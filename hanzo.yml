@@ -14,7 +14,7 @@
 # operator reconciles the Service CR; the release path notifies universe with a
 # proven tag.
 
-# NO binaries: lane. Every subsystem now ships as its OWN cmd/<app> binary, and
+# NO binaries: lane. Every subsystem now ships as its OWN plugin/<app> binary, and
 # the per-app binaries travel INSIDE the release image — the Dockerfile builds the
 # light host plus one binary per app into /plugins beside it, and the host resolves
 # each plugin as a file on disk (manifest.App.Plugin). There is no longer a single
@@ -34,8 +34,8 @@ test:
       go vet ./...
   - name: generated-current
     # manifest/apps.go is the hand-authored source of truth for the subsystem set.
-    # cmd/gen-app-cmds scaffolds a cmd/<app>/main.go for any manifest app that
-    # lacks one and refuses a cmd/<app> the manifest does not list — the bijection
+    # gen-app-cmds scaffolds a plugin/<app>/main.go for any manifest app that
+    # lacks one and refuses a plugin/<app> the manifest does not list — the bijection
     # that keeps the light host from routing to a binary that is not there (or a
     # binary from going unrouted). It never rewrites an existing main (those are
     # source), so it is idempotent: a clean tree after running it is the whole
@@ -43,14 +43,14 @@ test:
     run: |
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
-      go run ./cmd/gen-app-cmds
+      go run ./plugin/gen-app-cmds
       # --porcelain, not `git diff`: a NEW manifest app scaffolds a NEW
-      # cmd/<app>/main.go, which is untracked and therefore invisible to a diff.
+      # plugin/<app>/main.go, which is untracked and therefore invisible to a diff.
       # The failure that matters most is exactly the one a diff would miss.
-      # Scoped to cmd/*/main.go, the files the generator owns.
-      stale=$(git status --porcelain -- 'cmd/*/main.go')
+      # Scoped to plugin/*/main.go, the files the generator owns.
+      stale=$(git status --porcelain -- 'plugin/*/main.go')
       if [ -n "$stale" ]; then
-        echo "::error::a manifest app has no cmd/<app> (or one is stale) — run 'make generate' and commit. An orphan cmd/<app> fails the generator itself, above."
+        echo "::error::a manifest app has no plugin/<app> (or one is stale) — run 'make generate' and commit. An orphan plugin/<app> fails the generator itself, above."
         echo "$stale"
         exit 1
       fi
@@ -65,16 +65,16 @@ test:
     # one. (There is no package apps to leak anymore; it is gone.)
     run: |
       set -e
-      # CGO_ENABLED=0 to match `make host`: the cgo graph carries one extra
+      # CGO_ENABLED=0 to match `make cloud`: the cgo graph carries one extra
       # package, so leaving it unset makes the number CI prints disagree with the
       # number a developer measures, for no reason anyone can see.
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off CGO_ENABLED=0
-      leak=$(go list -deps ./cmd/host | grep -E '^github.com/hanzoai/cloud/(apps|clients)' || true)
+      leak=$(go list -deps ./cmd/cloud | grep -E '^github.com/hanzoai/cloud/(apps|clients)' || true)
       if [ -n "$leak" ]; then
-        echo "::error::cmd/host links subsystem code, which defeats the point of the light host: $leak"
+        echo "::error::cmd/cloud links subsystem code, which defeats the point of the light host: $leak"
         exit 1
       fi
-      echo "OK: cmd/host links $(go list -deps ./cmd/host | wc -l) packages and no subsystem"
+      echo "OK: cmd/cloud links $(go list -deps ./cmd/cloud | wc -l) packages and no subsystem"
   - name: openapi-composed
     # The fleet spec must BE the composition of its apps' own specs. Each app
     # binary emits its own subset from its own router (`<app> openapi`), and
@@ -112,7 +112,7 @@ test:
       # --porcelain, not `git diff`: a NEW app produces a NEW subset, which is
       # untracked and therefore invisible to a diff. Scoped to the files the
       # per-app target owns.
-      stale=$(git status --porcelain -- 'cmd/*/openapi.json')
+      stale=$(git status --porcelain -- 'plugin/*/openapi.json')
       if [ -n "$stale" ]; then
         echo "::error::an app's published subset is stale — its routes changed without 'make -C apps/<app> openapi'. Run 'make -f mk/fleet.mk openapi-apps' and commit."
         echo "$stale"

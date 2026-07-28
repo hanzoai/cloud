@@ -8,12 +8,12 @@
 ROOT := $(abspath $(dir $(firstword $(MAKEFILE_LIST)))..)
 include $(ROOT)/mk/go.mk
 
-# The apps, read from the Makefiles themselves. Those are generated from
-# apps.Wire() alongside cmd/<app>/main.go, so globbing them reads the same single
-# source of truth the mains do — no second list to fall out of step.
+# The apps, read from the Makefiles themselves. Those sit alongside each app's
+# plugin/<app>/main.go, so globbing them reads the same single source of truth
+# the mains do — no second list to fall out of step.
 APPDIRS := $(patsubst %/Makefile,%,$(wildcard $(ROOT)/apps/*/Makefile))
 
-# Three apps in the manifest have a cmd/<app> here and no source directory: they
+# Three apps in the manifest have a plugin/<app> here and no source directory: they
 # are external modules (hanzoai/authz, hanzoai/licensing, hanzoai/metrics) wired
 # into apps.Wire() by import. There is nothing for a per-app Makefile to sit
 # beside, so they are named here and run through the SAME mk/plugin.mk recipe by
@@ -37,4 +37,4 @@ openapi-weave: ## Weave the per-app subsets into the fleet spec and prove it equ
 openapi-apps: ## Regenerate EVERY app's own spec subset (one binary per app; slow by construction).
 	@for d in $(APPDIRS); do $(MAKE) --no-print-directory -C $$d openapi || exit 1; done
 	@for a in $(EXTERNAL); do $(MAKE) --no-print-directory -f $(ROOT)/mk/plugin.mk ROOT=$(ROOT) APPS=$$a openapi || exit 1; done
-	@echo ">> $$(ls $(ROOT)/cmd/*/openapi.json | wc -l) app subsets"
+	@echo ">> $$(ls $(ROOT)/plugin/*/openapi.json | wc -l) app subsets"

@@ -46,10 +46,10 @@ OPENAPI_DIR    ?= ../openapi
 CGO_ENABLED     ?= 0
 
 # Every app the light host mounts, read from the generated manifest — the same
-# list cmd/host links and the multi-call binary serves.
+# list cmd/cloud links and the multi-call binary serves.
 APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
 
-.PHONY: help webui deploy-ui agentskills build host ship plugin generate openapi run smoke test test-cgo test-codec vet tidy docker docker-push clean e2e
+.PHONY: help webui deploy-ui agentskills build cloud ship plugin generate openapi run smoke test test-cgo test-codec vet tidy docker docker-push clean e2e
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -97,16 +97,17 @@ agentskills: ## Regenerate the FULL agent-skills catalog into apps/agentskills/c
 #
 # then restart the host. `plugin` declares no prerequisites, so the second command
 # never drags the first along behind it.
-build: host ## FAST PATH (default): build the light host into ./bin/host. Then `make plugin APP=<x>` for the app you are editing.
+build: cloud ## FAST PATH (default): build the light host into ./bin/cloud. Then `make plugin APP=<x>` for the app you are editing.
 
 # THE LIGHT HOST links zip and the generated manifest and stops, because it knows
 # only where each app lives and which paths it answers — never what the app does.
 # The apps run as their own processes, started on the first request that reaches
-# them, so the host's build does not grow when a subsystem does.
-host: ## Build the light host into ./bin/host (links zip + the manifest, none of the apps).
+# them, so the host's build does not grow when a subsystem does. The binary is
+# named cloud — it IS the one real binary, and its ENTRYPOINT the image ships.
+cloud: ## Build the light host into ./bin/cloud (links zip + the manifest, none of the apps).
 	@mkdir -p bin
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$@ ./cmd/$@
-	@echo ">> bin/host — $$(CGO_ENABLED=$(CGO_ENABLED) $(GO) list -deps ./cmd/host | wc -l) packages, $$(du -h bin/host | cut -f1)"
+	@echo ">> bin/cloud — $$(CGO_ENABLED=$(CGO_ENABLED) $(GO) list -deps ./cmd/cloud | wc -l) packages, $$(du -h bin/cloud | cut -f1)"
 
 # THE RELEASE LAYOUT: the light host plus one dedicated binary per app, all in
 # ./bin. The host loads each app as a plugin (manifest.App.Plugin resolves a file
@@ -114,23 +115,23 @@ host: ## Build the light host into ./bin/host (links zip + the manifest, none of
 # binary at all. Each per-app link is its OWN graph (the one subsystem, not the
 # fleet), so this is $(words $(APPS)) independent lean builds and not the mega
 # link that used to dominate a release. Slow by count, never by any single link.
-ship: host ## Build the release layout into ./bin: the light host + one binary per app.
+ship: cloud ## Build the release layout into ./bin: the light host + one binary per app.
 	@for a in $(APPS); do $(MAKE) --no-print-directory plugin APP=$$a; done
-	@echo ">> ship: host + $(words $(APPS)) per-app plugins in ./bin ($$(du -sh bin | cut -f1))"
+	@echo ">> ship: cloud + $(words $(APPS)) per-app plugins in ./bin ($$(du -sh bin | cut -f1))"
 
 plugin: ## Build ONE app into ./bin: make plugin APP=wallets.
 	@test -n "$(APP)" || { echo "usage: make plugin APP=<name>"; echo "apps: $(APPS)"; exit 1; }
-	@test -d cmd/$(APP) || { echo "no cmd/$(APP) — run 'make generate', or check the name against 'make plugin' with no APP"; exit 1; }
+	@test -d plugin/$(APP) || { echo "no plugin/$(APP) — run 'make generate', or check the name against 'make plugin' with no APP"; exit 1; }
 	@mkdir -p bin
-	GOFLAGS=-p=2 CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$(APP) ./cmd/$(APP)
+	GOFLAGS=-p=2 CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$(APP) ./plugin/$(APP)
 
 # manifest/apps.go is the hand-authored source of truth for the subsystem set.
-# This scaffolds a cmd/<app>/main.go for any manifest app that lacks one and
+# This scaffolds a plugin/<app>/main.go for any manifest app that lacks one and
 # validates the two are in bijection (every app has a command, every command is
 # an app). Idempotent: a no-op run leaves the tree clean, which is what lets CI
 # diff it. It does NOT rewrite existing mains — those are source.
-generate: ## Scaffold missing cmd/<app>/main.go and validate the manifest.Apps bijection.
-	$(GO) run ./cmd/gen-app-cmds
+generate: ## Scaffold missing plugin/<app>/main.go and validate the manifest.Apps bijection.
+	$(GO) run ./plugin/gen-app-cmds
 
 # NOTE: the shipped API is the light host plus one binary per app (there is no
 # fused `cloud` binary anymore). The Go `hanzo` CLI (cmd/hanzo) is DELETED; the
@@ -145,12 +146,12 @@ generate: ## Scaffold missing cmd/<app>/main.go and validate the manifest.Apps b
 # that same list here is what keeps the two in step.
 RUN_ENABLE ?= iam,base,kms,gateway,o11y
 
-run: host ## Run the host with iam,base,kms,gateway,o11y (matches README quickstart); builds just those plugins.
+run: cloud ## Run the host with iam,base,kms,gateway,o11y (matches README quickstart); builds just those plugins.
 	@for a in $$(echo $(RUN_ENABLE) | tr ',' ' '); do $(MAKE) --no-print-directory plugin APP=$$a; done
-	./bin/host --enable=$(RUN_ENABLE)
+	./bin/cloud --enable=$(RUN_ENABLE)
 
-smoke: ## Build and run cmd/smoke (mount-time integration check).
-	$(GO) run ./cmd/smoke
+smoke: ## Build and run the smoke prober (mount-time integration check).
+	$(GO) run ./plugin/smoke
 
 # The ONE end-to-end target: builds this repo's binary, boots it on isolated ports
 # with a fresh data dir, seeds identity through the same operator upsert production
@@ -206,7 +207,7 @@ test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ship
 #      out of ./... by name, so a typed op added anywhere is covered and no
 #      unrelated generator fires.
 #   2. each app describes ITSELF: `<app> openapi` mounts that one subsystem and
-#      projects its own router into cmd/<app>/openapi.json (mk/fleet.mk — one lean
+#      projects its own router into plugin/<app>/openapi.json (mk/fleet.mk — one lean
 #      binary per app, no fused build and no mega link).
 #   3. the weave composes those subsets into openapi.yaml (openapi/weave.go),
 #      refusing when two apps claim one path or one schema name. There is no

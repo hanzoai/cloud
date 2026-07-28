@@ -1,10 +1,10 @@
-package cloud
+package webui
 
 // Tests for the embedded console: ONE binary serves the SPA at the web root AND
 // the /v1 API, from the same zip/fiber app. They drive real requests through the
 // stack (app.Fiber().Test) exactly as production Serve wires it — a /v1 route
-// registered FIRST, then mountConsole registered LAST — so the assertions prove
-// the real precedence and SPA-fallback behavior, not a mock of it.
+// registered FIRST, then Mount registered LAST — so the assertions prove the real
+// precedence and SPA-fallback behavior, not a mock of it.
 
 import (
 	"bytes"
@@ -37,8 +37,8 @@ func newConsoleApp(t *testing.T) *zip.App {
 	})
 
 	// Console LAST — terminal catch-all, same as Serve.
-	if err := mountConsole(app); err != nil {
-		t.Fatalf("mountConsole: %v", err)
+	if err := Mount(app); err != nil {
+		t.Fatalf("Mount: %v", err)
 	}
 	return app
 }
@@ -80,7 +80,7 @@ func do(t *testing.T, app *zip.App, method, target string, headers map[string]st
 // the real console bundle the image build drops in).
 func indexHTML(t *testing.T) []byte {
 	t.Helper()
-	b, err := consoleFS.ReadFile("webui/dist/index.html")
+	b, err := consoleFS.ReadFile("dist/index.html")
 	if err != nil {
 		t.Fatalf("read embedded index.html: %v", err)
 	}
