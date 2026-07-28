@@ -129,6 +129,16 @@ func TestCrossOrgSearch(t *testing.T) {
 	if got := decode(t, mustGet(t, app, "/v1/catalog?org=zoo&archetype=site")); got.Total != 1 {
 		t.Errorf("org+archetype should compose, got %+v", got.Data)
 	}
+	// Every dimension the response FACETS is a dimension it filters.
+	for dim, val := range map[string]string{"org": "lux", "kind": "repo", "archetype": "app", "language": "Go"} {
+		got := decode(t, mustGet(t, app, "/v1/catalog?"+dim+"="+val))
+		if got.Total == 0 || got.Total == 3 {
+			t.Errorf("%s=%s did not filter (total %d of 3)", dim, val, got.Total)
+		}
+		if _, ok := got.Facets[dim]; !ok {
+			t.Errorf("%s is filterable but not faceted", dim)
+		}
+	}
 }
 
 // TestPrivateProjectNeverLeaks is the tenancy boundary. acme's own catalog row
