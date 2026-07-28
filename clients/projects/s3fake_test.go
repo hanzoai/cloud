@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -81,6 +82,14 @@ func (f *fakeS3) seedSparse(bucket, key string, size int64) {
 		f.sizes = make(map[string]int64)
 	}
 	f.sizes[bucket+"/"+key] = size
+	f.mu.Unlock()
+}
+
+// remove drops one object, standing in for bytes reclaimed out of band — a
+// bucket lifecycle rule, an operator purge, or a retention pass.
+func (f *fakeS3) remove(bucket, key string) {
+	f.mu.Lock()
+	delete(f.objects, bucket+"/"+key)
 	f.mu.Unlock()
 }
 
@@ -150,6 +159,11 @@ func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodHead && !hasKey:
 		w.WriteHeader(http.StatusOK) // bucket exists → ensureBucket skips MakeBucket
+	// key != "", not hasKey: a bucket URL carries a trailing slash, so hasKey is
+	// true with an EMPTY key and a bucket HEAD would otherwise be answered as a
+	// missing object — ensureBucket would then re-create the bucket on every call.
+	case r.Method == http.MethodHead && key != "":
+		f.stat(w, bucket, key)
 	case r.Method == http.MethodGet && q.Has("location"):
 		w.Header().Set("Content-Type", "application/xml")
 		_, _ = io.WriteString(w, `<?xml version="1.0" encoding="UTF-8"?><LocationConstraint xmlns="http://s3.amazonaws.com/doc/2006-03-01/">us-east-1</LocationConstraint>`)
@@ -299,6 +313,28 @@ func (f *fakeS3) put(w http.ResponseWriter, bucket, key string, r *http.Request)
 	f.puts++
 	f.mu.Unlock()
 	w.Header().Set("ETag", fmt.Sprintf("%q", fmt.Sprintf("%x", md5.Sum(body))))
+	w.WriteHeader(http.StatusOK)
+}
+
+// stat implements S3 HEAD-object, the existence probe activation runs before it
+// flips a site's pointer. It must be HONEST about absence — a double that
+// answered 200 for every key would make the bytes-gone path untestable, which is
+// exactly the path retention creates.
+func (f *fakeS3) stat(w http.ResponseWriter, bucket, key string) {
+	f.mu.Lock()
+	body, ok := f.objects[bucket+"/"+key]
+	size, sized := f.sizes[bucket+"/"+key]
+	f.mu.Unlock()
+	if !ok {
+		w.WriteHeader(http.StatusNotFound) // a HEAD carries no body; the status IS the answer
+		return
+	}
+	if !sized {
+		size = int64(len(body))
+	}
+	w.Header().Set("ETag", fmt.Sprintf("%q", etagOf(body)))
+	w.Header().Set("Last-Modified", time.Now().UTC().Format(http.TimeFormat))
+	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 	w.WriteHeader(http.StatusOK)
 }
 
