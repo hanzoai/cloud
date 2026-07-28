@@ -40,29 +40,21 @@ test:
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
       go vet ./...
   - name: go-unit
-    # The money-path + composition-root surface: the packages the unfork/zip
-    # migration made load-bearing. Full ./... needs cek/KMS env; these run
-    # hermetic.
     run: |
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off CGO_ENABLED=1
-      # -skip: TestRecord_DebitsFinanceInProcess is env-gated (cek demands
-      # CLOUD_KMS_MASTER_KEY_REF on encryption-capable builds) — it runs where
-      # that key exists, not in the hermetic gate.
-      go test -count=1 -timeout 15m -skip 'TestRecord_DebitsFinanceInProcess' \
-        ./apps/ \
-        ./clients/commerce/ \
-        ./clients/commerce/transport/ \
-        ./clients/metering/ \
-        ./clients/catalogsync/ \
-        ./clients/bots/ \
-        ./clients/admin/finance/ \
-        ./clients/flags/ \
-        ./clients/ml/ \
-        ./clients/visor/ \
-        ./clients/translate/ \
-        ./cli/
-
-kms:
-  path: /deploy
-  environment: prod
+      # THE WHOLE TREE. This used to name twelve packages, which meant a red
+      # package could sit on main without ever producing a red build — that is
+      # exactly how clients/git and clients/entitlements went unnoticed. An
+      # allowlist silently stops covering everything added after it is written,
+      # so the gate takes ./... and the exceptions are named, with reasons.
+      #
+      # -skip, each entry env-dependent rather than broken:
+      #   TestRecord_DebitsFinanceInProcess — cek demands CLOUD_KMS_MASTER_KEY_REF
+      #     on an encryption-capable build; it runs where that key exists.
+      #   TestIndexerUnreachableHonestEmpty — asserts a hostname does NOT resolve.
+      #     A resolver that hijacks NXDOMAIN (or is merely slow) fails it for
+      #     reasons that have nothing to do with this code.
+      go test -count=1 -timeout 30m \
+        -skip 'TestRecord_DebitsFinanceInProcess|TestIndexerUnreachableHonestEmpty' \
+        ./...

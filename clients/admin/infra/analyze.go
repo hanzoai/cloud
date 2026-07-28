@@ -20,6 +20,11 @@
 // an idle database, not garbage. Idle volumes are surfaced as a queue for a human and
 // are never counted as reclaimable.
 //
+// THE SAME DISCIPLINE GOVERNS EVERY MUTATION, not just volume deletion. A droplet, a
+// load balancer and a node pool each get a (allowed, reason) verdict derived HERE, from
+// the same scan, behind the same completeness gate — see Snapshot.verdict. Handlers
+// carry no policy: they read the verdict this file already reached.
+//
 // Analyze is a pure function of (DO inventory, cluster scans) so every rule above is
 // unit-testable without a network or a cluster.
 package infra
@@ -128,6 +133,16 @@ type NodeState struct {
 	Schedulable bool
 }
 
+// ServiceRef is one Service of type LoadBalancer: the identities by which it claims a
+// DO load balancer. It is to load balancers exactly what PVRef is to volumes — the only
+// sound liveness test, because a DO load balancer carries no back-reference of its own.
+type ServiceRef struct {
+	Namespace string
+	Name      string
+	LBID      string
+	IPs       []string
+}
+
 // ClusterScan is ONE cluster's Kubernetes truth. Err non-nil means the cluster did
 // not answer — which forces the whole analysis incomplete.
 type ClusterScan struct {
@@ -137,6 +152,7 @@ type ClusterScan struct {
 	PVs       []PVRef
 	PVCs      []PVCRef
 	Pods      []PodRef
+	Services  []ServiceRef
 }
 
 // Snapshot is the whole board in one value.
@@ -190,6 +206,7 @@ type Cluster struct {
 	Version      string      `json:"version"`
 	Status       string      `json:"status"`
 	NodePools    int         `json:"nodePools"`
+	Pools        []NodePool  `json:"pools"`
 	Nodes        int         `json:"nodes"`
 	Pods         int         `json:"pods"`
 	PVs          int         `json:"pvs"`
@@ -198,6 +215,44 @@ type Cluster struct {
 	Scanned      bool        `json:"scanned"`
 	ScanError    string      `json:"scanError"`
 	MonthlyCents money.Cents `json:"monthlyCents"`
+}
+
+// NodePool is one DOKS node pool — the only correct place to change a cluster's node
+// count. ClusterSchedulable is the whole cluster's schedulable-and-ready node count,
+// carried on the row so the shrink verdict is a pure method of it.
+type NodePool struct {
+	ID                 string `json:"id"`
+	Name               string `json:"name"`
+	Size               string `json:"size"`
+	Count              int    `json:"count"`
+	ClusterID          string `json:"clusterId"`
+	Cluster            string `json:"cluster"`
+	ClusterSchedulable int    `json:"clusterSchedulable"`
+	Scalable           bool   `json:"scalable"`
+	BlockedReason      string `json:"blockedReason"`
+}
+
+// ScaleTo answers whether this pool may be set to count.
+//
+// PROVEN HERE: a pool keeps at least one node, and a shrink never leaves the cluster
+// with zero schedulable nodes — with none, every pod the removed nodes carried is
+// unschedulable, guaranteed.
+//
+// NOT PROVEN, and deliberately not pretended: DOKS picks WHICH nodes it removes, so no
+// particular pod can be shown to survive a shrink that leaves capacity behind. Node
+// affinity, taints and resource requests decide that, and PodDisruptionBudgets are
+// enforced by the cluster during DOKS's own drain — not by this board. A shrink that
+// merely MIGHT not fit is allowed, and the response says so.
+func (p NodePool) ScaleTo(count int) (bool, string) {
+	switch {
+	case !p.Scalable:
+		return false, p.BlockedReason
+	case count < 1:
+		return false, "A node pool must keep at least one node — scaling to zero destroys every node in the pool and strands its pods."
+	case count < p.Count && p.ClusterSchedulable-(p.Count-count) < 1:
+		return false, fmt.Sprintf("Removing %d node(s) would leave %s with no schedulable node.", p.Count-count, p.Cluster)
+	}
+	return true, ""
 }
 
 // Node is one droplet, joined to the Kubernetes node of the same name.
@@ -221,6 +276,11 @@ type Node struct {
 	Schedulable  bool        `json:"schedulable"`
 	Pods         int         `json:"pods"`
 	Volumes      int         `json:"volumes"`
+	// Mutable reports whether this droplet may be changed DIRECTLY — deleted or resized.
+	// One predicate covers both because one fact decides both: a DOKS node belongs to a
+	// node pool, and the pool is the only thing allowed to change it.
+	Mutable       bool   `json:"mutable"`
+	BlockedReason string `json:"blockedReason"`
 }
 
 // Volume is one block-storage volume with its PROVEN cluster ownership.
@@ -251,7 +311,8 @@ type Volume struct {
 	BlockedReason string   `json:"blockedReason"`
 }
 
-// LoadBalancer is one DO load balancer, attributed to a cluster via its members.
+// LoadBalancer is one DO load balancer, attributed to a cluster via the Service that
+// claims it, or failing that via its member droplets.
 type LoadBalancer struct {
 	ID           string      `json:"id"`
 	Name         string      `json:"name"`
@@ -262,6 +323,11 @@ type LoadBalancer struct {
 	MonthlyCents money.Cents `json:"monthlyCents"`
 	Droplets     int         `json:"droplets"`
 	Cluster      string      `json:"cluster"`
+	// Service is the `namespace/name` of the live type=LoadBalancer Service that claims
+	// this load balancer, proven from the cluster scan. Non-empty means IN USE.
+	Service       string `json:"service"`
+	Deletable     bool   `json:"deletable"`
+	BlockedReason string `json:"blockedReason"`
 }
 
 // Finding is one audit result — the "is anything bad" surface.
@@ -281,6 +347,30 @@ type pvHit struct {
 	cluster   string
 	clusterID string
 	pv        PVRef
+}
+
+// svcHit is a Service that claims a given DO load balancer, plus its cluster.
+type svcHit struct {
+	cluster string
+	svc     ServiceRef
+}
+
+// verdict is the ONE place a mutation's answer is decided: the completeness gate every
+// mutation shares, then the resource's own rule (blocked == "" meaning its rule is
+// satisfied). The gate comes first and applies to ALL of them — droplets, load balancers
+// and node pools fail closed on a partial scan for the same reason volumes do: a fleet
+// we cannot fully see is a fleet whose live parts we cannot fully name.
+//
+// Every (Deletable|Mutable|Scalable, BlockedReason) pair on this board comes from here,
+// so "allowed carries no reason, blocked always names one" is stated once.
+func (s *Snapshot) verdict(blocked string) (bool, string) {
+	switch {
+	case !s.Complete:
+		return false, s.IncompleteReason
+	case blocked != "":
+		return false, blocked
+	}
+	return true, ""
 }
 
 // Analyze folds the DO inventory and the per-cluster Kubernetes scans into the board.
@@ -329,6 +419,11 @@ func Analyze(inv Inventory, scans []ClusterScan, sources []core.SourceStatus, at
 	byHandle := make(map[string]pvHit)
 	// mounted[clusterID/ns/pvc] -> pods currently mounting it.
 	mounted := make(map[string][]string)
+	// THE load-balancer safety index, keyed by BOTH identities a Service can claim one
+	// by — the DOKS load-balancer-id annotation and every address it holds. Either
+	// matching counts, because a broad match means MORE load balancers are treated as in
+	// use, which is the safe direction.
+	lbClaims := make(map[string]svcHit)
 	for _, s := range scans {
 		if s.Err != nil {
 			continue
@@ -343,6 +438,14 @@ func Analyze(inv Inventory, scans []ClusterScan, sources []core.SourceStatus, at
 			for _, claim := range p.Claims {
 				k := claimKey(s.ClusterID, p.Namespace, claim)
 				mounted[k] = append(mounted[k], p.Namespace+"/"+p.Name)
+			}
+		}
+		for _, sv := range s.Services {
+			hit := svcHit{cluster: cname, svc: sv}
+			for _, key := range append([]string{sv.LBID}, sv.IPs...) {
+				if key = strings.TrimSpace(key); key != "" {
+					lbClaims[key] = hit
+				}
 			}
 		}
 	}
@@ -375,7 +478,7 @@ func Analyze(inv Inventory, scans []ClusterScan, sources []core.SourceStatus, at
 		cid := clusterIDFromTags(d.Tags)
 		clusterByDroplet[d.ID] = cid
 		ks := nodeByName[d.Name]
-		snap.Nodes = append(snap.Nodes, Node{
+		n := Node{
 			ID: d.ID, Name: d.Name, Cluster: nameByID[cid], ClusterID: cid,
 			Region: d.Region, Status: d.Status, SizeSlug: d.SizeSlug,
 			VCPUs: d.VCPUs, MemoryMiB: d.MemoryMiB, LocalDiskGiB: d.LocalDiskGiB,
@@ -383,7 +486,9 @@ func Analyze(inv Inventory, scans []ClusterScan, sources []core.SourceStatus, at
 			PrivateIP: d.PrivateIP, PublicIP: d.PublicIP, Tags: nonNilStrings(d.Tags),
 			Ready: ks.Ready, Schedulable: ks.Schedulable,
 			Pods: podsPerNode[d.Name], Volumes: volsPerDroplet[d.ID],
-		})
+		}
+		n.Mutable, n.BlockedReason = snap.verdict(nodeBlock(n))
+		snap.Nodes = append(snap.Nodes, n)
 		snap.Cost.DropletsMonthly += d.MonthlyCents
 		snap.Totals.LocalDiskGiB += d.LocalDiskGiB
 	}
@@ -437,8 +542,7 @@ func Analyze(inv Inventory, scans []ClusterScan, sources []core.SourceStatus, at
 		// Idle is a REVIEW signal on live data, never a delete signal.
 		vol.Idle = vol.State == StateBound && len(vol.MountedBy) == 0
 
-		vol.Deletable = snap.Complete && vol.State == StateUnreferenced
-		vol.BlockedReason = blockedReason(vol, snap.Complete, snap.IncompleteReason)
+		vol.Deletable, vol.BlockedReason = snap.verdict(volumeBlock(vol))
 
 		snap.Cost.VolumesMonthly += vol.MonthlyCents
 		snap.Totals.VolumeGiB += vol.SizeGiB
@@ -472,12 +576,27 @@ func Analyze(inv Inventory, scans []ClusterScan, sources []core.SourceStatus, at
 			ID: l.ID, Name: l.Name, Region: l.Region, Status: l.Status, IP: l.IP,
 			SizeUnit: l.SizeUnit, MonthlyCents: l.MonthlyCents, Droplets: len(l.DropletIDs),
 		}
+		// The claiming Service is the strongest attribution there is; member droplets are
+		// the fallback for a load balancer no scanned Service claims.
+		hit, claimed := lbClaims[l.ID]
+		if !claimed {
+			hit, claimed = lbClaims[l.IP]
+		}
+		if claimed {
+			lb.Service = hit.svc.Namespace + "/" + hit.svc.Name
+			lb.Cluster = hit.cluster
+		}
+		// A member droplet belonging to no cluster carries a workload Kubernetes knows
+		// nothing about, so the Service scan proves nothing about this load balancer.
+		unmanaged := 0
 		for _, id := range l.DropletIDs {
-			if cid := clusterByDroplet[id]; cid != "" {
+			if cid := clusterByDroplet[id]; cid == "" {
+				unmanaged++
+			} else if lb.Cluster == "" {
 				lb.Cluster = nameByID[cid]
-				break
 			}
 		}
+		lb.Deletable, lb.BlockedReason = snap.verdict(lbBlock(lb, unmanaged))
 		snap.Cost.LoadBalancersMonthly += lb.MonthlyCents
 		snap.LoadBalancers = append(snap.LoadBalancers, lb)
 	}
@@ -504,8 +623,9 @@ func Analyze(inv Inventory, scans []ClusterScan, sources []core.SourceStatus, at
 	for _, c := range inv.Clusters {
 		row := Cluster{
 			ID: c.ID, Name: c.Name, Region: c.Region, Version: c.Version,
-			Status: c.Status, NodePools: c.NodePools, Nodes: nodesByCluster[c.ID],
+			Status: c.Status, NodePools: len(c.Pools), Nodes: nodesByCluster[c.ID],
 			IdlePVCs: idleByCluster[c.ID], MonthlyCents: costByCluster[c.ID],
+			Pools: make([]NodePool, 0, len(c.Pools)),
 		}
 		if s, ok := scanByID[c.ID]; ok {
 			if s.Err != nil {
@@ -516,6 +636,25 @@ func Analyze(inv Inventory, scans []ClusterScan, sources []core.SourceStatus, at
 			}
 		} else {
 			row.ScanError = "not scanned"
+		}
+		// A node that is cordoned or NotReady cannot take a pod, so it does not count as
+		// somewhere a shrink's evicted pods could land. Counting conservatively here
+		// refuses more shrinks, which is the safe direction.
+		schedulable := 0
+		for _, n := range scanByID[c.ID].Nodes {
+			if n.Ready && n.Schedulable {
+				schedulable++
+			}
+		}
+		for _, p := range c.Pools {
+			pool := NodePool{
+				ID: p.ID, Name: p.Name, Size: p.Size, Count: p.Count,
+				ClusterID: c.ID, Cluster: c.Name, ClusterSchedulable: schedulable,
+			}
+			// A pool carries no rule of its own — what may be refused depends on the
+			// COUNT asked for, which ScaleTo decides. Only the shared gate applies here.
+			pool.Scalable, pool.BlockedReason = snap.verdict("")
+			row.Pools = append(row.Pools, pool)
 		}
 		snap.Clusters = append(snap.Clusters, row)
 	}
@@ -530,26 +669,57 @@ func Analyze(inv Inventory, scans []ClusterScan, sources []core.SourceStatus, at
 	return snap
 }
 
-// blockedReason states, in the operator's language, exactly why a volume may not be
-// deleted. An empty string means it may.
-func blockedReason(v Volume, complete bool, incomplete string) string {
-	if v.Deletable {
+// The per-resource rules. Each states, in the operator's language, exactly why ITS
+// resource may not be mutated, and returns "" when its own rule is satisfied — the
+// shared completeness gate in Snapshot.verdict has the final word either way.
+
+// volumeBlock: only an unreferenced volume may be deleted.
+func volumeBlock(v Volume) string {
+	switch v.State {
+	case StateUnreferenced:
 		return ""
-	}
-	switch {
-	case !complete:
-		return incomplete
-	case v.State == StateAttached:
+	case StateAttached:
 		if v.NodeName != "" {
 			return "Attached to " + v.NodeName + " and in use."
 		}
 		return "Attached to a droplet and in use."
-	case v.State == StateBound:
+	case StateBound:
 		return fmt.Sprintf("Live data: PV %s is Bound to %s/%s in %s.", v.PV, v.PVCNamespace, v.PVCName, v.Cluster)
-	case v.State == StateReleased:
+	case StateReleased:
 		return fmt.Sprintf("PV %s in %s still references it (%s) — retire the PV first.", v.PV, v.Cluster, v.PVPhase)
 	}
 	return "Not eligible for deletion."
+}
+
+// nodeBlock: a DOKS node may not be deleted OR resized directly. The node pool owns it
+// — DOKS recreates a node deleted out from under it (so the delete costs an outage and
+// changes nothing) and reverts a hand-resized one to the pool's declared size. The pool
+// is the only lever that actually holds.
+func nodeBlock(n Node) string {
+	if n.ClusterID == "" {
+		return ""
+	}
+	name := n.Cluster
+	if name == "" {
+		name = n.ClusterID
+	}
+	return fmt.Sprintf("Node of DOKS cluster %s — DOKS owns it via its node pool and will recreate it. Scale or edit the pool instead.", name)
+}
+
+// lbBlock: a load balancer a live Service still targets may not be deleted — doing so
+// black-holes that Service's public address, and DOKS recreates the load balancer
+// anyway. Nor may one that forwards to droplets outside every cluster: the Service scan
+// is the only liveness evidence this board has, and it says nothing about a workload
+// Kubernetes does not run. "Has member droplets" is NOT itself a liveness signal — a
+// DOKS load balancer lists every node in its cluster, so a leaked one still looks busy.
+func lbBlock(lb LoadBalancer, unmanagedMembers int) string {
+	switch {
+	case lb.Service != "":
+		return fmt.Sprintf("Serving Kubernetes Service %s in %s — delete the Service first; DOKS recreates a load balancer its Service still wants.", lb.Service, lb.Cluster)
+	case unmanagedMembers > 0:
+		return fmt.Sprintf("Forwards to %d droplet(s) outside any cluster — no Kubernetes Service can vouch for it, so it cannot be proven unused.", unmanagedMembers)
+	}
+	return ""
 }
 
 // findings is the audit pass: what a human should look at, worst first.
