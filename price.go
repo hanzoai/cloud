@@ -10,7 +10,7 @@ package cloud
 // customer complains) and under-billing is SILENT and PERMANENT, because free never
 // errors. A route nobody priced was free forever and nothing anywhere said so.
 //
-// So the price moved to where the surface is declared: MountSpec.Price, one field
+// So the price moved to where the surface is declared: App.Price, one field
 // beside Name in the composition root. Its zero value is Undeclared, which is not a
 // price but an unanswered question, and apps.TestPriceDeclared fails on it. A new
 // subsystem therefore cannot reach main until someone writes down what it costs, and

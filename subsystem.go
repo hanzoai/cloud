@@ -90,7 +90,7 @@ func MountPrefixes(name string, declared []string) []string {
 // declares — apps.Wire() — without booting 111 subsystems' stores and dialling their
 // providers to find out. Those tests are why the price a request resolves to can be
 // checked against the number a reviewer approved.
-func Declare(specs []MountSpec, cfg *Config) {
+func Declare(specs []Plugin, cfg *Config) {
 	idx := &subsystemIndex{
 		all:    make([]Subsystem, 0, len(specs)),
 		routes: make([]subsystemRoute, 0, len(specs)),

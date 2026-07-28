@@ -252,7 +252,7 @@ func billingEnabled(m *metering.Client) bool { return m != nil && m.Enabled() }
 
 // DefaultPrice is cloud's per-request price (in cents) for the edge gate. It holds
 // NO table: it reads the price the surface DECLARED at the composition root
-// (MountSpec.Price → PriceOf, see price.go), so the number the gate charges and the
+// (App.Price → PriceOf, see price.go), so the number the gate charges and the
 // number a reviewer approved are the same number, in one place.
 //
 // It used to be the table, and its last line was `return 0` for anything unlisted —

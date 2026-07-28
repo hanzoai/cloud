@@ -127,7 +127,7 @@ func AIHTTPM2M(baseURL, tokenURL, clientID, clientSecret, defaultModel string) t
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		TokenURL:     tokenURL,
-		// hanzo.id (Casdoor) expects the credentials in the form body, not Basic
+		// hanzo.id expects the credentials in the form body, not Basic
 		// auth — matches the proven client_credentials call.
 		AuthStyle: oauth2.AuthStyleInParams,
 	}

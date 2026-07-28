@@ -51,7 +51,7 @@ func TestAutoRoutingBillsAsResolvedModel(t *testing.T) {
 	// DefaultPrice reads the declaration and an ABSENT one would also resolve to zero —
 	// so without this the assertion below is satisfied by a gate that priced nothing at
 	// all, which proves nothing about ai.
-	index(t, &Config{Enable: []string{"ai"}}, MountSpec{Name: "ai", Price: Metered})
+	index(t, &Config{Enable: []string{"ai"}}, Plugin{Name: "ai", Price: Metered})
 
 	app := zip.New(zip.Config{})
 	// The genuine edge gate with the genuine price function.
@@ -102,7 +102,7 @@ func TestAutoRoutingBillsAsResolvedModel(t *testing.T) {
 // charge. Path-based, never request-model-based, pricing is what makes `auto`
 // bill as the model that served it.
 func TestDefaultPriceAiPathModelAgnostic(t *testing.T) {
-	index(t, &Config{Enable: []string{"ai"}}, MountSpec{Name: "ai", Price: Metered})
+	index(t, &Config{Enable: []string{"ai"}}, Plugin{Name: "ai", Price: Metered})
 	if got := priceForPath(t, "/v1/ai/chat/completions"); got != 0 {
 		t.Errorf("DefaultPrice(/v1/ai/chat/completions) = %d, want 0 — ai self-meters the resolved model", got)
 	}

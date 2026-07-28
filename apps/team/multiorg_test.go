@@ -400,7 +400,7 @@ func TestSendInviteWritesMembershipAndRow(t *testing.T) {
 		gotAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/v1/iam/get-user":
+		case "/v1/iam/users/get":
 			gotUserOwner = r.URL.Query().Get("owner")
 			gotUserEmail = r.URL.Query().Get("email")
 			_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "data": map[string]string{

@@ -20,7 +20,7 @@ import (
 )
 
 // scopeIAM is a fake IAM serving the org directory + single-org + users reads. It RECORDS
-// the owner query param it last saw on get-users, so a test can prove a scoped caller's
+// the owner query param it last saw on the users listing, so a test can prove a scoped caller's
 // read is hard-pinned to their own org (never a client-chosen ?org=).
 type scopeIAM struct {
 	server         *httptest.Server
@@ -33,19 +33,19 @@ func newScopeIAM() *scopeIAM {
 	f.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case strings.HasSuffix(r.URL.Path, "/get-organizations"):
+		case strings.HasSuffix(r.URL.Path, "/organizations"):
 			io.WriteString(w, `{"status":"ok","msg":"","data":[
 				{"owner":"admin","name":"hanzo","displayName":"Hanzo","createdTime":"2020-01-01T00:00:00Z"},
 				{"owner":"admin","name":"maxpower","displayName":"MaxPower","createdTime":"2021-02-02T00:00:00Z"}
 			],"data2":2}`)
-		case strings.HasSuffix(r.URL.Path, "/get-organization"):
+		case strings.HasSuffix(r.URL.Path, "/organizations/get"):
 			id := r.URL.Query().Get("id") // owner/name
 			name := id
 			if i := strings.LastIndex(id, "/"); i >= 0 {
 				name = id[i+1:]
 			}
 			fmt.Fprintf(w, `{"status":"ok","msg":"","data":{"owner":"admin","name":%q,"displayName":%q,"createdTime":"2021-02-02T00:00:00Z"}}`, name, name)
-		case strings.HasSuffix(r.URL.Path, "/get-users"):
+		case strings.HasSuffix(r.URL.Path, "/users"):
 			f.mu.Lock()
 			f.lastUsersOwner = r.URL.Query().Get("owner")
 			f.mu.Unlock()

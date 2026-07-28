@@ -38,7 +38,7 @@ func inviteIAM(t *testing.T, org, inviteeSub string) *httptest.Server {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/v1/iam/get-user":
+		case "/v1/iam/users/get":
 			_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "data": map[string]string{
 				"owner": org, "name": "eve", "id": inviteeSub, "email": r.URL.Query().Get("email"), "displayName": "Eve",
 			}})

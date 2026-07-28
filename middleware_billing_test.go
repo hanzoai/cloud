@@ -230,14 +230,14 @@ func TestBillingGate_NilClientIsNoop(t *testing.T) {
 // REAL declarations, and it is where a change in what customers pay shows up.
 func TestDefaultPrice(t *testing.T) {
 	index(t, &Config{Enable: []string{"ai", "agent", "agents", "commerce", "o11y", "iam", "base", "probe"}},
-		MountSpec{Name: "ai", Price: Metered, Prefixes: []string{"/v1/ai", "/v1/mcp"}},
-		MountSpec{Name: "agent", Price: Metered},
-		MountSpec{Name: "agents", Price: Metered},
-		MountSpec{Name: "commerce", Price: Free},
-		MountSpec{Name: "o11y", Price: Free},
-		MountSpec{Name: "iam", Price: Free},
-		MountSpec{Name: "base", Price: Free},
-		MountSpec{Name: "probe", Price: 7, Prefixes: []string{"/v1/probe"}},
+		Plugin{Name: "ai", Price: Metered, Prefixes: []string{"/v1/ai", "/v1/mcp"}},
+		Plugin{Name: "agent", Price: Metered},
+		Plugin{Name: "agents", Price: Metered},
+		Plugin{Name: "commerce", Price: Free},
+		Plugin{Name: "o11y", Price: Free},
+		Plugin{Name: "iam", Price: Free},
+		Plugin{Name: "base", Price: Free},
+		Plugin{Name: "probe", Price: 7, Prefixes: []string{"/v1/probe"}},
 	)
 	cases := []struct {
 		path string

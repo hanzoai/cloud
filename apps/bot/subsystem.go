@@ -108,7 +108,7 @@ type state struct {
 }
 
 // running holds the presence-renew loop so Shutdown can end it. It is package
-// state because Shutdown is a package function (cloud.MountSpec.Shutdown), and
+// state because Shutdown is a package function (cloud.Plugin.Shutdown), and
 // there is one bot plane per process.
 var running struct {
 	mu     sync.Mutex

@@ -133,7 +133,7 @@ func (g *api) iamDo(ctx context.Context, method, path string, q url.Values, body
 // found" when IAM has no such user (so the invite refuses rather than writing a
 // dangling row).
 func (g *api) iamGetUserByEmail(ctx context.Context, org, email string) (iamUser, error) {
-	data, err := g.iamDo(ctx, http.MethodGet, "/get-user", url.Values{"owner": {org}, "email": {email}}, nil)
+	data, err := g.iamDo(ctx, http.MethodGet, "/users/get", url.Values{"owner": {org}, "email": {email}}, nil)
 	if err != nil {
 		return iamUser{}, err
 	}

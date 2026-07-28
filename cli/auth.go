@@ -79,7 +79,7 @@ func (c *iamClient) postForm(ctx context.Context, endpoint string, form url.Valu
 // passwordGrant exchanges username+password for a token (the live IAM client
 // supports password grant; device_code is hard-rejected server-side).
 func (c *iamClient) passwordGrant(ctx context.Context, username, password, scope string) (*tokenResp, error) {
-	return c.postForm(ctx, "/v1/iam/oauth/access_token", url.Values{
+	return c.postForm(ctx, "/v1/iam/oauth/token", url.Values{
 		"grant_type": {"password"},
 		"client_id":  {c.clientID},
 		"username":   {username},

@@ -16,7 +16,7 @@ import (
 // as a plugin; run directly it serves standalone. Its OpenAPI subset comes from
 // `validators openapi`. Hand-owned — edit the spec below directly.
 func main() {
-	if err := cloud.Serve([]cloud.MountSpec{{
+	if err := cloud.Serve([]cloud.Plugin{{
 		Name:     "validators",
 		Price:    cloud.Free,
 		Mount:    validators.Mount,

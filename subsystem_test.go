@@ -6,11 +6,11 @@ import (
 
 // index installs a boot snapshot for one test and restores the previous one after,
 // so these tests can share the package-level index without ordering coupling.
-func index(t *testing.T, cfg *Config, specs ...MountSpec) {
+func index(t *testing.T, cfg *Config, plugins ...Plugin) {
 	t.Helper()
 	prev := subsystems.Load()
 	t.Cleanup(func() { subsystems.Store(prev) })
-	Declare(specs, cfg)
+	Declare(plugins, cfg)
 }
 
 // TestMountPrefixesIsTheOneRule proves the /v1/<name> fallback and that a declared
@@ -32,9 +32,9 @@ func TestMountPrefixesIsTheOneRule(t *testing.T) {
 // rests on: a nested surface must not be attributed to its parent.
 func TestSubsystemOfPrefersTheLongestPrefix(t *testing.T) {
 	index(t, &Config{},
-		MountSpec{Name: "admin"},
-		MountSpec{Name: "infra", Prefixes: []string{"/v1/admin/infra"}},
-		MountSpec{Name: "kms"},
+		Plugin{Name: "admin"},
+		Plugin{Name: "infra", Prefixes: []string{"/v1/admin/infra"}},
+		Plugin{Name: "kms"},
 	)
 
 	for _, tc := range []struct{ path, want string }{
@@ -59,8 +59,8 @@ func TestSubsystemOfPrefersTheLongestPrefix(t *testing.T) {
 func TestDisabledSubsystemIsListedButOwnsNoPath(t *testing.T) {
 	// Enable is an explicit allowlist, so naming only "kms" disables "ads".
 	index(t, &Config{Enable: []string{"kms"}},
-		MountSpec{Name: "kms"},
-		MountSpec{Name: "ads"},
+		Plugin{Name: "kms"},
+		Plugin{Name: "ads"},
 	)
 
 	all := Subsystems()
@@ -85,7 +85,7 @@ func TestDisabledSubsystemIsListedButOwnsNoPath(t *testing.T) {
 // TestSubsystemsSnapshotIsIsolated proves a caller cannot disturb the index that every
 // request reads.
 func TestSubsystemsSnapshotIsIsolated(t *testing.T) {
-	index(t, &Config{}, MountSpec{Name: "kms"})
+	index(t, &Config{}, Plugin{Name: "kms"})
 	got := Subsystems()
 	got[0].Name = "mutated"
 	if again := Subsystems(); again[0].Name != "kms" {
