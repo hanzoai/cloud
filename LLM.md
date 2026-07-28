@@ -51,6 +51,10 @@ ownership does not. A product fronted by a catch-all (`/v1/iam/*` proxies the
 whole identity surface to the IAM service) would make a count a lie by omission,
 so its row says opaque — same rule as "Catch-alls are opaque, by construction".
 
+Count by path SEGMENT, never string prefix: the product is the segment after
+`/v1/` (`openapi.Product`), so a `/v1/cloud*` grep also swallows `/v1/cloudflare`
+and reports this 5-route plane as 29. Two products, one string prefix.
+
 | Route | Noun | Owner | Tier |
 | --- | --- | --- | --- |
 | `/v1/connectors` | Custody: per-user BYO external accounts | `clients/integrations` (both planes; user scope) | Shipped — 8 ops |
