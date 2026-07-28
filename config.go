@@ -750,7 +750,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("data-dir is required")
 	}
 	// Embedded IAM (clients/iam) keeps its identity store as a per-pod embedded
-	// SQLite file ({DataDir}/iam/iam2.db), so a horizontally scaled app tier would give
+	// SQLite file ({DataDir}/iam/global.db), so a horizontally scaled app tier would give
 	// each replica its OWN divergent identity store — a user/session written on one
 	// replica is absent on the next. Refuse to boot an iam-enabled cloud above a single
 	// replica. CLOUD_REPLICAS=0 (unset) is the unmanaged/dev case and is allowed — the

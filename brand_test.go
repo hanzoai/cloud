@@ -14,11 +14,11 @@ func TestBrandFor(t *testing.T) {
 	cases := map[string]string{
 		"hanzo":    "https://hanzo.id",
 		"lux":      "https://lux.id",
-		"zoo":      "https://zoo.id",
+		"zoo":      "https://zoolabs.id",
 		"pars":     "https://pars.id",
 		"bootnode": "https://id.bootno.de",
 		"LUX":      "https://lux.id",   // case-insensitive
-		"  zoo  ":  "https://zoo.id",   // trimmed
+		"  zoo  ":  "https://zoolabs.id",   // trimmed
 		"unknown":  "https://hanzo.id", // falls back to hanzo
 		"":         "https://hanzo.id", // empty → hanzo default
 	}
