@@ -11,6 +11,7 @@ import (
 
 	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/clients/sites"
+	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/role"
@@ -40,6 +41,17 @@ import (
 // pipeline (Recover → RequestID → Logger), and shuts down gracefully on
 // SIGINT/SIGTERM.
 func Serve(specs []MountSpec, enable []string) error {
+	// Credentials FIRST — before config is read, before any store opens. A child
+	// the host spawned has none of its own: it pulls its scoped bundle from the
+	// credz broker here and installs it into the environment, which is what
+	// LoadConfig and all 108 subsystems then read through os.Getenv. Resolving them
+	// after LoadConfig would read the AI gateway key, the IAM identity and the
+	// data-plane key out of an environment that is still empty — which is exactly
+	// how a lazily-spawned plugin came up with no provider credential and served
+	// 503. Idempotent (sync.Once); BuildDeps calls it too, for callers that skip
+	// Serve.
+	credential := credz.Boot(DataDir())
+
 	cfg := LoadConfig()
 	if enable != nil {
 		cfg.Enable = enable
@@ -130,21 +142,36 @@ func Serve(specs []MountSpec, enable []string) error {
 	// telemetry.go.
 	telemetryShutdown := InstallTelemetry(context.Background(), deps.Logger, "hanzo-cloud")
 
-	// Data-plane encryption posture (cek). Every build encrypts a keyed store — the
-	// live libsqlcipher codec in production, the pure-Go codec envelope in dev/CI —
-	// so a store either opens keyed-and-encrypted or fails closed; there is no
-	// plaintext-at-rest mode. EnsureDevKey gives a pure-Go dev/CI build with no
-	// configured key a deterministic dev key so it runs encrypted with zero config;
-	// a production (codec-linked) build with a missing/invalid CLOUD_KMS_MASTER_KEY_REF
-	// makes the FIRST store open fail closed (MountAll aborts). It runs BEFORE the
-	// posture read below, which caches the resolved key. Surfaced so it is never silent.
-	switch {
-	case cek.EnsureDevKey():
-		deps.Logger.Warn("data-plane encryption ACTIVE with a DEV key (pure-Go build, no KMS key configured — dev/CI only)")
-	case cek.Encrypting():
-		deps.Logger.Info("data-plane encryption ACTIVE (SQLCipher at rest, per-db DEK)")
-	default:
-		deps.Logger.Warn("data-plane encryption posture: missing/invalid key on a production build → store opens fail closed")
+	// Data-plane encryption posture. The KEY was installed by credz.Boot at the top
+	// of this function (BuildDeps logs which posture resolved it); this only READS
+	// the outcome. Installing a key here — which is what used to happen — is after
+	// BuildDeps has already opened a store, and cek memoizes on first use, so the
+	// install silently lost to the cached "no key" while this line reported success.
+	// Every build encrypts a keyed store (live SQLCipher codec in production, the
+	// pure-Go envelope in dev/CI); a build with no key fails closed at the first
+	// open rather than writing plaintext.
+	if cek.Encrypting() {
+		deps.Logger.Info("data-plane encryption ACTIVE (per-db DEK, keyed at rest)")
+	} else {
+		deps.Logger.Warn("data-plane encryption posture: no usable key → store opens fail closed")
+	}
+
+	// The credential broker. A no-op in 107 of 108 processes: it starts only where
+	// this process both HOLDS the root key (credz.Root posture) and OWNS the sealed
+	// secret store (deps.KMS is the embedded client, not an RPC stub), which is true
+	// of exactly one process in a deployment. Every other cloud process is a client
+	// of it. Started after BuildDeps because the store it serves is built there.
+	if src, ok := deps.KMS.(credz.Source); ok {
+		broker, err := credz.Publish(credential, src, cfg.DataDir, cfg.AdminOrg, deps.Logger)
+		if err != nil {
+			// Not fatal: this process still serves its own traffic. But say so
+			// loudly — every child that pulls from here will fall back to no
+			// credentials at all, and a silent broker is how that becomes a 503
+			// somewhere else an hour later.
+			deps.Logger.Error("credz broker FAILED to start; children will boot without credentials", "err", err)
+		} else if broker != nil {
+			defer func() { _ = broker.Close() }()
+		}
 	}
 
 	// ReadBufferSize raises the fasthttp header ceiling above the 4 KiB fiber

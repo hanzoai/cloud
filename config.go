@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/role"
 )
 
@@ -76,10 +77,15 @@ type Config struct {
 	JWKSURL string
 
 	// KMSMasterKeyRef is the base64-encoded 32-byte KMS master key (KEK) the
-	// embedded luxfi/kms store seals every secret's DEK under. The operator
-	// injects it from a K8s Secret as CLOUD_KMS_MASTER_KEY_REF; cloud reads it
-	// ONLY from env (never from the store it hosts — the bootstrap chicken-and-egg)
-	// and never logs it. Empty ⇒ the KMS subsystem runs fail-closed (health-only).
+	// embedded luxfi/kms store seals every secret's DEK under, and the ONE
+	// credential a deployment provisions. The operator injects it from a K8s
+	// Secret as CLOUD_KMS_MASTER_KEY_REF; it is never read from the store it
+	// hosts (the bootstrap chicken-and-egg) and never logged. Empty ⇒ the KMS
+	// subsystem runs fail-closed (health-only).
+	//
+	// It is sourced from credz, not from the environment: credz.Boot takes it out
+	// of the environment at process start so no spawned child inherits it, and
+	// holds it in memory. See rootKeyRef.
 	KMSMasterKeyRef string
 
 	// KMSMPCAddr / KMSMPCVaultID configure the MPC threshold-signing backend for
@@ -426,10 +432,10 @@ func LoadConfig() *Config {
 		IAMIssuer:         getenv("CLOUD_IAM_ISSUER", ""),
 		AdminOrg:          getenv("IAM_ADMIN_ORG", "admin"),
 		JWKSURL:           getenv("CLOUD_JWKS_URL", ""),
-		KMSMasterKeyRef:   getenv("CLOUD_KMS_MASTER_KEY_REF", ""),
+		KMSMasterKeyRef:   rootKeyRef(),
 		KMSMPCAddr:        getenv("CLOUD_KMS_MPC_ADDR", ""),
 		KMSMPCVaultID:     getenv("CLOUD_KMS_MPC_VAULT_ID", ""),
-		DataDir:           getenv("CLOUD_DATA_DIR", "/var/lib/cloud"),
+		DataDir:           DataDir(),
 		WriterURL:         strings.TrimRight(getenv("CLOUD_WRITER_URL", ""), "/"),
 		ReaderRetryBudget: getenvDuration("CLOUD_READER_RETRY_BUDGET", 25*time.Second),
 		WriterLease:       getenvBool("CLOUD_WRITER_LEASE"),
@@ -626,6 +632,28 @@ func getenv(key, dflt string) string {
 		return v
 	}
 	return dflt
+}
+
+// DefaultDataDir is the on-disk data root when CLOUD_DATA_DIR is unset.
+const DefaultDataDir = "/var/lib/cloud"
+
+// DataDir resolves the data root from the environment. It is exported and split
+// out of LoadConfig because credz.Boot must find the same directory BEFORE
+// LoadConfig runs — the credential broker's socket lives there, and the
+// credentials have to be installed before anything reads config or opens a store.
+// One definition, so the two resolutions cannot drift.
+func DataDir() string { return getenv("CLOUD_DATA_DIR", DefaultDataDir) }
+
+// rootKeyRef resolves the root key credz holds. credz.Boot moves it out of the
+// environment (so no spawned child inherits it) and into memory, which makes
+// credz the single source; the raw variable is the fallback for a process that
+// never Booted — a test building a Config directly — and is the same value one
+// step earlier.
+func rootKeyRef() string {
+	if b64 := credz.KeyB64(); b64 != "" {
+		return b64
+	}
+	return getenv(credz.RootEnv, "")
 }
 
 // resolveVersion is the single source of Config.Version, so the test and the
