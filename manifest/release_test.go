@@ -7,13 +7,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"runtime"
-	"sync"
 	"sync/atomic"
 	"testing"
 )
 
 // reset clears the process-wide index so each test observes its own server.
-func reset() { index.once = sync.Once{}; index.byID = nil; index.err = nil }
+func reset() { index.byID = nil }
 
 func serveIndex(t *testing.T, body string, hits *int64) string {
 	t.Helper()
@@ -186,5 +185,29 @@ func TestRemote_DedicatedBeatsMultiCall(t *testing.T) {
 	p, _ := App{Name: "dns"}.remote()
 	if p.URL != "u/dns" || len(p.Args) != 0 {
 		t.Fatalf("url=%q args=%v", p.URL, p.Args)
+	}
+}
+
+// A blip while the network is still coming up must not disable plugins for the
+// life of the process: a lazy plugin can first resolve minutes after boot.
+func TestIndex_TransientFailureRecovers(t *testing.T) {
+	reset()
+	var up atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if !up.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		fmt.Fprint(w, indexFor("dns"))
+	}))
+	defer srv.Close()
+	t.Setenv(Plugins, srv.URL)
+
+	if _, ok := (App{Name: "dns"}).remote(); ok {
+		t.Fatal("resolved while the index was down")
+	}
+	up.Store(true)
+	if _, ok := (App{Name: "dns"}).remote(); !ok {
+		t.Fatal("index came up but the failure was cached forever")
 	}
 }
