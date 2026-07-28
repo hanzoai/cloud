@@ -3,6 +3,7 @@ package cloud
 import (
 	"bytes"
 	"context"
+	"os"
 	"strings"
 	"testing"
 )
@@ -142,18 +143,31 @@ func TestScalarRoundTrip(t *testing.T) {
 	}
 }
 
-// The loop closed: what serve.go binds is exactly what Call resolves. Before
-// listenOn bound these, nothing created the path, so every peer call failed with
-// "not running here" while the app was up and one socket away.
+// The loop closed: what a serving app binds is exactly what a caller resolves.
+// It is asserted through the REAL binder — rpc.Listen, which Serve calls — not
+// through listenOn, because listenOn stopped owning this path: handing the same
+// socket to zip's app.Listen double-binds it, and the unlink-first that made
+// that "work" would remove the live rpc listener out from under its callers.
+// One socket, one server.
 func TestPeerSocketIsWhatDialLooksFor(t *testing.T) {
 	t.Setenv(runDirEnv, t.TempDir())
-
-	addrs, _ := listenOn(&Config{ListenAddr: ":0", ZAPListenAddr: ":0", HealthListenAddr: ":0"},
-		[]MountSpec{{Name: "tasks"}})
-	if len(addrs) == 0 {
-		t.Fatal("listenOn bound nothing")
+	Expose("loop.ping", func(_ context.Context, _ Ident, _ []byte) ([]byte, error) {
+		return []byte("pong"), nil
+	})
+	c, err := Listen("loop", nil)
+	if err != nil {
+		t.Fatalf("listen: %v", err)
 	}
-	if want := PeerSocket("tasks"); addrs[0] != want {
-		t.Fatalf("listenOn serves %q but callers resolve %q — an app would be up and unreachable", addrs[0], want)
+	t.Cleanup(func() { _ = c.Close() })
+
+	if _, err := os.Stat(PeerSocket("loop")); err != nil {
+		t.Fatalf("Listen bound nothing at the path callers resolve: %v", err)
+	}
+	out, err := Dial("loop").Call(context.Background(), "loop.ping", nil)
+	if err != nil {
+		t.Fatalf("an app that is up must be reachable one socket away: %v", err)
+	}
+	if string(out) != "pong" {
+		t.Fatalf("reply = %q", out)
 	}
 }
