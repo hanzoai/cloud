@@ -2,7 +2,6 @@ package cloud
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -341,7 +340,7 @@ func serveCommerceOK(t *testing.T) {
 	t.Helper()
 	t.Setenv(runDirEnv, t.TempDir())
 	Expose(peerAuthorize, func(_ context.Context, _ Ident, _ []byte) ([]byte, error) {
-		return json.Marshal(peerAuthorizeReply{OK: true})
+		return PutVerdict(Verdict{OK: true}), nil
 	})
 	c, err := Listen(peerCommerce, nil)
 	if err != nil {
