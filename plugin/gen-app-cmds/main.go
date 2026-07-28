@@ -3,13 +3,13 @@
 //
 // manifest.Apps (manifest/apps.go) is the hand-authored SOURCE OF TRUTH for the
 // fleet — name, prefixes, eager. Each app ALSO ships a standalone binary at
-// cmd/<name>/main.go: its own one-app composition root, which states that app's
+// plugin/<name>/main.go: its own one-app composition root, which states that app's
 // Mount/Shutdown/OwnsHealth/Price once, where they are used. This tool binds the
 // two views. It reads the manifest as a VALUE (it imports the package and ranges
 // manifest.Apps — not a re-parse of the source text) and:
 //
-//	SCAFFOLDS  a cmd/<name>/main.go for a manifest app that has none, the lean
-//	           one-app form (import clients/<name>, mount <name>.Mount, Free), and
+//	SCAFFOLDS  a plugin/<name>/main.go for a manifest app that has none, the lean
+//	           one-app form (import apps/<name>, mount <name>.Mount, Free), and
 //	VALIDATES  the two sets are in bijection — every app has a command, and every
 //	           app command is a manifest app — so the light host can never route
 //	           to a binary that is not there, nor a binary go unrouted.
@@ -20,7 +20,7 @@
 // none of which a scaffold can guess. So idempotency is structural: a clean,
 // consistent tree is left untouched, which is what lets CI diff it.
 //
-//	run:  go run ./cmd/gen-app-cmds
+//	run:  go run ./plugin/gen-app-cmds
 package main
 
 import (
@@ -38,12 +38,12 @@ import (
 const modPath = "github.com/hanzoai/cloud"
 
 // pkgOf overrides the client package a scaffold imports for an app whose package
-// name is not simply its app name. An app absent here imports clients/<name> and
+// name is not simply its app name. An app absent here imports apps/<name> and
 // mounts <name>.Mount — the shape written for a brand-new subsystem. Apps with a
 // richer spec (account's two funcs, metrics' App grant, the external authz /
 // licensing modules, o11y's hand-written plugin main) are ALREADY committed and
 // are never scaffolded, so they need no entry: this map is consulted ONLY when a
-// cmd/<name> is missing, and those are not.
+// plugin/<name> is missing, and those are not.
 var pkgOf = map[string]string{
 	"audit":      "auditlog",
 	"evals":      "eval",
@@ -51,12 +51,11 @@ var pkgOf = map[string]string{
 	"zero-trust": "zt",
 }
 
-// notApps are the cmd/ directories that are tools, not fleet subsystems: the
-// light host, the smoke prober, this generator, and the two one-off migration
-// utilities. They are exempt from the bijection; everything ELSE under cmd/ must
-// be a manifest app.
+// notApps are the plugin/ directories that are tools, not fleet subsystems: the
+// smoke prober, this generator, and the two one-off migration utilities. They
+// are exempt from the bijection; everything ELSE under plugin/ must be a manifest
+// app. (The light host is cmd/cloud — the ONE thing under cmd/, never here.)
 var notApps = map[string]bool{
-	"host":                 true,
 	"smoke":                true,
 	"gen-app-cmds":         true,
 	"kmsreseal":            true,
@@ -73,7 +72,7 @@ func main() {
 	want := make(map[string]bool, len(manifest.Apps))
 	for _, a := range manifest.Apps {
 		want[a.Name] = true
-		mainGo := filepath.Join(root, "cmd", a.Name, "main.go")
+		mainGo := filepath.Join(root, "plugin", a.Name, "main.go")
 		if _, err := os.Stat(mainGo); err == nil {
 			continue // exists: it is source, leave it.
 		}
@@ -89,10 +88,10 @@ func main() {
 		}
 	}
 
-	// Reverse: no cmd/<x> app binary the manifest does not list. An orphan builds
-	// a plugin the host never routes to (or, worse, whose routes a sibling then
-	// answers) — the exact drift the bijection exists to refuse.
-	ents, err := os.ReadDir(filepath.Join(root, "cmd"))
+	// Reverse: no plugin/<x> app binary the manifest does not list. An orphan
+	// builds a plugin the host never routes to (or, worse, whose routes a sibling
+	// then answers) — the exact drift the bijection exists to refuse.
+	ents, err := os.ReadDir(filepath.Join(root, "plugin"))
 	if err != nil {
 		die(err)
 	}
@@ -101,13 +100,13 @@ func main() {
 		if !e.IsDir() || notApps[e.Name()] || want[e.Name()] {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(root, "cmd", e.Name(), "main.go")); err == nil {
+		if _, err := os.Stat(filepath.Join(root, "plugin", e.Name(), "main.go")); err == nil {
 			orphans = append(orphans, e.Name())
 		}
 	}
 	if len(orphans) > 0 {
 		sort.Strings(orphans)
-		die(fmt.Errorf("cmd/{%s} exist but are not in manifest.Apps — add the row (the host routes only to manifest apps), delete the command, or name it in notApps if it is a tool",
+		die(fmt.Errorf("plugin/{%s} exist but are not in manifest.Apps — add the row (the host routes only to manifest apps), delete the command, or name it in notApps if it is a tool",
 			strings.Join(orphans, ",")))
 	}
 }
@@ -118,7 +117,7 @@ func scaffold(name string) ([]byte, error) {
 	if p, ok := pkgOf[name]; ok {
 		pkg = p
 	}
-	src := fmt.Sprintf(stub, modPath+"/clients/"+pkg, name, pkg, name, name, pkg, name)
+	src := fmt.Sprintf(stub, modPath+"/apps/"+pkg, name, pkg, name, name, pkg, name)
 	return format.Source([]byte(src))
 }
 
@@ -133,12 +132,12 @@ const stub = "package main\n\n" +
 	")\n\n" +
 	"// Standalone entry for the %s app.\n" +
 	"//\n" +
-	"// This is the app's OWN composition root — it links only clients/%s and the\n" +
+	"// This is the app's OWN composition root — it links only apps/%s and the\n" +
 	"// cloud request tier, never package apps, so the build is this one subsystem\n" +
 	"// and not the whole fleet. The light host loads it as a plugin; run directly it\n" +
 	"// serves standalone. Its OpenAPI subset comes from `%s openapi`.\n" +
 	"//\n" +
-	"// Scaffolded by cmd/gen-app-cmds from the manifest.Apps row; now hand-owned —\n" +
+	"// Scaffolded by plugin/gen-app-cmds from the manifest.Apps row; now hand-owned —\n" +
 	"// add a Shutdown/OwnsHealth/metered Price here if the app grows to need one.\n" +
 	"func main() {\n" +
 	"\tif err := cloud.Serve([]cloud.MountSpec{{\n" +
