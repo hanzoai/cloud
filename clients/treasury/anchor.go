@@ -24,8 +24,8 @@ import (
 // key — HIP secrets rule):
 //
 //	TREASURY_ANCHOR_RPC_URL         Hanzo L1 C-chain RPC (the in-cluster
-//	                                hanzod-rpc-internal .../ext/bc/<blockchainID>/rpc,
-//	                                or https://api.hanzo.network/ext/bc/C/rpc)
+//	                                hanzod-rpc-internal .../v1/bc/<blockchainID>/rpc,
+//	                                or https://api.hanzo.network/v1/bc/C/rpc)
 //	TREASURY_ANCHOR_CHAIN_ID        EVM chain id (default 36963)
 //	TREASURY_ANCHOR_CONTRACT        deployed TreasuryAnchor address (optional; absent
 //	                                → anchor as a signed 0-value tx carrying the root
