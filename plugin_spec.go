@@ -25,7 +25,15 @@ import (
 // Global is set because zip.Load registers under the prefix it was given. Handing
 // it a scoped Router would nest that prefix under the subsystem name and the
 // routes would answer somewhere nobody is asking.
-func PluginSpec(name, prefix string, p zip.Plugin) MountSpec {
+//
+// Lazy is the caller's call, deliberately, and is NOT defaulted on here. It
+// defers starting the child until a request actually reaches one of its
+// prefixes, which is what makes a 69-service binary cheap to run — but it is
+// only correct for a subsystem whose work is request-driven. An app that owns a
+// listener or a background loop (o11y's OTLP collector is the standing example)
+// must start with the host or it silently ingests nothing, and the failure looks
+// like an empty dashboard rather than an error.
+func PluginSpec(name string, p zip.Plugin, prefixes ...string) MountSpec {
 	if p.Name == "" {
 		p.Name = name
 	}
@@ -37,7 +45,7 @@ func PluginSpec(name, prefix string, p zip.Plugin) MountSpec {
 			if !ok {
 				return fmt.Errorf("pluginspec %q: needs the root app, got %T — Global must stay set", name, router)
 			}
-			return zip.Load(prefix, p)(app)
+			return zip.Load(p, prefixes...)(app)
 		},
 	}
 }
