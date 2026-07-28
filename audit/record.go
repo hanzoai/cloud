@@ -35,13 +35,33 @@ import (
 // never be forged by the request that is being audited. A service principal
 // (M2M / no user sub) records Org with an empty Sub.
 type Actor struct {
-	// Org is the tenant (IAM `owner`). Empty for an unauthenticated request.
+	// Org is the tenant the action was taken IN — the EFFECTIVE org (X-Org-Id).
+	// For all but one caller this is also the actor's own org. Empty for an
+	// unauthenticated request.
 	Org string `json:"org"`
 	// Sub is the user id (IAM `sub`/`preferred_username`). Empty for a service
 	// principal or an anonymous request.
 	Sub string `json:"sub"`
 	// Email is the validated user email, when present.
 	Email string `json:"email,omitempty"`
+
+	// Home is the actor's OWN org (the validated home-org claim, X-User-Owner),
+	// recorded ONLY when it DIFFERS from Org — i.e. ONLY when this action was
+	// taken by a platform SuperAdmin acting INSIDE ANOTHER TENANT.
+	//
+	// Recording it conditionally is what makes the field MEAN something: a
+	// non-empty Home is, by construction, an impersonation event. Without it an
+	// admin org-switch is indistinguishable from a native member of the target
+	// org, because Org alone says "lux" in both cases — the impersonation fact
+	// was being destroyed at the moment of recording.
+	//
+	// HASH COMPATIBILITY (why omitempty is load-bearing, not style): the chain
+	// hashes the canonical JSON of the record (canonicalBytes). An omitempty
+	// field that is empty marshals to NOTHING, so every pre-existing record —
+	// and every ordinary same-org record written from now on — produces byte-
+	// identical canonical JSON to before this field existed. Existing hashes
+	// still verify. See TestVerify_HomeFieldIsHashCompatible.
+	Home string `json:"home,omitempty"`
 }
 
 // Resource identifies WHAT was acted upon: a type (e.g. "org", "role",
