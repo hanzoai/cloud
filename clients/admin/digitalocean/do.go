@@ -513,6 +513,41 @@ func (c *Client) ResizeDroplet(ctx context.Context, dropletID int, size string, 
 	return Action{ID: w.Action.ID, Status: w.Action.Status}, nil
 }
 
+// ResizeVolume grows a block-storage volume.
+//
+// GROW ONLY, and not by choice: DigitalOcean has no shrink. It resizes the DEVICE and does
+// nothing to the filesystem on it, so a volume Kubernetes manages must be grown through its
+// PersistentVolumeClaim instead — that path does both, and leaves nothing declaring a stale
+// capacity. See infra.ExpandPVC. This call is for the volumes Kubernetes does not manage,
+// where the DigitalOcean API is the only thing that holds the size.
+func (c *Client) ResizeVolume(ctx context.Context, volumeID, region string, gib int) (Action, error) {
+	var out Action
+	if !c.Ready() {
+		return out, fmt.Errorf("DO_API_TOKEN not configured")
+	}
+	if strings.TrimSpace(volumeID) == "" {
+		return out, fmt.Errorf("volume id required")
+	}
+	if strings.TrimSpace(region) == "" {
+		return out, fmt.Errorf("region required")
+	}
+	body, err := c.send(ctx, http.MethodPost, "/v2/volumes/"+url.PathEscape(volumeID)+"/actions",
+		map[string]any{"type": "resize", "size_gigabytes": gib, "region": strings.TrimSpace(region)})
+	if err != nil {
+		return out, err
+	}
+	var w struct {
+		Action struct {
+			ID     int    `json:"id"`
+			Status string `json:"status"`
+		} `json:"action"`
+	}
+	if err := json.Unmarshal(body, &w); err != nil {
+		return out, fmt.Errorf("do volume resize decode: %w", err)
+	}
+	return Action{ID: w.Action.ID, Status: w.Action.Status}, nil
+}
+
 // DeleteLoadBalancer destroys a load balancer. Irreversible, and it takes the public IP
 // with it: callers MUST have proven no Kubernetes Service still targets it.
 func (c *Client) DeleteLoadBalancer(ctx context.Context, lbID string) error {
