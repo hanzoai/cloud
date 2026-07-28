@@ -46,11 +46,11 @@ const RoleErpUser = "Erp User"
 // fields. They are real DocTypes (the engine validates each row against them) but
 // are never addressed standalone; the parent owns their rows atomically.
 const (
-	dtSalesOrderItem    = "erp-sales-order-item"
-	dtSalesInvoiceItem  = "erp-sales-invoice-item"
-	dtPurchaseOrderItem = "erp-purchase-order-item"
-	dtStockEntryItem    = "erp-stock-entry-item"
-	dtJournalAccount    = "erp-journal-entry-account"
+	dtSalesOrderItem    = "erp-sales-item"
+	dtSalesInvoiceItem  = "erp-invoice-item"
+	dtPurchaseOrderItem = "erp-purchase-item"
+	dtStockEntryItem    = "erp-stock-item"
+	dtJournalAccount    = "erp-journal-account"
 )
 
 // Parent / master / ledger DocType names.
@@ -62,14 +62,14 @@ const (
 	dtAccount       = "erp-account"
 	dtDepartment    = "erp-department"
 	dtEmployee      = "erp-employee"
-	dtSalesOrder    = "erp-sales-order"
-	dtSalesInvoice  = "erp-sales-invoice"
-	dtPurchaseOrder = "erp-purchase-order"
-	dtStockEntry    = "erp-stock-entry"
-	dtJournalEntry  = "erp-journal-entry"
-	dtPaymentEntry  = "erp-payment-entry"
+	dtSalesOrder    = "erp-sales"
+	dtSalesInvoice  = "erp-invoice"
+	dtPurchaseOrder = "erp-purchase"
+	dtStockEntry    = "erp-stock"
+	dtJournalEntry  = "erp-journal"
+	dtPaymentEntry  = "erp-payment"
 	dtGLEntry       = "erp-gl-entry"
-	dtStockLedger   = "erp-stock-ledger-entry"
+	dtStockLedger   = "erp-stock-ledger"
 )
 
 // init registers the ERP content model AND its native-Go business hooks with the
