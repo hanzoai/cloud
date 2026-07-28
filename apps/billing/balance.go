@@ -2,10 +2,8 @@ package billing
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/commerce"
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
@@ -63,20 +61,20 @@ func availableCents(ctx context.Context, org, subject string) (cents int64, ok b
 	// than reporting "not configured" for a ledger that exists one socket away —
 	// which is what answered 501 on a funded account once apps became their own
 	// binaries.
-	req, err := json.Marshal(commerce.BalanceRequest{Org: org, Subject: subject, Currency: "usd"})
-	if err != nil {
-		return 0, true, err
-	}
-	out, err := cloud.Dial("commerce").For(org).Call(ctx, "finance.balance", req)
+	// For(org) names the tenant whose books to read; the callee takes the org from
+	// that capability and the payload cannot name one, so the subject is all that
+	// travels.
+	out, err := cloud.Dial("commerce").For(org).Call(ctx, "finance.balance",
+		cloud.PutBalanceReq(subject, "usd"))
 	if err != nil {
 		// Unknown, not zero. A balance that cannot be read must never render as
 		// broke: the caller turns this into an upstream failure, and the prepaid
 		// gate fails closed on it rather than handing out free work.
 		return 0, true, err
 	}
-	var reply commerce.BalanceReply
-	if err := json.Unmarshal(out, &reply); err != nil {
+	cents, err = cloud.I64(out)
+	if err != nil {
 		return 0, true, err
 	}
-	return reply.Cents, true, nil
+	return cents, true, nil
 }
