@@ -58,6 +58,18 @@ def roots(d):
             if "%PUBLIC_URL%" in html and not re.search(
                     r"<script[^>]+src=[\"'](?!\w+:|//)[^\"']*\.js", html, re.I):
                 continue
+            # The same failure the CRA clause above catches, in the shape no
+            # placeholder betrays: Flutter's SOURCE web/index.html is ordinary
+            # HTML that loads flutter_bootstrap.js — a file that exists only in
+            # build/web. Serving it gives a blank page under a 200, and because
+            # web/ sits SHALLOWER than build/web it outranks the real build. A
+            # page whose own scripts are not on disk cannot run, whatever it is
+            # built with, so that is the rule rather than a third framework
+            # special case. Only same-origin srcs are checked: a CDN tag is not
+            # ours to resolve.
+            if any(not os.path.isfile(os.path.join(dp, s.split("?")[0].split("#")[0].lstrip("/")))
+                   for s in re.findall(r"<script[^>]+src=[\"'](?!\w+:|//)([^\"']+)", html, re.I)):
+                continue
         except OSError:
             continue
         rel = os.path.relpath(dp, d)
@@ -294,7 +306,26 @@ def buildable(d):
             yield p
 
 
+# Flutter's toolchain is not node, so a Flutter template never reaches the npm
+# path below and `flutter build web` is the ONE command that turns a pubspec
+# into a servable site. The SDK is not vendored and not fetched: Google ships
+# Linux x64 ONLY (every entry in releases_linux.json carries dart_sdk_arch=x64,
+# none arm64), so this lane needs an x64 runner. Everywhere else it returns
+# without building, roots() finds no built root, and the batch logs NO-SITE —
+# an honest skip instead of packing the unbuilt web/ scaffold, which is a blank
+# page that answers 200.
+def build_flutter(d):
+    fl = shutil.which("flutter") or os.path.expanduser("~/.cache/flutter-sdk/flutter/bin/flutter")
+    if not os.access(fl, os.X_OK):
+        return
+    run("%r config --enable-web --no-analytics" % fl, d, 600)
+    run("%r pub get" % fl, d, 900)
+    run("%r build web --release" % fl, d, 2400)
+
+
 def build(d):
+    if os.path.isfile(os.path.join(d, "pubspec.yaml")):
+        return build_flutter(d)
     pj = os.path.join(d, "package.json")
     if not os.path.isfile(pj):
         return
@@ -318,7 +349,14 @@ def build(d):
         else:
             open(os.path.join(d, "next.config.js"), "w").write(
                 "const __hanzoStatic = {}; module.exports = %s;\n" % MERGE)
-    elif not ({"vite", "react-scripts", "gulp", "parcel", "astro", "@11ty/eleventy"} & set(deps)):
+    elif not ({"vite", "react-scripts", "gulp", "parcel", "astro", "@11ty/eleventy",
+               # Expo's web target IS a static build (`expo export -p web` ->
+               # dist/), and leaving it out of this set is the whole reason
+               # android-expo-nativewind has no demo: prep.py returned before
+               # building, roots() then found nothing, and the slug 404s while
+               # its sibling Expo templates — built by hand — are live. The
+               # pipeline could not reproduce its own output.
+               "expo"} & set(deps)):
         return  # not a static web build (design kit, font pack, monorepo shell)
     ok, out = run("npm install --legacy-peer-deps --no-audit --no-fund", d, 1800)
     if not ok:
