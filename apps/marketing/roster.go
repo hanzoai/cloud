@@ -3,9 +3,14 @@
 package marketing
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"github.com/hanzoai/cloud"
 	iamclient "github.com/hanzoai/cloud/apps/iam"
 	model "github.com/hanzoai/iam/pkg/model"
 	iamstore "github.com/hanzoai/iam/pkg/store"
+	"time"
 )
 
 // roster.go is the IDENTITY seam: the ONE place marketing learns who an org's
@@ -40,12 +45,37 @@ var rosterFn = iamRoster
 // documented lifecycle: DB() is nil until IAM mounts cleanly, so callers must
 // nil-guard rather than dereference.
 func iamRoster(org string) ([]*model.User, error) {
-	db := iamclient.DB()
-	if db == nil {
-		return nil, errIAMUnavailable
+	if db := iamclient.DB(); db != nil {
+		return iamstore.GetMailableUsers(db, org)
 	}
-	return iamstore.GetMailableUsers(db, org)
+	// No identity store in THIS process, which is the normal case once apps are
+	// their own binaries — it has one writer and it lives with iam. Ask it.
+	//
+	// Reporting "IAM unavailable" here would be honest about the local process and
+	// wrong about the deployment: identity is up, one socket away, and an audience
+	// that resolves to nobody because of a process boundary is the silent-empty
+	// failure this file exists to refuse.
+	ctx, cancel := context.WithTimeout(context.Background(), rosterTimeout)
+	defer cancel()
+	out, err := cloud.Dial("iam").For(org).Call(ctx, "iam.mailable", nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errIAMUnavailable, err)
+	}
+	var people []iamclient.Recipient
+	if err := json.Unmarshal(out, &people); err != nil {
+		return nil, fmt.Errorf("%w: decode roster: %v", errIAMUnavailable, err)
+	}
+	users := make([]*model.User, 0, len(people))
+	for _, p := range people {
+		users = append(users, &model.User{Id: p.ID, Owner: p.Owner, Name: p.Name, Email: p.Email})
+	}
+	return users, nil
 }
+
+// rosterTimeout bounds the roster read. An audience preview is interactive, so a
+// slow identity store must surface as a refusal the operator can see rather than a
+// request that hangs.
+const rosterTimeout = 15 * time.Second
 
 // addresses reduces a roster to the deliverable, normalized addresses to send to.
 // It de-duplicates: two users sharing one mailbox receive ONE announcement, not
