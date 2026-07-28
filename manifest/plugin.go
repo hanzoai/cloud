@@ -3,14 +3,14 @@
 // answers, and whether it must already be running when the first request
 // arrives.
 //
-// It deliberately imports NOTHING but zip. That is the whole point — cmd/host
+// It deliberately imports NOTHING but zip. That is the whole point — cmd/cloud
 // links this package and zip and stops, so adding the 70th subsystem does not
 // grow the host's build by one package. What an app DOES belongs to the app's
 // own binary; where it lives and what it answers is all the router needs.
 //
 // apps.go is the single source of truth for both facts (Wire() for the set and
 // its order, the `eager` map for the rest), and apps.go is where a change is
-// made. Apps in apps.go is generated from it — see cmd/gen-app-cmds.
+// made. Apps in apps.go is generated from it — see plugin/gen-app-cmds.
 package manifest
 
 import (
@@ -55,7 +55,7 @@ type App struct {
 // whichever ones a PATH finds.
 //
 // There is ONE way a name resolves to a binary: its own. A subsystem is its own
-// cmd/<name> binary, on disk beside the host or fetched by digest from the
+// plugin/<name> binary, on disk beside the host or fetched by digest from the
 // release index — the two link modes of one contract (a developer builds the
 // single lean plugin they are editing; a release ships every per-app binary and
 // the host falls through to the index). A dedicated binary present on disk is
@@ -94,7 +94,7 @@ func found(path string) bool { _, err := os.Stat(path); return err == nil }
 // directory.
 func (a App) pluginIn(dir string) zip.Plugin {
 	// The dedicated per-app binary, beside the host — and nothing else. Every
-	// subsystem ships as its own binary now (cmd/<name>), so a name resolves to
+	// subsystem ships as its own binary now (plugin/<name>), so a name resolves to
 	// <dir>/<name> or it does not resolve on disk at all. A missing one is named
 	// in the failure, because that is the binary a developer expects to have
 	// built (or the release ladder below fills in over the network).

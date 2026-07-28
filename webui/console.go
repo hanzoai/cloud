@@ -1,4 +1,23 @@
-package cloud
+// Package webui serves the embedded Hanzo Cloud console — the single-page app,
+// white-labelled per request Host.
+//
+// It is a LEAF: stdlib + the brand registry + zip's net/http bridge, and NOTHING
+// of package cloud. That is the whole reason it exists as its own package. The
+// console has to be served from TWO places — every per-app plugin mounts it as
+// its "/" catch-all through cloud.Serve, and the light host (cmd/cloud) owns "/"
+// at the front door and cannot import package cloud (that would relink the fleet
+// it was split to avoid). One console implementation, reachable from both.
+//
+// `all:` embeds the whole tree (dotfiles included). At a plain `go build` this is
+// the committed fallback shell (dist/index.html); the build pipeline runs
+// hanzoai/console's `npm run build:embed` (a static export) and OVERWRITES
+// webui/dist with the real @hanzo/gui static bundle BEFORE `go build`, so the
+// shipped binary carries the full console. That pipeline is the Dockerfile
+// console stage for the image, and the `make webui` target for a standalone
+// build. Either way there is exactly one artifact — no separate console Service,
+// no second origin. See webui/dist/index.html, the Makefile, and the Dockerfile
+// console-build stage.
+package webui
 
 import (
 	"bytes"
@@ -11,23 +30,11 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/hanzoai/cloud/brand"
 	"github.com/zap-proto/zip"
 )
 
-// The unified console UI, embedded into the ONE cloud binary.
-//
-// `all:` embeds the whole tree (dotfiles included). At a plain `go build` this is
-// the committed fallback shell (webui/dist/index.html); the build pipeline runs
-// hanzoai/console's `npm run build:embed` (a static export) and OVERWRITES
-// webui/dist with the real @hanzo/gui static bundle BEFORE `go build`, so the
-// shipped binary carries the full console. That pipeline is the Dockerfile
-// console stage for the image, and the `make webui` target for a standalone
-// build (`make webui && go build ./cmd/cloud`, or `make build-standalone`).
-// Either way there is exactly one artifact — no separate console Service, no
-// second origin. See webui/dist/index.html, the Makefile, and the Dockerfile
-// console-build stage.
-//
-//go:embed all:webui/dist
+//go:embed all:dist
 var consoleFS embed.FS
 
 // apiPrefixes are the request-path prefixes the console catch-all must NEVER
@@ -57,36 +64,36 @@ var consoleTitleRe = regexp.MustCompile(`(?is)<title[^>]*>.*?</title>`)
 // console.hanzo.ai → "Hanzo Cloud Console"). It mirrors hanzoai/console's own
 // `${brandName} Console` SSR output so the embedded static console and the
 // standalone app render an identical per-host tab title. Brand is resolved from
-// the same brands registry as every other white-label surface (brand.go).
+// the same brands registry as every other white-label surface (the brand leaf).
 func consoleTitle(host string) string {
-	return brandDisplay(BrandForHost(host)) + " Cloud Console"
+	return brand.Display(brand.ForHost(host)) + " Cloud Console"
 }
 
-// mountConsole registers the embedded console at the web root as the app's
-// terminal handler. It is called LAST in Serve — after every /v1 subsystem
-// route, the /zap plane, and the health contract — so Fiber's in-order matching
-// gives all real API routes precedence and only unmatched paths reach the SPA.
-//
-// The console is served through a stdlib http.Handler (correct Content-Type,
-// conditional GET, precompressed negotiation) adapted onto the zip router via
-// zip.AdaptNetHTTP — the same net/http bridge the rest of the binary uses to
-// mount stdlib surfaces. The SPA fallback mirrors the hanzoai/static plugin's
-// SPAMode semantics (serve index.html for client routes); it is implemented in
-// this one file rather than via that plugin because static.Handler is
-// disk/S3-only today (its New() takes a Root path or S3 bucket, not an fs.FS),
-// so it cannot serve an embed.FS. Teaching hanzoai/static to accept an fs.FS is
-// the clean follow-up that lets this collapse onto the shared plugin.
-func mountConsole(app *zip.App) error {
-	sub, err := fs.Sub(consoleFS, "webui/dist")
-	if err != nil {
-		return err
-	}
-	h, err := newConsoleHandler(sub)
+// Mount registers the embedded console at the web root as the app's terminal
+// handler. Its caller registers it LAST — after every /v1 subsystem route, the
+// /zap plane, and the health contract — so the router's in-order matching gives
+// all real API routes precedence and only unmatched paths reach the SPA. Both
+// cloud.Serve (every plugin) and cmd/cloud (the host front door) call it, so the
+// "/" catch-all is spelled ONE way.
+func Mount(app *zip.App) error {
+	h, err := Handler()
 	if err != nil {
 		return err
 	}
 	app.All("/*", zip.AdaptNetHTTP(h))
 	return nil
+}
+
+// Handler is the console as a stdlib http.Handler (correct Content-Type,
+// conditional GET, precompressed negotiation, SPA fallback) — the form Mount
+// adapts onto the zip router via zip.AdaptNetHTTP, and the form a test drives
+// directly.
+func Handler() (http.Handler, error) {
+	sub, err := fs.Sub(consoleFS, "dist")
+	if err != nil {
+		return nil, err
+	}
+	return newConsoleHandler(sub)
 }
 
 // consoleHandler serves an embedded single-page app: exact-file when it exists,

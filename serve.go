@@ -9,12 +9,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/apps/sites"
+	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/role"
+	"github.com/hanzoai/cloud/webui"
 	"github.com/hanzoai/cloud/writerpin"
 	"github.com/hanzoai/cloud/zapface"
 	luxlog "github.com/luxfi/log"
@@ -24,9 +25,8 @@ import (
 
 // Serve boots the canonical compose root and mounts the selected subsystems.
 //
-// This is the ONE place the cloud-server body lives. cmd/cloud (the full fused
-// surface) and every `hanzo <svc>` subcommand share it; no boot logic is
-// duplicated per entrypoint.
+// This is the ONE place the cloud-server body lives — every per-app plugin main
+// (plugin/<app>/main.go) calls it, so no boot logic is duplicated per subsystem.
 //
 // specs is the composition root's subsystem list (apps.Wire()), threaded
 // in by the caller so cloud never imports subsystems (which would cycle). Serve
@@ -146,8 +146,8 @@ func Serve(specs []MountSpec, enable []string) error {
 	// installs the tracer and meter providers itself rather than borrowing them from
 	// a subsystem that may now be a separate binary. Runs BEFORE MountAll — so the
 	// providers exist before ai mounts and the composition root can adopt them into
-	// it (apps/install.go), and so BOTH cmd/cloud and every `hanzo <svc>` entrypoint,
-	// which share this body, install identically. Spans leave through ONE Send: Cost-0
+	// it (apps/install.go), and so every per-app plugin entrypoint, which shares
+	// this body, installs identically. Spans leave through ONE Send: Cost-0
 	// to a co-resident sink when clients/o11y is linked in, the ZAP wire when it is a
 	// plugin. No-op (non-nil shutdown) when no sink/endpoint is configured. See
 	// telemetry.go.
@@ -492,8 +492,8 @@ func Serve(specs []MountSpec, enable []string) error {
 	// for client-side deep links). The API namespace (/v1, /zap, /healthz…) never
 	// renders as HTML — an unmatched path there is a real 404. Same-origin: the
 	// embedded console calls /v1 on its own host, so the session cookie is
-	// first-party and no second origin / CORS is involved. See webui.go.
-	if err := mountConsole(app); err != nil {
+	// first-party and no second origin / CORS is involved. See the webui package.
+	if err := webui.Mount(app); err != nil {
 		return fmt.Errorf("console: %w", err)
 	}
 
