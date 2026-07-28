@@ -27,6 +27,7 @@
 package visor
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -262,13 +263,31 @@ func machineUnits(s *cloud.Service[state], c *zip.Ctx, org string) []fleetUnit {
 
 // ---- the routes ----
 
-// listFleet serves GET /v1/fleet — every source, unioned, each unit with its
-// latest utilization.
-func listFleet(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// fleetBoard is the whole board: every compute unit the org has, from every
+// source, each with whatever utilization is known about it.
+type fleetBoard struct {
+	// Units is the union across sources — agent run-targets, BYO workers, BYO
+	// clusters and Visor machines — each row naming the source it came from.
+	Units []fleetUnit `json:"units"`
+}
+
+// listFleet returns every compute unit the caller's org has, from every source, each
+// carrying its latest utilization: agent run-targets, the BYO machines that dialed
+// in, attached BYO clusters and Visor-provisioned machines.
+//
+// A unit with a live snapshot of its own keeps it; the rest are overlaid from the
+// utilization series, and only when the sample agrees about the SOURCE — two planes
+// could mint the same unit id, and a board must never show one machine's load on
+// another's row. BYO GPU units also carry their gpu-jobs queue depth. Every source
+// is folded in independently: a broken one costs its own rows and nothing else.
+//
+// Response: {"units":[{"source":"byo","unit":"spark","kind":"worker","label":"spark","host":"spark","status":"online","spec":{"os":"linux","arch":"arm64","cpus":20,"gpus":1,"gpuModel":"NVIDIA GB10"},"metrics":{"gpuUtil":0.42,"at":"2026-07-27T09:00:00Z"},"sessions":0,"running":1,"queued":2}]}
+func (o ops) listFleet(ctx context.Context, _ *noArgs) (*fleetBoard, error) {
+	c, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
 	}
+	s := o.Service
 	units := make([]fleetUnit, 0, 16)
 	units = append(units, agentUnits(s, c, org)...)
 	units = append(units, workerUnits(org)...)
@@ -310,23 +329,46 @@ func listFleet(s *cloud.Service[state], c *zip.Ctx) error {
 			units[i].Queued, units[i].Running = cnt.queued, cnt.running
 		}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"units": units})
+	return &fleetBoard{Units: units}, nil
 }
 
-// listFleetSamples serves GET /v1/fleet/samples?unit=&source=&range= — the org's
-// utilization series, oldest first. `unit`/`source`/`range` narrow WITHIN the
-// caller's tenant; every one of them is bound or allowlisted by clients/samples,
-// and org is never a client field.
-func listFleetSamples(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// sampleQuery narrows the utilization series WITHIN the caller's tenant. Each
+// narrower is bound or allowlisted by clients/samples; the org never is one.
+type sampleQuery struct {
+	// Unit selects one compute unit's series by its source-local id.
+	Unit string `json:"unit"`
+	// Source selects one plane: "agent", "byo" or "visor".
+	Source string `json:"source"`
+	// Range is the lookback window (e.g. "1h", "24h", "7d"); empty takes the
+	// warehouse default.
+	Range string `json:"range"`
+}
+
+// sampleList is the utilization series on the wire.
+type sampleList struct {
+	// Samples are the readings, OLDEST first — the order a chart plots.
+	Samples []sampleView `json:"samples"`
+}
+
+// listFleetSamples returns the caller org's utilization series, oldest first.
+//
+// A rejected narrower is a 400 carrying its own reason (the vocabulary is ours and
+// safe to echo); a warehouse failure is logged and answered 503 "unavailable",
+// because a chart that silently reads "no load" when the truth is "we cannot tell"
+// is worse than one that says so. An ABSENT warehouse is different again: it returns
+// an empty series, which renders honestly as "no samples yet".
+//
+// Response: {"samples":[{"source":"byo","unit":"spark","kind":"worker","host":"spark","at":"2026-07-27T09:00:00Z","gpuUtil":0.42,"gpus":1,"gpuModel":"GB10"}]}
+func (o ops) listFleetSamples(ctx context.Context, in *sampleQuery) (*sampleList, error) {
+	c, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
 	}
 	rows, err := samples.Series(c.Context(), samples.Query{
 		Org:    org, // the VALIDATED principal, never a query param
-		Unit:   c.Query("unit"),
-		Source: c.Query("source"),
-		Range:  c.Query("range"),
+		Unit:   in.Unit,
+		Source: in.Source,
+		Range:  in.Range,
 	})
 	if err != nil {
 		// The caller's error and the warehouse's are NOT the same thing:
@@ -340,14 +382,14 @@ func listFleetSamples(s *cloud.Service[state], c *zip.Ctx) error {
 		//     Series returns an empty series and no error, which renders honestly
 		//     as "no samples yet".)
 		if errors.Is(err, samples.ErrInvalid) {
-			return zip.ErrBadRequest(err.Error())
+			return nil, zip.ErrBadRequest(err.Error())
 		}
-		s.Log.Warn("fleet samples query failed", "org", org, "err", err)
-		return zip.Errorf(http.StatusServiceUnavailable, "fleet samples unavailable")
+		o.Log.Warn("fleet samples query failed", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "fleet samples unavailable")
 	}
 	out := make([]sampleView, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, toSampleView(r))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"samples": out})
+	return &sampleList{Samples: out}, nil
 }

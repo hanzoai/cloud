@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -20,28 +21,38 @@ import (
 
 // ── shared scope resolver ────────────────────────────────────────────────────
 
-// repoScope resolves (org, project, repo) for a control-plane route keyed on the
-// :name param, failing closed on a missing principal and 404-ing a repo the caller
-// cannot see. The repo-existence check uses the caller's project sub-scope, so a
-// cross-tenant :name is a 404 and never reaches the subscription/mirror store.
-func repoScope(s *cloud.Service[state], c *zip.Ctx) (orgID, project, name string, err error) {
-	o, ok := org(c)
-	if !ok {
-		return "", "", "", zip.ErrForbidden("X-Org-Id required")
-	}
-	name = normalizeName(c.Param("name"))
+// repoScope validates the :name of a control-plane route against the caller's
+// tenant, 404-ing a repo the caller cannot see. The existence check uses the
+// tenant's project sub-scope, so a cross-tenant name is a 404 and never reaches
+// the subscription/mirror store. Returns the normalized repo name.
+//
+// It takes a context and a tenant rather than a *zip.Ctx so the ONE resolver
+// serves both handler shapes: a typed op has only the context, and the raw
+// creators pass theirs in.
+func repoScope(s *cloud.Service[state], ctx context.Context, t tenant, rawName string) (string, error) {
+	name := normalizeName(rawName)
 	if name == "" || !nameRE.MatchString(name) {
-		return "", "", "", zip.ErrBadRequest("invalid repo name")
+		return "", zip.ErrBadRequest("invalid repo name")
 	}
-	project = projectScope(c)
-	store, serr := storeFor(s, o)
+	store, serr := storeFor(s, t.org)
 	if serr != nil {
-		return "", "", "", zip.Errorf(http.StatusInternalServerError, "open store: %v", serr)
+		return "", zip.Errorf(http.StatusInternalServerError, "open store: %v", serr)
 	}
-	if _, gerr := store.Get(c.Context(), o, project, name); gerr != nil {
-		return "", "", "", zip.ErrNotFound("repo not found")
+	if _, gerr := store.Get(ctx, t.org, t.project, name); gerr != nil {
+		return "", zip.ErrNotFound("repo not found")
 	}
-	return o, project, name, nil
+	return name, nil
+}
+
+// scoped is the preamble every repo-keyed typed op runs: resolve the tenant off
+// the request context, then validate the repo name against it.
+func (o ops) scoped(ctx context.Context, rawName string) (tenant, string, error) {
+	t, err := tenantOf(ctx)
+	if err != nil {
+		return tenant{}, "", err
+	}
+	name, err := repoScope(o.s, ctx, t, rawName)
+	return t, name, err
 }
 
 // ── subscriptions ────────────────────────────────────────────────────────────
@@ -57,12 +68,32 @@ type subscribeReq struct {
 	Events  []string `json:"events"`
 }
 
+// subscriptionView is one repo→Slack-channel subscription.
 type subscriptionView struct {
-	ID        string   `json:"id"`
-	Repo      string   `json:"repo"`
-	Channel   string   `json:"channel"`
-	Events    []string `json:"events"`
-	CreatedAt string   `json:"createdAt"`
+	// ID is the subscription's identifier ("sub_…"), the handle to delete it by.
+	ID string `json:"id"`
+	// Repo is the repo whose lifecycle events are delivered.
+	Repo string `json:"repo"`
+	// Channel is the Slack channel id or name the notifier posts to.
+	Channel string `json:"channel"`
+	// Events is the kind filter; absent means every deliverable kind.
+	Events []string `json:"events"`
+	// CreatedAt is RFC 3339 UTC.
+	CreatedAt string `json:"createdAt"`
+}
+
+// subscriptionList is the collection envelope for a repo's subscriptions.
+type subscriptionList struct {
+	// Data holds the repo's subscriptions.
+	Data []subscriptionView `json:"data"`
+}
+
+// childRef addresses one child row of a repo: a subscription or a mirror target.
+type childRef struct {
+	// Name is the repo, from the :name path segment.
+	Name string `json:"name"`
+	// ID is the row to remove, from the :id path segment.
+	ID string `json:"id"`
 }
 
 func subscriptionToView(v Subscription) subscriptionView {
@@ -72,9 +103,15 @@ func subscriptionToView(v Subscription) subscriptionView {
 	}
 }
 
-// subscribe binds a Slack channel to a repo for lifecycle notifications.
+// subscribe binds a Slack channel to a repo for lifecycle notifications. Raw,
+// not a typed op: it answers 201, and zip's typed registrar has no status seam.
 func subscribe(s *cloud.Service[state], c *zip.Ctx) error {
-	org, project, name, herr := repoScope(s, c)
+	t, herr := tenantFrom(c)
+	if herr != nil {
+		return herr
+	}
+	org, project := t.org, t.project
+	name, herr := repoScope(s, c.Context(), t, c.Param("name"))
 	if herr != nil {
 		return herr
 	}
@@ -111,43 +148,55 @@ func subscribe(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusCreated, subscriptionToView(v))
 }
 
-func listSubscriptions(s *cloud.Service[state], c *zip.Ctx) error {
-	org, project, name, herr := repoScope(s, c)
-	if herr != nil {
-		return herr
-	}
-	store, err := storeFor(s, org)
+// listSubscriptions returns a repo's Slack subscriptions — which channels the
+// lifecycle notifier posts this repo's push and deploy events to.
+//
+// Example: {"name": "widgets"}
+//
+//	Response: {"data": [{"id": "sub_7c2e", "repo": "widgets", "channel": "#builds",
+//		"events": ["push.landed"], "createdAt": "2026-07-01T10:00:00Z"}]}
+func (o ops) listSubscriptions(ctx context.Context, in *repoRef) (*subscriptionList, error) {
+	t, name, err := o.scoped(ctx, in.Name)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	rows, err := store.ListSubscriptions(c.Context(), org, project, name)
+	store, err := storeFor(o.s, t.org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	rows, err := store.ListSubscriptions(ctx, t.org, t.project, name)
+	if err != nil {
+		return nil, internalErr(err)
 	}
 	out := make([]subscriptionView, 0, len(rows))
 	for _, v := range rows {
 		out = append(out, subscriptionToView(v))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &subscriptionList{Data: out}, nil
 }
 
-func unsubscribe(s *cloud.Service[state], c *zip.Ctx) error {
-	org, project, name, herr := repoScope(s, c)
-	if herr != nil {
-		return herr
-	}
-	store, err := storeFor(s, org)
+// unsubscribe removes one Slack subscription from a repo; the notifier stops
+// posting that repo's events to that channel. Answers 204 with no body. An id
+// that is not this repo's subscription is not found.
+//
+// Example: {"name": "widgets", "id": "sub_7c2e"}
+func (o ops) unsubscribe(ctx context.Context, in *childRef) (*noContent, error) {
+	t, name, err := o.scoped(ctx, in.Name)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	deleted, err := store.DeleteSubscription(c.Context(), org, project, name, strings.TrimSpace(c.Param("id")))
+	store, err := storeFor(o.s, t.org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	deleted, err := store.DeleteSubscription(ctx, t.org, t.project, name, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, internalErr(err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("subscription not found")
+		return nil, zip.ErrNotFound("subscription not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // ── mirror targets ───────────────────────────────────────────────────────────
@@ -157,12 +206,24 @@ type mirrorTargetReq struct {
 	URL  string `json:"url"`
 }
 
+// mirrorTargetView is one downstream remote a repo's refs are pushed to.
 type mirrorTargetView struct {
-	ID        string `json:"id"`
-	Repo      string `json:"repo"`
-	Host      string `json:"host"`
-	URL       string `json:"url"`
+	// ID is the target's identifier ("mir_…"), the handle to remove it by.
+	ID string `json:"id"`
+	// Repo is the repo whose advanced refs are pushed downstream.
+	Repo string `json:"repo"`
+	// Host is the target's lowercased hostname, taken from URL and never the body.
+	Host string `json:"host"`
+	// URL is the canonical https remote, with any embedded credentials stripped.
+	URL string `json:"url"`
+	// CreatedAt is RFC 3339 UTC.
 	CreatedAt string `json:"createdAt"`
+}
+
+// mirrorList is the collection envelope for a repo's mirror targets.
+type mirrorList struct {
+	// Data holds the repo's outbound mirror targets.
+	Data []mirrorTargetView `json:"data"`
 }
 
 func mirrorToView(v MirrorTarget) mirrorTargetView {
@@ -174,8 +235,15 @@ func mirrorToView(v MirrorTarget) mirrorTargetView {
 // / git.hanzo.ai): the same set the mirror credential may be sent to, so a target
 // can never capture the shared token or point the push at an internal service. Any
 // embedded userinfo is stripped (credentials ride env-only at push time).
+//
+// Raw, not a typed op: it answers 201, and zip's typed registrar has no status seam.
 func addMirror(s *cloud.Service[state], c *zip.Ctx) error {
-	org, project, name, herr := repoScope(s, c)
+	t, herr := tenantFrom(c)
+	if herr != nil {
+		return herr
+	}
+	org, project := t.org, t.project
+	name, herr := repoScope(s, c.Context(), t, c.Param("name"))
 	if herr != nil {
 		return herr
 	}
@@ -213,43 +281,56 @@ func addMirror(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusCreated, mirrorToView(v))
 }
 
-func listMirrors(s *cloud.Service[state], c *zip.Ctx) error {
-	org, project, name, herr := repoScope(s, c)
-	if herr != nil {
-		return herr
-	}
-	store, err := storeFor(s, org)
+// listMirrors returns a repo's outbound mirror targets — the downstream remotes
+// the mirror reactor pushes to whenever a push lands here.
+//
+// Example: {"name": "widgets"}
+//
+//	Response: {"data": [{"id": "mir_2d90", "repo": "widgets", "host": "github.com",
+//		"url": "https://github.com/acme/widgets.git",
+//		"createdAt": "2026-07-01T10:00:00Z"}]}
+func (o ops) listMirrors(ctx context.Context, in *repoRef) (*mirrorList, error) {
+	t, name, err := o.scoped(ctx, in.Name)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	rows, err := store.ListMirrors(c.Context(), org, project, name)
+	store, err := storeFor(o.s, t.org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	rows, err := store.ListMirrors(ctx, t.org, t.project, name)
+	if err != nil {
+		return nil, internalErr(err)
 	}
 	out := make([]mirrorTargetView, 0, len(rows))
 	for _, v := range rows {
 		out = append(out, mirrorToView(v))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &mirrorList{Data: out}, nil
 }
 
-func deleteMirror(s *cloud.Service[state], c *zip.Ctx) error {
-	org, project, name, herr := repoScope(s, c)
-	if herr != nil {
-		return herr
-	}
-	store, err := storeFor(s, org)
+// deleteMirror removes one outbound mirror target; later pushes stop being
+// forwarded to it. Answers 204 with no body. Nothing is done to the downstream
+// remote itself — only this repo's intent to push there is dropped.
+//
+// Example: {"name": "widgets", "id": "mir_2d90"}
+func (o ops) deleteMirror(ctx context.Context, in *childRef) (*noContent, error) {
+	t, name, err := o.scoped(ctx, in.Name)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	deleted, err := store.DeleteMirror(c.Context(), org, project, name, strings.TrimSpace(c.Param("id")))
+	store, err := storeFor(o.s, t.org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	deleted, err := store.DeleteMirror(ctx, t.org, t.project, name, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, internalErr(err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("mirror not found")
+		return nil, zip.ErrNotFound("mirror not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // ── validation helpers ───────────────────────────────────────────────────────

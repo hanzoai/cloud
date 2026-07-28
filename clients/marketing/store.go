@@ -141,18 +141,33 @@ func (s *Store) Close() error { return s.db.Close() }
 // (cents). Channel is the delivery surface (email/sms/social/meta/google/tiktok);
 // Status is the lifecycle (draft/active/paused/completed) — both validated at the
 // write layer against the fixed vocabularies in marketing.go.
+// It is also the INPUT of create and update: the wire shape is the same record
+// either way, so there is one type and one set of field docs rather than two
+// that drift. On create the server assigns ID/CreatedAt/UpdatedAt and ignores
+// whatever the body carried; on update ID comes from the path.
 type Campaign struct {
-	ID          string `json:"id"`
-	Org         string `json:"-"`
-	Name        string `json:"name"`
-	Channel     string `json:"channel"`
-	Status      string `json:"status"`
-	Objective   string `json:"objective"`
-	Budget      int64  `json:"budget"`
-	Spend       int64  `json:"spend"`
-	ScheduledAt int64  `json:"scheduledAt"`
-	CreatedAt   int64  `json:"createdAt"`
-	UpdatedAt   int64  `json:"updatedAt"`
+	// ID is the server-assigned campaign id ("camp_" + 128 random bits).
+	ID  string `json:"id"`
+	Org string `json:"-"`
+	// Name is the campaign's label. Required, trimmed, capped at 1024 bytes.
+	Name string `json:"name"`
+	// Channel is the delivery surface: email, sms, social, meta, google or
+	// tiktok. Empty means email.
+	Channel string `json:"channel"`
+	// Status is the lifecycle: draft, scheduled, active, paused or completed.
+	// Empty means draft.
+	Status string `json:"status"`
+	// Objective is the free-text goal ("signups"), capped at 1024 bytes.
+	Objective string `json:"objective"`
+	// Budget and Spend are minor units (USD cents), clamped to >= 0.
+	Budget int64 `json:"budget"`
+	Spend  int64 `json:"spend"`
+	// ScheduledAt is the unix send time; 0 means unscheduled. Setting it on a
+	// campaign with no explicit status makes that status "scheduled".
+	ScheduledAt int64 `json:"scheduledAt"`
+	// CreatedAt and UpdatedAt are unix seconds, both server-assigned.
+	CreatedAt int64 `json:"createdAt"`
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 const campaignCols = `id,org,name,channel,status,objective,budget,spend,scheduled_at,created_at,updated_at`

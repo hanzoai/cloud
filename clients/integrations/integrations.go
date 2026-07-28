@@ -40,7 +40,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -306,20 +305,97 @@ var mounted *cloud.Service[state]
 // ── HTTP response shapes (the published contract) ──────────────────────────────
 
 type providerView struct {
-	ID          string          `json:"id"`
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Category    string          `json:"category"`
-	Available   bool            `json:"available"` // creds configured
-	Connected   bool            `json:"connected"` // this org has a connection
-	Connection  *connectionView `json:"connection,omitempty"`
+	// ID is the provider's registry id and the :provider path segment ("slack").
+	ID string `json:"id"`
+	// Name is the provider's display name ("Slack").
+	Name string `json:"name"`
+	// Description is the one-line pitch the console card shows.
+	Description string `json:"description"`
+	// Category groups the card ("Communication", "Developer", "Marketing").
+	Category string `json:"category"`
+	// Available is whether THIS DEPLOYMENT has the provider's app credentials, so
+	// connect can succeed. False renders the card without a working Connect button.
+	Available bool `json:"available"`
+	// Connected is whether this org has a live connection to the provider.
+	Connected bool `json:"connected"`
+	// Connection is the connected account's non-secret detail. Absent when the org
+	// has no connection; tokens NEVER appear here (they live only in KMS).
+	Connection *connectionView `json:"connection,omitempty"`
 }
 
 type connectionView struct {
-	Account     string   `json:"account"`
-	ExternalID  string   `json:"externalId"`
-	Scopes      []string `json:"scopes"`
-	ConnectedAt string   `json:"connectedAt"`
+	// Account is the human label of the connected third-party account (the Slack
+	// team name, the GitHub org login). Provider-supplied and sanitized on ingest.
+	Account string `json:"account"`
+	// ExternalID is the provider's own id for the account (Slack team.id, GitHub
+	// installation_id) — the value inbound webhooks are mapped back to this org by.
+	ExternalID string `json:"externalId"`
+	// Scopes are the permissions the provider granted. Never null; [] when none.
+	Scopes []string `json:"scopes"`
+	// ConnectedAt is when the connection was last (re)established, RFC 3339 UTC.
+	ConnectedAt string `json:"connectedAt"`
+}
+
+// listOut is the provider catalog: every ORG-plane provider, sorted by id, each
+// annotated with this org's connection. User-plane providers (/v1/connectors) are
+// not in it.
+type listOut struct {
+	// Providers is the whole catalog. Never null; [] when nothing is registered.
+	Providers []providerView `json:"providers"`
+}
+
+// connectOut is the answer to /connect, and it has TWO disjoint shapes because the
+// route has two credential paths. The OAuth path returns AuthorizeURL alone; the
+// apikey path returns the sealed connection's summary and no URL. Every field that
+// is exclusive to one path is omitempty (or a pointer, where the empty value is
+// itself meaningful), so each path puts EXACTLY its own keys on the wire.
+type connectOut struct {
+	// AuthorizeURL is the provider consent URL to send the user to. OAuth path only.
+	AuthorizeURL string `json:"authorizeUrl,omitempty"`
+	// Connected is true on the apikey path once the credential verified and sealed.
+	Connected bool `json:"connected,omitempty"`
+	// Provider is the connector's registry id. apikey path only.
+	Provider string `json:"provider,omitempty"`
+	// Account is the account label the provider reported for the credential.
+	// apikey path only; a pointer because "" is a real answer the provider gave.
+	Account *string `json:"account,omitempty"`
+	// ExternalID is the provider's account id for the credential. apikey path only.
+	ExternalID *string `json:"externalId,omitempty"`
+	// Scopes are the permissions the credential carries. apikey path only; never
+	// null on that path ([] when the provider reported none).
+	Scopes *[]string `json:"scopes,omitempty"`
+}
+
+// disconnectOut is the answer to /disconnect. Idempotent: disconnecting a provider
+// that was never connected still answers true.
+type disconnectOut struct {
+	// Disconnected is always true — the org's secrets and connection row are gone.
+	Disconnected bool `json:"disconnected"`
+}
+
+// verifyOut reports a live re-check of a stored apikey credential. A verification
+// FAILURE is a 200 carrying active:false plus a reason, not an HTTP error, so the
+// console can render it; the credential itself is never echoed.
+type verifyOut struct {
+	// Provider is the connector's registry id.
+	Provider string `json:"provider"`
+	// Active is whether the stored credential verified live against the provider.
+	Active bool `json:"active"`
+	// Reason is why the check failed. Present only when active is false.
+	Reason string `json:"reason,omitempty"`
+	// Account is the account label the provider reported. Present only when active.
+	Account *string `json:"account,omitempty"`
+	// ExternalID is the provider's account id. Present only when active.
+	ExternalID *string `json:"externalId,omitempty"`
+	// Scopes are the permissions the credential carries. Present only when active.
+	Scopes *[]string `json:"scopes,omitempty"`
+}
+
+// authorizeOut is the one-field answer of a connect leg that only has a URL to
+// give back: the provider consent page the caller must send the user to.
+type authorizeOut struct {
+	// AuthorizeURL is the provider consent (or bot deep-link) URL.
+	AuthorizeURL string `json:"authorizeUrl"`
 }
 
 // ── Mount / lifecycle ──────────────────────────────────────────────────────────
@@ -331,6 +407,13 @@ type connectionView struct {
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("integrations.Mount: nil app")
+	}
+	// The typed-op registry lives on the concrete app (ops.go). A Router that is
+	// neither an App nor a scope cannot reach it, and serving routes no projection
+	// knows is worse than not serving them — fail the mount instead.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("integrations.Mount: router does not expose the typed-op registry")
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("integrations.Mount: nil deps.Logger")
@@ -400,7 +483,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	mounted = s
 
-	routes(app, s)
+	routes(app, zapp, s)
 
 	b.Log.Info(
 		"integrations mounted",
@@ -428,8 +511,33 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // cloud.Terminal-wrapped so its bad-signature 401 / malformed-body 400 is written
 // in-band and survives the commerce /v1 ErrorHandlerJSON (co-mounted ahead of us),
 // which would otherwise flatten a propagated 4xx to 500. Uniform reject codes.
-func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/integrations", cloud.Handle(s, list))
+//
+// TWO REGISTRARS, ONE ROUTER. zip.<Verb>(zapp, …) registers a TYPED op — a route
+// PLUS the registry entry OpenAPI / MCP / the CLI are projected from (ops.go) —
+// and takes the ABSOLUTE path, since the registry keys on it. app.<Verb>(…) stays
+// for exactly three families a typed op cannot express, and nothing else:
+//
+//   - the LINK legs and the OAuth callback, which answer 302 to a browser. A
+//     redirect is not a response shape; a typed op's Out is a JSON body.
+//   - the inbound WEBHOOKS, whose auth is a signature over the RAW request bytes
+//     (Slack/GitHub HMAC, Discord Ed25519, Teams JWT, Telegram secret token). A
+//     typed op is handed the DECODED In and never the bytes that were signed.
+//   - the two 202 Accepted creators (/repos/import, /pages/builds). zip writes
+//     200, or 204 for a nil Out, and cloud.Created covers 201; 202 is not in the
+//     vocabulary, and downgrading it is a wire break for a client that checks it.
+//
+// The two are interleaved in the ORIGINAL order because fiber resolves by
+// registration order, and that order is load-bearing here (literals before the
+// /:provider wildcards).
+func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
+	o := ops{s: s}
+	// The bridges first: every typed op below reads its org (cloud.Bridge) and the
+	// remaining identity facts (bridgeFacts) off the request context, and a Use only
+	// runs ahead of routes registered after it. Bounded to the group, which is the
+	// prefix this subsystem serves.
+	app.Group("/v1/integrations").Use(cloud.Bridge(), bridgeFacts)
+
+	zip.Get(zapp, "/v1/integrations", o.list)
 	app.Post("/v1/integrations/slack/events", cloud.Terminal(cloud.Handle(s, slackEvents)))
 	app.Post("/v1/integrations/slack/commands", cloud.Terminal(cloud.Handle(s, slackCommands)))
 	app.Get("/v1/integrations/slack/link", cloud.Handle(s, slackLink))
@@ -445,20 +553,22 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// 401 / malformed-body 400 to 500. repos/import register BEFORE the /:provider
 	// wildcards (registration-order matching) and are org-authed via the principal.
 	app.Post("/v1/connector/github/webhook", cloud.Terminal(cloud.Handle(s, githubWebhook)))
-	app.Get("/v1/integrations/github/repos", cloud.Handle(s, githubRepos))
+	zip.Get(zapp, "/v1/integrations/github/repos", o.githubRepos)
+	// RAW (202): the import runs in a bounded background worker.
 	app.Post("/v1/integrations/github/repos/import", cloud.Handle(s, githubImport))
 	// Seed the native tracker with the org's EXISTING GitHub issues (the webhook
 	// keeps them live thereafter). Org-authed via the principal; bounded + idempotent.
-	app.Post("/v1/integrations/github/issues/backfill", cloud.Handle(s, githubIssuesBackfill))
+	zip.Post(zapp, "/v1/integrations/github/issues/backfill", o.githubIssuesBackfill)
 	// GitHub Pages management (github_pages.go), one repo as a resource. Registered
 	// AFTER the literal /repos/import so registration-order matching keeps the literal
 	// unshadowed; the :repo routes all carry a /pages suffix, so /repos/import (no
 	// suffix) never matches them. Org-authed via the principal; the repo is resolved
 	// against the installation's granted set (owner is server-derived).
-	app.Get("/v1/integrations/github/repos/:repo/pages", cloud.Handle(s, githubPagesGet))
-	app.Post("/v1/integrations/github/repos/:repo/pages", cloud.Handle(s, githubPagesEnable))
-	app.Put("/v1/integrations/github/repos/:repo/pages", cloud.Handle(s, githubPagesUpdate))
-	app.Delete("/v1/integrations/github/repos/:repo/pages", cloud.Handle(s, githubPagesDisable))
+	zip.Get(zapp, "/v1/integrations/github/repos/:repo/pages", o.githubPagesGet)
+	zip.Post(zapp, "/v1/integrations/github/repos/:repo/pages", o.githubPagesEnable)
+	zip.Put(zapp, "/v1/integrations/github/repos/:repo/pages", o.githubPagesUpdate)
+	zip.Delete(zapp, "/v1/integrations/github/repos/:repo/pages", o.githubPagesDisable)
+	// RAW (202): the build is queued at GitHub, not completed here.
 	app.Post("/v1/integrations/github/repos/:repo/pages/builds", cloud.Handle(s, githubPagesBuild))
 	// ChatBridge adapters (bridge.go + discord/teams/telegram). Same discipline as
 	// the slack bridge: the literal paths register BEFORE the /:provider wildcards so
@@ -475,22 +585,23 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/integrations/teams/link", cloud.Handle(s, teamsLink))
 	app.Get("/v1/integrations/teams/link/aad", cloud.Handle(s, teamsLinkAAD))
 	app.Get("/v1/integrations/teams/link/callback", cloud.Handle(s, teamsLinkCallback))
-	app.Post("/v1/integrations/telegram/connect", cloud.Handle(s, telegramConnect))
+	zip.Post(zapp, "/v1/integrations/telegram/connect", o.telegramConnect)
 	app.Post("/v1/integrations/telegram/webhook", cloud.Terminal(cloud.Handle(s, telegramWebhook)))
 	app.Get("/v1/integrations/telegram/link", cloud.Handle(s, telegramLink))
 	app.Get("/v1/integrations/telegram/link/auth", cloud.Handle(s, telegramLinkAuth))
 	app.Get("/v1/integrations/telegram/link/callback", cloud.Handle(s, telegramLinkCallback))
-	app.Get("/v1/integrations/:provider", cloud.Handle(s, get))
-	app.Post("/v1/integrations/:provider/connect", cloud.Handle(s, connect))
-	// PUBLIC, state-authed. RedirectPath == this path for every provider (asserted
-	// in Mount), so this single generic route serves every provider's OAuth callback.
+	zip.Get(zapp, "/v1/integrations/:provider", o.get)
+	zip.Post(zapp, "/v1/integrations/:provider/connect", o.connect)
+	// PUBLIC, state-authed, RAW (302). RedirectPath == this path for every provider
+	// (asserted in Mount), so this single generic route serves every provider's
+	// OAuth callback.
 	app.Get("/v1/integrations/:provider/callback", cloud.Handle(s, callback))
-	app.Post("/v1/integrations/:provider/disconnect", cloud.Handle(s, disconnect))
+	zip.Post(zapp, "/v1/integrations/:provider/disconnect", o.disconnect)
 	// apikey connectors: re-verify a stored credential live (`hanzo connector verify`).
-	app.Post("/v1/integrations/:provider/verify", cloud.Handle(s, verifyConn))
+	zip.Post(zapp, "/v1/integrations/:provider/verify", o.verifyConn)
 	// Per-USER connector plane (/v1/connectors — connectors.go). Own prefix, so no
 	// shadowing interplay with the /:provider wildcards above.
-	connectorRoutes(app, s)
+	connectorRoutes(app, zapp, o)
 }
 
 // Shutdown closes the store. Idempotent — safe when nothing is mounted.
@@ -519,81 +630,90 @@ func snapshotRegistry() map[string]*Provider {
 
 // ── handlers ───────────────────────────────────────────────────────────────────
 
-// list returns every registered provider with this org's connection status.
-// Org-authed: a caller with no validated principal is 403 (the status is per-org,
-// so an org is required).
-func list(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// list returns every registered integration provider together with THIS org's
+// connection status for it — the catalog the console's Integrations page renders.
+// Org-authed: a caller with no validated principal is 403, because the status is
+// per-org and there is no org-less answer. User-plane providers (the /v1/connectors
+// surface) are omitted; the two planes are disjoint.
+//
+// Response: {"providers":[{"id":"slack","name":"Slack","description":"Connect your workspace.","category":"Communication","available":true,"connected":true,"connection":{"account":"Acme","externalId":"T0231","scopes":["chat:write"],"connectedAt":"2026-07-01T10:00:00Z"}}]}
+func (o ops) list(ctx context.Context, _ *noArgs) (*listOut, error) {
+	org, err := authed(ctx, principalRequired)
+	if err != nil {
+		return nil, err
 	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	ids := sortedProviderIDs(s)
+	ids := sortedProviderIDs(o.s)
 	out := make([]providerView, 0, len(ids))
 	for _, id := range ids {
-		p := s.State.providers[id]
+		p := o.s.State.providers[id]
 		if p.Scope == userScope {
 			continue // user-plane providers are invisible on the org surface
 		}
-		v, err := providerViewFor(s, c.Context(), org, p)
-		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		v, verr := providerViewFor(o.s, ctx, org, p)
+		if verr != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", verr)
 		}
 		out = append(out, v)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"providers": out})
+	return &listOut{Providers: out}, nil
 }
 
-// get returns one provider (404 for an unknown id) with this org's status.
-func get(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	p, ok := orgProvider(s, providerParam(c))
-	if !ok {
-		return zip.ErrNotFound("unknown provider")
-	}
-	v, err := providerViewFor(s, c.Context(), org, p)
+// get returns ONE provider with this org's connection status — the same view list
+// carries, for a single id. An unknown id is 404, and so is a user-plane provider:
+// the org surface never resolves one.
+//
+// Example: {"provider":"slack"}
+// Response: {"id":"slack","name":"Slack","description":"Connect your workspace.","category":"Communication","available":true,"connected":false}
+func (o ops) get(ctx context.Context, in *providerRef) (*providerView, error) {
+	org, err := authed(ctx, principalRequired)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, v)
+	p, ok := orgProvider(o.s, in.id())
+	if !ok {
+		return nil, zip.ErrNotFound("unknown provider")
+	}
+	v, err := providerViewFor(o.s, ctx, org, p)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+	}
+	return &v, nil
 }
 
-// connect begins an OAuth flow: it mints a single-use nonce + HMAC-signed state
-// binding this org to this provider, and returns the provider's authorize URL.
-// Fail-closed order: no principal → 403; unknown provider → 404; not configured
+// connect acquires the org's credential for one provider. It has TWO paths and the
+// REQUEST picks which: a "token" key in the body seals that credential directly
+// (verify-before-store), and its absence begins the 3-legged OAuth flow — minting a
+// single-use nonce plus an HMAC-signed state that binds this org to this provider,
+// and answering with the provider's authorize URL for the caller to redirect to.
+//
+// Fail-closed order, unchanged: no principal → 403; unknown provider → 404; an
+// AdminOnly connector without the caller's own-org admin bit → 403; not configured
 // → 503; KMS not ready → 503 (the flow WILL need to seal a token, so refuse now
 // rather than dead-end at the callback).
-func connect(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required to connect an integration")
+//
+// Example: {"provider":"cloudflare","token":"cf-scoped-api-token","accountId":"a1b2c3"}
+// Response: {"connected":true,"provider":"cloudflare","account":"Acme","externalId":"a1b2c3","scopes":[]}
+func (o ops) connect(ctx context.Context, in *connectIn) (*connectOut, error) {
+	org, err := authed(ctx, "a validated principal is required to connect an integration")
+	if err != nil {
+		return nil, err
 	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	p, ok := orgProvider(s, providerParam(c))
+	s := o.s
+	p, ok := orgProvider(s, in.ref().id())
 	if !ok {
-		return zip.ErrNotFound("unknown provider")
+		return nil, zip.ErrNotFound("unknown provider")
 	}
 	// Mutating a connector is an org-admin action for providers that declare it
 	// (parity with the platform deploy-provider adminProcedure). The predicate is
 	// the caller's OWN-org isAdmin bit (principal.IsOrgAdmin) — NOT SuperAdmin.
-	if p.AdminOnly && !principal.IsOrgAdmin(c) {
-		return zip.ErrForbidden("connecting the " + p.ID + " connector requires org admin")
+	if p.AdminOnly && !orgAdmin(ctx) {
+		return nil, zip.ErrForbidden("connecting the " + p.ID + " connector requires org admin")
 	}
 	if !p.Configured() {
-		return zip.Errorf(http.StatusServiceUnavailable, "%s integration is not configured on this deployment", p.ID)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "%s integration is not configured on this deployment", p.ID)
 	}
 	if !kmsReady(s) {
-		return zip.Errorf(http.StatusServiceUnavailable, "%s", kms.ErrMasterKeyMissing.Error())
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "%s", kms.ErrMasterKeyMissing.Error())
 	}
 	// Pick the credential-acquisition path by REQUEST. A provider may offer an
 	// apikey path (Verify) and/or an OAuth path (Authorize). A credential in the
@@ -601,62 +721,68 @@ func connect(s *cloud.Service[state], c *zip.Ctx) error {
 	// bad credential); its absence starts the OAuth flow below. A provider with only
 	// one path always takes it — an apikey-only provider with no token still returns
 	// connectByCredential's helpful "token required" 400.
-	if p.Verify != nil && (p.Authorize == nil || bodyHasCredential(c)) {
-		return connectByCredential(s, c, org, p)
+	if p.Verify != nil && (p.Authorize == nil || in.Token != nil) {
+		return connectByCredential(s, ctx, org, p, in)
 	}
 	if p.Authorize == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "%s: no connect method configured", p.ID)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "%s: no connect method configured", p.ID)
 	}
 	// The authorize leg needs Hanzo's registered app creds. A dual-path provider
 	// keeps Configured()==true for its always-available apikey path, so gate on the
 	// authorize leg's OWN creds here — an honest 503 that points the caller at the
 	// token path rather than a dead consent URL with an empty client_id.
 	if !authorizeReady(p) {
-		return zip.Errorf(http.StatusServiceUnavailable, "%s is not configured for the install flow on this deployment; connect with a scoped API token instead", p.ID)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "%s is not configured for the install flow on this deployment; connect with a scoped API token instead", p.ID)
 	}
 
 	// Opportunistic GC of expired nonces (best-effort; never fails the request).
-	if _, err := s.State.store.GCNonces(c.Context(), staleNonceCutoff()); err != nil {
-		s.Log.Warn("nonce gc", "err", err)
+	if _, gerr := s.State.store.GCNonces(ctx, staleNonceCutoff()); gerr != nil {
+		s.Log.Warn("nonce gc", "err", gerr)
 	}
 
 	nonce, err := genToken()
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	if err := s.State.store.PutNonce(c.Context(), nonce, org, p.ID); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "nonce: %v", err)
+	if err := s.State.store.PutNonce(ctx, nonce, org, p.ID); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "nonce: %v", err)
 	}
-	state, err := sign(s, org, p.ID, nonce)
+	signed, err := sign(s, org, p.ID, nonce)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "state: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "state: %v", err)
 	}
-	authorizeURL, err := p.Authorize(p.Creds(), redirectURI(s, p), state)
+	authorizeURL, err := p.Authorize(p.Creds(), redirectURI(s, p), signed)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "authorize: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "authorize: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"authorizeUrl": authorizeURL})
+	return &connectOut{AuthorizeURL: authorizeURL}, nil
 }
+
+// connectIn is the /connect request: which connector, and optionally the customer
+// credential that selects the apikey path over OAuth.
+type connectIn struct {
+	// Provider is the connector's registry id, from the :provider path segment.
+	Provider string `json:"provider"`
+	// Token is the customer's provider credential. Its PRESENCE — not its value —
+	// is what selects the apikey seal over the OAuth flow for a provider that
+	// offers both: {"token":"…"}, even empty, is an apikey attempt (→ verify, which
+	// answers the "token required" 400 on an empty value), while a body with no
+	// token key (the console Connect button, `hanzo connector add` with no --token)
+	// starts OAuth. Read on STDIN by the CLI, never argv; never logged or echoed.
+	Token *string `json:"token"`
+	// AccountID is the provider account the credential should be scoped to, for the
+	// providers whose Verify needs one (Cloudflare). Ignored by the OAuth path.
+	AccountID string `json:"accountId"`
+}
+
+// ref is the connector this request addresses, normalized like every other
+// :provider op.
+func (in connectIn) ref() providerRef { return providerRef{Provider: in.Provider} }
 
 // maxCredentialLen bounds the credential an apikey /connect accepts. Real provider
 // API tokens are short (a Cloudflare token is ~40 chars); anything over 8 KiB is
 // hostile and rejected before it reaches Verify or KMS.
 const maxCredentialLen = 8192
-
-// bodyHasCredential reports whether the /connect body carries an apikey credential
-// INTENT — the signal that selects the apikey seal over the OAuth flow for a
-// provider that offers both. The signal is PRESENCE of the "token" key, not its
-// value: {"token":"…"} (even empty/whitespace) is an apikey attempt (→ verify,
-// which answers the "token required" 400 on an empty value); a body with no token
-// key (the console "Connect" button, `hanzo connector add` with no --token) starts
-// OAuth. A malformed body reads as "no credential" (→ OAuth). Never logs the token.
-func bodyHasCredential(c *zip.Ctx) bool {
-	var b struct {
-		Token *string `json:"token"`
-	}
-	_ = json.Unmarshal(c.Body(), &b)
-	return b.Token != nil
-}
 
 // connectByCredential completes an apikey connector. The caller submits the
 // provider credential in the request body (from `hanzo connector add`, read on
@@ -665,30 +791,26 @@ func bodyHasCredential(c *zip.Ctx) bool {
 // to the connection row. FAIL-CLOSED: a bad/inactive credential is refused and
 // NOTHING is stored (no KMS write, no row). The credential value never appears in
 // a log line, the response, or the store — only in the KMS seal input.
-func connectByCredential(s *cloud.Service[state], c *zip.Ctx, org string, p *Provider) error {
+func connectByCredential(s *cloud.Service[state], ctx context.Context, org string, p *Provider, in *connectIn) (*connectOut, error) {
 	if p.Verify == nil {
-		return zip.Errorf(http.StatusInternalServerError, "%s: apikey provider without Verify", p.ID)
+		return nil, zip.Errorf(http.StatusInternalServerError, "%s: apikey provider without Verify", p.ID)
 	}
-	var body struct {
-		Token     string `json:"token"`
-		AccountID string `json:"accountId"`
+	var token string
+	if in.Token != nil {
+		token = strings.TrimSpace(*in.Token)
 	}
-	if err := json.Unmarshal(c.Body(), &body); err != nil {
-		return zip.ErrBadRequest("invalid request body")
-	}
-	token := strings.TrimSpace(body.Token)
 	if token == "" {
-		return zip.ErrBadRequest("a credential token is required (pipe it on stdin: `hanzo connector add --provider " + p.ID + " --token -`)")
+		return nil, zip.ErrBadRequest("a credential token is required (pipe it on stdin: `hanzo connector add --provider " + p.ID + " --token -`)")
 	}
 	if len(token) > maxCredentialLen {
-		return zip.ErrBadRequest("credential too large")
+		return nil, zip.ErrBadRequest("credential too large")
 	}
-	res, err := p.Verify(c.Context(), VerifyInput{Token: token, AccountID: sanitizeMeta(strings.TrimSpace(body.AccountID))})
+	res, err := p.Verify(ctx, VerifyInput{Token: token, AccountID: sanitizeMeta(strings.TrimSpace(in.AccountID))})
 	if err != nil || res == nil {
 		// Verify FAILED → refuse; store NOTHING. err is provider-authored and must
 		// not carry the credential value (only its status/reason).
 		s.Log.Warn("connector verify failed", "provider", p.ID, "org", org, "err", err)
-		return zip.ErrBadRequest("credential verification failed")
+		return nil, zip.ErrBadRequest("credential verification failed")
 	}
 	// Harden provider-supplied NON-secret metadata (strip control chars, bound
 	// length) — never the secret token, which goes straight to the KMS seal.
@@ -697,7 +819,7 @@ func connectByCredential(s *cloud.Service[state], c *zip.Ctx, org string, p *Pro
 	// KMS failure leaves NO half-connected row advertising a token that was never
 	// stored (same ordering discipline as the OAuth callback).
 	if err := sealTokens(s, kmsPath(org, p.ID), res.Tokens); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "secret custody failed")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "secret custody failed")
 	}
 	conn := Connection{
 		Org:          org,
@@ -707,18 +829,19 @@ func connectByCredential(s *cloud.Service[state], c *zip.Ctx, org string, p *Pro
 		BotUserID:    res.BotUserID,
 		Scopes:       res.Scopes,
 	}
-	if err := s.State.store.Upsert(c.Context(), conn); err != nil {
+	if err := s.State.store.Upsert(ctx, conn); err != nil {
 		s.Log.Warn("connection upsert failed", "provider", p.ID, "org", org, "err", err)
-		return zip.Errorf(http.StatusInternalServerError, "persist failed")
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist failed")
 	}
 	s.Log.Info("connector connected", "provider", p.ID, "org", org, "account", res.AccountLabel, "externalId", res.ExternalID)
-	return c.JSON(http.StatusOK, map[string]any{
-		"connected":  true,
-		"provider":   p.ID,
-		"account":    res.AccountLabel,
-		"externalId": res.ExternalID,
-		"scopes":     nonNil(res.Scopes),
-	})
+	scopes := nonNil(res.Scopes)
+	return &connectOut{
+		Connected:  true,
+		Provider:   p.ID,
+		Account:    &res.AccountLabel,
+		ExternalID: &res.ExternalID,
+		Scopes:     &scopes,
+	}, nil
 }
 
 // verifyConn re-checks a CONNECTED apikey connector's stored credential against the
@@ -727,46 +850,49 @@ func connectByCredential(s *cloud.Service[state], c *zip.Ctx, org string, p *Pro
 // A verification failure is reported as {active:false}, not an error — the console/
 // CLI renders it. Only apikey providers support verify (OAuth tokens are checked at
 // use, not re-verified here).
-func verifyConn(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+//
+// Example: {"provider":"cloudflare"}
+// Response: {"provider":"cloudflare","active":true,"account":"Acme","externalId":"a1b2c3","scopes":["zone:read"]}
+func (o ops) verifyConn(ctx context.Context, in *providerRef) (*verifyOut, error) {
+	org, err := authed(ctx, principalRequired)
+	if err != nil {
+		return nil, err
 	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	p, ok := orgProvider(s, providerParam(c))
+	s := o.s
+	p, ok := orgProvider(s, in.id())
 	if !ok {
-		return zip.ErrNotFound("unknown provider")
+		return nil, zip.ErrNotFound("unknown provider")
 	}
 	if p.Kind != apiKeyKind || p.Verify == nil || len(p.Secrets) == 0 {
-		return zip.ErrBadRequest("verify is only supported for credential connectors")
+		return nil, zip.ErrBadRequest("verify is only supported for credential connectors")
 	}
-	_, found, err := s.State.store.Get(c.Context(), org, p.ID)
+	_, found, err := s.State.store.Get(ctx, org, p.ID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
 	}
 	if !found {
-		return zip.ErrNotFound("connector not connected")
+		return nil, zip.ErrNotFound("connector not connected")
 	}
 	if !kmsReady(s) {
-		return zip.Errorf(http.StatusServiceUnavailable, "%s", kms.ErrMasterKeyMissing.Error())
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "%s", kms.ErrMasterKeyMissing.Error())
 	}
 	tok, err := kmsGet(s, kmsPath(org, p.ID), p.Secrets[0])
 	if err != nil || len(tok) == 0 {
-		return zip.ErrBadRequest("stored credential unavailable")
+		return nil, zip.ErrBadRequest("stored credential unavailable")
 	}
-	res, verr := p.Verify(c.Context(), VerifyInput{Token: string(tok)})
+	res, verr := p.Verify(ctx, VerifyInput{Token: string(tok)})
 	if verr != nil || res == nil {
-		return c.JSON(http.StatusOK, map[string]any{"provider": p.ID, "active": false, "reason": "verification failed"})
+		return &verifyOut{Provider: p.ID, Reason: "verification failed"}, nil
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"provider":   p.ID,
-		"active":     true,
-		"account":    sanitizeMeta(res.AccountLabel),
-		"externalId": sanitizeMeta(res.ExternalID),
-		"scopes":     nonNil(sanitizeScopes(res.Scopes)),
-	})
+	account, externalID := sanitizeMeta(res.AccountLabel), sanitizeMeta(res.ExternalID)
+	scopes := nonNil(sanitizeScopes(res.Scopes))
+	return &verifyOut{
+		Provider:   p.ID,
+		Active:     true,
+		Account:    &account,
+		ExternalID: &externalID,
+		Scopes:     &scopes,
+	}, nil
 }
 
 // callback is the PUBLIC, state-authed OAuth return. It ALWAYS 302s the user back
@@ -851,35 +977,37 @@ func callback(s *cloud.Service[state], c *zip.Ctx) error {
 
 // disconnect revokes (best-effort) and forgets an org's connection: it deletes
 // every custodied KMS secret and the connection row. Idempotent — disconnecting a
-// provider that was never connected still returns {disconnected:true}.
-func disconnect(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required to disconnect an integration")
+// provider that was never connected still returns {disconnected:true}. Symmetric
+// with connect: an AdminOnly connector needs the caller's own-org admin bit.
+//
+// Example: {"provider":"slack"}
+// Response: {"disconnected":true}
+func (o ops) disconnect(ctx context.Context, in *providerRef) (*disconnectOut, error) {
+	org, err := authed(ctx, "a validated principal is required to disconnect an integration")
+	if err != nil {
+		return nil, err
 	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	p, ok := orgProvider(s, providerParam(c))
+	s := o.s
+	p, ok := orgProvider(s, in.id())
 	if !ok {
-		return zip.ErrNotFound("unknown provider")
+		return nil, zip.ErrNotFound("unknown provider")
 	}
 	// Symmetric with connect: disconnecting an admin-only connector requires the
 	// caller be an admin of its OWN org (principal.IsOrgAdmin — NOT SuperAdmin).
-	if p.AdminOnly && !principal.IsOrgAdmin(c) {
-		return zip.ErrForbidden("disconnecting the " + p.ID + " connector requires org admin")
+	if p.AdminOnly && !orgAdmin(ctx) {
+		return nil, zip.ErrForbidden("disconnecting the " + p.ID + " connector requires org admin")
 	}
 
-	_, found, err := s.State.store.Get(c.Context(), org, p.ID)
+	_, found, err := s.State.store.Get(ctx, org, p.ID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
 	}
 
 	// Best-effort provider-side revoke using the primary custodied secret. Never
 	// fails the disconnect: local forgetting is authoritative for the tenant.
 	if found && p.Revoke != nil && len(p.Secrets) > 0 && kmsReady(s) && p.Configured() {
 		if tok, gerr := kmsGet(s, kmsPath(org, p.ID), p.Secrets[0]); gerr == nil {
-			if rerr := p.Revoke(c.Context(), p.Creds(), string(tok)); rerr != nil {
+			if rerr := p.Revoke(ctx, p.Creds(), string(tok)); rerr != nil {
 				s.Log.Warn("provider revoke failed (continuing)", "provider", p.ID, "org", org, "err", rerr)
 			}
 		}
@@ -892,10 +1020,10 @@ func disconnect(s *cloud.Service[state], c *zip.Ctx) error {
 			}
 		}
 	}
-	if _, derr := s.State.store.Delete(c.Context(), org, p.ID); derr != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", derr)
+	if _, derr := s.State.store.Delete(ctx, org, p.ID); derr != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", derr)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"disconnected": true})
+	return &disconnectOut{Disconnected: true}, nil
 }
 
 // ── view + redirect builders ───────────────────────────────────────────────────

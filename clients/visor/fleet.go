@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/samples"
 	tasks "github.com/hanzoai/tasks/pkg/tasks"
 	"github.com/zap-proto/zip"
@@ -178,16 +177,26 @@ func byoStatus(lastHeartbeat string, now time.Time) string {
 	return "offline"
 }
 
-// listFleetWorkers serves GET /v1/fleet/workers — the raw BYO inventory for the
-// caller's tenant. The Machines and GPUs pages fold the same data in via the unions
-// below; this is the canonical list a fleet-specific view (or the CLI's `status`)
-// reads.
-func listFleetWorkers(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// workerList is the raw BYO inventory: the machines that dialed IN, as they
+// reported themselves.
+type workerList struct {
+	// Workers is one row per connected BYO machine, each carrying the host's own
+	// report (GPUs, driver versions, capabilities) rather than a normalized view.
+	Workers []byoWorker `json:"workers"`
+}
+
+// listFleetWorkers returns the caller org's BYO machines — the ones that dialed in
+// via `hanzo link` — with everything each host reported about itself. The Machines
+// and GPUs pages fold the same data into their normalized shapes; this is the
+// canonical raw list a fleet view (or the CLI's `status`) reads.
+//
+// Response: {"workers":[{"id":"spark","hostname":"spark","provider":"byo","location":"on-prem","status":"online","gpus":[{"name":"NVIDIA GB10","memoryTotal":"122880 MiB"}],"arch":"arm64","cpus":20}]}
+func (o ops) listFleetWorkers(ctx context.Context, _ *noArgs) (*workerList, error) {
+	_, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"workers": byoWorkers(org)})
+	return &workerList{Workers: byoWorkers(org)}, nil
 }
 
 // ---- unions into the existing console shapes ----
@@ -536,56 +545,94 @@ func gpuJobCounts(jobs []gpuJob) map[string]jobCount {
 	return out
 }
 
-// listFleetJobs serves GET /v1/fleet/jobs?gpu=&status= — the org's gpu-jobs queue,
-// each row tagged with the GPU it targets ("" = shared any-GPU lane) and the node
-// claiming it, optionally narrowed to one GPU's queue and/or status. org is the
-// validated principal (never a client field); gpu/status are narrowers WITHIN it.
-// Fail-soft: an unavailable engine yields an empty queue, never an error.
-func listFleetJobs(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	jobs := filterGPUJobs(gpuJobs(org), c.Query("gpu"), c.Query("status"))
-	return c.JSON(http.StatusOK, map[string]any{"jobs": jobs})
+// jobFilter narrows the queue WITHIN the caller's tenant. Both are optional; the
+// org is never one of them.
+type jobFilter struct {
+	// GPU selects one node's lane: jobs TARGETED at it (gpu:<node>) or CLAIMED by
+	// it. The literal "shared" selects the any-GPU lane — no target, no claimant.
+	// Matched case-insensitively.
+	GPU string `json:"gpu"`
+	// Status selects one lifecycle state: queued, running, stalled, completed,
+	// failed or canceled.
+	Status string `json:"status"`
 }
 
-// cancelFleetJob serves POST /v1/fleet/jobs/:id/cancel {run,reason} — cancel a queued
-// or running render in the caller's org. The engine cancel is org-scoped
-// (CancelActivityForOrg) so a tenant can only ever cancel its OWN job; a missing job
-// is 404, an already-finished one 409. runId defaults to the activityId (the
-// dispatcher sets runId==activityId==prompt_id), so the common case needs no body.
-func cancelFleetJob(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// jobList is the org's render queue.
+type jobList struct {
+	// Jobs is the queue, most-recent-first. Every LIVE job is present; terminal
+	// history is capped, so a busy org's running work is never crowded out.
+	Jobs []gpuJob `json:"jobs"`
+}
+
+// listFleetJobs returns the caller org's gpu-jobs render queue, each row tagged with
+// the GPU it targets (empty = the shared any-GPU lane) and the node claiming it,
+// optionally narrowed to one GPU's queue and/or one status.
+//
+// A job whose worker died — STARTED with an elapsed lease and not yet reclaimed —
+// reads "stalled", not "running". Fail-soft: an unavailable tasks engine yields an
+// empty queue rather than an error.
+//
+// Response: {"jobs":[{"id":"job-1","runId":"job-1","type":"studio.render","status":"running","gpu":"spark","worker":"spark","label":"hero","attempt":1}]}
+func (o ops) listFleetJobs(ctx context.Context, in *jobFilter) (*jobList, error) {
+	_, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := strings.TrimSpace(c.Param("id"))
+	return &jobList{Jobs: filterGPUJobs(gpuJobs(org), in.GPU, in.Status)}, nil
+}
+
+// jobCancel identifies the render to cancel and why.
+type jobCancel struct {
+	// ID is the job (activity) id, from the URL path.
+	ID string `json:"id"`
+	// Run is the run id; empty defaults to the job id, which is what the dispatcher
+	// sets (runId == activityId == prompt_id), so the common case sends no body.
+	Run string `json:"run"`
+	// Reason is recorded on the cancellation; empty records "canceled from console".
+	Reason string `json:"reason"`
+}
+
+// jobCanceled names the render a cancel stopped.
+type jobCanceled struct {
+	// Canceled is the job id that was canceled.
+	Canceled string `json:"canceled"`
+	// Run is the run id the cancel was applied to.
+	Run string `json:"run"`
+}
+
+// cancelFleetJob cancels a queued or running render in the caller's org. The engine
+// cancel is org-scoped, so a tenant can only ever cancel its OWN job: a job in
+// another tenant's shard is 404, exactly like one that never existed. An
+// already-finished job is 409.
+//
+// Example: {"reason":"superseded"}
+// Response: {"canceled":"job-1","run":"job-1"}
+func (o ops) cancelFleetJob(ctx context.Context, in *jobCancel) (*jobCanceled, error) {
+	c, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	id := strings.TrimSpace(in.ID)
 	if id == "" {
-		return zip.ErrBadRequest("job id required")
+		return nil, zip.ErrBadRequest("job id required")
 	}
-	var req struct {
-		Run    string `json:"run"`
-		Reason string `json:"reason"`
-	}
-	_ = json.Unmarshal(c.Body(), &req)
-	run := firstNonEmpty(strings.TrimSpace(req.Run), id)
+	run := firstNonEmpty(strings.TrimSpace(in.Run), id)
 	eng := cloud.EmbeddedTasks()
 	if eng == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "tasks engine not ready")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "tasks engine not ready")
 	}
 	who := firstNonEmpty(c.Header("X-User-Id"), org)
-	if err := eng.CancelActivityForOrg(org, jobsNamespace, id, run, firstNonEmpty(req.Reason, "canceled from console"), who); err != nil {
+	if err := eng.CancelActivityForOrg(org, jobsNamespace, id, run, firstNonEmpty(in.Reason, "canceled from console"), who); err != nil {
 		switch cancelErrStatus(err) {
 		case http.StatusNotFound:
-			return zip.ErrNotFound("job not found")
+			return nil, zip.ErrNotFound("job not found")
 		case http.StatusConflict:
-			return zip.Errorf(http.StatusConflict, "job already finished")
+			return nil, zip.Errorf(http.StatusConflict, "job already finished")
 		default:
-			return zip.Errorf(http.StatusBadGateway, "cancel: %v", err)
+			return nil, zip.Errorf(http.StatusBadGateway, "cancel: %v", err)
 		}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"canceled": id, "run": run})
+	return &jobCanceled{Canceled: id, Run: run}, nil
 }
 
 // cancelErrStatus maps a CancelActivityForOrg result to the client HTTP status: a
@@ -613,13 +660,28 @@ const sampleIngestTimeout = 10 * time.Second
 // Only the metrics a worker can measure locally; Org/Source/Kind are
 // server-authoritative — a worker cannot claim to be another tenant or source.
 type sampleIngest struct {
-	Unit     string  `json:"unit"`
-	Host     string  `json:"host"`
-	GPUUtil  float64 `json:"gpuUtil"`
-	GPUs     int     `json:"gpus"`
-	GPUModel string  `json:"gpuModel"`
-	MemUsed  int64   `json:"memUsed"`
-	MemFree  int64   `json:"memFree"`
+	// Unit is the reporting node's own id — the same id it registered under, and
+	// the key the board joins this series onto. Required.
+	Unit string `json:"unit"`
+	// Host is the node's hostname, for display.
+	Host string `json:"host"`
+	// GPUUtil is accelerator utilization as a fraction 0..1; the warehouse clamps
+	// anything outside that.
+	GPUUtil float64 `json:"gpuUtil"`
+	// GPUs is how many accelerators the reading covers, GPUModel the representative
+	// model name.
+	GPUs     int    `json:"gpus"`
+	GPUModel string `json:"gpuModel"`
+	// MemUsed and MemFree are host memory in bytes.
+	MemUsed int64 `json:"memUsed"`
+	MemFree int64 `json:"memFree"`
+}
+
+// sampleAccepted acknowledges an ingested reading.
+type sampleAccepted struct {
+	// Recorded is always true: the response is an acknowledgement, and the
+	// warehouse write is detached, so it reports acceptance, not durability.
+	Recorded bool `json:"recorded"`
 }
 
 // sample builds the warehouse Sample for org from the worker's report. Source/Kind
@@ -638,30 +700,31 @@ func (r sampleIngest) sample(org string) (samples.Sample, error) {
 	}, nil
 }
 
-// ingestSample serves POST /v1/fleet/samples — a BYO worker self-reports its live GPU
-// utilization into the SAME series the board overlays (clients/samples). org is the
-// validated principal; the worker names only its own metrics. Mirrors
-// clients/agents.recordSample: the warehouse write is DETACHED (own bounded context,
-// never in the response path), so a slow/absent warehouse never stalls a heartbeat.
-func ingestSample(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	var req sampleIngest
-	if err := json.Unmarshal(c.Body(), &req); err != nil {
-		return zip.ErrBadRequest("invalid JSON body")
-	}
-	smp, err := req.sample(org)
+// ingestSample records a BYO worker's live GPU utilization into the SAME series the
+// fleet board overlays. The org is the validated principal and source/kind are fixed
+// server-side, so a worker names only its own metrics — never another tenant or
+// another source. Answers 202: the warehouse write is DETACHED (its own bounded
+// context, never in the response path), so a slow or absent warehouse cannot stall a
+// heartbeat.
+//
+// Example: {"unit":"spark","host":"spark","gpuUtil":0.42,"gpus":1,"gpuModel":"GB10","memUsed":100,"memFree":200}
+// Response: {"recorded":true}
+func (o ops) ingestSample(ctx context.Context, in *sampleIngest) (*sampleAccepted, error) {
+	_, org, err := scope(ctx)
 	if err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, err
+	}
+	smp, err := in.sample(org)
+	if err != nil {
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), sampleIngestTimeout)
+		wctx, cancel := context.WithTimeout(context.Background(), sampleIngestTimeout)
 		defer cancel()
-		if err := samples.Record(ctx, smp); err != nil {
-			s.Log.Warn("byo fleet sample ingest failed", "org", org, "unit", smp.Unit, "err", err)
+		if err := samples.Record(wctx, smp); err != nil {
+			o.Log.Warn("byo fleet sample ingest failed", "org", org, "unit", smp.Unit, "err", err)
 		}
 	}()
-	return c.JSON(http.StatusAccepted, map[string]any{"recorded": true})
+	cloud.Accepted(ctx)
+	return &sampleAccepted{Recorded: true}, nil
 }

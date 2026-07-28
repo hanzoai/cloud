@@ -13,11 +13,18 @@
 // top-level reads (me/overview/orgs/users/usage/roles/applications/products/compute/o11y/
 // analytics/bases + the flags/waitlist control plane).
 //
-// SECURITY — TWO tiers off ONE identity predicate, both fail-closed. PLATFORM routes are
-// SuperAdmin ONLY (core.Guard). ORG-SCOPED routes (me/overview/orgs/users/usage/analytics/
-// bases) are core.GuardScoped: a SuperAdmin sees EVERY tenant; any other validated admin
+// SECURITY — TWO tiers off ONE identity predicate, both fail-closed. PLATFORM ops are
+// SuperAdmin ONLY (core.Admit). ORG-SCOPED ops (me/overview/orgs/users/usage/analytics/
+// bases) call core.AdmitScoped: a SuperAdmin sees EVERY tenant; any other validated admin
 // caller is HARD-limited to their OWN org subtree by core.ResolveScope/ScopedOrgs.
+//
+// SHAPE — every route is a zip TYPED op (zip.Get[In, Out]), so the /v1/admin surface is
+// ONE registry with N projections: REST, the OpenAPI document, the MCP tool list and the
+// CLI all derive from these declarations. Out is the /v1 envelope as a Go type, so the
+// operator's contract is checked by the compiler instead of restated by hand.
 package admin
+
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 import (
 	"context"
@@ -49,8 +56,8 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// Mount registers the /v1/admin/* surface on app. Every handler gates on c.IsAdmin()
-// first (via core.Guard/GuardScoped), then aggregates real upstream data.
+// Mount registers the /v1/admin/* surface on app. Every handler gates on the validated
+// identity first (via core.Admit/AdmitScoped), then aggregates real upstream data.
 //
 // The state is built from Deps fields NOT on cloud.Base (deps.Audit, deps.IAMIssuer), so
 // it constructs the cloud.Service value directly (cloud.NewBase + &cloud.Service[core.State]{…})
@@ -61,6 +68,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	if deps.Logger == nil {
 		return fmt.Errorf("admin.Mount: nil deps.Logger")
+	}
+	// Every route here is a typed op, and the op registry lives on the App. A Router
+	// that is not one cannot carry this surface, so the mount fails rather than
+	// registering routes no projection would know about.
+	if cloud.ZipApp(app) == nil {
+		return fmt.Errorf("admin.Mount: %T does not expose the typed-op registry", app)
 	}
 	b := cloud.NewBase(deps, "admin")
 	s := &cloud.Service[core.State]{
@@ -88,136 +101,196 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// routes registers the /v1/admin/* surface on app, threading the ONE service value
-// through the two-tier gate: org-scoped panels behind core.GuardScoped, the platform
-// control plane behind core.Guard. Each carved-out domain (audit/customer/revenue/finance)
-// owns its own route registration.
+// routes registers the /v1/admin/* surface on app: the ONE request bridge
+// (cloud.Bridge — a typed op is handed only a context, so the request it gates on is
+// parked there), then every op. Each carved-out domain (audit/customer/revenue/finance/…)
+// owns its own declarations.
+//
+// The gate is no longer a wrapper here: each handler calls core.Admit (platform) or
+// core.AdmitScoped (org-scoped) on its first line, so the tier is read where the handler
+// is read and applies to the MCP and CLI projections too, which never touch this router.
 func routes(app cloud.Router, s *cloud.Service[core.State]) {
-	g := app.Group("/v1/admin")
-	// Org-scoped panels — GuardScoped. Cross-tenant reads are impossible for a non-super
-	// caller.
-	g.Get("/me", core.GuardScoped(s, me))
-	g.Get("/overview", core.GuardScoped(s, overview))
-	g.Get("/orgs", core.GuardScoped(s, orgs))
-	g.Get("/users", core.GuardScoped(s, users))
-	g.Get("/usage", core.GuardScoped(s, usage))
+	o := ops{s: s}
+	z := cloud.ZipApp(app)
+	// The bridge FIRST: fiber runs middleware in registration order, so one installed
+	// after these leaves would never run — and every op below takes the request off the
+	// context it parks. Bounded to admin's own subtree. Serve installs one app-wide too;
+	// nesting is harmless, and this is what makes the surface testable on a bare app.
+	app.Group("/v1/admin").Use(cloud.Bridge())
+
+	// Org-scoped panels — AdmitScoped. Cross-tenant reads are impossible for a
+	// non-super caller.
+	zip.Get(z, "/v1/admin/me", o.me, op("adminMe"))
+	zip.Get(z, "/v1/admin/overview", o.overview, op("adminOverview"))
+	zip.Get(z, "/v1/admin/orgs", o.orgs, op("adminOrgs"))
+	zip.Get(z, "/v1/admin/users", o.users, op("adminUsers"))
+	zip.Get(z, "/v1/admin/usage", o.usage, op("adminUsage"))
 	// Platform reads — SuperAdmin only (cross-tenant by nature).
-	g.Get("/roles", core.Guard(s, roles))
-	g.Get("/applications", core.Guard(s, applications))
-	g.Get("/products", core.Guard(s, products))
-	g.Get("/compute", core.Guard(s, compute))
-	g.Get("/block-storage", core.Guard(s, blockStorage))
-	g.Get("/o11y", core.Guard(s, o11y))
-	g.Get("/aimetrics", core.Guard(s, aimetrics))
-	g.Post("/sync", core.Guard(s, syncNow))
+	zip.Get(z, "/v1/admin/roles", o.roles, op("adminRoles"))
+	zip.Get(z, "/v1/admin/applications", o.applications, op("adminApplications"))
+	zip.Get(z, "/v1/admin/products", products, op("adminProducts"))
+	zip.Get(z, "/v1/admin/compute", compute, op("adminCompute"))
+	zip.Get(z, "/v1/admin/block-storage", o.blockStorage, op("adminBlockStorage"))
+	zip.Get(z, "/v1/admin/o11y", o11y, op("adminO11y"))
+	zip.Get(z, "/v1/admin/aimetrics", aimetrics, op("adminAIMetrics"))
+	zip.Post(z, "/v1/admin/sync", syncNow, op("adminSync"))
 
 	// Credit grants — the ONE admin mint surface (SuperAdmin only). Thin, audited
 	// relay to commerce's mint-gated POST /v1/billing/credit-grants; commerce is the
 	// sole ledger. See creditgrant.go.
-	g.Post("/credit-grants", core.Guard(s, createCreditGrant))
+	zip.Post(z, "/v1/admin/credit-grants", o.createCreditGrant, op("adminCreateCreditGrant"))
 
 	// Product analytics — org-scoped (SuperAdmin: all-orgs; org admin: their own org).
-	g.Get("/analytics", core.GuardScoped(s, analytics))
+	zip.Get(z, "/v1/admin/analytics", o.analytics, op("adminAnalytics"))
 	// Bases — the tenant Base-instance panel, org-scoped (bases.go).
-	g.Get("/bases", core.GuardScoped(s, bases))
+	zip.Get(z, "/v1/admin/bases", o.bases, op("adminBases"))
 
 	// ── Platform control plane — SuperAdmin ONLY (launch/release/flags + access). ──
-	g.Get("/flags", core.Guard(s, flagsBoard))
-	g.Put("/flags/:key", core.Guard(s, setFlag))
+	zip.Get(z, "/v1/admin/flags", flagsBoard, op("adminFlags"))
+	zip.Put(z, "/v1/admin/flags/:key", setFlag, op("adminSetFlag"))
 	// Launch-control services board — the waitlist-mode lens on the flag engine (twin
 	// of /v1/admin/flags), reading the registry + decide the admission gate owns.
-	g.Get("/services", core.Guard(s, services))
-	g.Post("/services", core.Guard(s, upsertService))
-	g.Post("/services/:service/mode", core.Guard(s, setServiceMode))
-	g.Get("/waitlist", core.Guard(s, waitlist))
-	g.Post("/waitlist/boost", core.Guard(s, waitlistBoost))
+	zip.Get(z, "/v1/admin/services", services, op("adminServices"))
+	zip.Post(z, "/v1/admin/services", upsertService, op("adminUpsertService"))
+	zip.Post(z, "/v1/admin/services/:service/mode", setServiceMode, op("adminSetServiceMode"))
+	zip.Get(z, "/v1/admin/waitlist", waitlist, op("adminWaitlist"))
+	zip.Post(z, "/v1/admin/waitlist/boost", o.waitlistBoost, op("adminWaitlistBoost"))
 
 	// Usage-cap + promo control plane (promos platform-only; spend-caps org-scoped).
-	limitRoutes(app, s)
+	limitRoutes(z, o)
 
 	// ── Carved-out domains own their routes (audit/customer/revenue/finance +
 	// the billing fleet views metrics/invoices/subscriptions). ──
-	audit.Routes(app, s)
-	customer.Routes(app, s)
-	revenue.Routes(app, s)
-	finance.Routes(app, s)
-	metrics.Routes(app, s)
-	infra.Routes(app, s)
-	invoices.Routes(app, s)
-	subscriptions.Routes(app, s)
+	audit.Routes(z, s)
+	customer.Routes(z, s)
+	revenue.Routes(z, s)
+	finance.Routes(z, s)
+	metrics.Routes(z)
+	infra.Routes(z, s)
+	invoices.Routes(z)
+	subscriptions.Routes(z)
 }
+
+// ops binds the kernel to admin's typed handlers. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op that reads an upstream is a method value (o.orgs).
+// An op that needs only the gate stays a plain function. ops carries STATE and no logic.
+type ops struct{ s *cloud.Service[core.State] }
+
+// op is the per-route metadata every admin declaration carries: a stable operation id
+// (the name the OpenAPI document, the MCP tool and the CLI command all take) under the
+// one "admin" tag. The summary and the prose are NOT set here — cmd/zipdoc lifts them
+// from the handler's own doc comment, so they are written once, in the one place a Go
+// reader already looks.
+func op(id string) zip.OpOption { return zip.WithOperationID(id) }
 
 // ── /v1/admin/me — operator identity (AdminMe) ───────────────────────────────
 
-// me answers with the validated operator identity. The gate already proved this is an
-// admin, so the fields come from the sanitized identity headers — authoritative and never
-// client-forgeable.
-func me(s *cloud.Service[core.State], c *zip.Ctx) error {
-	sc := core.ResolveScope(s, c)
+// me answers with the validated operator identity — who the console is signed in as,
+// which tier they are, and how wide their tenant window is. The fields come from the
+// sanitized identity headers the gate just read, so they are authoritative and never
+// client-forgeable; nothing is looked up.
+//
+// Response: {"status":"ok","msg":"","data":{"owner":"admin","name":"z","email":"z@hanzo.ai",
+// "displayName":"z","isSuperAdmin":true,"isWhiteLabel":false}}
+func (o ops) me(ctx context.Context, _ *core.None) (*meOut, error) {
+	c, err := core.AdmitScoped(ctx, o.s)
+	if err != nil {
+		return nil, err
+	}
+	sc := core.ResolveScope(o.s, c)
 	owner, _ := principal.Org(c)
 	if owner == "" && sc.Super {
-		owner = s.State.AdminOrg
+		owner = o.s.State.AdminOrg
 	}
 	name := strings.TrimSpace(c.User())
-	return core.OK(c, adminMe{
+	return &meOut{Status: core.OK, Data: &adminMe{
 		Owner:        owner,
 		Name:         name,
 		Email:        strings.TrimSpace(c.UserEmail()),
 		DisplayName:  name,
 		IsSuperAdmin: sc.Super,
-		// The gate (GuardScoped) already proved this caller is either a SuperAdmin or an
+		// The gate (AdmitScoped) already proved this caller is either a SuperAdmin or an
 		// admin of an ENABLED WL tenant, so an admitted non-super IS the WL tier — no
 		// separate lookup needed. ScopeOrgs is the resolved subtree (empty ⇒ all, for super).
 		IsWhiteLabel: !sc.Super,
 		ScopeOrgs:    sc.Orgs,
-	})
+	}}, nil
 }
 
 // ── /v1/admin/orgs — tenant directory (OrgRow[]) ─────────────────────────────
 
-func orgs(s *cloud.Service[core.State], c *zip.Ctx) error {
-	ctx := c.Context()
-	cr := core.CallerCreds(c)
-	orgs, err := core.ScopedOrgs(s, ctx, c, cr)
+// orgs lists the tenant directory one row per org, sorted by slug: member count and the
+// org's month-to-date spend and credit balance, read live from IAM and commerce.
+//
+// The rows are the caller's tenant window, not the fleet: a SuperAdmin gets every org, a
+// white-label admin only their own subtree. A per-org read that fails degrades THAT row
+// to an honest zero — this panel carries no sources[] channel to report freshness on, so
+// the alternative would be a fleet total that silently reads healthy.
+//
+// Response: {"status":"ok","msg":"","data":[{"org":"acme","display":"Acme","users":7,
+// "products":0,"spendCents":12500,"creditsCents":5000,"tokens":0,
+// "created":"2026-01-04T00:00:00Z"}],"data2":1}
+func (o ops) orgs(ctx context.Context, _ *core.None) (*orgsOut, error) {
+	c, err := core.AdmitScoped(ctx, o.s)
 	if err != nil {
-		return core.Fail(c, err.Error())
+		return nil, err
+	}
+	cr := core.CallerCreds(c)
+	orgs, err := core.ScopedOrgs(o.s, ctx, c, cr)
+	if err != nil {
+		return &orgsOut{Status: core.Err, Msg: err.Error()}, nil
 	}
 	rows := make([]orgRow, 0, len(orgs))
-	for _, o := range orgs {
-		users := orgUserCount(s, ctx, cr, o.Name)
+	for _, row := range orgs {
+		users := orgUserCount(o.s, ctx, cr, row.Name)
 		// orgs is a per-ROW panel (OrgRow[] via OKList; it carries NO sources[] channel):
 		// a failed read degrades THAT org's row to an honest zero, never a fleet total that
 		// falsely reads healthy. The aggregate-freshness signal lives on /overview.
-		spend, credits, _ := core.OrgMoney(s, ctx, o.Name)
+		spend, credits, _ := core.OrgMoney(o.s, ctx, row.Name)
 		rows = append(rows, orgRow{
-			Org:          o.Name,
-			Display:      core.Display(o.DisplayName, o.Name),
+			Org:          row.Name,
+			Display:      core.Display(row.DisplayName, row.Name),
 			Users:        users,
 			Products:     0, // workload registry feed pending (platform apps table)
 			SpendCents:   spend,
 			CreditsCents: credits,
 			Tokens:       0, // fleet token counters pending (insights/datastore)
-			Created:      o.CreatedTime,
+			Created:      row.CreatedTime,
 		})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Org < rows[j].Org })
-	return core.OKList(c, rows, len(rows))
+	return &orgsOut{Status: core.OK, Data: rows, Data2: core.Total(len(rows))}, nil
 }
 
 // ── /v1/admin/users — cross-org directory (OperatorUser[]) ───────────────────
 
-func users(s *cloud.Service[core.State], c *zip.Ctx) error {
-	ctx := c.Context()
+// users lists the user directory across the caller's tenant window, one page at a time.
+// data2 is IAM's REAL total, so the console can page through it.
+//
+// A SuperAdmin may aim the read at one tenant with org; a white-label admin cannot — for
+// them the owner is hard-pinned to their own org and org is ignored, which is what keeps
+// the directory from becoming a cross-tenant read.
+//
+// Example: {"org":"acme","q":"ada","p":"1","pageSize":"50"}
+// Response: {"status":"ok","msg":"","data":[{"owner":"acme","name":"ada","email":"ada@acme.com",
+// "displayName":"Ada","isAdmin":true,"isSuperAdmin":false,"tag":"","created":"2026-01-04T00:00:00Z",
+// "lastSignin":"2026-07-01T09:12:00Z","forbidden":false}],"data2":222}
+func (o ops) users(ctx context.Context, in *usersIn) (*usersOut, error) {
+	c, err := core.AdmitScoped(ctx, o.s)
+	if err != nil {
+		return nil, err
+	}
 	cr := core.CallerCreds(c)
-	sc := core.ResolveScope(s, c)
+	sc := core.ResolveScope(o.s, c)
 	q := url.Values{}
 	if !sc.Super {
-		// A scoped caller lists ONLY their own org's users — the client ?org= is ignored,
+		// A scoped caller lists ONLY their own org's users — the client org is ignored,
 		// the owner hard-pinned to the sanitized org subtree.
 		if len(sc.Orgs) > 0 {
 			q.Set("owner", sc.Orgs[0])
 		}
-	} else if owner := strings.TrimSpace(c.Query("org")); owner != "" {
+	} else if owner := strings.TrimSpace(in.Org); owner != "" {
 		q.Set("owner", owner)
 	}
 	// Default pagination when the client omits it. IAM's user list returns ZERO
@@ -225,29 +298,29 @@ func users(s *cloud.Service[core.State], c *zip.Ctx) error {
 	// directory showing "0 of 222". Default to the first page at the shared admin
 	// page size so the directory populates and the REAL total is reported; an
 	// explicit client p/pageSize still wins (the UI paginates from there).
-	if p := strings.TrimSpace(c.Query("p")); p != "" {
+	if p := strings.TrimSpace(in.Page); p != "" {
 		q.Set("p", p)
 	} else {
 		q.Set("p", "1")
 	}
-	if ps := strings.TrimSpace(c.Query("pageSize")); ps != "" {
+	if ps := strings.TrimSpace(in.PageSize); ps != "" {
 		q.Set("pageSize", ps)
 	} else {
 		q.Set("pageSize", "200")
 	}
-	if term := strings.TrimSpace(c.Query("q")); term != "" {
+	if term := strings.TrimSpace(in.Query); term != "" {
 		// IAM's list uses field/value contains-matching for the free-text filter.
 		q.Set("field", "name")
 		q.Set("value", term)
 	}
-	res, err := s.State.IAM.Users(ctx, cr, q)
+	res, err := o.s.State.IAM.Users(ctx, cr, q)
 	if err != nil {
-		return core.Fail(c, err.Error())
+		return &usersOut{Status: core.Err, Msg: err.Error()}, nil
 	}
 	var raw []iam.User
 	if len(res.Rows) > 0 {
 		if err := json.Unmarshal(res.Rows, &raw); err != nil {
-			return core.Fail(c, "users decode: "+err.Error())
+			return &usersOut{Status: core.Err, Msg: "users decode: " + err.Error()}, nil
 		}
 	}
 	rows := make([]operatorUser, 0, len(raw))
@@ -258,7 +331,7 @@ func users(s *cloud.Service[core.State], c *zip.Ctx) error {
 			Email:        u.Email,
 			DisplayName:  u.DisplayName,
 			IsAdmin:      u.IsAdmin,
-			IsSuperAdmin: u.Owner == s.State.AdminOrg,
+			IsSuperAdmin: u.Owner == o.s.State.AdminOrg,
 			Tag:          u.Tag,
 			Created:      u.CreatedTime,
 			LastSignin:   u.LastSigninTime,
@@ -269,55 +342,86 @@ func users(s *cloud.Service[core.State], c *zip.Ctx) error {
 	if total < len(rows) {
 		total = len(rows)
 	}
-	return core.OKList(c, rows, total)
+	return &usersOut{Status: core.OK, Data: rows, Data2: core.Total(total)}, nil
 }
 
 // ── /v1/admin/roles and /applications — verbatim IAM passthrough ─────────────
 
-func roles(s *cloud.Service[core.State], c *zip.Ctx) error {
-	return iamPassthrough(s, c, "/v1/iam/get-roles")
+// roles lists IAM roles for one owner org, forwarded VERBATIM from IAM's get-roles.
+//
+// Example: {"owner":"admin","p":"1","pageSize":"50"}
+// Response: {"status":"ok","msg":"","data":[{"owner":"admin","name":"ops","displayName":"Ops"}],"data2":1}
+func (o ops) roles(ctx context.Context, in *iamPageIn) (*iamRowsOut, error) {
+	return o.iamPassthrough(ctx, in, "/v1/iam/get-roles")
 }
 
-func applications(s *cloud.Service[core.State], c *zip.Ctx) error {
-	return iamPassthrough(s, c, "/v1/iam/get-applications")
+// applications lists IAM applications for one owner org, forwarded VERBATIM from IAM's
+// get-applications. These are the platform's OIDC clients — the console reads clientId
+// off each row.
+//
+// Example: {"owner":"admin","p":"1","pageSize":"50"}
+// Response: {"status":"ok","msg":"","data":[{"owner":"admin","name":"hanzo-cloud","clientId":"cid"}],"data2":1}
+func (o ops) applications(ctx context.Context, in *iamPageIn) (*iamRowsOut, error) {
+	return o.iamPassthrough(ctx, in, "/v1/iam/get-applications")
 }
 
-// iamPassthrough forwards a paginated IAM read verbatim (the operator decodes Role /
-// Application as the raw IAM wire shape). `owner` defaults to the admin org, which owns
-// the platform applications.
-func iamPassthrough(s *cloud.Service[core.State], c *zip.Ctx, path string) error {
+// iamPassthrough forwards a paginated IAM read verbatim — the ONE body both IAM reads
+// share. `owner` defaults to the admin org, which owns the platform applications.
+//
+// The rows are NOT re-decoded: they reach the operator as the exact bytes IAM sent, so
+// this layer never becomes a second, drifting copy of IAM's Role/Application schema.
+// That is also why the response is declared opaque rather than typed.
+func (o ops) iamPassthrough(ctx context.Context, in *iamPageIn, path string) (*iamRowsOut, error) {
+	c, err := core.Admit(ctx)
+	if err != nil {
+		return nil, err
+	}
 	q := url.Values{}
-	owner := strings.TrimSpace(c.Query("owner"))
+	owner := strings.TrimSpace(in.Owner)
 	if owner == "" {
-		owner = s.State.AdminOrg
+		owner = o.s.State.AdminOrg
 	}
 	q.Set("owner", owner)
-	if p := strings.TrimSpace(c.Query("p")); p != "" {
+	if p := strings.TrimSpace(in.Page); p != "" {
 		q.Set("p", p)
 	}
-	if ps := strings.TrimSpace(c.Query("pageSize")); ps != "" {
+	if ps := strings.TrimSpace(in.PageSize); ps != "" {
 		q.Set("pageSize", ps)
 	}
-	res, err := s.State.IAM.List(c.Context(), core.CallerCreds(c), path, q)
+	res, err := o.s.State.IAM.List(ctx, core.CallerCreds(c), path, q)
 	if err != nil {
-		return core.Fail(c, err.Error())
+		return &iamRowsOut{Status: core.Err, Msg: err.Error()}, nil
 	}
-	return core.OKRaw(c, res.Rows, res.Total)
+	rows := res.Rows
+	if len(rows) == 0 {
+		rows = json.RawMessage("[]") // an absent page is an empty list, never a null
+	}
+	return &iamRowsOut{Status: core.OK, Data: rows, Data2: core.Total(res.Total)}, nil
 }
 
 // ── /v1/admin/usage — fleet usage roll-up (UsageData) ────────────────────────
 
-// usage returns the real fleet money totals from commerce. The daily series and the
-// per-product breakdown are NOT derivable from the commerce billing API (they live in
-// insights/datastore); admin returns the honest empty series/byProduct rather than
-// fabricating a trend.
-func usage(s *cloud.Service[core.State], c *zip.Ctx) error {
-	ctx := c.Context()
+// usage returns the month-to-date money totals: one org's when org names one, else the
+// fleet sum across every org a SuperAdmin can see.
+//
+// series and byProduct are ALWAYS empty. A daily trend and a per-product split are not
+// derivable from the commerce billing API — they live in insights/datastore — so this
+// answers with the honest empty arrays rather than fabricating a shape the console would
+// then chart. Same reason tokens and requests are 0: there is no fleet counter to read.
+//
+// Example: {"org":"acme"}
+// Response: {"status":"ok","msg":"","data":{"totals":{"spendCents":12500,"tokens":0,"requests":0},
+// "series":[],"byProduct":[]}}
+func (o ops) usage(ctx context.Context, in *usageIn) (*usageOut, error) {
+	c, err := core.AdmitScoped(ctx, o.s)
+	if err != nil {
+		return nil, err
+	}
 	cr := core.CallerCreds(c)
-	sc := core.ResolveScope(s, c)
-	org := strings.TrimSpace(c.Query("org"))
+	sc := core.ResolveScope(o.s, c)
+	org := strings.TrimSpace(in.Org)
 	if !sc.Super {
-		// A scoped caller reads ONLY their own org's usage — the client ?org= is ignored,
+		// A scoped caller reads ONLY their own org's usage — the client org is ignored,
 		// the org hard-pinned to the sanitized subtree.
 		org = ""
 		if len(sc.Orgs) > 0 {
@@ -328,26 +432,26 @@ func usage(s *cloud.Service[core.State], c *zip.Ctx) error {
 	var spend int64
 	switch {
 	case org != "":
-		if sp, err := s.State.Commerce.Spend(ctx, org); err == nil {
+		if sp, err := o.s.State.Commerce.Spend(ctx, org); err == nil {
 			spend = int64(sp.Consumed)
 		}
 	case sc.Super:
 		// Fleet: sum month-to-date consumption across every org.
-		orgs, err := core.ListOrgs(s, ctx, cr)
+		orgs, err := core.ListOrgs(o.s, ctx, cr)
 		if err == nil {
-			for _, o := range orgs {
-				if sp, e := s.State.Commerce.Spend(ctx, o.Name); e == nil {
+			for _, row := range orgs {
+				if sp, e := o.s.State.Commerce.Spend(ctx, row.Name); e == nil {
 					spend += int64(sp.Consumed)
 				}
 			}
 		}
 	}
 
-	return core.OK(c, usageData{
+	return &usageOut{Status: core.OK, Data: &usageData{
 		Totals:    usageTotals{SpendCents: spend, Tokens: 0, Requests: 0},
 		Series:    []usagePoint{},
 		ByProduct: []usageByProduct{},
-	})
+	}}, nil
 }
 
 // ── /v1/admin/products — workload registry (ProductRow[]) ────────────────────
@@ -356,15 +460,33 @@ func usage(s *cloud.Service[core.State], c *zip.Ctx) error {
 
 // ── /v1/admin/overview — Platform Overview tiles (OverviewData) ───────────────
 
-func overview(s *cloud.Service[core.State], c *zip.Ctx) error {
-	ctx := c.Context()
+// overview is the Platform Overview tiles: how many orgs and users are in the caller's
+// tenant window, the fleet workload counts, and month-to-date spend and credits.
+//
+// It ALWAYS answers 200 — a tile board that fails as a whole because one upstream is
+// down is useless. Instead every upstream reports itself in sources[]: ok, degraded, or
+// not-configured. A commerce read that failed for ANY org marks that source degraded,
+// because the spend/credits totals are then an undercount and must not read healthy.
+//
+// tokens30d is 0 for the same reason /usage has no series: there is no fleet token
+// counter to read yet.
+//
+// Response: {"status":"ok","msg":"","data":{"orgs":2,"users":14,"products":31,
+// "activeProducts":29,"drift":1,"spendCents30d":250000,"tokens30d":0,"creditsCents":10000,
+// "lastSync":"2026-07-27T00:00:00Z","sources":[{"name":"iam","ok":true,"rows":2,
+// "lastSync":"2026-07-27T00:00:00Z"}]}}
+func (o ops) overview(ctx context.Context, _ *core.None) (*overviewOut, error) {
+	c, err := core.AdmitScoped(ctx, o.s)
+	if err != nil {
+		return nil, err
+	}
 	cr := core.CallerCreds(c)
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	var sources []core.SourceStatus
 	orgCount, userCount, spend, credits := 0, 0, int64(0), int64(0)
 
-	orgs, orgErr := core.ScopedOrgs(s, ctx, c, cr)
+	orgs, orgErr := core.ScopedOrgs(o.s, ctx, c, cr)
 	sources = append(sources, core.SrcOf("iam", orgErr, len(orgs), now))
 	commercePartial := false
 	if orgErr == nil {
@@ -381,14 +503,14 @@ func overview(s *cloud.Service[core.State], c *zip.Ctx) error {
 			wg  sync.WaitGroup
 			sem = make(chan struct{}, maxParallelOrgReads)
 		)
-		for _, o := range orgs {
+		for _, row := range orgs {
 			wg.Add(1)
 			go func(org string) {
 				defer wg.Done()
 				sem <- struct{}{}
 				defer func() { <-sem }()
-				uc := orgUserCount(s, ctx, cr, org)
-				sp, cr2, ok := core.OrgMoney(s, ctx, org)
+				uc := orgUserCount(o.s, ctx, cr, org)
+				sp, cr2, ok := core.OrgMoney(o.s, ctx, org)
 				mu.Lock()
 				defer mu.Unlock()
 				userCount += uc
@@ -400,7 +522,7 @@ func overview(s *cloud.Service[core.State], c *zip.Ctx) error {
 					// not healthy.
 					commercePartial = true
 				}
-			}(o.Name)
+			}(row.Name)
 		}
 		wg.Wait()
 	}
@@ -412,7 +534,7 @@ func overview(s *cloud.Service[core.State], c *zip.Ctx) error {
 	var commerceErr error
 	commerceRows := 0
 	switch {
-	case !s.State.Commerce.Ready():
+	case !o.s.State.Commerce.Ready():
 		commerceErr = fmt.Errorf("commerce endpoint not configured")
 	case commercePartial:
 		commerceErr = core.ErrPartialRevenue
@@ -424,7 +546,7 @@ func overview(s *cloud.Service[core.State], c *zip.Ctx) error {
 
 	// o11y System Health.
 	o11yRows := 0
-	oOK, oErr := s.State.Health.Up(ctx)
+	oOK, oErr := o.s.State.Health.Up(ctx)
 	if oOK {
 		o11yRows = 1
 	}
@@ -436,7 +558,7 @@ func overview(s *cloud.Service[core.State], c *zip.Ctx) error {
 	fleetRows, fleetRoll, fleetErr := fleetProducts(ctx)
 	sources = append(sources, core.SrcOf("fleet", fleetErr, len(fleetRows), now))
 
-	return core.OK(c, overviewData{
+	return &overviewOut{Status: core.OK, Data: &overviewData{
 		Orgs:           orgCount,
 		Users:          userCount,
 		Products:       fleetRoll.Total,
@@ -447,16 +569,21 @@ func overview(s *cloud.Service[core.State], c *zip.Ctx) error {
 		CreditsCents:   credits,
 		LastSync:       now,
 		Sources:        sources,
-	})
+	}}, nil
 }
 
 // ── /v1/admin/sync — refresh trigger ─────────────────────────────────────────
 
-// syncNow answers the operator's "Sync now" button. admin aggregates LIVE on every read,
-// so there is no batch job to kick — the button simply re-reads. We acknowledge honestly
-// with { started: true }.
-func syncNow(s *cloud.Service[core.State], c *zip.Ctx) error {
-	return core.OK(c, map[string]bool{"started": true})
+// syncNow answers the operator's "Sync now" button. There is nothing to kick: admin
+// aggregates LIVE on every read, so the button is just a re-read. It acknowledges
+// honestly with started:true rather than pretending a batch job was queued.
+//
+// Response: {"status":"ok","msg":"","data":{"started":true}}
+func syncNow(ctx context.Context, _ *core.None) (*syncOut, error) {
+	if _, err := core.Admit(ctx); err != nil {
+		return nil, err
+	}
+	return &syncOut{Status: core.OK, Data: &syncStarted{Started: true}}, nil
 }
 
 // ── aggregation helpers ──────────────────────────────────────────────────────

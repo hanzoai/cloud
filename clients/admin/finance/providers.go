@@ -11,7 +11,7 @@
 //     Orthogonal — never mixed with the upstream provider credits above.
 //
 // Two SuperAdmin endpoints (the console renders them; this is the authoritative
-// contract). Both reuse the admin auth guard + the cloud_usage warehouse — no new
+// contract). Both reuse the admin gate + the cloud_usage warehouse — no new
 // datastore, no duplicate reads.
 package finance
 
@@ -26,7 +26,6 @@ import (
 	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/datastore"
 	"github.com/hanzoai/types"
-	"github.com/zap-proto/zip"
 )
 
 // usageTable is the ONE metered-LLM warehouse ledger (same table clients/usage +
@@ -143,8 +142,19 @@ func providerBurnCents(ctx context.Context) map[string]int64 {
 
 // ProvidersCredit serves GET /v1/admin/providers/credit — the per-provider upstream
 // credit ledger. SuperAdmin-guarded (see Routes).
-func ProvidersCredit(s *cloud.Service[core.State], c *zip.Ctx) error {
-	return core.OK(c, computeProviderCredits(c.Context(), s))
+func (o ops) ProvidersCredit(ctx context.Context, _ *core.None) (*ProvidersCreditOut, error) {
+	if _, err := core.Admit(ctx); err != nil {
+		return nil, err
+	}
+	return &ProvidersCreditOut{Status: core.OK, Data: computeProviderCredits(ctx, o.s)}, nil
+}
+
+// ProvidersCreditOut is the GET /v1/admin/providers/credit envelope. This read carries no
+// data2: it is a fixed roster of providers, not a page.
+type ProvidersCreditOut struct {
+	Status string           `json:"status"`
+	Msg    string           `json:"msg"`
+	Data   []ProviderCredit `json:"data"`
 }
 
 // UsageFundingRow is one (provider, model) usage roll-up tagged by funding class.
@@ -172,11 +182,44 @@ func fundingClass(pc ProviderCredit) string {
 	}
 }
 
-// UsageFunding serves GET /v1/admin/usage/funding?from&to — the per-provider/model
-// usage split by funding class over the window (default last 30d). SuperAdmin-guarded.
-func UsageFunding(s *cloud.Service[core.State], c *zip.Ctx) error {
-	ctx := c.Context()
-	w, werr := types.ParseWindow("", c.Query("from"), c.Query("to"), time.Now().UTC())
+// UsageFundingIn is the GET /v1/admin/usage/funding window.
+type UsageFundingIn struct {
+	// From is the inclusive start of the window. Unparseable or absent, together with
+	// To, falls back to the last 30 days.
+	From string `json:"from"`
+	// To is the exclusive end of the window.
+	To string `json:"to"`
+}
+
+// UsageFundingOut is the GET /v1/admin/usage/funding envelope. No data2: the split is one
+// row per (provider, model) over the window, unpaginated.
+type UsageFundingOut struct {
+	Status string            `json:"status"`
+	Msg    string            `json:"msg"`
+	Data   []UsageFundingRow `json:"data"`
+}
+
+// UsageFunding splits our upstream AI usage by how it was FUNDED: one row per (provider,
+// model) over the window, tagged credit (provider grant still remaining), paid (grant
+// exhausted) or paid_only (no grant at all).
+//
+// The class is resolved at the PROVIDER level from the credit ledger, not per call — the
+// per-call split, and the `byo` class, arrive when the metering write stamps a funding
+// column on cloud_usage and this can GROUP BY it directly. Until then a provider with
+// remaining grant reports all of its usage as credit, which is right in aggregate and
+// approximate at the boundary where a grant runs out mid-window.
+//
+// An unparseable window falls back to the last 30 days rather than refusing: this is a
+// dashboard read, and a typo in a date must not blank the board.
+//
+// Example: {"from":"2026-07-01T00:00:00Z","to":"2026-07-27T00:00:00Z"}
+// Response: {"status":"ok","msg":"","data":[{"provider":"digitalocean","model":"llama-3.3-70b",
+// "funding":"credit","tokens":1200000,"cost_cents":420,"requests":310}]}
+func (o ops) UsageFunding(ctx context.Context, in *UsageFundingIn) (*UsageFundingOut, error) {
+	if _, err := core.Admit(ctx); err != nil {
+		return nil, err
+	}
+	w, werr := types.ParseWindow("", in.From, in.To, time.Now().UTC())
 	start, end := w.Start, w.End
 	if werr != nil {
 		end = time.Now().UTC()
@@ -184,7 +227,7 @@ func UsageFunding(s *cloud.Service[core.State], c *zip.Ctx) error {
 	}
 
 	cls := map[string]string{}
-	for _, pc := range computeProviderCredits(ctx, s) {
+	for _, pc := range computeProviderCredits(ctx, o.s) {
 		cls[pc.Provider] = fundingClass(pc)
 	}
 
@@ -215,7 +258,7 @@ func UsageFunding(s *cloud.Service[core.State], c *zip.Ctx) error {
 			}
 		}
 	}
-	return core.OK(c, out)
+	return &UsageFundingOut{Status: core.OK, Data: out}, nil
 }
 
 // ── trivial warehouse-cell coercers (the usage package's equivalents are unexported) ──

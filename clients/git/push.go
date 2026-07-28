@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net/http"
 	"regexp"
 	"sort"
 	"strings"
@@ -30,23 +29,41 @@ import (
 // It composes the SAME provision() a create does when the repo is absent, so
 // there is one way a repo comes into being.
 
+// pushFile is one file in a client-less push.
 type pushFile struct {
-	Path     string `json:"path"`
-	Content  string `json:"content"`
-	Encoding string `json:"encoding"` // "" | "utf-8" | "base64"
+	// Path is repo-relative. Absolute or traversing paths are refused.
+	Path string `json:"path"`
+	// Content is the file's bytes, carried per Encoding.
+	Content string `json:"content"`
+	// Encoding is "base64", or "utf-8" (the default, also "utf8" / "text").
+	Encoding string `json:"encoding"`
 }
 
+// pushReq is a client-less push: a set of files landed as one commit.
 type pushReq struct {
-	Branch  string     `json:"branch"`
-	Message string     `json:"message"`
-	Files   []pushFile `json:"files"`
+	// Name is the repo to push into, from the :name path segment. It is CREATED
+	// on first push if it does not exist.
+	Name string `json:"name"`
+	// Branch to advance; empty means "main". A fresh branch that is the repo's
+	// first also becomes HEAD.
+	Branch string `json:"branch"`
+	// Message is the commit message; empty gets a generated one.
+	Message string `json:"message"`
+	// Files are added to or overwritten on the branch tip — files already there
+	// and not listed SURVIVE. At least one, at most 5000, 32 MiB each.
+	Files []pushFile `json:"files"`
 }
 
+// pushResp reports the commit a client-less push landed.
 type pushResp struct {
-	Commit   string `json:"commit"`
-	Branch   string `json:"branch"`
+	// Commit is the new commit's full hash.
+	Commit string `json:"commit"`
+	// Branch is the branch that was advanced, resolved (never empty).
+	Branch string `json:"branch"`
+	// CloneURL is the repo's HTTPS remote.
 	CloneURL string `json:"cloneUrl"`
-	SSHURL   string `json:"sshUrl"`
+	// SSHURL is the repo's scp-style SSH remote.
+	SSHURL string `json:"sshUrl"`
 }
 
 // maxPushFiles / maxPushFileBytes bound a single client-less push so a hostile
@@ -57,40 +74,50 @@ const (
 	maxPushFileBytes = 32 << 20 // 32 MiB per file
 )
 
-// pushFiles handles POST /v1/git/repos/:name/push.
-func pushFiles(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// pushFiles lands a set of files as one commit without a git client — the
+// hanzo.app builder's push. The repo is CREATED on first push, the files are
+// merged onto the branch tip (unlisted files survive), and the same
+// push-to-deploy hook a real receive-pack fires is fired, so downstream this is
+// indistinguishable from a `git push`.
+//
+// Example: {"name": "widgets", "branch": "main", "message": "generated build",
+//
+//	"files": [{"path": "index.html", "content": "<h1>hi</h1>"}]}
+//
+//	Response: {"commit": "a1b2c3d4e5f6", "branch": "main",
+//		"cloneUrl": "https://api.hanzo.ai/v1/git/acme/widgets.git",
+//		"sshUrl": "git@git.hanzo.ai:acme/widgets.git"}
+func (o ops) pushFiles(ctx context.Context, in *pushReq) (*pushResp, error) {
+	t, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	name := normalizeName(c.Param("name"))
-	if name == "" || !nameRE.MatchString(name) {
-		return zip.ErrBadRequest("invalid repo name")
+	// Normalize in place: the request value IS the core's input, so there is one
+	// repo name in play and no second, unnormalized copy for the core to read.
+	in.Name = normalizeName(in.Name)
+	if in.Name == "" || !nameRE.MatchString(in.Name) {
+		return nil, zip.ErrBadRequest("invalid repo name")
 	}
-	project := projectScope(c)
-
-	var body pushReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	commit, branch, err := corePush(s, c.Context(), org, project, name, body)
+	commit, branch, err := corePush(o.s, ctx, t.org, t.project, *in)
 	switch {
 	case errors.Is(err, errBadInput):
-		return zip.ErrBadRequest(strings.TrimPrefix(err.Error(), "git: invalid input: "))
+		return nil, zip.ErrBadRequest(strings.TrimPrefix(err.Error(), "git: invalid input: "))
 	case err != nil:
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+		return nil, internalErr(err)
 	}
-	return c.JSON(http.StatusOK, pushResp{
+	return &pushResp{
 		Commit: commit, Branch: branch,
-		CloneURL: cloneURL(s, org, name), SSHURL: sshURL(s, org, name),
-	})
+		CloneURL: cloneURL(o.s, t.org, in.Name), SSHURL: sshURL(o.s, t.org, in.Name),
+	}, nil
 }
 
 // corePush is the transport-agnostic client-less push: it ensures the repo
 // exists, materializes the files into a tree merged onto the branch tip, writes
 // a commit, advances refs/heads/<branch> (and HEAD on a fresh branch), records
 // usage, and fires the build hook. Returns the new commit hash + resolved branch.
-func corePush(s *cloud.Service[state], ctx context.Context, org, project, name string, in pushReq) (commitHash, branch string, err error) {
+// in.Name is the repo, already normalized and identifier-checked by the caller.
+func corePush(s *cloud.Service[state], ctx context.Context, org, project string, in pushReq) (commitHash, branch string, err error) {
+	name := in.Name
 	branch = strings.TrimSpace(in.Branch)
 	if branch == "" {
 		branch = defaultBranchName

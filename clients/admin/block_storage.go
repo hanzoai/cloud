@@ -29,18 +29,16 @@ package admin
 //     (datastore.Query) the analytics + compute lenses read, no second
 //     connection. This is THE number the operator scales on.
 //
-// SUPERADMIN ONLY (the s.guard wrap in admin.go): a cross-tenant infra read, all-orgs.
+// SUPERADMIN ONLY (core.Admit, the op's first line): a cross-tenant infra read, all-orgs.
 // admin holds NO storage state — it only reads DO + the datastore. DO unconfigured →
 // empty fleet; datastore not connected → no datastore card. Never a fabricated fleet.
 
 import (
 	"context"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/admin/digitalocean"
 	"github.com/hanzoai/cloud/clients/datastore"
-	"github.com/zap-proto/zip"
 )
 
 // doBlockUsdPerGiB is DO block storage's list price ($0.10/GiB/mo) — the fleet cost
@@ -99,13 +97,37 @@ type storageSnapshot struct {
 	Alerts    []storageAlert   `json:"alerts"`
 }
 
-// blockStorage answers GET /v1/admin/block-storage. SuperAdmin only. Each source
-// degrades independently — a DO outage still returns the real datastore fill, and v.v.
-func blockStorage(s *cloud.Service[core.State], c *zip.Ctx) error {
-	ctx := c.Context()
-	vols, _ := s.State.DO.Volumes(ctx) // honest empty on not-configured / unreachable
-	fill := datastoreFill(ctx)         // nil unless system.disks answered
-	return core.OK(c, buildStorageSnapshot(vols, fill))
+// blockStorage is the realtime block-storage board: the DigitalOcean volume fleet
+// (count, capacity, monthly list cost, per-volume region and attachment) plus the
+// analytics datastore's OWN fill, read from its system.disks.
+//
+// A volume's usedGiB and pct are null, always: DO exposes capacity and attachment but no
+// fill, so the console renders "—" rather than a number nobody measured. The datastore
+// card is the one real fill here, and it is the number to scale on.
+//
+// The two sources degrade independently — a DO outage still returns the datastore fill,
+// and a disconnected datastore still returns the DO fleet.
+//
+// Response: {"status":"ok","msg":"","data":{"fleet":{"count":2,"totalGiB":300,"usedGiB":null,
+// "pct":null,"monthlyUsd":30},"datastore":{"name":"default","mount":"/var/lib/datastore",
+// "sizeGiB":200,"usedGiB":81.4,"pct":40.7},"volumes":[{"id":"v1","name":"datastore-data",
+// "region":"nyc3","sizeGiB":200,"usedGiB":null,"pct":null,"attached":true,"service":""}],
+// "alerts":[]}}
+func (o ops) blockStorage(ctx context.Context, _ *core.None) (*blockStorageOut, error) {
+	if _, err := core.Admit(ctx); err != nil {
+		return nil, err
+	}
+	vols, _ := o.s.State.DO.Volumes(ctx) // honest empty on not-configured / unreachable
+	fill := datastoreFill(ctx)           // nil unless system.disks answered
+	snap := buildStorageSnapshot(vols, fill)
+	return &blockStorageOut{Status: core.OK, Data: &snap}, nil
+}
+
+// blockStorageOut is the GET /v1/admin/block-storage envelope.
+type blockStorageOut struct {
+	Status string           `json:"status"`
+	Msg    string           `json:"msg"`
+	Data   *storageSnapshot `json:"data"`
 }
 
 // buildStorageSnapshot assembles the board payload (PURE — unit-tested). It folds the

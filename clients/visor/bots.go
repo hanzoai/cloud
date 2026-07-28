@@ -33,6 +33,7 @@ package visor
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -102,21 +103,43 @@ func machineIsBot(m visorMachine) bool {
 
 // ---- bots ----
 
-func listBots(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// botRef addresses ONE bot machine.
+type botRef struct {
+	// ID is the bot machine's id — the same id the machines surface addresses it
+	// by. Scoped to the caller's org upstream, so another tenant's id is 404.
+	ID string `json:"id"`
+}
+
+// botList is the org's bot machines.
+type botList struct {
+	// Bots is one row per kind=bot machine, each joined with its agent binding
+	// when it has one.
+	Bots []botView `json:"bots"`
+}
+
+// listBots returns the caller org's bot machines — the kind=bot machines — each
+// joined with the agent binding that says which cloud Agent it runs.
+//
+// The bindings are read ONCE and joined by machine id, so the list is O(1) upstream
+// calls, not N+1. A bindings read that fails only costs the reconciled status: a bot
+// still lists without it.
+//
+// Response: {"bots":[{"id":"drop-a","name":"bot-a","status":"running","agent":"bot-a","binding":{"machineId":"drop-a","agentName":"bot-a","status":"running"}}]}
+func (o ops) listBots(ctx context.Context, _ *noArgs) (*botList, error) {
+	c, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
 	}
 	var machines []visorMachine
-	if err := s.State.cl.call(c, http.MethodGet, "/v1/machines", q("owner", org, "kind", "bot"), nil, &machines); err != nil {
-		return err
+	if err := o.State.cl.call(c, http.MethodGet, "/v1/machines", q("owner", org, "kind", "bot"), nil, &machines); err != nil {
+		return nil, err
 	}
 	// Join the org's bindings ONCE (O(1), not N+1), keyed by machine id — the same
 	// id vm binds a machine by. Enrichment only: a bindings read failure never
 	// blanks the list (a bot still lists without its reconciled status).
 	byMachine := map[string]*agentBinding{}
 	var bindings []agentBinding
-	if err := s.State.cl.call(c, http.MethodGet, "/v1/agent-bindings", q("owner", org), nil, &bindings); err == nil {
+	if err := o.State.cl.call(c, http.MethodGet, "/v1/agent-bindings", q("owner", org), nil, &bindings); err == nil {
 		for i := range bindings {
 			byMachine[bindings[i].Name] = &bindings[i]
 		}
@@ -125,7 +148,7 @@ func listBots(s *cloud.Service[state], c *zip.Ctx) error {
 	for _, m := range machines {
 		out = append(out, toBotView(m, byMachine[firstNonEmpty(m.Id, m.Name)]))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"bots": out})
+	return &botList{Bots: out}, nil
 }
 
 // botLaunchReq is the POST /v1/compute/bots/launch body. A bot needs a machine size and,
@@ -272,41 +295,52 @@ func ensureAgent(s *cloud.Service[state], c *zip.Ctx, agent, model, instructions
 	}
 }
 
-func getBot(s *cloud.Service[state], c *zip.Ctx) error {
-	org, id, err := botScope(s, c)
+// getBot returns one of the caller org's bot machines with its agent binding.
+//
+// A machine counts as a Bot if it carries the hanzo-kind:bot tag OR has an agent
+// binding — either signal is authoritative, so a bot resolves even before its
+// cloud-init has stamped every tag. A machine that is neither is 404: this route
+// answers for bots, not for machines.
+//
+// Response: {"id":"drop-a","name":"bot-a","status":"running","agent":"bot-a","binding":{"machineId":"drop-a","agentName":"bot-a","status":"running"}}
+func (o ops) getBot(ctx context.Context, in *botRef) (*botView, error) {
+	c, org, id, err := botOp(ctx, in)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var m visorMachine
-	if err := s.State.cl.call(c, http.MethodGet, "/v1/machines/"+url.PathEscape(id), q("owner", org), nil, &m); err != nil {
-		return err
+	if err := o.State.cl.call(c, http.MethodGet, "/v1/machines/"+url.PathEscape(id), q("owner", org), nil, &m); err != nil {
+		return nil, err
 	}
 	if m.Name == "" && m.Id == "" {
-		return zip.ErrNotFound("bot not found")
+		return nil, zip.ErrNotFound("bot not found")
 	}
 	// Attach the binding (best-effort). A machine is a Bot if it carries the
 	// hanzo-kind:bot tag OR has an agent binding — either signal is authoritative,
 	// so a bot resolves even before its cloud-init has stamped every tag.
 	var binding agentBinding
-	_ = s.State.cl.call(c, http.MethodGet, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, &binding)
+	_ = o.State.cl.call(c, http.MethodGet, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, &binding)
 	if !machineIsBot(m) && !binding.identifies() {
-		return zip.ErrNotFound("bot not found")
+		return nil, zip.ErrNotFound("bot not found")
 	}
-	return c.JSON(http.StatusOK, toBotView(m, &binding))
+	v := toBotView(m, &binding)
+	return &v, nil
 }
 
-func deleteBot(s *cloud.Service[state], c *zip.Ctx) error {
-	org, id, err := botScope(s, c)
+// deleteBot tears down both halves of a bot: it unbinds the agent (best-effort — a
+// bot with no binding still deletes), then terminates the machine. Answers 204.
+func (o ops) deleteBot(ctx context.Context, in *botRef) (*struct{}, error) {
+	c, org, id, err := botOp(ctx, in)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// Tear down both halves: unbind the agent first (best-effort — a bot with no
 	// binding still deletes), then terminate the machine.
-	_ = s.State.cl.call(c, http.MethodDelete, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, nil)
-	if err := s.State.cl.call(c, http.MethodDelete, "/v1/machines/"+url.PathEscape(id), q("owner", org), nil, nil); err != nil {
-		return err
+	_ = o.State.cl.call(c, http.MethodDelete, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, nil)
+	if err := o.State.cl.call(c, http.MethodDelete, "/v1/machines/"+url.PathEscape(id), q("owner", org), nil, nil); err != nil {
+		return nil, err
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // botAction dispatches /v1/compute/bots/:id/:action. message routes to the AGENT path;
@@ -388,88 +422,130 @@ func botScope(s *cloud.Service[state], c *zip.Ctx) (org, id string, err error) {
 	return org, id, nil
 }
 
+// botOp is botScope for a TYPED op: the same gate, reading the id from the bound
+// input rather than the route. Two entry points because a typed op is handed its
+// id already decoded; one rule, stated once each way.
+func botOp(ctx context.Context, in *botRef) (c *zip.Ctx, org, id string, err error) {
+	c, org, err = scope(ctx)
+	if err != nil {
+		return nil, "", "", err
+	}
+	id = strings.TrimSpace(in.ID)
+	if id == "" {
+		return nil, "", "", zip.ErrBadRequest("bot id required")
+	}
+	return c, org, id, nil
+}
+
 // ---- machine agent-binding proxies (thin, mirror vm exactly) ----
 
+// bindAgentReq marks a machine as running the @hanzo/bot runtime for a cloud Agent.
+// ID is flat rather than an embedded machineRef because zip binds a path segment
+// onto a TOP-LEVEL field only — nested, it would silently never bind.
 type bindAgentReq struct {
-	AgentName  string `json:"agentName"`
+	// ID is the machine to bind, from the URL path.
+	ID string `json:"id"`
+	// AgentName is the cloud Agent (/v1/agents) the machine will run. Required.
+	AgentName string `json:"agentName"`
+	// BotVersion pins the @hanzo/bot runtime version; empty takes the default.
 	BotVersion string `json:"botVersion"`
 }
 
-func bindMachineAgent(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// bindMachineAgent binds a cloud Agent to one of the caller org's machines: the
+// machine is recorded as running that Agent's @hanzo/bot runtime. The owning org is
+// the validated tenant, never a client field.
+//
+// Example: {"agentName":"bot-a","botVersion":"1.4.0"}
+// Response: {"machineId":"drop-a","agentName":"bot-a","status":"binding"}
+func (o ops) bindMachineAgent(ctx context.Context, in *bindAgentReq) (*agentBinding, error) {
+	c, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := strings.TrimSpace(c.Param("id"))
+	id := strings.TrimSpace(in.ID)
 	if id == "" {
-		return zip.ErrBadRequest("machine id required")
+		return nil, zip.ErrBadRequest("machine id required")
 	}
-	var body bindAgentReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if strings.TrimSpace(body.AgentName) == "" {
-		return zip.ErrBadRequest("agentName is required")
+	if strings.TrimSpace(in.AgentName) == "" {
+		return nil, zip.ErrBadRequest("agentName is required")
 	}
 	// org is the validated tenant (never a client field) — vm records it as the
 	// Agent's owning org and scopes the machine by ?owner.
 	var binding agentBinding
-	if err := s.State.cl.call(c, http.MethodPost, "/v1/machines/"+url.PathEscape(id)+"/bind-agent",
+	if err := o.State.cl.call(c, http.MethodPost, "/v1/machines/"+url.PathEscape(id)+"/bind-agent",
 		q("owner", org),
-		map[string]any{"org": org, "agentName": body.AgentName, "botVersion": body.BotVersion},
+		map[string]any{"org": org, "agentName": in.AgentName, "botVersion": in.BotVersion},
 		&binding); err != nil {
-		return err
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, binding)
+	return &binding, nil
 }
 
-func getMachineAgentBinding(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// getMachineAgentBinding returns the agent binding of one of the caller org's
+// machines, or 404 when the machine runs no bot runtime.
+//
+// Response: {"machineId":"drop-a","agentName":"bot-a","status":"running","botVersion":"1.4.0"}
+func (o ops) getMachineAgentBinding(ctx context.Context, in *machineRef) (*agentBinding, error) {
+	c, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := strings.TrimSpace(c.Param("id"))
+	id := strings.TrimSpace(in.ID)
 	if id == "" {
-		return zip.ErrBadRequest("machine id required")
+		return nil, zip.ErrBadRequest("machine id required")
 	}
 	var binding agentBinding
-	if err := s.State.cl.call(c, http.MethodGet, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, &binding); err != nil {
-		return err
+	if err := o.State.cl.call(c, http.MethodGet, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, &binding); err != nil {
+		return nil, err
 	}
 	if !binding.identifies() {
-		return zip.ErrNotFound("no agent binding for machine")
+		return nil, zip.ErrNotFound("no agent binding for machine")
 	}
-	return c.JSON(http.StatusOK, binding)
+	return &binding, nil
 }
 
-func unbindMachineAgent(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// unbindMachineAgent detaches the agent runtime from one of the caller org's
+// machines. The machine stays — this halts the bot, it does not terminate the
+// compute. Answers 204.
+func (o ops) unbindMachineAgent(ctx context.Context, in *machineRef) (*struct{}, error) {
+	c, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := strings.TrimSpace(c.Param("id"))
+	id := strings.TrimSpace(in.ID)
 	if id == "" {
-		return zip.ErrBadRequest("machine id required")
+		return nil, zip.ErrBadRequest("machine id required")
 	}
-	if err := s.State.cl.call(c, http.MethodDelete, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, nil); err != nil {
-		return err
+	if err := o.State.cl.call(c, http.MethodDelete, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, nil); err != nil {
+		return nil, err
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
-func listAgentBindings(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// bindingList is every agent↔machine binding in the org.
+type bindingList struct {
+	// AgentBindings is one row per bound machine, emitted verbatim as vm reports
+	// it so vm stays the single source of truth for the binding shape.
+	AgentBindings []agentBinding `json:"agentBindings"`
+}
+
+// listAgentBindings returns every agent↔machine binding in the caller's org — which
+// machines are running which cloud Agent, with vm's own reconciled status.
+//
+// Response: {"agentBindings":[{"machineId":"drop-a","agentName":"bot-a","status":"running","publicIp":"1.2.3.4"}]}
+func (o ops) listAgentBindings(ctx context.Context, _ *noArgs) (*bindingList, error) {
+	c, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
 	}
 	var bindings []agentBinding
-	if err := s.State.cl.call(c, http.MethodGet, "/v1/agent-bindings", q("owner", org), nil, &bindings); err != nil {
-		return err
+	if err := o.State.cl.call(c, http.MethodGet, "/v1/agent-bindings", q("owner", org), nil, &bindings); err != nil {
+		return nil, err
 	}
 	if bindings == nil {
 		bindings = []agentBinding{}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"agentBindings": bindings})
+	return &bindingList{AgentBindings: bindings}, nil
 }
 
 // ---- agent path (self) ----

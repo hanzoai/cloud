@@ -18,22 +18,35 @@ import (
 	"context"
 	"strings"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/paas"
-	"github.com/zap-proto/zip"
 )
 
-// products answers GET /v1/admin/products — the workload registry, optionally narrowed by
-// ?tier=, ?kind= (operator role), or ?env=. SuperAdmin only (core.Guard on the route).
-func products(s *cloud.Service[core.State], c *zip.Ctx) error {
-	rows, _, err := fleetProducts(c.Context())
-	if err != nil {
-		return core.Fail(c, err.Error())
+// products lists the fleet workload registry: every operator App CR across the platform
+// namespaces with its declared vs running image tag, reconciled health/phase and drift
+// verdict. Optionally narrowed by kind, tier or env, each an exact match.
+//
+// The rows are the SAME observation /v1/paas/apps renders — read through the in-process
+// paas seam, not a second k8s client — so the two boards can never disagree about what
+// the fleet is. A PaaS plane that is not co-resident yields an honestly empty registry,
+// never a fabricated row.
+//
+// Example: {"tier":"data","env":"main"}
+// Response: {"status":"ok","msg":"","data":[{"name":"sql","kind":"sql","tier":"data",
+// "org":"hanzoai","cluster":"hanzo-k8s","env":"main","namespace":"hanzo","repo":"hanzoai/sql",
+// "phase":"Running","declaredTag":"v1.4.2","runningTag":"v1.4.2","latestTag":"","health":"green",
+// "drift":false,"driftSeverity":"ok","updated":""}],"data2":1}
+func products(ctx context.Context, in *productsIn) (*productsOut, error) {
+	if _, err := core.Admit(ctx); err != nil {
+		return nil, err
 	}
-	kind := strings.TrimSpace(c.Query("kind"))
-	tier := strings.TrimSpace(c.Query("tier"))
-	env := strings.TrimSpace(c.Query("env"))
+	rows, _, err := fleetProducts(ctx)
+	if err != nil {
+		return &productsOut{Status: core.Err, Msg: err.Error()}, nil
+	}
+	kind := strings.TrimSpace(in.Kind)
+	tier := strings.TrimSpace(in.Tier)
+	env := strings.TrimSpace(in.Env)
 	out := make([]productRow, 0, len(rows))
 	for _, r := range rows {
 		if kind != "" && r.Kind != kind {
@@ -47,7 +60,7 @@ func products(s *cloud.Service[core.State], c *zip.Ctx) error {
 		}
 		out = append(out, r)
 	}
-	return core.OKList(c, out, len(out))
+	return &productsOut{Status: core.OK, Data: out, Data2: core.Total(len(out))}, nil
 }
 
 // productRollup is the fleet count the overview KPIs fold: total observed workloads, how many

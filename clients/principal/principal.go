@@ -30,6 +30,7 @@
 package principal
 
 import (
+	"context"
 	"strings"
 
 	"github.com/zap-proto/zip"
@@ -124,6 +125,34 @@ func Org(c *zip.Ctx) (string, bool) {
 		return "", false
 	}
 	return strings.Clone(org), true
+}
+
+// orgKey names the request-scoped slot the validated org crosses the typed-op
+// seam in. Unexported zero-size type, so only this package can mint or read one —
+// the same unforgeability the header gate has.
+type orgKey struct{}
+
+// WithOrg parks the request's VALIDATED org on ctx so a TYPED op — which
+// receives a context.Context and nothing else — can resolve it. It IS Org: the
+// trust decision stays in that one function and this only carries its answer to
+// the one seam that cannot call it. A request with no validated principal parks
+// NOTHING, so the reader sees ("", false) rather than an empty org a query would
+// then treat as a tenant.
+func WithOrg(ctx context.Context, c *zip.Ctx) context.Context {
+	org, ok := Org(c)
+	if !ok {
+		return ctx
+	}
+	return context.WithValue(ctx, orgKey{}, org)
+}
+
+// OrgFrom resolves the org WithOrg parked — the typed-op counterpart of Org, and
+// the same value. The org is never an In field: an In field is caller-supplied,
+// so a tenant key read from one is a cross-tenant read the caller asserted for
+// itself.
+func OrgFrom(ctx context.Context) (string, bool) {
+	org, ok := ctx.Value(orgKey{}).(string)
+	return org, ok && org != ""
 }
 
 // Owner resolves the caller's HOME org — the identity + BILLING anchor: the

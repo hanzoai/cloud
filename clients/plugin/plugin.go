@@ -25,6 +25,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -93,8 +94,8 @@ type Host struct {
 	// Err is set when a peer could not be reached. Its plugins are then
 	// unknown, which is NOT the same as none, so the list stays empty and the
 	// drift below refuses to conclude anything from it.
-	Err     string             `json:"error,omitempty"`
-	Plugins []zip.PluginStatus `json:"plugins"`
+	Err     string       `json:"error,omitempty"`
+	Plugins []zip.Status `json:"plugins"`
 }
 
 // Drift is one plugin's agreement across the fleet. Versions holds every
@@ -274,26 +275,34 @@ func (o *ops) reload(ctx context.Context, in *ReloadIn) (*ActionOut, error) {
 		return nil, err
 	}
 	if err := o.known(in.Name); err != nil {
-		return &ActionOut{Status: core.Err, Msg: err.Error()}, nil
+		return nil, err
 	}
 	spec, err := o.artifact(ctx, in)
 	if err != nil {
+		// What the CALLER got wrong is an HTTP status; what the DEPLOYMENT got
+		// wrong (no origin, unreachable index) is an outcome, so it stays in the
+		// envelope beside the rollout results.
+		var bad *zip.HTTPError
+		if errors.As(err, &bad) {
+			return nil, bad
+		}
 		return &ActionOut{Status: core.Err, Msg: err.Error()}, nil
 	}
 	return o.run(ctx, c, act{
 		name: in.Name, action: "plugin.reload", scope: in.Scope, version: spec.Sum,
 		body: map[string]string{"url": spec.URL, "sum": spec.Sum, "scope": scopeHost},
-		here: func() error { return o.z.ReloadTo(in.Name, spec) },
+		here: func() error { return o.z.Reload(in.Name, spec) },
 	})
 }
 
 // enable brings a stopped or disabled plugin back on the artifact it already
-// has. It is Reload with no new bits, named for what an operator means by it.
+// has: the zero Plugin names no new artifact, so Reload reuses the loaded spec
+// and clears the disabled flag. Named for what an operator means by it.
 //
 // Example: {"name":"billing"}
 // Response: {"status":"ok","msg":"billing enabled","data":[{"host":"cloud-0","ok":true}]}
 func (o *ops) enable(ctx context.Context, in *NameIn) (*ActionOut, error) {
-	return o.simple(ctx, in, "plugin.enable", func() error { return o.z.Reload(in.Name, nil) })
+	return o.simple(ctx, in, "plugin.enable", func() error { return o.z.Reload(in.Name, zip.Plugin{}) })
 }
 
 // disable stops the plugin. Its routes STAY REGISTERED and answer 503 — not 404.
@@ -318,7 +327,7 @@ func (o *ops) simple(ctx context.Context, in *NameIn, action string, here func()
 		return nil, err
 	}
 	if err := o.known(in.Name); err != nil {
-		return &ActionOut{Status: core.Err, Msg: err.Error()}, nil
+		return nil, err
 	}
 	return o.run(ctx, c, act{
 		name: in.Name, action: action, scope: in.Scope,
@@ -336,7 +345,7 @@ func (o *ops) known(name string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("no app named %q in the manifest", name)
+	return zip.ErrBadRequest(fmt.Sprintf("no app named %q in the manifest", name))
 }
 
 // self is this pod's stable id, from the same downward-API variables the shard

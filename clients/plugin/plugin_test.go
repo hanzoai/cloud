@@ -53,11 +53,11 @@ func TestRoutes_LandInTheTypedRegistry(t *testing.T) {
 // rollout is stuck", which is the question the board exists to answer.
 func TestDrift(t *testing.T) {
 	hosts := []Host{
-		{Host: "cloud-0", Plugins: []zip.PluginStatus{
+		{Host: "cloud-0", Plugins: []zip.Status{
 			{Name: "billing", Running: true, Version: "aaa"},
 			{Name: "search", Running: true, Version: "ccc"},
 		}},
-		{Host: "cloud-1", Plugins: []zip.PluginStatus{
+		{Host: "cloud-1", Plugins: []zip.Status{
 			{Name: "billing", Running: true, Version: "bbb"}, // mid-rollout
 			{Name: "search", Disabled: true},
 		}},
