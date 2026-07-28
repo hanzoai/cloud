@@ -279,6 +279,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/projects/:slug/domains", cloud.Handle(s, listDomains))
 	app.Post("/v1/projects/:slug/domains", cloud.Handle(s, setDomains))
 	app.Post("/v1/projects/:slug/domains/:host/verify", cloud.Handle(s, verifyDomain))
+	app.Delete("/v1/projects/:slug/domains/:host", cloud.Handle(s, releaseDomain))
 
 	// /v1/sites — the surface-agnostic deploy_site capability, shared with agents.
 	// /v1/sites builds a responsive static site from a brief and deploys it;
@@ -317,6 +318,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/platform/sites/:slug/domains", cloud.Handle(s, listDomains))
 	app.Post("/v1/platform/sites/:slug/domains", cloud.Handle(s, setDomains))
 	app.Post("/v1/platform/sites/:slug/domains/:host/verify", cloud.Handle(s, verifyDomain))
+	app.Delete("/v1/platform/sites/:slug/domains/:host", cloud.Handle(s, releaseDomain))
 	siteReleases(app, s, "/v1/platform/sites")
 }
 

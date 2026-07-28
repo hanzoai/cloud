@@ -169,6 +169,10 @@ func New(cfg Config, log luxlog.Logger) *Server {
 		seen[d] = true
 		self = append(self, d)
 	}
+	// Publish the SAME set to the shared source, so the claim gate refuses what the
+	// serve gate would refuse. Registered here, next to SetReservedExtra, for the
+	// identical reason: one source, no drift between enforcement points.
+	SetSelfDomains(self)
 	// First-party apex (internal, opt-in sites) — normalize, force it to be a self
 	// domain (a first-party site host is never a customer custom-domain candidate),
 	// and build the explicit allowlist. Empty apex or empty allowlist ⇒ disabled.
@@ -321,15 +325,7 @@ func hostOnly(host string) string {
 // lookup and makes it structurally impossible for a customer binding to shadow a
 // real Hanzo host — only genuinely external domains reach the binding resolver.
 func (s *Server) customCandidate(host string) bool {
-	if host == "" || !strings.Contains(host, ".") {
-		return false
-	}
-	for _, d := range s.selfDomains {
-		if host == d || strings.HasSuffix(host, "."+d) {
-			return false
-		}
-	}
-	return true
+	return host != "" && strings.Contains(host, ".") && !IsSelfHost(host)
 }
 
 // resolveLive resolves a key (a subdomain slug OR a full custom host) to a LIVE

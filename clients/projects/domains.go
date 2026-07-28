@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/hanzoai/cloud/internal/fqdn"
 	"github.com/zap-proto/zip"
 )
@@ -57,11 +58,20 @@ func publicHost(s *cloud.Service[state], slug string) string {
 	return slug + "." + s.State.apex
 }
 
-// underApex reports whether host is the published-site zone or anything beneath
-// it. Those names are ours to assign, and no DNS proof is even possible for them
-// — a customer cannot publish a TXT record in a zone we run.
-func underApex(s *cloud.Service[state], host string) bool {
-	return host == s.State.apex || strings.HasSuffix(host, "."+s.State.apex)
+// ours reports whether host is a domain WE run, or anything beneath it. Those names
+// are ours to assign, and no DNS proof is even possible for them — a customer cannot
+// publish a TXT record in a zone we run.
+//
+// It asks the SAME shared self-domain set the sites serve gate uses
+// (sites.IsSelfHost), not just the published-site apex. Checking only the apex left
+// the brand domain claimable: `api.hanzo.ai` — our production API host — passed this
+// gate and took a first-come claim row. It could never serve (the serve gate excluded
+// it), but the row denied the host to its real owner for good. The sites apex is
+// always in that set, so this is strictly wider, never narrower; the explicit apex
+// test remains as the floor for a deployment that registered no self domains.
+func ours(s *cloud.Service[state], host string) bool {
+	return sites.IsSelfHost(host) ||
+		host == s.State.apex || strings.HasSuffix(host, "."+s.State.apex)
 }
 
 // domainView is one row of a site's domains panel.
@@ -146,9 +156,9 @@ func setDomains(s *cloud.Service[state], c *zip.Ctx) error {
 		if !fqdn.Valid(host) {
 			return zip.ErrBadRequest("invalid domain: " + d)
 		}
-		if !vouched && underApex(s, host) {
+		if !vouched && ours(s, host) {
 			return zip.Errorf(http.StatusForbidden,
-				"hosts under %s are assigned by the platform, not claimed", s.State.apex)
+				"%s is a host we operate; those are assigned by the platform, not claimed", host)
 		}
 
 		var bindErr error
@@ -183,6 +193,44 @@ func setDomains(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{
 		"slug": p.Slug, "org": org, "bound": out, "domains": hosts,
 	})
+}
+
+// releaseDomain gives a host back. A claim is FIRST-COME and global, so until this
+// existed a bound or merely pending host was held forever: setDomains only ever adds
+// (an empty list is a 400, not a clear), delete-project unbinds the site's own bare
+// slug and nothing else, and there was no third writer. A customer who mistyped a
+// domain, or claimed one they later moved elsewhere, could neither reuse it nor let
+// anyone else — the row outlived every path that could reach it. Add-only ownership
+// of a global namespace is not ownership, it is a leak.
+//
+// Scoped to (host, org, slug) by UnbindHost, so a release can only ever drop THIS
+// tenant's own claim; another org's identical-host row is untouched (it cannot exist
+// — the host is unique — but the scoping states the guarantee). Idempotent: releasing
+// a host we do not hold is a clean 204, never a 404 that would let a caller probe
+// which hosts other tenants hold.
+func releaseDomain(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := org(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
+	if errors.Is(err, errNotFound) {
+		return zip.ErrNotFound("project not found")
+	}
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+	}
+	host := fqdn.Clean(c.Param("host"))
+	if host == "" {
+		return zip.ErrBadRequest("host is required")
+	}
+	if err := s.State.store.UnbindHost(c.Context(), host, org, p.Slug); err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "release %q: %v", host, err)
+	}
+	// The host stops routing here, so drop anything the edge still holds for it.
+	purgeTag(s, c.Context(), org, p.Slug)
+	s.Log.Info("site custom domain released", "org", org, "slug", p.Slug, "host", host)
+	return c.NoContent(http.StatusNoContent)
 }
 
 // verifyDomain resolves the DNS challenge for a pending claim. On success the
