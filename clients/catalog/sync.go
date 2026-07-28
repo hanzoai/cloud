@@ -24,7 +24,9 @@ import (
 //
 // Where a row lands is the whole tenancy rule, and it is one line each:
 //   - a public repo is public by definition        → the published corpus
-//   - a live site published by the PLATFORM's own org → the published corpus
+//   - a live site published by the PLATFORM's own org → the published corpus IF
+//     the page it serves passes admission (gate.go), else the platform's OWN
+//     corpus with the reason attached
 //   - a live site published by any other org       → THAT ORG's corpus, and no
 //     other tenant ever runs the query that would return it
 //
@@ -118,18 +120,33 @@ func corpus(ctx context.Context) ([]Entry, map[string][]Entry, error) {
 		ferr = err
 	}
 	platform := getenv(platformOrgEnv, "hanzo")
+	var ours []Entry
 	for _, s := range sites {
 		e := fromSite(s)
 		if s.Org != platform {
 			byOrg[s.Org] = append(byOrg[s.Org], e)
 			continue
 		}
+		ours = append(ours, e)
+	}
+	// Being ours is necessary to be published, not sufficient. The gate reads what
+	// each of our sites actually SERVES and holds back the ones with nothing to
+	// show (gate.go). A held site is not deleted and its repo row is not touched —
+	// it lands in OUR OWN corpus carrying the reason it is not public, so a demo
+	// that drops off the public lens can be explained instead of just vanishing.
+	show, hold := admit(ctx, ours)
+	for _, e := range show {
 		if i, ok := at[e.ID]; ok {
 			pub[i] = fold(pub[i], e)
 			continue
 		}
 		at[e.ID] = len(pub)
 		pub = append(pub, e)
+	}
+	if len(hold) > 0 {
+		// Only when there IS something to hold: creating the key unconditionally
+		// would make the "read nothing, reconcile nothing" guard below stop firing.
+		byOrg[platform] = append(byOrg[platform], hold...)
 	}
 	if len(pub) == 0 && len(byOrg) == 0 {
 		return nil, nil, ferr
