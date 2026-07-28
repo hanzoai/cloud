@@ -50,6 +50,7 @@ type Application struct {
 	Replicas      int
 	MinScale      int // container-serverless autoscaling floor (0 ⇒ no HPA, fixed Replicas). Set by /v1/run.
 	MaxScale      int // container-serverless autoscaling ceiling (0 ⇒ no HPA). Set by /v1/run.
+	StorageGB     int // persistent volume size in GiB (0 ⇒ stateless, no volume at all)
 	EnvJSON       string
 	DomainsJSON   string
 	Status        string
@@ -242,6 +243,8 @@ CREATE INDEX IF NOT EXISTS ix_pf_domains_app ON platform_domains(org, app_id);
 		// (computemeter.go). 0 = never metered → first-sight starts the clock with no
 		// back-charge. Forward-only, idempotent (duplicate column = already present).
 		`ALTER TABLE platform_apps ADD COLUMN compute_metered_at INTEGER NOT NULL DEFAULT 0`,
+		// 0 means stateless, which is what every app predating this column is.
+		`ALTER TABLE platform_apps ADD COLUMN storage_gb INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := s.db.Exec(alter); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return fmt.Errorf("migrate scale: %w", err)
@@ -291,24 +294,34 @@ func (s *Store) DeleteProjectApps(ctx context.Context, org, project string) ([]A
 
 // ── applications ─────────────────────────────────────────────────────────────
 
-const appCols = `id,org,project_id,slug,name,description,environment,source,repo_url,repo_branch,repo_provider,image_repo,image_tag,build_type,dockerfile,port,replicas,env_json,domains_json,status,namespace,current_deploy,created_at,updated_at,min_scale,max_scale`
+const appCols = `id,org,project_id,slug,name,description,environment,source,repo_url,repo_branch,repo_provider,image_repo,image_tag,build_type,dockerfile,port,replicas,env_json,domains_json,status,namespace,current_deploy,created_at,updated_at,min_scale,max_scale,storage_gb`
+
+// appScanDest returns the scan destinations for appCols, IN appCols ORDER. It
+// exists so a column added to appCols has exactly ONE field list to be added to.
+// scanApp and scanRunningApp read the same query prefix; while each spelled the
+// fields out separately, adding a column compiled fine and failed at runtime with
+// "expected N destination arguments in Scan".
+func appScanDest(a *Application) []any {
+	return []any{&a.ID, &a.Org, &a.ProjectID, &a.Slug, &a.Name, &a.Description, &a.Environment,
+		&a.Source, &a.RepoURL, &a.RepoBranch, &a.RepoProvider, &a.ImageRepo, &a.ImageTag,
+		&a.BuildType, &a.Dockerfile, &a.Port, &a.Replicas, &a.EnvJSON, &a.DomainsJSON,
+		&a.Status, &a.Namespace, &a.CurrentDeploy, &a.CreatedAt, &a.UpdatedAt, &a.MinScale, &a.MaxScale,
+		&a.StorageGB}
+}
 
 func scanApp(sc interface{ Scan(...any) error }) (Application, error) {
 	var a Application
-	err := sc.Scan(&a.ID, &a.Org, &a.ProjectID, &a.Slug, &a.Name, &a.Description, &a.Environment,
-		&a.Source, &a.RepoURL, &a.RepoBranch, &a.RepoProvider, &a.ImageRepo, &a.ImageTag,
-		&a.BuildType, &a.Dockerfile, &a.Port, &a.Replicas, &a.EnvJSON, &a.DomainsJSON,
-		&a.Status, &a.Namespace, &a.CurrentDeploy, &a.CreatedAt, &a.UpdatedAt, &a.MinScale, &a.MaxScale)
+	err := sc.Scan(appScanDest(&a)...)
 	return a, err
 }
 
 func (s *Store) CreateApplication(ctx context.Context, a Application) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO platform_apps (`+appCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO platform_apps (`+appCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.Org, a.ProjectID, a.Slug, a.Name, a.Description, a.Environment,
 		a.Source, a.RepoURL, a.RepoBranch, a.RepoProvider, a.ImageRepo, a.ImageTag,
 		a.BuildType, a.Dockerfile, a.Port, a.Replicas, a.EnvJSON, a.DomainsJSON,
-		a.Status, a.Namespace, a.CurrentDeploy, a.CreatedAt, a.UpdatedAt, a.MinScale, a.MaxScale)
+		a.Status, a.Namespace, a.CurrentDeploy, a.CreatedAt, a.UpdatedAt, a.MinScale, a.MaxScale, a.StorageGB)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return errConflict
@@ -421,12 +434,7 @@ type RunningApp struct {
 // the watermark stays orthogonal to the app config every other query reads.
 func scanRunningApp(sc interface{ Scan(...any) error }) (RunningApp, error) {
 	var ra RunningApp
-	a := &ra.App
-	err := sc.Scan(&a.ID, &a.Org, &a.ProjectID, &a.Slug, &a.Name, &a.Description, &a.Environment,
-		&a.Source, &a.RepoURL, &a.RepoBranch, &a.RepoProvider, &a.ImageRepo, &a.ImageTag,
-		&a.BuildType, &a.Dockerfile, &a.Port, &a.Replicas, &a.EnvJSON, &a.DomainsJSON,
-		&a.Status, &a.Namespace, &a.CurrentDeploy, &a.CreatedAt, &a.UpdatedAt, &a.MinScale, &a.MaxScale,
-		&ra.MeteredAt)
+	err := sc.Scan(append(appScanDest(&ra.App), &ra.MeteredAt)...)
 	return ra, err
 }
 
@@ -487,10 +495,10 @@ func (s *Store) StampComputeMeter(ctx context.Context, org, id string, now int64
 // are immutable and form the tenancy/identity key.
 func (s *Store) UpdateApplication(ctx context.Context, a Application) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE platform_apps SET name=?,description=?,environment=?,source=?,repo_url=?,repo_branch=?,repo_provider=?,image_repo=?,image_tag=?,build_type=?,dockerfile=?,port=?,replicas=?,min_scale=?,max_scale=?,env_json=?,domains_json=?,status=?,namespace=?,current_deploy=?,updated_at=?
+		`UPDATE platform_apps SET name=?,description=?,environment=?,source=?,repo_url=?,repo_branch=?,repo_provider=?,image_repo=?,image_tag=?,build_type=?,dockerfile=?,port=?,replicas=?,min_scale=?,max_scale=?,storage_gb=?,env_json=?,domains_json=?,status=?,namespace=?,current_deploy=?,updated_at=?
 		 WHERE org=? AND id=?`,
 		a.Name, a.Description, a.Environment, a.Source, a.RepoURL, a.RepoBranch, a.RepoProvider,
-		a.ImageRepo, a.ImageTag, a.BuildType, a.Dockerfile, a.Port, a.Replicas, a.MinScale, a.MaxScale, a.EnvJSON, a.DomainsJSON,
+		a.ImageRepo, a.ImageTag, a.BuildType, a.Dockerfile, a.Port, a.Replicas, a.MinScale, a.MaxScale, a.StorageGB, a.EnvJSON, a.DomainsJSON,
 		a.Status, a.Namespace, a.CurrentDeploy, a.UpdatedAt, a.Org, a.ID)
 	if err != nil {
 		return fmt.Errorf("update app: %w", err)
