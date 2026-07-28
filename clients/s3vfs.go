@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"sync/atomic"
+	"time"
 
 	s3 "github.com/hanzoai/s3-go"
 
@@ -59,9 +60,32 @@ func NewS3VFS(admin s3admin.Admin) (types.VFSClient, error) {
 		return nil, fmt.Errorf("s3vfs: build client: %w", err)
 	}
 	v := &s3vfs{client: cl, bucket: TeamBlobBucket, region: admin.Region()}
-	_ = v.ensure(context.Background()) // best-effort create-if-absent at construction
+	// Bounded, because "best-effort" has to be true of the WAIT as well as the
+	// result. This call is a pure optimisation: ensure is idempotent, every op
+	// retries it (Put/Get/Delete each call it), and the error is discarded right
+	// here precisely because nothing depends on it succeeding now.
+	//
+	// Unbounded it was not best-effort at all — it runs on the boot path, before
+	// the process listens, so an object store that accepts the TCP connection and
+	// then never answers holds the entire binary hostage. That is not theory: when
+	// the S3 gateway's authenticated path stopped responding, every cloud pod
+	// stalled here forever, outlived its liveness budget, and crashlooped — with
+	// no log line, since the next one only prints after this returns. A rollback
+	// did not help, because the hang is in neither version's changes.
+	//
+	// A deadline turns that outage into a degraded start: ensured stays 0, the
+	// first real op retries, and the binary reaches its listener.
+	ctx, cancel := context.WithTimeout(context.Background(), ensureBootTimeout)
+	defer cancel()
+	_ = v.ensure(ctx)
 	return v, nil
 }
+
+// ensureBootTimeout bounds the construction-time bucket check. Sized for "the
+// store is healthy and answers promptly", not for a struggling one: the whole
+// point is to stop waiting and let the first real op retry, so a longer value
+// would only lengthen a boot that is already degraded.
+const ensureBootTimeout = 5 * time.Second
 
 // ensure creates the bucket if absent, exactly once (idempotent, retried on each
 // op until it succeeds). A concurrent creator (another replica) is tolerated: a
