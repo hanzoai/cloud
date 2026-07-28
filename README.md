@@ -15,8 +15,8 @@ The same artifact serves `api.hanzo.ai`, `api.lux.cloud`, `api.zoo.cloud`, `api.
 # Run the unified binary (pin a released version)
 docker run -p 8080:8080 ghcr.io/hanzoai/cloud:v1.801.206
 
-# Or install the CLI + server
-go install github.com/hanzoai/cloud/cmd/hanzo@latest
+# The `hanzo` CLI is a separate Rust binary (hanzoai/cli) — this module ships no CLI
+curl hanzo.sh | sh
 brew install hanzoai/tap/hanzo
 ```
 
@@ -54,7 +54,8 @@ authed (it cannot validate user tokens), so `apps`/`deploy`/`clusters` use
 `--platform-token` / `HANZO_PLATFORM_TOKEN` / `PLATFORM_SERVICE_TOKEN`, and
 `build` uses `HANZO_BUILD_TOKEN` / `PLATFORM_BUILD_CALLBACK_TOKEN`.
 
-Install: `go install github.com/hanzoai/cloud/cmd/hanzo@latest`, or `brew install hanzoai/tap/hanzo`.
+Install the CLI: `curl hanzo.sh | sh`, or `brew install hanzoai/tap/hanzo`. It is the
+Rust binary in `hanzoai/cli`; this module serves `/v1` and ships plugins, not a CLI.
 
 ## Subsystems mounted
 
