@@ -28,14 +28,24 @@ import (
 // never a fabricated number.
 //
 // SCOPE. Cohorts resolve distinct_ids and counts. Product analytics scrubs PII,
-// so distinct_ids are cohort identifiers, not deliverable addresses — enrolling
-// a cohort into a drip requires resolving addresses through the CRM/identity, an
-// honest boundary the fold does not paper over.
+// so a distinct_id is a cohort IDENTIFIER, never a deliverable address; addresses
+// come from the identity store (roster.go), which is what resolveAudience joins
+// the two through. That join is the whole reason an audience can be mailed at all.
+//
+// AN AUDIENCE WITH NO EVENT IS EVERY CUSTOMER. The event filter is optional: an
+// audience that names none is the org's whole IAM roster — "announce to every
+// customer" — and needs no warehouse at all, so it resolves even before the
+// analytics collector is wired.
 
 const (
 	audDefaultWindowDays = 30
 	audMaxWindowDays     = 3650
 	audSampleLimit       = 1000
+	// audResolveLimit bounds the cohort read on the SEND path. It is far larger
+	// than audSampleLimit because that one feeds a preview list while this one
+	// decides who actually receives the mail — under-reading here would silently
+	// drop customers from an announcement.
+	audResolveLimit = 100000
 )
 
 // eventsTable is the shared web/commerce/UI wide event table (org column
@@ -53,13 +63,23 @@ type Audience struct {
 	UpdatedAt  int64  `json:"updatedAt"`
 }
 
-// AudiencePreview is a live cohort evaluation.
+// AudiencePreview is a live audience evaluation: how big the cohort is, and — the
+// question that decides whether a send is worth making — how many real customers
+// it actually reaches.
 type AudiencePreview struct {
-	Available bool     `json:"available"`
-	Reason    string   `json:"reason,omitempty"`
-	Count     int64    `json:"count"`
-	Sample    []string `json:"sample"`
-	Source    string   `json:"source"`
+	Available bool   `json:"available"`
+	Reason    string `json:"reason,omitempty"`
+	// Count is the cohort size: distinct warehouse identifiers for an event
+	// audience, mailable customers for an event-less (whole-org) one.
+	Count int64 `json:"count"`
+	// Deliverable is how many de-duplicated addresses a send would reach, and
+	// Unmatched how many cohort identifiers named no customer. Unmatched is
+	// reported rather than hidden: it is the honest explanation for a cohort of
+	// 500 that mails 3.
+	Deliverable int      `json:"deliverable"`
+	Unmatched   int      `json:"unmatched"`
+	Sample      []string `json:"sample"` // cohort identifiers, never addresses
+	Source      string   `json:"source"`
 }
 
 func (s *Store) migrateAudiences() error {
@@ -130,42 +150,85 @@ func (s *Store) DeleteAudience(ctx context.Context, org, id string) (bool, error
 	return n > 0, nil
 }
 
-// evalAudience resolves a cohort live against hanzo.events. It is honest-empty
-// (Available=false) when the warehouse is not wired, and otherwise returns the
-// distinct-user count plus a bounded sample of distinct_ids. tenant_id, event
-// and the time bound are ALL bound args — one tenancy invariant, no injection.
-func evalAudience(ctx context.Context, org string, a Audience) AudiencePreview {
-	out := AudiencePreview{Source: eventsTable, Sample: []string{}}
+// cohortIDs is the ONE cohort query: the distinct_ids the audience's event
+// selected inside its window, bounded by limit. tenant_id, event and the time
+// bound are ALL bound args — one tenancy invariant, no injection.
+func cohortIDs(ctx context.Context, org string, a Audience, limit int) ([]string, error) {
 	if !datastore.Ready() {
-		out.Reason = "analytics warehouse not configured"
-		return out
+		return nil, errWarehouse
 	}
 	sinceLit := time.Now().UTC().AddDate(0, 0, -a.WindowDays).Format("2006-01-02 15:04:05")
-
-	countRows, err := datastore.Query(ctx,
-		"SELECT uniqExact(distinct_id) AS n FROM "+eventsTable+" WHERE tenant_id = ? AND event = ? AND timestamp >= ?",
-		org, a.Event, sinceLit)
-	if err != nil {
-		out.Reason = "warehouse query failed"
-		return out
-	}
-	if len(countRows) > 0 {
-		out.Count = toInt64(countRows[0]["n"])
-	}
-
-	memberRows, err := datastore.Query(ctx,
+	rows, err := datastore.Query(ctx,
 		"SELECT DISTINCT distinct_id FROM "+eventsTable+" WHERE tenant_id = ? AND event = ? AND timestamp >= ? LIMIT ?",
-		org, a.Event, sinceLit, audSampleLimit)
+		org, a.Event, sinceLit, limit)
 	if err != nil {
-		out.Reason = "warehouse query failed"
-		return out
+		return nil, fmt.Errorf("warehouse query: %w", err)
 	}
-	for _, r := range memberRows {
+	out := make([]string, 0, len(rows))
+	for _, r := range rows {
 		if id := toString(r["distinct_id"]); id != "" {
-			out.Sample = append(out.Sample, id)
+			out = append(out, id)
 		}
 	}
+	return out, nil
+}
+
+// reach is an audience resolved to exactly who a send would go to, plus the facts
+// that explain the number.
+type reach struct {
+	addresses []string // de-duplicated, normalized, deliverable
+	cohort    []string // the warehouse identifiers the event selected (none for a roster audience)
+	unmatched int      // cohort identifiers naming no customer of this org
+}
+
+// resolveAudience turns an audience into deliverable addresses by joining the
+// cohort to the org's IAM roster. It is the ONE resolution path — the preview and
+// the enrollment fan-out both call it, so what an operator is shown is exactly
+// what would be mailed.
+//
+// An audience with no event is the whole roster: every mailable customer, no
+// warehouse involved. With an event, only the roster users the cohort actually
+// names are kept; an identifier that matches no customer is counted, never
+// invented into an address.
+func resolveAudience(ctx context.Context, org string, a Audience) (reach, error) {
+	roster, err := rosterFn(org)
+	if err != nil {
+		return reach{}, err
+	}
+	if a.Event == "" {
+		return reach{addresses: addresses(roster)}, nil
+	}
+	ids, err := cohortIDs(ctx, org, a, audResolveLimit)
+	if err != nil {
+		return reach{}, err
+	}
+	return matchCohort(roster, ids), nil
+}
+
+// evalAudience presents a resolution. It is honest-empty (Available=false, with
+// the reason) when the roster or the warehouse cannot be read, never a fabricated
+// number.
+func evalAudience(ctx context.Context, org string, a Audience) AudiencePreview {
+	out := AudiencePreview{Source: eventsTable, Sample: []string{}}
+	if a.Event == "" {
+		out.Source = "iam:" + org
+	}
+	r, err := resolveAudience(ctx, org, a)
+	if err != nil {
+		out.Reason = err.Error()
+		return out
+	}
 	out.Available = true
+	out.Deliverable = len(r.addresses)
+	out.Unmatched = r.unmatched
+	out.Count = int64(len(r.cohort))
+	if a.Event == "" {
+		out.Count = int64(len(r.addresses))
+	}
+	if len(r.cohort) > audSampleLimit {
+		r.cohort = r.cohort[:audSampleLimit]
+	}
+	out.Sample = append(out.Sample, r.cohort...)
 	return out
 }
 
@@ -184,10 +247,8 @@ func createAudience(s *cloud.Service[state], c *zip.Ctx) error {
 	if name == "" {
 		return zip.ErrBadRequest("name is required")
 	}
+	// No event means no filter: the audience is every mailable customer in the org.
 	event := clip(body.Event)
-	if event == "" {
-		return zip.ErrBadRequest("event is required")
-	}
 	window := body.WindowDays
 	if window <= 0 {
 		window = audDefaultWindowDays

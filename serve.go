@@ -95,13 +95,16 @@ func Serve(specs []MountSpec, enable []string) error {
 
 	deps := BuildDeps(cfg)
 
-	// Surface the resolved role and the writer-pin backing it. The pin is
-	// SingleWriter today (k8s StatefulSet replicas:1 guarantees one writer);
-	// consensus (Quasar) election is stubbed (writerpin.ConsensusPin) and NOT yet
-	// gating store opens — logged here so operators see the real posture.
+	// Surface the resolved role and the writer-pin backing it, WITH the reason the
+	// pin was chosen. SingleWriter is correct at replicas:1 (Kubernetes is the
+	// elector); a real coordination.k8s.io Lease election is opt-in via
+	// CLOUD_WRITER_LEASE + the downward API, and every incomplete configuration
+	// falls back and says so here rather than pretending to elect.
+	pin, pinReason := writerpin.ResolveWithReason()
 	deps.Logger.Info("HA role resolved",
 		"role", cfg.Role.String(),
-		"writer_pin", writerpin.Resolve().Kind(),
+		"writer_pin", pin.Kind(),
+		"writer_pin_reason", pinReason,
 		"kms_read_only", cfg.Role.IsReader())
 
 	// Horizontal-scale shard router. When CLOUD_PEERS names >1 pod, each org is
@@ -369,6 +372,26 @@ func Serve(specs []MountSpec, enable []string) error {
 			return c.JSON(200, map[string]string{"service": name, "status": "ok"})
 		})
 	}
+
+	// The binary's own health, and the ONE place it admits a plane is dead.
+	//
+	// A subsystem that mounts fail-closed (commerce with an unusable KV_URL, team
+	// in degraded mode) keeps the process up and answers 503 on its own routes.
+	// From outside that is indistinguishable from a subsystem which was simply
+	// never enabled — which is how a dead revenue plane once shipped behind a green
+	// pod and a green gate. Degradations() makes the difference visible.
+	//
+	// It answers 200 EVEN WHEN DEGRADED, on purpose. This doubles as the container
+	// probe, and taking a pod out of rotation because one plane of many is broken
+	// would turn a partial outage into a total one — the opposite of what
+	// fail-closed mounting is for. The release smoke reads the `degraded` field and
+	// refuses the image; that is the right place to say no, before it ships.
+	app.Get("/v1/health", func(c *zip.Ctx) error {
+		if d := Degradations(); len(d) > 0 {
+			return c.JSON(200, map[string]any{"status": "degraded", "degraded": d})
+		}
+		return c.JSON(200, map[string]any{"status": "ok"})
+	})
 
 	if err := MountAll(app, specs, cfg, deps); err != nil {
 		return fmt.Errorf("mount: %w", err)

@@ -41,6 +41,10 @@ func Routes(app cloud.Router, s *cloud.Service[core.State]) {
 	g.Post("/infra/volumes/:id/snapshot", core.Guard(s, b.snapshotVolume))
 	g.Delete("/infra/volumes/:id", core.Guard(s, b.deleteVolume))
 	g.Post("/infra/nodes/:id/cordon", core.Guard(s, b.cordonNode))
+	g.Delete("/infra/droplets/:id", core.Guard(s, b.deleteDroplet))
+	g.Post("/infra/droplets/:id/resize", core.Guard(s, b.resizeDroplet))
+	g.Delete("/infra/loadbalancers/:id", core.Guard(s, b.deleteLoadBalancer))
+	g.Post("/infra/clusters/:id/nodepools/:pool/scale", core.Guard(s, b.scaleNodePool))
 }
 
 // read serves the board, from cache unless ?refresh=1.
@@ -157,52 +161,188 @@ func (b *board) snapshotVolume(s *cloud.Service[core.State], c *zip.Ctx) error {
 	return core.OK(c, out)
 }
 
-// deleteVolume destroys a volume — but ONLY one the server itself has just proven to
-// be referenced by no PersistentVolume in any cluster.
+// mutation is one change to the fleet: what it touches, the verdict the ANALYZER
+// already derived for it, and what to do once that verdict says yes. A handler supplies
+// only WHAT to change — it never decides WHETHER.
+type mutation[T any] struct {
+	action  string // audit action, e.g. "infra.volume.delete"
+	resType string // audit resource type, e.g. "do_volume"
+	resID   string
+	find    func(Snapshot) (T, bool)
+	verdict func(T) (bool, string) // read off the row; never recomputed here
+	apply   func(context.Context, *digitalocean.Client, T) (map[string]any, error)
+}
+
+// run is THE mutation discipline, written once and shared by every destructive route.
 //
-// The client's opinion is never trusted: deletability is recomputed here from a FRESH
-// complete cross-cluster scan (force=true, never the cache), so a volume that became
-// live between the operator loading the page and pressing the button is refused. If
-// any cluster is unreachable the scan is incomplete and NOTHING is deletable.
-func (b *board) deleteVolume(s *cloud.Service[core.State], c *zip.Ctx) error {
-	id := strings.TrimSpace(c.Param("id"))
+// The client's opinion is never trusted. The board is re-scanned from scratch
+// (force=true, NEVER the cache), the verdict is taken from that fresh scan, and every
+// outcome — success, failure and refusal — is audited. A resource that became live
+// between the operator loading the page and pressing the button is refused, and if any
+// cluster is unreachable the scan is incomplete and NOTHING may be mutated.
+func run[T any](b *board, s *cloud.Service[core.State], c *zip.Ctx, m mutation[T]) error {
 	snap, err := b.load(c.Context(), s.State.DO, true)
 	if err != nil {
 		return core.Fail(c, err.Error())
 	}
-	v, ok := findVolume(snap, id)
-	if !ok {
-		return core.Fail(c, "volume not found")
+	subject, found := m.find(snap)
+	if !found {
+		return core.Fail(c, strings.ReplaceAll(strings.TrimPrefix(m.resType, "do_"), "_", " ")+" not found")
 	}
-	if !v.Deletable {
-		core.EmitAudit(s, c, "infra.volume.delete", "do_volume", id, v, nil,
-			audit.Outcome{Result: "denied", Status: 200, Reason: v.BlockedReason})
-		return core.Fail(c, "refusing to delete: "+v.BlockedReason)
+	if ok, reason := m.verdict(subject); !ok {
+		core.EmitAudit(s, c, m.action, m.resType, m.resID, subject, nil,
+			audit.Outcome{Result: "denied", Status: 200, Reason: reason})
+		return core.Fail(c, "refusing: "+reason)
 	}
-
-	out := map[string]any{"deleted": false, "name": v.Name, "sizeGiB": v.SizeGiB,
-		"freedMonthlyCents": v.MonthlyCents}
-	// Snapshot first unless explicitly waived — the delete is irreversible, the
-	// snapshot is the undo.
-	if c.Query("snapshot") != "false" {
-		shot, serr := takeSnapshot(c.Context(), s.State.DO, v, "")
-		if serr != nil {
-			core.EmitAudit(s, c, "infra.volume.delete", "do_volume", id, v, nil,
-				audit.Outcome{Result: "failure", Status: 200, Reason: "snapshot failed: " + serr.Error()})
-			return core.Fail(c, "snapshot failed, volume NOT deleted: "+serr.Error())
-		}
-		out["snapshotId"] = shot.ID
-	}
-	if err := s.State.DO.DeleteVolume(c.Context(), id); err != nil {
-		core.EmitAudit(s, c, "infra.volume.delete", "do_volume", id, v, nil,
+	out, err := m.apply(c.Context(), s.State.DO, subject)
+	if err != nil {
+		core.EmitAudit(s, c, m.action, m.resType, m.resID, subject, out,
 			audit.Outcome{Result: "failure", Status: 200, Reason: err.Error()})
 		return core.Fail(c, err.Error())
 	}
-	out["deleted"] = true
 	b.invalidate()
-	core.EmitAudit(s, c, "infra.volume.delete", "do_volume", id, v, out,
+	core.EmitAudit(s, c, m.action, m.resType, m.resID, subject, out,
 		audit.Outcome{Result: "success", Status: 200})
 	return core.OK(c, out)
+}
+
+// deleteVolume destroys a volume the board has just proven no PersistentVolume in any
+// cluster references. Irreversible, so it snapshots first unless explicitly waived —
+// the snapshot IS the undo.
+func (b *board) deleteVolume(s *cloud.Service[core.State], c *zip.Ctx) error {
+	id := strings.TrimSpace(c.Param("id"))
+	snapshotFirst := c.Query("snapshot") != "false"
+	return run(b, s, c, mutation[Volume]{
+		action: "infra.volume.delete", resType: "do_volume", resID: id,
+		find:    func(snap Snapshot) (Volume, bool) { return findVolume(snap, id) },
+		verdict: func(v Volume) (bool, string) { return v.Deletable, v.BlockedReason },
+		apply: func(ctx context.Context, do *digitalocean.Client, v Volume) (map[string]any, error) {
+			out := map[string]any{"deleted": false, "name": v.Name, "sizeGiB": v.SizeGiB,
+				"freedMonthlyCents": v.MonthlyCents}
+			if snapshotFirst {
+				shot, err := takeSnapshot(ctx, do, v, "")
+				if err != nil {
+					return out, fmt.Errorf("snapshot failed, volume NOT deleted: %w", err)
+				}
+				out["snapshotId"] = shot.ID
+			}
+			if err := do.DeleteVolume(ctx, v.ID); err != nil {
+				return out, err
+			}
+			out["deleted"] = true
+			return out, nil
+		},
+	})
+}
+
+// deleteDroplet destroys a droplet the board has just proven is NOT a DOKS node. There
+// is no snapshot-first undo for a droplet the way there is for a volume: the local disk
+// goes with it.
+func (b *board) deleteDroplet(s *cloud.Service[core.State], c *zip.Ctx) error {
+	id, err := strconv.Atoi(strings.TrimSpace(c.Param("id")))
+	if err != nil {
+		return core.Fail(c, "droplet id must be numeric")
+	}
+	return run(b, s, c, mutation[Node]{
+		action: "infra.droplet.delete", resType: "do_droplet", resID: c.Param("id"),
+		find:    func(snap Snapshot) (Node, bool) { return findNode(snap, id) },
+		verdict: func(n Node) (bool, string) { return n.Mutable, n.BlockedReason },
+		apply: func(ctx context.Context, do *digitalocean.Client, n Node) (map[string]any, error) {
+			if err := do.DeleteDroplet(ctx, n.ID); err != nil {
+				return nil, err
+			}
+			return map[string]any{"deleted": true, "name": n.Name,
+				"freedMonthlyCents": n.MonthlyCents}, nil
+		},
+	})
+}
+
+// resizeDroplet changes a droplet's plan. Same refusal as delete and for the same
+// reason: a DOKS node's size is the node pool's to declare.
+//
+// disk=true is a PERMANENT resize — the disk grows and DO can never resize the droplet
+// DOWN again. disk=false (the default) changes CPU/RAM only and is reversible. DO
+// requires the droplet to be powered off and applies the change asynchronously, so the
+// response carries the action to poll, not a completed change.
+func (b *board) resizeDroplet(s *cloud.Service[core.State], c *zip.Ctx) error {
+	id, err := strconv.Atoi(strings.TrimSpace(c.Param("id")))
+	if err != nil {
+		return core.Fail(c, "droplet id must be numeric")
+	}
+	var body struct {
+		Size string `json:"size"`
+		Disk bool   `json:"disk"`
+	}
+	if err := c.Bind(&body); err != nil {
+		return core.Fail(c, "invalid body")
+	}
+	if strings.TrimSpace(body.Size) == "" {
+		return core.Fail(c, "size is required (a DigitalOcean size slug, e.g. s-4vcpu-8gb)")
+	}
+	return run(b, s, c, mutation[Node]{
+		action: "infra.droplet.resize", resType: "do_droplet", resID: c.Param("id"),
+		find:    func(snap Snapshot) (Node, bool) { return findNode(snap, id) },
+		verdict: func(n Node) (bool, string) { return n.Mutable, n.BlockedReason },
+		apply: func(ctx context.Context, do *digitalocean.Client, n Node) (map[string]any, error) {
+			act, err := do.ResizeDroplet(ctx, n.ID, body.Size, body.Disk)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"name": n.Name, "from": n.SizeSlug, "to": body.Size,
+				"permanent": body.Disk, "actionId": act.ID, "actionStatus": act.Status}, nil
+		},
+	})
+}
+
+// deleteLoadBalancer destroys a load balancer the board has just proven no live
+// type=LoadBalancer Service in any cluster targets.
+func (b *board) deleteLoadBalancer(s *cloud.Service[core.State], c *zip.Ctx) error {
+	id := strings.TrimSpace(c.Param("id"))
+	return run(b, s, c, mutation[LoadBalancer]{
+		action: "infra.loadbalancer.delete", resType: "do_load_balancer", resID: id,
+		find:    func(snap Snapshot) (LoadBalancer, bool) { return findLoadBalancer(snap, id) },
+		verdict: func(l LoadBalancer) (bool, string) { return l.Deletable, l.BlockedReason },
+		apply: func(ctx context.Context, do *digitalocean.Client, l LoadBalancer) (map[string]any, error) {
+			if err := do.DeleteLoadBalancer(ctx, l.ID); err != nil {
+				return nil, err
+			}
+			return map[string]any{"deleted": true, "name": l.Name, "ip": l.IP,
+				"freedMonthlyCents": l.MonthlyCents}, nil
+		},
+	})
+}
+
+// scaleNodePool sets a node pool's node count — the ONE correct way to change how many
+// nodes a DOKS cluster has.
+//
+// The response states what the board could NOT prove: DOKS picks which nodes a shrink
+// removes, so no particular pod is shown to survive one. See NodePool.ScaleTo.
+func (b *board) scaleNodePool(s *cloud.Service[core.State], c *zip.Ctx) error {
+	clusterID, pool := strings.TrimSpace(c.Param("id")), strings.TrimSpace(c.Param("pool"))
+	var body struct {
+		Count int `json:"count"`
+	}
+	if err := c.Bind(&body); err != nil {
+		return core.Fail(c, "invalid body")
+	}
+	return run(b, s, c, mutation[NodePool]{
+		action: "infra.nodepool.scale", resType: "do_node_pool", resID: clusterID + "/" + pool,
+		find:    func(snap Snapshot) (NodePool, bool) { return findNodePool(snap, clusterID, pool) },
+		verdict: func(p NodePool) (bool, string) { return p.ScaleTo(body.Count) },
+		apply: func(ctx context.Context, do *digitalocean.Client, p NodePool) (map[string]any, error) {
+			if err := do.ScaleNodePool(ctx, p.ClusterID, p.ID, p.Name, body.Count); err != nil {
+				return nil, err
+			}
+			out := map[string]any{"pool": p.Name, "cluster": p.Cluster, "from": p.Count, "to": body.Count}
+			if body.Count < p.Count {
+				out["note"] = "DOKS chooses which nodes to remove and drains them itself. " +
+					"This board proved only that the cluster keeps a schedulable node; " +
+					"PodDisruptionBudgets, taints, affinity and resource requests are enforced " +
+					"by the cluster, so some pods may stay Pending."
+			}
+			return out, nil
+		},
+	})
 }
 
 // cordonNode cordons/uncordons a node, optionally draining it.
@@ -222,14 +362,8 @@ func (b *board) cordonNode(s *cloud.Service[core.State], c *zip.Ctx) error {
 	if err != nil {
 		return core.Fail(c, err.Error())
 	}
-	var node *Node
-	for i := range snap.Nodes {
-		if snap.Nodes[i].ID == id {
-			node = &snap.Nodes[i]
-			break
-		}
-	}
-	if node == nil {
+	node, ok := findNode(snap, id)
+	if !ok {
 		return core.Fail(c, "node not found")
 	}
 	if node.ClusterID == "" {
@@ -272,6 +406,40 @@ func findVolume(s Snapshot, id string) (Volume, bool) {
 		}
 	}
 	return Volume{}, false
+}
+
+func findNode(s Snapshot, id int) (Node, bool) {
+	for _, n := range s.Nodes {
+		if n.ID == id {
+			return n, true
+		}
+	}
+	return Node{}, false
+}
+
+func findLoadBalancer(s Snapshot, id string) (LoadBalancer, bool) {
+	for _, l := range s.LoadBalancers {
+		if l.ID == id {
+			return l, true
+		}
+	}
+	return LoadBalancer{}, false
+}
+
+// findNodePool resolves a pool by its DO id or by its name — both are unique within a
+// cluster, and an operator reads the name off the board while the API speaks ids.
+func findNodePool(s Snapshot, clusterID, pool string) (NodePool, bool) {
+	for _, c := range s.Clusters {
+		if c.ID != clusterID {
+			continue
+		}
+		for _, p := range c.Pools {
+			if p.ID == pool || p.Name == pool {
+				return p, true
+			}
+		}
+	}
+	return NodePool{}, false
 }
 
 // sortSources keeps the freshness list stable across reads (map/goroutine order is not).

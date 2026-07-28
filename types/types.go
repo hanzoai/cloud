@@ -318,6 +318,22 @@ type ModelLister interface {
 	Models(ctx context.Context) ([]string, error)
 }
 
+// StreamCompleter is an OPTIONAL capability an AIClient may ALSO implement,
+// exactly like ModelLister: the SAME chat completion, delivered as the model
+// produces it. emit is called once per content delta, in order; returning an
+// error from emit stops the stream (a disconnected client), which is NOT a
+// failure of the completion. The returned ChatResponse carries the FULL
+// accumulated content plus usage, so a caller that only wants the answer gets
+// the identical value ChatCompletion would have returned — streaming is a
+// delivery property, never a different result.
+//
+// An AIClient that cannot stream (the disabled stub, the ZAP-RPC client) simply
+// does not implement it, and callers fall back to ChatCompletion — so token
+// streaming is a progressive-delivery upgrade, never a hard dependency.
+type StreamCompleter interface {
+	ChatStream(ctx context.Context, req *ChatRequest, emit func(delta string) error) (*ChatResponse, error)
+}
+
 // O11yClient is the inter-subsystem interface to o11y.
 type O11yClient interface {
 	Counter(name string, tags ...string) Counter

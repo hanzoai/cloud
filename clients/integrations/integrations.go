@@ -252,6 +252,13 @@ type Provider struct {
 	Creds func() OAuthConfig
 	// Authorize builds the provider's consent URL for (creds, redirectURI, state).
 	Authorize func(creds OAuthConfig, redirectURI, state string) (string, error)
+	// AuthorizeReady reports whether the Authorize leg has the credentials it
+	// needs. OPTIONAL: when nil the leg is standard OAuth2 and readiness is
+	// ClientID being set. A provider whose authorize leg is NOT OAuth sets this
+	// so the gate asks the provider instead of assuming — a GitHub App install
+	// URL is built from the app slug and has no client id at all, so without this
+	// its connect flow is refused for a credential it never uses.
+	AuthorizeReady func() bool
 	// Exchange trades the OAuth code for tokens + account metadata.
 	Exchange func(ctx context.Context, creds OAuthConfig, redirectURI, code string) (*ExchangeResult, error)
 	// Revoke best-effort invalidates a token at the provider on disconnect. nil
@@ -600,12 +607,12 @@ func connect(s *cloud.Service[state], c *zip.Ctx) error {
 	if p.Authorize == nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "%s: no connect method configured", p.ID)
 	}
-	// The OAuth leg needs Hanzo's registered app creds. A dual-path provider keeps
-	// Configured()==true for its always-available apikey path, so gate OAuth on its
-	// OWN creds here — an honest 503 that points the caller at the token path rather
-	// than a dead consent URL with an empty client_id.
-	if p.Creds().ClientID == "" {
-		return zip.Errorf(http.StatusServiceUnavailable, "%s OAuth is not configured on this deployment; connect with a scoped API token instead", p.ID)
+	// The authorize leg needs Hanzo's registered app creds. A dual-path provider
+	// keeps Configured()==true for its always-available apikey path, so gate on the
+	// authorize leg's OWN creds here — an honest 503 that points the caller at the
+	// token path rather than a dead consent URL with an empty client_id.
+	if !authorizeReady(p) {
+		return zip.Errorf(http.StatusServiceUnavailable, "%s is not configured for the install flow on this deployment; connect with a scoped API token instead", p.ID)
 	}
 
 	// Opportunistic GC of expired nonces (best-effort; never fails the request).
@@ -1127,6 +1134,17 @@ func tokenFor(s *cloud.Service[state], ctx context.Context, org, provider, name 
 // OrgForExternalID resolves a provider account id (Slack team_id / GitHub
 // installation_id) back to the org that connected it. Used by inbound provider
 // events (which carry the external id, not an org) to find the tenant.
+// authorizeReady reports whether a provider's authorize leg can actually build a
+// URL. Standard OAuth2 needs a client id; a provider that says otherwise via
+// AuthorizeReady is asked instead, so an install flow is never refused for a
+// credential its protocol does not have.
+func authorizeReady(p *Provider) bool {
+	if p.AuthorizeReady != nil {
+		return p.AuthorizeReady()
+	}
+	return p.Creds().ClientID != ""
+}
+
 func OrgForExternalID(provider, externalID string) (string, bool) {
 	if mounted == nil {
 		return "", false
