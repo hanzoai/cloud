@@ -257,7 +257,7 @@ func billingEnabled(m *metering.Client) bool { return m != nil && m.Enabled() }
 //
 // It used to be the table, and its last line was `return 0` for anything unlisted —
 // which made a new route free forever, silently, because free never errors. That
-// default is gone: an unpriced surface now fails apps.TestPriceDeclared before it can
+// default is gone: an unpriced surface now fails TestPriceDeclared before it can
 // ship. Undeclared still charges nothing HERE (Price.Cents), because a missing
 // declaration must break the build, never a customer's card.
 //
