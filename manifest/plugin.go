@@ -85,14 +85,13 @@ func (a App) Plugin() zip.Plugin {
 	if self, err := os.Executable(); err == nil {
 		dir = filepath.Dir(self)
 	}
-	// On-disk still wins, for the reason above: a binary shipped beside the host
-	// is what that host was built with. The release index is the rung BELOW it,
-	// so it changes nothing for an image that carries its plugins and is the
-	// whole answer for one that carries none.
+	// On-disk wins: it is what this host was built with. The index is the rung
+	// below, so an image carrying plugins is unchanged and one carrying none
+	// now works.
 	if p := a.pluginIn(dir); found(p.Path) {
 		return p
 	}
-	if p, ok := a.fromRelease(); ok {
+	if p, ok := a.remote(); ok {
 		return p
 	}
 	return a.pluginIn(dir)

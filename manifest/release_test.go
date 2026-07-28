@@ -37,9 +37,9 @@ func indexFor(name string) string {
 
 func TestFromRelease_ResolvesURLAndSumForThisPlatform(t *testing.T) {
 	reset()
-	t.Setenv(PluginsEnv, serveIndex(t, indexFor("dns"), nil))
+	t.Setenv(Plugins, serveIndex(t, indexFor("dns"), nil))
 
-	p, ok := App{Name: "dns"}.fromRelease()
+	p, ok := App{Name: "dns"}.remote()
 	if !ok {
 		t.Fatal("expected dns to resolve from the release index")
 	}
@@ -55,7 +55,7 @@ func TestFromRelease_ResolvesURLAndSumForThisPlatform(t *testing.T) {
 // resolves every app. dir is empty, so the on-disk rungs all miss.
 func TestPlugin_EmptyImageFallsThroughToRelease(t *testing.T) {
 	reset()
-	t.Setenv(PluginsEnv, serveIndex(t, indexFor("books"), nil))
+	t.Setenv(Plugins, serveIndex(t, indexFor("books"), nil))
 
 	p := App{Name: "books"}.Plugin()
 	if p.URL == "" {
@@ -68,9 +68,9 @@ func TestPlugin_EmptyImageFallsThroughToRelease(t *testing.T) {
 
 func TestFromRelease_EagerAppIsNotLazy(t *testing.T) {
 	reset()
-	t.Setenv(PluginsEnv, serveIndex(t, indexFor("o11y"), nil))
+	t.Setenv(Plugins, serveIndex(t, indexFor("o11y"), nil))
 
-	p, ok := App{Name: "o11y", Eager: true}.fromRelease()
+	p, ok := App{Name: "o11y", Eager: true}.remote()
 	if !ok || p.Lazy {
 		t.Fatalf("eager app must start with the host: ok=%v lazy=%v", ok, p.Lazy)
 	}
@@ -80,10 +80,10 @@ func TestFromRelease_EagerAppIsNotLazy(t *testing.T) {
 func TestLoadIndex_FetchedOncePerProcess(t *testing.T) {
 	reset()
 	var hits int64
-	t.Setenv(PluginsEnv, serveIndex(t, indexFor("dns"), &hits))
+	t.Setenv(Plugins, serveIndex(t, indexFor("dns"), &hits))
 
 	for i := 0; i < 25; i++ {
-		App{Name: "dns"}.fromRelease()
+		App{Name: "dns"}.remote()
 	}
 	if hits != 1 {
 		t.Fatalf("fetched the index %d times, want 1", hits)
@@ -93,9 +93,9 @@ func TestLoadIndex_FetchedOncePerProcess(t *testing.T) {
 func TestFromRelease_WrongPlatformIsNotAMatch(t *testing.T) {
 	reset()
 	body := `{"binaries":[{"name":"dns","os":"plan9","arch":"mips","url":"u","sha256":"s"}]}`
-	t.Setenv(PluginsEnv, serveIndex(t, body, nil))
+	t.Setenv(Plugins, serveIndex(t, body, nil))
 
-	if _, ok := (App{Name: "dns"}).fromRelease(); ok {
+	if _, ok := (App{Name: "dns"}).remote(); ok {
 		t.Fatal("resolved a plan9/mips artifact on this host")
 	}
 }
@@ -104,9 +104,9 @@ func TestFromRelease_EntryWithoutDigestIsDropped(t *testing.T) {
 	reset()
 	body := fmt.Sprintf(`{"binaries":[{"name":"dns","os":%q,"arch":%q,"url":"u","sha256":""}]}`,
 		runtime.GOOS, runtime.GOARCH)
-	t.Setenv(PluginsEnv, serveIndex(t, body, nil))
+	t.Setenv(Plugins, serveIndex(t, body, nil))
 
-	if _, ok := (App{Name: "dns"}).fromRelease(); ok {
+	if _, ok := (App{Name: "dns"}).remote(); ok {
 		t.Fatal("accepted an artifact with no digest — that is the ACE vector")
 	}
 }
@@ -115,17 +115,17 @@ func TestFromRelease_EntryWithoutDigestIsDropped(t *testing.T) {
 // beside the host.
 func TestFromRelease_NoIndexConfigured(t *testing.T) {
 	reset()
-	t.Setenv(PluginsEnv, "")
-	if _, ok := (App{Name: "dns"}).fromRelease(); ok {
+	t.Setenv(Plugins, "")
+	if _, ok := (App{Name: "dns"}).remote(); ok {
 		t.Fatal("resolved from an index that was never configured")
 	}
 }
 
 func TestFromRelease_UnreachableIndexIsNotFatal(t *testing.T) {
 	reset()
-	t.Setenv(PluginsEnv, "http://127.0.0.1:1/nope.json")
+	t.Setenv(Plugins, "http://127.0.0.1:1/nope.json")
 
-	if _, ok := (App{Name: "dns"}).fromRelease(); ok {
+	if _, ok := (App{Name: "dns"}).remote(); ok {
 		t.Fatal("resolved from an unreachable index")
 	}
 	// Plugin() must still answer, naming the path a developer expects.
@@ -138,7 +138,7 @@ func TestFromRelease_UnreachableIndexIsNotFatal(t *testing.T) {
 // silently fetching a different one would be a lie.
 func TestPlugin_ExplicitBinBeatsRelease(t *testing.T) {
 	reset()
-	t.Setenv(PluginsEnv, serveIndex(t, indexFor("dns"), nil))
+	t.Setenv(Plugins, serveIndex(t, indexFor("dns"), nil))
 	t.Setenv("CLOUD_DNS_BIN", "/opt/mine/dns")
 
 	if p := (App{Name: "dns"}).Plugin(); p.Path != "/opt/mine/dns" || p.URL != "" {
@@ -148,7 +148,7 @@ func TestPlugin_ExplicitBinBeatsRelease(t *testing.T) {
 
 func TestPlugin_AddrBeatsRelease(t *testing.T) {
 	reset()
-	t.Setenv(PluginsEnv, serveIndex(t, indexFor("dns"), nil))
+	t.Setenv(Plugins, serveIndex(t, indexFor("dns"), nil))
 	t.Setenv("CLOUD_DNS_ADDR", "10.0.0.9:9000")
 
 	if p := (App{Name: "dns"}).Plugin(); p.Addr != "10.0.0.9:9000" || p.URL != "" {
