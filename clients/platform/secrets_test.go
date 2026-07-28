@@ -420,7 +420,7 @@ func TestObserveSecretSync(t *testing.T) {
 func TestSecretEnvEndToEndDeploy(t *testing.T) {
 	app, s := mountSvcK8s(t, fakeK8s())
 	ctx := context.Background()
-	do(t, app, "POST", "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
+	seedProject(t, app, "maxpower", "web")
 	if code, body := do(t, app, "POST", "/v1/platform/projects/web/apps", "maxpower", map[string]any{
 		"name": "api", "source": "image", "image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1"},
 		"env": []map[string]any{{"key": "DB_PASSWORD", "value": "hunter2", "secret": true}, {"key": "PUBLIC", "value": "ok"}},
