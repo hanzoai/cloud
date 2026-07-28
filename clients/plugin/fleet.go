@@ -37,8 +37,23 @@ func liveMembers(deps cloud.Deps) func() []ha.Member {
 
 // peers returns the fleet in a deterministic order, so a staged rollout visits
 // hosts in the same sequence every time and a halted one is reproducible.
+//
+// This host is always in the set, even when membership has already dropped it —
+// a pod that is terminating leaves the live set while it is still answering, and
+// a host that answered a request while claiming not to be part of the fleet
+// would be both wrong and impossible to act on.
 func (o *ops) peers() []ha.Member {
 	m := append([]ha.Member(nil), o.members()...)
+	found := false
+	for _, x := range m {
+		if x.ID == o.self {
+			found = true
+			break
+		}
+	}
+	if !found && len(m) > 0 {
+		m = append(m, ha.Member{ID: o.self})
+	}
 	sort.Slice(m, func(i, j int) bool { return m[i].ID < m[j].ID })
 	return m
 }
