@@ -322,6 +322,10 @@ func TestCacheControlFor(t *testing.T) {
 		"app.js":                    "public, max-age=3600", // not fingerprinted
 		"data.json":                 "public, max-age=3600", // default class
 		"favicon.ico":               "public, max-age=3600",
+		// engine payloads: fingerprinted ones are immutable like any other asset
+		"Build/game-0881644a.data": "public, max-age=31536000, immutable",
+		"orb-dd8b3278.pck":         "public, max-age=31536000, immutable",
+		"Build/game.data":          "public, max-age=3600", // not fingerprinted
 	}
 	for key, want := range cases {
 		if got := CacheControlFor(key, ""); got != want {
