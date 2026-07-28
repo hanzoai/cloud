@@ -94,8 +94,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	g.Post("", serve)
 	g.Post("/", serve)
 
-	logger.Info("crawl surface mounted (native in-process fetch + extract; no external crawler)",
-		"archive", deps.VFS != nil)
+	// No "archive" field: it used to log deps.VFS != nil, which is ALWAYS true —
+	// deps.VFS is guaranteed non-nil by contract (R-7, so consumers never
+	// nil-deref) and is a fail-closed STUB when no object store is configured. So
+	// the field reported an archive whether or not one byte could ever be stored,
+	// and read as reassurance exactly when the corpus was off. Whether the store
+	// works is not knowable here without doing I/O on the boot path, which is its
+	// own hazard; a field that cannot be false should not be printed at all.
+	logger.Info("crawl surface mounted (native in-process fetch + extract; no external crawler)")
 	return nil
 }
 
