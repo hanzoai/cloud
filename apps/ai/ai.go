@@ -5,7 +5,7 @@
 // It cannot live in package cloud — github.com/hanzoai/ai imports
 // github.com/hanzoai/cloud, so that direction is an import cycle. It lived in
 // package apps for that reason, and the cost was that the composition root's ai
-// entry named an apps-local helper: cmd/gen-app-cmds can only emit a
+// entry named an apps-local helper: plugin/gen-app-cmds can only emit a
 // package-qualified expression, so ai got the fat stub (every subsystem linked)
 // and NO manifest row — which is why the light host 404'd /v1/chat/completions.
 // A sibling package that imports both the module and cloud is legal and is all

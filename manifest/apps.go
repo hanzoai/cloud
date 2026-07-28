@@ -5,16 +5,16 @@
 // takes the first prefix that matches. Three facts per app and no more — name,
 // the absolute paths it answers, and whether it must already be running when the
 // first request arrives — because that is the whole of what the light host needs
-// to know (cmd/host links this package and zip and NOTHING else). What an app
-// DOES lives in the app's own binary (cmd/<name>/main.go), which states its
+// to know (cmd/cloud links this package and zip and NOTHING else). What an app
+// DOES lives in the app's own binary (plugin/<name>/main.go), which states its
 // Mount/Shutdown/OwnsHealth/Price once, where they are used.
 //
 // This list was the composition root once removed (apps.Wire()); that root is
 // gone. Editing an app is now two coordinated edits with no generator between
-// them: a row HERE (the host's view) and cmd/<name>/main.go (the app's view).
-// cmd/gen-app-cmds reads THIS list to scaffold a new app's main and to VALIDATE
-// that the two never drift — every row has a cmd/<name> serving exactly it, and
-// no cmd/<name> app-binary is missing from this list. Order is deliberate: a
+// them: a row HERE (the host's view) and plugin/<name>/main.go (the app's view).
+// plugin/gen-app-cmds reads THIS list to scaffold a new app's main and to VALIDATE
+// that the two never drift — every row has a plugin/<name> serving exactly it, and
+// no plugin/<name> app-binary is missing from this list. Order is deliberate: a
 // shallower prefix registered earlier wins (account's /v1/iam/keys must precede
 // iam's /v1/iam), and manifest/order_test.go freezes the sequence so a reorder
 // is a decision, never an accident.
