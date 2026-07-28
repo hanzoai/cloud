@@ -214,34 +214,75 @@ func (c *iamClient) do(ctx context.Context, method, path string, q url.Values, b
 
 // ── the Cloud API key (per-user) ─────────────────────────────────────────────
 
-// userKey is the subset of an IAM user row the key surface reads: the access
-// key and the last time the key row changed (updatedTime).
+// iamScopePublish is IAM's storage value for a PUBLISHABLE key
+// (schema.KeyScopePublish). It is the one string the mint, the resolver and the
+// ingest door already agree on; cloud reads it to tell a key's type apart.
+const iamScopePublish = "publish"
+
+// userKey is the subset of an IAM key row the key surface reads: the publishable
+// identifier, the access class, and when the row last changed. NO confidential
+// half — IAM masks it (schema.Key.Mask), so there is nothing here to leak.
 type userKey struct {
+	Name        string `json:"name"`
 	AccessKey   string `json:"accessKey"`
+	Scope       string `json:"scope"`
+	User        string `json:"user"`
 	UpdatedTime string `json:"updatedTime"`
 }
 
-// getUserKey reads a user's CURRENT Cloud API key AUTHORITATIVELY from IAM (get-user).
-// The session claim can lag a freshly-minted key (it returns ”) — so GET /keys
-// must read IAM, not the claim (the "key never listed" bug identity.ts documents).
-// `id` is the `<owner>/<name>` composite IAM parses.
-func (c *iamClient) getUserKey(ctx context.Context, id string) (userKey, error) {
-	env, err := c.do(ctx, http.MethodGet, "/v1/iam/get-user", url.Values{"id": {id}}, nil)
+// userKeys lists the keys `user` holds in `owner`, AUTHORITATIVELY from IAM.
+//
+// It reads the KEY ROWS, which is where a minted key actually lives. Reading the
+// USER row instead was the "key never listed" bug in its second incarnation: the
+// mint moved to a key row (because that is the only thing the resolvers read) while
+// the read still looked at User.AccessKey, so GET reported "no key" immediately
+// after a successful POST — the mint and the read never met.
+//
+// Owner-scoped and then filtered to the target user, because a key is filed under
+// (owner, name) and the caller may only ever see their own.
+func (c *iamClient) userKeys(ctx context.Context, owner, user string) ([]userKey, error) {
+	if strings.TrimSpace(owner) == "" {
+		return nil, nil // an owner-less (first-run) user holds no keys yet
+	}
+	env, err := c.do(ctx, http.MethodGet, "/v1/iam/keys", url.Values{"owner": {owner}}, nil)
 	if err != nil {
-		return userKey{}, err
+		return nil, err
 	}
-	var u userKey
-	if err := json.Unmarshal(env.Data, &u); err != nil {
-		return userKey{}, fmt.Errorf("iam get-user: decode: %w", err)
+	var out struct {
+		Keys []userKey `json:"keys"`
 	}
-	return u, nil
+	if err := json.Unmarshal(env.Data, &out); err != nil {
+		return nil, fmt.Errorf("iam keys: decode: %w", err)
+	}
+	mine := make([]userKey, 0, len(out.Keys))
+	for _, k := range out.Keys {
+		if keyBelongsTo(k, owner, user) {
+			mine = append(mine, k)
+		}
+	}
+	return mine, nil
 }
 
-// mintUserKey (re)generates the user's Cloud API key and returns the new secret — shown
-// ONCE to the caller (POST /keys), never echoed again. IAM binds the key to `id`,
-// so a caller can only ever mint their OWN.
-func (c *iamClient) mintUserKey(ctx context.Context, id string) (string, error) {
-	env, err := c.do(ctx, http.MethodPost, "/v1/iam/mint-user-keys", url.Values{"id": {id}}, nil)
+// keyBelongsTo reports whether an IAM key row is the given user's. IAM files the
+// row's User as a bare username or as "<owner>/<name>"; both mean the same user
+// within the key's own owner (IAM refuses a cross-owner reference at write time),
+// so both are accepted and nothing else is.
+func keyBelongsTo(k userKey, owner, user string) bool {
+	if user == "" {
+		return false
+	}
+	return k.User == user || k.User == owner+"/"+user
+}
+
+// mintUserKey (re)generates the user's key of `typ` and returns it — shown ONCE to
+// the caller (POST /v1/keys), never echoed again. IAM binds the key to `id`, so a
+// caller can only ever mint their OWN.
+//
+// The type rides as a FIELD on the one mint. A secret key returns its confidential
+// sk- half; a publishable key returns its pk- (and IAM stores no secret for it at
+// all), which is the credential a browser bundle carries.
+func (c *iamClient) mintUserKey(ctx context.Context, id, typ string) (string, error) {
+	env, err := c.do(ctx, http.MethodPost, "/v1/iam/mint-user-keys", url.Values{"id": {id}, "type": {typ}}, nil)
 	if err != nil {
 		return "", err
 	}
@@ -257,10 +298,10 @@ func (c *iamClient) mintUserKey(ctx context.Context, id string) (string, error) 
 	return out.AccessKey, nil
 }
 
-// revokeUserKey clears the user's Cloud API key (immediate revoke; the gateway key
-// cache lapses within ~5m).
-func (c *iamClient) revokeUserKey(ctx context.Context, id string) error {
-	_, err := c.do(ctx, http.MethodPost, "/v1/iam/revoke-user-keys", url.Values{"id": {id}}, nil)
+// revokeUserKey clears the user's key of `typ` (immediate revoke; the gateway key
+// cache lapses within ~5m). Scoped by the same field the mint takes.
+func (c *iamClient) revokeUserKey(ctx context.Context, id, typ string) error {
+	_, err := c.do(ctx, http.MethodPost, "/v1/iam/revoke-user-keys", url.Values{"id": {id}, "type": {typ}}, nil)
 	return err
 }
 
