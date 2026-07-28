@@ -79,11 +79,12 @@ func (p *Peer) As(h Headers) *Peer {
 	}
 	cp := *p
 	cp.who = Ident{
-		Org:     strings.TrimSpace(h.Header("X-Org-Id")),
-		User:    strings.TrimSpace(h.Header("X-User-Id")),
-		Email:   strings.TrimSpace(h.Header("X-User-Email")),
-		Project: strings.TrimSpace(h.Header("X-Project-Id")),
-		Admin:   strings.TrimSpace(h.Header("X-User-IsAdmin")) == "true",
+		Org:      strings.TrimSpace(h.Header("X-Org-Id")),
+		User:     strings.TrimSpace(h.Header("X-User-Id")),
+		Email:    strings.TrimSpace(h.Header("X-User-Email")),
+		Project:  strings.TrimSpace(h.Header("X-Project-Id")),
+		Admin:    strings.TrimSpace(h.Header("X-User-IsAdmin")) == "true",
+		OrgAdmin: strings.TrimSpace(h.Header("X-User-IsOrgAdmin")) == "true",
 	}
 	return &cp
 }
