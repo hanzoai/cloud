@@ -795,9 +795,15 @@ func (s *Store) GetRelease(ctx context.Context, org, slug, id string) (Release, 
 }
 
 // ListReleases returns a site's releases, newest first — the rollback menu.
+//
+// The tiebreak is rowid DESC, i.e. INSERTION order, because created_at has
+// second granularity and a CI job can publish twice inside one second. It is the
+// same order PruneReleases applies, and that is the point: the menu a caller
+// sees must be exactly the set retention keeps, or a tie would show one release
+// and reclaim another.
 func (s *Store) ListReleases(ctx context.Context, org, slug string, limit int) ([]Release, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+releaseCols+` FROM releases WHERE org=? AND slug=? ORDER BY created_at DESC, id ASC LIMIT ?`,
+		`SELECT `+releaseCols+` FROM releases WHERE org=? AND slug=? ORDER BY created_at DESC, rowid DESC LIMIT ?`,
 		org, slug, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list releases: %w", err)
@@ -814,6 +820,70 @@ func (s *Store) ListReleases(ctx context.Context, org, slug string, limit int) (
 	return out, rows.Err()
 }
 
+// PruneReleases drops a site's release rows beyond the newest keep and returns
+// EXACTLY the rows it removed, so the caller frees exactly those bytes and no
+// others. Retention is per site; keep<=0 prunes nothing (a misconfigured depth
+// must not shred a site's history).
+//
+// The live release is protected TWICE, and the second guard is the one that
+// holds under concurrency:
+//
+//   - it is excluded from the candidate query (`id <> current_release`), so it
+//     never even counts against the keep budget — a rollback to an ancient
+//     release keeps that release alive however deep it has sunk;
+//   - every DELETE additionally requires the row NOT be the project's
+//     current_release AT DELETE TIME. So a rollback that activates a doomed
+//     release between the scan and the delete makes that delete match zero rows,
+//     and the row (with its bytes) survives. The two statements are the
+//     serialized SQLite writers of the same pointer, so there is no interleaving
+//     in which activation wins the pointer and prune still wins the row.
+//
+// Rows go FIRST and bytes after (the caller's half), which is exactly promote's
+// ordering run backwards: a row's existence keeps meaning "the prefix is
+// complete", so no reader can ever reach a half-reclaimed release. A crash
+// between the two leaks objects nothing points at — the same convergent failure
+// promote already accepts — never a live 404.
+func (s *Store) PruneReleases(ctx context.Context, org, slug string, keep int) ([]Release, error) {
+	if keep <= 0 {
+		return nil, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+releaseCols+` FROM releases
+		 WHERE org=? AND slug=?
+		   AND id <> COALESCE((SELECT current_release FROM projects WHERE org=? AND slug=?), '')
+		 ORDER BY created_at DESC, rowid DESC LIMIT -1 OFFSET ?`,
+		org, slug, org, slug, keep)
+	if err != nil {
+		return nil, fmt.Errorf("scan prunable releases: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var doomed []Release
+	for rows.Next() {
+		r, err := scanRelease(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan prunable release: %w", err)
+		}
+		doomed = append(doomed, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("scan prunable releases: %w", err)
+	}
+	var pruned []Release
+	for _, r := range doomed {
+		res, err := s.db.ExecContext(ctx,
+			`DELETE FROM releases WHERE org=? AND slug=? AND id=?
+			   AND NOT EXISTS (SELECT 1 FROM projects WHERE org=? AND slug=? AND current_release=?)`,
+			org, slug, r.ID, org, slug, r.ID)
+		if err != nil {
+			return pruned, fmt.Errorf("prune release: %w", err)
+		}
+		if n, _ := res.RowsAffected(); n == 1 {
+			pruned = append(pruned, r)
+		}
+	}
+	return pruned, nil
+}
+
 // ActivateRelease flips a site's serving pointer to a release. This is the whole
 // of activation, and it is ATOMIC in the strongest available sense: ONE statement
 // whose WHERE clause both scopes the project to the tenant AND requires a
@@ -822,8 +892,12 @@ func (s *Store) ListReleases(ctx context.Context, org, slug string, limit int) (
 // and two concurrent activations serialize into one winner (never a blend) —
 // SQLite runs them one at a time on the single write connection.
 //
-// A release row exists only after every object was copied (PutRelease), so
-// "pointer set" implies "content complete" by construction. n==0 means the
+// A release row exists only after every object was copied (PutRelease) and is
+// dropped before its bytes are reclaimed (PruneReleases), so "pointer set"
+// implies "content complete" by construction. Retention makes that a NECESSARY
+// but no longer SUFFICIENT check — bytes can also vanish out of band (an
+// operator purge, a bucket lifecycle rule, a prune that died mid-purge) — so
+// activate() stats the release's entry point before calling this. n==0 means the
 // project or the release does not exist FOR THIS TENANT; the caller renders the
 // same 404 for both, so a foreign id yields no signal. Re-activating the
 // already-active release matches a row and succeeds — activation is idempotent.
