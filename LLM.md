@@ -634,6 +634,42 @@ tri-state (`boolQuery`/`strconv.ParseBool` — set-true, set-false, unasked; `of
 rides the same helper) and `facet` counts both sides through the same loop as every
 other dimension. `Entry.Forkable` is NOT `omitempty`: false is an answer.
 
+**`origin` is what a row IS to you**, and it is the axis the two hanzo.app lanes
+are cut on. The corpus flattened 579 rows into one list in which a curated starter
+you fork FROM, a stranger's remix of one, somebody else's paid UI kit and
+`luxfi/node` rendered identically — the labelling complaint underneath was an
+information-architecture bug, because there was no field to ask the question with.
+Four values, `template | community | third-party | product` (`origin.go`), all
+DERIVED:
+
+- the source table (`defaultOrgs`) now says both the brand a person browses by AND
+  the lane, because both are facts about the org. `hanzo-templates` → starters,
+  the apps orgs and `hanzo-community` → what people built, everything else → our
+  own software. `hanzo-community` is listed before it has repos, so the auto-publish
+  lane is fed the hour that lands.
+- a live site is one of OUR starters' demos when the CURATED GALLERY says its slug
+  is, read FORWARD through the three slugs the fork flow derives (`<slug>`,
+  `<slug>-<variant>`, `<slug>-template`), so a new template files its own demo and
+  a community app cannot fall in by spelling. Recorded lineage outranks that (a
+  remix is a remix), and a declared `upstream` outranks everything.
+- `fromRepo` lets GitHub's own `fork` bit override the address: a starter we
+  vendored from somebody else is not a starter of ours.
+
+`origin` is deliberately NOT braided with `official`. Origin says which lane;
+`official` says whose work it is. One `official-example` value would make them
+unaskable separately, and *community apps that are NOT ours* is the whole point of
+a community lane. Both are faceted and both filter, plus `?template=<parent id>`
+for one lineage — a facet nobody can act on is a rail that lies.
+
+**Third-party is attributed or NOT LISTED.** A fork holds somebody else's code
+under one of our org headers. GitHub's org listing omits `parent`, so `credit`
+spends one extra request per fork (a few dozen an hour against a listing pass of
+about a dozen) and DROPS any fork it cannot name rather than showing it authorless
+— the safe direction for *whose is this* is silence, not a guess. `NOASSERTION` is
+GitHub failing to identify a licence, not a licence, so those rows carry the
+upstream and state no terms. Live: 437 repos, 40 third-party, every one naming its
+real parent.
+
 ## Starter kits (`clients/templates`, `/v1/templates`)
 
 One embedded PUBLIC catalog (read-only; a customer's own templates are the second
