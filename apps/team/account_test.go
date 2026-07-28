@@ -156,8 +156,8 @@ func TestAccountIDDerivation(t *testing.T) {
 	if got := accountID(sub); got != sub {
 		t.Fatalf("accountID(uuid) = %q, want the uuid verbatim", got)
 	}
-	want := uuid.NewSHA1(uuid.NameSpaceURL, []byte("iam:casdoor-alice")).String()
-	if got := accountID("casdoor-alice"); got != want {
+	want := uuid.NewSHA1(uuid.NameSpaceURL, []byte("iam:legacy-alice")).String()
+	if got := accountID("legacy-alice"); got != want {
 		t.Fatalf("accountID(non-uuid) = %q, want stable uuidv5 %q", got, want)
 	}
 	if accountID("") != "" || accountID("   ") != "" {
