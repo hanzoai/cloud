@@ -769,15 +769,8 @@ components:
               addr:
                 type: string
               error:
-                description: |-
-                  Err is set when a peer could not be reached. Its plugins are then
-                  unknown, which is NOT the same as none, so the list stays empty and the
-                  drift below refuses to conclude anything from it.
                 type: string
               host:
-                description: |-
-                  Host is the pod's stable id, and Addr where it was reached. Self is true
-                  for the host that answered the request.
                 type: string
               plugins:
                 items:
@@ -1133,10 +1126,8 @@ components:
     NameIn:
       properties:
         name:
-          description: Name is the app, from the path.
           type: string
         scope:
-          description: Scope "host" applies here only; default "fleet" applies everywhere.
           type: string
       type: object
     None:
@@ -1771,27 +1762,14 @@ components:
     ReloadIn:
       properties:
         name:
-          description: Name is the app, from the path. It must be one the manifest
-            declares.
           type: string
         scope:
-          description: |-
-            Scope "host" applies here only. Default "fleet" rolls it out one host at
-            a time, halting on the first host that fails to come up.
           type: string
         sum:
           type: string
         url:
-          description: |-
-            URL is the artifact directly, for an origin with no index. Sum is its hex
-            SHA-256 and is REQUIRED with it: zip refuses an unverified download, and
-            so does this.
           type: string
         version:
-          description: |-
-            Version is a release tag, resolved to a URL and digest through the
-            origin's binaries.json index — the same index CI publishes, so there is
-            no second table mapping versions to digests.
           type: string
       type: object
     RevenueOut:
@@ -7859,22 +7837,9 @@ paths:
       - admin
   /v1/admin/plugins:
     get:
-      description: |-
-        list reports what each host is actually running: every loaded plugin with its
-        version, pid, uptime, reload and restart counts, and its measured CPU, RSS,
-        thread and fd cost — read from the kernel, which is only answerable at all
-        because a plugin is a process.
-
-        Reading this from deployment config would answer what was INTENDED. Only the
-        process knows what is TRUE, and during a rolling upgrade the two disagree on
-        purpose.
       operationId: adminPlugins
       parameters:
-      - description: |-
-          Scope "host" answers for THIS host only. Default "fleet" fans out to every
-          live peer. A peer answers a host-scoped read, which is what stops the
-          fan-out recursing.
-        in: query
+      - in: query
         name: scope
         required: false
         schema:
@@ -7883,54 +7848,16 @@ paths:
         "200":
           content:
             application/json:
-              example:
-                data:
-                - host: cloud-0
-                  plugins:
-                  - name: billing
-                    prefix: /v1/billing
-                    reloads: 1
-                    restarts: 0
-                    running: true
-                    source: url
-                    version: 9f2c…
-                  self: true
-                drift:
-                - drifted: false
-                  name: billing
-                  running: 1
-                  versions:
-                  - 9f2c…
-                msg: ""
-                status: ok
               schema:
                 $ref: '#/components/schemas/ListOut'
           description: ok
-      summary: |-
-        list reports what each host is actually running: every loaded plugin with its
-        version, pid, uptime, reload and restart counts, and its measured CPU, RSS,
-        thread and fd cost — read from the kernel, which is only answerable at all
-        because a plugin is a process.
-
-        Reading this from deployment config would answer what was INTENDED.
       tags:
       - admin
   /v1/admin/plugins/{name}/disable:
     post:
-      description: |-
-        disable stops the plugin. Its routes STAY REGISTERED and answer 503 — not 404.
-
-        That is zip's choice and this keeps it. Removing the routes would mutate the
-        route table, and re-adding them on enable would grow it without bound across
-        repeated cycles, which is the invariant that makes reloads flat in memory. It
-        is also the better answer: 404 says "no such API" and a client may cache it
-        and stop retrying, while 503 says "this API exists and is down right now",
-        which is true and retryable. Which of the two 503s this is — deliberate stop
-        or crash — is what the status's disabled flag reports.
       operationId: adminDisablePlugin
       parameters:
-      - description: Name is the app, from the path.
-        in: path
+      - in: path
         name: name
         required: true
         schema:
@@ -7938,8 +7865,6 @@ paths:
       requestBody:
         content:
           application/json:
-            example:
-              name: billing
             schema:
               $ref: '#/components/schemas/NameIn'
         required: true
@@ -7947,28 +7872,16 @@ paths:
         "200":
           content:
             application/json:
-              example:
-                data:
-                - host: cloud-0
-                  ok: true
-                msg: billing disabled
-                status: ok
               schema:
                 $ref: '#/components/schemas/ActionOut'
           description: ok
-      summary: disable stops the plugin.
       tags:
       - admin
   /v1/admin/plugins/{name}/enable:
     post:
-      description: |-
-        enable brings a stopped or disabled plugin back on the artifact it already
-        has: the zero Plugin names no new artifact, so Reload reuses the loaded spec
-        and clears the disabled flag. Named for what an operator means by it.
       operationId: adminEnablePlugin
       parameters:
-      - description: Name is the app, from the path.
-        in: path
+      - in: path
         name: name
         required: true
         schema:
@@ -7976,8 +7889,6 @@ paths:
       requestBody:
         content:
           application/json:
-            example:
-              name: billing
             schema:
               $ref: '#/components/schemas/NameIn'
         required: true
@@ -7985,39 +7896,16 @@ paths:
         "200":
           content:
             application/json:
-              example:
-                data:
-                - host: cloud-0
-                  ok: true
-                msg: billing enabled
-                status: ok
               schema:
                 $ref: '#/components/schemas/ActionOut'
           description: ok
-      summary: |-
-        enable brings a stopped or disabled plugin back on the artifact it already
-        has: the zero Plugin names no new artifact, so Reload reuses the loaded spec
-        and clears the disabled flag.
       tags:
       - admin
   /v1/admin/plugins/{name}/reload:
     post:
-      description: |-
-        reload swaps a plugin for another build without dropping a request. The
-        replacement is started and proven to be LISTENING before any traffic moves to
-        it, so a bad build leaves the old one serving and returns an error rather
-        than a hole; the old process then drains before it is killed.
-
-        With a version or url+sum it pins; naming a digest this host has run before is
-        the rollback, and costs no network because the digest IS the cache key. With
-        neither it restarts what is already loaded.
-
-        Fleet scope applies it to one host at a time and STOPS at the first failure,
-        so a build that cannot come up reaches exactly one host.
       operationId: adminReloadPlugin
       parameters:
-      - description: Name is the app, from the path. It must be one the manifest declares.
-        in: path
+      - in: path
         name: name
         required: true
         schema:
@@ -8025,9 +7913,6 @@ paths:
       requestBody:
         content:
           application/json:
-            example:
-              name: billing
-              version: v1.2.3
             schema:
               $ref: '#/components/schemas/ReloadIn'
         required: true
@@ -8035,17 +7920,9 @@ paths:
         "200":
           content:
             application/json:
-              example:
-                data:
-                - host: cloud-0
-                  ok: true
-                  version: 9f2c…
-                msg: billing -> 9f2c…
-                status: ok
               schema:
                 $ref: '#/components/schemas/ActionOut'
           description: ok
-      summary: reload swaps a plugin for another build without dropping a request.
       tags:
       - admin
   /v1/admin/products:
@@ -16194,19 +16071,6 @@ paths:
       operationId: post_v1_kb_search
       tags:
       - kb
-  /v1/keys:
-    delete:
-      operationId: delete_v1_keys
-      tags:
-      - keys
-    get:
-      operationId: get_v1_keys
-      tags:
-      - keys
-    post:
-      operationId: post_v1_keys
-      tags:
-      - keys
   /v1/kms/auth/login:
     post:
       operationId: post_v1_kms_auth_login
@@ -17983,35 +17847,6 @@ paths:
       operationId: post_v1_notify_send_sms
       tags:
       - notify
-  /v1/o11y:
-    delete:
-      operationId: delete_v1_o11y
-      tags:
-      - o11y
-    get:
-      operationId: get_v1_o11y
-      tags:
-      - o11y
-    options:
-      operationId: options_v1_o11y
-      tags:
-      - o11y
-    patch:
-      operationId: patch_v1_o11y
-      tags:
-      - o11y
-    post:
-      operationId: post_v1_o11y
-      tags:
-      - o11y
-    put:
-      operationId: put_v1_o11y
-      tags:
-      - o11y
-    trace:
-      operationId: trace_v1_o11y
-      tags:
-      - o11y
   /v1/o11y/{wildcard1}:
     delete:
       operationId: delete_v1_o11y_by_wildcard1
@@ -18081,6 +17916,138 @@ paths:
         required: true
         schema:
           type: string
+      tags:
+      - o11y
+  /v1/o11y/annotation-queues:
+    get:
+      operationId: get_v1_o11y_annotation-queues
+      tags:
+      - o11y
+    post:
+      operationId: post_v1_o11y_annotation-queues
+      tags:
+      - o11y
+  /v1/o11y/annotation-queues/{id}:
+    delete:
+      operationId: delete_v1_o11y_annotation-queues_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      tags:
+      - o11y
+    get:
+      operationId: get_v1_o11y_annotation-queues_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      tags:
+      - o11y
+    patch:
+      operationId: patch_v1_o11y_annotation-queues_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      tags:
+      - o11y
+  /v1/o11y/annotation-queues/{id}/items:
+    get:
+      operationId: get_v1_o11y_annotation-queues_by_id_items
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      tags:
+      - o11y
+    post:
+      operationId: post_v1_o11y_annotation-queues_by_id_items
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      tags:
+      - o11y
+  /v1/o11y/annotation-queues/{id}/items/{itemId}:
+    patch:
+      operationId: patch_v1_o11y_annotation-queues_by_id_items_by_itemid
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: itemId
+        required: true
+        schema:
+          type: string
+      tags:
+      - o11y
+  /v1/o11y/api/v2/healthz:
+    get:
+      operationId: get_v1_o11y_api_v2_healthz
+      tags:
+      - o11y
+  /v1/o11y/api/v2/livez:
+    get:
+      operationId: get_v1_o11y_api_v2_livez
+      tags:
+      - o11y
+  /v1/o11y/api/v2/readyz:
+    get:
+      operationId: get_v1_o11y_api_v2_readyz
+      tags:
+      - o11y
+  /v1/o11y/logs:
+    get:
+      operationId: get_v1_o11y_logs
+      tags:
+      - o11y
+  /v1/o11y/metrics:
+    get:
+      operationId: get_v1_o11y_metrics
+      tags:
+      - o11y
+  /v1/o11y/query:
+    post:
+      operationId: post_v1_o11y_query
+      tags:
+      - o11y
+  /v1/o11y/query_range:
+    post:
+      operationId: post_v1_o11y_query_range
+      tags:
+      - o11y
+  /v1/o11y/sessions:
+    get:
+      operationId: get_v1_o11y_sessions
+      tags:
+      - o11y
+  /v1/o11y/status:
+    get:
+      operationId: get_v1_o11y_status
+      tags:
+      - o11y
+  /v1/o11y/vm/query:
+    get:
+      operationId: get_v1_o11y_vm_query
+      tags:
+      - o11y
+  /v1/o11y/vm/query_range:
+    get:
+      operationId: get_v1_o11y_vm_query_range
       tags:
       - o11y
   /v1/openapi.json:
@@ -19461,35 +19428,6 @@ paths:
           type: string
       tags:
       - security
-  /v1/sentry:
-    delete:
-      operationId: delete_v1_sentry
-      tags:
-      - sentry
-    get:
-      operationId: get_v1_sentry
-      tags:
-      - sentry
-    options:
-      operationId: options_v1_sentry
-      tags:
-      - sentry
-    patch:
-      operationId: patch_v1_sentry
-      tags:
-      - sentry
-    post:
-      operationId: post_v1_sentry
-      tags:
-      - sentry
-    put:
-      operationId: put_v1_sentry
-      tags:
-      - sentry
-    trace:
-      operationId: trace_v1_sentry
-      tags:
-      - sentry
   /v1/sentry/{wildcard1}:
     delete:
       operationId: delete_v1_sentry_by_wildcard1
@@ -21324,7 +21262,6 @@ tags:
 - name: integrations
 - name: k8s
 - name: kb
-- name: keys
 - name: kms
 - name: kv
 - name: legal
