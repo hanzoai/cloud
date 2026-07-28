@@ -11,7 +11,7 @@
 # the app (`cd apps/tasks && make openapi`), because everything below is
 # absolute and derived from the including Makefile's own location — never from
 # the caller's cwd. That is not a convenience: task #49 extracts apps into their
-# own repos, and an extracted apps/<app> + cmd/<app> + mk/ keeps these paths
+# own repos, and an extracted apps/<app> + plugin/<app> + mk/ keeps these paths
 # intact, so extraction is a move rather than a rewrite.
 #
 # APPS is a LIST and is never inferred from the directory name. Four packages
@@ -65,14 +65,14 @@ build: generate ## Build this app's binary into <root>/bin.
 	@mkdir -p $(BIN) $(TMPDIR)
 	@for a in $(APPS); do \
 	  echo ">> build $$a"; \
-	  CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o $(BIN)/$$a $(ROOT)/cmd/$$a || exit 1; \
+	  CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o $(BIN)/$$a $(ROOT)/plugin/$$a || exit 1; \
 	done
 
 test: ## Run this app's tests.
 	@$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -tags "$(TEST_TAGS)" $(APPDIR)/...
 
 vet: ## go vet this app and its entrypoint(s).
-	@CGO_ENABLED=$(CGO_ENABLED) $(GO) vet $(APPDIR)/... $(foreach a,$(APPS),$(ROOT)/cmd/$(a))
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) vet $(APPDIR)/... $(foreach a,$(APPS),$(ROOT)/plugin/$(a))
 
 # The app's OWN subset of the API document, from the app's OWN live router: the
 # binary mounts one subsystem and projects it through the same
@@ -86,18 +86,18 @@ vet: ## go vet this app and its entrypoint(s).
 # GIT_SSH_ADDR: mounting is not free of side effects — apps/git opens a real
 # SSH listener on a fixed :2222 — and a document is a projection of routes, not a
 # reason to contend for a port with a cloud already running on the box. The same
-# ephemeral-port convention cmd/cloud's spec harness uses.
+# ephemeral-port convention the shared openapi_dump spec harness uses.
 #
 # The binary is handed the PATH, never a redirect: a subsystem's dependencies
 # write to stdout at mount (hanzoai/commerce prints a sqlite-vec warning and GORM
 # debug lines), and `> file` splices those into the front of the document.
-openapi: build ## Emit this app's own subset of the API document into cmd/<app>/openapi.json.
+openapi: build ## Emit this app's own subset of the API document into plugin/<app>/openapi.json.
 	@for a in $(APPS); do \
 	  echo ">> openapi $$a"; \
-	  GIT_SSH_ADDR=127.0.0.1:0 $(BIN)/$$a openapi $(ROOT)/cmd/$$a/openapi.json || exit 1; \
+	  GIT_SSH_ADDR=127.0.0.1:0 $(BIN)/$$a openapi $(ROOT)/plugin/$$a/openapi.json || exit 1; \
 	done
 
-# Binaries only. cmd/<app>/openapi.json is a committed artifact, like the fleet's
+# Binaries only. plugin/<app>/openapi.json is a committed artifact, like the fleet's
 # openapi.yaml — `clean` removes what a build wrote, not what a build publishes.
 clean: ## Remove this app's built binary.
 	@rm -f $(foreach a,$(APPS),$(BIN)/$(a))

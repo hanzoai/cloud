@@ -200,7 +200,7 @@ func publishFor(t *testing.T, c *Client, dir string) {
 //
 // The stamp is what makes it that app — credz.LaunchSecret() is the same secret
 // this process handed its broker in publishFor, so this test binary is playing
-// the launcher exactly as cloud.PluginSpec and cmd/host do. Without it every
+// the launcher exactly as cloud.PluginSpec and cmd/cloud do. Without it every
 // child is refused, which is the correct failure and the reason this line is not
 // optional. The binary is still symlinked to <app> so a regression that started
 // reading argv again would be visible rather than harmless.

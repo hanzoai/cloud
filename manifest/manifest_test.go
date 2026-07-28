@@ -86,7 +86,7 @@ func TestPluginResolution(t *testing.T) {
 
 // pluginIn resolves an app to its ONE binary: the dedicated per-app binary beside
 // the host. There is no multi-call fallback — every subsystem ships as its own
-// cmd/<name>, so the path is always <dir>/<name> with empty args. Whether that
+// plugin/<name>, so the path is always <dir>/<name> with empty args. Whether that
 // file is actually present is Plugin()'s decision (found), not this one's; this
 // pins the PATH it names and the lazy flag it carries.
 func TestPluginResolvesToDedicatedBinary(t *testing.T) {

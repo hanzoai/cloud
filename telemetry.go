@@ -166,10 +166,10 @@ func TraceInprocEnabled() bool {
 // non-nil, so callers defer it unconditionally.
 //
 // Call it ONCE per process, from the composition root, BEFORE anything mounts.
-// Serve does exactly that — so the fused cmd/cloud and every `hanzo <svc>`
-// entrypoint, which share its body, install identically and before ai mounts and
-// reads the adopted-ready flag. It is exported because Serve is not the only
-// composition root: a plugin binary (cmd/o11y) is a host for its own requests and
+// Serve does exactly that — so every per-app plugin entrypoint, which shares its
+// body, installs identically and before ai mounts and reads the adopted-ready
+// flag. It is exported because Serve is not the only composition root: a plugin
+// binary (plugin/o11y) is a host for its own requests and
 // needs the same providers, and one bootstrap that every root calls is the only
 // way that stays true. No root writes its own.
 //

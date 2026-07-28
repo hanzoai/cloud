@@ -10,7 +10,7 @@ package cloud
 // carve downward — see openapi/weave.go for the other half.
 //
 // It lives on Serve because Serve is the single entry every app binary shares:
-// cmd/<app>/main.go is generated as one cloud.Serve call, so putting the mode
+// plugin/<app>/main.go is generated as one cloud.Serve call, so putting the mode
 // here gives every one of them the target at a cost of zero per-app code. A binary
 // that mounts its own app (cmd/o11y) calls WriteSpec directly.
 

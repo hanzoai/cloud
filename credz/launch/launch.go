@@ -38,10 +38,10 @@
 // a peer reading its neighbours.
 //
 // STDLIB ONLY, ON PURPOSE. Both spawn sites import this — the fused binary,
-// where the launcher IS the broker in-process, and cmd/host, which must stay
+// where the launcher IS the broker in-process, and cmd/cloud, which must stay
 // light. Importing credz itself from the host would drag cek → modernc/sqlite +
 // sqlcipher in behind it and push a ~395-package build past 415, and that build
-// being small is the entire reason cmd/host exists. A leaf that depends on
+// being small is the entire reason cmd/cloud exists. A leaf that depends on
 // nothing can be imported by anything, so the launch contract lives in one place
 // and both launchers spell it the same way.
 package launch
@@ -73,6 +73,18 @@ const SecretEnv = "CREDZ_LAUNCH_SECRET"
 // In the fused binary this is unused — there the launcher and the broker are the
 // same process, and the secret never leaves it.
 const Broker = "kms"
+
+// RootEnv carries the KMS master key (the base64 32-byte KEK). It is a
+// launcher↔broker fact, which is why it lives in this leaf and not only in
+// credz: a launcher that spawns children through zip — which builds each child's
+// environment as append(os.Environ(), Plugin.Env...) — would hand the root key
+// to EVERY child through os.Environ() and re-open the very hole credz closes
+// (any child resolves the Root posture and can open any store). So the light
+// host scrubs it: os.Unsetenv(RootEnv) on itself before it spawns anything, then
+// re-adds RootEnv=<key> to the broker child's Plugin.Env ALONE. The broker is
+// then the only child that is Root; every other child comes up with a scoped
+// token and no key, and must ask the broker. credz.RootEnv is this same name.
+const RootEnv = "CLOUD_KMS_MASTER_KEY_REF"
 
 // Secret mints a launcher's signing secret, once per launcher process. It is
 // never persisted and never written anywhere but the broker child's environment:
