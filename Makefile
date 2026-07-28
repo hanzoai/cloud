@@ -2,8 +2,6 @@
 # Targets are intentionally minimal; deploy artifacts (compose, helm) live in deploy/ and helm/.
 
 GO              ?= go
-BIN             ?= cloud
-PKG             ?= ./cmd/cloud
 
 # cloud is a STANDALONE Go module — a self-contained deploy unit (its own go.mod,
 # Dockerfile, binary). It is intentionally NOT a member of the parent
@@ -51,7 +49,7 @@ CGO_ENABLED     ?= 0
 # list cmd/host links and the multi-call binary serves.
 APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
 
-.PHONY: help native webui deploy-ui agentskills build host ship plugin generate openapi run smoke test test-cgo test-codec vet tidy docker docker-push clean monolith monolith-standalone e2e
+.PHONY: help native webui deploy-ui agentskills build host ship plugin generate openapi run smoke test test-cgo test-codec vet tidy docker docker-push clean e2e
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -86,21 +84,19 @@ agentskills: ## Regenerate the FULL agent-skills catalog into clients/agentskill
 	@echo ">> embedded FULL agent-skills catalog ($$(jq -r .skill_count clients/agentskills/catalog/hanzo/index.json) skills/brand)"
 
 # THE DEFAULT BUILD IS THE HOST, and that is the whole point of the plugin model:
-# nothing compiles together. `build` used to link all 103 subsystems into one
-# 3108-package binary, so changing one line in one app relinked every other app
-# with it. Measured on this tree with a fully warm cache, that relink is 9.5s and
-# 3.8GiB of peak RSS — from cold it is minutes — for a change that touched one
-# app. It is still available as `monolith` (last target in this file), which says
-# why it survives. It is no longer what you get by typing `make build`.
+# nothing compiles together. The fused binary linked all 112 subsystems into one
+# ~3040-package graph, so changing one line in one app relinked every other app
+# with it — 9.5s and 3.8GiB of peak RSS warm, minutes cold, for a one-app change.
+# That binary is GONE: there is no target that links the fleet, by design.
 #
-# The loop this replaces it with is two commands, and neither grows as the fleet
-# does. Measured here:
+# The loop that replaces it is two commands, and neither grows as the fleet does.
+# Measured here:
 #
-#   make build              # the router — 316 packages, 0.6s
+#   make build              # the router — ~395 packages, 0.6s
 #   make plugin APP=wallets # the ONE app you edited — 1.3s, recompile + relink
 #
-# then restart the host. `plugin` declares no prerequisites, so the second
-# command never drags the first — or the monolith — along behind it.
+# then restart the host. `plugin` declares no prerequisites, so the second command
+# never drags the first along behind it.
 build: host ## FAST PATH (default): build the light host into ./bin/host. Then `make plugin APP=<x>` for the app you are editing.
 
 # THE LIGHT HOST links zip and the generated manifest and stops, because it knows
@@ -112,13 +108,15 @@ host: ## Build the light host into ./bin/host (links zip + the manifest, none of
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$@ ./cmd/$@
 	@echo ">> bin/host — $$(CGO_ENABLED=$(CGO_ENABLED) $(GO) list -deps ./cmd/host | wc -l) packages, $$(du -h bin/host | cut -f1)"
 
-# THE RELEASE LAYOUT. A dedicated plugin is ~40MB of which ~35MB is the
-# core every other plugin also links, so 108 of them measure 4.41GB of duplicated
-# code (already stripped — -s -w is the default LDFLAGS, there is no symbol win
-# left in it). The unified binary is that core ONCE, 196MB, and serves any app
-# via `cloud --enable=<name>`. Same contract, same child, 23x less to ship.
-ship: host monolith ## Build the RELEASE layout into ./bin: the host + the one multi-call binary that serves all $(words $(APPS)) apps.
-	@echo ">> ship: host $$(du -h bin/host | cut -f1) + cloud $$(du -h bin/cloud | cut -f1) = $$(du -ch bin/host bin/cloud | tail -1 | cut -f1) for $(words $(APPS)) apps"
+# THE RELEASE LAYOUT: the light host plus one dedicated binary per app, all in
+# ./bin. The host loads each app as a plugin (manifest.App.Plugin resolves a file
+# beside it), so shipping is one directory — host + its plugins — with no fused
+# binary at all. Each per-app link is its OWN graph (the one subsystem, not the
+# fleet), so this is $(words $(APPS)) independent lean builds and not the mega
+# link that used to dominate a release. Slow by count, never by any single link.
+ship: host ## Build the release layout into ./bin: the light host + one binary per app.
+	@for a in $(APPS); do $(MAKE) --no-print-directory plugin APP=$$a; done
+	@echo ">> ship: host + $(words $(APPS)) per-app plugins in ./bin ($$(du -sh bin | cut -f1))"
 
 plugin: ## Build ONE app into ./bin: make plugin APP=wallets.
 	@test -n "$(APP)" || { echo "usage: make plugin APP=<name>"; echo "apps: $(APPS)"; exit 1; }
@@ -126,20 +124,20 @@ plugin: ## Build ONE app into ./bin: make plugin APP=wallets.
 	@mkdir -p bin
 	GOFLAGS=-p=2 CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$(APP) ./cmd/$(APP)
 
-# apps.Wire() is the single source of truth for the subsystem set. This derives
-# BOTH artifacts from it in one parse — the per-app standalone mains and the
-# host's manifest — so a subsystem added there cannot be missing from either.
-# Idempotent: a no-op run leaves the tree clean, which is what lets CI diff it.
-generate: ## Regenerate cmd/<app>/main.go + manifest/apps.go from apps.Wire().
+# manifest/apps.go is the hand-authored source of truth for the subsystem set.
+# This scaffolds a cmd/<app>/main.go for any manifest app that lacks one and
+# validates the two are in bijection (every app has a command, every command is
+# an app). Idempotent: a no-op run leaves the tree clean, which is what lets CI
+# diff it. It does NOT rewrite existing mains — those are source.
+generate: ## Scaffold missing cmd/<app>/main.go and validate the manifest.Apps bijection.
 	$(GO) run ./cmd/gen-app-cmds
 
-# NOTE: cloud builds ONLY the `cloud` binary — the stateless unified API. The Go
-# `hanzo` CLI (cmd/hanzo + cli/) is RETIRED: the shipped `hanzo` is the Rust CLI
-# (~/work/hanzo/cli, `curl hanzo.sh`), which talks to this API over HTTP via its
-# OpenAPI-generated command surface. The `code` wrapper (incl. the zen-tier 1M
-# mechanism) now lives in the Rust CLI. cmd/hanzo + cli/ remain only as the
-# reference for the still-to-port client-side tools (GPU fleet worker `link`,
-# `runner`, `engine`, `security`) and are no longer built here.
+# NOTE: the shipped API is the light host plus one binary per app (there is no
+# fused `cloud` binary anymore). The Go `hanzo` CLI (cmd/hanzo) is DELETED; the
+# shipped `hanzo` is the Rust CLI (~/work/hanzo/cli, `curl hanzo.sh`), which talks
+# to this API over HTTP via its OpenAPI-generated command surface. cli/ remains
+# only as the reference for the still-to-port client-side tools and is not built
+# here.
 
 # Builds the host plus EXACTLY the plugins it is told to mount — not all 106.
 # The host resolves a plugin as a file beside itself (manifest.App.Plugin), so a
@@ -151,8 +149,8 @@ run: host ## Run the host with iam,base,kms,gateway,o11y (matches README quickst
 	@for a in $$(echo $(RUN_ENABLE) | tr ',' ' '); do $(MAKE) --no-print-directory plugin APP=$$a; done
 	./bin/host --enable=$(RUN_ENABLE)
 
-smoke: ## Build and run cmd/cloud-smoke (mount-time integration check).
-	$(GO) run ./cmd/cloud-smoke
+smoke: ## Build and run cmd/smoke (mount-time integration check).
+	$(GO) run ./cmd/smoke
 
 # The ONE end-to-end target: builds this repo's binary, boots it on isolated ports
 # with a fresh data dir, seeds identity through the same operator upsert production
@@ -200,28 +198,27 @@ test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ship
 	@set -e; for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' clients cmd . 2>/dev/null | xargs -n1 dirname | sort -u); do 	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check) || { echo "$$d/zipdoc_gen.go is stale — run: go generate -run zipdoc ./$$d/..."; exit 1; }; 	done
 	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -tags "$(TEST_TAGS)" ./...
 
-# THE spec, in one command. Three steps, in the only order they work in:
+# THE spec, in three steps, in the only order they work in:
 #
 #   1. zipdoc lifts the doc comments off every typed handler into zipdoc_gen.go.
 #      Go drops comments at compile time, so this build-time pass is the ONLY way
 #      prose and examples reach the document. `-run zipdoc` picks the directives
 #      out of ./... by name, so a typed op added anywhere is covered and no
 #      unrelated generator fires.
-#   2. the golden test mounts apps.Wire() and folds the two readings of that one
-#      router — the live route table (every operation) over zip's typed-op
-#      registry (schemas, parameters, responses, prose) — into one document.
-#   3. it writes both sinks from that single value: openapi.yaml here, and the
-#      drop hanzoai/openapi aggregates, audits and generates SDKs from.
+#   2. each app describes ITSELF: `<app> openapi` mounts that one subsystem and
+#      projects its own router into cmd/<app>/openapi.json (mk/fleet.mk — one lean
+#      binary per app, no fused build and no mega link).
+#   3. the weave composes those subsets into openapi.yaml (openapi/weave.go),
+#      refusing when two apps claim one path or one schema name. There is no
+#      monolith left to read: the woven document IS the published spec.
 #
-# openapi.yaml is a golden file: written with -update, VERIFIED by the same test
-# with no flag, which `make test` (and therefore CI) already runs. That is the
-# whole drift guard — change a route without regenerating and the build goes red
-# before a stale spec reaches an SDK. OPENAPI_DIR is optional; without a checkout
-# there the golden is still regenerated and guarded.
-openapi: ## Regenerate the spec from the live router + typed registry, into openapi.yaml and $(OPENAPI_DIR)/generated.
+# openapi.yaml is a golden file: written here, VERIFIED by the same weave with no
+# flag, which `make test` (and therefore CI) already runs. Change a route without
+# regenerating and the weave gate goes red before a stale spec reaches an SDK.
+openapi: ## Regenerate every app subset, then weave them into openapi.yaml.
 	$(GO) generate -run zipdoc ./...
-	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -tags "$(TEST_TAGS)" -count=1 -run TestOpenAPIYAML ./cmd/cloud \
-	  -update $(if $(wildcard $(OPENAPI_DIR)/capabilities.yaml),-publish="$(abspath $(OPENAPI_DIR))")
+	$(MAKE) -f mk/fleet.mk openapi-apps
+	$(MAKE) -f mk/fleet.mk openapi-weave OUT=openapi.yaml
 	@echo ">> openapi.yaml — $$(grep -c '^  /' openapi.yaml) paths"
 
 test-cgo: ## Prove the cgo build works too — forces the fork's pure-Go backend via -tags sqlite_purego so the embedded modernc importers don't double-register "sqlite".
@@ -268,18 +265,3 @@ clean: ## Remove built artifacts.
 
 native: ## Build the native flags evaluator staticlib (required for CGO=1 builds/tests).
 	cargo build --release --manifest-path native/flags/Cargo.toml
-
-# ---------------------------------------------------------------------------
-# The ONE binary. Running it directly serves every app in this process; the host
-# running it as a child with --enable=<app> serves one. Same bits, same Serve,
-# same middleware — "monolith" and "plugin" are not two artifacts to choose
-# between, they are one artifact under two invocations, which is why there is
-# nothing here to keep in sync.
-#
-# It is also what `ship` publishes and what manifest.App resolves to, on disk or
-# over the network, when no dedicated binary sits beside the host.
-monolith: ## Link the one multi-call binary into ./bin/cloud (3027 packages, 196MB). `ship` builds this plus the host.
-	@mkdir -p bin
-	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$(BIN) $(PKG)
-
-monolith-standalone: webui monolith ## The 1-binary console — console build:embed → webui/dist → monolith.
