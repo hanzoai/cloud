@@ -696,11 +696,8 @@ func aiM2MTokenURL(cfg *Config) string {
 	if override := strings.TrimSpace(os.Getenv("CLOUD_AI_IAM_TOKEN_URL")); override != "" {
 		return override
 	}
-	if base := strings.TrimRight(strings.TrimSpace(os.Getenv("IAM_URL")), "/"); base != "" {
+	if base := IAMBaseURL(cfg.IAMIssuer); base != "" {
 		return base + "/v1/iam/oauth/token"
-	}
-	if iss := strings.TrimRight(strings.TrimSpace(cfg.IAMIssuer), "/"); iss != "" {
-		return iss + "/v1/iam/oauth/token"
 	}
 	return ""
 }
