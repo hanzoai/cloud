@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // mountApp mounts the projects surface on a fresh in-memory app with a temp
