@@ -67,14 +67,17 @@ test:
   - name: host-is-light
     # The light host's ONE property is that it links no subsystem: it knows where
     # each app lives and what path it answers, never what the app does. That is
-    # what keeps it at ~317 packages against cmd/cloud's 3105, and it is a
+    # what keeps it at 316 packages against cmd/cloud's 3108, and it is a
     # property of the IMPORT GRAPH, so it is checked with the import graph rather
     # than with a size threshold nobody can interpret. One stray import of a
     # clients/* package (or of apps) drags the whole graph back in, and the only
     # symptom would be a slow build — this turns that into a failed one.
     run: |
       set -e
-      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      # CGO_ENABLED=0 to match `make host`: the cgo graph carries one extra
+      # package, so leaving it unset makes the number CI prints disagree with the
+      # number a developer measures, for no reason anyone can see.
+      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off CGO_ENABLED=0
       leak=$(go list -deps ./cmd/host | grep -E '^github.com/hanzoai/cloud/(apps|clients)' || true)
       if [ -n "$leak" ]; then
         echo "::error::cmd/host links subsystem code, which defeats the point of the light host: $leak"
