@@ -33,6 +33,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/types"
 )
 
 // Warehouse + tables (the ONE analytics warehouse per unified-analytics.md §1).
@@ -152,7 +154,7 @@ type Overview struct {
 	Range    string           `json:"range"`
 	Start    string           `json:"start"`
 	End      string           `json:"end"`
-	Interval string           `json:"interval"`
+	Interval types.Interval   `json:"interval"`
 	Scope    Scope            `json:"scope"`
 	LLM      LLMOverview      `json:"llm"`
 	Web      WebOverview      `json:"web"`
@@ -167,13 +169,13 @@ type SeriesPoint struct {
 }
 
 type Timeseries struct {
-	Range    string        `json:"range"`
-	Start    string        `json:"start"`
-	End      string        `json:"end"`
-	Interval string        `json:"interval"`
-	Scope    Scope         `json:"scope"`
-	Series   []SeriesPoint `json:"series"`
-	Source   string        `json:"source"`
+	Range    string         `json:"range"`
+	Start    string         `json:"start"`
+	End      string         `json:"end"`
+	Interval types.Interval `json:"interval"`
+	Scope    Scope          `json:"scope"`
+	Series   []SeriesPoint  `json:"series"`
+	Source   string         `json:"source"`
 }
 
 type ModelRow struct {
@@ -299,8 +301,8 @@ func buildCommerceOverview(row map[string]any, ok bool) CommerceOverview {
 // series so the client charts a continuous line. Bucket alignment matches
 // toStartOf{Hour,Day}(…, 'UTC'): Go's Truncate over the step lands on the same
 // UTC boundaries. Pure (mirrors ai/object buildCloudUsageSeries).
-func buildSeries(start, end time.Time, interval string, rows []map[string]any) []SeriesPoint {
-	step := stepOf(interval)
+func buildSeries(start, end time.Time, interval types.Interval, rows []map[string]any) []SeriesPoint {
+	step := interval.Step()
 
 	type agg struct{ requests, tokens, spend int64 }
 	idx := make(map[int64]agg, len(rows))
@@ -324,13 +326,6 @@ func buildSeries(start, end time.Time, interval string, rows []map[string]any) [
 		})
 	}
 	return out
-}
-
-func stepOf(interval string) time.Duration {
-	if strings.EqualFold(interval, "day") {
-		return 24 * time.Hour
-	}
-	return time.Hour
 }
 
 // buildTopModels assembles the top-models table, computing each model's share of
