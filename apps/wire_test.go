@@ -66,7 +66,7 @@ var frozen = []struct {
 	{"deploy", true, false, false},          // after paas (release seam), before functions
 	{"functions", false, false, false},      // was order 128
 	{"tracker", false, false, false},        // was order 129
-	{"templates", false, false, false},      // was order 129
+	{"templates", false, true, false},       // was order 129; per-org private templates added a store → Shutdown
 	{"blueprint", true, false, false},       // new: OSS-template compute-cost basis /v1/blueprint (after templates); owns health, embedded content → no Shutdown
 	{"framework", false, true, false},       // was order 129
 	{"knowledge", false, false, false},      // was order 130
@@ -110,6 +110,7 @@ var frozen = []struct {
 	{"websearch", false, false, false},      // was order 141
 	{"crawl", false, false, false},          // new: /v1/crawl, in-process fetch+extract (also backs websearch's /scrape)
 	{"index", true, true, false},            // new: in-binary full-text index (Meilisearch dialect), after websearch
+	{"catalog", false, false, false},        // new: cross-org discovery lens /v1/catalog (after index); owns no store → no Shutdown. Golden was not refrozen when it landed — refrozen here.
 	{"world", false, true, false},           // was order 142
 	{"bot", true, true, false},              // new: the node control plane (/v1/bot/{connect,nodes,peer}); before runtime so its routes win over that /v1/bot/* relay. OwnsHealth declines /v1/bot/health, which the relay already answers for real.
 	{"runtime", false, false, false},        // was order 143; was "bot" until the transport was named for what it is
