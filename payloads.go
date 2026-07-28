@@ -1,0 +1,132 @@
+package cloud
+
+import (
+	"bytes"
+	"fmt"
+
+	zap "github.com/zap-proto/go"
+)
+
+// payloads.go — the wire contracts of the internal plane's structured methods,
+// until zapc generates typed codecs per subsystem (the future deps.go already
+// names). One file, imported by BOTH ends of every method it describes, so the
+// two halves of a payload cannot drift. Everything here is ZAP messages built
+// in wire layout — scalars, text, raw bytes — and nothing is JSON.
+//
+// A payload with repeated records carries them as inner frames: the same
+// 4-byte framing the transport itself uses, applied inside the payload. That
+// is the ONE repetition rule until zapc emits real nested messages.
+
+// ---- git.files: (repo, ref, glob) -> (rev, files) ----
+//
+// The delivery plane's manifest inventory. File bytes travel AS BYTES: the
+// base64 detour in the HTTP shape existed only because JSON cannot carry
+// binary, and going native deletes that layer rather than porting it.
+
+const (
+	fqRepoOff = 0
+	fqRefOff  = 8
+	fqGlobOff = 16
+	fqFixed   = 24
+)
+
+// PutFilesReq packs a git.files request.
+func PutFilesReq(repo, ref, glob string) []byte {
+	b := zap.NewBuilder(len(repo) + len(ref) + len(glob) + fqFixed + 64)
+	ob := b.StartObject(fqFixed)
+	ob.SetText(fqRepoOff, repo)
+	ob.SetText(fqRefOff, ref)
+	ob.SetText(fqGlobOff, glob)
+	ob.FinishAsRoot()
+	return b.Finish()
+}
+
+// FilesReq unpacks one.
+func FilesReq(payload []byte) (repo, ref, glob string, err error) {
+	m, err := zap.Parse(payload)
+	if err != nil {
+		return "", "", "", fmt.Errorf("files req: %w", err)
+	}
+	r := m.Root()
+	return r.Text(fqRepoOff), r.Text(fqRefOff), r.Text(fqGlobOff), nil
+}
+
+// File is one file as git.files reports it. Truncated marks a file listed but
+// larger than the read limit: its Data is absent, and a consumer assembling a
+// COMPLETE set must refuse the whole read rather than proceed without it.
+type File struct {
+	Path      string
+	Data      []byte
+	Truncated bool
+}
+
+const (
+	fhRevOff   = 0
+	fhCountOff = 8
+	fhFixed    = 12
+)
+
+const (
+	fPathOff  = 0
+	fDataOff  = 8
+	fTruncOff = 16
+	fFixed    = 17
+)
+
+// PutFiles packs a git.files reply: a header frame (rev + count), then one
+// frame per file.
+func PutFiles(rev string, files []File) []byte {
+	var out bytes.Buffer
+	h := zap.NewBuilder(len(rev) + fhFixed + 64)
+	hb := h.StartObject(fhFixed)
+	hb.SetText(fhRevOff, rev)
+	hb.SetUint32(fhCountOff, uint32(len(files)))
+	hb.FinishAsRoot()
+	_ = writeFrame(&out, h.Finish())
+	for _, f := range files {
+		b := zap.NewBuilder(len(f.Path) + len(f.Data) + fFixed + 64)
+		fb := b.StartObject(fFixed)
+		fb.SetText(fPathOff, f.Path)
+		fb.SetBytes(fDataOff, f.Data)
+		fb.SetBool(fTruncOff, f.Truncated)
+		fb.FinishAsRoot()
+		_ = writeFrame(&out, b.Finish())
+	}
+	return out.Bytes()
+}
+
+// Files unpacks one. The count is the header's promise and the frames are the
+// delivery; a short payload is an error, never a shorter list — a partial
+// inventory silently returned is how a pruning consumer sweeps a fleet.
+func Files(payload []byte) (rev string, files []File, err error) {
+	r := bytes.NewReader(payload)
+	hb, err := readFrame(r)
+	if err != nil {
+		return "", nil, fmt.Errorf("files: header: %w", err)
+	}
+	hm, err := zap.Parse(hb)
+	if err != nil {
+		return "", nil, fmt.Errorf("files: header: %w", err)
+	}
+	hr := hm.Root()
+	rev = hr.Text(fhRevOff)
+	n := int(hr.Uint32(fhCountOff))
+	files = make([]File, 0, n)
+	for i := 0; i < n; i++ {
+		fb, err := readFrame(r)
+		if err != nil {
+			return "", nil, fmt.Errorf("files: %d of %d: %w", i+1, n, err)
+		}
+		fm, err := zap.Parse(fb)
+		if err != nil {
+			return "", nil, fmt.Errorf("files: %d of %d: %w", i+1, n, err)
+		}
+		fr := fm.Root()
+		files = append(files, File{
+			Path:      fr.Text(fPathOff),
+			Data:      fr.Bytes(fDataOff),
+			Truncated: fr.Bool(fTruncOff),
+		})
+	}
+	return rev, files, nil
+}
