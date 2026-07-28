@@ -19,6 +19,7 @@ import (
 func main() {
 	if err := cloud.Serve([]cloud.MountSpec{{
 		Name:     "kafka",
+		Price:    cloud.Free,
 		Mount:    kafka.Mount,
 		Shutdown: kafka.Shutdown,
 	}}, []string{"kafka"}); err != nil {

@@ -29,25 +29,23 @@ import (
 // rejects an empty list by name, and restating that would put the same rule in two
 // places for the usual price.
 //
-// App is set because zip.Load registers under the prefixes it was given. Handing
-// it a scoped Router would nest them under the subsystem name and the routes would
-// answer somewhere nobody is asking.
-//
-// Lazy is the caller's call, deliberately, and is NOT defaulted on here. It
-// defers starting the child until a request actually reaches one of its
-// prefixes, which is what makes a 69-service binary cheap to run — but it is
-// only correct for a subsystem whose work is request-driven. An app that owns a
-// listener or a background loop (o11y's OTLP collector is the standing example)
-// must start with the host or it silently ingests nothing, and the failure looks
-// like an empty dashboard rather than an error.
-func PluginSpec(name string, p zip.Plugin, prefixes ...string) MountSpec {
+// App is set because zip.Load registers under the prefixes it was given.
+// Handing it a scoped Router would nest them under the subsystem name and the
+// routes would answer somewhere nobody is asking.
+// price is a positional argument for the same reason App is set below: a plugin
+// serves its prefixes from another process, and NOTHING downstream of this spec can
+// see what happens in there — so what the surface costs has to be stated by whoever
+// decides to mount it, exactly as it is for a linked-in subsystem. Variadic prefixes
+// force it ahead of them; that is the only reason it sits where it does.
+func PluginSpec(name string, price Price, p zip.Plugin, prefixes ...string) MountSpec {
 	if p.Name == "" {
 		p.Name = name
 	}
 	return MountSpec{
-		Name: name,
+		Name:  name,
+		Price: price,
 		// Stated once, and it reaches both places that care. zip routes on it, and
-		// indexSubsystems reads it for the boot inventory (/v1/admin/subsystems) and
+		// Declare reads it for the boot inventory (/v1/admin/subsystems) and
 		// the per-request subsystem attribution tracing hangs off. Leaving it empty
 		// falls back to the /v1/<name> convention, which for a plugin owning a second
 		// subtree means that subtree's traffic is attributed to NOBODY and the admin
