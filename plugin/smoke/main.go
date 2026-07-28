@@ -25,8 +25,8 @@
 //
 // USAGE
 //
-//	SMOKE_BASE_URL=http://127.0.0.1:8000 SMOKE_TOKEN=<bearer> go run ./cmd/smoke
-//	go run ./cmd/smoke -base https://api.hanzo.ai -token "$T" -strict
+//	SMOKE_BASE_URL=http://127.0.0.1:8000 SMOKE_TOKEN=<bearer> go run ./plugin/smoke
+//	go run ./plugin/smoke -base https://api.hanzo.ai -token "$T" -strict
 //
 // Env: SMOKE_BASE_URL, SMOKE_TOKEN, SMOKE_STRICT=1, SMOKE_TIMEOUT (seconds).
 // Flags (-base/-token/-strict/-timeout) override env. Exit code is non-zero iff any
