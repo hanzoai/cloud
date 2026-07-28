@@ -141,6 +141,7 @@ func corpus(ctx context.Context) ([]Entry, map[string][]Entry, error) {
 // of the corpus's two sources, and a package var for the same reason liveSites
 // is one: the assembly is testable without a live GitHub.
 func orgRepos(ctx context.Context) ([]Entry, error) {
+	at := map[string]int{}
 	var out []Entry
 	var ferr error
 	for gh, brand := range sourceOrgs() {
@@ -153,10 +154,31 @@ func orgRepos(ctx context.Context) ([]Entry, error) {
 			if r.Archived || r.Private {
 				continue // dead or not ours to show — a corpus decision, not a forkable one
 			}
-			out = append(out, fromRepo(r, brand))
+			e := fromRepo(r, brand)
+			i, seen := at[e.ID]
+			if !seen {
+				at[e.ID] = len(out)
+				out = append(out, e)
+				continue
+			}
+			if canonical(e, out[i]) {
+				out[i] = e
+			}
 		}
 	}
 	return out, ferr
+}
+
+// canonical breaks a name collision between two orgs claiming one catalog id —
+// hanzoai/ui and hanzo-apps/ui are both "hanzo/ui". sourceOrgs is a map, so
+// without this the winner is Go's iteration order, and hanzo/ui would flip its
+// own forkable answer from sync to sync. Ours beats a vendored fork; between
+// two of ours, the one people actually use.
+func canonical(a, b Entry) bool {
+	if a.Forkable != b.Forkable {
+		return a.Forkable
+	}
+	return a.Stars > b.Stars
 }
 
 // fromSite maps one live project to a catalog row. Repo and Template are READ
