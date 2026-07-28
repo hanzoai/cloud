@@ -76,7 +76,11 @@ func validKind(k string) bool {
 // ---- HTTP shapes (the published contract) ----
 
 type sessionView struct {
-	ID              string `json:"id"`
+	ID string `json:"id"`
+	// Org is the caller's OWN tenant, echoed so a client can build the public
+	// build URL (/builds/:org/:project) without a second call or a guess. It is
+	// never another tenant's — every read is org-scoped before it gets here.
+	Org             string `json:"org"`
 	Agent           string `json:"agent"`
 	Actor           string `json:"actor,omitempty"`
 	Status          string `json:"status"`
@@ -159,7 +163,7 @@ type treeNode struct {
 
 func toSessionView(x Session, events, children int) sessionView {
 	return sessionView{
-		ID: x.ID, Agent: x.Agent, Actor: x.Actor, Status: x.Status,
+		ID: x.ID, Org: x.Org, Agent: x.Agent, Actor: x.Actor, Status: x.Status,
 		ParentSessionID: x.ParentID, RootSessionID: x.RootID, Title: x.Title,
 		TaskWorkflowID: x.TaskWorkflowID, TaskRunID: x.TaskRunID,
 		Host: x.Host, Cwd: x.Cwd, Repo: x.Repo, Target: x.Target,
