@@ -39,7 +39,7 @@ concurrency:
 jobs:
   # Test gate + the decoupled native flags staticlib image, driven by hanzo.yml.
   gate:
-    uses: hanzoai/ci/.hanzo/workflows/build.yml@v2
+    uses: hanzoai/ci/.hanzo/workflows/build.yml@v1
     secrets: inherit
 
   # Guards the Stage-1 byzantine ceremony containment (clients/controlplane,
