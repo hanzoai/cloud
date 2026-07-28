@@ -1,0 +1,76 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "domain"
+    }
+  ],
+  "paths": {
+    "/v1/domain/availability": {
+      "get": {
+        "operationId": "get_v1_domain_availability",
+        "tags": [
+          "domain"
+        ]
+      }
+    },
+    "/v1/domain/domains": {
+      "get": {
+        "operationId": "get_v1_domain_domains",
+        "tags": [
+          "domain"
+        ]
+      }
+    },
+    "/v1/domain/health": {
+      "get": {
+        "operationId": "get_v1_domain_health",
+        "tags": [
+          "domain"
+        ]
+      }
+    },
+    "/v1/domain/register": {
+      "post": {
+        "operationId": "post_v1_domain_register",
+        "tags": [
+          "domain"
+        ]
+      }
+    },
+    "/v1/domain/renew": {
+      "post": {
+        "operationId": "post_v1_domain_renew",
+        "tags": [
+          "domain"
+        ]
+      }
+    },
+    "/v1/domain/search": {
+      "get": {
+        "operationId": "get_v1_domain_search",
+        "tags": [
+          "domain"
+        ]
+      }
+    },
+    "/v1/domain/transfer": {
+      "post": {
+        "operationId": "post_v1_domain_transfer",
+        "tags": [
+          "domain"
+        ]
+      }
+    }
+  }
+}

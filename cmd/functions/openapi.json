@@ -1,0 +1,154 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "functions"
+    }
+  ],
+  "paths": {
+    "/v1/functions": {
+      "get": {
+        "operationId": "get_v1_functions",
+        "tags": [
+          "functions"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_functions",
+        "tags": [
+          "functions"
+        ]
+      }
+    },
+    "/v1/functions/deployments": {
+      "get": {
+        "operationId": "get_v1_functions_deployments",
+        "tags": [
+          "functions"
+        ]
+      }
+    },
+    "/v1/functions/metrics": {
+      "get": {
+        "operationId": "get_v1_functions_metrics",
+        "tags": [
+          "functions"
+        ]
+      }
+    },
+    "/v1/functions/secrets": {
+      "get": {
+        "operationId": "get_v1_functions_secrets",
+        "tags": [
+          "functions"
+        ]
+      }
+    },
+    "/v1/functions/triggers": {
+      "get": {
+        "operationId": "get_v1_functions_triggers",
+        "tags": [
+          "functions"
+        ]
+      }
+    },
+    "/v1/functions/{name}": {
+      "delete": {
+        "operationId": "delete_v1_functions_by_name",
+        "tags": [
+          "functions"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_functions_by_name",
+        "tags": [
+          "functions"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/functions/{name}/invocations": {
+      "get": {
+        "operationId": "get_v1_functions_by_name_invocations",
+        "tags": [
+          "functions"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/functions/{name}/invoke": {
+      "post": {
+        "operationId": "post_v1_functions_by_name_invoke",
+        "tags": [
+          "functions"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/functions/{name}/logs": {
+      "get": {
+        "operationId": "get_v1_functions_by_name_logs",
+        "tags": [
+          "functions"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

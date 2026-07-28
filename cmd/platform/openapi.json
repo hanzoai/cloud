@@ -1,0 +1,620 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "builds"
+    },
+    {
+      "name": "environments"
+    },
+    {
+      "name": "pipelines"
+    },
+    {
+      "name": "platform"
+    },
+    {
+      "name": "releases"
+    },
+    {
+      "name": "run"
+    },
+    {
+      "name": "runner"
+    }
+  ],
+  "paths": {
+    "/v1/builds": {
+      "get": {
+        "operationId": "get_v1_builds",
+        "tags": [
+          "builds"
+        ]
+      }
+    },
+    "/v1/environments": {
+      "get": {
+        "operationId": "get_v1_environments",
+        "tags": [
+          "environments"
+        ]
+      }
+    },
+    "/v1/pipelines": {
+      "get": {
+        "operationId": "get_v1_pipelines",
+        "tags": [
+          "pipelines"
+        ]
+      }
+    },
+    "/v1/platform/health": {
+      "get": {
+        "operationId": "get_v1_platform_health",
+        "tags": [
+          "platform"
+        ]
+      }
+    },
+    "/v1/platform/projects": {
+      "get": {
+        "operationId": "get_v1_platform_projects",
+        "tags": [
+          "platform"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_platform_projects",
+        "tags": [
+          "platform"
+        ]
+      }
+    },
+    "/v1/platform/projects/{project}": {
+      "delete": {
+        "operationId": "delete_v1_platform_projects_by_project",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_platform_projects_by_project",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/projects/{project}/apps": {
+      "get": {
+        "operationId": "get_v1_platform_projects_by_project_apps",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_platform_projects_by_project_apps",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/projects/{project}/apps/{app}": {
+      "delete": {
+        "operationId": "delete_v1_platform_projects_by_project_apps_by_app",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_platform_projects_by_project_apps_by_app",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/projects/{project}/apps/{app}/deploy": {
+      "post": {
+        "operationId": "post_v1_platform_projects_by_project_apps_by_app_deploy",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/projects/{project}/apps/{app}/deployments": {
+      "get": {
+        "operationId": "get_v1_platform_projects_by_project_apps_by_app_deployments",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/projects/{project}/apps/{app}/deployments/{id}": {
+      "get": {
+        "operationId": "get_v1_platform_projects_by_project_apps_by_app_deployments_by_id",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/projects/{project}/apps/{app}/deployments/{id}/logs": {
+      "get": {
+        "operationId": "get_v1_platform_projects_by_project_apps_by_app_deployments_by_id_logs",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/projects/{project}/apps/{app}/domains": {
+      "get": {
+        "operationId": "get_v1_platform_projects_by_project_apps_by_app_domains",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_platform_projects_by_project_apps_by_app_domains",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/projects/{project}/apps/{app}/domains/{host}": {
+      "delete": {
+        "operationId": "delete_v1_platform_projects_by_project_apps_by_app_domains_by_host",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "host",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/projects/{project}/apps/{app}/domains/{host}/verify": {
+      "post": {
+        "operationId": "post_v1_platform_projects_by_project_apps_by_app_domains_by_host_verify",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "host",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/projects/{project}/apps/{app}/env": {
+      "put": {
+        "operationId": "put_v1_platform_projects_by_project_apps_by_app_env",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/projects/{project}/apps/{app}/preview": {
+      "post": {
+        "operationId": "post_v1_platform_projects_by_project_apps_by_app_preview",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/projects/{project}/apps/{app}/promote": {
+      "post": {
+        "operationId": "post_v1_platform_projects_by_project_apps_by_app_promote",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/projects/{project}/apps/{app}/rollback": {
+      "post": {
+        "operationId": "post_v1_platform_projects_by_project_apps_by_app_rollback",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/projects/{project}/apps/{app}/start": {
+      "post": {
+        "operationId": "post_v1_platform_projects_by_project_apps_by_app_start",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/platform/projects/{project}/apps/{app}/stop": {
+      "post": {
+        "operationId": "post_v1_platform_projects_by_project_apps_by_app_stop",
+        "tags": [
+          "platform"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "app",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/releases": {
+      "get": {
+        "operationId": "get_v1_releases",
+        "tags": [
+          "releases"
+        ]
+      }
+    },
+    "/v1/run": {
+      "post": {
+        "operationId": "post_v1_run",
+        "tags": [
+          "run"
+        ]
+      }
+    },
+    "/v1/runner": {
+      "post": {
+        "operationId": "post_v1_runner",
+        "tags": [
+          "runner"
+        ]
+      }
+    }
+  }
+}

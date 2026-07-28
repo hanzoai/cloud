@@ -1,0 +1,374 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "datastore"
+    },
+    {
+      "name": "docdb"
+    },
+    {
+      "name": "kv"
+    },
+    {
+      "name": "s3"
+    },
+    {
+      "name": "search"
+    },
+    {
+      "name": "sql"
+    },
+    {
+      "name": "vector"
+    }
+  ],
+  "paths": {
+    "/v1/datastore": {
+      "get": {
+        "operationId": "get_v1_datastore",
+        "tags": [
+          "datastore"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_datastore",
+        "tags": [
+          "datastore"
+        ]
+      }
+    },
+    "/v1/datastore/{name}": {
+      "delete": {
+        "operationId": "delete_v1_datastore_by_name",
+        "tags": [
+          "datastore"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_datastore_by_name",
+        "tags": [
+          "datastore"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/docdb": {
+      "get": {
+        "operationId": "get_v1_docdb",
+        "tags": [
+          "docdb"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_docdb",
+        "tags": [
+          "docdb"
+        ]
+      }
+    },
+    "/v1/docdb/{name}": {
+      "delete": {
+        "operationId": "delete_v1_docdb_by_name",
+        "tags": [
+          "docdb"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_docdb_by_name",
+        "tags": [
+          "docdb"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/kv": {
+      "get": {
+        "operationId": "get_v1_kv",
+        "tags": [
+          "kv"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_kv",
+        "tags": [
+          "kv"
+        ]
+      }
+    },
+    "/v1/kv/{name}": {
+      "delete": {
+        "operationId": "delete_v1_kv_by_name",
+        "tags": [
+          "kv"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_kv_by_name",
+        "tags": [
+          "kv"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/s3": {
+      "get": {
+        "operationId": "get_v1_s3",
+        "tags": [
+          "s3"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_s3",
+        "tags": [
+          "s3"
+        ]
+      }
+    },
+    "/v1/s3/{name}": {
+      "delete": {
+        "operationId": "delete_v1_s3_by_name",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_s3_by_name",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/search": {
+      "get": {
+        "operationId": "get_v1_search",
+        "tags": [
+          "search"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_search",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/v1/search/{name}": {
+      "delete": {
+        "operationId": "delete_v1_search_by_name",
+        "tags": [
+          "search"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_search_by_name",
+        "tags": [
+          "search"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sql": {
+      "get": {
+        "operationId": "get_v1_sql",
+        "tags": [
+          "sql"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_sql",
+        "tags": [
+          "sql"
+        ]
+      }
+    },
+    "/v1/sql/{name}": {
+      "delete": {
+        "operationId": "delete_v1_sql_by_name",
+        "tags": [
+          "sql"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_sql_by_name",
+        "tags": [
+          "sql"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/vector": {
+      "get": {
+        "operationId": "get_v1_vector",
+        "tags": [
+          "vector"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_vector",
+        "tags": [
+          "vector"
+        ]
+      }
+    },
+    "/v1/vector/{name}": {
+      "delete": {
+        "operationId": "delete_v1_vector_by_name",
+        "tags": [
+          "vector"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_vector_by_name",
+        "tags": [
+          "vector"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

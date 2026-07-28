@@ -1,0 +1,192 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "tracker"
+    }
+  ],
+  "paths": {
+    "/v1/tracker/projects": {
+      "get": {
+        "operationId": "get_v1_tracker_projects",
+        "tags": [
+          "tracker"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_tracker_projects",
+        "tags": [
+          "tracker"
+        ]
+      }
+    },
+    "/v1/tracker/projects/{key}": {
+      "delete": {
+        "operationId": "delete_v1_tracker_projects_by_key",
+        "tags": [
+          "tracker"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_tracker_projects_by_key",
+        "tags": [
+          "tracker"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_tracker_projects_by_key",
+        "tags": [
+          "tracker"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/tracker/projects/{key}/issues": {
+      "get": {
+        "operationId": "get_v1_tracker_projects_by_key_issues",
+        "tags": [
+          "tracker"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_tracker_projects_by_key_issues",
+        "tags": [
+          "tracker"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/tracker/projects/{key}/issues/{num}": {
+      "delete": {
+        "operationId": "delete_v1_tracker_projects_by_key_issues_by_num",
+        "tags": [
+          "tracker"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "num",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_tracker_projects_by_key_issues_by_num",
+        "tags": [
+          "tracker"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "num",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_tracker_projects_by_key_issues_by_num",
+        "tags": [
+          "tracker"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "num",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

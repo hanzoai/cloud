@@ -1,0 +1,313 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "admin"
+    },
+    {
+      "name": "enablement"
+    },
+    {
+      "name": "pricing"
+    },
+    {
+      "name": "pricing-policy"
+    }
+  ],
+  "paths": {
+    "/v1/admin/catalog": {
+      "get": {
+        "operationId": "get_v1_admin_catalog",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/catalog/models/{wildcard1}": {
+      "patch": {
+        "operationId": "patch_v1_admin_catalog_models_by_wildcard1",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/admin/catalog/providers/{name}": {
+      "patch": {
+        "operationId": "patch_v1_admin_catalog_providers_by_name",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/admin/enablement": {
+      "get": {
+        "operationId": "get_v1_admin_enablement",
+        "tags": [
+          "admin"
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_admin_enablement",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/enablement": {
+      "get": {
+        "operationId": "get_v1_enablement",
+        "tags": [
+          "enablement"
+        ]
+      }
+    },
+    "/v1/enablement/optin": {
+      "post": {
+        "operationId": "post_v1_enablement_optin",
+        "tags": [
+          "enablement"
+        ]
+      }
+    },
+    "/v1/enablement/optout": {
+      "post": {
+        "operationId": "post_v1_enablement_optout",
+        "tags": [
+          "enablement"
+        ]
+      }
+    },
+    "/v1/pricing": {
+      "get": {
+        "operationId": "get_v1_pricing",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing-policy": {
+      "get": {
+        "operationId": "get_v1_pricing-policy",
+        "tags": [
+          "pricing-policy"
+        ]
+      }
+    },
+    "/v1/pricing/base": {
+      "get": {
+        "operationId": "get_v1_pricing_base",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/blockchain": {
+      "get": {
+        "operationId": "get_v1_pricing_blockchain",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/cloud": {
+      "get": {
+        "operationId": "get_v1_pricing_cloud",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/cloud/plans": {
+      "get": {
+        "operationId": "get_v1_pricing_cloud_plans",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/cloud/regions": {
+      "get": {
+        "operationId": "get_v1_pricing_cloud_regions",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/cloud/storage": {
+      "get": {
+        "operationId": "get_v1_pricing_cloud_storage",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/compute": {
+      "get": {
+        "operationId": "get_v1_pricing_compute",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/compute/presets": {
+      "get": {
+        "operationId": "get_v1_pricing_compute_presets",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/featured": {
+      "get": {
+        "operationId": "get_v1_pricing_featured",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/free": {
+      "get": {
+        "operationId": "get_v1_pricing_free",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/gpu": {
+      "get": {
+        "operationId": "get_v1_pricing_gpu",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/health": {
+      "get": {
+        "operationId": "get_v1_pricing_health",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/iam": {
+      "get": {
+        "operationId": "get_v1_pricing_iam",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/model/{name}": {
+      "get": {
+        "operationId": "get_v1_pricing_model_by_name",
+        "tags": [
+          "pricing"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/pricing/models": {
+      "get": {
+        "operationId": "get_v1_pricing_models",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/paas": {
+      "get": {
+        "operationId": "get_v1_pricing_paas",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/policy": {
+      "get": {
+        "operationId": "get_v1_pricing_policy",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/providers": {
+      "get": {
+        "operationId": "get_v1_pricing_providers",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/subscriptions": {
+      "get": {
+        "operationId": "get_v1_pricing_subscriptions",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/summary": {
+      "get": {
+        "operationId": "get_v1_pricing_summary",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/sync": {
+      "post": {
+        "operationId": "post_v1_pricing_sync",
+        "tags": [
+          "pricing"
+        ]
+      }
+    },
+    "/v1/pricing/tools": {
+      "get": {
+        "operationId": "get_v1_pricing_tools",
+        "tags": [
+          "pricing"
+        ]
+      }
+    }
+  }
+}

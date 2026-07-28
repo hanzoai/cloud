@@ -1,0 +1,364 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "admin"
+    }
+  ],
+  "paths": {
+    "/v1/admin/plugins": {
+      "get": {
+        "operationId": "adminPlugins",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/admin/plugins/{name}/disable": {
+      "post": {
+        "operationId": "adminDisablePlugin",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NameIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/admin/plugins/{name}/enable": {
+      "post": {
+        "operationId": "adminEnablePlugin",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NameIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/admin/plugins/{name}/reload": {
+      "post": {
+        "operationId": "adminReloadPlugin",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReloadIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ActionOut": {
+        "properties": {
+          "data": {
+            "items": {
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "msg": {
+                  "type": "string"
+                },
+                "ok": {
+                  "type": "boolean"
+                },
+                "version": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ListOut": {
+        "properties": {
+          "data": {
+            "items": {
+              "properties": {
+                "addr": {
+                  "type": "string"
+                },
+                "error": {
+                  "type": "string"
+                },
+                "host": {
+                  "type": "string"
+                },
+                "plugins": {
+                  "items": {
+                    "properties": {
+                      "addr": {
+                        "type": "string"
+                      },
+                      "disabled": {
+                        "type": "boolean"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "pid": {
+                        "type": "integer"
+                      },
+                      "prefix": {
+                        "type": "string"
+                      },
+                      "prefixes": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "reloads": {
+                        "type": "integer"
+                      },
+                      "restarts": {
+                        "type": "integer"
+                      },
+                      "running": {
+                        "type": "boolean"
+                      },
+                      "since": {
+                        "properties": {},
+                        "type": "object"
+                      },
+                      "source": {
+                        "type": "string"
+                      },
+                      "usage": {
+                        "properties": {
+                          "cpuNs": {
+                            "type": "integer"
+                          },
+                          "fds": {
+                            "type": "integer"
+                          },
+                          "rssBytes": {
+                            "type": "integer"
+                          },
+                          "threads": {
+                            "type": "integer"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "version": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "self": {
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "data2": {
+            "type": "integer"
+          },
+          "drift": {
+            "items": {
+              "properties": {
+                "disabled": {
+                  "type": "integer"
+                },
+                "down": {
+                  "type": "integer"
+                },
+                "drifted": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "running": {
+                  "type": "integer"
+                },
+                "versions": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "NameIn": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ReloadIn": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "sum": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    }
+  }
+}

@@ -209,10 +209,14 @@ for the credentials of the app it is.**
       /orgs/{adminOrg}/svc/_shared/{NAME}   every app
       /orgs/{adminOrg}/svc/{app}/{NAME}     that app only
 
-  `{NAME}` is the environment variable the app already reads. Provisioning is a
-  `POST /v1/kms/orgs/{adminOrg}/secrets` — no second registry, no code change to
-  add a credential. `billing` cannot read `/svc/ai` because it cannot ask for a
-  path it is not.
+  `{NAME}` is the environment variable the app already reads, and `credz` reads
+  env `default` — the store requires `env` on every write, so provisioning is:
+
+      POST /v1/kms/orgs/{adminOrg}/secrets
+      {"path":"/svc/ai","name":"CLOUD_AI_API_KEY","env":"default","value":"sk-…"}
+
+  No second registry and no code change to add a credential. `billing` cannot
+  read `/svc/ai` because it cannot ask for a path it is not.
 - **The environment stays the interface**: the bundle is installed with
   `os.Setenv`, so all 108 apps keep reading `os.Getenv` unchanged — and a value
   set after `execve` never appears in `/proc/<pid>/environ`.

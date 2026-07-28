@@ -1,0 +1,189 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "base"
+    },
+    {
+      "name": "collections"
+    }
+  ],
+  "paths": {
+    "/v1/base/health": {
+      "get": {
+        "operationId": "get_v1_base_health",
+        "tags": [
+          "base"
+        ]
+      }
+    },
+    "/v1/collections": {
+      "delete": {
+        "operationId": "delete_v1_collections",
+        "tags": [
+          "collections"
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_collections",
+        "tags": [
+          "collections"
+        ]
+      },
+      "options": {
+        "operationId": "options_v1_collections",
+        "tags": [
+          "collections"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_collections",
+        "tags": [
+          "collections"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_collections",
+        "tags": [
+          "collections"
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_collections",
+        "tags": [
+          "collections"
+        ]
+      },
+      "trace": {
+        "operationId": "trace_v1_collections",
+        "tags": [
+          "collections"
+        ]
+      }
+    },
+    "/v1/collections/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_v1_collections_by_wildcard1",
+        "tags": [
+          "collections"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_collections_by_wildcard1",
+        "tags": [
+          "collections"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "options": {
+        "operationId": "options_v1_collections_by_wildcard1",
+        "tags": [
+          "collections"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_collections_by_wildcard1",
+        "tags": [
+          "collections"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_collections_by_wildcard1",
+        "tags": [
+          "collections"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_collections_by_wildcard1",
+        "tags": [
+          "collections"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "trace": {
+        "operationId": "trace_v1_collections_by_wildcard1",
+        "tags": [
+          "collections"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

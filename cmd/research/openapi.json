@@ -1,0 +1,90 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "research"
+    }
+  ],
+  "paths": {
+    "/v1/research/artifacts": {
+      "get": {
+        "operationId": "get_v1_research_artifacts",
+        "tags": [
+          "research"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_research_artifacts",
+        "tags": [
+          "research"
+        ]
+      }
+    },
+    "/v1/research/artifacts/{sha256}": {
+      "get": {
+        "operationId": "get_v1_research_artifacts_by_sha256",
+        "tags": [
+          "research"
+        ],
+        "parameters": [
+          {
+            "name": "sha256",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/research/experiments": {
+      "get": {
+        "operationId": "get_v1_research_experiments",
+        "tags": [
+          "research"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_research_experiments",
+        "tags": [
+          "research"
+        ]
+      }
+    },
+    "/v1/research/grants": {
+      "post": {
+        "operationId": "post_v1_research_grants",
+        "tags": [
+          "research"
+        ]
+      }
+    },
+    "/v1/research/projects": {
+      "get": {
+        "operationId": "get_v1_research_projects",
+        "tags": [
+          "research"
+        ]
+      }
+    },
+    "/v1/research/totals": {
+      "get": {
+        "operationId": "get_v1_research_totals",
+        "tags": [
+          "research"
+        ]
+      }
+    }
+  }
+}

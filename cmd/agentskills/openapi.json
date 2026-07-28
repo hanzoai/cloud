@@ -1,0 +1,35 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "paths": {
+    "/.well-known/agent-skills/index.json": {
+      "get": {
+        "operationId": "get_.well-known_agent-skills_index.json"
+      }
+    },
+    "/.well-known/agent-skills/{skill}/SKILL.md": {
+      "get": {
+        "operationId": "get_.well-known_agent-skills_by_skill_skill.md",
+        "parameters": [
+          {
+            "name": "skill",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

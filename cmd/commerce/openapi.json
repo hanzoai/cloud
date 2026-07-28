@@ -1,0 +1,1150 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "billing"
+    },
+    {
+      "name": "catalog"
+    },
+    {
+      "name": "commerce"
+    },
+    {
+      "name": "plans"
+    },
+    {
+      "name": "store"
+    }
+  ],
+  "paths": {
+    "/_/commerce": {
+      "get": {
+        "operationId": "get___commerce"
+      }
+    },
+    "/_/commerce/healthz": {
+      "get": {
+        "operationId": "get___commerce_healthz"
+      }
+    },
+    "/_/commerce/providers": {
+      "get": {
+        "operationId": "get___commerce_providers"
+      }
+    },
+    "/_/commerce/tenants": {
+      "post": {
+        "operationId": "post___commerce_tenants"
+      }
+    },
+    "/_/commerce/ui": {
+      "get": {
+        "operationId": "get___commerce_ui"
+      }
+    },
+    "/_/commerce/ui/{wildcard1}": {
+      "get": {
+        "operationId": "get___commerce_ui_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/billing/auto-recharge/run-all": {
+      "post": {
+        "operationId": "post_v1_billing_auto-recharge_run-all",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/invoices": {
+      "get": {
+        "operationId": "get_v1_billing_invoices",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/invoices/{id}/pdf": {
+      "get": {
+        "operationId": "get_v1_billing_invoices_by_id_pdf",
+        "tags": [
+          "billing"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/billing/payment-config": {
+      "get": {
+        "operationId": "get_v1_billing_payment-config",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/payment-methods": {
+      "post": {
+        "operationId": "post_v1_billing_payment-methods",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/payouts": {
+      "get": {
+        "operationId": "get_v1_billing_payouts",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/plans": {
+      "get": {
+        "operationId": "get_v1_billing_plans",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/spend-alerts": {
+      "get": {
+        "operationId": "get_v1_billing_spend-alerts",
+        "tags": [
+          "billing"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_billing_spend-alerts",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/spend-alerts/authorize": {
+      "get": {
+        "operationId": "get_v1_billing_spend-alerts_authorize",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/spend-alerts/{id}": {
+      "delete": {
+        "operationId": "delete_v1_billing_spend-alerts_by_id",
+        "tags": [
+          "billing"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_billing_spend-alerts_by_id",
+        "tags": [
+          "billing"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/billing/subscriptions": {
+      "get": {
+        "operationId": "get_v1_billing_subscriptions",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/subscriptions/{id}/cancel": {
+      "post": {
+        "operationId": "post_v1_billing_subscriptions_by_id_cancel",
+        "tags": [
+          "billing"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/billing/subscriptions/{id}/reactivate": {
+      "post": {
+        "operationId": "post_v1_billing_subscriptions_by_id_reactivate",
+        "tags": [
+          "billing"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/billing/topup/token": {
+      "post": {
+        "operationId": "post_v1_billing_topup_token",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/v1/billing/webhooks/{provider}": {
+      "post": {
+        "operationId": "post_v1_billing_webhooks_by_provider",
+        "tags": [
+          "billing"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/catalog/entries": {
+      "get": {
+        "operationId": "get_v1_catalog_entries",
+        "tags": [
+          "catalog"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_catalog_entries",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/v1/catalog/entries/{slug}": {
+      "delete": {
+        "operationId": "delete_v1_catalog_entries_by_slug",
+        "tags": [
+          "catalog"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_catalog_entries_by_slug",
+        "tags": [
+          "catalog"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/catalog/models": {
+      "post": {
+        "operationId": "post_v1_catalog_models",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/v1/catalog/seed": {
+      "post": {
+        "operationId": "post_v1_catalog_seed",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/v1/commerce/admin/catalog": {
+      "get": {
+        "operationId": "get_v1_commerce_admin_catalog",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/catalog": {
+      "get": {
+        "operationId": "get_v1_commerce_catalog",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/currencies": {
+      "get": {
+        "operationId": "get_v1_commerce_currencies",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/deposits": {
+      "post": {
+        "operationId": "post_v1_commerce_deposits",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/deposits/{id}/confirm": {
+      "post": {
+        "operationId": "post_v1_commerce_deposits_by_id_confirm",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/commerce/deposits/{id}/status": {
+      "get": {
+        "operationId": "get_v1_commerce_deposits_by_id_status",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/commerce/tenant": {
+      "get": {
+        "operationId": "get_v1_commerce_tenant",
+        "tags": [
+          "commerce"
+        ]
+      }
+    },
+    "/v1/commerce/webhooks/{provider}": {
+      "post": {
+        "operationId": "post_v1_commerce_webhooks_by_provider",
+        "tags": [
+          "commerce"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/plans/entries": {
+      "get": {
+        "operationId": "get_v1_plans_entries",
+        "tags": [
+          "plans"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_plans_entries",
+        "tags": [
+          "plans"
+        ]
+      }
+    },
+    "/v1/plans/entries/{slug}": {
+      "delete": {
+        "operationId": "delete_v1_plans_entries_by_slug",
+        "tags": [
+          "plans"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_plans_entries_by_slug",
+        "tags": [
+          "plans"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/plans/seed": {
+      "post": {
+        "operationId": "post_v1_plans_seed",
+        "tags": [
+          "plans"
+        ]
+      }
+    },
+    "/v1/store/": {
+      "get": {
+        "operationId": "get_v1_store",
+        "tags": [
+          "store"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_store",
+        "tags": [
+          "store"
+        ]
+      }
+    },
+    "/v1/store/access": {
+      "get": {
+        "operationId": "get_v1_store_access",
+        "tags": [
+          "store"
+        ]
+      }
+    },
+    "/v1/store/current": {
+      "get": {
+        "operationId": "get_v1_store_current",
+        "tags": [
+          "store"
+        ]
+      }
+    },
+    "/v1/store/storefront-token": {
+      "post": {
+        "operationId": "post_v1_store_storefront-token",
+        "tags": [
+          "store"
+        ]
+      }
+    },
+    "/v1/store/{storeid}": {
+      "delete": {
+        "operationId": "delete_v1_store_by_storeid",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_store_by_storeid",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_store_by_storeid",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_store_by_storeid",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_store_by_storeid",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/authorize": {
+      "post": {
+        "operationId": "post_v1_store_by_storeid_authorize",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/authorize/{orderid}": {
+      "post": {
+        "operationId": "post_v1_store_by_storeid_authorize_by_orderid",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "orderid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/bundle/{key}": {
+      "get": {
+        "operationId": "get_v1_store_by_storeid_bundle_by_key",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/capture/{orderid}": {
+      "post": {
+        "operationId": "post_v1_store_by_storeid_capture_by_orderid",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "orderid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/charge": {
+      "post": {
+        "operationId": "post_v1_store_by_storeid_charge",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/checkout/authorize": {
+      "post": {
+        "operationId": "post_v1_store_by_storeid_checkout_authorize",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/checkout/authorize/{orderid}": {
+      "post": {
+        "operationId": "post_v1_store_by_storeid_checkout_authorize_by_orderid",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "orderid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/checkout/capture/{orderid}": {
+      "post": {
+        "operationId": "post_v1_store_by_storeid_checkout_capture_by_orderid",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "orderid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/checkout/charge": {
+      "post": {
+        "operationId": "post_v1_store_by_storeid_checkout_charge",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/checkout/paypal/cancel/{payKey}": {
+      "post": {
+        "operationId": "post_v1_store_by_storeid_checkout_paypal_cancel_by_paykey",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "payKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/checkout/paypal/confirm/{payKey}": {
+      "post": {
+        "operationId": "post_v1_store_by_storeid_checkout_paypal_confirm_by_paykey",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "payKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/checkout/paypal/pay": {
+      "post": {
+        "operationId": "post_v1_store_by_storeid_checkout_paypal_pay",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/listing": {
+      "get": {
+        "operationId": "get_v1_store_by_storeid_listing",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/listing/{key}": {
+      "delete": {
+        "operationId": "delete_v1_store_by_storeid_listing_by_key",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_store_by_storeid_listing_by_key",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_store_by_storeid_listing_by_key",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_store_by_storeid_listing_by_key",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_store_by_storeid_listing_by_key",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/paypal/cancel/{payKey}": {
+      "post": {
+        "operationId": "post_v1_store_by_storeid_paypal_cancel_by_paykey",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "payKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/paypal/confirm/{payKey}": {
+      "post": {
+        "operationId": "post_v1_store_by_storeid_paypal_confirm_by_paykey",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "payKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/paypal/pay": {
+      "post": {
+        "operationId": "post_v1_store_by_storeid_paypal_pay",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/product/{key}": {
+      "get": {
+        "operationId": "get_v1_store_by_storeid_product_by_key",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/trial": {
+      "post": {
+        "operationId": "post_v1_store_by_storeid_trial",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/store/{storeid}/variant/{key}": {
+      "get": {
+        "operationId": "get_v1_store_by_storeid_variant_by_key",
+        "tags": [
+          "store"
+        ],
+        "parameters": [
+          {
+            "name": "storeid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "marketplace"
+    }
+  ],
+  "paths": {
+    "/v1/marketplace": {
+      "get": {
+        "operationId": "get_v1_marketplace",
+        "tags": [
+          "marketplace"
+        ]
+      }
+    },
+    "/v1/marketplace/install": {
+      "post": {
+        "operationId": "post_v1_marketplace_install",
+        "tags": [
+          "marketplace"
+        ]
+      }
+    },
+    "/v1/marketplace/listings": {
+      "get": {
+        "operationId": "get_v1_marketplace_listings",
+        "tags": [
+          "marketplace"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_marketplace_listings",
+        "tags": [
+          "marketplace"
+        ]
+      }
+    },
+    "/v1/marketplace/listings/{id}": {
+      "delete": {
+        "operationId": "delete_v1_marketplace_listings_by_id",
+        "tags": [
+          "marketplace"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/marketplace/uninstall": {
+      "post": {
+        "operationId": "post_v1_marketplace_uninstall",
+        "tags": [
+          "marketplace"
+        ]
+      }
+    }
+  }
+}

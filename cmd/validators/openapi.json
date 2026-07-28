@@ -1,0 +1,60 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "validators"
+    }
+  ],
+  "paths": {
+    "/v1/validators": {
+      "get": {
+        "operationId": "get_v1_validators",
+        "tags": [
+          "validators"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_validators",
+        "tags": [
+          "validators"
+        ]
+      }
+    },
+    "/v1/validators/challenge": {
+      "get": {
+        "operationId": "get_v1_validators_challenge",
+        "tags": [
+          "validators"
+        ]
+      }
+    },
+    "/v1/validators/{tokenId}": {
+      "get": {
+        "operationId": "get_v1_validators_by_tokenid",
+        "tags": [
+          "validators"
+        ],
+        "parameters": [
+          {
+            "name": "tokenId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

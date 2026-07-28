@@ -1,0 +1,106 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "cloud"
+    }
+  ],
+  "paths": {
+    "/v1/cloud": {
+      "get": {
+        "operationId": "get_v1_cloud",
+        "tags": [
+          "cloud"
+        ]
+      }
+    },
+    "/v1/cloud/accounts": {
+      "get": {
+        "operationId": "get_v1_cloud_accounts",
+        "tags": [
+          "cloud"
+        ]
+      }
+    },
+    "/v1/cloud/{provider}/accounts": {
+      "post": {
+        "operationId": "post_v1_cloud_by_provider_accounts",
+        "tags": [
+          "cloud"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/cloud/{provider}/accounts/{label}": {
+      "delete": {
+        "operationId": "delete_v1_cloud_by_provider_accounts_by_label",
+        "tags": [
+          "cloud"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "label",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/cloud/{provider}/accounts/{label}/sync": {
+      "post": {
+        "operationId": "post_v1_cloud_by_provider_accounts_by_label_sync",
+        "tags": [
+          "cloud"
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "label",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

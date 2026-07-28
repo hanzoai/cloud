@@ -1,0 +1,114 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "experiments"
+    }
+  ],
+  "paths": {
+    "/v1/experiments": {
+      "get": {
+        "operationId": "get_v1_experiments",
+        "tags": [
+          "experiments"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_experiments",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
+    "/v1/experiments/health": {
+      "get": {
+        "operationId": "get_v1_experiments_health",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
+    "/v1/experiments/{id}": {
+      "get": {
+        "operationId": "get_v1_experiments_by_id",
+        "tags": [
+          "experiments"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/experiments/{id}/analyze": {
+      "post": {
+        "operationId": "post_v1_experiments_by_id_analyze",
+        "tags": [
+          "experiments"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/experiments/{id}/assign": {
+      "get": {
+        "operationId": "get_v1_experiments_by_id_assign",
+        "tags": [
+          "experiments"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/experiments/{id}/decide": {
+      "post": {
+        "operationId": "post_v1_experiments_by_id_decide",
+        "tags": [
+          "experiments"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,144 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "s3"
+    }
+  ],
+  "paths": {
+    "/v1/s3/buckets": {
+      "get": {
+        "operationId": "get_v1_s3_buckets",
+        "tags": [
+          "s3"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_s3_buckets",
+        "tags": [
+          "s3"
+        ]
+      }
+    },
+    "/v1/s3/buckets/{bucket}": {
+      "delete": {
+        "operationId": "delete_v1_s3_buckets_by_bucket",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/s3/buckets/{bucket}/objects": {
+      "get": {
+        "operationId": "get_v1_s3_buckets_by_bucket_objects",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_s3_buckets_by_bucket_objects",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/s3/buckets/{bucket}/objects/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_v1_s3_buckets_by_bucket_objects_by_wildcard1",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_s3_buckets_by_bucket_objects_by_wildcard1",
+        "tags": [
+          "s3"
+        ],
+        "parameters": [
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/s3/health": {
+      "get": {
+        "operationId": "get_v1_s3_health",
+        "tags": [
+          "s3"
+        ]
+      }
+    }
+  }
+}

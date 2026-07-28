@@ -1,0 +1,194 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "company"
+    }
+  ],
+  "paths": {
+    "/v1/company": {
+      "get": {
+        "operationId": "get_v1_company",
+        "tags": [
+          "company"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_company",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/advance": {
+      "post": {
+        "operationId": "post_v1_company_advance",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/documents": {
+      "post": {
+        "operationId": "post_v1_company_documents",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/esign": {
+      "post": {
+        "operationId": "post_v1_company_esign",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/esign/complete": {
+      "post": {
+        "operationId": "post_v1_company_esign_complete",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/founders": {
+      "post": {
+        "operationId": "post_v1_company_founders",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/fundraise/deck": {
+      "post": {
+        "operationId": "post_v1_company_fundraise_deck",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/fundraise/round": {
+      "post": {
+        "operationId": "post_v1_company_fundraise_round",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/fundraise/safe": {
+      "post": {
+        "operationId": "post_v1_company_fundraise_safe",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/genesis": {
+      "post": {
+        "operationId": "post_v1_company_genesis",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/import/captable": {
+      "post": {
+        "operationId": "post_v1_company_import_captable",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/import/documents": {
+      "post": {
+        "operationId": "post_v1_company_import_documents",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/kyc": {
+      "post": {
+        "operationId": "post_v1_company_kyc",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/kyc/decision": {
+      "post": {
+        "operationId": "post_v1_company_kyc_decision",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/kyc/refresh": {
+      "post": {
+        "operationId": "post_v1_company_kyc_refresh",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/payment": {
+      "post": {
+        "operationId": "post_v1_company_payment",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/register": {
+      "get": {
+        "operationId": "get_v1_company_register",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/register/summary": {
+      "get": {
+        "operationId": "get_v1_company_register_summary",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/review": {
+      "get": {
+        "operationId": "get_v1_company_review",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/skip": {
+      "post": {
+        "operationId": "post_v1_company_skip",
+        "tags": [
+          "company"
+        ]
+      }
+    },
+    "/v1/company/structure": {
+      "put": {
+        "operationId": "put_v1_company_structure",
+        "tags": [
+          "company"
+        ]
+      }
+    }
+  }
+}

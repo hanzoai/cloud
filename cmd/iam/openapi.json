@@ -1,0 +1,387 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "iam"
+    }
+  ],
+  "paths": {
+    "/.well-known/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_.well-known_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_.well-known_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "options": {
+        "operationId": "options_.well-known_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_.well-known_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_.well-known_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_.well-known_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "trace": {
+        "operationId": "trace_.well-known_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/login/oauth": {
+      "delete": {
+        "operationId": "delete_login_oauth"
+      },
+      "get": {
+        "operationId": "get_login_oauth"
+      },
+      "options": {
+        "operationId": "options_login_oauth"
+      },
+      "patch": {
+        "operationId": "patch_login_oauth"
+      },
+      "post": {
+        "operationId": "post_login_oauth"
+      },
+      "put": {
+        "operationId": "put_login_oauth"
+      },
+      "trace": {
+        "operationId": "trace_login_oauth"
+      }
+    },
+    "/login/oauth/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_login_oauth_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_login_oauth_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "options": {
+        "operationId": "options_login_oauth_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_login_oauth_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_login_oauth_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_login_oauth_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "trace": {
+        "operationId": "trace_login_oauth_by_wildcard1",
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/iam": {
+      "delete": {
+        "operationId": "delete_v1_iam",
+        "tags": [
+          "iam"
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_iam",
+        "tags": [
+          "iam"
+        ]
+      },
+      "options": {
+        "operationId": "options_v1_iam",
+        "tags": [
+          "iam"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_iam",
+        "tags": [
+          "iam"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_iam",
+        "tags": [
+          "iam"
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_iam",
+        "tags": [
+          "iam"
+        ]
+      },
+      "trace": {
+        "operationId": "trace_v1_iam",
+        "tags": [
+          "iam"
+        ]
+      }
+    },
+    "/v1/iam/{wildcard1}": {
+      "delete": {
+        "operationId": "delete_v1_iam_by_wildcard1",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_iam_by_wildcard1",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "options": {
+        "operationId": "options_v1_iam_by_wildcard1",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_iam_by_wildcard1",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_iam_by_wildcard1",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_iam_by_wildcard1",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "trace": {
+        "operationId": "trace_v1_iam_by_wildcard1",
+        "tags": [
+          "iam"
+        ],
+        "parameters": [
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

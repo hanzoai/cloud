@@ -1,0 +1,1906 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "git"
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "get"
+      }
+    },
+    "/explore": {
+      "get": {
+        "operationId": "get_explore"
+      }
+    },
+    "/git": {
+      "get": {
+        "operationId": "get_git"
+      }
+    },
+    "/git/explore": {
+      "get": {
+        "operationId": "get_git_explore"
+      }
+    },
+    "/git/{org}/{repo}": {
+      "get": {
+        "operationId": "get_git_by_org_by_repo",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/git/{org}/{repo}/blob/{wildcard1}": {
+      "get": {
+        "operationId": "get_git_by_org_by_repo_blob_by_wildcard1",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/git/{org}/{repo}/commits": {
+      "get": {
+        "operationId": "get_git_by_org_by_repo_commits",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/git/{org}/{repo}/tree/{wildcard1}": {
+      "get": {
+        "operationId": "get_git_by_org_by_repo_tree_by_wildcard1",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/git/keys": {
+      "get": {
+        "operationId": "get_v1_git_keys",
+        "summary": "listKeys returns the SSH public keys registered to the caller's org — the keys\nthat authenticate `git clone git@\u003chost\u003e:\u003corg\u003e/\u003crepo\u003e.git`.",
+        "description": "listKeys returns the SSH public keys registered to the caller's org — the keys\nthat authenticate `git clone git@\u003chost\u003e:\u003corg\u003e/\u003crepo\u003e.git`. Keys are org-scoped\non read even though the fingerprint index is global, so one org never sees\nanother's.",
+        "tags": [
+          "git"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "createdAt": "2026-07-01T10:00:00Z",
+                      "fingerprint": "SHA256:9pQ…",
+                      "id": "gitkey_4a1b",
+                      "publicKey": "ssh-ed25519 AAAAC3Nz…",
+                      "title": "laptop"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/keyList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_v1_git_keys",
+        "tags": [
+          "git"
+        ]
+      }
+    },
+    "/v1/git/keys/{id}": {
+      "delete": {
+        "operationId": "delete_v1_git_keys_id",
+        "summary": "deleteKey removes a registered SSH key, scoped to the caller's org: an org can\nonly delete its own, and a key id it does not own is not found.",
+        "description": "deleteKey removes a registered SSH key, scoped to the caller's org: an org can\nonly delete its own, and a key id it does not own is not found. Answers 204\nwith no body. Once removed the key no longer authenticates any SSH git access.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the key's identifier (\"gitkey_…\"), from the :id path segment.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/noContent"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/git/repos": {
+      "get": {
+        "operationId": "get_v1_git_repos",
+        "summary": "listRepos returns the repos in the caller's scope, most recently updated\nfirst.",
+        "description": "listRepos returns the repos in the caller's scope, most recently updated\nfirst. The scope is the request principal's — the gateway-minted org and its\noptional project — never anything off the wire, so a caller only ever sees its\nown. Rows carry no branches or HEAD; read one repo for those.",
+        "tags": [
+          "git"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "cloneUrl": "https://api.hanzo.ai/v1/git/acme/widgets.git",
+                      "createdAt": "2026-07-01T10:00:00Z",
+                      "defaultBranch": "main",
+                      "id": "repo_9f3c",
+                      "name": "widgets",
+                      "org": "acme",
+                      "public": false,
+                      "sizeBytes": 4096,
+                      "sshUrl": "git@git.hanzo.ai:acme/widgets.git"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/repoList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_v1_git_repos",
+        "tags": [
+          "git"
+        ]
+      }
+    },
+    "/v1/git/repos/{name}": {
+      "delete": {
+        "operationId": "delete_v1_git_repos_name",
+        "summary": "deleteRepo removes a repo's metadata and purges its storage.",
+        "description": "deleteRepo removes a repo's metadata and purges its storage. Answers 204 with\nno body. The metadata row is the source of truth for existence, so a storage\npurge that fails is logged and the delete still succeeds — and a second call\nis a 404, not a second delete.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/noContent"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "get": {
+        "operationId": "get_v1_git_repos_name",
+        "summary": "getRepo returns one repo with its live ref state: every branch name and the\nresolved HEAD commit.",
+        "description": "getRepo returns one repo with its live ref state: every branch name and the\nresolved HEAD commit. Both are read from the object store on each call, so an\nempty repo reports no branches and an empty head rather than failing. A repo\noutside the caller's scope is not found.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/repoView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patch_v1_git_repos_name",
+        "summary": "setVisibility flips a repo's public bit, the one mutable repo setting today.\nPublic grants ANONYMOUS fetch only; push and the whole control plane stay\norg-authed.",
+        "description": "setVisibility flips a repo's public bit, the one mutable repo setting today.\nPublic grants ANONYMOUS fetch only; push and the whole control plane stay\norg-authed. Returns the updated repo.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the repo to update, from the :name path segment.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "widgets",
+                "public": true
+              },
+              "schema": {
+                "$ref": "#/components/schemas/patchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/repoView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/git/repos/{name}/blob": {
+      "get": {
+        "operationId": "get_v1_git_repos_name_blob",
+        "summary": "browseBlob returns one file's bytes at one revision.",
+        "description": "browseBlob returns one file's bytes at one revision. Text comes back verbatim,\nbinary comes back base64, and a file past the 1 MiB view cap comes back marked\ntruncated with NO content — the client is expected to clone instead.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the repo to read, from the :name path segment.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ref",
+            "in": "query",
+            "required": false,
+            "description": "Ref is a branch, tag or commit; empty means the repo's HEAD.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "description": "Path is repo-relative; empty is the tree root. Traversal is stripped.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "binary": false,
+                  "content": "module widgets\n",
+                  "encoding": "utf8",
+                  "path": "go.mod",
+                  "size": 42,
+                  "truncated": false
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/blobJSON"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/git/repos/{name}/commits": {
+      "get": {
+        "operationId": "get_v1_git_repos_name_commits",
+        "summary": "browseCommits walks a ref's history newest first, or one path's history when a\npath is given.",
+        "description": "browseCommits walks a ref's history newest first, or one path's history when a\npath is given. There is no cursor: the page is the newest `limit` commits.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the repo to read, from the :name path segment.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ref",
+            "in": "query",
+            "required": false,
+            "description": "Ref is the branch, tag or commit to walk back from; empty means HEAD.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "description": "Path narrows the history to commits touching it; empty walks the whole ref.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the page. Anything not positive means 50; the cap is 100.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "commits": [
+                    {
+                      "authorEmail": "ada@hanzo.ai",
+                      "authorName": "Ada",
+                      "date": "2026-07-01T10:00:00Z",
+                      "message": "add the widget service",
+                      "sha": "a1b2c3d4e5f6",
+                      "shortSha": "a1b2c3d"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/commitsJSON"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/git/repos/{name}/gc": {
+      "post": {
+        "operationId": "post_v1_git_repos_name_gc",
+        "summary": "gc repacks a repo into one bitmapped pack and rewrites its commit-graph, so\nthe next clone reuses the bitmap instead of walking the whole object graph.\nIdempotent, and safe to interrupt — git swaps both artifacts atomically.",
+        "description": "gc repacks a repo into one bitmapped pack and rewrites its commit-graph, so\nthe next clone reuses the bitmap instead of walking the whole object graph.\nIdempotent, and safe to interrupt — git swaps both artifacts atomically. It\nruns under one pack slot with the same memory bounds as a clone, so it can\nblock behind heavy pack traffic rather than compete with it. Storage usage is\nre-measured afterwards, since a repack reclaims space.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "widgets"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/repoRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "maintained": true,
+                  "repo": "widgets",
+                  "sizeBytes": 3072
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/gcOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/git/repos/{name}/mirror": {
+      "post": {
+        "operationId": "post_v1_git_repos_name_mirror",
+        "summary": "mirror imports an external git repository into the caller's repo, provisioning\nit on first use.",
+        "description": "mirror imports an external git repository into the caller's repo, provisioning\nit on first use. Fetch is FORCED and covers every ref, so a first call clones\nthe source and a repeat call re-syncs it — the endpoint is idempotent by mirror\nsemantics. Mirrored bytes are metered exactly like a push, and a push.landed\nevent is emitted for the default branch so the code index picks the repo up.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the local repo to mirror into, from the :name path segment. It is\nCREATED on first use.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "widgets",
+                "source": "https://github.com/acme/widgets.git"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/mirrorReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/repoView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/git/repos/{name}/mirrors": {
+      "get": {
+        "operationId": "get_v1_git_repos_name_mirrors",
+        "summary": "listMirrors returns a repo's outbound mirror targets — the downstream remotes",
+        "description": "listMirrors returns a repo's outbound mirror targets — the downstream remotes\nthe mirror reactor pushes to whenever a push lands here.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "createdAt": "2026-07-01T10:00:00Z",
+                      "host": "github.com",
+                      "id": "mir_2d90",
+                      "repo": "widgets",
+                      "url": "https://github.com/acme/widgets.git"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/mirrorList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_v1_git_repos_by_name_mirrors",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/git/repos/{name}/mirrors/{id}": {
+      "delete": {
+        "operationId": "delete_v1_git_repos_name_mirrors_id",
+        "summary": "deleteMirror removes one outbound mirror target; later pushes stop being\nforwarded to it.",
+        "description": "deleteMirror removes one outbound mirror target; later pushes stop being\nforwarded to it. Answers 204 with no body. Nothing is done to the downstream\nremote itself — only this repo's intent to push there is dropped.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the repo, from the :name path segment.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the row to remove, from the :id path segment.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/noContent"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/git/repos/{name}/push": {
+      "post": {
+        "operationId": "post_v1_git_repos_name_push",
+        "summary": "pushFiles lands a set of files as one commit without a git client — the\nhanzo.app builder's push.",
+        "description": "pushFiles lands a set of files as one commit without a git client — the\nhanzo.app builder's push. The repo is CREATED on first push, the files are\nmerged onto the branch tip (unlisted files survive), and the same\npush-to-deploy hook a real receive-pack fires is fired, so downstream this is\nindistinguishable from a `git push`.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the repo to push into, from the :name path segment. It is CREATED\non first push if it does not exist.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "branch": "main",
+                "files": [
+                  {
+                    "content": "\u003ch1\u003ehi\u003c/h1\u003e",
+                    "path": "index.html"
+                  }
+                ],
+                "message": "generated build",
+                "name": "widgets"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/pushReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "branch": "main",
+                  "cloneUrl": "https://api.hanzo.ai/v1/git/acme/widgets.git",
+                  "commit": "a1b2c3d4e5f6",
+                  "sshUrl": "git@git.hanzo.ai:acme/widgets.git"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/pushResp"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/git/repos/{name}/readme": {
+      "get": {
+        "operationId": "get_v1_git_repos_name_readme",
+        "summary": "browseReadme returns the README at the tree root as plain text — unrendered, so\nthe caller decides how to present it.",
+        "description": "browseReadme returns the README at the tree root as plain text — unrendered, so\nthe caller decides how to present it. A repo with no README is not found.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the repo to read, from the :name path segment.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ref",
+            "in": "query",
+            "required": false,
+            "description": "Ref is a branch, tag or commit; empty means the repo's HEAD.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "content": "# widgets\n",
+                  "encoding": "utf8",
+                  "path": "README.md"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/readmeJSON"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/git/repos/{name}/refs": {
+      "get": {
+        "operationId": "get_v1_git_repos_name_refs",
+        "summary": "browseRefs lists a repo's branches, tags and default branch — what a branch\npicker needs in one call.",
+        "description": "browseRefs lists a repo's branches, tags and default branch — what a branch\npicker needs in one call. Unlike the other read ops it tolerates a repo with no\ncommits: the ref sets come back empty and the default branch is still named.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "branches": [
+                    {
+                      "name": "main",
+                      "sha": "a1b2c3d4"
+                    }
+                  ],
+                  "default": "main",
+                  "tags": []
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/refsJSON"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/git/repos/{name}/subscriptions": {
+      "get": {
+        "operationId": "get_v1_git_repos_name_subscriptions",
+        "summary": "listSubscriptions returns a repo's Slack subscriptions — which channels the",
+        "description": "listSubscriptions returns a repo's Slack subscriptions — which channels the\nlifecycle notifier posts this repo's push and deploy events to.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "channel": "#builds",
+                      "createdAt": "2026-07-01T10:00:00Z",
+                      "events": [
+                        "push.landed"
+                      ],
+                      "id": "sub_7c2e",
+                      "repo": "widgets"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/subscriptionList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_v1_git_repos_by_name_subscriptions",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/git/repos/{name}/subscriptions/{id}": {
+      "delete": {
+        "operationId": "delete_v1_git_repos_name_subscriptions_id",
+        "summary": "unsubscribe removes one Slack subscription from a repo; the notifier stops\nposting that repo's events to that channel.",
+        "description": "unsubscribe removes one Slack subscription from a repo; the notifier stops\nposting that repo's events to that channel. Answers 204 with no body. An id\nthat is not this repo's subscription is not found.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the repo, from the :name path segment.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID is the row to remove, from the :id path segment.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/noContent"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/git/repos/{name}/tree": {
+      "get": {
+        "operationId": "get_v1_git_repos_name_tree",
+        "summary": "browseTree lists the immediate children of one directory at one revision,\ndirectories before files.",
+        "description": "browseTree lists the immediate children of one directory at one revision,\ndirectories before files. It does not recurse — walk down a level at a time.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the repo to read, from the :name path segment.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ref",
+            "in": "query",
+            "required": false,
+            "description": "Ref is a branch, tag or commit; empty means the repo's HEAD.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "description": "Path is repo-relative; empty is the tree root. Traversal is stripped.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "entries": [
+                    {
+                      "mode": "040000",
+                      "name": "server",
+                      "path": "cmd/server",
+                      "size": 0,
+                      "type": "tree"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/treeJSON"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/git/usage": {
+      "get": {
+        "operationId": "get_v1_git_usage",
+        "summary": "usage returns per-repo and total storage bytes for the caller's org — the\nqueryable, per-tenant number commerce and o11y meter on.",
+        "description": "usage returns per-repo and total storage bytes for the caller's org — the\nqueryable, per-tenant number commerce and o11y meter on. It spans EVERY\nproject sub-scope, unlike the repo list, so a billing consumer sees the whole\ntenant footprint in one call. Sizes are last-measured values (create, push,\nmirror and gc each re-measure), not a live walk of the disk.",
+        "tags": [
+          "git"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "org": "acme",
+                  "repos": [
+                    {
+                      "name": "widgets",
+                      "sizeBytes": 4096
+                    },
+                    {
+                      "name": "site",
+                      "project": "web",
+                      "sizeBytes": 8192
+                    }
+                  ],
+                  "totalBytes": 12288
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/usageView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
+    "/v1/git/zap/createRepo": {
+      "post": {
+        "operationId": "post_v1_git_zap_createrepo",
+        "tags": [
+          "git"
+        ]
+      }
+    },
+    "/v1/git/zap/deleteRepo": {
+      "post": {
+        "operationId": "post_v1_git_zap_deleterepo",
+        "tags": [
+          "git"
+        ]
+      }
+    },
+    "/v1/git/zap/getRepo": {
+      "post": {
+        "operationId": "post_v1_git_zap_getrepo",
+        "tags": [
+          "git"
+        ]
+      }
+    },
+    "/v1/git/zap/listRepos": {
+      "post": {
+        "operationId": "post_v1_git_zap_listrepos",
+        "tags": [
+          "git"
+        ]
+      }
+    },
+    "/v1/git/zap/usage": {
+      "post": {
+        "operationId": "post_v1_git_zap_usage",
+        "tags": [
+          "git"
+        ]
+      }
+    },
+    "/v1/git/{org}/{repo}/git-receive-pack": {
+      "post": {
+        "operationId": "post_v1_git_by_org_by_repo_git-receive-pack",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/git/{org}/{repo}/git-upload-pack": {
+      "post": {
+        "operationId": "post_v1_git_by_org_by_repo_git-upload-pack",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/git/{org}/{repo}/info/refs": {
+      "get": {
+        "operationId": "get_v1_git_by_org_by_repo_info_refs",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/{org}/{repo}": {
+      "get": {
+        "operationId": "get_by_org_by_repo",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/{org}/{repo}/blob/{wildcard1}": {
+      "get": {
+        "operationId": "get_by_org_by_repo_blob_by_wildcard1",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/{org}/{repo}/commits": {
+      "get": {
+        "operationId": "get_by_org_by_repo_commits",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/{org}/{repo}/git-receive-pack": {
+      "post": {
+        "operationId": "post_by_org_by_repo_git-receive-pack",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/{org}/{repo}/git-upload-pack": {
+      "post": {
+        "operationId": "post_by_org_by_repo_git-upload-pack",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/{org}/{repo}/info/refs": {
+      "get": {
+        "operationId": "get_by_org_by_repo_info_refs",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/{org}/{repo}/tree/{wildcard1}": {
+      "get": {
+        "operationId": "get_by_org_by_repo_tree_by_wildcard1",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wildcard1",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "blobJSON": {
+        "properties": {
+          "binary": {
+            "description": "Binary marks content git could not treat as text; it comes back base64.",
+            "type": "boolean"
+          },
+          "content": {
+            "description": "Content is the file's bytes, empty when Truncated.",
+            "type": "string"
+          },
+          "encoding": {
+            "description": "Encoding is how Content is carried: \"utf8\" verbatim, or \"base64\".",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the file's repo-relative path.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Size is the file's byte length in the repo, whatever was returned below.",
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "Truncated marks a file past the 1 MiB view cap. No content is sent —\nclone the repo for it.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "commitsJSON": {
+        "properties": {
+          "commits": {
+            "description": "Commits are newest first.",
+            "items": {
+              "properties": {
+                "authorEmail": {
+                  "description": "AuthorEmail is the commit author's email.",
+                  "type": "string"
+                },
+                "authorName": {
+                  "description": "AuthorName is the commit author's name.",
+                  "type": "string"
+                },
+                "date": {
+                  "description": "Date is the author date, RFC 3339 UTC.",
+                  "type": "string"
+                },
+                "message": {
+                  "description": "Message is the commit's SUBJECT — its first line only.",
+                  "type": "string"
+                },
+                "sha": {
+                  "description": "SHA is the full commit hash.",
+                  "type": "string"
+                },
+                "shortSha": {
+                  "description": "ShortSHA is the abbreviated hash a UI displays.",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "gcOut": {
+        "properties": {
+          "maintained": {
+            "description": "Maintained is always true; the call fails rather than reporting false.",
+            "type": "boolean"
+          },
+          "repo": {
+            "description": "Repo is the repo that was repacked.",
+            "type": "string"
+          },
+          "sizeBytes": {
+            "description": "SizeBytes is the size measured AFTER the repack — usually smaller, since\nrepacking drops the packs it supersedes.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "keyList": {
+        "properties": {
+          "data": {
+            "description": "Data holds the org's keys.",
+            "items": {
+              "properties": {
+                "createdAt": {
+                  "type": "string"
+                },
+                "fingerprint": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "publicKey": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "mirrorList": {
+        "properties": {
+          "data": {
+            "description": "Data holds the repo's outbound mirror targets.",
+            "items": {
+              "properties": {
+                "createdAt": {
+                  "description": "CreatedAt is RFC 3339 UTC.",
+                  "type": "string"
+                },
+                "host": {
+                  "description": "Host is the target's lowercased hostname, taken from URL and never the body.",
+                  "type": "string"
+                },
+                "id": {
+                  "description": "ID is the target's identifier (\"mir_…\"), the handle to remove it by.",
+                  "type": "string"
+                },
+                "repo": {
+                  "description": "Repo is the repo whose advanced refs are pushed downstream.",
+                  "type": "string"
+                },
+                "url": {
+                  "description": "URL is the canonical https remote, with any embedded credentials stripped.",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "mirrorReq": {
+        "properties": {
+          "name": {
+            "description": "Name is the local repo to mirror into, from the :name path segment. It is\nCREATED on first use.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project is the sub-scope to land the repo in; empty uses the caller's own,\nexactly as a create would.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the http(s) git URL to fetch from. The host is SSRF-guarded and\nthe shared mirror credential is only sent to allowlisted hosts.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "noContent": {
+        "properties": {},
+        "type": "object"
+      },
+      "patchIn": {
+        "properties": {
+          "name": {
+            "description": "Name is the repo to update, from the :name path segment.",
+            "type": "string"
+          },
+          "public": {
+            "description": "Public flips anonymous read access. Omit it and the request is refused —\nthere is nothing else to update yet.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "pushReq": {
+        "properties": {
+          "branch": {
+            "description": "Branch to advance; empty means \"main\". A fresh branch that is the repo's\nfirst also becomes HEAD.",
+            "type": "string"
+          },
+          "files": {
+            "description": "Files are added to or overwritten on the branch tip — files already there\nand not listed SURVIVE. At least one, at most 5000, 32 MiB each.",
+            "items": {
+              "properties": {
+                "content": {
+                  "description": "Content is the file's bytes, carried per Encoding.",
+                  "type": "string"
+                },
+                "encoding": {
+                  "description": "Encoding is \"base64\", or \"utf-8\" (the default, also \"utf8\" / \"text\").",
+                  "type": "string"
+                },
+                "path": {
+                  "description": "Path is repo-relative. Absolute or traversing paths are refused.",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "message": {
+            "description": "Message is the commit message; empty gets a generated one.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the repo to push into, from the :name path segment. It is CREATED\non first push if it does not exist.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pushResp": {
+        "properties": {
+          "branch": {
+            "description": "Branch is the branch that was advanced, resolved (never empty).",
+            "type": "string"
+          },
+          "cloneUrl": {
+            "description": "CloneURL is the repo's HTTPS remote.",
+            "type": "string"
+          },
+          "commit": {
+            "description": "Commit is the new commit's full hash.",
+            "type": "string"
+          },
+          "sshUrl": {
+            "description": "SSHURL is the repo's scp-style SSH remote.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "readmeJSON": {
+        "properties": {
+          "content": {
+            "description": "Content is the file's text, verbatim and unrendered.",
+            "type": "string"
+          },
+          "encoding": {
+            "description": "Encoding is always \"utf8\" — a README is text by definition.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the file the README was found at (README.md, README, …).",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "refsJSON": {
+        "properties": {
+          "branches": {
+            "description": "Branches are the repo's heads; empty on a repo with no commits.",
+            "items": {
+              "properties": {
+                "name": {
+                  "description": "Name is the short ref name (\"main\", \"v1.2.0\"), not the full refs/… path.",
+                  "type": "string"
+                },
+                "sha": {
+                  "description": "SHA is the full commit hash the ref resolves to.",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "default": {
+            "description": "Default is the branch name a caller gets when it asks for no ref.",
+            "type": "string"
+          },
+          "tags": {
+            "description": "Tags are the repo's tags; empty when there are none.",
+            "items": {
+              "properties": {
+                "name": {
+                  "description": "Name is the short ref name (\"main\", \"v1.2.0\"), not the full refs/… path.",
+                  "type": "string"
+                },
+                "sha": {
+                  "description": "SHA is the full commit hash the ref resolves to.",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "repoList": {
+        "properties": {
+          "data": {
+            "description": "Data holds the repos in scope, most recently updated first.",
+            "items": {
+              "properties": {
+                "branches": {
+                  "description": "Branches are the repo's branch names. Read live, so the detail view carries\nthem and a list row does not.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "cloneUrl": {
+                  "description": "CloneURL is the HTTPS smart-HTTP remote `git clone` takes.",
+                  "type": "string"
+                },
+                "createdAt": {
+                  "description": "CreatedAt is RFC 3339 UTC.",
+                  "type": "string"
+                },
+                "defaultBranch": {
+                  "description": "DefaultBranch is where HEAD points on a fresh repo (\"main\").",
+                  "type": "string"
+                },
+                "description": {
+                  "description": "Description is the caller-supplied blurb (max 4KiB).",
+                  "type": "string"
+                },
+                "head": {
+                  "description": "Head is the resolved HEAD commit, empty on an empty repo.",
+                  "type": "string"
+                },
+                "id": {
+                  "description": "ID is the repo's stable, prefixed identifier (\"repo_\" + 128 random bits).",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Name is the org-unique handle, and the last path segment of both URLs below.",
+                  "type": "string"
+                },
+                "org": {
+                  "description": "Org owns the repo — the gateway-minted X-Org-Id, and the isolation key.",
+                  "type": "string"
+                },
+                "project": {
+                  "description": "Project is the optional sub-scope the repo lives in; absent for the org's\ndefault scope.",
+                  "type": "string"
+                },
+                "public": {
+                  "description": "Public grants ANONYMOUS read (fetch) only; push and the whole control plane\nstay org-authed.",
+                  "type": "boolean"
+                },
+                "sizeBytes": {
+                  "description": "SizeBytes is the repo's measured on-disk size, re-measured on create, after\neach push, and after a gc. This is the number billing meters.",
+                  "type": "integer"
+                },
+                "sshUrl": {
+                  "description": "SSHURL is the scp-style SSH remote (git@host:org/repo.git).",
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "description": "UpdatedAt is RFC 3339 UTC, empty until the first write.",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "repoRef": {
+        "properties": {
+          "name": {
+            "description": "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "repoView": {
+        "properties": {
+          "branches": {
+            "description": "Branches are the repo's branch names. Read live, so the detail view carries\nthem and a list row does not.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "cloneUrl": {
+            "description": "CloneURL is the HTTPS smart-HTTP remote `git clone` takes.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is RFC 3339 UTC.",
+            "type": "string"
+          },
+          "defaultBranch": {
+            "description": "DefaultBranch is where HEAD points on a fresh repo (\"main\").",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description is the caller-supplied blurb (max 4KiB).",
+            "type": "string"
+          },
+          "head": {
+            "description": "Head is the resolved HEAD commit, empty on an empty repo.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the repo's stable, prefixed identifier (\"repo_\" + 128 random bits).",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the org-unique handle, and the last path segment of both URLs below.",
+            "type": "string"
+          },
+          "org": {
+            "description": "Org owns the repo — the gateway-minted X-Org-Id, and the isolation key.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project is the optional sub-scope the repo lives in; absent for the org's\ndefault scope.",
+            "type": "string"
+          },
+          "public": {
+            "description": "Public grants ANONYMOUS read (fetch) only; push and the whole control plane\nstay org-authed.",
+            "type": "boolean"
+          },
+          "sizeBytes": {
+            "description": "SizeBytes is the repo's measured on-disk size, re-measured on create, after\neach push, and after a gc. This is the number billing meters.",
+            "type": "integer"
+          },
+          "sshUrl": {
+            "description": "SSHURL is the scp-style SSH remote (git@host:org/repo.git).",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is RFC 3339 UTC, empty until the first write.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "subscriptionList": {
+        "properties": {
+          "data": {
+            "description": "Data holds the repo's subscriptions.",
+            "items": {
+              "properties": {
+                "channel": {
+                  "description": "Channel is the Slack channel id or name the notifier posts to.",
+                  "type": "string"
+                },
+                "createdAt": {
+                  "description": "CreatedAt is RFC 3339 UTC.",
+                  "type": "string"
+                },
+                "events": {
+                  "description": "Events is the kind filter; absent means every deliverable kind.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "id": {
+                  "description": "ID is the subscription's identifier (\"sub_…\"), the handle to delete it by.",
+                  "type": "string"
+                },
+                "repo": {
+                  "description": "Repo is the repo whose lifecycle events are delivered.",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "treeJSON": {
+        "properties": {
+          "entries": {
+            "description": "Entries are the immediate children, directories before files.",
+            "items": {
+              "properties": {
+                "mode": {
+                  "description": "Mode is the octal git file mode (\"100644\", \"040000\", \"120000\").",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Name is the entry's own name, no directory part.",
+                  "type": "string"
+                },
+                "path": {
+                  "description": "Path is the entry's full repo-relative path.",
+                  "type": "string"
+                },
+                "size": {
+                  "description": "Size is the file's byte length; 0 for a directory.",
+                  "type": "integer"
+                },
+                "type": {
+                  "description": "Type is \"tree\" for a directory, \"blob\" for a file.",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "usageView": {
+        "properties": {
+          "org": {
+            "description": "Org the rollup is for.",
+            "type": "string"
+          },
+          "repos": {
+            "description": "Repos is every repo the org owns, across every project sub-scope.",
+            "items": {
+              "properties": {
+                "name": {
+                  "description": "Name is the repo's org-unique handle.",
+                  "type": "string"
+                },
+                "project": {
+                  "description": "Project is the sub-scope the repo lives in; absent for the default scope.",
+                  "type": "string"
+                },
+                "sizeBytes": {
+                  "description": "SizeBytes is the repo's on-disk size at its last measurement.",
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "totalBytes": {
+            "description": "TotalBytes is the sum over Repos — the org's whole git footprint.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    }
+  }
+}

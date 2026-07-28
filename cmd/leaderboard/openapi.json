@@ -1,0 +1,66 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "usage"
+    }
+  ],
+  "paths": {
+    "/v1/usage/activity": {
+      "get": {
+        "operationId": "get_v1_usage_activity",
+        "tags": [
+          "usage"
+        ]
+      }
+    },
+    "/v1/usage/leaderboard": {
+      "get": {
+        "operationId": "get_v1_usage_leaderboard",
+        "tags": [
+          "usage"
+        ]
+      }
+    },
+    "/v1/usage/leaderboard/optin": {
+      "get": {
+        "operationId": "get_v1_usage_leaderboard_optin",
+        "tags": [
+          "usage"
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_usage_leaderboard_optin",
+        "tags": [
+          "usage"
+        ]
+      }
+    },
+    "/v1/usage/leaderboard/optin/org": {
+      "put": {
+        "operationId": "put_v1_usage_leaderboard_optin_org",
+        "tags": [
+          "usage"
+        ]
+      }
+    },
+    "/v1/usage/rollup/backfill": {
+      "post": {
+        "operationId": "post_v1_usage_rollup_backfill",
+        "tags": [
+          "usage"
+        ]
+      }
+    }
+  }
+}

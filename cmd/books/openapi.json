@@ -1,0 +1,214 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "books"
+    }
+  ],
+  "paths": {
+    "/v1/books/accounts": {
+      "get": {
+        "operationId": "get_v1_books_accounts",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/ask": {
+      "post": {
+        "operationId": "post_v1_books_ask",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/balance-sheet": {
+      "get": {
+        "operationId": "get_v1_books_balance-sheet",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/bank/exchange": {
+      "post": {
+        "operationId": "post_v1_books_bank_exchange",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/bank/import": {
+      "post": {
+        "operationId": "post_v1_books_bank_import",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/bank/link-token": {
+      "post": {
+        "operationId": "post_v1_books_bank_link-token",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/bank/sync": {
+      "post": {
+        "operationId": "post_v1_books_bank_sync",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/bank/transactions": {
+      "get": {
+        "operationId": "get_v1_books_bank_transactions",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/bank/unreconciled": {
+      "get": {
+        "operationId": "get_v1_books_bank_unreconciled",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/export": {
+      "get": {
+        "operationId": "get_v1_books_export",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/gl": {
+      "get": {
+        "operationId": "get_v1_books_gl",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/inbox": {
+      "get": {
+        "operationId": "get_v1_books_inbox",
+        "tags": [
+          "books"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_books_inbox",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/metrics": {
+      "get": {
+        "operationId": "get_v1_books_metrics",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/pnl": {
+      "get": {
+        "operationId": "get_v1_books_pnl",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/questions": {
+      "get": {
+        "operationId": "get_v1_books_questions",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/rules": {
+      "get": {
+        "operationId": "get_v1_books_rules",
+        "tags": [
+          "books"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_books_rules",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/scan": {
+      "post": {
+        "operationId": "post_v1_books_scan",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/scan/book": {
+      "post": {
+        "operationId": "post_v1_books_scan_book",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/sync": {
+      "post": {
+        "operationId": "post_v1_books_sync",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/transactions": {
+      "get": {
+        "operationId": "get_v1_books_transactions",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/trial-balance": {
+      "get": {
+        "operationId": "get_v1_books_trial-balance",
+        "tags": [
+          "books"
+        ]
+      }
+    },
+    "/v1/books/vendors": {
+      "get": {
+        "operationId": "get_v1_books_vendors",
+        "tags": [
+          "books"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_books_vendors",
+        "tags": [
+          "books"
+        ]
+      }
+    }
+  }
+}

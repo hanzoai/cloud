@@ -1,0 +1,102 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "sync"
+    }
+  ],
+  "paths": {
+    "/v1/sync": {
+      "get": {
+        "operationId": "get_v1_sync",
+        "tags": [
+          "sync"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_sync",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/v1/sync/{id}": {
+      "delete": {
+        "operationId": "delete_v1_sync_by_id",
+        "tags": [
+          "sync"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_sync_by_id",
+        "tags": [
+          "sync"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_sync_by_id",
+        "tags": [
+          "sync"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sync/{id}/run": {
+      "post": {
+        "operationId": "post_v1_sync_by_id_run",
+        "tags": [
+          "sync"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

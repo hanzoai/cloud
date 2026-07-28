@@ -1,0 +1,444 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Hanzo Cloud API",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://api.hanzo.ai"
+    }
+  ],
+  "tags": [
+    {
+      "name": "agents"
+    }
+  ],
+  "paths": {
+    "/v1/agents": {
+      "get": {
+        "operationId": "get_v1_agents",
+        "tags": [
+          "agents"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_agents",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/v1/agents/activity": {
+      "get": {
+        "operationId": "get_v1_agents_activity",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/v1/agents/metrics": {
+      "get": {
+        "operationId": "get_v1_agents_metrics",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/v1/agents/sessions": {
+      "get": {
+        "operationId": "get_v1_agents_sessions",
+        "tags": [
+          "agents"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_agents_sessions",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/v1/agents/sessions/stream": {
+      "get": {
+        "operationId": "get_v1_agents_sessions_stream",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/v1/agents/sessions/{id}": {
+      "get": {
+        "operationId": "get_v1_agents_sessions_by_id",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_agents_sessions_by_id",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/agents/sessions/{id}/control": {
+      "get": {
+        "operationId": "get_v1_agents_sessions_by_id_control",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/agents/sessions/{id}/events": {
+      "post": {
+        "operationId": "post_v1_agents_sessions_by_id_events",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/agents/sessions/{id}/message": {
+      "post": {
+        "operationId": "post_v1_agents_sessions_by_id_message",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/agents/sessions/{id}/pause": {
+      "post": {
+        "operationId": "post_v1_agents_sessions_by_id_pause",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/agents/sessions/{id}/resume": {
+      "post": {
+        "operationId": "post_v1_agents_sessions_by_id_resume",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/agents/sessions/{id}/stop": {
+      "post": {
+        "operationId": "post_v1_agents_sessions_by_id_stop",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/agents/sessions/{id}/tree": {
+      "get": {
+        "operationId": "get_v1_agents_sessions_by_id_tree",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/agents/targets": {
+      "get": {
+        "operationId": "get_v1_agents_targets",
+        "tags": [
+          "agents"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_agents_targets",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/v1/agents/targets/{id}": {
+      "delete": {
+        "operationId": "delete_v1_agents_targets_by_id",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_agents_targets_by_id",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_agents_targets_by_id",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/agents/targets/{id}/claim": {
+      "post": {
+        "operationId": "post_v1_agents_targets_by_id_claim",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/agents/targets/{id}/claim-key": {
+      "post": {
+        "operationId": "post_v1_agents_targets_by_id_claim-key",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/agents/targets/{id}/runs/{runId}/report": {
+      "post": {
+        "operationId": "post_v1_agents_targets_by_id_runs_by_runid_report",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/agents/{ref}": {
+      "delete": {
+        "operationId": "delete_v1_agents_by_ref",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "ref",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_agents_by_ref",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "ref",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "patch_v1_agents_by_ref",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "ref",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/agents/{ref}/run": {
+      "post": {
+        "operationId": "post_v1_agents_by_ref_run",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "ref",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/agents/{ref}/runs": {
+      "get": {
+        "operationId": "get_v1_agents_by_ref_runs",
+        "tags": [
+          "agents"
+        ],
+        "parameters": [
+          {
+            "name": "ref",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
