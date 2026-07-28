@@ -10,7 +10,7 @@
 //
 //	GET /v1/git/repos/:name/refs                 → { branches, tags, default }
 //	GET /v1/git/repos/:name/tree?ref&path        → { entries: [ {name,path,type,size,mode} ] }
-//	GET /v1/git/repos/:name/paths?ref&glob       → { rev, paths: [ … ] }   (delivery inventory)
+//	GET /v1/git/repos/:name/files?ref&glob       → { rev, files: [ {path,content,…} ] }  (delivery inventory)
 //	GET /v1/git/repos/:name/blob?ref&path        → { path,size,encoding,content,binary,truncated }
 //	GET /v1/git/repos/:name/commits?ref&path&limit → { commits: [ {sha,shortSha,message,author*,date} ] }
 //	GET /v1/git/repos/:name/readme?ref           → { path, content, encoding }
@@ -110,12 +110,28 @@ type commitJSON struct {
 	Date string `json:"date"`
 }
 
-// pathsJSON is the set of paths a glob selected, at the revision it resolved to.
-type pathsJSON struct {
+// fileJSON is one selected file and its bytes.
+type fileJSON struct {
+	// Path is the file's repo-relative path.
+	Path string `json:"path"`
+	// Size is the file's byte length in the repo.
+	Size int64 `json:"size"`
+	// Encoding is how Content is carried: "utf8" verbatim, or "base64".
+	Encoding string `json:"encoding"`
+	// Content is the file's bytes, empty when Truncated.
+	Content string `json:"content"`
+	// Truncated marks a file past the read cap; no content is sent. A caller
+	// assembling a desired set must treat this as INCOMPLETE, never as empty.
+	Truncated bool `json:"truncated"`
+}
+
+// filesJSON is the inventory a glob selected, at the revision it resolved to.
+type filesJSON struct {
 	// Rev is the full revision the ref resolved to — pin follow-up reads to it.
 	Rev string `json:"rev"`
-	// Paths are repo-relative file paths, sorted. Directories are never returned.
-	Paths []string `json:"paths"`
+	// Files are the selected files, sorted by path. Directories are never
+	// returned.
+	Files []fileJSON `json:"files"`
 }
 
 // commitsJSON is one page of history.
@@ -254,18 +270,23 @@ func (o ops) browseTree(ctx context.Context, in *pathRef) (*treeJSON, error) {
 	return &treeJSON{Entries: out}, nil
 }
 
-// browsePaths lists every file a glob selects at one revision, plus the revision
-// it resolved to. It is the read a delivery generator makes: one call answers
-// "what is the inventory at this commit", where walking the tree a level at a
-// time would be a request per directory.
+// browseFiles returns every file a glob selects at one revision, WITH its bytes
+// and the revision they came from. It is the read a delivery generator makes:
+// one call answers "what is the inventory at this commit, and what does it say",
+// where listing and then fetching would be a request per file.
 //
-// Returning the resolved revision matters as much as the paths. A generator that
-// lists at `main` and then reads files at `main` can straddle a push and build
-// from two different commits; pinning the returned rev makes the whole read
-// consistent.
+// Returning the resolved revision matters as much as the bytes. A generator that
+// lists at `main` and then reads at `main` can straddle a push and assemble half
+// its inventory from one commit and half from the next; resolving once makes the
+// whole read consistent by construction.
+//
+// A file past the read cap comes back Truncated with no content rather than
+// being dropped. A caller building a desired set has to know the difference
+// between "this file is empty" and "this file was not read" — silently omitting
+// it is how a pruning reconcile deletes what the missing file declared.
 //
 // Example: {"name": "universe", "ref": "main", "glob": "charts/app/values/*/*.yaml"}
-func (o ops) browsePaths(ctx context.Context, in *globRef) (*pathsJSON, error) {
+func (o ops) browseFiles(ctx context.Context, in *globRef) (*filesJSON, error) {
 	t, err := tenantOf(ctx)
 	if err != nil {
 		return nil, err
@@ -281,7 +302,26 @@ func (o ops) browsePaths(ctx context.Context, in *globRef) (*pathsJSON, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &pathsJSON{Rev: rev.String(), Paths: paths}, nil
+	out := &filesJSON{Rev: rev.String(), Files: make([]fileJSON, 0, len(paths))}
+	for _, p := range paths {
+		blob, err := repo.Blob(ctx, rev, p, maxBlobBytes)
+		if err != nil {
+			// A path the walk just listed and the read cannot open is a broken
+			// object store, not an empty file. Failing the whole read is right:
+			// a partial inventory is the dangerous answer.
+			return nil, zip.Errorf(http.StatusInternalServerError, "read %s at %s: %v", p, ShortRev(rev), err)
+		}
+		f := fileJSON{Path: p, Size: blob.Size, Encoding: "utf8", Truncated: blob.Truncated}
+		switch {
+		case blob.Truncated:
+		case blob.Binary:
+			f.Encoding, f.Content = "base64", base64.StdEncoding.EncodeToString(blob.Content)
+		default:
+			f.Content = string(blob.Content)
+		}
+		out.Files = append(out.Files, f)
+	}
+	return out, nil
 }
 
 // browseBlob returns one file's bytes at one revision. Text comes back verbatim,
