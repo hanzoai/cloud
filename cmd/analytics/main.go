@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/analytics"
+	"github.com/hanzoai/cloud/apps/analytics"
 )
 
 // Standalone entry for the analytics app.

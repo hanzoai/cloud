@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/storage"
+	"github.com/hanzoai/cloud/apps/storage"
 )
 
 // Standalone entry for the storage app.

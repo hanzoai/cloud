@@ -32,7 +32,7 @@ import (
 	gojose "github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 
-	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/apps/principal"
 	model "github.com/hanzoai/iam/pkg/model"
 )
 

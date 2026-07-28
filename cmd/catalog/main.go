@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/catalog"
+	"github.com/hanzoai/cloud/apps/catalog"
 )
 
 // Standalone entry for the catalog app.

@@ -20,8 +20,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/clients/metering"
-	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/apps/principal"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )

@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/benchmark"
+	"github.com/hanzoai/cloud/apps/benchmark"
 )
 
 // Standalone entry for the benchmark app.

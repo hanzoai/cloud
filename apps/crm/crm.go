@@ -1,0 +1,555 @@
+// Package crm mounts the Hanzo Cloud /v1/crm/* surface: a native-Go,
+// per-org CRM (companies, contacts, opportunities) on Base/SQLite. It is the
+// first slice of the "collapse the business apps into the unified cloud binary"
+// program (universe/docs/architecture/unified-backend-go.md) — a native-Go port
+// of the Twenty CRM core model, NOT a proxy to a NestJS backend.
+//
+// The three entities are faithful to Twenty's `company` / `person` /
+// `opportunity` standard objects, with Twenty's composite fields (FULL_NAME,
+// EMAILS, CURRENCY, LINKS, ADDRESS) flattened to scalar columns for SQLite.
+//
+// Tenant isolation is enforced SERVER-SIDE on every request: the org is
+// c.Org() — the value SanitizeIdentity minted from the VALIDATED bearer owner
+// claim (HIP-0026) — and NEVER a client-supplied header. Every store query
+// filters WHERE org=?, so one tenant can never read or mutate another's data.
+//
+// Surface (all org-scoped; /v1 only):
+//
+//	GET    /v1/crm/summary               per-org row counts (companies/contacts/opps)
+//	GET    /v1/crm/companies             list companies                 -> {data:[…]}
+//	POST   /v1/crm/companies             create a company               -> Company (201)
+//	GET    /v1/crm/companies/:id         company detail                 -> Company
+//	PUT    /v1/crm/companies/:id         update a company               -> Company
+//	DELETE /v1/crm/companies/:id         delete a company (+ clear refs)
+//	GET    /v1/crm/contacts              list contacts (?companyId=)     -> {data:[…]}
+//	POST   /v1/crm/contacts             create a contact               -> Contact (201)
+//	GET    /v1/crm/contacts/:id          contact detail                 -> Contact
+//	PUT    /v1/crm/contacts/:id          update a contact               -> Contact
+//	DELETE /v1/crm/contacts/:id          delete a contact (+ clear refs)
+//	GET    /v1/crm/opportunities         list opportunities (?stage=)    -> {data:[…]}
+//	POST   /v1/crm/opportunities        create an opportunity          -> Opportunity (201)
+//	GET    /v1/crm/opportunities/:id     opportunity detail             -> Opportunity
+//	PUT    /v1/crm/opportunities/:id     update an opportunity          -> Opportunity
+//	DELETE /v1/crm/opportunities/:id     delete an opportunity
+//
+// Order 131: binds /v1/crm/* before the AI subsystem's /v1/* catch-all (150).
+// serve.go auto-registers GET /v1/crm/health.
+package crm
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/types"
+	"github.com/zap-proto/zip"
+	"github.com/zap-proto/zip/middleware"
+)
+
+const (
+	// maxField caps a single text field so an unbounded body can't amplify the
+	// shared DB or a list response. CRM fields are short identifiers/labels.
+	maxField = 1024
+	// defaultLimit / maxLimit bound list responses.
+	defaultLimit = 200
+	maxLimit     = 1000
+)
+
+// stages is the default Twenty opportunity pipeline. A create/update with an
+// unknown stage is rejected; empty defaults to NEW.
+var stages = map[string]bool{
+	"NEW": true, "SCREENING": true, "MEETING": true, "PROPOSAL": true, "CUSTOMER": true,
+}
+
+// state is crm's own data; shared deps (logger, brand) live in the embedded
+// cloud.Base, reached as s.Log / s.Brand.
+type state struct {
+	store *Store
+	// ai screens Startup Program applications; nil disables screening (non-fatal).
+	ai types.AIClient
+	// defaultModel is the gateway model for screens ("" → gateway default).
+	defaultModel string
+	// screenSync runs the AI screen inline instead of detached (tests only).
+	screenSync bool
+}
+
+// mounted is the active service so Shutdown can release the store.
+var mounted *cloud.Service[state]
+
+// Mount wires the crm surface onto app per HIP-0106. Complex flavour: it keeps a
+// package global (mounted) for Shutdown, so it constructs the Service value directly.
+func Mount(app cloud.Router, deps cloud.Deps) error {
+	if app == nil {
+		return fmt.Errorf("crm.Mount: nil app")
+	}
+	if deps.Logger == nil {
+		return fmt.Errorf("crm.Mount: nil deps.Logger")
+	}
+	if deps.DataDir == "" {
+		return fmt.Errorf("crm.Mount: empty DataDir")
+	}
+	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
+		return fmt.Errorf("crm.Mount: data dir: %w", err)
+	}
+	store, err := openStore(filepath.Join(deps.DataDir, "crm.db"))
+	if err != nil {
+		return fmt.Errorf("crm.Mount: open store: %w", err)
+	}
+	b := cloud.NewBase(deps, "crm")
+	s := &cloud.Service[state]{Base: b, State: state{
+		store:        store,
+		ai:           deps.AI,
+		defaultModel: strings.TrimSpace(deps.AIDefaultModel),
+	}}
+	mounted = s
+
+	routes(app, s)
+
+	b.Log.Info("crm mounted", "brand", deps.Brand)
+	return nil
+}
+
+// routes registers the CRM surface: companies, contacts, opportunities, the summary
+// roll-up, and the Startup Program application intake.
+func routes(app cloud.Router, s *cloud.Service[state]) {
+	g := app.Group("/v1/crm")
+	g.Get("/summary", cloud.Handle(s, summary))
+
+	g.Get("/companies", cloud.Handle(s, listCompanies))
+	g.Post("/companies", cloud.Handle(s, createCompany))
+	g.Get("/companies/:id", cloud.Handle(s, getCompany))
+	g.Put("/companies/:id", cloud.Handle(s, updateCompany))
+	g.Delete("/companies/:id", cloud.Handle(s, deleteCompany))
+
+	g.Get("/contacts", cloud.Handle(s, listContacts))
+	g.Post("/contacts", cloud.Handle(s, createContact))
+	g.Get("/contacts/:id", cloud.Handle(s, getContact))
+	g.Put("/contacts/:id", cloud.Handle(s, updateContact))
+	g.Delete("/contacts/:id", cloud.Handle(s, deleteContact))
+
+	g.Get("/opportunities", cloud.Handle(s, listOpps))
+	g.Post("/opportunities", cloud.Handle(s, createOpp))
+	g.Get("/opportunities/:id", cloud.Handle(s, getOpp))
+	g.Put("/opportunities/:id", cloud.Handle(s, updateOpp))
+	g.Delete("/opportunities/:id", cloud.Handle(s, deleteOpp))
+
+	// Startup Program applications. The intake POST is PUBLIC (unauthenticated
+	// marketing form) and IP-rate-limited; the reads/mutations are staff-only,
+	// gated by tenant() like every other CRM route.
+	app.Group("/v1/crm", middleware.RateLimit(middleware.RateLimitConfig{
+		Limit:  intakeRateLimit,
+		Window: intakeRateWindow,
+		KeyFn:  func(c *zip.Ctx) string { return c.Fiber().IP() },
+	})).Post("/applications", cloud.Handle(s, apply))
+	g.Get("/applications", cloud.Handle(s, listApplications))
+	g.Get("/applications/:id", cloud.Handle(s, getApplication))
+	g.Patch("/applications/:id", cloud.Handle(s, patchApplication))
+}
+
+// ---- shared helpers ----
+
+// tenant resolves the org — the tenant-isolation KEY — for a request. It uses
+// c.Org() EXACTLY as SanitizeIdentity minted it from the validated IAM owner
+// claim (HIP-0026): never lowercased, stripped, or truncated (normalizing would
+// collapse DISTINCT owners into one bucket — a cross-tenant break). Reject only
+// empty or pathologically long; never transform. Mirrors clients/prompts.
+func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
+
+func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
+
+// genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
+func genID(prefix string) (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return prefix + "_" + hex.EncodeToString(b[:]), nil
+}
+
+// clip trims and bounds a text field to maxField.
+func clip(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) > maxField {
+		return s[:maxField]
+	}
+	return s
+}
+
+func limitOf(c *zip.Ctx) int {
+	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
+	if err != nil || n <= 0 {
+		return defaultLimit
+	}
+	if n > maxLimit {
+		return maxLimit
+	}
+	return n
+}
+
+func defaultCurrency(cur string) string {
+	cur = strings.ToUpper(strings.TrimSpace(cur))
+	if cur == "" {
+		return "USD"
+	}
+	if len(cur) > 8 {
+		return cur[:8]
+	}
+	return cur
+}
+
+// mapErr maps a store sentinel error to the right HTTP error. Non-sentinel
+// errors become a 500 with the wrapped message.
+func mapErr(err error, notFoundMsg string) error {
+	switch err {
+	case errNotFound:
+		return zip.ErrNotFound(notFoundMsg)
+	case errConflict:
+		return zip.ErrConflict("already exists")
+	case errBadRef:
+		return zip.Errorf(http.StatusUnprocessableEntity, "referenced record not found in org")
+	default:
+		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+	}
+}
+
+// ---- companies ----
+
+func createCompany(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	var body Company
+	if err := c.Bind(&body); err != nil {
+		return err
+	}
+	name := clip(body.Name)
+	if name == "" {
+		return zip.ErrBadRequest("name is required")
+	}
+	id, err := genID("comp")
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+	}
+	now := time.Now().Unix()
+	comp := Company{
+		ID: id, Org: org, Name: name, DomainName: clip(body.DomainName),
+		Employees: body.Employees, City: clip(body.City), Country: clip(body.Country),
+		ARR: body.ARR, Currency: defaultCurrency(body.Currency), ICP: body.ICP,
+		Linkedin: clip(body.Linkedin), XLink: clip(body.XLink), CreatedAt: now, UpdatedAt: now,
+	}
+	saved, err := s.State.store.CreateCompany(c.Context(), comp)
+	if err != nil {
+		return mapErr(err, "")
+	}
+	return c.JSON(http.StatusCreated, saved)
+}
+
+func listCompanies(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	rows, err := s.State.store.ListCompanies(c.Context(), org, limitOf(c))
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+	}
+	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+}
+
+func getCompany(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	comp, err := s.State.store.GetCompany(c.Context(), org, idParam(c))
+	if err != nil {
+		return mapErr(err, "company not found")
+	}
+	return c.JSON(http.StatusOK, comp)
+}
+
+func updateCompany(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	var body Company
+	if err := c.Bind(&body); err != nil {
+		return err
+	}
+	name := clip(body.Name)
+	if name == "" {
+		return zip.ErrBadRequest("name is required")
+	}
+	comp := Company{
+		ID: idParam(c), Org: org, Name: name, DomainName: clip(body.DomainName),
+		Employees: body.Employees, City: clip(body.City), Country: clip(body.Country),
+		ARR: body.ARR, Currency: defaultCurrency(body.Currency), ICP: body.ICP,
+		Linkedin: clip(body.Linkedin), XLink: clip(body.XLink), UpdatedAt: time.Now().Unix(),
+	}
+	saved, err := s.State.store.UpdateCompany(c.Context(), comp)
+	if err != nil {
+		return mapErr(err, "company not found")
+	}
+	return c.JSON(http.StatusOK, saved)
+}
+
+func deleteCompany(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	deleted, err := s.State.store.DeleteCompany(c.Context(), org, idParam(c))
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+	}
+	if !deleted {
+		return zip.ErrNotFound("company not found")
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// ---- contacts ----
+
+func createContact(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	var body Contact
+	if err := c.Bind(&body); err != nil {
+		return err
+	}
+	ct := Contact{
+		FirstName: clip(body.FirstName), LastName: clip(body.LastName), Email: clip(body.Email),
+		Phone: clip(body.Phone), JobTitle: clip(body.JobTitle), City: clip(body.City),
+		CompanyID: clip(body.CompanyID), Linkedin: clip(body.Linkedin), XLink: clip(body.XLink),
+	}
+	if ct.FirstName == "" && ct.LastName == "" && ct.Email == "" {
+		return zip.ErrBadRequest("one of firstName, lastName, or email is required")
+	}
+	id, err := genID("cont")
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+	}
+	now := time.Now().Unix()
+	ct.ID, ct.Org, ct.CreatedAt, ct.UpdatedAt = id, org, now, now
+	saved, err := s.State.store.CreateContact(c.Context(), ct)
+	if err != nil {
+		return mapErr(err, "")
+	}
+	return c.JSON(http.StatusCreated, saved)
+}
+
+func listContacts(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	rows, err := s.State.store.ListContacts(c.Context(), org, strings.TrimSpace(c.Query("companyId")), limitOf(c))
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+	}
+	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+}
+
+func getContact(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	ct, err := s.State.store.GetContact(c.Context(), org, idParam(c))
+	if err != nil {
+		return mapErr(err, "contact not found")
+	}
+	return c.JSON(http.StatusOK, ct)
+}
+
+func updateContact(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	var body Contact
+	if err := c.Bind(&body); err != nil {
+		return err
+	}
+	ct := Contact{
+		ID: idParam(c), Org: org,
+		FirstName: clip(body.FirstName), LastName: clip(body.LastName), Email: clip(body.Email),
+		Phone: clip(body.Phone), JobTitle: clip(body.JobTitle), City: clip(body.City),
+		CompanyID: clip(body.CompanyID), Linkedin: clip(body.Linkedin), XLink: clip(body.XLink),
+		UpdatedAt: time.Now().Unix(),
+	}
+	if ct.FirstName == "" && ct.LastName == "" && ct.Email == "" {
+		return zip.ErrBadRequest("one of firstName, lastName, or email is required")
+	}
+	saved, err := s.State.store.UpdateContact(c.Context(), ct)
+	if err != nil {
+		return mapErr(err, "contact not found")
+	}
+	return c.JSON(http.StatusOK, saved)
+}
+
+func deleteContact(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	deleted, err := s.State.store.DeleteContact(c.Context(), org, idParam(c))
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+	}
+	if !deleted {
+		return zip.ErrNotFound("contact not found")
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// ---- opportunities ----
+
+func normStage(s string) (string, bool) {
+	s = strings.ToUpper(strings.TrimSpace(s))
+	if s == "" {
+		return "NEW", true
+	}
+	return s, stages[s]
+}
+
+func createOpp(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	var body Opportunity
+	if err := c.Bind(&body); err != nil {
+		return err
+	}
+	name := clip(body.Name)
+	if name == "" {
+		return zip.ErrBadRequest("name is required")
+	}
+	stage, valid := normStage(body.Stage)
+	if !valid {
+		return zip.ErrBadRequest("stage must be one of NEW, SCREENING, MEETING, PROPOSAL, CUSTOMER")
+	}
+	id, err := genID("oppo")
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+	}
+	now := time.Now().Unix()
+	o := Opportunity{
+		ID: id, Org: org, Name: name, Amount: body.Amount, Currency: defaultCurrency(body.Currency),
+		Stage: stage, CloseDate: body.CloseDate, CompanyID: clip(body.CompanyID),
+		PointOfContact: clip(body.PointOfContact), CreatedAt: now, UpdatedAt: now,
+	}
+	saved, err := s.State.store.CreateOpportunity(c.Context(), o)
+	if err != nil {
+		return mapErr(err, "")
+	}
+	return c.JSON(http.StatusCreated, saved)
+}
+
+func listOpps(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	stage := strings.ToUpper(strings.TrimSpace(c.Query("stage")))
+	rows, err := s.State.store.ListOpportunities(c.Context(), org, stage, limitOf(c))
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+	}
+	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+}
+
+func getOpp(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	o, err := s.State.store.GetOpportunity(c.Context(), org, idParam(c))
+	if err != nil {
+		return mapErr(err, "opportunity not found")
+	}
+	return c.JSON(http.StatusOK, o)
+}
+
+func updateOpp(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	var body Opportunity
+	if err := c.Bind(&body); err != nil {
+		return err
+	}
+	name := clip(body.Name)
+	if name == "" {
+		return zip.ErrBadRequest("name is required")
+	}
+	stage, valid := normStage(body.Stage)
+	if !valid {
+		return zip.ErrBadRequest("stage must be one of NEW, SCREENING, MEETING, PROPOSAL, CUSTOMER")
+	}
+	o := Opportunity{
+		ID: idParam(c), Org: org, Name: name, Amount: body.Amount, Currency: defaultCurrency(body.Currency),
+		Stage: stage, CloseDate: body.CloseDate, CompanyID: clip(body.CompanyID),
+		PointOfContact: clip(body.PointOfContact), UpdatedAt: time.Now().Unix(),
+	}
+	saved, err := s.State.store.UpdateOpportunity(c.Context(), o)
+	if err != nil {
+		return mapErr(err, "opportunity not found")
+	}
+	return c.JSON(http.StatusOK, saved)
+}
+
+func deleteOpp(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	deleted, err := s.State.store.DeleteOpportunity(c.Context(), org, idParam(c))
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+	}
+	if !deleted {
+		return zip.ErrNotFound("opportunity not found")
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// ---- summary ----
+
+func summary(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	companies, contacts, opps, err := s.State.store.Counts(c.Context(), org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "summary: %v", err)
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"companies": companies, "contacts": contacts, "opportunities": opps,
+	})
+}
+
+// Shutdown closes the crm store. Idempotent.
+func Shutdown() error {
+	if mounted == nil || mounted.State.store == nil {
+		return nil
+	}
+	err := mounted.State.store.Close()
+	mounted = nil
+	return err
+}

@@ -20,7 +20,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hanzoai/cloud/clients/metering"
+	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/types"
 	luxlog "github.com/luxfi/log"
 )

@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/blueprint"
+	"github.com/hanzoai/cloud/apps/blueprint"
 )
 
 // Standalone entry for the blueprint app.

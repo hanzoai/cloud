@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/marketplace"
+	"github.com/hanzoai/cloud/apps/marketplace"
 )
 
 // Standalone entry for the marketplace app.

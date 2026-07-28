@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/captable"
+	"github.com/hanzoai/cloud/apps/captable"
 )
 
 // Standalone entry for the captable app.

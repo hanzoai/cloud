@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/domain"
+	"github.com/hanzoai/cloud/apps/domain"
 )
 
 // Standalone entry for the domain app.

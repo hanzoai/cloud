@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/ask"
+	"github.com/hanzoai/cloud/apps/ask"
 )
 
 // Standalone entry for the ask app.

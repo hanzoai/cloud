@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/account"
+	"github.com/hanzoai/cloud/apps/account"
 )
 
 // Standalone entry for the account-bridge app.

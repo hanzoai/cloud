@@ -4,7 +4,7 @@ metadata:
   name: {{ include "cloud.fullname" . }}
   labels: {{- include "cloud.labels" . | nindent 4 }}
 spec:
-  # Embedded IAM (clients/iam) keeps a per-pod SQLite identity store, so a
+  # Embedded IAM (apps/iam) keeps a per-pod SQLite identity store, so a
   # horizontally scaled app tier would give each replica its own divergent store.
   # Whenever IAM is enabled the Deployment is PINNED to a single replica; cloud's
   # Config.Validate also refuses to boot iam-enabled above CLOUD_REPLICAS=1

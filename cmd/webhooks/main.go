@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/webhooks"
+	"github.com/hanzoai/cloud/apps/webhooks"
 )
 
 // Standalone entry for the webhooks app.

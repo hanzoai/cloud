@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/compliance"
+	"github.com/hanzoai/cloud/apps/compliance"
 )
 
 // Standalone entry for the compliance app.
