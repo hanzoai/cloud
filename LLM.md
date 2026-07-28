@@ -589,6 +589,25 @@ are published because they are the demos a visitor is meant to fork, and every o
 org's live sites land in that org's corpus. `TestSyncRoutesSitesByOrg` asserts the
 routing itself, because that is where a customer's project would leak.
 
+**Being ours is necessary to be published, not sufficient** (`gate.go`). Whose a
+site is says nothing about whether it is worth showing, and for a while the public
+catalog proved it: two deploy probes (399 and 480 bytes), the same scaffolding stub
+under two slugs byte-for-byte (`vite`, `next`), and a mislabeled ACME landing page.
+So `admit` READS the page each of our sites serves and refuses exactly three things:
+an unbuilt scaffolding placeholder (matched on the page's collapsed visible text), a
+page under a kilobyte that is also **inert**, and a body byte-identical to one
+already admitted this pass. Inert is the load-bearing half — a 784-byte SPA shell and
+a 682-byte redirect are both real apps, so "small" alone would have deleted them;
+what has nothing to show is small AND loads no first-party script, style or frame and
+goes nowhere. References to another host do not count, because we staple our own
+analytics onto every page we serve. Refusal is DEMOTION: the row moves to the
+platform's own corpus carrying `Note`, the reason, so a demo that leaves the public
+lens can be explained. It fails open twice — an unreadable page is unjudged and
+therefore admitted, and a pass that would hold MOST of the corpus has diagnosed the
+reader, not the sites, so it is discarded whole. It does NOT catch two different
+BUILDS of one design (same page, different bytes); that needs rendered comparison,
+which a reconcile does not do.
+
 `index.Reconcile` is `index.Query`'s mirror and the only in-process WRITE seam: a
 full-corpus swap (upsert everything, delete what is gone) because the truth lives
 upstream and a re-run must converge.
