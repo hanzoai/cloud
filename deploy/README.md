@@ -31,6 +31,6 @@ Optional (defaults shown):
 - `HANZO_ENABLE=iam,base,kms,gateway,o11y`
 - `HANZO_DATA_DIR=/var/lib/cloud`
 
-The full subsystem list is in `cmd/cloud/main.go`. Per HIP-0106
+The full subsystem list is in `manifest/apps.go`. Per HIP-0106
 payments and vault NEVER co-resident — leave them off this binary
 unless you understand the PCI scope implications.

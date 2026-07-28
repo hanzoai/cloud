@@ -7,7 +7,7 @@ import "github.com/zap-proto/zip"
 // There are now four projections of this one API, and they are compared against
 // each other by TEST:
 //
-//	the fully-mounted golden       openapi.yaml, written by cmd/cloud
+//	the woven golden               openapi.yaml, written by the weave (make openapi)
 //	each app binary's own subset   `<app> openapi`, one file per app
 //	the woven fleet document       Weave() over those subsets
 //	the live endpoint              GET /v1/openapi.json

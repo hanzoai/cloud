@@ -1,0 +1,143 @@
+// Package brand is the white-label registry (HIP-0111): the map from a brand id
+// (and from a request Host) to that brand's PUBLIC identity — its canonical OIDC
+// issuer and its serving domains.
+//
+// It is a LEAF (imports only strings), on purpose. Three unrelated callers need
+// it and none should drag the others in: package cloud derives Config.IAMIssuer
+// and validates token `iss` from it; the light webui console reads it to write
+// the per-Host <title>; and cmd/cloud — the light host, which cannot import
+// package cloud — reaches it through webui to brand the "/" it serves. A brand
+// map that lived in package cloud would be unreachable from the host without
+// linking every subsystem, so the white-label fact lives here, once.
+//
+// The cloud binary is one artifact serving every brand's API host (api.hanzo.ai,
+// api.lux.cloud, api.zoo.cloud, api.cloud.pars.network, ...). Brand is a
+// per-deployment value (CLOUD_BRAND / --brand). These facts are public (issuer
+// host + brand domain), so they live in code, not in KMS.
+package brand
+
+import "strings"
+
+// Info is the PUBLIC per-brand identity used for token validation + URL scoping.
+// No secrets.
+type Info struct {
+	// ID is the canonical brand key.
+	ID string
+	// IAMIssuer is the OIDC issuer (JWKS source) for this brand — the value the
+	// JWT `iss` claim must equal and whose /v1/iam/.well-known/jwks signs tokens.
+	IAMIssuer string
+	// Domain is the brand's primary marketing/site domain (for response scoping
+	// and base-URL derivation, e.g. api.<Domain>).
+	Domain string
+	// AltDomains are additional registrable domains that ALSO belong to this
+	// brand, used ONLY for hostname→brand white-label detection (ForHostOK).
+	// A brand's real serving surfaces span more than its marketing domain — the
+	// cloud console runs on <brand>.cloud hosts (console.lux.cloud,
+	// console.zoo.cloud), and a request Host there must brand as Lux/Zoo, never
+	// fall through to Hanzo. Base-URL/issuer scoping still uses the primary Domain.
+	AltDomains []string
+}
+
+// brands is the brand→IAM registry. Keys are the canonical brand IDs accepted
+// by CLOUD_BRAND. Per HIP-0111 §Brands: hanzo→hanzo.id, lux→lux.id,
+// zoo→zoolabs.id (zoo.id does not resolve; the live IAM stamps iss=zoolabs.id
+// — verified against /.well-known/openid-configuration), pars→pars.id,
+// bootnode→id.bootno.de.
+//
+// IAMIssuer MUST equal the `iss` IAM actually stamps AND host the signing JWKS.
+// For hanzo the live .well-known/openid-configuration on BOTH hanzo.id and
+// iam.hanzo.ai reports issuer=https://hanzo.id + jwks_uri=
+// https://hanzo.id/v1/iam/.well-known/jwks (iam.hanzo.ai is a routing alias, not
+// the issuer), and the cloud CLI already defaults to hanzo.id. Pinning
+// iam.hanzo.ai here would fail the issuer check on every real token, anonymizing
+// every principal — SuperAdmin would 403 platform-wide (fail-secure, but
+// broken). lux/zoo/pars already correctly point at their own .id issuers.
+var brands = map[string]Info{
+	"hanzo":    {ID: "hanzo", IAMIssuer: "https://hanzo.id", Domain: "hanzo.ai", AltDomains: []string{"hanzo.cloud", "hanzo.app"}},
+	"lux":      {ID: "lux", IAMIssuer: "https://lux.id", Domain: "lux.network", AltDomains: []string{"lux.cloud"}},
+	"zoo":      {ID: "zoo", IAMIssuer: "https://zoolabs.id", Domain: "zoo.ngo", AltDomains: []string{"zoo.network", "zoo.cloud"}},
+	"pars":     {ID: "pars", IAMIssuer: "https://pars.id", Domain: "pars.network", AltDomains: []string{"pars.ai"}},
+	"bootnode": {ID: "bootnode", IAMIssuer: "https://id.bootno.de", Domain: "bootno.de"},
+}
+
+// Default is the fallback brand when CLOUD_BRAND is unknown.
+const Default = "hanzo"
+
+// For returns the Info for id, falling back to the Hanzo brand for an unknown
+// id. Lookup is case-insensitive.
+func For(id string) Info {
+	if b, ok := brands[strings.ToLower(strings.TrimSpace(id))]; ok {
+		return b
+	}
+	return brands[Default]
+}
+
+// IssuerFor returns the canonical OIDC issuer for a brand id.
+func IssuerFor(id string) string {
+	return For(id).IAMIssuer
+}
+
+// ForHostOK resolves a request Host to a brand id from the same `brands`
+// registry, mirroring the hostname→brand semantics of platform.ts's
+// getWhiteLabelBrand: a Host at or under a brand's Domain (api.lux.network,
+// lux.network) is that brand. The port is stripped and the compare is
+// case-insensitive; the longest matching Domain wins so a nested brand domain is
+// never shadowed by a shorter one. ok is false when NO brand domain matches, so
+// the caller can choose its own fallback (the deployment brand) rather than
+// silently emitting Hanzo branding on, say, a Zoo pod hit with an odd Host.
+func ForHostOK(host string) (string, bool) {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if i := strings.IndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
+	// A fully-qualified Host may carry a trailing root dot ("api.lux.network.");
+	// strip it so the suffix match still resolves the brand instead of failing to
+	// neutral.
+	host = strings.TrimSuffix(host, ".")
+	best, bestLen := "", -1
+	for id, b := range brands {
+		for _, d := range append([]string{b.Domain}, b.AltDomains...) {
+			d = strings.ToLower(d)
+			if d == "" {
+				continue
+			}
+			if (host == d || strings.HasSuffix(host, "."+d)) && len(d) > bestLen {
+				best, bestLen = id, len(d)
+			}
+		}
+	}
+	return best, best != ""
+}
+
+// ForHost is ForHostOK with the Hanzo default for an unmatched Host.
+func ForHost(host string) string {
+	if b, ok := ForHostOK(host); ok {
+		return b
+	}
+	return Default
+}
+
+// Display is a brand id's human display name: the id with an upper-cased first
+// letter (lux → "Lux", hanzo → "Hanzo"). Derived from the id — one source of
+// truth with the brands registry, no hand-maintained display list. Used to build
+// the white-label console <title>.
+func Display(id string) string {
+	if id == "" {
+		id = Default
+	}
+	return strings.ToUpper(id[:1]) + id[1:]
+}
+
+// Issuers returns the OIDC issuer of every configured white-label brand. The
+// in-binary identity validator (auth_identity.go) trusts a token whose `iss` is
+// any of these, so ONE cloud binary validates hanzo AND lux/zoo/pars tokens. One
+// source of truth: derived from the same `brands` registry above.
+func Issuers() []string {
+	out := make([]string, 0, len(brands))
+	for _, b := range brands {
+		if b.IAMIssuer != "" {
+			out = append(out, b.IAMIssuer)
+		}
+	}
+	return out
+}

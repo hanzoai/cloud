@@ -1013,7 +1013,7 @@ type ShutdownFunc func(ctx context.Context) error
 // entries stay declarative — no inline closures.
 //
 // It lives beside ShutdownFunc rather than in package apps because a Wire entry
-// is copied verbatim into cmd/<app>/main.go by cmd/gen-app-cmds: an apps-local
+// is copied verbatim into plugin/<app>/main.go by plugin/gen-app-cmds: an apps-local
 // helper is unreachable from a standalone main, so that app falls back to the
 // fat stub that links EVERY subsystem. Package-qualified here, it is nameable
 // from anywhere and the per-app binary stays lean.
@@ -1027,7 +1027,7 @@ func CtxShutdown(f func() error) ShutdownFunc {
 //
 // It lives here rather than in package apps for exactly CtxShutdown's reason: an
 // apps-local identifier in a Wire entry is unreachable from the generated
-// cmd/<app>/main.go, so metrics fell back to the stub that links every subsystem.
+// plugin/<app>/main.go, so metrics fell back to the stub that links every subsystem.
 // The move is affordable only because it is nearly free — cloud's core already
 // carries 398 of metrics' 399 dependencies, so every binary grows by the one
 // package hanzoai/metrics itself. It is the ONLY one of the four mount adapters

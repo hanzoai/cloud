@@ -81,8 +81,10 @@ import (
 // RootEnv is the ONE variable a production deployment provisions. It carries the
 // base64 32-byte key that both unseals the KMS secret store and encrypts the cek
 // data plane; every other secret lives inside that store. cek names the same
-// variable — one key, one name, no second gate.
-const RootEnv = "CLOUD_KMS_MASTER_KEY_REF"
+// variable — one key, one name, no second gate. It is defined on the launch leaf
+// (credz/launch) because the light host, which cannot import credz, scrubs this
+// same name from its children; there is one spelling of it, and it is there.
+const RootEnv = launch.RootEnv
 
 // SockName is the broker's socket, inside the data directory. That directory is
 // already the deployment's private state (RWO volume, 0700), so the filesystem is
@@ -137,8 +139,8 @@ var (
 //
 //   - Fused (/cloud) — nothing to adopt, so it is minted here and never leaves
 //     the process. Children get tokens; nothing gets the secret.
-//   - Host (cmd/host) — the launcher is the host and the broker is a child, so
-//     the secret has to cross that one edge. cmd/host mints it and hands it to
+//   - Host (cmd/cloud) — the launcher is the host and the broker is a child, so
+//     the secret has to cross that one edge. cmd/cloud mints it and hands it to
 //     the broker child ALONE, which adopts it here.
 //
 // Scrubbed on adoption for the same reason RootEnv is: a process holding this
