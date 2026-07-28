@@ -61,6 +61,19 @@ import (
 // when no endpoint is configured.
 func BuildDeps(cfg *Config) Deps {
 	logger := luxlog.New("cloud")
+
+	// The dev key must be installed HERE, before the first store opens — cek
+	// memoizes the resolved master on first use, and the first open is edge.New
+	// below. Installing it in Serve (which is where it used to happen) is 46 lines
+	// too late: the once has already cached "no key", so a pure-Go build with no
+	// KMS key configured fails every subsequent open — the audit store among them,
+	// which is fatal — while logging that a dev key was active. It self-gates on a
+	// configured key and on a codec-linked build, so production reaches neither
+	// the key nor this warning and still fails closed exactly as before.
+	if cek.EnsureDevKey() {
+		logger.Warn("data-plane encryption ACTIVE with a DEV key (pure-Go build, no KMS key configured — dev/CI only)")
+	}
+
 	logger.Info(
 		"building deps",
 		"brand", cfg.Brand,
