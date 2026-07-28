@@ -99,7 +99,7 @@ func TestAnchorSignerSeam(t *testing.T) {
 	}
 
 	// configured() must hold with a bound signer even with no local key (rpc set).
-	a.rpcURL = "http://hanzod-rpc-internal/ext/bc/C/rpc"
+	a.rpcURL = "http://hanzod-rpc-internal/v1/bc/C/rpc"
 	if !a.configured() {
 		t.Fatal("bound quorum signer must satisfy configured() without a local key")
 	}
