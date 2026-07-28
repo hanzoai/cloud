@@ -20,7 +20,7 @@ type ghCall struct {
 	Body         map[string]any
 }
 
-// fakeGitHub serves the two endpoints ensureGitHubRepo uses. `exists` decides
+// fakeGitHub serves the two endpoints ensure uses. `exists` decides
 // whether the repo is already there, which is the whole branch under test.
 func fakeGitHub(t *testing.T, exists bool) (*[]ghCall, func()) {
 	t.Helper()
@@ -45,10 +45,10 @@ func fakeGitHub(t *testing.T, exists bool) (*[]ghCall, func()) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}))
-	old := ghAPIBase
-	ghAPIBase = srv.URL
+	old := api
+	api = srv.URL
 	t.Setenv(mirrorEnvToken, "test-token")
-	t.Cleanup(func() { ghAPIBase = old; srv.Close() })
+	t.Cleanup(func() { api = old; srv.Close() })
 	return &calls, srv.Close
 }
 
@@ -59,7 +59,7 @@ func fakeGitHub(t *testing.T, exists bool) (*[]ghCall, func()) {
 func TestCommunityRepoIsCreatedWhenMissing(t *testing.T) {
 	calls, _ := fakeGitHub(t, false)
 
-	url, err := ensureGitHubRepo(context.Background(), "acme", "board", "a board", true)
+	url, err := ensure(context.Background(), "acme", "board", "a board", true)
 	if err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestCommunityRepoIsCreatedWhenMissing(t *testing.T) {
 func TestCommunityRepoIsBornPrivate(t *testing.T) {
 	calls, _ := fakeGitHub(t, false)
 
-	if _, err := ensureGitHubRepo(context.Background(), "acme", "secret", "", false); err != nil {
+	if _, err := ensure(context.Background(), "acme", "secret", "", false); err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
 	create := (*calls)[len(*calls)-1]
@@ -114,7 +114,7 @@ func TestVisibilityStaysInStepOnBothHosts(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			calls, _ := fakeGitHub(t, true)
 
-			if _, err := ensureGitHubRepo(context.Background(), "acme", "board", "", tc.listed); err != nil {
+			if _, err := ensure(context.Background(), "acme", "board", "", tc.listed); err != nil {
 				t.Fatalf("ensure: %v", err)
 			}
 			if len(*calls) != 1 {
@@ -149,7 +149,7 @@ func TestVisibilityStaysInStepOnBothHosts(t *testing.T) {
 // push that could never land.
 func TestNoCredentialMeansNoReplica(t *testing.T) {
 	t.Setenv(mirrorEnvToken, "")
-	url, err := ensureGitHubRepo(context.Background(), "acme", "board", "", true)
+	url, err := ensure(context.Background(), "acme", "board", "", true)
 	if err != nil {
 		t.Fatalf("unconfigured must be a no-op, got %v", err)
 	}

@@ -27,13 +27,13 @@ import (
 // handler uses. This file adds no second construction path — an already-existing
 // repo is not an error here, it is the steady state.
 
-// publishCommunity applies one project's visibility to its canonical repo. It is
+// publish applies one project's visibility to its canonical repo. It is
 // IDEMPOTENT by construction: an existing repo is reconciled to the event rather
 // than rejected, so projects can fire on every create, visibility change and
 // moderation without tracking transitions. A missed transition would leave a
 // private project world-readable, which is the one failure here that cannot be
 // taken back — so the cheap redundant write is the right trade.
-func publishCommunity(ctx context.Context, ev cloud.CommunityEvent) error {
+func publish(ctx context.Context, ev cloud.Visibility) error {
 	s := mounted.Load()
 	if s == nil {
 		return nil // git plane not mounted (or shutting down): nothing to apply
@@ -61,7 +61,7 @@ func publishCommunity(ctx context.Context, ev cloud.CommunityEvent) error {
 	case err == nil:
 		// Created with the right visibility already on it; still attach (or skip)
 		// the replica, so a brand-new public project is mirrored like any other.
-		return mirrorCommunity(ctx, ev)
+		return mirror(ctx, ev)
 	case !errors.Is(err, errConflict):
 		return fmt.Errorf("community: provision %s/%s: %w", ev.Org, ev.Slug, err)
 	}
@@ -70,10 +70,10 @@ func publishCommunity(ctx context.Context, ev cloud.CommunityEvent) error {
 	if err := store.SetPublic(ctx, ev.Org, "", ev.Slug, ev.Listed, now); err != nil {
 		return fmt.Errorf("community: set visibility %s/%s: %w", ev.Org, ev.Slug, err)
 	}
-	return mirrorCommunity(ctx, ev)
+	return mirror(ctx, ev)
 }
 
-// mirrorCommunity gives the project a REAL GitHub repo under the community org
+// mirror gives the project a REAL GitHub repo under the community org
 // and keeps its visibility in step with the canonical one, so a public project
 // is public in both places and a private one is private in both.
 //
@@ -86,10 +86,10 @@ func publishCommunity(ctx context.Context, ev cloud.CommunityEvent) error {
 // The registration itself routes through gitMirrorController.EnsureMirror — the
 // SAME idempotent, host-allowlisted path the sync engine and the /mirror
 // endpoint use — so there is one outbound target list and no second way to add
-// to it. No credential ⇒ ensureGitHubRepo returns "" and the whole replica is
+// to it. No credential ⇒ ensure returns "" and the whole replica is
 // skipped, rather than registering a push that could never land.
-func mirrorCommunity(ctx context.Context, ev cloud.CommunityEvent) error {
-	url, err := ensureGitHubRepo(ctx, ev.Org, ev.Slug, ev.Description, ev.Listed)
+func mirror(ctx context.Context, ev cloud.Visibility) error {
+	url, err := ensure(ctx, ev.Org, ev.Slug, ev.Description, ev.Listed)
 	if err != nil {
 		return err
 	}

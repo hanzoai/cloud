@@ -305,7 +305,7 @@ func TestForkPublishedProjectRecordsLineage(t *testing.T) {
 	}
 	// Whose app this is now is its Org, and the fork moved it: acme's. There is no
 	// authorship field to inherit or fail to clear.
-	if p.Visibility != VisibilityPublic {
+	if p.Visibility != Public {
 		t.Fatalf("a fork must land public by default, got %q", p.Visibility)
 	}
 
@@ -389,7 +389,7 @@ func TestPublishingIsUngated(t *testing.T) {
 	}
 	var p projectView
 	_ = json.Unmarshal(body, &p)
-	if p.Visibility != VisibilityPublic {
+	if p.Visibility != Public {
 		t.Fatalf("a project must default to public, got %q (%s)", p.Visibility, body)
 	}
 	if p.Hidden {
@@ -403,7 +403,7 @@ func TestPublishingIsUngated(t *testing.T) {
 		t.Fatalf("patch public want 200, got %d (%s)", code, body)
 	}
 	_ = json.Unmarshal(body, &p)
-	if p.Visibility != VisibilityPublic {
+	if p.Visibility != Public {
 		t.Fatalf("visibility = %q, want public", p.Visibility)
 	}
 
@@ -463,7 +463,7 @@ func TestModerationIsAdminOnlyAndSubtractive(t *testing.T) {
 	if !hid.Hidden || hid.HiddenReason != "spam" {
 		t.Fatalf("admin hide = %v/%q, want true/spam", hid.Hidden, hid.HiddenReason)
 	}
-	if hid.Visibility != VisibilityPublic {
+	if hid.Visibility != Public {
 		t.Fatalf("moderation must not rewrite the publisher's choice, got %q", hid.Visibility)
 	}
 
@@ -474,7 +474,7 @@ func TestModerationIsAdminOnlyAndSubtractive(t *testing.T) {
 	if lifted.HiddenReason != "" {
 		t.Fatalf("a lifted moderation must leave no stale reason, got %q", lifted.HiddenReason)
 	}
-	if lifted.Visibility != VisibilityPublic {
+	if lifted.Visibility != Public {
 		t.Fatalf("lifting must restore exactly what the publisher asked for, got %q", lifted.Visibility)
 	}
 }
@@ -494,9 +494,9 @@ func TestPrivateAndModeratedProjectsLeaveNoCatalogRow(t *testing.T) {
 			t.Fatalf("seed %s: %v", slug, err)
 		}
 	}
-	seed("shown", VisibilityPublic, false)
-	seed("privately", VisibilityPrivate, false)
-	seed("moderated", VisibilityPublic, true)
+	seed("shown", Public, false)
+	seed("privately", Private, false)
+	seed("moderated", Public, true)
 
 	sites, err := LiveSites(ctx)
 	if err != nil {
