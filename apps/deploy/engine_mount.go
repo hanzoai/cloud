@@ -99,9 +99,12 @@ func engineReconcile(s *cloud.Service[state], c *zip.Ctx) error {
 	// Let the informer cache warm before the first sync so live state is known.
 	time.Sleep(2 * time.Second)
 
-	objs, revision, err := gitSource{repo: engineRepo(), ref: engineRef(), path: enginePath()}.render(ctx)
+	// The principal is delegated to whichever source reads: a native repo is
+	// read as the caller, so the git plane scopes the answer itself rather than
+	// trusting this plane to have scoped it.
+	objs, revision, err := newSource(engineRepo(), engineRef(), enginePath(), c).render(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "engine: render git source: %v", err)
+		return zip.Errorf(http.StatusBadGateway, "engine: render source: %v", err)
 	}
 
 	results, err := rec.reconcile(ctx, objs, revision, engineDefaultNS(), enginePrune(), pruneFuse())
