@@ -191,6 +191,68 @@ func TestSelectWorkspaceHTTP(t *testing.T) {
 	if err != nil || dec.Account != acct || dec.Workspace != ws.UUID || dec.Extra["org"] != org {
 		t.Fatalf("workspace token round-trip: %+v (err %v)", dec, err)
 	}
+	// The token must carry the caller's ROLE. Everything downstream that tells a
+	// member from a guest reads this claim and nothing else — clients/analytics for
+	// unprojected-write capability, clients/meet for a seat in a room — so a mint that
+	// drops it silently hands every guest an owner-shaped token.
+	if dec.Role() != token.RoleOwner {
+		t.Fatalf("workspace token role = %q, want %q", dec.Role(), token.RoleOwner)
+	}
+	if !dec.Privileged() {
+		t.Fatal("the workspace creator's token is not Privileged()")
+	}
+}
+
+// TestSelectWorkspaceSignsGuestRole is the F1 regression guard, at the MINT site.
+//
+// Every test of the CONSUMERS (clients/analytics, clients/meet) mints its own tokens
+// with a role already set, so all of them pass whether or not selectWorkspace actually
+// signs one. That is the same defect as the original inert extra.guest guards — a
+// property proven against a synthesized shape — moved up one layer, and it is why
+// deleting `"role": role` from the mint survived a whole mutation round. This test
+// drives the REAL RPC and asserts the token a guest is handed reports itself as a guest.
+func TestSelectWorkspaceSignsGuestRole(t *testing.T) {
+	app := mountTeam(t)
+	const org, owner = "acme", "550e8400-e29b-41d4-a716-446655440000"
+	const guest = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+	ctx := context.Background()
+	ws, err := mounted.State.accounts.EnsureWorkspace(ctx, org, owner, "Ada")
+	if err != nil {
+		t.Fatalf("seed workspace: %v", err)
+	}
+	if err := mounted.State.accounts.AddMember(ctx, ws.ID, guest, token.RoleGuest, "Visitor"); err != nil {
+		t.Fatalf("seed guest member: %v", err)
+	}
+	sess, err := token.Generate(guest, "", map[string]any{"org": org}, expUnix(sessionTokenTTL), testSecret)
+	if err != nil {
+		t.Fatalf("mint session token: %v", err)
+	}
+	code, body := call(t, app, http.MethodPost, "/v1/team/account",
+		map[string]string{"Authorization": "Bearer " + sess},
+		map[string]any{"method": "selectWorkspace", "params": map[string]any{"workspaceUrl": ws.Slug}})
+	if code != http.StatusOK {
+		t.Fatalf("guest selectWorkspace status %d: %s", code, body)
+	}
+	var sw struct {
+		Result WorkspaceLoginInfo `json:"result"`
+		Error  *Status            `json:"error"`
+	}
+	if err := json.Unmarshal(body, &sw); err != nil || sw.Error != nil {
+		t.Fatalf("guest selectWorkspace = %s (err %v)", body, err)
+	}
+	dec, err := token.Decode(sw.Result.Token, testSecret, true)
+	if err != nil {
+		t.Fatalf("decode guest workspace token: %v", err)
+	}
+	if dec.Role() != token.RoleGuest {
+		t.Fatalf("guest token role = %q, want %q — the mint dropped or hardcoded the role", dec.Role(), token.RoleGuest)
+	}
+	if dec.Privileged() {
+		t.Fatal("a guest's workspace token reports Privileged() — it would get unprojected ingest and a room seat")
+	}
+	if dec.Org() != org {
+		t.Fatalf("guest token org = %q, want %q", dec.Org(), org)
+	}
 }
 
 // TestSelectWorkspaceCrossTenantBlocked proves a caller whose token org is org-b
