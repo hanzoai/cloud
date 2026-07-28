@@ -611,7 +611,8 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/oasis",
-  "preview": "https://gallery.hanzo.ai/screenshots/oasis.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/oasis.png",
+  "demo": "https://oasis.hanzo.app"
  },
  {
   "slug": "solo",
@@ -1083,7 +1084,7 @@
   "slug": "mobile",
   "title": "Hanzo Mobile",
   "category": "Mobile",
-  "description": "Expo Router tab starter — iOS, Android and web from one tree. Feed, search, settings and a dynamic detail route.",
+  "description": "Expo Router tab starter \u2014 iOS, Android and web from one tree. Feed, search, settings and a dynamic detail route.",
   "framework": "Expo SDK 54 + expo-router 6",
   "features": [
    "Expo Router",
@@ -1163,7 +1164,7 @@
   "slug": "flutter",
   "title": "Hanzo Flutter",
   "category": "Mobile",
-  "description": "Material 3 starter — NavigationBar over an IndexedStack, search, detail route and widget tests.",
+  "description": "Material 3 starter \u2014 NavigationBar over an IndexedStack, search, detail route and widget tests.",
   "framework": "Flutter 3.44 + Material 3",
   "features": [
    "Material 3",
@@ -1203,7 +1204,7 @@
   "slug": "swiftui",
   "title": "Hanzo SwiftUI",
   "category": "Mobile",
-  "description": "Native iOS 17 starter — TabView, NavigationStack, @AppStorage and swift-testing. Project generated from project.yml.",
+  "description": "Native iOS 17 starter \u2014 TabView, NavigationStack, @AppStorage and swift-testing. Project generated from project.yml.",
   "framework": "SwiftUI + Swift 6 (iOS 17)",
   "features": [
    "TabView",
@@ -1222,7 +1223,7 @@
   "slug": "swiftui-chat",
   "title": "Hanzo Chat (SwiftUI)",
   "category": "Mobile",
-  "description": "Native streaming AI chat — @Observable, AsyncThrowingStream over URLSession.bytes, Hanzo /v1.",
+  "description": "Native streaming AI chat \u2014 @Observable, AsyncThrowingStream over URLSession.bytes, Hanzo /v1.",
   "framework": "SwiftUI + Swift 6 (iOS 17)",
   "features": [
    "@Observable",
