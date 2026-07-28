@@ -1,7 +1,6 @@
 package platform
 
 import (
-	"github.com/hanzoai/cloud/clients/principal"
 	"context"
 	"encoding/json"
 	"github.com/hanzoai/cloud/clients/k8s"
@@ -22,7 +21,6 @@ func TestRunCreatesAutoscaledServiceCR(t *testing.T) {
 	k := fakeK8s()
 	app := mountAppK8s(t, k)
 	// /v1/run resolves the org\'s default project; it no longer creates one.
-	seedProject(t, app, "maxpower", principal.DefaultProject)
 
 	code, body := do(t, app, http.MethodPost, "/v1/run", "maxpower", map[string]any{
 		"name":     "api",
@@ -115,5 +113,20 @@ func TestRunTenantGateAndFailClosed(t *testing.T) {
 	appK8s := mountAppK8s(t, fakeK8s())
 	if code, _ := do(t, appK8s, http.MethodPost, "/v1/run", "maxpower", map[string]any{"name": "api"}); code != http.StatusBadRequest {
 		t.Fatalf("missing image want 400, got %d", code)
+	}
+}
+
+// TestRunWorksWithoutDefaultProjectRow pins the implicit default: an org whose
+// IAM has not materialized the "default" project row yet can still run — the
+// row is owed by provisioning, and a run must not 424 on it. Platform still
+// never creates the project (nothing here writes the project store).
+func TestRunWorksWithoutDefaultProjectRow(t *testing.T) {
+	k := fakeK8s()
+	app := mountAppK8s(t, k)
+	code, body := do(t, app, http.MethodPost, "/v1/run", "maxpower", map[string]any{
+		"name": "api", "image": "ghcr.io/hanzoai/nginx:1.27", "port": 8080,
+	})
+	if code != http.StatusAccepted {
+		t.Fatalf("run without a default project row want 202, got %d (%s)", code, body)
 	}
 }

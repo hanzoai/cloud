@@ -237,15 +237,23 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 func health(s *cloud.Service[state], c *zip.Ctx) error {
 	res := map[string]any{"service": "meet", "status": "ok"}
 	if !s.State.ready() {
-		res["status"], res["ready"], res["error"] = "degraded", false, s.State.reason
+		// ready:false IS the dashboard fact, and it is all a probe needs. The REASON —
+		// which names the key-file path and the Secret — stays in the boot log, because
+		// this endpoint takes no credential and is reachable on five public hosts. The
+		// api key is withheld for the same reason; it is not secret, but an unauthed
+		// caller has no business enumerating which key pair this binary signs with.
+		// (Leaking it here while deliberately keeping it out of the getToken 503 would
+		// have been two postures in one file.)
+		res["status"], res["ready"] = "degraded", false
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
-	res["ready"], res["livekitApiKey"], res["ttl"] = true, s.State.apiKey, ttl.String()
+	res["ready"] = true
 	return c.JSON(http.StatusOK, res)
 }
 
-// request is the office client's wire. `_id` is the person ref, which becomes the
-// LiveKit participant identity; participantName is the display name.
+// request is the office client's wire. `_id` is the SPA's person ref — accepted because
+// the published bundle sends it, and IGNORED because the participant identity now comes
+// from the signed token (see mint). participantName is a display name only.
 type request struct {
 	RoomName        string `json:"roomName"`
 	ID              string `json:"_id"`
@@ -276,15 +284,24 @@ func mint(s *cloud.Service[state], c *zip.Ctx) error {
 	if room == "" {
 		return zip.ErrBadRequest("roomName required")
 	}
-	// LiveKit requires an identity on a join grant; a token without one is refused
-	// at the media edge. Catch it here as a 400 rather than minting a token that
-	// cannot work.
-	identity := strings.TrimSpace(req.ID)
-	if identity == "" {
-		return zip.ErrBadRequest("_id required")
-	}
-	if !st.admits(room, c.Header("Authorization")) {
+	t, ok := st.admits(room, c.Header("Authorization"))
+	if !ok {
 		return zip.Errorf(http.StatusUnauthorized, "not a member of this room's workspace")
+	}
+	// THE IDENTITY IS THE TOKEN'S, NOT THE BODY'S. LiveKit uses `sub` as the
+	// participant identity and EJECTS an existing participant on a duplicate — so
+	// minting with a caller-supplied `_id` let any member of a workspace kick a
+	// colleague out of a call by claiming their identity, and impersonate them to
+	// everyone else in the room. Upstream did this too; it is still wrong. The signed
+	// account is the one identity the caller cannot choose.
+	//
+	// The body's `_id` (the SPA's person ref) is deliberately ignored rather than
+	// checked: verifying it belongs to the caller would need the person<->account
+	// mapping from clients/team, whereas the token already carries an identity that IS
+	// the caller. One fewer seam, and no lookup to get wrong.
+	identity := strings.TrimSpace(t.Account)
+	if identity == "" {
+		return zip.Errorf(http.StatusUnauthorized, "token carries no account")
 	}
 	tok, err := st.grant(room, identity, strings.TrimSpace(req.ParticipantName), time.Now())
 	if err != nil {
@@ -319,19 +336,22 @@ func workspace(room string) string {
 //     check was inert and every guest was admitted. selectWorkspace now signs the real
 //     workspace role, and an ABSENT role is unprivileged, so a token that has not
 //     proven a role is refused rather than assumed to be a member.
-func (s state) admits(room, auth string) bool {
+func (s state) admits(room, auth string) (*token.Token, bool) {
 	raw := bearer(auth)
 	if raw == "" {
-		return false
+		return nil, false
 	}
 	t, err := token.Decode(raw, s.teamSecret, true)
 	if err != nil {
-		return false
+		return nil, false
 	}
 	if t.Workspace == "" || t.Workspace != workspace(room) {
-		return false
+		return nil, false
 	}
-	return t.Privileged()
+	if !t.Privileged() {
+		return nil, false
+	}
+	return t, true
 }
 
 // bearer extracts the token from an "Authorization: Bearer <t>" header (scheme

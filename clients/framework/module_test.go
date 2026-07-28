@@ -2,6 +2,7 @@ package framework
 
 import (
 	"encoding/json"
+	"github.com/hanzoai/doctype"
 	"net/http"
 	"testing"
 )
@@ -20,9 +21,9 @@ func testFixtures() []DocType {
 // process-global registry afterward (mirrors resetHooks in the hook tests).
 func withTestModule(t *testing.T, module string, fx []DocType) {
 	t.Helper()
-	resetModules()
+	doctype.ResetModules()
 	RegisterModule(module, fx)
-	t.Cleanup(resetModules)
+	t.Cleanup(doctype.ResetModules)
 }
 
 func TestInstallModule_CreatesFixturesStampedWithModule(t *testing.T) {
