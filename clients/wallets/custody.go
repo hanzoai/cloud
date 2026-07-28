@@ -113,12 +113,21 @@ type Scope struct {
 // a tenant — can address this material. The org segment is the hard isolation
 // boundary; each PRESENT narrowing adds a labeled segment in a fixed order (an
 // absent one is omitted, never blank-joined). An org-only scope keeps the exact
-// ref "wallets/<org>/<walletID>"; a scoped one is unambiguous and injection-safe
-// (narrowings are validated to a slash-free charset by validNarrowing).
+// ref "orgs/<org>/wallets/<walletID>"; a scoped one is unambiguous and
+// injection-safe (narrowings are validated to a slash-free charset by
+// validNarrowing).
+//
+// The leading "orgs/<org>" is load-bearing, not decoration: the store derives the
+// tenant partition from exactly those two segments (clients/kms fileOrg requires
+// segs[0]=="orgs") and ANY other shape falls through to the shared _platform
+// file rather than erroring. This ref began "wallets/" until now, so every
+// tenant's sealed secp256k1 signing key was written to that one shared partition
+// — the isolation the sentence above claims was never actually in effect.
 func (s Scope) keyRef(walletID string) string {
 	var b strings.Builder
-	b.WriteString("wallets/")
+	b.WriteString("orgs/")
 	b.WriteString(s.Org)
+	b.WriteString("/wallets")
 	if s.Project != "" {
 		b.WriteString("/p/")
 		b.WriteString(s.Project)

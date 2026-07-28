@@ -16,13 +16,13 @@ func TestScopeKeyRefDerivation(t *testing.T) {
 
 	// Org-only scope derives the EXACT legacy ref — an org's default-scope wallet
 	// keeps its un-suffixed key, so scoping is additive, never a migration.
-	if got := (Scope{Org: "acme"}).keyRef(id); got != "wallets/acme/"+id {
-		t.Fatalf("org-only ref = %q, want wallets/acme/%s", got, id)
+	if got := (Scope{Org: "acme"}).keyRef(id); got != "orgs/acme/wallets/"+id {
+		t.Fatalf("org-only ref = %q, want orgs/acme/wallets/%s", got, id)
 	}
 
 	// Each present narrowing adds ONE labeled segment, in a fixed order.
 	full := Scope{Org: "acme", Project: "proj1", Agent: "bot7", AccountID: "acct9"}
-	if got, want := full.keyRef(id), "wallets/acme/p/proj1/a/bot7/c/acct9/"+id; got != want {
+	if got, want := full.keyRef(id), "orgs/acme/wallets/p/proj1/a/bot7/c/acct9/"+id; got != want {
 		t.Fatalf("full-scope ref = %q, want %q", got, want)
 	}
 
@@ -100,7 +100,7 @@ func TestScopedWalletSealsAtScopedRef(t *testing.T) {
 		t.Fatal("scoped ref holds no key material")
 	}
 	// It is NOT at the org-only ref (proof the scope actually moved the ref).
-	if _, err := k.GetSecret(context.Background(), "wallets/acme/"+w.ID); err == nil {
+	if _, err := k.GetSecret(context.Background(), "orgs/acme/wallets/"+w.ID); err == nil {
 		t.Fatal("key must NOT be reachable at the org-only ref for a scoped wallet")
 	}
 
