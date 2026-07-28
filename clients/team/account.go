@@ -10,7 +10,6 @@ package team
 // net/http — it is an external hop to hanzo.id.
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -233,13 +232,12 @@ func (g *api) register(r zip.Router, guard guardFn) {
 // ── REST: providers ───────────────────────────────────────────────────────────
 
 func (g *api) providers(c *zip.Ctx) error {
-	// Every entry federates through the SAME IAM authorize hop: google/github
-	// carry a provider_hint so hanzo.id lands STRAIGHT in the provider's OAuth
-	// flow (the console-proven pattern, id >= 0.2.6); openid is the plain Hanzo
-	// SSO page.
+	// ONE door: hanzo.id. Which identities that door accepts — Google, GitHub,
+	// passkey, password — is IAM's question, answered on IAM's own page, next to
+	// the identity check and the training-data consent that must precede a first
+	// session. Listing providers here would be a second place holding that answer,
+	// and the two drift the moment IAM gains or drops one.
 	return c.JSON(http.StatusOK, []ProviderInfo{
-		{Name: "google", DisplayName: "Google"},
-		{Name: "github", DisplayName: "GitHub"},
 		{Name: g.cfg.provider, DisplayName: "Hanzo"},
 	})
 }
@@ -514,8 +512,6 @@ func (g *api) rpc(c *zip.Ctx) error {
 		return g.fail(c, statusError("bad request"))
 	}
 	switch req.Method {
-	case "login":
-		return g.passwordLogin(c, req.Params)
 	case "getLoginInfoByToken", "getLoginWithWorkspaceInfo":
 		return g.getLoginInfoByToken(c)
 	case "getUserWorkspaces":
@@ -541,100 +537,6 @@ func (g *api) rpc(c *zip.Ctx) error {
 	default:
 		return g.fail(c, Status{Severity: "ERROR", Code: "account:status:UnknownMethod", Params: map[string]any{"method": req.Method}})
 	}
-}
-
-// passwordLogin is the account RPC "login" — the SPA's native email+password
-// form. It authenticates against IAM ONLY (there are no local accounts): the
-// SAME two-step the platform e2e auth helper documents — POST /v1/iam/login
-// (responseType=code) with the credentials, then the standard confidential code
-// exchange — then the EXACT session establishment the OAuth callback runs. The
-// password lives in one local string, rides only in the body of the ONE IAM
-// login call, and is never logged or persisted; bad credentials answer a clean
-// 401 with the platform status the form already translates.
-func (g *api) passwordLogin(c *zip.Ctx, params map[string]any) error {
-	email, _ := params["email"].(string)
-	password, _ := params["password"].(string)
-	email = strings.TrimSpace(email)
-	if email == "" || password == "" {
-		return c.JSON(http.StatusUnauthorized, map[string]any{"error": statusBadCredentials()})
-	}
-	redirect := g.callbackOrigin(c) + "/v1/team/account/auth/" + g.cfg.provider + "/callback"
-	code, err := g.passwordCode(email, password, redirect)
-	if err != nil {
-		// err carries IAM's status message only — never the submitted secret.
-		g.log.Warn("account: password login refused", "err", err)
-		return c.JSON(http.StatusUnauthorized, map[string]any{"error": statusBadCredentials()})
-	}
-	access, err := g.exchangeCode(code, redirect)
-	if err != nil {
-		g.log.Error("account: password login code exchange", "err", err)
-		return c.JSON(http.StatusUnauthorized, map[string]any{"error": statusBadCredentials()})
-	}
-	account, tok, _, err := g.establishSession(c.Context(), access)
-	if err != nil {
-		g.log.Error("account: password login session", "err", err)
-		return c.JSON(http.StatusUnauthorized, map[string]any{"error": statusBadCredentials()})
-	}
-	// Same cookie posture as the OAuth callback: the IAM access_token rides an
-	// HttpOnly cookie for the same-origin agents proxy; the SPA then PUTs the
-	// session cookie through the SAME /cookie route every login path uses.
-	g.setIAMTokenCookie(c, access)
-	return g.ok(c, LoginInfo{Account: account, Token: tok})
-}
-
-// passwordCode performs the IAM password login and returns the authorization
-// code (the same two-step contract the platform e2e auth helper locks: the
-// OAuth params ride the query string, the credentials ride the JSON body — the
-// ONE place the password touches the wire). Error paths surface only IAM's
-// status message.
-func (g *api) passwordCode(username, password, redirectURI string) (string, error) {
-	nonce, err := randState()
-	if err != nil {
-		return "", err
-	}
-	q := url.Values{
-		"clientId":     {g.cfg.iamClientID},
-		"responseType": {"code"},
-		"redirectUri":  {redirectURI},
-		"scope":        {"openid profile email"},
-		"state":        {nonce},
-		"type":         {"code"},
-	}
-	body, err := json.Marshal(map[string]any{
-		"type":         "code",
-		"application":  g.cfg.iamClientID,
-		"username":     username,
-		"password":     password,
-		"signinMethod": "Password",
-		"autoSignin":   true,
-	})
-	if err != nil {
-		return "", err
-	}
-	resp, err := http.Post(oauthBase(g.cfg.iamEndpoint)+"/login?"+q.Encode(), "application/json", bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("iam login request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("iam login status %d", resp.StatusCode)
-	}
-	var out struct {
-		Status string          `json:"status"`
-		Msg    string          `json:"msg"`
-		Data   json.RawMessage `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", fmt.Errorf("iam login decode: %w", err)
-	}
-	if out.Status != "ok" {
-		return "", fmt.Errorf("iam login: %s", out.Msg)
-	}
-	var code string
-	if err := json.Unmarshal(out.Data, &code); err != nil || code == "" {
-		return "", fmt.Errorf("iam login: no authorization code in response")
-	}
-	return code, nil
 }
 
 func (g *api) getLoginInfoByToken(c *zip.Ctx) error {
