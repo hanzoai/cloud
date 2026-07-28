@@ -3,7 +3,9 @@ package clients
 import (
 	"errors"
 	"fmt"
+	"net"
 	"testing"
+	"time"
 
 	s3 "github.com/hanzoai/s3-go"
 
@@ -64,6 +66,62 @@ func TestNewS3VFSRequiresCreds(t *testing.T) {
 	t.Setenv("S3_ADMIN_SECRET_KEY", "")
 	if _, err := NewS3VFS(s3admin.New()); err == nil {
 		t.Fatal("NewS3VFS with no creds must error (so pickVFSClient falls back to DisabledVFS)")
+	}
+}
+
+// Construction must not wait on the object store. NewS3VFS runs on the BOOT path,
+// before the process listens, and its bucket-ensure is a discarded-error
+// optimisation — so a store that accepts the connection and then never answers
+// must cost a bounded pause, not the binary.
+//
+// The listener here is the exact failure that took production down: it completes
+// the TCP handshake and then reads forever without writing a byte, so every
+// connect succeeds and every request hangs. Unbounded, this test does not fail —
+// it never finishes, which is precisely what the pods did (no log line, liveness
+// killed them, and a rollback did not help because the hang predates both
+// versions' changes).
+func TestNewS3VFSDoesNotBlockBootOnAHangingStore(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			// Accept and go silent. Never read to completion, never respond.
+			defer c.Close()
+		}
+	}()
+
+	t.Setenv("S3_ADMIN_ACCESS_KEY", "ak")
+	t.Setenv("S3_ADMIN_SECRET_KEY", "sk")
+	t.Setenv("S3_ADMIN_ENDPOINT", ln.Addr().String())
+	t.Setenv("S3_SECURE", "false")
+
+	done := make(chan time.Duration, 1)
+	go func() {
+		start := time.Now()
+		// A client is still returned: deps.VFS must never be nil (R-7), and the
+		// first real op retries the ensure.
+		v, err := NewS3VFS(s3admin.New())
+		if err == nil && v == nil {
+			t.Error("NewS3VFS returned (nil, nil) — deps.VFS must never be nil")
+		}
+		done <- time.Since(start)
+	}()
+
+	// Generous versus the 5s bound, decisive versus unbounded.
+	select {
+	case took := <-done:
+		if took > 30*time.Second {
+			t.Fatalf("construction took %v — the ensure is not bounded", took)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("NewS3VFS never returned against a hanging store — this is the boot hang that took prod down")
 	}
 }
 
