@@ -12,7 +12,7 @@ import (
 // target) answer 201 and zip's typed registrar has no status seam, so they stay
 // raw; the pack protocol, the ZAP envelope adapters and the HTML UI have no JSON
 // shape at all. Change this number only by moving a route between the two.
-// 20 since browsePaths — the delivery inventory read (browse.go).
+// 20 since browseFiles — the delivery inventory read (browse.go).
 const typedOpCount = 20
 
 // TestTypedOpsProject pins the payoff of registering ops instead of handlers:
