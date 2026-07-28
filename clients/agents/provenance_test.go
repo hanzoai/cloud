@@ -361,3 +361,54 @@ func TestParseLinksAgainstRealGit(t *testing.T) {
 		t.Fatalf("note binding from real git wrong: %+v", got)
 	}
 }
+
+// TestParseLinksSurvivesASplitTrailerBlock pins the reason ParseLinks scans the
+// WHOLE message body line by line instead of calling git's trailer interpreter.
+//
+// Real repositories run commit-msg hooks. Ours appends a sign-off with a LEADING
+// BLANK LINE, which starts a new paragraph — and git only treats the LAST
+// paragraph as trailers, so `git log --format=%(trailers)` and
+// `git interpret-trailers --parse` both report the appended line and nothing
+// above it. A binding written by the agent would be invisible to git's own
+// tooling through no fault of the agent.
+//
+// The fact is still in the commit, so the parser reads it. This test fails if
+// anyone "simplifies" ParseLinks into a last-paragraph parser.
+func TestParseLinksSurvivesASplitTrailerBlock(t *testing.T) {
+	git, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not installed")
+	}
+	dir := t.TempDir()
+	run := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command(git, args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@e",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@e",
+			"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return string(out)
+	}
+	run("init", "-q", "-b", "main")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", "-A")
+	// Exactly the shape the hook produces: our trailers, then a blank line, then
+	// the appended sign-off.
+	run("commit", "-q", "-m",
+		"agents: readable builds\n\nHanzo-Session: sess_split\nHanzo-Turn: 42\n\nCo-authored-by: Hanzo Dev <dev@hanzo.ai>")
+
+	// Git's own interpreter sees only the last paragraph — this is the trap.
+	if strings.Contains(run("log", "-1", "--format=%(trailers:key=Hanzo-Turn,valueonly)"), "42") {
+		t.Log("note: this git treats a split block as trailers; the parser handles both")
+	}
+	links := ParseLinks(run("log", "--format="+ProvenanceLogFormat))
+	if len(links) != 1 || links[0].Turn != 42 || links[0].Session != "sess_split" {
+		t.Fatalf("a hook-split trailer block must still bind, got %+v", links)
+	}
+}
