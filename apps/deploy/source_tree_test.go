@@ -137,3 +137,40 @@ func TestIsManifestPath(t *testing.T) {
 		}
 	}
 }
+
+// TestNewSourcePicksByReference fixes the selection rule. It is derived from the
+// repo value rather than a mode flag beside it, so a flag and a URL can never
+// disagree — a disagreement there renders the wrong desired set, or none.
+func TestNewSourcePicksByReference(t *testing.T) {
+	native := map[string]struct{ org, repo string }{
+		"hanzo/universe":     {"hanzo", "universe"},
+		"/hanzo/universe/":   {"hanzo", "universe"},
+		"hanzo/universe.git": {"hanzo", "universe"},
+		"tenant-acme/deploy": {"tenant-acme", "deploy"},
+	}
+	for ref, want := range native {
+		s := newSource(ref, "main", "k8s", nil)
+		got, ok := s.(treeSource)
+		if !ok {
+			t.Fatalf("newSource(%q) = %T, want treeSource", ref, s)
+		}
+		if got.org != want.org || got.repo != want.repo {
+			t.Fatalf("newSource(%q) = %s/%s, want %s/%s", ref, got.org, got.repo, want.org, want.repo)
+		}
+	}
+	// Anything carrying a scheme or an SSH host is somewhere else and is cloned,
+	// including a URL whose tail looks like org/repo.
+	for _, ref := range []string{
+		"https://github.com/hanzoai/universe",
+		"git@github.com:hanzoai/universe.git",
+		"universe", // no org
+		"a/b/c",    // not an org/repo pair
+		"",
+	} {
+		if s := newSource(ref, "main", "k8s", nil); !isClone(s) {
+			t.Fatalf("newSource(%q) = %T, want gitSource", ref, s)
+		}
+	}
+}
+
+func isClone(s source) bool { _, ok := s.(gitSource); return ok }
