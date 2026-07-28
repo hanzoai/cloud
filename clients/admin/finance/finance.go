@@ -1,7 +1,7 @@
 // Package finance is the SaaS business/finance dashboard (/v1/admin/finance) — the
 // profitability panel: what we pay every vendor (COGS), what we earn, the gross margin,
 // how fast we're burning the DigitalOcean promo credit, and the runway that credit + burn
-// imply. SUPERADMIN ONLY (core.Guard).
+// imply. SUPERADMIN ONLY (core.Admit).
 //
 // It FABRICATES NOTHING and OWNS NO cost logic. COGS is the SINGLE source of truth in
 // commerce (GET /v1/costs) — cloud CONSUMES it. Revenue + MRR come from commerce billing.
@@ -9,6 +9,8 @@
 // burn-down history — an ORTHOGONAL treasury view. The derived margin/runway math is a
 // pure function (ComputeFinance) with a unit test proving the numbers.
 package finance
+
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 import (
 	"context"
@@ -27,11 +29,11 @@ import (
 var errUnconfigured = errors.New("not configured")
 
 // Routes registers the finance dashboard (SuperAdmin only).
-func Routes(app cloud.Router, s *cloud.Service[core.State]) {
-	g := app.Group("/v1/admin")
-	g.Get("/finance", core.Guard(s, Finance))
+func Routes(z *zip.App, s *cloud.Service[core.State]) {
+	o := ops{s: s}
+	zip.Get(z, "/v1/admin/finance", o.Finance, zip.WithOperationID("adminFinance"))
 	// One-time commerce→finance balance cutover (SuperAdmin only). Idempotent per org.
-	g.Post("/finance/backfill", core.Guard(s, Backfill))
+	zip.Post(z, "/v1/admin/finance/backfill", Backfill, zip.WithOperationID("adminFinanceBackfill"))
 	// There is no second credit-write here. POST /finance/deposit used to fund an
 	// arbitrary subject verbatim, because the credit grant could only reach the org
 	// pool; the grant now resolves its address through account.Payer and can name a
@@ -41,8 +43,20 @@ func Routes(app cloud.Router, s *cloud.Service[core.State]) {
 
 	// Per-provider upstream credit ledger + usage funding split (multi-provider
 	// credit-management). Same SuperAdmin guard, same cloud_usage warehouse.
-	g.Get("/providers/credit", core.Guard(s, ProvidersCredit))
-	g.Get("/usage/funding", core.Guard(s, UsageFunding))
+	zip.Get(z, "/v1/admin/providers/credit", o.ProvidersCredit, zip.WithOperationID("adminProvidersCredit"))
+	zip.Get(z, "/v1/admin/usage/funding", o.UsageFunding, zip.WithOperationID("adminUsageFunding"))
+}
+
+// ops binds the kernel to the typed handlers: a TypedHandler has no parameter for the
+// service, so it arrives as a RECEIVER and every op that reads an upstream is a method
+// value. Backfill needs no upstream of ours and stays a plain function.
+type ops struct{ s *cloud.Service[core.State] }
+
+// FinanceOut is the GET /v1/admin/finance envelope.
+type FinanceOut struct {
+	Status string       `json:"status"`
+	Msg    string       `json:"msg"`
+	Data   *FinanceData `json:"data"`
 }
 
 // FinanceData is the full /v1/admin/finance aggregate.
@@ -163,8 +177,12 @@ func ComputeFinance(in FinanceInput) FinanceData {
 // Finance answers GET /v1/admin/finance. It reads the multi-vendor COGS from commerce
 // /v1/costs, the DO promo-credit/burn-down treasury view, and the fleet commerce revenue,
 // then hands them to ComputeFinance. SuperAdmin only.
-func Finance(s *cloud.Service[core.State], c *zip.Ctx) error {
-	ctx := c.Context()
+func (o ops) Finance(ctx context.Context, _ *core.None) (*FinanceOut, error) {
+	c, err := core.Admit(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s := o.s
 	cr := core.CallerCreds(c)
 	now := time.Now().UTC().Format(time.RFC3339)
 	period := time.Now().UTC().Format("2006-01")
@@ -260,12 +278,13 @@ func Finance(s *cloud.Service[core.State], c *zip.Ctx) error {
 		}
 	}
 
-	return core.OK(c, ComputeFinance(FinanceInput{
+	data := ComputeFinance(FinanceInput{
 		Cost:        cost,
 		Revenue:     rev,
 		GeneratedAt: now,
 		Sources:     sources,
-	}))
+	})
+	return &FinanceOut{Status: core.OK, Data: &data}, nil
 }
 
 // doHistory reads DO billing history into the burn-down series (best-effort: a failure

@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -31,11 +32,15 @@ type registerKeyReq struct {
 // stores it under the caller's org + user. The full key round-trips (it is
 // public); the fingerprint is the auth lookup key. A key already registered
 // (to this or any org — fingerprint is globally unique) yields 409.
+//
+// Raw, not a typed op: it answers 201, and zip's typed registrar writes 200 for
+// a value and 204 for none with no seam to set another status.
 func registerKey(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+	t, terr := tenantFrom(c)
+	if terr != nil {
+		return terr
 	}
+	org := t.org
 	var body registerKeyReq
 	if err := c.Bind(&body); err != nil {
 		return err
@@ -78,39 +83,63 @@ func registerKey(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusCreated, row.view())
 }
 
-// listKeys returns the caller org's registered keys.
-func listKeys(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	rows, err := s.State.keys.List(c.Context(), org)
+// keyList is the collection envelope for registered SSH keys.
+type keyList struct {
+	// Data holds the org's keys.
+	Data []keyView `json:"data"`
+}
+
+// keyRef addresses one registered key.
+type keyRef struct {
+	// ID is the key's identifier ("gitkey_…"), from the :id path segment.
+	ID string `json:"id"`
+}
+
+// listKeys returns the SSH public keys registered to the caller's org — the keys
+// that authenticate `git clone git@<host>:<org>/<repo>.git`. Keys are org-scoped
+// on read even though the fingerprint index is global, so one org never sees
+// another's.
+//
+// Example: {}
+//
+//	Response: {"data": [{"id": "gitkey_4a1b", "title": "laptop",
+//		"publicKey": "ssh-ed25519 AAAAC3Nz…", "fingerprint": "SHA256:9pQ…",
+//		"createdAt": "2026-07-01T10:00:00Z"}]}
+func (o ops) listKeys(ctx context.Context, _ *noInput) (*keyList, error) {
+	t, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list keys: %v", err)
+		return nil, err
+	}
+	rows, err := o.s.State.keys.List(ctx, t.org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list keys: %v", err)
 	}
 	out := make([]keyView, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, r.view())
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &keyList{Data: out}, nil
 }
 
-// deleteKey removes a key by id, scoped to the caller's org (an org can only
-// delete its own keys).
-func deleteKey(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// deleteKey removes a registered SSH key, scoped to the caller's org: an org can
+// only delete its own, and a key id it does not own is not found. Answers 204
+// with no body. Once removed the key no longer authenticates any SSH git access.
+//
+// Example: {"id": "gitkey_4a1b"}
+func (o ops) deleteKey(ctx context.Context, in *keyRef) (*noContent, error) {
+	t, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := strings.TrimSpace(c.Param("id"))
+	id := strings.TrimSpace(in.ID)
 	if id == "" {
-		return zip.ErrBadRequest("key id required")
+		return nil, zip.ErrBadRequest("key id required")
 	}
-	if err := s.State.keys.Delete(c.Context(), org, id); err != nil {
+	if err := o.s.State.keys.Delete(ctx, t.org, id); err != nil {
 		if errors.Is(err, errKeyNotFound) {
-			return zip.ErrNotFound("key not found")
+			return nil, zip.ErrNotFound("key not found")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "delete key: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete key: %v", err)
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }

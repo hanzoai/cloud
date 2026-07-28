@@ -299,11 +299,11 @@ type index struct {
 func (o *ops) artifact(ctx context.Context, in *ReloadIn) (zip.Plugin, error) {
 	switch {
 	case in.Version != "" && in.URL != "":
-		return zip.Plugin{}, fmt.Errorf("give a version or a url, not both")
+		return zip.Plugin{}, zip.ErrBadRequest("give a version or a url, not both")
 
 	case in.URL != "":
 		if in.Sum == "" {
-			return zip.Plugin{}, fmt.Errorf("url requires sum — refusing to run an unverified download")
+			return zip.Plugin{}, zip.ErrBadRequest("url requires sum — refusing to run an unverified download")
 		}
 		return zip.Plugin{URL: in.URL, Sum: in.Sum}, nil
 

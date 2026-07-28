@@ -2,9 +2,19 @@ package admin
 
 import "github.com/hanzoai/cloud/clients/admin/core"
 
-// Response shapes for /v1/admin/*. Each mirrors the operator's api.ts contract
-// (admin/apps/operator/src/lib/api.ts) field-for-field — the JSON tags ARE the
+// Request and response shapes for /v1/admin/*. Each mirrors the operator's api.ts
+// contract (admin/apps/operator/src/lib/api.ts) field-for-field — the JSON tags ARE the
 // contract, so the operator's TypeScript types decode these one-to-one.
+//
+// Every op's Out is the /v1 envelope itself, spelled out per op rather than shared,
+// because the envelope's `data` is what makes an op's contract specific and a Go generic
+// over it produces an OpenAPI schema name no $ref can address. The four fields are always
+// the same:
+//
+//	status — core.OK, or core.Err with msg set (still HTTP 200; see core.Err)
+//	msg    — the failure reason, or an advisory note on a successful read
+//	data   — the payload, null when the read failed
+//	data2  — the total row count of a LIST read; absent on a single-value read
 //
 // The cross-cutting SourceStatus (freshness of one upstream) lives in clients/admin/core
 // (core.SourceStatus) because revenue/finance/analytics share it; overview embeds it.
@@ -32,6 +42,13 @@ type adminMe struct {
 	ScopeOrgs []string `json:"scopeOrgs,omitempty"`
 }
 
+// meOut is the GET /v1/admin/me envelope.
+type meOut struct {
+	Status string   `json:"status"`
+	Msg    string   `json:"msg"`
+	Data   *adminMe `json:"data"`
+}
+
 // overviewData is the fleet overview tiles (OverviewData / GET /v1/admin/overview).
 type overviewData struct {
 	Orgs           int                 `json:"orgs"`
@@ -46,6 +63,13 @@ type overviewData struct {
 	Sources        []core.SourceStatus `json:"sources"`
 }
 
+// overviewOut is the GET /v1/admin/overview envelope.
+type overviewOut struct {
+	Status string        `json:"status"`
+	Msg    string        `json:"msg"`
+	Data   *overviewData `json:"data"`
+}
+
 // orgRow is one tenant row (OrgRow / GET /v1/admin/orgs).
 type orgRow struct {
 	Org          string `json:"org"`
@@ -56,6 +80,60 @@ type orgRow struct {
 	CreditsCents int64  `json:"creditsCents"`
 	Tokens       int64  `json:"tokens"`
 	Created      string `json:"created"`
+}
+
+// orgsOut is the GET /v1/admin/orgs envelope. data2 == len(data): the directory is the
+// caller's whole tenant window, unpaginated.
+type orgsOut struct {
+	Status string   `json:"status"`
+	Msg    string   `json:"msg"`
+	Data   []orgRow `json:"data"`
+	Data2  *int     `json:"data2,omitempty"`
+}
+
+// usersIn is the GET /v1/admin/users query.
+type usersIn struct {
+	// Org narrows the directory to ONE tenant. Honoured for a SuperAdmin only — a
+	// white-label admin is pinned to their own org and this is ignored.
+	Org string `json:"org"`
+	// Query is a free-text filter, matched by IAM as a "contains" over the user name.
+	Query string `json:"q"`
+	// Page is the 1-based page number. Defaults to "1"; IAM returns zero rows AND a
+	// zero total when it is unset, so this layer never leaves it empty.
+	Page string `json:"p"`
+	// PageSize is rows per page. Defaults to "200", the shared admin page size.
+	PageSize string `json:"pageSize"`
+}
+
+// usersOut is the GET /v1/admin/users envelope. data2 is IAM's REAL total across all
+// pages, not len(data) — it is what the console pages against.
+type usersOut struct {
+	Status string         `json:"status"`
+	Msg    string         `json:"msg"`
+	Data   []operatorUser `json:"data"`
+	Data2  *int           `json:"data2,omitempty"`
+}
+
+// iamPageIn is the query shared by the verbatim IAM reads (roles, applications).
+type iamPageIn struct {
+	// Owner is the org whose rows to read. Defaults to the admin org, which owns the
+	// platform's roles and applications.
+	Owner string `json:"owner"`
+	// Page is the 1-based page number. Forwarded only when set — IAM applies its own
+	// default otherwise.
+	Page string `json:"p"`
+	// PageSize is rows per page. Forwarded only when set.
+	PageSize string `json:"pageSize"`
+}
+
+// iamRowsOut is the envelope of a verbatim IAM read. `data` is IAM's own payload,
+// forwarded byte-for-byte and therefore declared opaque: describing it here would be a
+// second copy of IAM's schema, free to drift from the one IAM actually serves.
+type iamRowsOut struct {
+	Status string `json:"status"`
+	Msg    string `json:"msg"`
+	Data   any    `json:"data"`
+	Data2  *int   `json:"data2,omitempty"`
 }
 
 // operatorUser is one user in the cross-org directory (OperatorUser / GET
@@ -97,6 +175,75 @@ type usageData struct {
 	Totals    usageTotals      `json:"totals"`
 	Series    []usagePoint     `json:"series"`
 	ByProduct []usageByProduct `json:"byProduct"`
+}
+
+// usageIn is the GET /v1/admin/usage query.
+type usageIn struct {
+	// Org reads ONE tenant's month-to-date total instead of the fleet sum. Honoured
+	// for a SuperAdmin only — a white-label admin always reads their own org.
+	Org string `json:"org"`
+}
+
+// usageOut is the GET /v1/admin/usage envelope.
+type usageOut struct {
+	Status string     `json:"status"`
+	Msg    string     `json:"msg"`
+	Data   *usageData `json:"data"`
+}
+
+// syncStarted acknowledges the "Sync now" button. There is no job id because there is no
+// job: the read that follows is the sync.
+type syncStarted struct {
+	Started bool `json:"started"`
+}
+
+// syncOut is the POST /v1/admin/sync envelope.
+type syncOut struct {
+	Status string       `json:"status"`
+	Msg    string       `json:"msg"`
+	Data   *syncStarted `json:"data"`
+}
+
+// productsIn is the GET /v1/admin/products query. Each filter is an exact match against
+// the corresponding productRow field; empty means "every value".
+type productsIn struct {
+	// Kind matches the operator App CR's declared spec.role (sql|kv|generic|ingress).
+	Kind string `json:"kind"`
+	// Tier matches the derived infra grouping (cloud|data|edge|daemon|paas|app).
+	Tier string `json:"tier"`
+	// Env matches the lifecycle namespace (main|test|dev).
+	Env string `json:"env"`
+}
+
+// productsOut is the GET /v1/admin/products envelope. data2 == len(data): the registry is
+// the whole observed fleet after filtering, unpaginated.
+type productsOut struct {
+	Status string       `json:"status"`
+	Msg    string       `json:"msg"`
+	Data   []productRow `json:"data"`
+	Data2  *int         `json:"data2,omitempty"`
+}
+
+// rangeIn is the time window shared by the warehouse-backed boards (o11y, aimetrics,
+// analytics, compute).
+type rangeIn struct {
+	// Range is the lower time bound: 24h, 7d or 30d. Anything else reads as the
+	// board's own default.
+	Range string `json:"range"`
+}
+
+// rawOut is the envelope of a read this layer forwards VERBATIM from an upstream
+// (the waitlist engine, commerce's spend-alert and promo CRUD, a credit-grant receipt).
+// `data` is the upstream's own payload, declared opaque for the same reason as
+// iamRowsOut: re-describing someone else's schema here would be a second copy of it.
+//
+// data2 is a POINTER because these reads differ on it — a passthrough list carries the
+// upstream's total, a passthrough object carries none — and an added key is a wire change.
+type rawOut struct {
+	Status string `json:"status"`
+	Msg    string `json:"msg"`
+	Data   any    `json:"data"`
+	Data2  *int   `json:"data2,omitempty"`
 }
 
 // productRow is one product/workload row (ProductRow / GET /v1/admin/products) — the

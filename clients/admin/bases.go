@@ -29,9 +29,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
-	"github.com/zap-proto/zip"
 )
 
 const (
@@ -63,7 +61,7 @@ func baseAdminConfig() (base, token string, ok bool) {
 // baseProxy issues a server-authed GET to the Base admin surface and returns its raw JSON
 // body + status. Bounded read; Bearer token only when configured; never forwards a client
 // header.
-func baseProxy(s *cloud.Service[core.State], ctx context.Context, target, token string) (json.RawMessage, int, error) {
+func baseProxy(ctx context.Context, target, token string) (json.RawMessage, int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return nil, 0, fmt.Errorf("base request: %w", err)
@@ -84,18 +82,34 @@ func baseProxy(s *cloud.Service[core.State], ctx context.Context, target, token 
 	return json.RawMessage(raw), resp.StatusCode, nil
 }
 
-// bases answers GET /v1/admin/bases — the scoped Base-instance list. Honest empty when the
-// engine is unconfigured; scope-filtered for a non-super caller.
-func bases(s *cloud.Service[core.State], c *zip.Ctx) error {
-	sc := core.ResolveScope(s, c)
+// bases lists the tenant Base instances in the caller's window — a SuperAdmin sees every
+// tenant's, anyone else only their own subtree's.
+//
+// The scope is enforced TWICE: the upstream is asked for the caller's org, AND every row
+// it returns is re-checked against the resolved scope. An upstream that ignored the
+// filter therefore degrades to empty, never to a cross-tenant leak.
+//
+// The Base engine is being embedded into cloud; until it lands this proxies
+// BASE_ADMIN_URL and, when that is unset, answers 200 with an empty list and msg saying
+// so — the honest not-yet state, never fabricated instances.
+//
+// Response: {"status":"ok","msg":"","data":[{"name":"acme-base","org":"acme",
+// "url":"https://acme.base.hanzo.ai","status":"running","plan":"pro","region":"nyc3",
+// "created":"2026-03-01T00:00:00Z"}],"data2":1}
+func (o ops) bases(ctx context.Context, _ *core.None) (*basesOut, error) {
+	c, err := core.AdmitScoped(ctx, o.s)
+	if err != nil {
+		return nil, err
+	}
+	sc := core.ResolveScope(o.s, c)
 	base, token, ok := baseAdminConfig()
 	if !ok {
-		return c.JSON(200, map[string]any{
-			"status": "ok",
-			"msg":    "the Base engine is not yet embedded on this deployment",
-			"data":   []baseInstance{},
-			"data2":  0,
-		})
+		return &basesOut{
+			Status: core.OK,
+			Msg:    "the Base engine is not yet embedded on this deployment",
+			Data:   []baseInstance{},
+			Data2:  core.Total(0),
+		}, nil
 	}
 	q := url.Values{}
 	if !sc.Super && len(sc.Orgs) > 0 {
@@ -105,12 +119,12 @@ func bases(s *cloud.Service[core.State], c *zip.Ctx) error {
 	if enc := q.Encode(); enc != "" {
 		target += "?" + enc
 	}
-	raw, code, err := baseProxy(s, c.Context(), target, token)
+	raw, code, err := baseProxy(ctx, target, token)
 	if err != nil {
-		return core.Fail(c, err.Error())
+		return &basesOut{Status: core.Err, Msg: err.Error()}, nil
 	}
 	if code/100 != 2 {
-		return core.Fail(c, fmt.Sprintf("base engine returned http %d", code))
+		return &basesOut{Status: core.Err, Msg: fmt.Sprintf("base engine returned http %d", code)}, nil
 	}
 	// Defense 2: re-check every row against the resolved scope. A scoped caller NEVER
 	// sees a row outside their subtree even if the upstream ignored ?org=.
@@ -120,7 +134,16 @@ func bases(s *cloud.Service[core.State], c *zip.Ctx) error {
 			out = append(out, r)
 		}
 	}
-	return core.OKList(c, out, len(out))
+	return &basesOut{Status: core.OK, Data: out, Data2: core.Total(len(out))}, nil
+}
+
+// basesOut is the GET /v1/admin/bases envelope. data2 == len(data): the list is the
+// caller's whole window after scope filtering, unpaginated.
+type basesOut struct {
+	Status string         `json:"status"`
+	Msg    string         `json:"msg"`
+	Data   []baseInstance `json:"data"`
+	Data2  *int           `json:"data2,omitempty"`
 }
 
 // decodeInstances tolerates BOTH a bare JSON array and a { data: [...] } envelope (the two

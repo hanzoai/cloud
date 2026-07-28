@@ -1,12 +1,10 @@
 package subscriptions
 
-import (
-	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/admin/core"
-)
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+import "github.com/zap-proto/zip"
 
 // Routes registers the fleet subscription view (SuperAdmin only, cross-tenant).
-func Routes(app cloud.Router, s *cloud.Service[core.State]) {
-	g := app.Group("/v1/admin")
-	g.Get("/subscriptions", core.Guard(s, Subscriptions))
+func Routes(z *zip.App) {
+	zip.Get(z, "/v1/admin/subscriptions", Subscriptions, zip.WithOperationID("adminSubscriptions"))
 }

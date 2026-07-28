@@ -1,6 +1,8 @@
 # Built binaries (Dockerfile output + `go build ./cmd/hanzo`)
 /cloud
 /hanzo
+# `make host` writes here too — 26MB of ELF one `git add -A` away from a commit.
+/host
 
 # Local build directories
 /dist/

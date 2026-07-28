@@ -53,6 +53,17 @@ import (
 // mountZAP registers git's ZAP procedure adapters. Called from routes(). The
 // procedures are ordinary /v1 routes; the shared /zap plane turns them into ZAP
 // procedures for the browser/service ZAP client.
+//
+// These stay RAW handlers, unlike the control plane they wrap. A typed op
+// answers a failure by RETURNING an error, which zip renders as its own
+// {status, code, error} body; the envelope contract here is a non-2xx status
+// carrying a {status:"error", msg} body instead. That is a wire shape a typed
+// op cannot produce, so typing these would break the bridge's clients.
+//
+// They are also the surface a reader should expect to shrink. The /v1 routes
+// they adapt are now typed ops (ops.go), so the shared /zap plane already
+// replays them frame-for-frame — this file is the older, hand-written path to
+// the same five core funcs, kept because its envelope is a published contract.
 func mountZAP(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/git")
 	g.Post("/zap/createRepo", cloud.Handle(s, zapCreate))

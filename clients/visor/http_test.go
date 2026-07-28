@@ -105,6 +105,11 @@ func mountApp(t *testing.T, f *fakeVisor) *zip.App {
 	t.Setenv("VISOR_CLIENT_ID", "")     // force bearer-forward path (fake ignores auth)
 	t.Setenv("VISOR_CLIENT_SECRET", "") //
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// The one piece of Serve's pipeline these routes depend on: a typed op reads
+	// its tenant and its request off the context, and Bridge is what puts them
+	// there. Without it every typed route answers 403, exactly as it would in
+	// production if the middleware were missing.
+	app.Use(cloud.Bridge())
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

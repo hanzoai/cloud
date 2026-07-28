@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -181,12 +180,26 @@ func installationIssues(ctx context.Context, token, fullName, state string) ([]g
 
 // githubBackfillResult is the count the operator asked for.
 type githubBackfillResult struct {
-	Repos     int  `json:"repos"`
-	Issues    int  `json:"issues"`
-	Created   int  `json:"created"`
-	Updated   int  `json:"updated"`
-	Failed    int  `json:"failed"`
+	// Repos is how many granted repos were walked (archived/disabled are skipped).
+	Repos int `json:"repos"`
+	// Issues is how many upstream issues were seen.
+	Issues int `json:"issues"`
+	// Created is how many native issues this pass created.
+	Created int `json:"created"`
+	// Updated is how many existing native issues this pass refreshed.
+	Updated int `json:"updated"`
+	// Failed is how many repos or issues errored; the pass continues past each.
+	Failed int `json:"failed"`
+	// Truncated is set when the time budget or the issue cap stopped the pass early.
+	// Re-run to continue — the mirror is idempotent by ExtRef, so nothing duplicates.
 	Truncated bool `json:"truncated,omitempty"`
+}
+
+// githubBackfillIn selects which upstream issues to mirror.
+type githubBackfillIn struct {
+	// State is the GitHub issue state to walk: "open" (the default), "closed" or
+	// "all". Anything else is a 400.
+	State string `json:"state"`
 }
 
 const (
@@ -195,35 +208,36 @@ const (
 )
 
 // githubIssuesBackfill seeds the native tracker with the EXISTING issues across the
-// org's granted repos (default state=open). Org-scoped by the validated principal —
-// a caller only ever backfills its OWN org. Synchronous + bounded (a total time
-// budget + an issue cap) so it returns the counts directly; idempotent by ExtRef, so
-// a re-run continues where a truncated pass left off (never duplicates).
-func githubIssuesBackfill(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// org's granted repos (default state=open); the webhook keeps them live thereafter.
+// Org-scoped by the validated principal — a caller only ever backfills its OWN org.
+// Synchronous + bounded (a total time budget and an issue cap) so it returns the
+// counts directly; idempotent by ExtRef, so a re-run continues where a truncated
+// pass left off and never duplicates.
+//
+// Example: {"state":"all"}
+// Response: {"repos":12,"issues":430,"created":410,"updated":20,"failed":0}
+func (o ops) githubIssuesBackfill(ctx context.Context, in *githubBackfillIn) (*githubBackfillResult, error) {
+	org, err := authed(ctx, principalRequired)
+	if err != nil {
+		return nil, err
 	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	state := strings.ToLower(strings.TrimSpace(c.Query("state")))
-	switch state {
+	issueState := strings.ToLower(strings.TrimSpace(in.State))
+	switch issueState {
 	case "", "open":
-		state = "open"
+		issueState = "open"
 	case "closed", "all":
 	default:
-		return zip.ErrBadRequest("state must be open|closed|all")
+		return nil, zip.ErrBadRequest("state must be open|closed|all")
 	}
-	tok, herr := githubTokenForOrg(c.Context(), org)
+	tok, herr := githubTokenForOrg(ctx, org)
 	if herr != nil {
-		return herr
+		return nil, herr
 	}
-	repos, err := installationRepos(c.Context(), tok)
+	repos, err := installationRepos(ctx, tok)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "list github repositories: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "list github repositories: %v", err)
 	}
-	ctx, cancel := context.WithTimeout(c.Context(), backfillBudget)
+	ctx, cancel := context.WithTimeout(ctx, backfillBudget)
 	defer cancel()
 
 	var out githubBackfillResult
@@ -236,10 +250,10 @@ func githubIssuesBackfill(s *cloud.Service[state], c *zip.Ctx) error {
 			break
 		}
 		out.Repos++
-		issues, ierr := installationIssues(ctx, tok, r.FullName, state)
+		issues, ierr := installationIssues(ctx, tok, r.FullName, issueState)
 		if ierr != nil {
 			out.Failed++
-			s.Log.Warn("github backfill: list issues", "org", org, "repo", r.Name, "err", ierr)
+			o.s.Log.Warn("github backfill: list issues", "org", org, "repo", r.Name, "err", ierr)
 			continue
 		}
 		for _, is := range issues {
@@ -251,7 +265,7 @@ func githubIssuesBackfill(s *cloud.Service[state], c *zip.Ctx) error {
 			created, uerr := mirrorGitHubIssue(ctx, org, r.Name, r.FullName, is)
 			if uerr != nil {
 				out.Failed++
-				s.Log.Warn("github backfill: mirror", "org", org, "repo", r.Name, "num", is.Number, "err", uerr)
+				o.s.Log.Warn("github backfill: mirror", "org", org, "repo", r.Name, "num", is.Number, "err", uerr)
 				continue
 			}
 			if created {
@@ -261,7 +275,7 @@ func githubIssuesBackfill(s *cloud.Service[state], c *zip.Ctx) error {
 			}
 		}
 	}
-	s.Log.Info("github issues backfill", "org", org, "repos", out.Repos, "issues", out.Issues,
+	o.s.Log.Info("github issues backfill", "org", org, "repos", out.Repos, "issues", out.Issues,
 		"created", out.Created, "updated", out.Updated, "failed", out.Failed, "truncated", out.Truncated)
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }

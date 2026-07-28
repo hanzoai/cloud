@@ -51,19 +51,35 @@ const (
 // sweep.
 var errNotImplemented = errors.New("marketing: publish connector not implemented")
 
-// CalendarPost is a scheduled content document.
+// CalendarPost is a scheduled content document. It is also the INPUT of create
+// and update: the wire shape is the same record either way. On create the server
+// assigns ID/CreatedAt/UpdatedAt; on update ID comes from the path. Status,
+// PublishedAt and Error are always server-owned — a caller cannot declare a post
+// published.
 type CalendarPost struct {
-	ID          string `json:"id"`
-	Org         string `json:"-"`
-	Title       string `json:"title"`
-	Body        string `json:"body"`
-	Channel     string `json:"channel"`
-	ScheduledAt int64  `json:"scheduledAt"`
-	Status      string `json:"status"`
-	PublishedAt int64  `json:"publishedAt"`
-	Error       string `json:"error,omitempty"`
-	CreatedAt   int64  `json:"createdAt"`
-	UpdatedAt   int64  `json:"updatedAt"`
+	// ID is the server-assigned post id ("cal_" + 128 random bits).
+	ID  string `json:"id"`
+	Org string `json:"-"`
+	// Title is the post's internal label, capped at 1024 bytes.
+	Title string `json:"title"`
+	// Body is the post text. Required.
+	Body string `json:"body"`
+	// Channel is the target network: x, facebook, instagram, linkedin, tiktok,
+	// youtube or threads. Required — a post must name where it goes.
+	Channel string `json:"channel"`
+	// ScheduledAt is the unix publish time; 0 leaves the post a draft, and any
+	// value makes it "scheduled" for the durable sweep to pick up.
+	ScheduledAt int64 `json:"scheduledAt"`
+	// Status is draft, scheduled, published, failed or canceled. Server-owned.
+	Status string `json:"status"`
+	// PublishedAt is when the publish succeeded; 0 until it does.
+	PublishedAt int64 `json:"publishedAt"`
+	// Error is the exact reason the last publish attempt failed — the honest
+	// record behind a "failed" status, never a faked success.
+	Error string `json:"error,omitempty"`
+	// CreatedAt and UpdatedAt are unix seconds, both server-assigned.
+	CreatedAt int64 `json:"createdAt"`
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 func (s *Store) migrateCalendar() error {
@@ -283,130 +299,172 @@ func normCalendarChannel(v string) (string, bool) {
 	return v, true
 }
 
-func createCalendarPost(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
+// PostRef addresses one calendar post.
+type PostRef struct {
+	// ID is the post id from the path, as returned by create.
+	ID string `json:"id"`
+}
+
+// PostQuery filters the calendar list.
+type PostQuery struct {
+	// Status keeps only posts in that state (draft, scheduled, published,
+	// failed, canceled). Empty means every post.
+	Status string `json:"status"`
+	// Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.
+	Limit int `json:"limit"`
+}
+
+// PostList is a page of calendar posts, soonest scheduled first.
+type PostList struct {
+	Data []CalendarPost `json:"data"`
+}
+
+// createCalendarPost adds a post to the content calendar. Channel and body are
+// required. A scheduledAt in the future makes the post "scheduled" and the
+// durable sweep publishes it when it comes due — claimed once, so a post
+// publishes at most once; without one it stays a draft.
+//
+// Example: {"title": "Launch day", "body": "Hanzo Cloud is live.", "channel": "x", "scheduledAt": 1780000000}
+func (o ops) createCalendarPost(ctx context.Context, in *CalendarPost) (*CalendarPost, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body CalendarPost
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	channel, okCh := normCalendarChannel(body.Channel)
+	channel, okCh := normCalendarChannel(in.Channel)
 	if !okCh {
-		return zip.ErrBadRequest("channel must be one of x, facebook, instagram, linkedin, tiktok, youtube, threads")
+		return nil, zip.ErrBadRequest("channel must be one of x, facebook, instagram, linkedin, tiktok, youtube, threads")
 	}
-	if clip(body.Body) == "" {
-		return zip.ErrBadRequest("body is required")
+	if clip(in.Body) == "" {
+		return nil, zip.ErrBadRequest("body is required")
 	}
 	status := calDraft
-	if body.ScheduledAt > 0 {
+	if in.ScheduledAt > 0 {
 		status = calScheduled
 	}
 	id, err := genID("cal")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
-	p, err := s.State.store.CreateCalendarPost(c.Context(), CalendarPost{
-		ID: id, Org: org, Title: clip(body.Title), Body: body.Body, Channel: channel,
-		ScheduledAt: body.ScheduledAt, Status: status, CreatedAt: now, UpdatedAt: now,
+	p, err := o.s.State.store.CreateCalendarPost(ctx, CalendarPost{
+		ID: id, Org: org, Title: clip(in.Title), Body: in.Body, Channel: channel,
+		ScheduledAt: in.ScheduledAt, Status: status, CreatedAt: now, UpdatedAt: now,
 	})
 	if err != nil {
-		return mapErr(err, "")
+		return nil, mapErr(err, "")
 	}
-	return c.JSON(http.StatusCreated, p)
+	cloud.Created(ctx)
+	return &p, nil
 }
 
-func listCalendarPosts(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
-	rows, err := s.State.store.ListCalendarPosts(c.Context(), org, status, limitOf(c))
+// listCalendarPosts returns the org's calendar, soonest scheduled first,
+// optionally narrowed to one status.
+//
+// Example: {"status": "scheduled", "limit": 50}
+func (o ops) listCalendarPosts(ctx context.Context, in *PostQuery) (*PostList, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
-}
-
-func getCalendarPost(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	p, err := s.State.store.GetCalendarPost(c.Context(), org, idParam(c))
+	rows, err := o.s.State.store.ListCalendarPosts(ctx, org, strings.ToLower(strings.TrimSpace(in.Status)), limitOf(in.Limit))
 	if err != nil {
-		return mapErr(err, "post not found")
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
-	return c.JSON(http.StatusOK, p)
+	return &PostList{Data: rows}, nil
 }
 
-func updateCalendarPost(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
+// getCalendarPost returns one of the caller org's posts, including the exact
+// error behind a failed publish. A post belonging to another org reads as not
+// found.
+//
+// Example: {"id": "cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468"}
+func (o ops) getCalendarPost(ctx context.Context, in *PostRef) (*CalendarPost, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body CalendarPost
-	if err := c.Bind(&body); err != nil {
-		return err
+	p, err := o.s.State.store.GetCalendarPost(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, mapErr(err, "post not found")
 	}
-	channel, okCh := normCalendarChannel(body.Channel)
+	return &p, nil
+}
+
+// updateCalendarPost replaces a post's editable fields. It is a full write, not
+// a patch, and it RESETS the lifecycle from the schedule: a scheduledAt makes
+// the post "scheduled" again and none makes it a draft — so editing a failed
+// post requeues it rather than leaving it stuck.
+//
+// Example: {"title": "Launch day", "body": "Hanzo Cloud is live — try it free.", "channel": "x", "scheduledAt": 1780003600}
+func (o ops) updateCalendarPost(ctx context.Context, in *CalendarPost) (*CalendarPost, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	channel, okCh := normCalendarChannel(in.Channel)
 	if !okCh {
-		return zip.ErrBadRequest("unknown channel")
+		return nil, zip.ErrBadRequest("unknown channel")
 	}
 	status := calDraft
-	if body.ScheduledAt > 0 {
+	if in.ScheduledAt > 0 {
 		status = calScheduled
 	}
-	p, err := s.State.store.UpdateCalendarPost(c.Context(), CalendarPost{
-		ID: idParam(c), Org: org, Title: clip(body.Title), Body: body.Body, Channel: channel,
-		ScheduledAt: body.ScheduledAt, Status: status, UpdatedAt: time.Now().Unix(),
+	p, err := o.s.State.store.UpdateCalendarPost(ctx, CalendarPost{
+		ID: strings.TrimSpace(in.ID), Org: org, Title: clip(in.Title), Body: in.Body, Channel: channel,
+		ScheduledAt: in.ScheduledAt, Status: status, UpdatedAt: time.Now().Unix(),
 	})
 	if err != nil {
-		return mapErr(err, "post not found")
+		return nil, mapErr(err, "post not found")
 	}
-	return c.JSON(http.StatusOK, p)
+	return &p, nil
 }
 
-func deleteCalendarPost(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	deleted, err := s.State.store.DeleteCalendarPost(c.Context(), org, idParam(c))
+// deleteCalendarPost removes one of the caller org's posts and answers 204. A
+// post already published is deleted from the calendar only — nothing is
+// retracted from the network it went out on.
+//
+// Example: {"id": "cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468"}
+func (o ops) deleteCalendarPost(ctx context.Context, in *PostRef) (*struct{}, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, err
+	}
+	deleted, err := o.s.State.store.DeleteCalendarPost(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("post not found")
+		return nil, zip.ErrNotFound("post not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
-// publishCalendarPost publishes a post immediately (sync). For a channel with no
-// wired connector it returns an honest 501 and records the failure.
-func publishCalendarPost(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	p, err := s.State.store.GetCalendarPost(c.Context(), org, idParam(c))
+// publishCalendarPost publishes a post NOW, synchronously, whatever its
+// schedule. No social connector is wired today, so every channel answers an
+// honest 501 naming the seam a real one would plug into, and the post is
+// recorded failed with that exact reason — never a faked "published".
+//
+// Example: {"id": "cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468"}
+func (o ops) publishCalendarPost(ctx context.Context, in *PostRef) (*CalendarPost, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return mapErr(err, "post not found")
+		return nil, err
+	}
+	p, err := o.s.State.store.GetCalendarPost(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, mapErr(err, "post not found")
 	}
 	now := time.Now().Unix()
-	if perr := publishPost(c.Context(), s, p); perr != nil {
-		_ = s.State.store.MarkCalendarFailed(c.Context(), org, p.ID, perr.Error(), now)
+	if perr := publishPost(ctx, o.s, p); perr != nil {
+		_ = o.s.State.store.MarkCalendarFailed(ctx, org, p.ID, perr.Error(), now)
 		if errors.Is(perr, errNotImplemented) {
-			return zip.Errorf(http.StatusNotImplemented, "%v", perr)
+			return nil, zip.Errorf(http.StatusNotImplemented, "%v", perr)
 		}
-		return zip.Errorf(http.StatusBadGateway, "publish: %v", perr)
+		return nil, zip.Errorf(http.StatusBadGateway, "publish: %v", perr)
 	}
-	if err := s.State.store.MarkCalendarPublished(c.Context(), org, p.ID, now); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "publish: %v", err)
+	if err := o.s.State.store.MarkCalendarPublished(ctx, org, p.ID, now); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "publish: %v", err)
 	}
-	p, _ = s.State.store.GetCalendarPost(c.Context(), org, p.ID)
-	return c.JSON(http.StatusOK, p)
+	p, _ = o.s.State.store.GetCalendarPost(ctx, org, p.ID)
+	return &p, nil
 }

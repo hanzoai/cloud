@@ -18,7 +18,6 @@ package main
 import (
 	"encoding/json"
 	"net/http/httptest"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -53,13 +52,25 @@ var (
 
 func fullyMountedApp(t *testing.T) *zip.App {
 	t.Helper()
+	// git.Mount opens a REAL SSH listener, and its default :2222 is a fixed port
+	// on the machine — so this harness fails to mount at all whenever anything
+	// else on the box is already serving git (a running cloud, another package's
+	// mount under `go test ./...`). An ephemeral port is the convention the rest
+	// of the suite already uses (clients/git/tenant_isolation_test.go) and the
+	// port number is not part of the route table this reads.
+	t.Setenv("GIT_SSH_ADDR", "127.0.0.1:0")
 	mountOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "openapi-spec-*")
+		// The SAME config every app binary's `openapi` dump builds, so the golden
+		// and the per-app subsets describe one deployment and not two.
+		//
+		// The cleanup is deliberately dropped: this app holds its stores open for
+		// the life of the test binary, and removing the dir under a live store is
+		// how a read goes flaky. The OS reclaims it at exit.
+		cfg, _, err := cloud.SpecConfig()
 		if err != nil {
 			mountErr = err
 			return
 		}
-		cfg := &cloud.Config{Brand: "hanzo", Domain: "api.hanzo.ai", DataDir: dir}
 		deps := cloud.BuildDeps(cfg)
 		app := zip.New(zip.Config{Logger: deps.Logger, DisableStartupMessage: true})
 		if mountErr = cloud.MountAll(app, apps.Wire(), cfg, deps); mountErr != nil {
@@ -244,4 +255,54 @@ func head(s []string, n int) []string {
 		return s
 	}
 	return append(s[:n:n], "... +"+strconv.Itoa(len(s)-n)+" more")
+}
+
+// The complement of the bijection: what the router serves and the document
+// CANNOT say. Both exclusions are forced — by the format (OpenAPI 3.1 has no
+// `connect` Path Item field) and by stability (fiber copies every GET into a
+// HEAD at boot, not at registration, so the count depends on lifecycle stage).
+// So the honest guarantee is not "nothing is excluded" but "nothing ELSE is": a
+// third method dropping out silently would be a real hole, and this refuses it.
+func TestOnlyUnrepresentableMethodsAreExcluded(t *testing.T) {
+	if testing.Short() {
+		t.Skip("mounts every subsystem in apps.Wire(); slow by construction")
+	}
+	app := fullyMountedApp(t)
+	doc, err := openapi.Spec(app, testInfo())
+	if err != nil {
+		t.Fatalf("Spec: %v", err)
+	}
+
+	excluded := map[string]int{}
+	for _, r := range app.Fiber().GetRoutes(true) {
+		p, _ := openapiPath(r.Path)
+		if doc.Paths[p][strings.ToLower(r.Method)] == nil {
+			excluded[r.Method]++
+		}
+	}
+	for _, method := range sortedMethods(excluded) {
+		if method != "CONNECT" && method != "HEAD" {
+			t.Errorf("%d %s route(s) live in the router and in no operation — the document is not total",
+				excluded[method], method)
+		}
+	}
+	t.Logf("%d live routes → %d operations / %d paths; excluded %v",
+		len(app.Fiber().GetRoutes(true)), countOps(doc), len(doc.Paths), excluded)
+}
+
+func sortedMethods(m map[string]int) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func countOps(d *openapi.Document) int {
+	n := 0
+	for _, item := range d.Paths {
+		n += len(item)
+	}
+	return n
 }

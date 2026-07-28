@@ -1,28 +1,60 @@
 package finance
 
 import (
+	"context"
 	"strings"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/commerce"
 	ledger "github.com/hanzoai/cloud/clients/finance"
-	"github.com/zap-proto/zip"
 )
 
-// Backfill answers POST /v1/admin/finance/backfill?org=<org> — the ONE-TIME cutover that
-// carries an org's CURRENT commerce prepaid balance into the native finance wallet. It
-// reads the pre-migration source of truth (the org's commerce balance for the org-pool
-// subject == the org slug) and deposits it into finance under the FIXED ref
-// "backfill:<org>", so re-running the cutover credits the wallet AT MOST ONCE. SuperAdmin
-// only (core.Guard). Returns { org, migratedCents, entryId }; entryId is "" when the
-// balance was non-positive (nothing to carry).
-func Backfill(s *cloud.Service[core.State], c *zip.Ctx) error {
-	org := strings.TrimSpace(c.Query("org"))
-	if org == "" {
-		return core.Fail(c, "org is required")
+// BackfillIn is the POST /v1/admin/finance/backfill input.
+type BackfillIn struct {
+	// Org is the tenant to migrate. Required — there is no fleet-wide form of this
+	// cutover, because each org must be reconciled on its own.
+	Org string `json:"org"`
+}
+
+// Backfilled is the cutover receipt.
+type Backfilled struct {
+	// Org is the tenant migrated.
+	Org string `json:"org"`
+	// MigratedCents is the balance carried across, read from commerce BEFORE the move.
+	MigratedCents int64 `json:"migratedCents"`
+	// EntryID is the finance ledger entry created, or "" when the balance was
+	// non-positive and there was nothing to carry.
+	EntryID string `json:"entryId"`
+}
+
+// BackfillOut is the POST /v1/admin/finance/backfill envelope.
+type BackfillOut struct {
+	Status string      `json:"status"`
+	Msg    string      `json:"msg"`
+	Data   *Backfilled `json:"data"`
+}
+
+// Backfill carries ONE org's current commerce prepaid balance into the native finance
+// wallet — the one-time cutover between the two ledgers.
+//
+// It is IDEMPOTENT: the deposit uses the fixed ref "backfill:<org>", so re-running it
+// credits the wallet at most once. Safe to retry.
+//
+// The pre-migration balance is read from the CO-RESIDENT commerce ledger, not over HTTP:
+// the admin HTTP client dials an unroutable in-process address and would read $0, and a
+// phantom zero would silently carry nothing while reporting success. When commerce is
+// not co-resident this fails rather than migrating nothing.
+//
+// Example: {"org":"acme"}
+// Response: {"status":"ok","msg":"","data":{"org":"acme","migratedCents":50000,"entryId":"fe_01J"}}
+func Backfill(ctx context.Context, in *BackfillIn) (*BackfillOut, error) {
+	if _, err := core.Admit(ctx); err != nil {
+		return nil, err
 	}
-	ctx := c.Context()
+	org := strings.TrimSpace(in.Org)
+	if org == "" {
+		return &BackfillOut{Status: core.Err, Msg: "org is required"}, nil
+	}
 
 	// Pre-migration source of truth: the org's current commerce prepaid balance for the
 	// org-pool subject (== the org slug), read DIRECTLY from the co-resident embedded
@@ -32,16 +64,16 @@ func Backfill(s *cloud.Service[core.State], c *zip.Ctx) error {
 	// silently carry as "nothing to migrate").
 	balanceCents, err := commerce.BalanceCents(ctx, org, org, "usd", false)
 	if err != nil {
-		return core.Fail(c, "read commerce balance: "+err.Error())
+		return &BackfillOut{Status: core.Err, Msg: "read commerce balance: " + err.Error()}, nil
 	}
 
 	entryID, err := ledger.MigrateOrg(ctx, org, balanceCents)
 	if err != nil {
-		return core.Fail(c, "finance backfill: "+err.Error())
+		return &BackfillOut{Status: core.Err, Msg: "finance backfill: " + err.Error()}, nil
 	}
-	return core.OK(c, map[string]any{
-		"org":           org,
-		"migratedCents": balanceCents,
-		"entryId":       entryID,
-	})
+	return &BackfillOut{Status: core.OK, Data: &Backfilled{
+		Org:           org,
+		MigratedCents: balanceCents,
+		EntryID:       entryID,
+	}}, nil
 }

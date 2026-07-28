@@ -116,17 +116,53 @@ func grantIdempotencyKey(c *zip.Ctx, subject, currency, source string, amountCen
 	return "grant-" + hex.EncodeToString(sum[:])
 }
 
+// GrantResult is what a credit grant DID — the receipt both grant ops answer with.
+type GrantResult struct {
+	// Org is the tenant whose ledger was credited.
+	Org string `json:"org"`
+	// Subject is the ACCOUNT the credit landed on inside that ledger: the org slug for
+	// a pooled org, "<org>/<name>" for a member of a per-member one. It is echoed
+	// because the operator does not choose it — account.Payer does — so naming a
+	// member of a pooled org credits the pool and the receipt has to say so.
+	Subject string `json:"subject"`
+	// GrantedCents is the amount actually credited.
+	GrantedCents int64 `json:"grantedCents"`
+	// Currency is the lower-cased ISO code the grant was denominated in.
+	Currency string `json:"currency"`
+	// Source is the money bucket: "trial" (non-cash comp) or "prepaid" (real money).
+	Source string `json:"source"`
+	// BalanceCents is the account balance AFTER the grant, in whole cents.
+	BalanceCents int64 `json:"balanceCents"`
+	// BalanceExact is that same balance at full 18-decimal precision, so a sub-cent
+	// debit is visible rather than rounded away.
+	BalanceExact string `json:"balanceExact"`
+	// TransactionID is the ledger entry id, for reconciliation against commerce.
+	TransactionID string `json:"transactionId"`
+}
+
+// GrantOut is the envelope of every credit-grant op. There is one shape because there is
+// ONE credit-write path.
+type GrantOut struct {
+	Status string       `json:"status"`
+	Msg    string       `json:"msg"`
+	Data   *GrantResult `json:"data"`
+}
+
 // ApplyGrant validates the amount + target org, deposits into the org's commerce ledger
 // (trial vs prepaid by source), and records the tamper-evident audit row. One path, one
 // way to grant.
-func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditRequest) error {
+//
+// Two refusals carry a NON-200 status, set on c before the envelope is returned: an
+// unknown org is 404, and a deployment with no durable audit store is 503. Both keep the
+// envelope body — the status is the addition, not a different contract.
+func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditRequest) (*GrantOut, error) {
 	ctx := c.Context()
 	cr := CallerCreds(c)
 	if req.AmountCents <= 0 {
-		return Fail(c, "amountCents must be positive")
+		return &GrantOut{Status: Err, Msg: "amountCents must be positive"}, nil
 	}
 	if req.AmountCents > maxGrantCents {
-		return Fail(c, fmt.Sprintf("amountCents exceeds the %d-cent per-grant cap", maxGrantCents))
+		return &GrantOut{Status: Err, Msg: fmt.Sprintf("amountCents exceeds the %d-cent per-grant cap", maxGrantCents)}, nil
 	}
 	currency := strings.ToLower(strings.TrimSpace(req.Currency))
 	if currency == "" {
@@ -136,10 +172,11 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 	// Validate the target is a REAL org (never mint an orphan wallet on a typo).
 	o, err := FindOrg(s, ctx, cr, org)
 	if err != nil {
-		return Fail(c, err.Error())
+		return &GrantOut{Status: Err, Msg: err.Error()}, nil
 	}
 	if o == nil {
-		return c.JSON(404, map[string]any{"status": "error", "msg": "customer not found", "data": nil})
+		c.Status(404)
+		return &GrantOut{Status: Err, Msg: "customer not found"}, nil
 	}
 
 	// FAIL-CLOSED durability (SOC2 AU-2/AU-5): a credit grant moves REAL money and MUST
@@ -149,7 +186,8 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 	// for the trail (audit_serve.go), and nil arises only from the explicit
 	// CLOUD_AUDIT_DISABLED dev opt-out, on which moving money is not a supported op.
 	if s.State.AuditStore == nil {
-		return c.JSON(503, map[string]any{"status": "error", "msg": "grant refused: no durable audit store is configured on this deployment; a credit grant must be recorded before money moves", "data": nil})
+		c.Status(503)
+		return &GrantOut{Status: Err, Msg: "grant refused: no durable audit store is configured on this deployment; a credit grant must be recorded before money moves"}, nil
 	}
 
 	// Resolve the ADDRESS the grant lands at — the same rule (account.Payer) the
@@ -160,7 +198,7 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 	// (a "/" in it would silently address something else), never a fallback.
 	w, addressed := principal.WalletFor(org, req.User)
 	if !addressed {
-		return Fail(c, "user must be a bare IAM username (no '/')")
+		return &GrantOut{Status: Err, Msg: "user must be a bare IAM username (no '/')"}, nil
 	}
 	subject := w.Account
 
@@ -183,7 +221,7 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 			map[string]any{"balanceCents": before},
 			map[string]any{"amountCents": req.AmountCents, "currency": currency, "reason": req.Reason, "source": source, "subject": subject, "error": derr.Error()},
 			audit.Outcome{Result: "error", Status: 200, Reason: "grant failed"})
-		return Fail(c, "grant failed: "+derr.Error())
+		return &GrantOut{Status: Err, Msg: "grant failed: " + derr.Error()}, nil
 	}
 
 	EmitAudit(s, c, "admin.customer.credit", "credit", org,
@@ -191,19 +229,16 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 		map[string]any{"balanceCents": after, "grantedCents": req.AmountCents, "currency": currency, "reason": req.Reason, "source": source, "subject": subject, "transactionId": txID},
 		audit.Outcome{Result: "success", Status: 200})
 
-	// subject is echoed because the operator does not choose it — account.Payer does.
-	// Naming a member of a pooled org credits the pool, and the response has to say so
-	// rather than let the caller assume a member wallet exists.
-	return OK(c, map[string]any{
-		"org":           org,
-		"subject":       subject,
-		"grantedCents":  req.AmountCents,
-		"currency":      currency,
-		"source":        source,
-		"balanceCents":  after,
-		"balanceExact":  afterExact, // EXACT 18-decimal balance — a sub-cent debit is visible here
-		"transactionId": txID,
-	})
+	return &GrantOut{Status: OK, Data: &GrantResult{
+		Org:           org,
+		Subject:       subject,
+		GrantedCents:  req.AmountCents,
+		Currency:      currency,
+		Source:        source,
+		BalanceCents:  after,
+		BalanceExact:  afterExact,
+		TransactionID: txID,
+	}}, nil
 }
 
 // grantDeposit performs the ONE credit money-move for a grant. It prefers the co-resident

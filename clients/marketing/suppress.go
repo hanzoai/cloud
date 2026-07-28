@@ -38,13 +38,21 @@ import (
 // whitespace-insensitive ("A@B.com" suppresses "a@b.com ").
 func normAddr(a string) string { return strings.ToLower(strings.TrimSpace(a)) }
 
-// Suppression is one opt-out record: (org, channel, address) is the key.
+// Suppression is one opt-out record: (org, channel, address) is the key. It is
+// also the INPUT of add and remove — the same tuple names the record either way.
 type Suppression struct {
-	Org       string `json:"-"`
-	Channel   string `json:"channel"`
-	Address   string `json:"address"`
-	Reason    string `json:"reason"`
-	CreatedAt int64  `json:"createdAt"`
+	Org string `json:"-"`
+	// Channel is the surface opted out of: email, sms, social, meta, google or
+	// tiktok. Empty means email. Opting out of one leaves the others reachable.
+	Channel string `json:"channel"`
+	// Address is the recipient, normalized (lower-cased, trimmed) so an opt-out
+	// cannot be slipped past on a case or whitespace difference. Required.
+	Address string `json:"address"`
+	// Reason is a free-text note, capped at 1024 bytes. The public one-click
+	// endpoint records "one-click unsubscribe".
+	Reason string `json:"reason"`
+	// CreatedAt is unix seconds, server-assigned.
+	CreatedAt int64 `json:"createdAt"`
 }
 
 func (s *Store) migrateSuppressions() error {
@@ -217,91 +225,126 @@ func unsubURL(ctx context.Context, s *cloud.Service[state], org, channel, addres
 
 // ---- handlers ----
 
-// listSuppressions returns the org's opt-out list.
-func listSuppressions(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	rows, err := s.State.store.ListSuppressions(c.Context(), org, limitOf(c))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
-	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+// SuppressionList is a page of opt-outs, newest first.
+type SuppressionList struct {
+	Data []Suppression `json:"data"`
 }
 
-// addSuppression records an opt-out for the org (admin/self-service management).
-func addSuppression(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
+// UnsubscribeInput is the signed one-click link's query: the tuple to opt out
+// plus the MAC that authorizes exactly that tuple.
+type UnsubscribeInput struct {
+	// Org is the org the link was minted for.
+	Org string `json:"org"`
+	// Channel is the surface to opt out of.
+	Channel string `json:"channel"`
+	// Address is the recipient to opt out.
+	Address string `json:"address"`
+	// Token is the HMAC over (org, channel, address). It is the ONLY authority
+	// here — there is no principal — so it binds the request to one tuple and
+	// nothing else.
+	Token string `json:"token"`
+}
+
+// Unsubscribed confirms a one-click opt-out.
+type Unsubscribed struct {
+	Unsubscribed bool   `json:"unsubscribed"`
+	Address      string `json:"address"`
+	Channel      string `json:"channel"`
+}
+
+// listSuppressions returns the org's opt-out list, newest first — everyone the
+// send gate will refuse to deliver to.
+//
+// Example: {"limit": 100}
+func (o ops) listSuppressions(ctx context.Context, in *Page) (*SuppressionList, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body Suppression
-	if err := c.Bind(&body); err != nil {
-		return err
+	rows, err := o.s.State.store.ListSuppressions(ctx, org, limitOf(in.Limit))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
-	channel, okCh := normChannel(body.Channel)
+	return &SuppressionList{Data: rows}, nil
+}
+
+// addSuppression records an opt-out for the org (admin / self-service
+// management). Address is required; channel defaults to email. It is idempotent:
+// re-suppressing the same tuple keeps the original record rather than erroring.
+// From here on the ONE send gate refuses that recipient on that channel.
+//
+// Example: {"channel": "email", "address": "person@example.com", "reason": "asked support to stop"}
+func (o ops) addSuppression(ctx context.Context, in *Suppression) (*Suppression, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	channel, okCh := normChannel(in.Channel)
 	if !okCh {
-		return zip.ErrBadRequest("channel must be one of email, sms, social, meta, google, tiktok")
+		return nil, zip.ErrBadRequest("channel must be one of email, sms, social, meta, google, tiktok")
 	}
-	addr := normAddr(body.Address)
+	addr := normAddr(in.Address)
 	if addr == "" {
-		return zip.ErrBadRequest("address is required")
+		return nil, zip.ErrBadRequest("address is required")
 	}
-	sup := Suppression{Org: org, Channel: channel, Address: addr, Reason: clip(body.Reason), CreatedAt: time.Now().Unix()}
-	if err := s.State.store.Suppress(c.Context(), sup); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "suppress: %v", err)
+	sup := Suppression{Org: org, Channel: channel, Address: addr, Reason: clip(in.Reason), CreatedAt: time.Now().Unix()}
+	if err := o.s.State.store.Suppress(ctx, sup); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "suppress: %v", err)
 	}
-	return c.JSON(http.StatusCreated, sup)
+	cloud.Created(ctx)
+	return &sup, nil
 }
 
-// removeSuppression re-subscribes an address (org-scoped).
-func removeSuppression(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	var body Suppression
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	channel, okCh := normChannel(body.Channel)
-	if !okCh {
-		return zip.ErrBadRequest("unknown channel")
-	}
-	removed, err := s.State.store.Unsuppress(c.Context(), org, channel, body.Address)
+// removeSuppression re-subscribes an address on one channel and answers 204. An
+// address that is not on the list reads as not found.
+//
+// Example: {"channel": "email", "address": "person@example.com"}
+func (o ops) removeSuppression(ctx context.Context, in *Suppression) (*struct{}, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "unsuppress: %v", err)
+		return nil, err
+	}
+	channel, okCh := normChannel(in.Channel)
+	if !okCh {
+		return nil, zip.ErrBadRequest("unknown channel")
+	}
+	removed, err := o.s.State.store.Unsuppress(ctx, org, channel, in.Address)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "unsuppress: %v", err)
 	}
 	if !removed {
-		return zip.ErrNotFound("not on the suppression list")
+		return nil, zip.ErrNotFound("not on the suppression list")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
-// unsubscribe is the PUBLIC one-click endpoint (no principal): a recipient clicks
-// the signed link in an email footer. The token binds (org, channel, address), so
-// a caller can only opt OUT exactly the tuple it was minted for — never another
-// address and never another org. An invalid token is refused.
-func unsubscribe(s *cloud.Service[state], c *zip.Ctx) error {
-	org := strings.TrimSpace(c.Query("org"))
-	channel := strings.ToLower(strings.TrimSpace(c.Query("channel")))
-	address := normAddr(c.Query("address"))
-	token := strings.TrimSpace(c.Query("token"))
+// unsubscribe is the PUBLIC one-click endpoint (no principal): a recipient
+// clicks the signed link in an email footer. The token binds (org, channel,
+// address), so a caller can only opt OUT exactly the tuple it was minted for —
+// never another address and never another org. An invalid token is refused, and
+// a deployment with no KMS-sealed key refuses rather than accepting anything.
+//
+// Example: {"org": "acme", "channel": "email", "address": "person@example.com", "token": "9f2a…"}
+// Response: {"unsubscribed": true, "address": "person@example.com", "channel": "email"}
+func (o ops) unsubscribe(ctx context.Context, in *UnsubscribeInput) (*Unsubscribed, error) {
+	org := strings.TrimSpace(in.Org)
+	channel := strings.ToLower(strings.TrimSpace(in.Channel))
+	address := normAddr(in.Address)
+	token := strings.TrimSpace(in.Token)
 	if org == "" || channel == "" || address == "" || token == "" {
-		return zip.ErrBadRequest("org, channel, address and token are required")
+		return nil, zip.ErrBadRequest("org, channel, address and token are required")
 	}
-	key, err := unsubKey(c.Context(), s.KMS)
+	key, err := unsubKey(ctx, o.s.KMS)
 	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "unsubscribe unavailable: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "unsubscribe unavailable: %v", err)
 	}
 	if !unsubValid(key, org, channel, address, token) {
-		return zip.ErrForbidden("invalid unsubscribe token")
+		return nil, zip.ErrForbidden("invalid unsubscribe token")
 	}
-	if err := s.State.store.Suppress(c.Context(), Suppression{
+	if err := o.s.State.store.Suppress(ctx, Suppression{
 		Org: org, Channel: channel, Address: address, Reason: "one-click unsubscribe", CreatedAt: time.Now().Unix(),
 	}); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "suppress: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "suppress: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"unsubscribed": true, "address": address, "channel": channel})
+	return &Unsubscribed{Unsubscribed: true, Address: address, Channel: channel}, nil
 }

@@ -57,63 +57,72 @@ const mirrorOutAllowHostsEnv = "GIT_MIRROR_OUT_ALLOW_HOSTS"
 // and deliberate internal mirrors. Empty ⇒ all internal targets are refused.
 const mirrorAllowPrivateEnv = "GIT_MIRROR_ALLOW_PRIVATE_HOSTS"
 
+// mirrorReq imports an external repository into one of the caller's repos.
 type mirrorReq struct {
-	Source  string `json:"source"`
+	// Name is the local repo to mirror into, from the :name path segment. It is
+	// CREATED on first use.
+	Name string `json:"name"`
+	// Source is the http(s) git URL to fetch from. The host is SSRF-guarded and
+	// the shared mirror credential is only sent to allowlisted hosts.
+	Source string `json:"source"`
+	// Project is the sub-scope to land the repo in; empty uses the caller's own,
+	// exactly as a create would.
 	Project string `json:"project"`
 }
 
-// mirror imports body.Source into the org's repo at :name. It provisions the
-// repo on first use (idempotent, race-safe) then force-fetches every ref, so a
-// first call clones the source and a repeat call syncs it.
-func mirror(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	store, err := storeFor(s, org)
+// mirror imports an external git repository into the caller's repo, provisioning
+// it on first use. Fetch is FORCED and covers every ref, so a first call clones
+// the source and a repeat call re-syncs it — the endpoint is idempotent by mirror
+// semantics. Mirrored bytes are metered exactly like a push, and a push.landed
+// event is emitted for the default branch so the code index picks the repo up.
+//
+// Example: {"name": "widgets", "source": "https://github.com/acme/widgets.git"}
+func (o ops) mirror(ctx context.Context, in *mirrorReq) (*repoView, error) {
+	t, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	name := normalizeName(c.Param("name"))
+	store, err := storeFor(o.s, t.org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	name := normalizeName(in.Name)
 	if !nameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+		return nil, zip.ErrBadRequest("name must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
-	var body mirrorReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	src, err := mirrorSource(body.Source)
+	src, err := mirrorSource(in.Source)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	// Project sub-scope: explicit body value wins, else the header sub-scope —
+	// Project sub-scope: explicit body value wins, else the principal's sub-scope —
 	// identical to create so a mirror lands in the same scope a create would.
-	project := strings.TrimSpace(body.Project)
+	project := strings.TrimSpace(in.Project)
 	if project == "" {
-		project = projectScope(c)
+		project = t.project
 	} else if !projectRE.MatchString(project) {
-		return zip.ErrBadRequest("project must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+		return nil, zip.ErrBadRequest("project must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
 
-	r, err := ensureRepo(s, c.Context(), store, org, project, name)
+	r, err := ensureRepo(o.s, ctx, store, t.org, project, name)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "ensure repo: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "ensure repo: %v", err)
 	}
 	// The org-supplied /mirror endpoint uses the SHARED, host-allowlisted mirror
 	// credential (empty gitCred ⇒ mirrorGitEnv falls back to the env-token path).
 	// The GitHub-App path passes a per-org installation token instead (github_import.go).
-	if err := s.State.storage.mirrorInto(c.Context(), org, project, name, src, gitCred{}); err != nil {
-		return zip.Errorf(http.StatusBadGateway, "mirror fetch: %v", err)
+	if err := o.s.State.storage.mirrorInto(ctx, t.org, project, name, src, gitCred{}); err != nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "mirror fetch: %v", err)
 	}
 	// Meter the mirrored bytes the same way a push is metered (the ONE storage
 	// bound). Best-effort — a metering miss must not fail a landed mirror.
-	r.SizeBytes = recordUsage(s, context.WithoutCancel(c.Context()), org, project, name)
+	r.SizeBytes = recordUsage(o.s, context.WithoutCancel(ctx), t.org, project, name)
 	// Index-on-import: emit push.landed for the mirrored default branch so /v1/code
 	// covers this repo now, exactly as a push would (the same reactor). Origin =
 	// source host, so the outbound mirror suppresses the echo. Detached + best-effort.
-	emitImportPush(s, context.WithoutCancel(c.Context()), org, project, name, src)
-	branches, head := refState(c.Context(), s, org, project, name)
-	return c.JSON(http.StatusOK, toView(s, r, branches, head))
+	emitImportPush(o.s, context.WithoutCancel(ctx), t.org, project, name, src)
+	branches, head := refState(ctx, o.s, t.org, project, name)
+	view := toView(o.s, r, branches, head)
+	return &view, nil
 }
 
 // gitCred is a per-fetch/push basic-auth credential presented ONLY via the env-

@@ -1,7 +1,7 @@
 // Package metrics is the fleet SaaS-operations god-view (/v1/admin/metrics) — the
 // operator's business dashboard: MRR/ARR, net-new vs churned MRR, the plan/category
 // mix, the top customers, and the recent subscription movements. SuperAdmin only
-// (core.Guard).
+// (core.Admit).
 //
 // It reads the ONE shared warehouse (commerce.events) — the table the commerce
 // analytics collector lands every subscription/invoice/usage-lifecycle event in —
@@ -22,11 +22,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/admin/money"
 	"github.com/hanzoai/cloud/clients/datastore"
-	"github.com/zap-proto/zip"
 )
 
 // errUnconfigured marks the warehouse not connected on this deployment — core.SrcOf
@@ -139,15 +137,18 @@ type MetricsData struct {
 // (fleet-wide, no per-org fan-out). SuperAdmin only.
 //
 //	GET /v1/admin/metrics?window=30d&limit=20
-func Metrics(s *cloud.Service[core.State], c *zip.Ctx) error {
-	ctx := c.Context()
+func Metrics(ctx context.Context, in *MetricsIn) (*MetricsOut, error) {
+	if _, err := core.Admit(ctx); err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	window := normalizeWindow(c.Query("window"))
-	limit := parseLimit(c.Query("limit"))
+	window := normalizeWindow(in.Window)
+	limit := parseLimit(in.Limit)
 
 	// Honest not-configured snapshot when the warehouse/collector table is absent.
 	if !core.BillingEventsReady(ctx) {
-		return core.OK(c, empty(now, window, core.SrcOf("billing-warehouse", errUnconfigured, 0, now)))
+		zero := empty(now, window, core.SrcOf("billing-warehouse", errUnconfigured, 0, now))
+		return &MetricsOut{Status: core.OK, Data: &zero}, nil
 	}
 
 	sinceTS := core.CHTimeLit(core.WarehouseSince(window))
@@ -193,11 +194,27 @@ func Metrics(s *cloud.Service[core.State], c *zip.Ctx) error {
 	m.Customers = topCustomers(ctx, sinceTS, limit)
 
 	m.Gaps = gapsFor(m)
-	return core.OK(c, MetricsData{
+	return &MetricsOut{Status: core.OK, Data: &MetricsData{
 		SaaSMetrics: normalize(m),
 		GeneratedAt: now,
 		Sources:     []core.SourceStatus{core.SrcOf("billing-warehouse", nil, m.Orgs, now)},
-	})
+	}}, nil
+}
+
+// MetricsIn is the GET /v1/admin/metrics query.
+type MetricsIn struct {
+	// Window is the movement window the new/churned MRR and the recent feed are
+	// measured over. Anything unrecognised falls back to the board default.
+	Window string `json:"window"`
+	// Limit caps the top-customers table.
+	Limit string `json:"limit"`
+}
+
+// MetricsOut is the GET /v1/admin/metrics envelope.
+type MetricsOut struct {
+	Status string       `json:"status"`
+	Msg    string       `json:"msg"`
+	Data   *MetricsData `json:"data"`
 }
 
 // ── active-subscription state subquery (latest-event-wins, non-canceled) ─────
