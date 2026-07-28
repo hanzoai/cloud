@@ -1146,3 +1146,46 @@ func TestSettlementIsRecordedNotInferred(t *testing.T) {
 		t.Fatalf("external basis settlesTo = %v, want %q", eb["settlesTo"], settlementWallet)
 	}
 }
+
+// TestEnsureSystemAuthorPromotesExistingConnected: an org that connected as an
+// author BEFORE it became the maintainer org keeps a CONNECTED row, and a
+// connected author never accrues — so "pay ourselves" was silently blocked
+// forever on exactly the deployment that had once used the manual flow. Ensure
+// means ensure: the row is promoted to approved and then actually earns. A
+// SUSPENDED row is left alone: un-suspending is an operator decision.
+func TestEnsureSystemAuthorPromotesExistingConnected(t *testing.T) {
+	t.Run("connected is promoted and earns", func(t *testing.T) {
+		app, s, fc, _ := mount(t) // maintainerOrg = "hanzo"
+		ctx := context.Background()
+		connectOrg(t, app, s, "hanzo", "zeekay")
+		if a, _ := s.State.store.GetByOrg(ctx, "hanzo"); a.Status != StatusConnected {
+			t.Fatalf("precondition: want connected, got %q", a.Status)
+		}
+		req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false,
+			map[string]any{"repoUrl": "https://github.com/hanzoai/chat-starter", "project": "proj-b"})
+		a, err := s.State.store.GetByOrg(ctx, "hanzo")
+		if err != nil || a.Status != StatusApproved {
+			t.Fatalf("maintainer author = %+v (%v), want approved — else it can never earn", a, err)
+		}
+		fc.setSpend("orgB", 10000)
+		sweepAndPayout(s)
+		a, _ = s.State.store.GetByOrg(ctx, "hanzo")
+		if want := int64(10000 * defaultShareBps / bpsDenom); a.AccruedCents != want || a.PaidCents != want {
+			t.Fatalf("accrued=%d paid=%d, want %d/%d", a.AccruedCents, a.PaidCents, want, want)
+		}
+	})
+
+	t.Run("suspended stays suspended", func(t *testing.T) {
+		app, s, _, _ := mount(t)
+		ctx := context.Background()
+		id, _ := connectOrg(t, app, s, "hanzo", "zeekay")
+		if st, body := req(t, app, http.MethodPost, "/v1/admin/authors/"+id+"/suspend", "admin", true, nil); st != http.StatusOK {
+			t.Fatalf("suspend want 200, got %d (%s)", st, body)
+		}
+		req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false,
+			map[string]any{"repoUrl": "https://github.com/hanzoai/chat-starter", "project": "proj-b"})
+		if a, _ := s.State.store.GetByOrg(ctx, "hanzo"); a.Status != StatusSuspended {
+			t.Fatalf("suspended maintainer author was silently reinstated: %q", a.Status)
+		}
+	})
+}
