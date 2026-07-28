@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"sync"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -26,6 +27,24 @@ import (
 // to inspect/prime process-local state (e.g. the per-org deploy gate) can reach it.
 // It NEVER touches a real cluster (the earlier version resolved the dev kubeconfig
 // and wrote to live DOKS — never again).
+// testProjects maps a mounted app to its fake IAM project store. Platform cannot
+// create a project (that is IAM's, at /v1/iam/projects), so a test that needs one
+// declares it with seedProject instead of POSTing it.
+var testProjects sync.Map // *zip.App -> *fakeProjects
+
+// seedProject registers a project in the app's IAM store — the precondition for
+// deploying an app under it.
+func seedProject(t *testing.T, app *zip.App, org, name string) {
+	t.Helper()
+	v, ok := testProjects.Load(app)
+	if !ok {
+		t.Fatalf("seedProject: app was not mounted by this harness")
+	}
+	if _, err := v.(*fakeProjects).Create(context.Background(), org, name, name, ""); err != nil {
+		t.Fatalf("seedProject %s/%s: %v", org, name, err)
+	}
+}
+
 func mountSvcK8s(t *testing.T, k *k8sClient) (*zip.App, *cloud.Service[state]) {
 	t.Helper()
 	store, err := openStore(filepath.Join(t.TempDir(), "platform.db"))
@@ -33,9 +52,11 @@ func mountSvcK8s(t *testing.T, k *k8sClient) (*zip.App, *cloud.Service[state]) {
 		t.Fatalf("openStore: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	s := &cloud.Service[state]{Base: cloud.Base{KMS: newFakeKMS(), Log: luxlog.New("test"), Brand: "hanzo"}, State: state{store: store, projects: newFakeProjects(), k8s: k, sitesHost: "hanzo.app"}}
+	fp := newFakeProjects()
+	s := &cloud.Service[state]{Base: cloud.Base{KMS: newFakeKMS(), Log: luxlog.New("test"), Brand: "hanzo"}, State: state{store: store, projects: fp, k8s: k, sitesHost: "hanzo.app"}}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	routes(app, s)
+	testProjects.Store(app, fp)
 	return app, s
 }
 
@@ -156,11 +177,8 @@ func TestHTTPProjectAppLifecycle(t *testing.T) {
 		t.Fatalf("no-org list want 403, got %d", code)
 	}
 
-	// Create a project.
-	code, _ := do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "Web", "slug": "web"})
-	if code != http.StatusCreated {
-		t.Fatalf("create project want 201, got %d", code)
-	}
+	// The project is IAM's; platform only deploys into one.
+	seedProject(t, app, "maxpower", "web")
 	// Create an image-source application under it.
 	code, body := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
 		"name": "api", "source": "image",
@@ -218,7 +236,7 @@ func TestHTTPDeploySucceedsIntoTenantNamespace(t *testing.T) {
 	k := fakeK8s()
 	app := mountAppK8s(t, k)
 
-	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
+	seedProject(t, app, "maxpower", "web")
 	do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
 		"name": "api", "source": "image",
 		"image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1.27"},
@@ -269,7 +287,7 @@ func TestImageDeployOverCapReturns429(t *testing.T) {
 	app, s := mountSvcK8s(t, k)
 
 	seedApp := func(org string) {
-		do(t, app, http.MethodPost, "/v1/platform/projects", org, map[string]any{"name": "web"})
+		seedProject(t, app, org, "web")
 		do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", org, map[string]any{
 			"name": "api", "source": "image",
 			"image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1.27"},
@@ -326,7 +344,7 @@ func TestHTTPForgeableOrgRefused(t *testing.T) {
 	app := mountApp(t)
 	for _, tc := range []struct{ method, path string }{
 		{http.MethodGet, "/v1/platform/projects"},
-		{http.MethodPost, "/v1/platform/projects"},
+		{http.MethodPost, "/v1/platform/projects/x/apps"},
 		{http.MethodGet, "/v1/platform/projects/x/apps"},
 		{http.MethodPost, "/v1/platform/projects/x/apps/y/deploy"},
 		{http.MethodPost, "/v1/platform/projects/x/apps/y/stop"},
@@ -347,7 +365,7 @@ func TestHTTPCrossTenantIsolation(t *testing.T) {
 	app := mountApp(t)
 
 	// maxpower creates project + app.
-	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
+	seedProject(t, app, "maxpower", "web")
 	do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
 		"name": "api", "source": "image", "image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1"},
 	})
@@ -398,7 +416,7 @@ func TestHTTPCrossTenantIsolation(t *testing.T) {
 // stored row carries no plaintext — the value lives only in KMS.
 func TestHTTPSecretEnvSealed(t *testing.T) {
 	app, s := mountSvcK8s(t, &k8sClient{initErr: "no cluster (test)", limits: testLimits()})
-	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
+	seedProject(t, app, "maxpower", "web")
 	code, body := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
 		"name": "api", "source": "image", "image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1"},
 		"env": []map[string]any{{"key": "DB_PASSWORD", "value": "hunter2", "secret": true}, {"key": "PUBLIC", "value": "ok"}},
@@ -430,7 +448,7 @@ func TestHTTPSecretEnvSealed(t *testing.T) {
 func TestHTTPSecretEnvFailsClosedWithoutKMS(t *testing.T) {
 	app, s := mountSvcK8s(t, &k8sClient{initErr: "no cluster (test)", limits: testLimits()})
 	s.KMS = nil // KMS not configured
-	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
+	seedProject(t, app, "maxpower", "web")
 	code, body := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
 		"name": "api", "source": "image", "image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1"},
 		"env": []map[string]any{{"key": "DB_PASSWORD", "value": "hunter2", "secret": true}},
@@ -460,11 +478,7 @@ func TestHTTPHealthFailClosed(t *testing.T) {
 // source.
 func TestHTTPValidation(t *testing.T) {
 	app := mountApp(t)
-	// Missing name.
-	if code, _ := do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{}); code != http.StatusBadRequest {
-		t.Fatalf("missing name want 400, got %d", code)
-	}
-	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
+	seedProject(t, app, "maxpower", "web")
 	// Bad source.
 	if code, _ := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{"name": "x", "source": "ftp"}); code != http.StatusBadRequest {
 		t.Fatalf("bad source want 400, got %d", code)
