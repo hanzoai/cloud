@@ -96,11 +96,16 @@ func basisOf(s *cloud.Service[state], ctx context.Context, a Author, period stri
 			"deployingOrg": r.DeployingOrg,
 			"spendCents":   r.SpendCents,
 			"shareBps":     r.ShareBps, // as APPLIED then — a share change never rewrites history
-			"earningCents": r.EarningCents,
-			"consistent":   ok,
-			"computeProof": r.ComputeProof, // nil marshals to null: absence stays legible
-			"createdAt":    r.CreatedAt,
-			"attribution":  attributionAt(byOrg[r.DeployingOrg], r.CreatedAt),
+			// The other side of the SAME split, stated rather than left to be inferred:
+			// the platform kept spend − earning at (10000 − shareBps). Both halves of
+			// every row are readable, so the split is auditable without arithmetic.
+			"platformShareBps":     bpsDenom - r.ShareBps,
+			"platformEarningCents": r.SpendCents - r.EarningCents,
+			"earningCents":         r.EarningCents,
+			"consistent":           ok,
+			"computeProof":         r.ComputeProof, // nil marshals to null: absence stays legible
+			"createdAt":            r.CreatedAt,
+			"attribution":          attributionAt(byOrg[r.DeployingOrg], r.CreatedAt),
 		})
 	}
 
@@ -115,13 +120,21 @@ func basisOf(s *cloud.Service[state], ctx context.Context, a Author, period stri
 	}
 
 	out := map[string]any{
-		"isAuthor":        true,
-		"id":              a.ID,
-		"status":          a.Status,
-		"asOf":            time.Now().Unix(),
-		"shareBps":        a.ShareBps,
-		"defaultShareBps": defaultShareBps,
-		"shareSource":     shareSource,
+		"isAuthor": true,
+		"id":       a.ID,
+		"status":   a.Status,
+		"asOf":     time.Now().Unix(),
+		"shareBps": a.ShareBps,
+		// The platform's own cut, published beside the creator's. Both are fields
+		// read off the same one split, so neither side of the deal is a number the
+		// other party has to take on trust.
+		"platformShareBps": bpsDenom - a.ShareBps,
+		"defaultShareBps":  defaultShareBps,
+		"shareSource":      shareSource,
+		// Where this author's payouts settle. "treasury" says plainly that this is a
+		// FIRST-PARTY account whose royalty is realized into Hanzo's own reserve —
+		// internal accounting, not an independent creator being paid.
+		"settlesTo": settlementOf(s, a, methodCredits),
 		"method": map[string]any{
 			"spendBasis":   "org-metered-total",
 			"period":       "utc-month",

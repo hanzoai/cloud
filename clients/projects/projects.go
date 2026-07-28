@@ -153,8 +153,16 @@ type projectView struct {
 	// site posts form/forum/data submissions to under /v1/base.
 	Analytics bool   `json:"analytics"`
 	Space     string `json:"space,omitempty"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	// ForkedFrom is the parent this project was forked from ("<org>/<slug>" of a
+	// published project, or a catalog template slug) — the attribution edge a
+	// gallery credits. Official marks a FIRST-PARTY Hanzo example rather than an
+	// independent community submission; it is the machine-readable half of the
+	// badge, and always present (never omitempty) so a consumer can tell "false"
+	// from "this API is too old to say".
+	ForkedFrom string `json:"forkedFrom,omitempty"`
+	Official   bool   `json:"official"`
+	CreatedAt  int64  `json:"createdAt"`
+	UpdatedAt  int64  `json:"updatedAt"`
 }
 
 func toProjectView(p Project) projectView {
@@ -164,6 +172,7 @@ func toProjectView(p Project) projectView {
 		Framework: p.Framework, Status: p.Status, LiveURL: p.LiveURL, Bucket: p.Bucket,
 		CurrentDeploymentID: p.CurrentDeploy, CacheControl: p.CacheControl, LastPurgeAt: p.LastPurgeAt,
 		Analytics: p.Analytics, Space: p.SpaceId,
+		ForkedFrom: p.ForkedFrom, Official: p.Official,
 		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 }
@@ -337,6 +346,14 @@ type createReq struct {
 	// (nil) ⇒ ON (the default); explicit false ⇒ off. A pointer so "unset" is
 	// distinguishable from "false" — the only way to turn the default off.
 	Analytics *bool `json:"analytics"`
+	// Official requests the first-party-example badge. Honored ONLY for a
+	// SuperAdmin caller (createProject drops it otherwise), so a tenant can never
+	// pass its own app off as a Hanzo example.
+	Official bool `json:"official"`
+	// ForkedFrom is the lineage stamp. json:"-": it is set by the fork path from
+	// the parent it actually resolved, never by the caller, so an attribution edge
+	// always names a real ancestor.
+	ForkedFrom string `json:"-"`
 }
 
 func create(s *cloud.Service[state], c *zip.Ctx) error {
@@ -392,6 +409,10 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body createR
 		RepoURL: strings.TrimSpace(body.Repo.URL), RepoBranch: strings.TrimSpace(body.Repo.Branch),
 		RepoProvider: providerFromURL(body.Repo.URL), Framework: framework,
 		Status: "draft", Bucket: s.State.blob.bucket, CreatedAt: now, UpdatedAt: now,
+		ForkedFrom: body.ForkedFrom,
+		// The badge is an assertion about WHO published, so only the platform may
+		// make it: a tenant asking for official:true simply gets false.
+		Official: body.Official && c.IsAdmin(),
 	}
 	if p.RepoBranch == "" && p.RepoURL != "" {
 		p.RepoBranch = "main"
