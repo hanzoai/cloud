@@ -23,22 +23,30 @@
 //     advertise admin. That is a feature — each deployment describes itself —
 //     and it is why the document is generated per-process, not built once in CI.
 //
-// # Why not zip's built-in generator
+// # Two readings of one router, folded into one document
 //
 // zip ships its own OpenAPI projection (zip/openapi.go) driven by the typed-op
-// registry (zip.Get[In,Out] → app.ops), which carries real request/response Go
-// types and therefore real JSON Schema. It is the better mechanism and it is NOT
-// duplicated here — it is simply empty for this binary: cloud registers ZERO
-// typed ops and ~876 plain app.Get/Post handlers, so installOpenAPIRoutes()
-// bails at `len(a.ops) == 0` and emits nothing.
+// registry (zip.Get[In, Out] → app.ops), which carries the real request/response
+// Go types and therefore real JSON Schema — plus the prose cmd/zipdoc lifts out
+// of the handlers' doc comments at build time. It is the better reading, and it
+// is not duplicated here: Typed READS it and Fold lays it over the router
+// projection.
 //
-// GetRoutes() is a strict SUPERSET of app.ops (registerTyped registers a fiber
-// route too), so reading the router is the ONE complete source today and stays
-// correct as typed ops appear. Migrating a handler to a typed op is what earns
-// its schema; see the derivability boundary on Document.
+// The two are not rivals because GetRoutes() is a strict SUPERSET of app.ops
+// (registerTyped registers a fiber route too). So the router gives the TOTAL set
+// of operations and the registry gives DETAIL for the subset that has any:
+//
+//	router   → every operation exists, with its address and product.
+//	registry → the typed ones also carry schemas, parameters, responses,
+//	           descriptions and examples.
+//
+// One document, no gaps and no invention. Migrating a raw handler to a typed op
+// is what earns it the second half, and it needs no generator change: the same
+// fold picks it up on the next run.
 package openapi
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -154,33 +162,45 @@ type Tag struct {
 	Name string `json:"name"`
 }
 
-// Schema is the sliver of JSON Schema this generator can honestly assert.
-type Schema struct {
-	Type string `json:"type"`
-}
-
-// Parameter is an OpenAPI parameter object. Only PATH parameters are emitted:
-// they are structural — the router matches on them — so they are derivable.
-// Query, header, and body parameters are read inside handler bodies the router
-// cannot see.
+// Parameter is an OpenAPI parameter object.
+//
+// From the ROUTER only path parameters are emitted: they are structural — the
+// router matches on them — so they are derivable. From the REGISTRY a typed op's
+// query parameters come too, with descriptions, because its input type says what
+// they are. Schema is an open map because JSON Schema is an open vocabulary: the
+// router asserts `{"type": "string"}` and nothing more, while a typed op's field
+// can be any shape zip derives from its Go type.
 type Parameter struct {
-	Name     string `json:"name"`
-	In       string `json:"in"`
-	Required bool   `json:"required"`
-	Schema   Schema `json:"schema"`
+	Name        string         `json:"name"`
+	In          string         `json:"in"`
+	Required    bool           `json:"required"`
+	Description string         `json:"description,omitempty"`
+	Schema      map[string]any `json:"schema,omitempty"`
 }
 
 // Operation is one operation.
 //
-// There is no Responses field, and that is an honest answer rather than a gap.
-// OpenAPI 3.1 makes `responses` OPTIONAL (3.0 required it), so omitting it is
-// valid — and a fabricated `200: {description: ok}` on ~900 routes would assert
-// a status code and content type this generator has no evidence for. Absent
-// beats invented.
+// Everything past Tags is omitempty and comes ONLY from the typed registry. A
+// route the registry does not know keeps exactly the four structural facts the
+// router can prove, and asserts no status code, content type or prose it has no
+// evidence for — OpenAPI 3.1 makes `responses` optional (3.0 required it), so
+// absent stays valid and absent beats invented.
 type Operation struct {
-	OperationID string      `json:"operationId"`
-	Tags        []string    `json:"tags,omitempty"`
-	Parameters  []Parameter `json:"parameters,omitempty"`
+	OperationID string         `json:"operationId"`
+	Summary     string         `json:"summary,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Tags        []string       `json:"tags,omitempty"`
+	Parameters  []Parameter    `json:"parameters,omitempty"`
+	RequestBody map[string]any `json:"requestBody,omitempty"`
+	Responses   map[string]any `json:"responses,omitempty"`
+}
+
+// Components holds the schemas typed ops reference. Reused verbatim from zip's
+// projection: they are JSON Schema derived from the Go types, and restating them
+// in a Go struct here would be a second, lossier copy of a vocabulary that is
+// open by design.
+type Components struct {
+	Schemas map[string]any `json:"schemas,omitempty"`
 }
 
 // PathItem maps a lowercased HTTP method to its operation.
@@ -203,7 +223,9 @@ type PathItem map[string]*Operation
 //     param is optional only if written :name?, which cloud does not use).
 //   - product tag — the first /v1/ segment of that same pattern.
 //
-// NOT derivable (absent here; no amount of router-reading changes it):
+// NOT derivable from the router (no amount of router-reading changes it — these
+// come from the typed registry via Fold, and are absent on a route that has no
+// typed op):
 //   - request body schema. The router holds a func(*zip.Ctx) error. The request
 //     type is a LOCAL VARIABLE inside the handler body — clients/kms putSecret
 //     is the representative case: `var req secretPutRequest; json.Unmarshal(
@@ -228,18 +250,19 @@ type PathItem map[string]*Operation
 //     catch-all, this document can name the prefix and nothing under it.
 //
 // The consequence for a consumer: this document is a complete and exact map of
-// the API's SHAPE (every operation, its address, its product) and says nothing
-// about payloads. A CLI can build its full command tree — `hanzo <product>
-// <resource> <verb>` — and bind path params from it with no judgment calls. It
-// cannot typecheck a request body or pretty-print a response from it, and behind
-// a catch-all it cannot enumerate subcommands at all.
+// the API's SHAPE (every operation, its address, its product), and it describes
+// PAYLOADS exactly as far as the typed registry does. A CLI can build its full
+// command tree — `hanzo <product> <resource> <verb>` — and bind path params from
+// it with no judgment calls, everywhere. It can typecheck a request body and
+// pretty-print a response only for a typed op, and behind a catch-all it cannot
+// enumerate subcommands at all.
 //
-// The path to schemas is not a better reader; it is zip's typed ops
-// (zip.Get[In,Out]) which carry the In/Out Go types. Every handler migrated to a
-// typed op earns real schema — and an MCP tool, from the same registry (zip's
-// THIRD projection, zip/mcp.go). That is a per-handler refactor of business
-// logic, not a generator change, and it composes with this: GetRoutes() already
-// includes typed ops, so migration adds detail without changing the pipeline.
+// The path to more schema is not a better reader; it is zip's typed ops
+// (zip.Get[In, Out]) which carry the In/Out Go types. Every handler migrated to a
+// typed op earns real schema — and an MCP tool and a CLI command, from the same
+// registry entry. That is a per-handler refactor of business logic, not a
+// generator change: GetRoutes() already includes typed ops, so migration adds
+// detail through the fold that is already running.
 //
 // # Chained handlers are not collisions
 //
@@ -268,11 +291,12 @@ type PathItem map[string]*Operation
 // requirement is that (method, path) → operation stay injective, which From
 // enforces via operationId uniqueness.
 type Document struct {
-	OpenAPI string              `json:"openapi"`
-	Info    Info                `json:"info"`
-	Servers []Server            `json:"servers,omitempty"`
-	Tags    []Tag               `json:"tags,omitempty"`
-	Paths   map[string]PathItem `json:"paths"`
+	OpenAPI    string              `json:"openapi"`
+	Info       Info                `json:"info"`
+	Servers    []Server            `json:"servers,omitempty"`
+	Tags       []Tag               `json:"tags,omitempty"`
+	Paths      map[string]PathItem `json:"paths"`
+	Components *Components         `json:"components,omitempty"`
 }
 
 // From builds the document from route data. Pure — no router, no I/O.
@@ -290,25 +314,18 @@ func From(rs []Route, info Info, servers ...Server) (*Document, error) {
 	}
 
 	products := map[string]bool{}
-	opIDs := map[string]string{} // operationId → "METHOD path", for the clash message
 
 	for _, r := range rs {
 		path, params := translate(r.Path)
 
 		op := &Operation{OperationID: operationID(r.Method, path)}
-		if prev, dup := opIDs[op.OperationID]; dup {
-			return nil, fmt.Errorf("operationId %q is claimed by both %q and %q — OpenAPI requires it unique",
-				op.OperationID, prev, r.Method+" "+r.Path)
-		}
-		opIDs[op.OperationID] = r.Method + " " + r.Path
-
 		if p := Product(r.Path); p != "" {
 			op.Tags = []string{p}
 			products[p] = true
 		}
 		for _, name := range params {
 			op.Parameters = append(op.Parameters, Parameter{
-				Name: name, In: "path", Required: true, Schema: Schema{Type: "string"},
+				Name: name, In: "path", Required: true, Schema: map[string]any{"type": "string"},
 			})
 		}
 
@@ -323,13 +340,131 @@ func From(rs []Route, info Info, servers ...Server) (*Document, error) {
 	}
 	sort.Slice(doc.Tags, func(i, j int) bool { return doc.Tags[i].Name < doc.Tags[j].Name })
 
+	if err := uniqueOperationIDs(doc); err != nil {
+		return nil, err
+	}
 	return doc, nil
 }
 
-// Spec reads the live router and projects it — Live + From, the one call a
-// caller wants.
+// Registry is zip's typed-op projection, reduced to what the router cannot
+// supply: the operations that carry schema and prose, keyed by the same
+// "METHOD /templated/path" identity a Document is indexed by, and the schemas
+// they $ref.
+type Registry struct {
+	Ops     map[string]*Operation
+	Schemas map[string]any
+}
+
+// Typed reads the typed-op registry off the app — the SAME value zip serves at
+// /.well-known/openapi.json, so there is one generator for schemas and this is
+// not it.
+//
+// It comes back through JSON rather than by walking zip's map[string]any because
+// the map IS a JSON document; decoding it into the same Operation the router
+// projection builds is what makes the two foldable at all, and it means a field
+// zip adds later arrives here without a change (or is dropped honestly, if
+// nothing here has a name for it).
+func Typed(app *zip.App) (Registry, error) {
+	raw, err := json.Marshal(app.OpenAPISpec())
+	if err != nil {
+		return Registry{}, fmt.Errorf("typed registry: %w", err)
+	}
+	var spec struct {
+		Paths      map[string]map[string]*Operation `json:"paths"`
+		Components Components                       `json:"components"`
+	}
+	if err := json.Unmarshal(raw, &spec); err != nil {
+		return Registry{}, fmt.Errorf("typed registry: %w", err)
+	}
+	reg := Registry{Ops: map[string]*Operation{}, Schemas: spec.Components.Schemas}
+	for path, item := range spec.Paths {
+		for method, op := range item {
+			reg.Ops[strings.ToUpper(method)+" "+path] = op
+		}
+	}
+	return reg, nil
+}
+
+// Fold lays the registry's detail over the router's shape, in place. A typed op
+// REPLACES the structural operation at its address — it is strictly richer,
+// including the path parameters, which zip derives from the same pattern.
+//
+// Two things the fold keeps from the router, both because the router is the
+// authority on them:
+//
+//   - the product tag, which is the path's first /v1/ segment and nothing else.
+//     zip's per-op tags are a different axis and cloud registers none.
+//   - membership. A typed op with no live route is a contradiction — registering
+//     one registers a fiber route — so it means the two readings disagree about
+//     a path (a translation bug), and the honest answer is to refuse rather than
+//     to invent the operation or drop it silently.
+func Fold(doc *Document, reg Registry) error {
+	for _, key := range sortedKeys(reg.Ops) {
+		op := reg.Ops[key]
+		method, path, _ := strings.Cut(key, " ")
+		shape := doc.Paths[path][strings.ToLower(method)]
+		if shape == nil {
+			return fmt.Errorf("typed op %q has no live route — the registry and the router disagree about its path", key)
+		}
+		op.Tags = shape.Tags
+		doc.Paths[path][strings.ToLower(method)] = op
+	}
+	if len(reg.Schemas) > 0 {
+		doc.Components = &Components{Schemas: reg.Schemas}
+	}
+	return uniqueOperationIDs(doc)
+}
+
+// Spec reads the live router and both projections of it — the one call a caller
+// wants.
 func Spec(app *zip.App, info Info, servers ...Server) (*Document, error) {
-	return From(Live(app), info, servers...)
+	doc, err := From(Live(app), info, servers...)
+	if err != nil {
+		return nil, err
+	}
+	reg, err := Typed(app)
+	if err != nil {
+		return nil, err
+	}
+	if err := Fold(doc, reg); err != nil {
+		return nil, err
+	}
+	return doc, nil
+}
+
+// uniqueOperationIDs refuses a document a generator would mis-consume. It runs
+// after BOTH projections because either can name an operation: From derives an
+// id from method+path, Fold takes the registry's own (WithOperationID), and a
+// clash between the two families is exactly as broken as one within either.
+//
+// The check subsumes the only ambiguity the document can suffer: two routes
+// sharing a (method, path) derive the same id, so an injective
+// (method, path) → operation map is what uniqueness buys.
+func uniqueOperationIDs(d *Document) error {
+	seen := map[string]string{} // operationId → "METHOD path", for the clash message
+	for _, path := range sortedKeys(d.Paths) {
+		item := d.Paths[path]
+		for _, method := range sortedKeys(item) {
+			at := strings.ToUpper(method) + " " + path
+			if prev, dup := seen[item[method].OperationID]; dup {
+				return fmt.Errorf("operationId %q is claimed by both %q and %q — OpenAPI requires it unique",
+					item[method].OperationID, prev, at)
+			}
+			seen[item[method].OperationID] = at
+		}
+	}
+	return nil
+}
+
+// sortedKeys makes map iteration deterministic, so a clash reports the same pair
+// every run.
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // translate rewrites a fiber pattern into an OpenAPI path template and returns

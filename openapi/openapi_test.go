@@ -1,6 +1,7 @@
 package openapi
 
 import (
+	"context"
 	"testing"
 
 	luxlog "github.com/luxfi/log"
@@ -236,7 +237,7 @@ func TestFromShape(t *testing.T) {
 	if len(get.Parameters) != 1 {
 		t.Fatalf("parameters = %+v, want 1", get.Parameters)
 	}
-	if p := get.Parameters[0]; p.Name != "org" || p.In != "path" || !p.Required || p.Schema.Type != "string" {
+	if p := get.Parameters[0]; p.Name != "org" || p.In != "path" || !p.Required || p.Schema["type"] != "string" {
 		t.Errorf("param = %+v, want {org path required string}", p)
 	}
 	if get.OperationID == item["post"].OperationID {
@@ -260,5 +261,78 @@ func TestMountServesLiveSpecIncludingItself(t *testing.T) {
 	}
 	if _, ok := doc.Paths["/v1/kms/health"]; !ok {
 		t.Errorf("document omits /v1/kms/health")
+	}
+}
+
+// The fold is the whole point of two projections: a typed op keeps the shape the
+// router proves (address, product tag) and GAINS everything only its Go types
+// know — schema, responses, query parameters — while the raw route beside it is
+// untouched. Both are in the one document.
+type secretIn struct {
+	Org   string `json:"org"`
+	Limit int    `json:"limit"`
+}
+type secretOut struct {
+	Names []string `json:"names"`
+}
+
+func TestFoldGivesTypedOpsSchemaAndLeavesRawRoutesAlone(t *testing.T) {
+	app := newApp()
+	app.Post("/v1/kms/orgs/:org/secrets", func(c *zip.Ctx) error { return c.JSON(200, "ok") })
+	zip.Get(app, "/v1/kms/orgs/:org/secrets", func(ctx context.Context, in *secretIn) (*secretOut, error) {
+		return &secretOut{}, nil
+	}, zip.WithOperationID("kmsListSecrets"), zip.WithSummary("List secret names"))
+
+	doc, err := Spec(app, Info{Title: "Hanzo Cloud", Version: "v1"})
+	if err != nil {
+		t.Fatalf("Spec: %v", err)
+	}
+	item := doc.Paths["/v1/kms/orgs/{org}/secrets"]
+	get, post := item["get"], item["post"]
+	if get == nil || post == nil {
+		t.Fatalf("path item should carry both the typed get and the raw post, got %v", item)
+	}
+
+	if get.OperationID != "kmsListSecrets" || get.Summary != "List secret names" {
+		t.Errorf("typed op = %q/%q, want the registry's own identity", get.OperationID, get.Summary)
+	}
+	if get.Responses["200"] == nil {
+		t.Errorf("typed op has no 200 response; the Out type is evidence for one")
+	}
+	if len(get.Tags) != 1 || get.Tags[0] != "kms" {
+		t.Errorf("tags = %v, want the router's product tag [kms]", get.Tags)
+	}
+	// :org is a path param and `limit` a query param, both derived from the
+	// pattern and the In type — the router alone could only name the first.
+	in := map[string]string{}
+	for _, p := range get.Parameters {
+		in[p.Name] = p.In
+	}
+	if in["org"] != "path" || in["limit"] != "query" {
+		t.Errorf("parameters = %+v, want org in path and limit in query", get.Parameters)
+	}
+	if doc.Components == nil || doc.Components.Schemas["secretOut"] == nil {
+		t.Errorf("components carry no secretOut schema: %+v", doc.Components)
+	}
+
+	// The raw route keeps exactly the four structural facts and invents nothing.
+	if post.Responses != nil || post.RequestBody != nil || post.Description != "" {
+		t.Errorf("raw route gained detail it has no evidence for: %+v", post)
+	}
+}
+
+// A registry entry with no live route means the two readings disagree about a
+// path. That is a generator bug, and refusing beats emitting an operation
+// nothing serves.
+func TestFoldRefusesATypedOpWithNoLiveRoute(t *testing.T) {
+	doc, err := From(nil, Info{Title: "Hanzo Cloud", Version: "v1"})
+	if err != nil {
+		t.Fatalf("From: %v", err)
+	}
+	err = Fold(doc, Registry{Ops: map[string]*Operation{
+		"GET /v1/kms/ghost": {OperationID: "ghost"},
+	}})
+	if err == nil {
+		t.Fatal("Fold accepted an operation the router does not serve")
 	}
 }
