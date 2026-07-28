@@ -4,7 +4,6 @@ package commerce
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/hanzoai/cloud"
@@ -28,39 +27,30 @@ import (
 // facts. One resolver, at the edge that has the request.
 const balanceMethod = "finance.balance"
 
-// BalanceRequest names whose wallet to read: the org is the ledger (the tenant's
-// books) and the subject is the wallet inside it.
-type BalanceRequest struct {
-	Org      string `json:"org"`
-	Subject  string `json:"subject"`
-	Currency string `json:"currency"`
-}
-
-// BalanceReply is the spendable amount, in cents.
-type BalanceReply struct {
-	Cents int64 `json:"cents"`
-}
-
 // exposeBalance publishes the ledger read on the internal plane. Mount calls it.
+//
+// The request codec is cloud.PutBalanceReq/BalanceReq and the reply is a bare
+// scalar (cloud.PutI64) — the wire contract lives in cloud/payloads.go so both
+// ends read it from ONE definition and cannot drift. It carries no org field at
+// all; see below.
 func exposeBalance() {
 	cloud.Expose(balanceMethod, func(ctx context.Context, who cloud.Ident, req []byte) ([]byte, error) {
-		var in BalanceRequest
-		if err := json.Unmarshal(req, &in); err != nil {
+		subject, currency, err := cloud.BalanceReq(req)
+		if err != nil {
 			return nil, fmt.Errorf("balance: decode: %w", err)
 		}
 		// The ORG is taken from the delegated capability, never from the payload: a
 		// caller that could name its own org would be naming another tenant's books.
+		// The payload cannot express an org, so this is the ONLY way one is chosen.
 		// The subject is the caller's to choose, but only within that org — it is a
 		// wallet inside the ledger the capability already pinned.
 		org := who.Org
 		if org == "" {
-			return nil, fmt.Errorf("balance: no org on the capability")
+			return nil, cloud.Fault(403, "balance: no org on the capability")
 		}
-		subject := in.Subject
 		if subject == "" {
 			subject = org
 		}
-		currency := in.Currency
 		if currency == "" {
 			currency = "usd"
 		}
@@ -76,6 +66,6 @@ func exposeBalance() {
 		if err != nil {
 			return nil, fmt.Errorf("balance: read %s/%s: %w", org, subject, err)
 		}
-		return json.Marshal(BalanceReply{Cents: bal.Cents()})
+		return cloud.PutI64(bal.Cents()), nil
 	})
 }
