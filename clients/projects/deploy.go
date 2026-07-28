@@ -260,7 +260,18 @@ func deployGit(s *cloud.Service[state], c *zip.Ctx, org string, p Project) error
 		s.Log.Warn("set building failed (continuing)", "slug", p.Slug, "err", err)
 	}
 	emitProjectLifecycle(c.Context(), cloud.LifecycleBuildStarted, org, p, d, "building "+p.Slug)
-	return c.JSON(http.StatusAccepted, toDeploymentView(d))
+
+	// Hand CI a prefix-scoped, short-lived write grant with the 202, so it needs no
+	// bucket credential of its own (grant.go). Best-effort: a deployment whose
+	// grant could not be minted is still queued and still completable — the caller
+	// just has to have its own way to write, and sees no `upload` in the response.
+	view := toDeploymentView(d)
+	grant, gErr := mintUploadGrant(c.Context(), s.State.blob, d.Prefix, time.Now())
+	if gErr != nil {
+		s.Log.Warn("mint upload grant failed (deployment still queued)", "slug", p.Slug, "err", gErr)
+	}
+	view.Upload = grant
+	return c.JSON(http.StatusAccepted, view)
 }
 
 // emitProjectLifecycle fans a site-deploy transition onto the cloud lifecycle
@@ -362,6 +373,12 @@ type completeReq struct {
 	Message string `json:"message"`
 	Files   int    `json:"files"`
 	Bytes   int64  `json:"bytes"`
+	// Keys is the manifest CI just uploaded, RELATIVE to the deployment prefix. It
+	// is what replaces `aws s3 sync --delete`: an upload grant authorizes writes
+	// only, so CI cannot remove a file, and cloud reconciles the prefix against
+	// this list instead (grant.go). Omit it and nothing is deleted — the prefix
+	// only grows, which is the old pre-grant behaviour and a safe default.
+	Keys []string `json:"keys,omitempty"`
 }
 
 // completeDeployment is the CI completion hook for the git path: after CI syncs
@@ -411,6 +428,27 @@ func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	if err := s.State.store.UpdateDeployment(c.Context(), d); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "update deployment: %v", err)
+	}
+
+	// Reconcile the prefix against what CI says it uploaded, so a deleted page
+	// actually stops serving. Only on a LIVE completion: pruning against the
+	// manifest of a build that failed would delete the site the previous good
+	// build is still serving. Best-effort — the new content is already up, and a
+	// stale leftover must not turn a successful deploy into a 500.
+	if status == "live" && len(body.Keys) > 0 {
+		keep := make(map[string]bool, len(body.Keys))
+		for _, k := range body.Keys {
+			if k = strings.TrimPrefix(strings.TrimSpace(k), "/"); k != "" {
+				keep[k] = true
+			}
+		}
+		if cli, cErr := s.State.blob.client(); cErr != nil {
+			s.Log.Warn("reconcile skipped (no s3 client)", "slug", p.Slug, "err", cErr)
+		} else if removed, rErr := reconcilePrefix(c.Context(), cli, d.Bucket, d.Prefix, keep); rErr != nil {
+			s.Log.Warn("reconcile failed (new content is live; stale files remain)", "slug", p.Slug, "err", rErr)
+		} else if removed > 0 {
+			s.Log.Info("reconciled site prefix", "slug", p.Slug, "prefix", d.Prefix, "removed", removed)
+		}
 	}
 
 	p.UpdatedAt = now
