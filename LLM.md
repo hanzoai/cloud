@@ -198,11 +198,22 @@ for the credentials of the app it is.**
   subsystem — exactly one process. `cmd/host` stays light; it holds nothing.
 - **Who asks**: every other `cloud` process, at the top of `Serve`, before
   `LoadConfig` and before any store opens.
-- **Identity is the kernel's**: no token, no name in the request. The broker reads
-  `SO_PEERCRED` and resolves the peer's argv through `/proc`. Both spawn shapes
-  the manifest produces are accepted (`<dir>/<app>`, `cloud --enable=<app>`) and
-  the result is checked against `manifest.Apps`. Nothing to steal, nothing to
-  expire, and a child that crashes and respawns is re-attested for free.
+- **Identity is NOT sound yet — do not merge this to main as a security boundary.**
+  No token, no name in the request: the broker reads `SO_PEERCRED` and resolves
+  the peer's argv through `/proc`, accepting both spawn shapes the manifest
+  produces (`<dir>/<app>`, `cloud --enable=<app>`) checked against
+  `manifest.Apps`. `SO_PEERCRED` is kernel-authenticated for pid/uid — **argv is
+  not**. A process picks its own `argv[0]` at `execve`, so any same-uid process
+  can present itself as any app and receive that app's bundle, *including the
+  root key*. Demonstrated: a binary named `spoof` was granted `billing`'s and then
+  `ai`'s bundle and logged as a legitimate grant both times.
+
+  So today this partitions credentials against **accident** (107 processes stop
+  carrying secrets they never use) and not against a **compromised** process. The
+  fix has to come from the spawner, which is the only party that knows which app
+  it started as which pid: a per-plugin nonce in `zip.Plugin.Env`, or a
+  pre-connected socket passed as an `ExtraFile` — both in `manifest/plugin.go` +
+  `cmd/host`.
 - **Scope is derived, not configured** — the manifest names every app, the store
   holds every secret, and the path is built from the peer's identity:
 
@@ -215,8 +226,9 @@ for the credentials of the app it is.**
       POST /v1/kms/orgs/{adminOrg}/secrets
       {"path":"/svc/ai","name":"CLOUD_AI_API_KEY","env":"default","value":"sk-…"}
 
-  No second registry and no code change to add a credential. `billing` cannot
-  read `/svc/ai` because it cannot ask for a path it is not.
+  No second registry and no code change to add a credential. The `billing`
+  process is never handed `/svc/ai` — subject to the identity caveat above, which
+  is what decides whether "never handed" also means "cannot obtain".
 - **The environment stays the interface**: the bundle is installed with
   `os.Setenv`, so all 108 apps keep reading `os.Getenv` unchanged — and a value
   set after `execve` never appears in `/proc/<pid>/environ`.
