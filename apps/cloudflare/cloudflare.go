@@ -150,6 +150,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Get("/zones", cloud.Handle(s, zonesList))
 	g.Get("/zones/:zone", cloud.Handle(s, zoneGet))
 	g.Get("/zones/:zone/analytics", cloud.Handle(s, zoneAnalytics))
+	g.Post("/zones/:zone/purge", cloud.Handle(s, zonePurge))
 
 	// Pages — account-scoped.
 	g.Get("/pages/projects", cloud.Handle(s, pagesList))
