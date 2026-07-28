@@ -82,10 +82,9 @@ func TestResolveKeyNeverEscapesPrefix(t *testing.T) {
 		if strings.HasPrefix(rel, "/") {
 			t.Fatalf("resolveKey(%q) = %q is absolute", in, rel)
 		}
-		// No real ".." path SEGMENT survives (unencoded traversal is collapsed by
-		// rooted path.Clean). A literal "%2f" is NOT a separator to S3 — object
-		// keys are opaque strings — so an encoded sequence stays inside the prefix
-		// as a (nonexistent) literal key; the decisive guard is prefix containment.
+		// No ".." path SEGMENT survives: resolveKey decodes BEFORE it cleans, so an
+		// encoded traversal is collapsed as the traversal it is rather than kept as
+		// an opaque literal. Either way the decisive guard is prefix containment.
 		if strings.Contains("/"+rel+"/", "/../") {
 			t.Fatalf("resolveKey(%q) = %q has a .. segment", in, rel)
 		}
@@ -112,6 +111,15 @@ func TestResolveKeyFallbacks(t *testing.T) {
 		"/./a":        "a",
 		"/a/./b/":     "a/b",
 		`/a\b`:        "a/b",
+		// A browser percent-encodes what it must, so the key stored at deploy is
+		// only ever found if the request is decoded first. Next.js names a dynamic
+		// route's chunk after the literal segment, so EVERY such page asked for
+		// %5Bslug%5D, got a 404, and never hydrated.
+		"/_next/static/chunks/app/blog/%5Bslug%5D/page-abc.js": "_next/static/chunks/app/blog/[slug]/page-abc.js",
+		"/a%20b/c.css": "a b/c.css",
+		"/a%2Bb.js":    "a+b.js",
+		// Not valid percent-encoding: kept verbatim rather than dropped.
+		"/100%off.html": "100%off.html",
 	}
 	for in, want := range cases {
 		if got := resolveKey(in); got != want {

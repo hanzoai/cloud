@@ -6,6 +6,9 @@
 // mutating this catalog. It mirrors the prompts starter catalog exactly (one
 // embedded JSON, validated once, served under /v1).
 //
+// ONE template is ONE entry. The shapes it ships in — format, page, theme — are
+// Variants inside that entry, chosen at fork time.
+//
 // Surface:
 //
 //	GET /v1/templates          list the starter-kit catalog        -> {data:[Template]}
@@ -28,19 +31,60 @@ var catalogJSON []byte
 
 // Template is one starter kit as the console gallery browser consumes it. The
 // `Source`/`Preview` URLs point at the live gallery (gallery.hanzo.ai), the real
-// fork/deploy + screenshot surfaces.
+// fork/deploy + screenshot surfaces; `Demo` is the deployed site itself.
 type Template struct {
-	Slug        string   `json:"slug"`
-	Title       string   `json:"title"`
-	Category    string   `json:"category"`
-	Description string   `json:"description"`
-	Framework   string   `json:"framework"`
-	Features    []string `json:"features"`
-	UseCase     string   `json:"useCase"`
-	Tier        *int     `json:"tier,omitempty"`
-	Rating      *float64 `json:"rating,omitempty"`
-	Source      string   `json:"source"`
-	Preview     string   `json:"preview"`
+	Slug        string    `json:"slug"`
+	Title       string    `json:"title"`
+	Category    string    `json:"category"`
+	Description string    `json:"description"`
+	Framework   string    `json:"framework"`
+	Features    []string  `json:"features"`
+	UseCase     string    `json:"useCase"`
+	Tier        *int      `json:"tier,omitempty"`
+	Rating      *float64  `json:"rating,omitempty"`
+	Source      string    `json:"source"`
+	Preview     string    `json:"preview"`
+	Demo        string    `json:"demo,omitempty"`     // live demo (<slug>.hanzo.app), when deployed
+	Variants    []Variant `json:"variants,omitempty"` // the shapes this template ships in
+}
+
+// Variant is one SHAPE of a template: the same design in another format
+// (html/react/bootstrap), on another page (folio's about/contact/grid-3), or in
+// another theme. A variant is an option resolved at fork time from what the
+// user asks for — never a catalog row of its own, which is what made one
+// portfolio template read as 26 templates and one dashboard as 2.
+type Variant struct {
+	ID        string `json:"id"`                  // selector, unique within the template ("react", "grid-3-fluid")
+	Label     string `json:"label"`               // human label for the picker
+	Kind      string `json:"kind"`                // the axis it varies: format | page | theme
+	Framework string `json:"framework,omitempty"` // only when it differs from the template's
+	Source    string `json:"source"`
+}
+
+// Variant resolves a variant id against the template and is the ONE place the
+// resolution rule lives. The empty id means "no preference" and yields the
+// template's first (default) shape; a template that ships in a single shape
+// answers with itself, so callers never branch on len(Variants).
+func (t Template) Variant(id string) (Variant, bool) {
+	if len(t.Variants) == 0 {
+		if id != "" {
+			return Variant{}, false
+		}
+		return Variant{ID: "default", Label: t.Title, Kind: "format",
+			Framework: t.Framework, Source: t.Source}, true
+	}
+	if id == "" {
+		id = t.Variants[0].ID
+	}
+	for _, v := range t.Variants {
+		if v.ID == id {
+			if v.Framework == "" {
+				v.Framework = t.Framework
+			}
+			return v, true
+		}
+	}
+	return Variant{}, false
 }
 
 // catalog decodes and validates the embedded gallery once (drops entries with no
