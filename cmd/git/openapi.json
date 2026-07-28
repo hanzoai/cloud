@@ -1052,6 +1052,14 @@
         }
       }
     },
+    "/v1/git/webhook": {
+      "post": {
+        "operationId": "post_v1_git_webhook",
+        "tags": [
+          "git"
+        ]
+      }
+    },
     "/v1/git/zap/createRepo": {
       "post": {
         "operationId": "post_v1_git_zap_createrepo",

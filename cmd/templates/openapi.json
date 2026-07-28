@@ -22,11 +22,49 @@
         "tags": [
           "templates"
         ]
+      },
+      "post": {
+        "operationId": "post_v1_templates",
+        "tags": [
+          "templates"
+        ]
       }
     },
     "/v1/templates/{slug}": {
+      "delete": {
+        "operationId": "delete_v1_templates_by_slug",
+        "tags": [
+          "templates"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
       "get": {
         "operationId": "get_v1_templates_by_slug",
+        "tags": [
+          "templates"
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_templates_by_slug",
         "tags": [
           "templates"
         ],

@@ -133,7 +133,11 @@ func gate(next http.Handler) http.Handler {
 // principal-gated. The {project} segment is a UUID enforced by the runtime route; the
 // trailing slash is the Sentry wire form, the slash-less variant tolerated defensively.
 // The gateway needs a byte-identical sibling allow-rule so the tokenless ingest it lets
-// through is not then 403'd here (coordinated separately; see the report).
+// through is not then 403'd here. VERIFIED in production once the host actually mounted
+// /v1/sentry: a keyless POST to /v1/sentry/<uuid>/envelope/ answers 401 "invalid ingest
+// key" (text/plain, from the ingest verifier) — NOT 404 (unrouted), and NOT the 403
+// {"status":"error","msg":"no validated principal"} that the READ paths still return.
+// Those three responses are how you tell the hops apart if this ever regresses.
 func isSentryIngestPath(method, path string) bool {
 	if method != http.MethodPost {
 		return false
@@ -244,7 +248,8 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	if err := mountEventIngest(a, deps); err != nil { // POST /v1/o11y/ingestion
 		return err
 	}
-	mountScope(a) // GET logs/metrics/status + vm/{query,query_range} + flat builder query + sessions
+	mountScope(a)  // GET logs/metrics/status + vm/{query,query_range} + flat builder query + sessions
+	mountAlerts(a) // POST /v1/o11y/alerts/:receiver + GET /v1/o11y/alerts/last
 	// Native annotation-queues surface (SQLite metastore) — /v1/o11y/annotation-queues*.
 	if err := mountAnnotationQueues(a, deps); err != nil {
 		return err
@@ -256,8 +261,14 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	// Hanzo Sentry product face /v1/sentry/* — the SIBLING of the /v1/o11y wildcard,
 	// delegating to the SAME gated runtime handler (which carries the clean /v1/sentry
 	// routes; the DSN-ingest routes are gate-exempt via isSentryIngestPath). One
-	// runtime, two path families. The runtime must be an o11y build that includes the
-	// /v1/sentry routes (see the report's dep-bump note); until then these 404, inert.
+	// runtime, two path families.
+	//
+	// Registering it here is necessary but NOT sufficient — the subtree has to be
+	// reachable at both hops above this one, and it silently was not at either:
+	// hanzoai/o11y had to carry the routes (the pinned v1.5.33 does —
+	// o11yapiserver/sentry.go registers them), and now that o11y runs out-of-process the HOST has
+	// to mount /v1/sentry as a second prefix or the request 404s before it ever
+	// reaches this process — see cloud.PluginSpec in apps.Wire().
 	mountSentry(a)
 	// WRITE plane — opt-in, order-independent (no /v1/o11y/* Fiber route).
 	if err := mountIngest(deps); err != nil { // ZAP ingest collector (:4317)

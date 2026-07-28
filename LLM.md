@@ -45,29 +45,81 @@ map, not the spec. One noun, one owner, one route family. No plane reads another
 plane's store; imports flow custody-ward only (channels -> integrations, never
 reverse).
 
+Tier is adjudicated by `GET /v1/openapi.json` on the deployment, never by a
+branch name — a branch is deleted at merge, so a row that cites one rots into
+"not built yet" and the next engineer rebuilds a shipped plane. Op counts below
+are the CONCRETE operations that spec names on api.hanzo.ai; they move, the
+ownership does not. A product fronted by a catch-all (`/v1/iam/*` proxies the
+whole identity surface to the IAM service) would make a count a lie by omission,
+so its row says opaque — same rule as "Catch-alls are opaque, by construction".
+
+Count by path SEGMENT, never string prefix: the product is the segment after
+`/v1/` (`openapi.Product`), so a `/v1/cloud*` grep also swallows `/v1/cloudflare`
+and reports this 5-route plane as 29. Two products, one string prefix.
+
 | Route | Noun | Owner | Tier |
 | --- | --- | --- | --- |
-| `/v1/connectors` | Custody: per-user BYO external accounts | `clients/integrations` (extends; user scope new) | In flight (branch `feat/connectors`) |
-| `/v1/channels` | Transport: portable message envelope, DM pairing, send + inbox | `clients/channels` (new) | Planned (branch `feat/channels` reserved; no transport code yet) |
-| `/v1/sync` | Data: bidirectional sync engine | `clients/sync` | Shipped |
-| `/v1/automations` | Workflows: flows/runs, goja piece runtime | `clients/automations` | Shipped |
-| `/v1/compute/bots` | Hosting: `@hanzo/bot` Node containers | `clients/bots` | Shipped |
-| `/v1/tasks` | Durable engine | `clients/tasks` | Shipped |
-| `/v1/gpus` + fleet | BYO GPU presence | `clients/fleet` + `clients/visor` | Shipped |
-| `/v1/cloud` | Cloud accounts: link DO/AWS/GCP/Azure, discover native k8s clusters, fold into the fleet | `clients/venue` (new) | In flight (branch `feat/cloud-account-connectors`; blue-held for red) |
-| `/v1/blueprint` | Cost: OSS-template SBOM (compose→images) + compute-cost estimate | `clients/blueprint` (new) | Shipped |
-| IAM | Identity: users, orgs, roles | IAM | Shipped |
-| KMS | Secret custody: sealed secrets | `clients/kms` | Shipped |
+| `/v1/connectors` | Custody: per-user BYO external accounts | `clients/integrations` (both planes; user scope) | Shipped — 8 ops |
+| `/v1/channels` | Transport: portable message envelope, DM pairing, send + inbox | `clients/channels` | Shipped — 8 ops |
+| `/v1/sync` | Data: bidirectional sync engine | `clients/sync` | Shipped — 7 ops |
+| `/v1/automations` | Workflows: flows/runs, goja piece runtime | `clients/automations` | Shipped — 20 ops |
+| `/v1/bots` | A bot RUN on a surface | `clients/bots` | Shipped — 4 ops |
+| `/v1/compute/bots` | A bot MACHINE (kind=bot + agent binding) | `clients/visor` — NOT `clients/bots` | Shipped — 5 ops |
+| `/v1/tasks` | Durable engine | `clients/tasks` | Shipped — 11 ops |
+| `/v1/machines` `/v1/gpus` `/v1/fleet` `/v1/clusters` `/v1/k8s` `/v1/compute` | Compute: provisioned + BYO machines, GPUs, k8s clusters | `clients/visor` (+ `clients/fleet` registry) | Shipped — 33 ops |
+| `/v1/cloud` | Cloud accounts: link DO/AWS/GCP/Azure, discover native k8s clusters, fold into the fleet | `clients/venue` | Shipped — 5 ops |
+| `/v1/blueprint` | Cost: OSS-template SBOM (compose→images) + compute-cost estimate | `clients/blueprint` | Shipped — 3 ops |
+| `/v1/templates` | Starter kits: ONE entry per template, shapes as variants | `clients/templates` | Shipped — 2 ops |
+| `/v1/iam` | Identity: users, orgs, roles | `clients/iam` | Shipped — opaque (catch-all, see below) |
+| `/v1/kms` | Secret custody: sealed secrets | `clients/kms` | Shipped — 7 ops |
 
-Custody invariants: secrets sealed in KMS at
-`/orgs/{org}/users/{user}/connectors/{provider}/{label}`, never in SQLite rows;
-verify before store. Refresh is single-flight with rotation resealing; the CLI
-does local browser PKCE and posts the bundle to
-`POST /v1/connectors/:provider/credential`; cloud owns device-code flows.
+`/v1/bots` and `/v1/compute/bots` are two nouns with two owners; the row above
+pairs each with the package that REGISTERS it. Pairing `/v1/compute/bots` with
+`clients/bots` is the merge "Bot is three values" (below) exists to forbid.
+
+Custody invariants: secrets sealed in KMS, never in SQLite rows; verify before
+store. Two scopes, two paths, one rule — the path is built from the VALIDATED
+principal, never a client field:
+
+    /orgs/{org}/users/{user}/connectors/{provider}/{label}   per-user (integrations)
+    /orgs/{org}/cloud/{provider}/{label}                     per-org  (venue)
+
+Refresh is single-flight with rotation resealing; the CLI does local browser
+PKCE and posts the bundle to `POST /v1/connectors/:provider/credential`; cloud
+owns device-code flows.
 
 Transport invariants: typed actions (`command|url|select|approval`), no raw
 string sniffing; pairing codes 8 chars, 1h TTL, max 3 pending per account,
 owner bootstrap on first approval.
+
+### Folding a cloud account's k8s clusters into the fleet — the ONE way
+
+An org's own DigitalOcean/AWS/GCP clusters reach the fleet by exactly three
+calls. There is no second cluster registry and no import path that skips them:
+
+1. **Link** — `POST /v1/cloud/{provider}/accounts` (body carries the credential;
+   `label` defaults to `default`). Verifies the credential LIVE, seals it in the
+   org's KMS namespace, discovers the account's clusters and folds them.
+2. **Re-sync** — `POST /v1/cloud/{provider}/accounts/{label}/sync` re-discovers
+   and re-folds that one account. This is the ONLY refresh verb; it is
+   idempotent and acts on the fleet shard recorded at link time.
+3. **Read** — `GET /v1/clusters`. Discovered clusters appear here beside managed
+   (visor-provisioned) and BYO (hand-pasted kubeconfig) ones and run work
+   identically. `DELETE /v1/cloud/{provider}/accounts/{label}` detaches them and
+   forgets the credential.
+
+Discovery ends at `fleet.Register` — exactly where `visor.attachCluster` ends —
+which is what makes "discovered" and "attached" the same kind of cluster
+afterwards. Do not add a cluster store; extend the fold.
+
+**`visor` is an agent name, not a query surface.** `clients/visor` OWNS the
+compute plane, but it serves it at the nouns above (`/v1/machines`,
+`/v1/clusters`, `/v1/gpus`, `/v1/fleet`, `/v1/k8s`, `/v1/compute`) — never under
+`/v1/visor`. The only live `/v1/visor` route is `GET /v1/visor/health`, and that
+one is not visor's: `serve.go` auto-mounts `/v1/<name>/health` for every
+subsystem that does not set `OwnsHealth`. So do not look for the fleet under
+`/v1/visor/*` and do not mount anything there — the node-side agent reports
+presence, and presence is read back at `/v1/fleet`.
 
 Container boundary is permanent for native-module, host-filesystem, loop-state,
 and vendor-Node work (agent loop, exec/PTY, harnesses, browser, voice, codecs,
@@ -75,8 +127,10 @@ Node-bound channels, plugin SDK/loader). The Node plugin SDK is never ported to
 Go; cloud extensibility is connectors/automations/tools.
 
 Port roadmap (P1-P15) lives in HIP-0129; do not restate it here. Every claim
-carries its tier: Shipped (on main, named package/route), In flight (named
-pre-main branch), Planned (backlog id or named reservation).
+carries its tier, and Shipped is the only one with durable evidence — a named
+package plus a route in the live spec. In flight/Planned cite a branch or a
+backlog id, both of which disappear on merge, so re-check either against
+`/v1/openapi.json` before believing it and promote the row when it answers.
 
 ## Build & module graph — standalone module, NOT a go.work member
 
@@ -282,6 +336,25 @@ package under `clients/<name>` that obeys these seams — nothing more.
   process-wide handles (Logger, DataDir, the subsystem `Client` seams). No
   subsystem reaches into another's internals. There is no init()-registry and no
   `cloud.Register` — subsystems do NOT self-register.
+- **Out-of-process variant.** A subsystem may run as its OWN binary without
+  changing anything about it: `cloud.PluginSpec(name, zip.Plugin{…}, prefixes…)`
+  returns an ordinary `MountSpec`, so where a subsystem runs stops being a
+  property of its source and becomes one line at the composition root. zip starts
+  `cmd/<name>` as a child on a private unix socket and forwards the path
+  UNCHANGED. Today `o11y` is the only one — it is the heaviest graph in the tree
+  (otel-collector, prometheus, gonum) and imported by nothing else, so unlinking
+  it is pure subtraction.
+  - `prefixes` is variadic because ONE plugin commonly owns several subtrees
+    (`o11y` answers `/v1/o11y` AND `/v1/sentry`). Naming only the first 404s the
+    rest AT THE HOST — the request never reaches the child — while the host
+    starts and reports healthy. Both readers take the same list: zip routes on
+    it, and `indexSubsystems` reports it to `/v1/admin/subsystems` and to the
+    per-request subsystem attribution tracing hangs off.
+  - The image must actually CONTAIN the binary: `zip.Load` fork/execs a sibling
+    of `/cloud`, so a missing one aborts the mount and cloud never listens
+    (`fork/exec /o11y: no such file`). The Dockerfile DERIVES the list by grepping
+    `PluginSpec("…"` out of `apps/apps.go` rather than keeping a second copy —
+    unlinking o11y without adding a build step once cost five consecutive releases.
 - **Client seams.** Cross-subsystem calls go through a narrow in-process interface
   published in `types` and aliased at the provider, e.g. `commerce.Client =
   types.CommerceClient` (`GetOrgConfig` + `CheckEntitlement`). Consumers depend on
@@ -377,9 +450,13 @@ embedded underneath.
   and every other function in `openapi/` is a pure function of that `[]Route`.
   There is NO checked-in spec file to hand-maintain and no second registry. The
   drift guard is `cmd/cloud/openapi_test.go`: a BIJECTION over the fully-mounted
-  `apps.Wire()` (983 operations / 692 paths / 109 products) — every live route
-  appears as an operation, every operation is backed by a live route. It is the
-  only test whose failure means the document lies.
+  `apps.Wire()` — every live route appears as an operation, every operation is
+  backed by a live route. It is the only test whose failure means the document
+  lies. The test LOGS its size and pins only the bijection, so never quote that
+  size as a fact here: it grows every time a subsystem gains a route, and a
+  quoted count is stale the next week (api.hanzo.ai measured 1467 operations /
+  1064 paths / 167 products against a doc that still claimed 983/692/109). Count
+  the live spec when you need a number.
 - **Reading the LIVE router is the only total source.** `POST /v1/kms/auth/login`
   is registered as `Group("/v1/kms/auth").Post("/login")` — no grep can find that
   path; only the assembled router knows it. And the route set is a function of
@@ -446,6 +523,32 @@ embedded underneath.
   "stopped" runs that were never started. Isolation holds because the org is the
   validated one cloud sends, never a client's, and the runtime keys every run
   under `tenants/{org}/`.
+- **Nouns, one owner each (2026-07-28).** IAM owns orgs and Projects
+  (`/v1/iam/projects`); platform makes APPS and SITES under them and its
+  `ProjectStore` is READ-ONLY (List/Get/Exists — re-adding Create breaks the
+  build). `/v1/run` RESOLVES the org's default project (424 → IAM when absent),
+  never mints one. Apps whose IAM project is gone are removed by the orphan
+  reaper (`clients/platform/orphans.go`) — fails SAFE (IAM unreachable ⇒ reap
+  nothing), one existence question per (org,project), volumes left behind.
+- **An app declares storage** (`storageGb` on the platform Application): the
+  deploy ensures an RWO claim `<slug>-data`, mounts it at `/data`, and forces
+  `strategy: Recreate` (an RWO volume + rolling update deadlocks on
+  Multi-Attach). The claim is never patched or deleted with the app. Stateful
+  binaries should keep their store in a SUBDIRECTORY (`/data/<name>`) — the
+  volume root carries ext4 `lost+found`, which version-sniffing stores reject.
+- **No KMS URL names an org.** The tenant surface is `/v1/kms/secrets`; the org
+  comes from the validated principal (for a switched-in SuperAdmin, X-Org-Id —
+  the same one-predicate switch every subsystem honors). Cross-org over HTTP
+  does not exist; in-process callers (which hold the master key) are the only
+  cross-org readers. The org remains the STORE partition (`/orgs/<org>/…`).
+- **Per-tenant KMS identity is minted, not runbooked.** On a missing
+  `orgs/<org>/kms-auth/*` credential and with `IAM_SERVICE_TOKEN` set,
+  `clients/platform` calls IAM's idempotent bootstrap upsert to create
+  `<org>-platform-kms` (clientId==name==audience; a surprise clientId is
+  refused, never sealed; the upsert must carry `cert-<brand>` or the minted app
+  cannot SIGN and its tokens 500), seals both fields, and the sync proceeds.
+  In-cluster IAM base resolution is `cloud.IAMBaseURL` — the split-horizon
+  policy stated once (Cloudflare 403s server-side POSTs to the public issuer).
 - **A customer IS an IAM user; marketing keeps no contact list.** Who to email is
   read IN-PROCESS from the embedded IAM (`clients/marketing/roster.go` →
   `iam/pkg/store.GetMailableUsers` over `clients/iam.DB()`), the same seam
@@ -570,7 +673,8 @@ repoints by changing one host. It replaced the standalone Meilisearch containers
 
 **Four different things, four names — do not merge them.** `hanzoai/search` is the
 SEARCH PRODUCT (our own Meilisearch build, serving `search.hanzo.ai` and the docs
-corpus). `clients/websearch` queries the OUTSIDE world. `hanzoai/crawl` fetches it.
+corpus). `clients/websearch` queries the OUTSIDE world. `clients/crawl` fetches it
+(in-binary — see below; the standalone `hanzoai/crawl` service it used to call is gone).
 `clients/index` is the storage primitive an application writes documents into and
 queries back. It is NOT at `/v1/search`: that path belongs to the `hanzoai/ai` RAG
 plane, whose `/v1/search/{name}` pattern silently swallowed this subsystem's
@@ -598,6 +702,129 @@ keeps the wrapped data key beside it as `<path>.dek`, so moving the `.db` alone
 strands the key and every document becomes undecryptable — data loss that presents
 as an empty index.
 
+## The cross-org catalog (`clients/catalog`, `/v1/catalog`)
+
+Everything the fleet has built — hanzo, lux and zoo repos, plus every site this
+deployment serves — as ONE searchable corpus. It owns no store: the rows live in
+`clients/index` under the uid `catalog`, so relevance, paging and encryption at rest
+are the index's. What catalog adds is the one thing a per-org index cannot express,
+a corpus that spans orgs, and it does that with a SECOND corpus rather than a
+weaker filter:
+
+- `~catalog` is the published, world-readable corpus. The leading `~` is
+  load-bearing: an org id is minted from a validated IAM owner claim and IAM org
+  slugs begin with an alphanumeric, so no principal can ever BE `~catalog`.
+- the caller's own org holds their private rows, read with `principal.Org` and
+  nothing else. Another tenant never RUNS the query that would return them.
+
+**There is no write route, on purpose.** The first cut had `PUT /v1/catalog` behind
+`principal.IsSuperAdmin`; that gate is correct and unusable, because SuperAdmin is
+human-only here and a cron would have needed a second fabric credential. Instead
+`sync.go` reconciles the corpus in-process every hour (first pass delayed 90s so a
+boot never waits on the network) from the public repos of the source orgs
+(`CLOUD_CATALOG_ORGS`, default the fleet) and `projects.LiveSites`. A failed source
+keeps the last good corpus — a GitHub outage must not prune the catalog to empty.
+
+Which corpus a row lands in IS the tenancy rule: a public repo is public by
+definition, our OWN org's live sites (`CLOUD_CATALOG_PLATFORM_ORG`, default `hanzo`)
+are published because they are the demos a visitor is meant to fork, and every other
+org's live sites land in that org's corpus. `TestSyncRoutesSitesByOrg` asserts the
+routing itself, because that is where a customer's project would leak.
+
+`index.Reconcile` is `index.Query`'s mirror and the only in-process WRITE seam: a
+full-corpus swap (upsert everything, delete what is gone) because the truth lives
+upstream and a re-run must converge.
+
+## Starter kits (`clients/templates`, `/v1/templates`)
+
+One embedded PUBLIC catalog (read-only; a customer's own templates are the second
+layer, below), and **one template is one entry**. The shapes a
+template ships in — FORMAT (`-html`/`-react`/`-bootstrap`), PAGE (folio's
+about/contact/grid-3-fluid) and THEME — are `variants` inside that entry, chosen
+at fork time: `POST /v1/projects/fork {"slug":"prism","variant":"react"}`.
+
+Spending a slug per shape is what the catalog used to do, and it cost more than
+tidiness: one portfolio kit held 26 rows, and because a multi-page kit's "variant"
+IS its page-list index, two of those rows deployed demos that rendered a bare
+column of links — byte-identical to each other. The catalog also carried the same
+72 templates TWICE, under two naming generations of hanzoai/gallery (upstream
+`brainwave`/`xora-react` vs Hanzo `synapse`/`prism-react`); they join 1:1 on the
+gallery `id`, which is how 141 rows became 44.
+
+`Template.Variant(id)` is the ONE resolution rule — no preference yields the
+default shape, a single-shape template answers with itself — so no caller
+branches on `len(Variants)`. A non-default shape carries its id into the derived
+project slug (`prism` + `react` → `prism-react`) so two shapes coexist in an org;
+`ForkedFrom` still records the template, because a shape is not another parent.
+`TestVariantsAreOptionsNotSiblings` forbids the regression: no variant id may
+also be a catalog slug.
+
+### Two layers, not one visibility flag
+
+Same shape as the cross-org catalog above, for the same reason. A customer must be able to
+hold starter kits that are THEIRS — private to their org, forkable only by them —
+next to the public gallery, and the public gallery is what an anonymous visitor
+browses on hanzo.app. So the two live in different containers:
+
+- the PUBLIC catalog is the embedded `catalog.json`, immutable, with **no write
+  route**. Nothing a customer does can put a row in it.
+- a customer's OWN templates are rows in `{DataDir}/templates.db` keyed by
+  `principal.Org` — the gateway-minted, JWT-validated owner, never a request field
+  (a body `org` is overwritten server-side). Every read binds that column.
+
+An anonymous `GET /v1/templates` never touches the store at all, so a private
+template cannot surface publicly by CONSTRUCTION rather than by a filter each
+future reader must remember. `TestPrivateTemplateIsOrgOnly` asserts both
+directions (owner sees it; another org and anonymous do not) and that the
+anonymous view is exactly the embedded gallery, entry for entry.
+
+A slug stays single-valued across both layers: publishing over a public slug is
+409, so `slug → template` remains a function and no org can shadow the gallery.
+Two DIFFERENT orgs may hold the same private slug — the key is `(org, slug)`.
+
+`templates.Lookup(ctx, org, slug)` is the ONE door other subsystems read through
+(`clients/projects`' fork resolves the caller org's own templates first, then the
+gallery), so "which templates may this org use" is answered in exactly one place;
+a fork of a private template records owner-qualified lineage (`acme/acme-portal`),
+a fork of a gallery template records the bare public slug.
+
+## Fetching the web (`clients/crawl`, `/v1/crawl`)
+
+In-binary fetch + extract + markdown. It replaced a call to a standalone crawler
+at `crawl.hanzo.svc.cluster.local:11235` — a name that had stopped resolving, which
+nothing noticed because every caller is allowed to degrade: the answer engine's read
+stage falls back to the ~600-char search snippet, so research answers silently
+grounded on snippets and looked fine.
+
+**`Fetch` and `Read` are different doors, deliberately.** `Fetch` is the pure network
+primitive (URL in, `Page` out, no IO beyond the request) — testable with no store.
+`Read` is what callers use: archive first, network second, keep what came back. One
+door, so no caller has to remember to persist and no two can disagree about where
+pages live.
+
+Kept pages ride the ONE object seam the binary already has (`types.VFSClient` over
+the shared S3 gateway) — no second client, no second bucket, no second credential.
+Key is `crawl/<org>/<project>/<sha256(url)>.json`, and both halves of that path are
+load-bearing:
+
+- The URL is HASHED, never spliced in. A URL carries `/`, `?`, `#`, `%` and arbitrary
+  unicode; embedding one lets a crafted URL walk out of its prefix into another
+  tenant's, which is the whole isolation boundary.
+- Scope comes from the VERIFIED principal, never the body, because it selects that
+  prefix.
+- Keyed by the REQUESTED url, not `Page.URL` (where it landed after redirects) —
+  filing under the latter means a cache that never hits for exactly the pages that
+  redirect.
+- The scope segments are readable + digest, because sanitising alone is LOSSY:
+  fold-to-`-` maps `a/b` and `a-b` onto one segment, and two orgs that collide share
+  a corpus prefix. The digest decides identity; the readable half is for browsing.
+
+SSRF is guarded IN THE DIALER, not by inspecting the hostname: a name check is
+TOCTOU (DNS rebinding), and redirects re-enter the same dialer for free. The dialer
+resolves, refuses if ANY resolved address is non-public, and dials the address it
+checked. Storage failures are best-effort throughout — a store that is down costs a
+cache hit, never the page.
+
 ## Releases are cut by a merge to main
 
 `.github/workflows` is intentionally empty of CI. The image and its `v*` tags have ONE
@@ -605,16 +832,31 @@ owner, `clients/platform/release.go`: compute the next version → build → SMO
 pushed image → tag → roll out. The tag is a RECEIPT for a proven image, so a
 change that breaks boot never reaches production and leaves no phantom tag.
 
-The final step has ONE writer: patch the operator `hanzo.ai/v1` Service CR's
-`spec.image` and let the operator reconcile. It used to write twice — that patch plus
-a `repository_dispatch` mirror at `hanzoai/universe` — composed best-effort so the
-step passed if EITHER landed. Two writers for one fact, and the composition HID their
-disagreement: patch fails, mirror succeeds, cluster and git now describe different
-production states with nothing reporting a problem. The mirror was also never running
-— it read `UNIVERSE_DISPATCH_TOKEN`, never set on the deployment, so it failed closed
-on every release and the CR patch was already doing all the work. A rollout with
-nowhere to write is now an ERROR: the image is built, smoke-passed and tagged but NOT
-live, and a release that claims otherwise is worse than one that fails.
+The final step has ONE writer, and for a first-party service it is **universe git,
+not the cluster**. `clients/paas.releaseService` REFUSES to patch the operator
+`hanzo.ai/v1` App CR's `spec.image`: those CRs are declared in
+`infra/k8s/operator/crs/` and reconciled by Hanzo CD with selfHeal, so a patch is
+reverted on the next sync — the release would look applied and then silently roll
+back. It validates first (DNS-1123 name, clean-semver via `splitReleaseImage`,
+App exists in the namespace) so the refusal is specific rather than generic, and
+names the remedy: **commit the tag to that file.**
+
+So a green pipeline ends at `release tag minted (receipt for a pushed,
+smoke-passed image)` followed by `release failed … reached: tagged`. That pair is
+NOT a broken build — the image is real and proven, it simply has no declared state
+pointing at it. Production moves when someone bumps `tag:` in
+`universe/infra/k8s/operator/crs/cloud.yaml`. Four tags (`.267`–`.270`)
+accumulated behind that once, with prod healthy on `.266` the whole time.
+
+It used to write twice — a CR patch plus a `repository_dispatch` mirror at
+`hanzoai/universe` — composed best-effort so the step passed if EITHER landed. Two
+writers for one fact, and the composition HID their disagreement: patch fails,
+mirror succeeds, cluster and git now describe different production states with
+nothing reporting a problem. The mirror was also never running — it read
+`UNIVERSE_DISPATCH_TOKEN`, never set on the deployment, so it failed closed on every
+release. A rollout with nowhere to write is an ERROR: the image is built,
+smoke-passed and tagged but NOT live, and a release that claims otherwise is worse
+than one that fails.
 
 ### Site releases already have a lifecycle — do not build a second one
 
@@ -639,20 +881,46 @@ A parallel `clients/cd` + `clients/site` lifecycle (kind-agnostic `Target`, a
 `CURRENT` pointer object next to the bundles) was built and then DELETED unmerged: it
 re-implemented all of the above with a weaker pointer — a `v<N>` counter instead of a
 content digest, and a plain PUT that could name a release whose row does not exist.
-Its one genuinely new finding is recorded as a gap below, not as a second system.
+Its one genuinely new finding was a gap in THIS lifecycle, closed below rather than
+answered with a second system.
 
-**Known gap: releases are never garbage-collected.** `promote` writes a new immutable
-prefix per distinct content and nothing prunes them; `DeleteReleases` only runs on
-project delete. Retention belongs in `clients/projects` next to `promote`. When it is
-added, `activate` must also verify the bytes still exist before flipping — today
-`ActivateRelease` proves only that the ROW exists, which is sufficient only while
-nothing can prune the bytes out from under it.
+**Retention is bounded, and it lives next to `promote`.** Releases used to
+accumulate forever — `promote` wrote a new immutable prefix per distinct content,
+nothing pruned them, and `DeleteReleases` only ran on project delete. Now every
+promote that records a row calls `pruneReleases`, which reclaims what fell past
+`keepReleases` (10 superseded, plus the live one). Retention at the one event that
+GROWS the set means no sweeper, no schedule, and no second notion of which releases
+exist. It is best-effort: a prune failure is logged and recomputed by the next
+publish, never turned into a failed publish.
 
-It is driven by the GitHub App. A push arrives HMAC-verified at
-`/v1/connector/github/webhook`, which fires `cloud.OnGitPush` — the SAME
-single-registrant seam the embedded git server uses, not a second CI — and
-`clients/platform` decides what the push means: an app tracking the repo rebuilds,
-and cloud's own upstream cuts a release. Cloud is the machine, so it calls the
+Two consequences, both load-bearing:
+
+- **The live release is not a candidate at any depth.** It is excluded from the
+  prune scan (so it never counts against the budget — a site parked on an ancient
+  release keeps it), AND every prune `DELETE` re-checks `current_release` at delete
+  time, so a rollback landing after the scan makes that delete match zero rows. Rows
+  go first, bytes after — `promote`'s ordering run backwards — so a surviving row
+  still means "the prefix is complete", and a crash between the two leaks objects
+  nothing points at rather than serving a 404.
+- **`activate` verifies BYTES, not just the row.** `ActivateRelease`'s
+  `WHERE EXISTS (release row)` was sufficient only while nothing could prune bytes
+  out from under a row. It now stats the release's `index.html` before the flip:
+  missing row → 404 (no cross-tenant oracle), missing bytes → **410 Gone**. Without
+  it, activating a reclaimed release returns 200 and takes a live site down.
+  `ListReleases` and `PruneReleases` share one order (`created_at DESC, rowid DESC`)
+  because `created_at` is second-granular and the menu a caller sees must be exactly
+  the set retention keeps.
+
+**Three transports, one trigger.** A push reaches `cloud.OnGitPush` — the
+single-registrant seam, never a second CI — from the embedded git server
+(`clients/git/smart_http.go`), the GitHub App (`/v1/connector/github/webhook`), and
+the canonical forge (`/v1/git/webhook`, `clients/git/webhook.go`). The third exists
+because git.hanzo.ai is a SEPARATE process: its pushes never touch our receive-pack,
+so without that door the host we call canonical builds nothing and only the mirror
+releases. Both webhook transports HMAC-verify fail-closed and drop bot-authored
+pushes through the one `cloud.IsBotActor`, so a release cannot retrigger itself.
+`clients/platform` is the only place that decides what a push MEANS: an app tracking
+the repo rebuilds, and cloud's own upstream cuts a release. Cloud is the machine, so it calls the
 release in-process and the build token is never handed to a caller. The trigger runs
 BEFORE the token mint and the mirror, because a build reads from GitHub and must not
 be lost to a sync outage.
@@ -679,18 +947,46 @@ the final bearer fallback — no `--platform-token`). The ONE contract, no TS-Do
   RESTART (stamps the Deployment pod-template `hanzo.ai/restartedAt` annotation; never
   changes the declared TAG — that stays a git commit CD reconciles). `--env` picks the ns.
 - `hanzo clusters list|get` → `GET /v1/clusters`  (`clients/visor`, tenant-scoped)
-- `hanzo build`          → `POST /v1/runner`  (native buildkit fabric)
+- `hanzo build`          → `POST /v1/runner`  (native buildkit fabric). With `--image` it
+  builds a container image; with NO `--image` it reads the repo's own `hanzo.yml`
+  (`binaries:` + `bucket:`) and builds the ARTIFACT lane instead — see below.
+
+### `/v1/runner` builds ANY project, not only a Dockerfile
+
+`/v1/runner` has two lanes, and a request is in exactly one of them:
+
+- **image** (`image:`) → `launchDirectBuild` → rootless BuildKit → a pushed OCI ref.
+- **artifact** (`binaries:`) → `launchArtifactBuild` (`clients/platform/artifact.go`) → a
+  Job whose initContainers are ONE PER RECIPE ENTRY, each in that entry's toolchain image
+  (`image:`, default `golang:1.26-bookworm`), sharing `/w`; then a publisher that hashes
+  everything the recipe left in `/w/dist`, PUTs it to hanzoai/s3 and writes `binaries.json`
+  last. Output: `https://s3.hanzo.ai/<bucket>/<owner>/<repo>/<tag>/binaries.json`, the same
+  layout hanzoai/ci publishes to — one index, two front doors.
+
+The recipe is the EXISTING `hanzo.yml` contract, extended by exactly two optional fields:
+`run:` (a build command for any toolchain that is not Go) and `out:` (the glob of what it
+produced). `main:` stays the zero-config Go lane. Nothing here is a second recipe format.
+
+Why the split in the Job matters: `run:` is arbitrary shell by design (same trust as a
+Dockerfile `RUN`), so it must never see a credential — the initContainers carry no
+object-store env and no service-account token; only the publisher, which runs a constant
+script, mounts `artifact-s3` (a KMSSecret; cloud holds no secrets grant in `hanzo-build`).
+The publisher writes over the INTERNAL endpoint (`s3.hanzo.svc:9000`) and records the
+PUBLIC URL, because `s3.hanzo.ai` is this cluster's own LoadBalancer and does not hairpin —
+a pod dialling it times out. Its egress hole is `artifact-publish-egress` in universe,
+selecting the pod label `hanzo.ai/publish=artifact`.
 
 `/v1/paas/*` auth mirrors `/v1/runner` (`clients/platform/runner.go`): the `guard` admits a
 validated principal who is SuperAdmin OR OrgAdmin, then each handler CONFINES a non-super
 caller to the platform namespaces its own validated org owns (`scopedNamespaces`, keyed on
 `principal.Org` — a tenant admin can never observe/restart another org's, or a platform,
 app; `?org=` cannot widen it). The rolling restart needs `patch` on `apps/deployments`
-(ClusterRole/cloud, universe `infra/k8s/cloud/rbac.yaml`). There is NO `/v1/apps`,
-`/v1/org/{org}/cluster`, or `/v1/platform/projects` CLI path — the first two never existed
-here (TS-Dokploy contract, 404), and `/v1/platform/*` needs a co-resident IAM store this
-deployment does not fold in (IAM runs as a separate svc) so it 500s; the live apps backend
-is `/v1/paas`, whose board reads k8s directly with no IAM-store dependency.
+(ClusterRole/cloud, universe `infra/k8s/cloud/rbac.yaml`). There is NO `/v1/apps` or
+`/v1/org/{org}/cluster` CLI path — both are the TS-Dokploy contract, never served here
+(404 live). `/v1/platform/*` IS served (29 paths live, projects + apps + sites) and no
+longer 500s on a missing co-resident IAM store — it answers the ordinary gate
+(`403 {"error":"X-Org-Id required"}` unauthenticated). The CLI still targets `/v1/paas`
+for the apps board, which reads k8s directly with no IAM-store dependency.
 
 ## GTM: `/v1/campaign` orchestration → channels → connectors → analytics
 
@@ -730,3 +1026,78 @@ reinvent it: a creative A/B is an experiment whose variant = a creative (tagged
 `utm_content`) and whose metric = the analytics read. The `AssignFunc`/`EvidenceFunc`
 seams are wired at the root to the flags-assignment + evidence primitive; nil-safe
 until it lands (single-creative honest default).
+
+## GitHub → forge sync: every ref, one App, nothing per-repo
+
+git.hanzo.ai is canonical and GitHub is its mirror, so an inbound push is an
+*import*: it carries work the mirror received back to the canonical copy. The whole
+configuration surface is below, because the shape people expect (a per-repo sync
+setting) does not exist and should not be added.
+
+**There is no per-repo and no per-ref configuration.** A repo is not enrolled, and a
+ref is not filtered. `clients/integrations/github_webhook.go` accepts any ref under
+`refs/`, and `Ref` stays a FULL ref (`refs/heads/x`, `refs/tags/v1.2.3`) the length of
+the chain — webhook → `SyncEvent` → `sync.Event` → `GitInboundReq` → `inboundFastForward`
+→ `GitPushEvent`. Tags matter here: a version is published by tag, so a filter on
+`refs/heads/` left every release existing only on the mirror.
+
+**Carrying tags needs no force, and that is what makes "everything" safe.** The
+inbound advance uses a non-forcing refspec, so re-pointing a tag that already exists
+is not a fast-forward and git refuses it — the canonical copy keeps the tag it
+published. A branch delete is likewise never propagated (`ignored: branch delete not
+propagated`): the mirror does not get to delete canonical history.
+
+**A consumer that wants a branch cuts the prefix itself.** `strings.CutPrefix(ev.Ref,
+"refs/heads/")` answers "is this a branch" and "what is its name" in one total step,
+so a tag can never rebuild an app that tracks a branch (`clients/platform/push.go`),
+and `refs/tags/main` is not `refs/heads/main` for the release check.
+
+**Tenancy comes only from the installation id** in the HMAC-verified body — never a
+header, never a client-controlled field. That is the whole tenant resolution:
+`OrgForExternalID("github", installation.ID)`.
+
+### Exactly one GitHub App — two is not redundancy
+
+`Store.Get(ctx, org, provider)` keys a connection on `(org, "github")`: **one row per
+org**, holding one installation id. The App's own identity is a single set of process
+values, `GITHUB_APP_ID` + `GITHUB_APP_PRIVATE_KEY` + `GITHUB_APP_WEBHOOK_SECRET`
+(KMS-synced, `clients/integrations/github.go`), used to mint short-lived installation
+tokens.
+
+So pointing a second App at the same webhook with the same secret does not double
+coverage — it makes the two Apps contend for one row. The HMAC passes for both
+(shared secret), but only the most recent install's id is stored, and a delivery from
+the other App resolves to no org and is acknowledged `200 {"ignored": "unknown
+installation"}` so GitHub does not retry-storm. The failure is therefore SILENT at
+both ends: GitHub shows a green delivery, and nothing arrives. If the stored id and
+the configured key belong to different Apps, token minting fails for every event
+instead. Run one App; install it on every org whose repos should sync.
+
+**Reading the live configuration is already a route — do not add a second one.**
+`GET /v1/integrations` (`providerViewFor`) reports, for the `github` provider,
+`available` (the App's creds are present in this process) and, when the org has a
+connection, `connection.externalId` — **the stored installation id**. That id is the
+one value that decides whether a delivery resolves, so comparing it against the
+`installation.id` GitHub shows on a delivery is the whole diagnosis: equal ⇒ the event
+lands; different ⇒ it is the silent `unknown installation` ack, and a second App is
+usually why.
+
+### The knobs that do exist
+
+Process values, all with working defaults — none of them selects *what* syncs:
+
+- `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET`, `GITHUB_APP_SLUG`
+  — the single App identity; absent ⇒ the plane reports itself unconfigured.
+- `GITHUB_API_URL` — API base, for GitHub Enterprise.
+- `GITHUB_IMPORT_CONCURRENCY` — parallel repo imports on first connect.
+- `GIT_MIRROR_OUT_CONCURRENCY`, `GIT_MIRROR_OUT_TIMEOUT` — the outbound leg.
+- `GIT_SSH_HOST`, `GIT_SSH_ADDR`, `GIT_SSH_HOST_KEY` — SSH front door; the host key is
+  KMS-sourced and MUST be set when replicas > 1, or each replica presents its own.
+- `GIT_SYNC_ACTOR` — the actor recorded for a sync-initiated write.
+
+**What genuinely is per-repo is a different plane**, and naming it keeps the two from
+being confused: `/v1/git/repos/:name/*` (`clients/git/subscriptions.go`) holds a
+repo→Slack-channel subscription and a repo→downstream mirror target. Those are
+reactor config, org-scoped like every repo route. The code index is also per-repo and
+indexes the default branch only — a feature-branch push is skipped so it cannot
+clobber the canonical index. None of these decide whether a ref syncs.

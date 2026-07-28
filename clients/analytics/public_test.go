@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -68,13 +69,20 @@ const anonPageview = `{"batch":[{"type":"pageview","event":"$pageview","distinct
 	`"referrer":"https://google.com/","utm":{"source":"google","medium":"organic"},` +
 	`"library":"@hanzo/event","libraryVersion":"0.3.3"}]}`
 
-// ── admitPublic: the pure attribution decision ──────────────────────────────
+// ── admitPublic: the pure capability decision ───────────────────────────────
 
-// TestAdmitPublic_TenantIsAlwaysPublic is the ISOLATION PROOF. admitPublic takes no
-// request, so no header/query/body can reach it; here we additionally hand it every
-// org-naming field the wire has and confirm the tenant it returns is the reserved
-// constant every time.
-func TestAdmitPublic_TenantIsAlwaysPublic(t *testing.T) {
+// TestAdmitPublic_CannotReachAttribution is the ISOLATION PROOF, and it is now a
+// compile-time one: admitPublic's signature is ([]CaptureEvent) → ([]CaptureEvent,int).
+// It takes no *zip.Ctx AND no org, so there is no header, query, body field, or caller
+// argument through which attribution could be influenced from inside the projection —
+// not a check that can be bypassed, but an argument list that cannot express the
+// alternative. WHERE a row lands is the door's decision (publicIngest's org); this
+// function only decides WHAT may be stored.
+//
+// What is left to assert at runtime is that the projection's OUTPUT can never name an
+// org either — so whatever tenant the door supplies, no admitted event carries a
+// competing claim into the row.
+func TestAdmitPublic_CannotReachAttribution(t *testing.T) {
 	hostile := [][]CaptureEvent{
 		{{Type: "pageview"}},
 		{{Type: "pageview", GroupID: "maxpower"}},
@@ -85,9 +93,42 @@ func TestAdmitPublic_TenantIsAlwaysPublic(t *testing.T) {
 		nil,
 	}
 	for i, evs := range hostile {
-		org, _, _ := admitPublic(evs)
-		if org != publicTenant {
-			t.Fatalf("case %d: admitPublic org = %q, want the reserved %q", i, org, publicTenant)
+		out, _ := admitPublic(evs)
+		for j, e := range out {
+			if e.GroupID != "" || e.PersonID != "" || len(e.Properties) != 0 {
+				t.Fatalf("case %d event %d: an org-naming field survived the projection: %+v", i, j, e)
+			}
+		}
+	}
+}
+
+// TestAdmitPublic_DoorOwnsTheTenant pins the two-door reality after the fix, through the
+// REAL normalizer — the one function that stamps tenant_id. Whichever tenant the door
+// supplies, the row carries EXACTLY that and never the org the body named:
+//
+//   - every /v1 door passes the publicTenant constant (handle, event.go);
+//   - the published-site host passes the org the site resolver returned for that host
+//     (installHostCarve, analytics.go), which is why a customer's own site analytics
+//     keep landing in the customer's org under this same projection.
+func TestAdmitPublic_DoorOwnsTheTenant(t *testing.T) {
+	for _, doorOrg := range []string{publicTenant, "yadota"} {
+		out, _ := admitPublic([]CaptureEvent{{
+			Type: "pageview", GroupID: "maxpower", PersonID: "victim",
+			Properties: map[string]any{"org": "maxpower", "tenant_id": "maxpower"},
+		}})
+		if len(out) != 1 {
+			t.Fatalf("door %q: want 1 admitted event", doorOrg)
+		}
+		row, ok := normalizeEvent(doorOrg, time.Now(), out[0])
+		if !ok {
+			t.Fatalf("door %q: want routable", doorOrg)
+		}
+		if row.tenant != doorOrg {
+			t.Fatalf("row.tenant = %q, want the door's %q", row.tenant, doorOrg)
+		}
+		if row.groupID != "" || row.personID != "" || row.properties != "" {
+			t.Fatalf("door %q: a body claim reached the row: group=%q person=%q props=%q",
+				doorOrg, row.groupID, row.personID, row.properties)
 		}
 	}
 }
@@ -110,7 +151,7 @@ func TestPublicTenantOutsideOrgNamespace(t *testing.T) {
 // the projection must not carry it forward. groupId (a group/org) and personId (a
 // person) are the two fields that bind an event to someone else's identity.
 func TestAdmitPublic_ForeignOrgFieldsDropped(t *testing.T) {
-	_, out, _ := admitPublic([]CaptureEvent{{
+	out, _ := admitPublic([]CaptureEvent{{
 		Type:       "pageview",
 		GroupID:    "maxpower",
 		PersonID:   "victim-person",
@@ -145,8 +186,9 @@ func TestAdmitPublic_ForeignOrgFieldsDropped(t *testing.T) {
 // normalizer — the one function that stamps tenant_id — and proves the stored row
 // carries the public tenant, not the org the body named.
 func TestAdmitPublic_ForeignOrgNeverStamped(t *testing.T) {
-	org, out, _ := admitPublic([]CaptureEvent{{Type: "pageview", GroupID: "maxpower"}})
-	row, ok := normalizeEvent(org, time.Now(), out[0])
+	out, _ := admitPublic([]CaptureEvent{{Type: "pageview", GroupID: "maxpower"}})
+	// publicTenant is the org every /v1 door hands this lane (handle, event.go).
+	row, ok := normalizeEvent(publicTenant, time.Now(), out[0])
 	if !ok {
 		t.Fatal("want routable")
 	}
@@ -163,13 +205,13 @@ func TestAdmitPublic_ForeignOrgNeverStamped(t *testing.T) {
 // an unknown type folds to "event" (canonicalType) and is therefore dropped too.
 func TestAdmitPublic_KindAllowlist(t *testing.T) {
 	for _, kind := range []string{"pageview", "page", "error"} {
-		_, out, dropped := admitPublic([]CaptureEvent{{Type: kind, Error: &Exception{Message: "m"}}})
+		out, dropped := admitPublic([]CaptureEvent{{Type: kind, Error: &Exception{Message: "m"}}})
 		if len(out) != 1 || dropped != 0 {
 			t.Fatalf("kind %q must be admitted, got out=%d dropped=%d", kind, len(out), dropped)
 		}
 	}
 	for _, kind := range []string{"identify", "group", "event", "", "purchase", "metering", "BILLING"} {
-		_, out, dropped := admitPublic([]CaptureEvent{{Type: kind, Event: "whatever"}})
+		out, dropped := admitPublic([]CaptureEvent{{Type: kind, Event: "whatever"}})
 		if len(out) != 0 || dropped != 1 {
 			t.Fatalf("kind %q must be dropped, got out=%d dropped=%d", kind, len(out), dropped)
 		}
@@ -187,7 +229,7 @@ func TestAdmitPublic_NameIsServerChosen(t *testing.T) {
 		{"error", "", "$error"},
 	}
 	for _, c := range cases {
-		_, out, _ := admitPublic([]CaptureEvent{{Type: c.kind, Event: c.sent}})
+		out, _ := admitPublic([]CaptureEvent{{Type: c.kind, Event: c.sent}})
 		if len(out) != 1 {
 			t.Fatalf("kind %q: want 1 admitted", c.kind)
 		}
@@ -210,7 +252,7 @@ func truncate(s string) string {
 // the handler does: admitPublic (projection) → foldException (ingestDecoded's tail) →
 // withSource (write core) → normalizeEvent (the row).
 func TestAdmitPublic_OnlyServerProperties(t *testing.T) {
-	_, out, _ := admitPublic([]CaptureEvent{{
+	out, _ := admitPublic([]CaptureEvent{{
 		Type:       "error",
 		Error:      &Exception{Type: "TypeError", Message: "x is not a function"},
 		Properties: map[string]any{"password": "hunter2", "custom": "junk", "$release": "v1"},
@@ -543,24 +585,38 @@ func TestAuthenticated_OptOutNotHonoredForPrincipal(t *testing.T) {
 // pre-scrub event and forward it to an org's connected ad platforms, so an unattested
 // event must never reach one.
 func TestFanOut_PublicTenantNeverReachesDestinations(t *testing.T) {
+	// fanOut dispatches on a goroutine, so the recorder is shared across goroutines and
+	// must be guarded — the sink WRITES from the dispatch goroutine while the assertions
+	// below READ from the test goroutine. Without this the test is itself a data race
+	// (caught by -race), which would make its verdict unreliable.
+	var mu sync.Mutex
 	var gotOrgs []string
-	SetSink(func(org string, _ []SinkEvent) { gotOrgs = append(gotOrgs, org) })
+	seen := func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), gotOrgs...)
+	}
+	SetSink(func(org string, _ []SinkEvent) {
+		mu.Lock()
+		gotOrgs = append(gotOrgs, org)
+		mu.Unlock()
+	})
 	t.Cleanup(func() { SetSink(nil) })
 
 	fanOut(publicTenant, []CaptureEvent{{Type: "pageview", Event: "$pageview"}})
-	// The sink dispatches on a goroutine; give a real fan-out time to land.
+	// Give a real fan-out time to land.
 	time.Sleep(50 * time.Millisecond)
-	if len(gotOrgs) != 0 {
-		t.Fatalf("the public tenant must never fan out to destinations, got orgs %v", gotOrgs)
+	if got := seen(); len(got) != 0 {
+		t.Fatalf("the public tenant must never fan out to destinations, got orgs %v", got)
 	}
 
 	// A real org still fans out — the guard is scoped to the sentinel, not a regression.
 	fanOut("acme", []CaptureEvent{{Type: "pageview", Event: "$pageview"}})
 	deadline := time.Now().Add(2 * time.Second)
-	for len(gotOrgs) == 0 && time.Now().Before(deadline) {
+	for len(seen()) == 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if len(gotOrgs) != 1 || gotOrgs[0] != "acme" {
-		t.Fatalf("a real org must still fan out, got %v", gotOrgs)
+	if got := seen(); len(got) != 1 || got[0] != "acme" {
+		t.Fatalf("a real org must still fan out, got %v", got)
 	}
 }

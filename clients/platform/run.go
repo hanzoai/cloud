@@ -191,23 +191,23 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
-// ensureRunProject ensures the org's default project exists in IAM (the project
-// lifecycle owner) and returns its name, so a run needs no explicit project and
-// still lands in the normal app hierarchy. Idempotent and race-tolerant.
+// ensureRunProject resolves the project a run lands in. The DEFAULT project is
+// IMPLICIT: it is part of what an org IS, so a run under it proceeds whether or
+// not IAM has materialized the row yet — platform still never CREATES a project
+// (that is IAM's, at /v1/iam/projects), it just declines to fail an org for a
+// row IAM owes it. An explicit, non-default project must exist, exactly like
+// the apps routes require.
 func ensureRunProject(s *cloud.Service[state], ctx context.Context, org string) (string, error) {
 	name := principal.DefaultProject
 	ok, err := s.State.projects.Exists(ctx, org, name)
 	if err != nil {
-		return "", zip.Errorf(http.StatusInternalServerError, "get project: %v", err)
-	}
-	if ok {
+		// The project store being unreachable must not take /v1/run down for the
+		// implicit default — the row is owed by provisioning, not load-bearing.
+		s.Log.Warn("run: project store unavailable; proceeding under the implicit default project", "org", org, "err", err)
 		return name, nil
 	}
-	if _, err := s.State.projects.Create(ctx, org, name, "Default", "Container-serverless runs"); err != nil {
-		if errors.Is(err, errConflict) {
-			return name, nil // lost a create race — the winner's default project is fine
-		}
-		return "", zip.Errorf(http.StatusInternalServerError, "persist project: %v", err)
+	if !ok {
+		s.Log.Info("run: default project row absent in IAM; proceeding (IAM provisioning owes it)", "org", org)
 	}
 	return name, nil
 }

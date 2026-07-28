@@ -133,6 +133,12 @@ func routes(app cloud.Router, s *cloud.Service[core.State]) {
 	zip.Get(z, "/v1/admin/block-storage", o.blockStorage, op("adminBlockStorage"))
 	zip.Get(z, "/v1/admin/o11y", o11y, op("adminO11y"))
 	zip.Get(z, "/v1/admin/aimetrics", aimetrics, op("adminAIMetrics"))
+	// Per-subsystem lens on the one binary: the mount inventory (what is on/off) fused
+	// with the RED signals the request span already carries. See subsystems.go.
+	zip.Get(z, "/v1/admin/subsystems", o.Subsystems, op("adminSubsystems"))
+	// The ONE consolidated financial view — revenue, credits, spend by org, infra cost.
+	// See moneyboard.go.
+	zip.Get(z, "/v1/admin/money", o.Money, op("adminMoney"))
 	zip.Post(z, "/v1/admin/sync", syncNow, op("adminSync"))
 
 	// Credit grants — the ONE admin mint surface (SuperAdmin only). Thin, audited

@@ -16,6 +16,7 @@ import (
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/admin/digitalocean"
+	"github.com/hanzoai/cloud/clients/admin/money"
 )
 
 // cacheTTL bounds how stale a READ may be. It exists because one board is a fan-out
@@ -43,6 +44,7 @@ func Routes(z *zip.App, s *cloud.Service[core.State]) {
 	b := &board{s: s}
 	zip.Get(z, "/v1/admin/infra", b.read, zip.WithOperationID("adminInfra"))
 	zip.Post(z, "/v1/admin/infra/volumes/:id/snapshot", b.snapshotVolume, zip.WithOperationID("adminSnapshotVolume"))
+	zip.Post(z, "/v1/admin/infra/volumes/:id/resize", b.expandVolume, zip.WithOperationID("adminResizeVolume"))
 	zip.Delete(z, "/v1/admin/infra/volumes/:id", b.deleteVolume, zip.WithOperationID("adminDeleteVolume"))
 	zip.Post(z, "/v1/admin/infra/nodes/:id/cordon", b.cordonNode, zip.WithOperationID("adminCordonNode"))
 	zip.Delete(z, "/v1/admin/infra/droplets/:id", b.deleteDroplet, zip.WithOperationID("adminDeleteDroplet"))
@@ -90,6 +92,9 @@ type VolumeIn struct {
 	// Name is the snapshot name on the snapshot action. Blank gets a deterministic
 	// "<volume>-predelete-<unix>" so the undo is findable in the DO console.
 	Name string `json:"name"`
+	// SizeGiB is the target size on the resize action. A volume only ever grows —
+	// ExpandTo is the verdict that refuses a shrink, so this is not validated here.
+	SizeGiB int `json:"sizeGiB"`
 }
 
 // DropletIn addresses one droplet, optionally with a resize.
@@ -356,6 +361,46 @@ func (b *board) deleteVolume(ctx context.Context, in *VolumeIn) (*MutationOut, e
 				return out, err
 			}
 			out["deleted"] = true
+			return out, nil
+		},
+	})
+}
+
+// expandVolume grows a volume. GROW ONLY — see Volume.ExpandTo for why the other
+// direction is a data migration this board deliberately refuses to run.
+//
+// The MECHANISM follows the volume's owner, because there is exactly one way to grow each
+// kind completely. A volume a PVC claims is grown by patching the claim: the CSI driver
+// then resizes the DigitalOcean device AND grows the filesystem on it, leaving claim, PV,
+// device and filesystem all agreeing. Calling DigitalOcean directly for that volume would
+// grow the device while the PV kept declaring the old capacity and the filesystem never
+// grew at all. One operation, one correct mechanism per owner — not two ways to do it.
+func (b *board) expandVolume(ctx context.Context, in *VolumeIn) (*MutationOut, error) {
+	id := strings.TrimSpace(in.ID)
+	return run(ctx, b, mutation[Volume]{
+		action: "infra.volume.resize", resType: "do_volume", resID: id,
+		find:    func(snap Snapshot) (Volume, bool) { return findVolume(snap, id) },
+		verdict: func(v Volume) (bool, string) { return v.ExpandTo(in.SizeGiB) },
+		apply: func(ctx context.Context, do *digitalocean.Client, v Volume) (map[string]any, error) {
+			out := map[string]any{"name": v.Name, "from": v.SizeGiB, "to": in.SizeGiB,
+				"addedMonthlyCents": money.Cents(in.SizeGiB-v.SizeGiB) * volumeGiBCents}
+			if v.PVCName != "" {
+				if err := ExpandPVC(ctx, do, v.ClusterID, v.PVCNamespace, v.PVCName, in.SizeGiB); err != nil {
+					return out, err
+				}
+				out["via"] = fmt.Sprintf("pvc %s/%s", v.PVCNamespace, v.PVCName)
+				out["note"] = "The CSI driver resizes the volume and then grows the filesystem. " +
+					"Both are asynchronous: watch the PVC's conditions until FileSystemResizePending clears."
+				return out, nil
+			}
+			act, err := do.ResizeVolume(ctx, v.ID, v.Region, in.SizeGiB)
+			if err != nil {
+				return out, err
+			}
+			out["via"] = "digitalocean volume action"
+			out["actionId"], out["actionStatus"] = act.ID, act.Status
+			out["note"] = "No PersistentVolumeClaim owns this volume, so only the DEVICE was grown. " +
+				"Any filesystem on it still reports the old size until it is grown in place."
 			return out, nil
 		},
 	})
