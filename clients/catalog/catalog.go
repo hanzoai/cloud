@@ -12,35 +12,41 @@
 // The index pins every row to an org and every query to one org. Cross-org
 // discovery is therefore not a weaker filter — it is a SECOND corpus:
 //
-//	PublicOrg ("~catalog")   the published, world-readable catalog. Every
-//	                         authenticated caller reads it. Nobody writes it over
-//	                         HTTP: an org id is minted from a validated IAM owner
-//	                         claim, IAM org slugs begin with an alphanumeric, so
-//	                         no principal can ever BE "~catalog".
+//	PublicOrg ("~catalog")   the published, world-readable catalog. Every caller
+//	                         reads it. Nobody can write it: an org id is minted
+//	                         from a validated IAM owner claim and IAM org slugs
+//	                         begin with an alphanumeric, so no principal can ever
+//	                         BE "~catalog".
 //	the caller's own org     their private projects, read with principal.Org and
 //	                         nothing else — never a request field (HIP-0026).
 //
 // A customer's private project is a row in their own org's `catalog` index. It
 // cannot appear in another tenant's results because the query that would return
-// it is never run for them. Publishing to the public corpus is a SuperAdmin
-// write (PUT /v1/catalog), so a tenant cannot promote their own row into it.
+// it is never run for them. Nothing PUBLISHES over HTTP either: the published
+// corpus is reconciled in-process from sources that are public by construction
+// (sync.go), so no credential exists that could promote a tenant row into it.
 //
 // Surface:
 //
 //	GET /v1/catalog   search + browse: ?q= &org= &archetype= &language= &forkable=
-//	PUT /v1/catalog   replace the published corpus (SuperAdmin) — full swap, prunes
+//
+// There is no write route. The corpus reconciles itself (sync.go), which is why
+// there is no credential that could publish into the published catalog at all.
 package catalog
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/index"
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/clients/projects"
 	"github.com/zap-proto/zip"
 )
 
@@ -103,14 +109,36 @@ type counts map[string]int
 
 type state struct{}
 
-// Mount wires the lens. No store, no DataDir: the corpus is the index's.
+// Mount wires the lens and starts the corpus reconcile. No store, no DataDir:
+// the corpus is the index's, and the sync is a goroutine, not an endpoint.
 func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "catalog", func(cloud.Base) (state, error) { return state{}, nil }, routes)
+	return cloud.Mount(app, deps, "catalog", build, routes)
+}
+
+func build(b cloud.Base) (state, error) {
+	go loop(b)
+	return state{}, nil
 }
 
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/catalog", cloud.Handle(s, browse))
-	app.Put("/v1/catalog", cloud.Handle(s, publish))
+}
+
+// loop reconciles the corpus on a timer, first pass delayed so a boot never waits
+// on the network. Failures are logged and retried at the next tick: a stale
+// catalog is a far better answer than an empty one.
+func loop(b cloud.Base) {
+	for t := time.NewTimer(firstAfter); ; t.Reset(every) {
+		<-t.C
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		kept, pruned, err := run(ctx)
+		cancel()
+		if err != nil {
+			b.Log.Warn("catalog sync", "err", err, "published", kept)
+			continue
+		}
+		b.Log.Info("catalog synced", "published", kept, "pruned", pruned)
+	}
 }
 
 // browse answers search AND browse. The lexical index does relevance over the
@@ -220,39 +248,22 @@ func intQuery(c *zip.Ctx, name string, def int) int {
 	return n
 }
 
-// publish REPLACES the published corpus. SuperAdmin only, and a full swap: the
-// catalog mirrors upstream sources (a git forge, the sites table), so a sync must
-// converge and a deleted project must leave. An org publishing its OWN private
-// entries does not come here — it writes its own org's `catalog` index through
-// the Meilisearch dialect, which is already org-scoped.
-func publish(s *cloud.Service[state], c *zip.Ctx) error {
-	if !principal.IsSuperAdmin(c) {
-		return zip.ErrForbidden("catalog: publishing the cross-org catalog is a platform operation")
-	}
-	if !index.Ready() {
-		return zip.Errorf(http.StatusServiceUnavailable, "catalog: index not mounted")
-	}
-	var in struct {
-		Entries []Entry `json:"entries"`
-	}
-	if err := c.Bind(&in); err != nil {
-		return zip.ErrBadRequest("catalog: invalid body")
-	}
-	docs := make([]map[string]any, 0, len(in.Entries))
-	for _, e := range in.Entries {
-		if e.ID == "" || e.Org == "" {
-			continue // an unkeyed row would be a document the swap can never prune
+// The two seams sync writes and reads through, as package vars so the reconcile
+// is testable without a live GitHub and the site source without a store.
+var (
+	reconcile = func(ctx context.Context, org string, rows []Entry) (int, int, error) {
+		docs := make([]map[string]any, 0, len(rows))
+		for _, e := range rows {
+			if e.ID == "" || e.Org == "" {
+				continue // an unkeyed row is one the next swap could never prune
+			}
+			e.Scope = "" // provenance is stamped on READ; storing it would freeze it
+			var doc map[string]any
+			raw, _ := json.Marshal(e)
+			_ = json.Unmarshal(raw, &doc)
+			docs = append(docs, doc)
 		}
-		e.Scope = ""
-		var doc map[string]any
-		raw, _ := json.Marshal(e)
-		_ = json.Unmarshal(raw, &doc)
-		docs = append(docs, doc)
+		return index.Reconcile(ctx, org, uid, pk, docs)
 	}
-	kept, removed, err := index.Reconcile(c.Context(), PublicOrg, uid, pk, docs)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "catalog: %v", err)
-	}
-	s.Log.Info("catalog published", "entries", kept, "pruned", removed)
-	return c.JSON(http.StatusOK, map[string]any{"published": kept, "pruned": removed})
-}
+	liveSites = projects.LiveSites
+)
