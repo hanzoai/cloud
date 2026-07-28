@@ -2,7 +2,9 @@ package infra
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +25,11 @@ import (
 // as unreachable, which fails the completeness gate — the safe direction.
 const clusterScanTimeout = 45 * time.Second
 
+// nodeStatsFanout bounds the per-cluster kubelet fan-out. Each read is one small JSON
+// document through the apiserver's node proxy, so this bounds pressure on the apiserver,
+// not local work.
+const nodeStatsFanout = 16
+
 // kube opens an authenticated client for one DOKS cluster. DO hands back a
 // token-based kubeconfig against the cluster's public https endpoint; it still goes
 // through fleet.SafeRESTConfig, the ONE gate that rejects exec-credential plugins and
@@ -37,6 +44,15 @@ func kube(ctx context.Context, do *digitalocean.Client, clusterID string) (*kube
 		return nil, err
 	}
 	cfg.Timeout = clusterScanTimeout
+	// client-go's default limiter is 5 QPS / burst 10, which was fine when a scan was
+	// five List calls but throttles the per-node kubelet fan-out: a 17-node cluster spent
+	// over a second queued, and at 100 nodes the queue alone would approach the scan
+	// timeout. Readings lost that way fail SAFE (the volume renders unmeasured) — which
+	// is exactly why it must be fixed rather than tolerated: it would quietly shrink the
+	// measured set as the fleet grows, with nothing but the coverage line to show for it.
+	// The read count is known and bounded (a handful of Lists plus one call per node), so
+	// the real concurrency bound is nodeStatsFanout, not this.
+	cfg.QPS, cfg.Burst = 50, 100
 	return kubernetes.NewForConfig(cfg)
 }
 
@@ -132,7 +148,114 @@ func scanOne(ctx context.Context, do *digitalocean.Client, clusterID string) Clu
 			Schedulable: !n.Spec.Unschedulable,
 		})
 	}
+
+	// Fill is read LAST and cannot fail the scan — see volumeUsage. Every read the
+	// safety verdict depends on has already succeeded by this point, so a slow or
+	// missing kubelet costs a metric, never a mutation.
+	s.Usage = volumeUsage(ctx, cs, s.Nodes)
 	return s
+}
+
+// volumeUsage reads every kubelet's stats/summary and returns one row per mounted PVC.
+//
+// This is the ONLY source of fill on this board. DigitalOcean does not expose how full a
+// volume is, and metrics-server is absent from most of our clusters — but every kubelet
+// serves stats/summary unconditionally, so this works on all of them.
+//
+// ERRORS ARE DROPPED, DELIBERATELY. Fill is advisory: no safety verdict depends on it, so
+// a kubelet that will not answer must not fail the scan — that would block every mutation
+// on the fleet over a metric. Its volumes simply get NO ROW, and a volume with no row is
+// carried to the screen as unmeasured, which is a different fact from empty.
+func volumeUsage(ctx context.Context, cs *kubernetes.Clientset, nodes []NodeState) []VolumeUsage {
+	var (
+		mu   sync.Mutex
+		wg   sync.WaitGroup
+		used = map[[2]string]int64{}
+		sem  = make(chan struct{}, nodeStatsFanout)
+	)
+	for _, n := range nodes {
+		wg.Add(1)
+		go func(node string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			raw, err := cs.CoreV1().RESTClient().Get().
+				Resource("nodes").Name(node).SubResource("proxy").
+				Suffix("stats", "summary").DoRaw(ctx)
+			if err != nil {
+				return
+			}
+			var sum struct {
+				Pods []struct {
+					Volume []struct {
+						PVCRef *struct {
+							Namespace string `json:"namespace"`
+							Name      string `json:"name"`
+						} `json:"pvcRef"`
+						UsedBytes int64 `json:"usedBytes"`
+					} `json:"volume"`
+				} `json:"pods"`
+			}
+			if json.Unmarshal(raw, &sum) != nil {
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			for _, p := range sum.Pods {
+				for _, v := range p.Volume {
+					if v.PVCRef == nil {
+						continue
+					}
+					k := [2]string{v.PVCRef.Namespace, v.PVCRef.Name}
+					// Two kubelets can report the same claim — ReadWriteMany, or a rollout
+					// with both pods briefly alive. Keep the LARGEST reading: more used
+					// means less waste claimed, the same conservative direction the rest of
+					// this package takes.
+					if v.UsedBytes > used[k] {
+						used[k] = v.UsedBytes
+					}
+				}
+			}
+		}(n.Name)
+	}
+	wg.Wait()
+
+	out := make([]VolumeUsage, 0, len(used))
+	for k, b := range used {
+		out = append(out, VolumeUsage{Namespace: k[0], Name: k[1], UsedBytes: b})
+	}
+	// Map order is not stable; the scan's output is. Analyze folds this into a map and
+	// does not care, but a reproducible scan is worth one sort.
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Namespace != out[j].Namespace {
+			return out[i].Namespace < out[j].Namespace
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+// ExpandPVC grows a PersistentVolumeClaim.
+//
+// This is the ONE correct way to grow a volume Kubernetes manages: the resize controller
+// acts on the CLAIM, growing the backing cloud device and then the filesystem on it, so
+// claim, PV, device and filesystem all end up agreeing. Growing the device through the
+// DigitalOcean API instead would leave the claim and the PV declaring the old capacity
+// and the filesystem never grown at all — three sources of truth, two of them wrong.
+//
+// The StorageClass must set allowVolumeExpansion; when it does not, the apiserver refuses
+// the patch and its message is surfaced verbatim rather than worked around.
+func ExpandPVC(ctx context.Context, do *digitalocean.Client, clusterID, ns, name string, gib int) error {
+	cs, err := kube(ctx, do, clusterID)
+	if err != nil {
+		return err
+	}
+	patch := fmt.Sprintf(`{"spec":{"resources":{"requests":{"storage":"%dGi"}}}}`, gib)
+	if _, err := cs.CoreV1().PersistentVolumeClaims(ns).Patch(
+		ctx, name, types.MergePatchType, []byte(patch), metav1.PatchOptions{}); err != nil {
+		return fmt.Errorf("expand pvc %s/%s: %w", ns, name, err)
+	}
+	return nil
 }
 
 // volumeHandle extracts the backing DO volume ID a PV claims. Deliberately NOT
@@ -199,6 +322,15 @@ func podRefOf(p corev1.Pod) PodRef {
 	for _, v := range p.Spec.Volumes {
 		if v.PersistentVolumeClaim != nil {
 			r.Claims = append(r.Claims, v.PersistentVolumeClaim.ClaimName)
+		}
+	}
+	// The controlling owner names the workload that has to be edited to right-size this
+	// pod's volumes, and its KIND decides how: a StatefulSet's volumeClaimTemplates are
+	// immutable, so the workload itself must be recreated around the swap. See
+	// shrinkRecipe, which is the only consumer.
+	for _, o := range p.OwnerReferences {
+		if o.Controller != nil && *o.Controller {
+			r.Controller = o.Kind + "/" + o.Name
 		}
 	}
 	for _, c := range p.Spec.InitContainers {
