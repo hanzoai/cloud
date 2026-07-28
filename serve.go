@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/apps/sites"
+	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/openapi"
@@ -495,6 +495,21 @@ func Serve(specs []MountSpec, enable []string) error {
 	// first-party and no second origin / CORS is involved. See webui.go.
 	if err := mountConsole(app); err != nil {
 		return fmt.Errorf("console: %w", err)
+	}
+
+	// Internal plane: native ZAP over this app's unix socket (rpc.go). Served
+	// for every mounted app name — methods Exposed during Mount are live by now —
+	// so Dial(app) resolving a socket always means "the app is up", and an up app
+	// answering 404 means version skew: two different, diagnosable facts.
+	for _, sp := range specs {
+		if sp.Name == "" {
+			continue
+		}
+		if c, err := Listen(sp.Name, deps.Logger); err != nil {
+			deps.Logger.Warn("rpc: socket not served", "app", sp.Name, "err", err)
+		} else {
+			defer func() { _ = c.Close() }()
+		}
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

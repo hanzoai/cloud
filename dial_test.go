@@ -1,126 +1,143 @@
 package cloud
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
-	"net"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// serveSock stands an app up on its well-known socket and returns nothing —
-// Dial finds it by path, which is the whole point of the convention.
-func serveSock(t *testing.T, app string, h http.Handler) {
+// dial_test.go proves the internal plane end to end: real frames over a real
+// unix socket, no HTTP and no JSON anywhere in the path.
+
+// hdr is the test stand-in for the sliver of a request As needs.
+type hdr map[string]string
+
+func (h hdr) Header(k string) string { return h[k] }
+
+// serve exposes the given methods and listens on app's socket in a temp run
+// dir. The registry is process-global, so each test uses its own method names.
+func serve(t *testing.T, app string, names map[string]Method) {
 	t.Helper()
-	dir := t.TempDir()
-	t.Setenv(runDirEnv, dir)
-	ln, err := net.Listen("unix", filepath.Join(dir, app+".sock"))
+	t.Setenv(runDirEnv, t.TempDir())
+	for n, m := range names {
+		Expose(n, m)
+	}
+	c, err := Listen(app, nil)
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	srv := &http.Server{Handler: h}
-	go func() { _ = srv.Serve(ln) }()
-	t.Cleanup(func() { _ = srv.Close() })
+	t.Cleanup(func() { _ = c.Close() })
 }
 
-// TestDialPrefersTheSocket: a co-located app is reached over the socket and the
-// call never touches the network. This is the case that replaces an import.
-func TestDialPrefersTheSocket(t *testing.T) {
-	var gotOrg, gotPath string
-	serveSock(t, "treasury", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotOrg, gotPath = r.Header.Get("X-Org-Id"), r.URL.Path
-		_ = json.NewEncoder(w).Encode(map[string]any{"cents": 4200})
-	}))
-
-	p := Dial("treasury")
-	if !p.Local() {
-		t.Fatal("a co-located app must resolve to its socket, not the internet")
+// TestCallMovesBytesUntouched is the property this plane exists for: the
+// payload is opaque to the transport, so the bytes the callee returns are the
+// bytes the caller reads — no re-encode, no translation layer, nothing between
+// the two memories but the socket.
+func TestCallMovesBytesUntouched(t *testing.T) {
+	serve(t, "echo", map[string]Method{
+		"echo.raw": func(_ context.Context, _ Ident, req []byte) ([]byte, error) {
+			return req, nil
+		},
+	})
+	// Arbitrary bytes, deliberately not text and not valid JSON or ZAP: the
+	// transport must not care.
+	in := []byte{0x00, 0xff, 0x7f, 0x80, 'z', 0x00, 0x01, 0xfe, 0x00}
+	out, err := Dial("echo").Call(context.Background(), "echo.raw", in)
+	if err != nil {
+		t.Fatalf("call: %v", err)
 	}
-	var out struct {
-		Cents int64 `json:"cents"`
-	}
-	if err := p.Get(context.Background(), "hanzo", "/v1/treasury/reserve", &out); err != nil {
-		t.Fatalf("get: %v", err)
-	}
-	if out.Cents != 4200 {
-		t.Fatalf("cents = %d, want 4200 — a real number, not the zero an import returned", out.Cents)
-	}
-	if gotPath != "/v1/treasury/reserve" {
-		t.Fatalf("path = %q", gotPath)
-	}
-	// The caller's org rides along so the callee scopes the answer itself; a peer
-	// call is never implicitly privileged.
-	if gotOrg != "hanzo" {
-		t.Fatalf("X-Org-Id = %q, want hanzo", gotOrg)
+	if !bytes.Equal(out, in) {
+		t.Fatalf("payload changed in transit:\n in  %x\n out %x", in, out)
 	}
 }
 
-// TestDialFallsBackToTheNetwork: no socket means the app is not co-located, so
-// the same call goes out over the network with no change at the call site.
-func TestDialFallsBackToTheNetwork(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"cents": 7})
-	}))
-	defer srv.Close()
+// TestIdentityRidesTheCapability: the delegated principal travels in the
+// envelope's capability slot and arrives as a value — the callee never parses
+// headers, and a caller with no principal arrives anonymous rather than as an
+// empty claim.
+func TestIdentityRidesTheCapability(t *testing.T) {
+	var got Ident
+	serve(t, "who", map[string]Method{
+		"who.ami": func(_ context.Context, who Ident, _ []byte) ([]byte, error) {
+			got = who
+			return nil, nil
+		},
+	})
 
-	t.Setenv(runDirEnv, t.TempDir()) // empty: nothing co-located
-	t.Setenv(remoteEnv, srv.URL)
+	caller := hdr{
+		"X-Org-Id": "hanzo", "X-User-Id": "u_z", "X-User-IsAdmin": "true",
+	}
+	if _, err := Dial("who").As(caller).Call(context.Background(), "who.ami", nil); err != nil {
+		t.Fatalf("call: %v", err)
+	}
+	if got.Org != "hanzo" || got.User != "u_z" || !got.Admin {
+		t.Fatalf("principal arrived as %+v", got)
+	}
 
-	p := Dial("treasury")
-	if p.Local() {
-		t.Fatal("with no socket present the peer must not claim to be local")
+	if _, err := Dial("who").Call(context.Background(), "who.ami", nil); err != nil {
+		t.Fatalf("anonymous call: %v", err)
 	}
-	var out struct {
-		Cents int64 `json:"cents"`
-	}
-	if err := p.Get(context.Background(), "hanzo", "/v1/treasury/reserve", &out); err != nil {
-		t.Fatalf("get: %v", err)
-	}
-	if out.Cents != 7 {
-		t.Fatalf("cents = %d, want 7", out.Cents)
+	if got != (Ident{}) {
+		t.Fatalf("an undelegated call must arrive anonymous, got %+v", got)
 	}
 }
 
-// TestPeerFailureIsLoud is the whole reason this replaces the imports. A
-// cross-app read that cannot be served must ERROR, not hand back a zero value —
-// silently returning 0 is exactly how admin's money board went blank while
-// still compiling.
-func TestPeerFailureIsLoud(t *testing.T) {
-	serveSock(t, "treasury", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
-	var out struct {
-		Cents int64 `json:"cents"`
-	}
-	err := Dial("treasury").Get(context.Background(), "hanzo", "/v1/treasury/reserve", &out)
+// TestFaultCarriesItsStatus: a refusal arrives with the exact status the method
+// chose and the method's own words — 402 is "unfunded", not a generic failure,
+// and never a zero value.
+func TestFaultCarriesItsStatus(t *testing.T) {
+	serve(t, "till", map[string]Method{
+		"till.take": func(_ context.Context, _ Ident, _ []byte) ([]byte, error) {
+			return nil, Fault(402, "unfunded")
+		},
+	})
+	_, err := Dial("till").Call(context.Background(), "till.take", nil)
 	if err == nil {
-		t.Fatal("an unreachable peer must be an error, never a silent zero")
+		t.Fatal("a refused call must be an error")
 	}
-	if out.Cents != 0 {
-		t.Fatal("nothing should have been decoded")
+	if !strings.Contains(err.Error(), "402") || !strings.Contains(err.Error(), "unfunded") {
+		t.Fatalf("refusal lost its status or its words: %v", err)
 	}
 }
 
-// TestUnreachablePeerNamesItsTransport: when a call fails, the message has to
-// say whether we could not reach a SOCKET or could not reach the internet —
-// those have completely different fixes.
-func TestUnreachablePeerNamesItsTransport(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv(runDirEnv, dir)
-	// A socket file that nothing is listening on: present, so Dial goes local,
-	// and then the connect fails.
-	if err := os.WriteFile(filepath.Join(dir, "ghost.sock"), nil, 0o600); err != nil {
-		t.Fatalf("seed: %v", err)
+// TestUnknownMethodIsNotSilence: a live app answering a method it does not
+// serve is version skew — a 404 with the method named by the caller, distinct
+// from "app not running".
+func TestUnknownMethodIsNotSilence(t *testing.T) {
+	serve(t, "sparse", map[string]Method{
+		"sparse.only": func(_ context.Context, _ Ident, _ []byte) ([]byte, error) { return nil, nil },
+	})
+	_, err := Dial("sparse").Call(context.Background(), "sparse.other", nil)
+	if err == nil || !strings.Contains(err.Error(), "404") {
+		t.Fatalf("unknown method must answer 404, got: %v", err)
 	}
-	err := Dial("ghost").Get(context.Background(), "hanzo", "/v1/x", nil)
+}
+
+// TestNoSocketNamesThePath: "that app is not running here" is an error naming
+// the socket it looked for — the diagnosis is in the message, and there is no
+// second transport to fall back to.
+func TestNoSocketNamesThePath(t *testing.T) {
+	t.Setenv(runDirEnv, t.TempDir())
+	_, err := Dial("ghost").Call(context.Background(), "ghost.read", nil)
 	if err == nil {
-		t.Fatal("want an error")
+		t.Fatal("a missing socket must be an error, never a zero value")
 	}
-	if !strings.Contains(err.Error(), "uds") {
-		t.Fatalf("error must name the transport it tried, got: %v", err)
+	if !strings.Contains(err.Error(), "ghost.sock") {
+		t.Fatalf("error must name the socket it tried: %v", err)
+	}
+}
+
+// TestScalarRoundTrip: the interim scalar payload helpers carry an int64 as a
+// ZAP message — negative values included — with no JSON anywhere.
+func TestScalarRoundTrip(t *testing.T) {
+	for _, v := range []int64{0, 1, -1, 4200, -913 << 40} {
+		got, err := I64(PutI64(v))
+		if err != nil {
+			t.Fatalf("I64(%d): %v", v, err)
+		}
+		if got != v {
+			t.Fatalf("round trip %d -> %d", v, got)
+		}
 	}
 }
