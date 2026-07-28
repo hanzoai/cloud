@@ -1,7 +1,6 @@
 package sites
 
 import (
-	"sort"
 	"strings"
 	"sync"
 )
@@ -92,26 +91,4 @@ func IsReserved(label string) bool {
 	ok := extraReserved[label]
 	reservedMu.RUnlock()
 	return ok
-}
-
-// ReservedLabels returns the sorted union of baked-in and operator-configured
-// reserved labels (the empty apex label omitted). Exposed for diagnostics / tests.
-func ReservedLabels() []string {
-	reservedMu.RLock()
-	defer reservedMu.RUnlock()
-	set := make(map[string]bool, len(baseReserved)+len(extraReserved))
-	for l := range baseReserved {
-		if l != "" {
-			set[l] = true
-		}
-	}
-	for l := range extraReserved {
-		set[l] = true
-	}
-	out := make([]string, 0, len(set))
-	for l := range set {
-		out = append(out, l)
-	}
-	sort.Strings(out)
-	return out
 }

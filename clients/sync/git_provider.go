@@ -70,7 +70,7 @@ func resolve(sy Sync, ev Event) act {
 	if !dirPulls(sy.Direction) {
 		return act{}
 	}
-	if ev.Branch == "" || ev.After == "" {
+	if ev.Ref == "" || ev.After == "" {
 		return act{}
 	}
 	return act{do: true, inbound: true}
@@ -94,7 +94,7 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 		// Advance the pushed branch fast-forward only; a diverged native ref is a
 		// Conflict (preserved) and an up-to-date ref is a no-op — both "no change".
 		res, err := cloud.InboundGitSync(ctx, cloud.GitInboundReq{
-			Org: owner, Repo: native, Branch: ev.Branch,
+			Org: owner, Repo: native, Ref: ev.Ref,
 			CloneURL: source, Token: tok, Origin: hostOf(source),
 		})
 		if err != nil {
