@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/sync"
+	"github.com/hanzoai/cloud/apps/sync"
 )
 
 // Standalone entry for the sync app.

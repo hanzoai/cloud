@@ -11,7 +11,7 @@ include $(ROOT)/mk/go.mk
 # The apps, read from the Makefiles themselves. Those are generated from
 # apps.Wire() alongside cmd/<app>/main.go, so globbing them reads the same single
 # source of truth the mains do — no second list to fall out of step.
-APPDIRS := $(patsubst %/Makefile,%,$(wildcard $(ROOT)/clients/*/Makefile))
+APPDIRS := $(patsubst %/Makefile,%,$(wildcard $(ROOT)/apps/*/Makefile))
 
 # Three apps in the manifest have a cmd/<app> here and no source directory: they
 # are external modules (hanzoai/authz, hanzoai/licensing, hanzoai/metrics) wired

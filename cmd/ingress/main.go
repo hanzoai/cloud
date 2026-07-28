@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/ingress"
+	"github.com/hanzoai/cloud/apps/ingress"
 )
 
 // Standalone entry for the ingress app.

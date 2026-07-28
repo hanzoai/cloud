@@ -26,8 +26,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/clients/metering"
-	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/apps/principal"
 	model "github.com/hanzoai/iam/pkg/model"
 	"github.com/zap-proto/zip"
 )

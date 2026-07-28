@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/notify"
+	"github.com/hanzoai/cloud/apps/notify"
 )
 
 // Standalone entry for the notify app.

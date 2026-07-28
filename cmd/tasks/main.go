@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/tasks"
+	"github.com/hanzoai/cloud/apps/tasks"
 )
 
 // Standalone entry for the tasks app.

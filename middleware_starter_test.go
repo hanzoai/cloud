@@ -25,8 +25,8 @@ import (
 	"testing"
 
 	"github.com/hanzoai/account"
-	"github.com/hanzoai/cloud/clients/finance"
-	"github.com/hanzoai/cloud/clients/money"
+	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/apps/money"
 	"github.com/hanzoai/cloud/types"
 	"github.com/hanzoai/commerce/billing/creditledger"
 	"github.com/zap-proto/zip"

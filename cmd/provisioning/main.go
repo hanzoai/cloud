@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/provisioning"
+	"github.com/hanzoai/cloud/apps/provisioning"
 )
 
 // Standalone entry for the provisioning app.

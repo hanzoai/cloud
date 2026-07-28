@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/bot"
+	"github.com/hanzoai/cloud/apps/bot"
 )
 
 // Standalone entry for the bot app.

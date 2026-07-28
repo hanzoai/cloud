@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/translate"
+	"github.com/hanzoai/cloud/apps/translate"
 )
 
 // Standalone entry for the translate app.

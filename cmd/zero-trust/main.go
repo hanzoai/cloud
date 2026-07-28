@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/zt"
+	"github.com/hanzoai/cloud/apps/zt"
 )
 
 // Standalone entry for the zero-trust app.
