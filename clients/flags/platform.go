@@ -25,7 +25,6 @@ func init() {
 		// ── Subsystem activation (boot-time; applying a flip needs an operator reconcile) ──
 		{Key: "subsystem_iam_active", Category: "Subsystems", Label: "IAM (canary auth cutover)", Desc: "Serve identity from the embedded clean-room iam-v2 (zip-native, beego-free; the Casdoor iam-v1 embed is retired). CANARY-GATED staged auth cutover; applied at boot via CLOUD_ENABLE. Gate before flipping: the IAM cutover parity suite (universe e2e/50-iam-cutover-parity) must be green.", Type: TypeBool, Default: "false", ReadOnly: true},
 		{Key: "subsystem_ingress_active", Category: "Subsystems", Label: "Ingress edge", Desc: "Serve the embedded ingress edge (routes/TLS/ACME). Applied at boot via CLOUD_ENABLE.", Type: TypeBool, Default: "false", ReadOnly: true},
-		{Key: "subsystem_pubsub_active", Category: "Subsystems", Label: "PubSub (NATS+JetStream)", Desc: "Serve the embedded messaging plane. Applied at boot via CLOUD_PUBSUB_ENABLED.", Type: TypeBool, Env: "CLOUD_PUBSUB_ENABLED", Default: "false", ReadOnly: true},
 
 		// ── Gateway (full rate-limit / quota / CORS config lives at /v1/gateway) ──
 		{Key: "gateway_rate_limit_rpm", Category: "Gateway", Label: "Rate limit (req/min)", Desc: "Default per-key request rate limit. Full CORS / quota config lives at /v1/gateway.", Type: TypeInt, Default: "0"},
