@@ -24,7 +24,7 @@ func TestMigrateAddsMediaColumnToOldPosts(t *testing.T) {
 	// Seed a prod-shaped OLD DB: social_posts WITH the publish-state columns but
 	// WITHOUT media, plus an existing row — exactly what a pre-media prod deployment
 	// holds. Written through cek so the on-disk format matches what openStore reads.
-	raw, err := cek.Open(path)
+	raw, err := cek.Open(cek.Global, path)
 	if err != nil {
 		t.Fatalf("cek.Open (seed old db): %v", err)
 	}

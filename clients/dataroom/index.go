@@ -25,7 +25,7 @@ func openLinkIndex(dataDir string) (*linkIndex, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("dataroom: mkdir %s: %w", dir, err)
 	}
-	db, err := cek.Open(filepath.Join(dir, "link_index.db"))
+	db, err := cek.Open(cek.Global, filepath.Join(dir, "link_index.db"))
 	if err != nil {
 		return nil, fmt.Errorf("dataroom: open link index: %w", err)
 	}

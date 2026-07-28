@@ -67,7 +67,7 @@ func (s *docStore) db(org, workspace string) (*sql.DB, error) {
 	}
 	journal := env("SQLITE_JOURNAL_MODE", "WAL") // DELETE/TRUNCATE on FUSE/S3 mounts
 	path := filepath.Join(dir, seg(workspace)+".db")
-	db, err := cek.Open(path)
+	db, err := cek.Open(cek.Global, path)
 	if err != nil {
 		return nil, err
 	}

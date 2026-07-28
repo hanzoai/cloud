@@ -23,7 +23,7 @@ func TestMigrateUpgradesOldCampaignsTable(t *testing.T) {
 	// Seed a prod-shaped OLD DB: marketing_campaigns WITHOUT scheduled_at, plus an
 	// existing row — exactly what a pre-scheduling prod deployment holds. Written
 	// through cek so the on-disk format matches what openStore reads back.
-	raw, err := cek.Open(path)
+	raw, err := cek.Open(cek.Global, path)
 	if err != nil {
 		t.Fatalf("cek.Open (seed old db): %v", err)
 	}

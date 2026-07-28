@@ -52,7 +52,7 @@ type MCPServerStore struct {
 
 // OpenMCPServerStore opens (and migrates) the external-server store at path.
 func OpenMCPServerStore(path string) (*MCPServerStore, error) {
-	db, err := cek.Open(path)
+	db, err := cek.Open(cek.Global, path)
 	if err != nil {
 		return nil, fmt.Errorf("tools: open mcp-server store %q: %w", path, err)
 	}

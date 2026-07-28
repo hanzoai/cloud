@@ -23,12 +23,12 @@ func TestInMemoryNeverTouchesDisk(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(wd) })
 
 	for _, dsn := range []string{":memory:", "file::memory:", "file:x?mode=memory&cache=shared"} {
-		db, err := Open(dsn)
+		db, err := Open(Global, dsn)
 		if err != nil {
-			t.Fatalf("Open(%q): %v", dsn, err)
+			t.Fatalf("Open(Global, %q): %v", dsn, err)
 		}
 		if _, err := db.Exec(`CREATE TABLE t (v TEXT)`); err != nil {
-			t.Fatalf("Open(%q): unusable: %v", dsn, err)
+			t.Fatalf("Open(Global, %q): unusable: %v", dsn, err)
 		}
 		_ = db.Close()
 	}

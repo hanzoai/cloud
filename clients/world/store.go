@@ -56,7 +56,7 @@ type PipelineStore struct {
 }
 
 func openPipelineStore(path string) (*PipelineStore, error) {
-	db, err := cek.Open(path)
+	db, err := cek.Open(cek.Global, path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}

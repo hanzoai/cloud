@@ -50,7 +50,7 @@ type SettingsStore struct {
 }
 
 func openSettingsStore(path string) (*SettingsStore, error) {
-	db, err := cek.Open(path)
+	db, err := cek.Open(cek.Global, path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}

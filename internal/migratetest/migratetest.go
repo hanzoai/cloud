@@ -46,7 +46,7 @@ func (c Case) Run(t *testing.T) {
 
 	// Stand up the legacy schema exactly as a pre-migration prod DB has it, using
 	// the SAME driver the store opens with.
-	raw, err := cek.Open(path)
+	raw, err := cek.Open(cek.Global, path)
 	if err != nil {
 		t.Fatalf("%s: open legacy db: %v", c.Name, err)
 	}

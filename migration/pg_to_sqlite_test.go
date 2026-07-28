@@ -162,7 +162,7 @@ CREATE TABLE legacy_audit (
 	// Stronger check — count rows in the per-user file.
 	// Read through cek: the dst files the migration writes are encrypted at rest,
 	// so a bare sql.Open cannot read them.
-	dst1, err := cek.Open(filepath.Join(dstRoot, "hanzo", "z@hanzo.ai", "cloud.sqlite"))
+	dst1, err := cek.Open(cek.Global, filepath.Join(dstRoot, "hanzo", "z@hanzo.ai", "cloud.sqlite"))
 	if err != nil {
 		t.Fatalf("open dst1: %v", err)
 	}
@@ -176,7 +176,7 @@ CREATE TABLE legacy_audit (
 	}
 
 	// org_settings row should land under _org sentinel.
-	dst2, err := cek.Open(filepath.Join(dstRoot, "hanzo", "_org", "cloud.sqlite"))
+	dst2, err := cek.Open(cek.Global, filepath.Join(dstRoot, "hanzo", "_org", "cloud.sqlite"))
 	if err != nil {
 		t.Fatalf("open dst2: %v", err)
 	}
@@ -190,7 +190,7 @@ CREATE TABLE legacy_audit (
 	}
 
 	// legacy_audit row should land under the _global sentinel.
-	dst3, err := cek.Open(filepath.Join(dstRoot, "_global", "_org", "cloud.sqlite"))
+	dst3, err := cek.Open(cek.Global, filepath.Join(dstRoot, "_global", "_org", "cloud.sqlite"))
 	if err != nil {
 		t.Fatalf("open dst3: %v", err)
 	}
