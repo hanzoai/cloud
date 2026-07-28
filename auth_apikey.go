@@ -40,7 +40,8 @@ type iamKeys struct {
 	base  string
 	auth  string // client_secret_basic, or "" when unconfigured
 	http  *http.Client
-	cache cache[string, *idClaims]
+	cache cache[string, *idClaims] // secret key -> principal (get-user?accessKey)
+	orgs  cache[string, string]    // publishable key -> org, and no principal (resolve-key)
 }
 
 // newIAMKeys reads the same IAM env clients/account does. With no confidential
@@ -52,6 +53,7 @@ func newIAMKeys() *iamKeys {
 		auth:  iamCred(),
 		http:  &http.Client{Timeout: 5 * time.Second},
 		cache: newCache[string, *idClaims](60 * time.Second),
+		orgs:  newCache[string, string](60 * time.Second),
 	}
 }
 
@@ -76,10 +78,24 @@ func sharedKeys() *iamKeys {
 // is refused rather than stored.
 const maxKeyOrgLen = 128
 
-// OrgForKey resolves an opaque Hanzo API key (hk-/sk-/pk-/fw_/hz_) to the org it
-// belongs to — the SAME owner org SanitizeIdentity mints when that key arrives as a
-// bearer — through the ONE IAM key seam (get-user?accessKey). It is the exported
-// door a keyed, bearer-less SDK path uses to attribute a project key to a tenant.
+// OrgForKey resolves an opaque Hanzo API key (pk-/sk-/hk-) to the org it belongs
+// to — the SAME owner org SanitizeIdentity mints when that key arrives as a bearer
+// — and is the exported door a keyed, bearer-less SDK path uses to attribute a
+// project key to a tenant.
+//
+// TWO doors in IAM, because a publishable key and a secret key are resolved by
+// different questions and the answers must not be interchangeable:
+//
+//   - a SECRET key (sk-/hk-) asks WHO, and get-user?accessKey answers with the
+//     principal. IAM refuses a pk- there BY DESIGN (store.UserByAccessKey), which
+//     is right and was also the bug: cloud sent every prefix down this one door, so
+//     a publishable key resolved to nothing and the ingest path it exists for could
+//     never attribute a beacon. A publishable key that resolves to nobody is a
+//     publishable key that does not work.
+//   - a PUBLISHABLE key (pk-) asks WHICH ORG, and resolve-key answers with the org
+//     and nothing else — no user, no email, no admin bit. That is the property that
+//     makes it safe to ship in client JS, so it is a separate door with its own
+//     narrower capability (CapPublishableResolve), not a flag on the first.
 //
 // FAILS CLOSED: ("", false) for a non-key-shaped string, an unknown/unresolvable
 // key, an unconfigured resolver, or an out-of-bounds org — never a fabricated or
@@ -90,11 +106,13 @@ func OrgForKey(ctx context.Context, key string) (string, bool) {
 	if !isAPIKey(key) {
 		return "", false
 	}
-	claims := sharedKeys().resolve(ctx, key)
-	if claims == nil {
-		return "", false
+	var owner string
+	if IsPublishableKey(key) {
+		owner = sharedKeys().resolveOrg(ctx, key)
+	} else if claims := sharedKeys().resolve(ctx, key); claims != nil {
+		owner = claims.Owner
 	}
-	owner := strings.TrimSpace(claims.Owner)
+	owner = strings.TrimSpace(owner)
 	if owner == "" || len(owner) > maxKeyOrgLen {
 		return "", false
 	}
@@ -136,6 +154,57 @@ func (k *iamKeys) resolve(ctx context.Context, key string) *idClaims {
 	c := k.lookup(ctx, key)
 	k.cache.put(key, c)
 	return c
+}
+
+// resolveOrg resolves a PUBLISHABLE key to the org that holds it, and to nothing
+// else. "" for an unknown/expired/non-publishable key or an unconfigured resolver.
+//
+// It shares this resolver's credential and cache shape but NOT its cache: the two
+// doors answer different questions, and one map keyed only on the key string would
+// let a pk- entry read as a principal or a sk- entry read as a bare org. The values
+// are different types precisely so they cannot be confused.
+func (k *iamKeys) resolveOrg(ctx context.Context, key string) string {
+	if k.auth == "" || k.base == "" || key == "" {
+		return ""
+	}
+	if org, ok := k.orgs.get(key); ok {
+		return org // may be a cached "" — a valid "unresolvable" answer
+	}
+	org := k.lookupOrg(ctx, key)
+	k.orgs.put(key, org)
+	return org
+}
+
+// lookupOrg performs the authenticated resolve-key call — the ORG-ONLY dual of
+// get-user?accessKey. It reads `org` and deliberately nothing else: the envelope
+// carries no principal, and this function would have nowhere to put one.
+func (k *iamKeys) lookupOrg(ctx context.Context, key string) string {
+	u := k.base + "/v1/iam/resolve-key?" + url.Values{"accessKey": {key}}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("Authorization", k.auth)
+	req.Header.Set("Accept", "application/json")
+	resp, err := k.http.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return ""
+	}
+	var env struct {
+		Status string `json:"status"`
+		Data   *struct {
+			Org string `json:"org"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(raw, &env) != nil || env.Status != "ok" || env.Data == nil {
+		return ""
+	}
+	return strings.TrimSpace(env.Data.Org)
 }
 
 // lookup performs the authenticated get-user?accessKey call and maps the user row

@@ -18,9 +18,10 @@
 // gateway-minted, IAM-verified X-User-Id; a client-forged X-Org-Id on the bearer-less
 // path is refused):
 //
-//	GET    /v1/iam/keys              — whether the caller has a Cloud API key (+ prefix/mtime); no secret.
-//	POST   /v1/iam/keys              — mint/rotate the key; returns { accessKey } ONCE.
-//	DELETE /v1/iam/keys              — revoke the key.
+//	GET    /v1/keys                  — the caller's keys: { keys: [{ type, prefix, createdAt }] }; no secret.
+//	POST   /v1/keys                  — create/rotate a key of { type: publishable | secret }; returns it ONCE.
+//	DELETE /v1/keys                  — revoke the key of that type.
+//	…      /v1/iam/keys              — DEPRECATED aliases of the three above (same handlers).
 //	POST   /v1/iam/onboard           — create the caller's org (+ move them in on first run).
 //	GET    /v1/csrf                  — mint the anti-CSRF token the SPA echoes on money writes (csrf.go).
 //	GET    /v1/embed-status          — brand-app embed entitlement + reachability probe (embed.go).
@@ -52,6 +53,7 @@ package account
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -138,15 +140,34 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) {
 	// GET /v1/csrf issues the anti-CSRF token the embedded SPA echoes as X-CSRF-Token on
 	// every money write (csrf.go). Safe (read-only), same-origin.
 	app.Get("/v1/csrf", cloud.Handle(s, issueCSRFToken))
-	// The caller's own Cloud API key — IAM self-service. These SPECIFIC routes MUST
-	// register before clients/iam's /v1/iam/* wildcard (order 50 > 48) so Fiber's
-	// first-match scan hits the native handler, not the wildcard (TestIAMKeysBeatsWildcard).
+	// The caller's own API keys. ONE noun, the methods carry the operations, and the
+	// key TYPE (publishable | secret) is a FIELD — the concept had four names
+	// (/v1/iam/mint-user-keys, /v1/iam/revoke-user-keys, /v1/iam/keys,
+	// /v1/ingest/keys) and the only honest one 404'd.
+	//
+	// It lives OUTSIDE /v1/iam on purpose, and that is not cosmetic: api.hanzo.ai
+	// routes /v1/iam/* straight to the IAM service (ingress router
+	// api-hanzo-ai-iam-api), so the handler below was UNREACHABLE at the only host
+	// callers use — every request landed on IAM's Guard and 401'd. A key surface
+	// spelled as if it belonged to IAM was answered by IAM. Naming it for the
+	// resource instead of the subsystem that stores it is what makes it reachable.
+	//
 	// Reads are open; every state-changing WRITE is wrapped: requireCSRF blocks a
 	// cross-site ambient-cookie forgery, and rateLimit caps per-IP frequency (cloud is
 	// reachable off-gateway).
-	app.Get("/v1/iam/keys", cloud.Handle(s, getKey))
-	app.Post("/v1/iam/keys", rateLimit(s, s.State.writesRL, requireCSRF(s, cloud.Handle(s, mintKey))))
-	app.Delete("/v1/iam/keys", rateLimit(s, s.State.writesRL, requireCSRF(s, cloud.Handle(s, revokeKey))))
+	app.Get("/v1/keys", cloud.Handle(s, getKey))
+	app.Post("/v1/keys", rateLimit(s, s.State.writesRL, requireCSRF(s, cloud.Handle(s, mintKey))))
+	app.Delete("/v1/keys", rateLimit(s, s.State.writesRL, requireCSRF(s, cloud.Handle(s, revokeKey))))
+	// DEPRECATED alias of /v1/keys, kept because the go:embed console addresses it
+	// directly (src/lib/api/keys.ts, IS_EMBED build) against cloud's own origin,
+	// where it is not shadowed by the edge. The SAME handlers — an alias, never a
+	// second implementation — plus a Deprecation header naming the replacement.
+	// These SPECIFIC routes MUST register before clients/iam's /v1/iam/* wildcard
+	// (order 50 > 48) so Fiber's first-match scan hits the native handler
+	// (TestIAMKeysBeatsWildcard).
+	app.Get("/v1/iam/keys", deprecatedFor("/v1/keys", cloud.Handle(s, getKey)))
+	app.Post("/v1/iam/keys", deprecatedFor("/v1/keys", rateLimit(s, s.State.writesRL, requireCSRF(s, cloud.Handle(s, mintKey)))))
+	app.Delete("/v1/iam/keys", deprecatedFor("/v1/keys", rateLimit(s, s.State.writesRL, requireCSRF(s, cloud.Handle(s, revokeKey)))))
 	app.Post("/v1/iam/onboard", requireCSRF(s, cloud.Handle(s, onboard)))
 	// Console module embed-entitlement + reachability probe (embed.go).
 	app.Get("/v1/embed-status", cloud.Handle(s, embedStatus))
@@ -249,17 +270,66 @@ func resolveCaller(c *zip.Ctx, requireOwner bool) (caller, bool) {
 	return caller{id: id, owner: owner, name: name, username: username}, true
 }
 
-// ── keys (the per-user Cloud API key) ────────────────────────────────────────
+// ── keys (/v1/keys — the caller's own API keys) ───────────────────────────────
 
-type keyStatus struct {
-	HasKey    bool   `json:"hasKey"`
-	KeyPrefix string `json:"keyPrefix,omitempty"`
+// The key TYPES, as the product names them. A key's type says what the key may
+// DO, so it is a field on the one resource, never a path segment and never a
+// separate endpoint:
+//
+//   - secret (sk-) authenticates its holder as the user. Session-equivalent — an
+//     sk- resolves through IAM to a full user row — so it belongs on a server.
+//   - publishable (pk-) identifies only the ORG, so it may be shipped in a browser
+//     bundle. It covers analytics, product insights and error capture as ONE key,
+//     which is why "there is no way to mint one" meant every surface configured its
+//     own thing and error reporting kept a separate DSN.
+const (
+	keyTypeSecret      = "secret"
+	keyTypePublishable = "publishable"
+)
+
+// keyRecord is one key as a caller may see it: what it is, enough of it to
+// recognize, and when it last changed. NEVER secret material — the secret is
+// returned once, by the POST that mints it, and is unreadable afterwards.
+//
+// A publishable key is the exception that proves the rule: `key` carries its FULL
+// value, because a publishable key is public by construction and useless to its
+// holder if they cannot read it back.
+type keyRecord struct {
+	Type      string `json:"type"`
+	Prefix    string `json:"prefix,omitempty"`
+	Key       string `json:"key,omitempty"`
 	CreatedAt string `json:"createdAt,omitempty"`
 }
 
-// getKey reports whether the caller has a Cloud API key, its public prefix, and when
-// the key row last changed — NO secret material. Reads IAM authoritatively (not the
-// session claim, which lags a fresh key). Mirrors GET app/keys/route.ts.
+// keyList is the GET /v1/keys body.
+type keyList struct {
+	Keys []keyRecord `json:"keys"`
+}
+
+// keyType reads the requested type off the request — `?type=` or a {"type":…}
+// body — and defaults to secret, which is what every existing caller means.
+// An unrecognized value is refused rather than defaulted: a caller asking for a
+// browser-safe key must never be handed a session-equivalent secret by accident.
+func keyType(c *zip.Ctx) (string, bool) {
+	t := strings.TrimSpace(c.Query("type"))
+	if t == "" {
+		var body struct {
+			Type string `json:"type"`
+		}
+		_ = json.Unmarshal(c.Body(), &body)
+		t = strings.TrimSpace(body.Type)
+	}
+	switch t {
+	case "", keyTypeSecret:
+		return keyTypeSecret, true
+	case keyTypePublishable:
+		return keyTypePublishable, true
+	}
+	return "", false
+}
+
+// getKey answers GET /v1/keys — the caller's keys, of every type, read
+// AUTHORITATIVELY from IAM (not the session claim, which lags a fresh key).
 func getKey(s *cloud.Service[state], c *zip.Ctx) error {
 	cr, ok := resolveCaller(c, true)
 	if !ok {
@@ -268,26 +338,47 @@ func getKey(s *cloud.Service[state], c *zip.Ctx) error {
 	if !s.State.iam.configured() {
 		return notConfigured("API key management")
 	}
-	uk, err := s.State.iam.getUserKey(c.Context(), cr.keyID())
+	rows, err := s.State.iam.userKeys(c.Context(), cr.owner, cr.username)
 	if err != nil {
-		// Fail-soft on a transient IAM read: report "no key" rather than 5xx, so the
+		// Fail-soft on a transient IAM read: report an empty set rather than 5xx, so the
 		// page shows the honest empty state (never a fabricated key). The mint path
 		// still 502s loudly on a real failure — reads degrade, writes do not.
-		s.Log.Warn("get key: iam read failed (reporting no key)", "err", err)
-		return c.JSON(http.StatusOK, keyStatus{HasKey: false})
+		s.Log.Warn("get keys: iam read failed (reporting none)", "err", err)
+		return c.JSON(http.StatusOK, keyList{Keys: []keyRecord{}})
 	}
-	if uk.AccessKey == "" {
-		return c.JSON(http.StatusOK, keyStatus{HasKey: false})
+	out := keyList{Keys: make([]keyRecord, 0, len(rows))}
+	for _, r := range rows {
+		rec := keyRecord{Type: keyTypeSecret, CreatedAt: r.UpdatedTime}
+		if r.Scope == iamScopePublish {
+			// Publishable: hand back the whole value. It is the one a browser bundle
+			// carries, and there is no second chance to read it.
+			rec.Type, rec.Key, rec.Prefix = keyTypePublishable, r.AccessKey, prefixOf(r.AccessKey)
+		} else {
+			// Secret: the prefix only. The AccessKey half identifies the row; the
+			// confidential sk- is masked by IAM and never leaves it.
+			rec.Prefix = prefixOf(r.AccessKey)
+		}
+		out.Keys = append(out.Keys, rec)
 	}
-	prefix := uk.AccessKey
-	if len(prefix) > 11 {
-		prefix = prefix[:11]
-	}
-	return c.JSON(http.StatusOK, keyStatus{HasKey: true, KeyPrefix: prefix, CreatedAt: uk.UpdatedTime})
+	return c.JSON(http.StatusOK, out)
 }
 
-// mintKey (re)generates the caller's Cloud API key and returns it ONCE (show-once). A
-// real IAM failure surfaces as 502 (never a fabricated key). Mirrors POST app/keys.
+// prefixOf is the recognizable, non-secret head of a key — enough for a holder to
+// tell two keys apart, never enough to use one.
+func prefixOf(key string) string {
+	if len(key) > 11 {
+		return key[:11]
+	}
+	return key
+}
+
+// mintKey answers POST /v1/keys — create (or rotate) the caller's key of the
+// requested type and return it ONCE. A real IAM failure surfaces as 502, never a
+// fabricated key.
+//
+// Rotating is what creating means here: a user holds one key per type, so the
+// endpoint is idempotent by (caller, type) and the superseded credential stops
+// working. Two live secrets for one user would make "revoke my key" a lie.
 func mintKey(s *cloud.Service[state], c *zip.Ctx) error {
 	cr, ok := resolveCaller(c, true)
 	if !ok {
@@ -296,14 +387,22 @@ func mintKey(s *cloud.Service[state], c *zip.Ctx) error {
 	if !s.State.iam.configured() {
 		return notConfigured("API key management")
 	}
-	key, err := s.State.iam.mintUserKey(c.Context(), cr.keyID())
+	typ, ok := keyType(c)
+	if !ok {
+		return zip.ErrBadRequest("type must be " + keyTypeSecret + " or " + keyTypePublishable)
+	}
+	key, err := s.State.iam.mintUserKey(c.Context(), cr.keyID(), typ)
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "could not mint an API key: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]string{"accessKey": key})
+	// `key` is the canonical field and `accessKey` its predecessor, carried so the
+	// live console keeps working across the deploy; both are the same one value.
+	return c.JSON(http.StatusOK, map[string]string{"type": typ, "key": key, "accessKey": key})
 }
 
-// revokeKey clears the caller's Cloud API key. Mirrors DELETE app/keys.
+// revokeKey answers DELETE /v1/keys — revoke the caller's key of the requested
+// type. Scoped by the same field mint takes, so revoking the key in a browser
+// bundle does not sign the holder out of their own API.
 func revokeKey(s *cloud.Service[state], c *zip.Ctx) error {
 	cr, ok := resolveCaller(c, true)
 	if !ok {
@@ -312,10 +411,26 @@ func revokeKey(s *cloud.Service[state], c *zip.Ctx) error {
 	if !s.State.iam.configured() {
 		return notConfigured("API key management")
 	}
-	if err := s.State.iam.revokeUserKey(c.Context(), cr.keyID()); err != nil {
+	typ, ok := keyType(c)
+	if !ok {
+		return zip.ErrBadRequest("type must be " + keyTypeSecret + " or " + keyTypePublishable)
+	}
+	if err := s.State.iam.revokeUserKey(c.Context(), cr.keyID(), typ); err != nil {
 		return zip.Errorf(http.StatusBadGateway, "could not revoke the API key: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]bool{"ok": true})
+	return c.JSON(http.StatusOK, map[string]any{"ok": true, "type": typ})
+}
+
+// deprecatedFor wraps a handler served at a superseded path: it answers exactly as
+// the canonical path does — the SAME handler, so there is one implementation — and
+// says so on the wire (RFC 8594 Deprecation + a Link naming the successor), which is
+// how a caller finds out without reading a changelog.
+func deprecatedFor(canonical string, next zip.Handler) zip.Handler {
+	return func(c *zip.Ctx) error {
+		c.SetHeader("Deprecation", "true")
+		c.SetHeader("Link", "<"+canonical+`>; rel="successor-version"`)
+		return next(c)
+	}
 }
 
 // ── onboard (create the caller's org) ────────────────────────────────────────
