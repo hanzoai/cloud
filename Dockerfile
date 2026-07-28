@@ -163,6 +163,19 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     SQLITE_REQUIRE_CODEC=1 CGO_ENABLED=1 go test -count=1 -run TestFrozenFixtureOpens \
       -tags "libsqlite3 sqlite_fts5" ./cek
+# Go drops comments at compile time, so this pass is the ONLY way a typed handler's
+# prose reaches the document: zipdoc lifts it into zipdoc_gen.go, which registers it
+# with zip.Describe at init. It must run BEFORE every build below, because the
+# generated file is compiled INTO each binary — running it after would be too late.
+#
+# mk/plugin.mk makes this a prerequisite of the per-app `build`, so the per-app path
+# has always had it. This path did not, and the omission is measurable in production:
+# api.hanzo.ai/v1/openapi.json serves 1441 operations with ZERO descriptions, which
+# is exactly the binary mk/plugin.mk warns about. The SDK repos and the CLI read that
+# document, so the prose never reached any of them either.
+RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
+    go generate -run zipdoc ./...
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5" -ldflags="-s -w" -o /cloud ./cmd/cloud
