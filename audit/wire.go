@@ -14,6 +14,10 @@ type Wire struct {
 	Org        string `json:"org"`
 	Sub        string `json:"sub"`
 	Email      string `json:"email,omitempty"`
+	// Home is present ONLY on a cross-org action: the org the actor came FROM,
+	// while Org is the org they acted IN. A console row carrying `home` is a
+	// platform-admin impersonation and should be rendered as one.
+	Home string `json:"home,omitempty"`
 	Action     string `json:"action"`
 	Resource   string `json:"resource"`
 	ResourceID string `json:"resourceId,omitempty"`
@@ -41,6 +45,7 @@ func (r Record) ToWire() Wire {
 		Org:        r.Actor.Org,
 		Sub:        r.Actor.Sub,
 		Email:      r.Actor.Email,
+		Home:       r.Actor.Home,
 		Action:     r.Action,
 		Resource:   r.Resource.Type,
 		ResourceID: r.Resource.ID,

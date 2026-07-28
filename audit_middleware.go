@@ -23,11 +23,16 @@ package cloud
 //
 // WHAT IT RECORDS (the coverage predicate, auditable in one place — see
 // isSecurityRelevant): every mutating request (POST/PUT/PATCH/DELETE), every
-// /v1/admin/* request (read or write — admin reads are AC-relevant), and every
+// /v1/admin/* request (read or write — admin reads are AC-relevant), every
 // auth-failure outcome (401/403) on ANY method (a denied GET is an access-control
-// event). Safe, unauthenticated reads (a 200 GET on a public route) are NOT
-// audited — that is request-log noise, not a security event, and auditing it
-// would bury the signal and balloon the trail.
+// event), and every CROSS-ORG request — a platform SuperAdmin acting inside
+// another tenant — including a successful READ. Safe SAME-ORG reads (a 200 GET
+// on a normal route) are NOT audited — that is request-log noise, not a security
+// event, and auditing it would bury the signal and balloon the trail.
+//
+// The cross-org clause is the one that makes an admin's read of another tenant's
+// KMS secret leave a record: actor + their home org + the target org + the
+// secret PATH (never the value — this middleware never reads bodies) + outcome.
 //
 // FAIL MODE (AU-5): if the trail write fails on a request we decided to audit,
 // the CLIENT gets a fail-closed 503 rather than a success it can rely on — the
@@ -81,6 +86,12 @@ func AuditTrail(rec *audit.Recorder) zip.Handler {
 		method := c.Method()
 		path := c.Path()
 
+		// Whether this request ACTS ON someone else's tenant, captured BEFORE the
+		// chain runs for the same reason as method/path: the ctx is recycled after
+		// the handler returns. One value serves both uses below — the coverage
+		// predicate and the recorded Actor.Home.
+		home := crossOrgHome(c)
+
 		err := c.Next()
 
 		// Resolve the EFFECTIVE status. A handler may set it on the response
@@ -91,12 +102,12 @@ func AuditTrail(rec *audit.Recorder) zip.Handler {
 		// carries one; this is what makes admin-guard denials (which return
 		// ErrForbidden) get audited as 403.
 		status := effectiveStatus(c.Fiber().Response().StatusCode(), err)
-		if !isSecurityRelevant(method, path, status) {
+		if !isSecurityRelevant(method, path, status, home != "") {
 			return err // not an audited event; pass the handler result through.
 		}
 
 		record := audit.Record{
-			Actor:    actorFromCtx(c),
+			Actor:    actorFromCtx(c, home),
 			Action:   method + " " + routeFamily(path),
 			Resource: resourceFromPath(path),
 			Auth:     authFromCtx(c),
@@ -138,6 +149,7 @@ func AuditTrail(rec *audit.Recorder) zip.Handler {
 // the health-probe exemption can NEVER be used to evade audit of a mutation or a
 // denial (a POST/DELETE, or any 401/403, is always audited whatever the path).
 //   - any auth-failure outcome (401/403) on any method (a denied access attempt),
+//   - any CROSS-ORG request (a platform SuperAdmin acting inside another tenant),
 //   - any /v1/admin/* request (admin reads are access-control-relevant),
 //   - any mutating request (POST/PUT/PATCH/DELETE).
 //
@@ -146,11 +158,31 @@ func AuditTrail(rec *audit.Recorder) zip.Handler {
 // request-log noise. The exemption matches EXACT probe paths, never an arbitrary
 // path that merely ends in "/health" (which a wildcard/attacker-named segment
 // like POST /v1/admin/orgs/x/health could otherwise abuse to slip past audit).
-func isSecurityRelevant(method, path string, status int) bool {
+func isSecurityRelevant(method, path string, status int, crossOrg bool) bool {
 	// Unconditional security signals — never suppressed by any path shape. A
 	// denial, an admin call, or a mutation is ALWAYS audited, whatever the path
 	// (so a wildcard/attacker-named "/health" tail cannot evade it).
 	if status == 401 || status == 403 {
+		return true
+	}
+	// A CROSS-ORG action is always audited — read or write, success or failure.
+	//
+	// This is the clause that closes the fleet's sharpest audit blind spot. A
+	// platform SuperAdmin org-switch reading another tenant's data is a plain GET
+	// on a plain tenant route: not a mutation, not under /v1/admin/, and (when it
+	// works) not a denial. Every other clause therefore said "not security
+	// relevant", so the single highest-value read in the fleet — one admin
+	// fetching another org's KMS secret — was the one read that left NO record.
+	//
+	// It is deliberately NOT scoped to secrets or to any subsystem: impersonation
+	// is a property of the REQUEST, not of the route. KMS keeps knowing nothing
+	// about audit, audit keeps knowing nothing about routes, and every subsystem
+	// gets the coverage at once rather than KMS alone.
+	//
+	// Volume is a non-issue: cross-org requires a human SuperAdmin holding a
+	// signed admin-org membership, so these are rare by construction — the trail
+	// gains exactly the rows an auditor wants and no noise.
+	if crossOrg {
 		return true
 	}
 	if strings.HasPrefix(path, "/v1/admin/") {
@@ -194,7 +226,11 @@ func isMutation(method string) bool {
 //
 // With a validated sub, org/sub/email all reflect the verified principal and are
 // recorded authoritatively.
-func actorFromCtx(c *zip.Ctx) audit.Actor {
+// home is the actor's own org, already resolved by crossOrgHome and non-empty
+// ONLY for a cross-org action; it is passed in rather than re-derived so the
+// coverage decision and the recorded record can never disagree about whether
+// this request was an impersonation.
+func actorFromCtx(c *zip.Ctx, home string) audit.Actor {
 	if !principal.Validated(c) {
 		// No validated principal — do not trust the client-asserted org.
 		return audit.Actor{}
@@ -203,7 +239,40 @@ func actorFromCtx(c *zip.Ctx) audit.Actor {
 		Org:   strings.TrimSpace(c.Org()),
 		Sub:   strings.TrimSpace(c.User()),
 		Email: strings.TrimSpace(c.UserEmail()),
+		Home:  home,
 	}
+}
+
+// crossOrgHome returns the actor's HOME org when this request acts on a
+// DIFFERENT org — a platform SuperAdmin org-switch — and "" otherwise. The
+// non-empty return is therefore both the answer to "is this an impersonation?"
+// and the value to record, so there is one fact and one place it comes from.
+//
+// WHY THE TWO ORGS DIFFER AT ALL. SanitizeIdentity mints X-User-Owner (the home
+// org, from the validated membership claim) DISTINCTLY from X-Org-Id (the
+// effective org). For every ordinary caller the two are equal. They diverge in
+// exactly one case: a HUMAN principal whose home org is the reserved admin org
+// switching into another tenant (middleware_identity.go, `effOrg = cliOrg`).
+// That divergence IS the impersonation, so comparing the two detects it without
+// inventing a new signal or a new header.
+//
+// UNFORGEABLE BY CONSTRUCTION. Both values are authorityHeaders: stripped from
+// every inbound request and re-minted only from validated claims. So an attacker
+// can neither hide an impersonation (by forging home == effective) nor fake one
+// (by forging a divergence to pollute the trail). And on the bearer-less Phase-1
+// path there is no validated principal, so X-User-Owner is never restored — such
+// a request resolves not-cross-org here, but it is also refused by the org gate
+// and audited as a 403 by the clause above. No path slips both.
+func crossOrgHome(c *zip.Ctx) string {
+	if !principal.Validated(c) {
+		return ""
+	}
+	home := principal.Owner(c)
+	eff := strings.TrimSpace(c.Org())
+	if home == "" || eff == "" || home == eff {
+		return ""
+	}
+	return home
 }
 
 // authFromCtx records HOW the caller authenticated and the VALIDATED admin bit.
