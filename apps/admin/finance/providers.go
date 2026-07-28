@@ -21,7 +21,6 @@ import (
 	"strconv"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/core"
 	"github.com/hanzoai/cloud/apps/datastore"
@@ -149,7 +148,13 @@ func providerBurnCents(ctx context.Context) map[string]int64 {
 	if !datastore.Ready() {
 		return burn
 	}
-	if err := aiobject.EnsureCloudUsageTable(ctx); err != nil {
+	// datastore's DDL, not ai's. ai's EnsureCloudUsageTable execs through a
+	// connection opened only inside aimod.Mount, and admin does not link the ai
+	// module — so that call ALWAYS returned "datastore: not connected" here and
+	// this function always took the branch below, reporting every provider's burn
+	// as zero on a warehouse that was up. Same table, same idempotent DDL, on the
+	// connection this binary actually holds.
+	if err := datastore.EnsureCloudUsage(ctx); err != nil {
 		return burn
 	}
 	rows, err := datastore.Query(ctx,
@@ -258,7 +263,7 @@ func (o ops) UsageFunding(ctx context.Context, in *UsageFundingIn) (*UsageFundin
 
 	out := []UsageFundingRow{}
 	if datastore.Ready() {
-		if err := aiobject.EnsureCloudUsageTable(ctx); err == nil {
+		if err := datastore.EnsureCloudUsage(ctx); err == nil {
 			rows, qerr := datastore.Query(ctx,
 				"SELECT provider, model, count() AS requests, sum(total_tokens) AS tokens, "+
 					"sum(cost_cents) AS cost_cents FROM "+usageTable+
