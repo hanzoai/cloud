@@ -143,12 +143,10 @@ func TestScalarRoundTrip(t *testing.T) {
 	}
 }
 
-// The loop closed: what a serving app binds is exactly what a caller resolves.
-// It is asserted through the REAL binder — rpc.Listen, which Serve calls — not
-// through listenOn, because listenOn stopped owning this path: handing the same
-// socket to zip's app.Listen double-binds it, and the unlink-first that made
-// that "work" would remove the live rpc listener out from under its callers.
-// One socket, one server.
+// The loop closed: what rpc.Listen SERVES is exactly what Call RESOLVES. They are
+// two functions deriving a path from a name, and if they ever disagreed an app
+// would be up and unreachable — so the socket a listener creates is asserted to be
+// the one PeerSocket names, rather than each side being trusted separately.
 func TestPeerSocketIsWhatDialLooksFor(t *testing.T) {
 	t.Setenv(runDirEnv, t.TempDir())
 	Expose("loop.ping", func(_ context.Context, _ Ident, _ []byte) ([]byte, error) {
@@ -156,18 +154,21 @@ func TestPeerSocketIsWhatDialLooksFor(t *testing.T) {
 	})
 	c, err := Listen("loop", nil)
 	if err != nil {
-		t.Fatalf("listen: %v", err)
+		t.Fatalf("Listen: %v", err)
 	}
 	t.Cleanup(func() { _ = c.Close() })
 
 	if _, err := os.Stat(PeerSocket("loop")); err != nil {
-		t.Fatalf("Listen bound nothing at the path callers resolve: %v", err)
+		t.Fatalf("rpc.Listen served something other than %s: %v", PeerSocket("loop"), err)
 	}
+	// Reachability, not just presence: a real call over that same file, and a
+	// real reply. A socket that exists and answers nothing is the failure this
+	// closes — the app was up, one socket away, and every peer call missed it.
 	out, err := Dial("loop").Call(context.Background(), "loop.ping", nil)
 	if err != nil {
-		t.Fatalf("an app that is up must be reachable one socket away: %v", err)
+		t.Fatalf("an app that is up must be reachable at the path callers resolve: %v", err)
 	}
 	if string(out) != "pong" {
-		t.Fatalf("reply = %q", out)
+		t.Fatalf("reply = %q, want pong", out)
 	}
 }

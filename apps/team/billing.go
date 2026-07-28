@@ -141,8 +141,8 @@ func orgPrincipal(c *zip.Ctx, secret string) (account, org string, err error) {
 	if err != nil {
 		return "", "", err
 	}
-	org, _ = t.Extra["org"].(string)
-	if strings.TrimSpace(org) == "" {
+	org = t.Org()
+	if org == "" {
 		return "", "", errNoOrg
 	}
 	return t.Account, org, nil

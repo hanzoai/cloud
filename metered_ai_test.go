@@ -2,6 +2,7 @@ package cloud
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -83,6 +84,7 @@ func TestMeteredAI_Pricing(t *testing.T) {
 // response, and the billing scope on the request reaches the transport (so the
 // gen_ai span + any downstream carry it).
 func TestMeteredAI_PassThroughForwardsScope(t *testing.T) {
+	serveCommerceOK(t)
 	inner := &recordingAI{resp: &types.ChatResponse{Content: "hi", TotalTokens: 42}}
 	m := passthroughMetered(inner)
 
@@ -230,6 +232,7 @@ func TestMeteredAI_StreamCompleterPreserved(t *testing.T) {
 // A streamed completion must meter on exactly the same terms as a buffered one —
 // streaming can never be a cheaper way to buy inference.
 func TestMeteredAI_StreamMetersLikeCompletion(t *testing.T) {
+	serveCommerceOK(t)
 	inner := &streamAI{}
 	sc, ok := meteredAIClient(inner, Deps{}).(types.StreamCompleter)
 	if !ok {
@@ -327,4 +330,22 @@ func TestMicrosToGateCents(t *testing.T) {
 			t.Fatalf("MicrosToGateCents(%d) = %d, want %d", tc.micros, got, tc.cents)
 		}
 	}
+}
+
+// serveCommerceOK stands up the ledger these tests assume is there. The AI path
+// gates through the ONE ResourceMeter, and since the ledger moved to its own
+// binary a meter with no local URL asks commerce over the socket. Without a
+// biller to answer, these would be asserting "the gate fails closed" — which is
+// true, and is TestResourceMeter_UnconfiguredIsNoop's job, not theirs.
+func serveCommerceOK(t *testing.T) {
+	t.Helper()
+	t.Setenv(runDirEnv, t.TempDir())
+	Expose(peerAuthorize, func(_ context.Context, _ Ident, _ []byte) ([]byte, error) {
+		return json.Marshal(peerAuthorizeReply{OK: true})
+	})
+	c, err := Listen(peerCommerce, nil)
+	if err != nil {
+		t.Fatalf("commerce stand-in: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
 }

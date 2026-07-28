@@ -188,7 +188,7 @@ func TestSelectWorkspaceHTTP(t *testing.T) {
 	// The returned workspace token decodes back to (acct, ws.UUID, org) under the
 	// SAME secret the transactor verifies with — the wire is closed end-to-end.
 	dec, err := token.Decode(sw.Result.Token, testSecret, true)
-	if err != nil || dec.Account != acct || dec.Workspace != ws.UUID || dec.Extra["org"] != org {
+	if err != nil || dec.Account != acct || dec.Workspace != ws.UUID || dec.Org() != org {
 		t.Fatalf("workspace token round-trip: %+v (err %v)", dec, err)
 	}
 	// The token must carry the caller's ROLE. Everything downstream that tells a
@@ -550,7 +550,7 @@ func TestCallbackVerifiesOwner(t *testing.T) {
 		t.Fatalf("no session token in bounce: %q", resp.Header.Get("Location"))
 	}
 	dec, err := token.Decode(sess, testSecret, true)
-	if err != nil || dec.Extra["org"] != "acme" {
+	if err != nil || dec.Org() != "acme" {
 		t.Fatalf("session token org = %v (err %v), want verified owner acme", dec, err)
 	}
 

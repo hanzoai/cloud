@@ -47,13 +47,28 @@ func TestAI64(t *testing.T) {
 	}
 }
 
-// TestProviderGrantsSeeded asserts DO's $26k grant is the seeded real row (the
-// live-verifiable acceptance) and is treated as credit-bearing.
-func TestProviderGrantsSeeded(t *testing.T) {
-	if providerGrantsCents["do-ai"] != 2_600_000 {
-		t.Fatalf("do-ai grant = %d cents, want 2_600_000 ($26k)", providerGrantsCents["do-ai"])
+// TestDOGrantIsDiscoveredNotSeeded pins the inversion: DO's grant must NOT be a
+// constant in this map. It is read from DO's own invoices (Client.CreditIssued),
+// because the hand-entered value was wrong and unverifiable — this map said
+// $26,000 while DO's ledger showed $21,263.65 ever applied and the operator
+// believed $50,000. A seeded number here would silently win again.
+func TestDOGrantIsDiscoveredNotSeeded(t *testing.T) {
+	if v, ok := providerGrantsCents["do-ai"]; ok {
+		t.Fatalf("do-ai must not carry a seeded grant (got %d cents); it is discovered from DO invoices", v)
 	}
-	if fundingClass(ProviderCredit{HasCredit: true, RemainingCents: providerGrantsCents["do-ai"]}) != "credit" {
-		t.Error("seeded DO grant with full remaining must classify as credit")
+}
+
+// TestExhaustedCreditClassifiesAsPaid is the whole point of the funding class: a
+// provider whose promo credit is SPENT is cash from that moment on, even though a
+// grant certainly existed. Classifying on "was a grant ever issued" instead of
+// "is credit left" is what let $1,824 of real DO spend read as credit-funded.
+func TestExhaustedCreditClassifiesAsPaid(t *testing.T) {
+	live := ProviderCredit{GrantCents: 2_126_712, RemainingCents: 347, HasCredit: true}
+	if got := fundingClass(live); got != "credit" {
+		t.Errorf("credit remaining => credit-funded, got %q", got)
+	}
+	spent := ProviderCredit{GrantCents: 2_126_712, RemainingCents: 0, HasCredit: false, IsPaidOnly: true}
+	if got := fundingClass(spent); got == "credit" {
+		t.Error("an EXHAUSTED grant must never classify as credit — every later call is cash")
 	}
 }

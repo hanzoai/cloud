@@ -46,13 +46,17 @@ TAGS = "sqlite_fts5"  # the tag `make test` carries, so the same schema surface 
 ENV = dict(os.environ, PATH="/usr/local/go/bin:" + os.environ.get("PATH", ""))
 ENV.setdefault("CLOUD_KMS_MASTER_KEY_REF", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
 
-E = "clients/analytics/event.go"
-A = "clients/analytics/analytics.go"
-C = "clients/analytics/capture.go"
-P = "clients/analytics/public.go"
-S = "clients/sites/sites.go"
-PA = "./clients/analytics/"
-PS = "./clients/sites/"
+E = "apps/analytics/event.go"
+A = "apps/analytics/analytics.go"
+C = "apps/analytics/capture.go"
+P = "apps/analytics/public.go"
+S = "apps/sites/sites.go"
+T = "apps/analytics/team.go"
+M = "apps/meet/meet.go"
+MT = "apps/meet/meet_test.go"
+PA = "./apps/analytics/"
+PS = "./apps/sites/"
+PM = "./apps/meet/"
 
 # A mutant is (name, edits, test regex, package). edits is a LIST of (file, old,
 # new) so a mutation that needs a helper injected alongside it is the same kind of
@@ -143,7 +147,7 @@ MUTANTS = [
             '\t\t\t\tif site, ok := s.resolveLivePinned(c.Context(), slug, firstParty); ok {\n\t\t\t\t\t_ = site\n\t\t\t\t\treturn h(c.Org(), c)')],
      "TestSiteHostLaneWritesTheResolvedSiteOrg", PA),
 
-    # Guarded in clients/sites, which owns host→org resolution, and NOT in analytics:
+    # Guarded in apps/sites, which owns host→org resolution, and NOT in analytics:
     # the analytics test on this host shape proves the carve fires, not who it fires for.
     ("carve: the CUSTOM DOMAIN takes the tenant from the caller's header", [
         (S, '\t\t\t\tif h, ok := analyticsIngest(c); ok {\n\t\t\t\t\treturn h(site.Org, c)',
@@ -197,6 +201,83 @@ MUTANTS = [
         (S, '\t\t\tif h, ok := analyticsIngest(c); ok {\n\t\t\t\tif site, ok := s.resolveLivePinned(c.Context(), slug, firstParty); ok {',
             '\t\t\tif h, ok := analyticsIngest(c); ok {\n\t\t\t\tif site, ok := s.resolveLive(c.Context(), slug); ok {')],
      "TestMount_HostCarve_FirstPartyHostResolvesPinned", PA),
+
+    # ── the warehouse schema: retention and the tenant boundary ───────────────
+    # These four anchor on the FIX, so on a pristine checkout they report ANCHOR-MISS
+    # rather than SURVIVED — the text they revert does not exist there, and neither do
+    # the tests. KILLED here is what says the assertion, not luck, is doing the work.
+    ("schema: measure retention from the CALLER's timestamp again", [
+        (C, 'TTL ingested_at + INTERVAL 2 YEAR`', 'TTL timestamp + INTERVAL 2 YEAR`')],
+     "TestRetentionIsNotARequestParameter", PA),
+
+    ("schema: let the wire SET the column retention is measured from", [
+        (C, '\t"properties", "library", "library_version",',
+            '\t"properties", "library", "library_version", "ingested_at",')],
+     "TestRetentionIsNotARequestParameter", PA),
+
+    ("schema: drop PARTITION BY — back to one shared 'all' partition", [
+        (C, '\tPARTITION BY (tenant_id, toYYYYMM(timestamp))\n', '')],
+     "TestTenantIsThePartitionBoundary", PA),
+
+    # Partitioning by month ALONE still prunes by time, so a test that only asked
+    # "is there a PARTITION BY" would pass. The tenant half is the isolation half.
+    #
+    # Anchored through `\n\tORDER BY` on purpose: the bare clause appears TWICE in
+    # capture.go — in the DDL and in the comment explaining it — and the unqualified
+    # anchor scored AMBIGUOUS, which is the harness refusing to mutate a site it cannot
+    # name uniquely. Reaching into the next DDL line is what makes it one site.
+    ("schema: partition by month only, dropping the tenant boundary", [
+        (C, '\tPARTITION BY (tenant_id, toYYYYMM(timestamp))\n\tORDER BY',
+            '\tPARTITION BY toYYYYMM(timestamp)\n\tORDER BY')],
+     "TestTenantIsThePartitionBoundary", PA),
+
+    ("clamp: remove the PAST bound, restoring the unbounded key range", [
+        (C, 'if ts.After(now.Add(maxClockSkew)) || ts.Before(now.Add(-maxBackdate)) {',
+            'if ts.After(now.Add(maxClockSkew)) {')],
+     "TestBackdatedTimestampIsClamped", PA),
+
+    # The same removal, asked from the live door instead of the unit: the team wire's
+    # epoch-MILLIS is the reachable way to 1970 (`"timestamp":1`), and teamTime is
+    # deliberately not where it is stopped.
+    ("clamp: the team wire reaches 1970 through the write core", [
+        (C, 'if ts.After(now.Add(maxClockSkew)) || ts.Before(now.Add(-maxBackdate)) {',
+            'if ts.After(now.Add(maxClockSkew)) {')],
+     "TestTeamEpochMillisCannotReach1970", PA),
+
+    # Guarding the guard: teamTime returning "" for a ZERO millis is what keeps the
+    # absent-timestamp case off the epoch, and it is a separate fact from the clamp.
+    ("clamp: teamTime renders a ZERO millis as the epoch instead of empty", [
+        (T, '\tif ms <= 0 {\n\t\treturn ""\n\t}\n', '')],
+     "TestTeamTimestampAbsentClampsToNow", PA),
+
+    # ── meet's unauthenticated replies: the leak set, and its vacuity guard ───
+    # TWO edits, and both are needed to prove what the NEW element adds. Leaking the
+    # reason verbatim is already caught by the fragment list ("keys.yaml"), so a
+    # single-edit mutant would be killed by the OLD assertion too and would prove
+    # nothing. Rewording the reason so no fragment appears in it is what isolates the
+    # whole-reason element — this mutant SURVIVES on a pristine checkout (where the
+    # leak set held t.TempDir(), which can never match) and is KILLED here.
+    ("meet: leak a REWORDED reason from the unauthenticated health surface", [
+        (M, '\t\tres["status"], res["ready"] = "degraded", false',
+            '\t\tres["status"], res["ready"], res["reason"] = "degraded", false, s.State.reason'),
+        (M, 'fmt.Errorf("the LiveKit key file %s (K8s Secret livekit-keys, key keys.yaml) declares no api key", path)',
+            'fmt.Errorf("the office has nothing to sign with")')],
+     "TestHealthLeaksNothingUnauthenticated", PM),
+
+    ("meet: leak a REWORDED reason from the unauthenticated getToken 503", [
+        (M, 'return zip.Errorf(http.StatusServiceUnavailable, "meet: the office is not configured")',
+            'return zip.Errorf(http.StatusServiceUnavailable, "meet: the office is not configured: %s", st.reason)'),
+        (M, 'fmt.Errorf("the LiveKit key file %s (K8s Secret livekit-keys, key keys.yaml) declares no api key", path)',
+            'fmt.Errorf("the office has nothing to sign with")')],
+     "TestUnconfiguredReasonNeverReachesTheCaller", PM),
+
+    # A leak test whose fixture is CONFIGURED has no reason to withhold and asserts
+    # nothing — the exact shape of the t.TempDir() element it replaced. Mutating the
+    # fixture must trip the guard, not pass quietly.
+    ("meet: configure the fixture, so the leak test has nothing to catch", [
+        (MT, '\tpath := keyFileWith(t, "")\n\tapp := mountWithKeyFile(t, teamSecret, path)',
+            '\tpath := keyFileWith(t, keyBody(apiKey, apiSecret))\n\tapp := mountWithKeyFile(t, teamSecret, path)')],
+     "TestUnconfiguredReasonNeverReachesTheCaller", PM),
 ]
 
 RUN_RE = re.compile(r"^=== RUN\s+(\S+)", re.M)

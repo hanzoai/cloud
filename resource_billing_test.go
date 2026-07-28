@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -326,8 +327,19 @@ func TestResourceMeter_UnconfiguredIsNoop(t *testing.T) {
 	if rm.Enabled() {
 		t.Fatal("ResourceMeter with empty commerce URL must not be Enabled()")
 	}
-	if err := rm.Gate(t.Context(), "acme", "", false, "sql", 100); err != nil {
-		t.Fatalf("Gate(unconfigured) = %v, want nil (no-op)", err)
+	// !Enabled no longer means "nothing bills". Once apps are their own binaries
+	// the ledger has ONE writer and it lives with commerce, so a meter without a
+	// local URL asks it — and a biller it cannot reach is UNKNOWN, never allowed.
+	// Allowing would turn every priced act free the moment an app is split out,
+	// silently. The gate fires identically in every deployment; nothing bypasses
+	// it (see the env-awareness note in resource_billing.go).
+	t.Setenv(runDirEnv, t.TempDir()) // no commerce socket here
+	err := rm.Gate(t.Context(), "acme", "", false, "sql", 100)
+	if err == nil {
+		t.Fatal("Gate with no local ledger and no reachable biller must not allow")
+	}
+	if !strings.Contains(err.Error(), "commerce") {
+		t.Fatalf("Gate = %v, want an error naming the biller it could not reach", err)
 	}
 	rm.Meter("acme", "", "sql", 100, "r", "") // must not panic
 }
