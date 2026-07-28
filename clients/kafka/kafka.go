@@ -9,12 +9,11 @@
 // It mounts NO HTTP routes of its own; cloud's generic per-subsystem liveness
 // route answers /v1/kafka/health and the K8s Service TCP-probes :9092.
 //
-// ACTIVATION is opt-in via CLOUD_KAFKA_ENABLED (a staged cutover). Unset ⇒ the
-// subsystem is a no-op. Enabled ⇒ Mount fails CLOSED: a connect/bind error
-// within the startup window aborts boot rather than serving a phantom broker.
-// It dials the embedded PubSub by default, so enabling kafka without
-// CLOUD_PUBSUB_ENABLED (and no external CLOUD_KAFKA_PUBSUB_URL) fails closed —
-// never a silent half-embed.
+// It ALWAYS serves, like the PubSub plane it rides (a staged cutover that is
+// over). Mount fails CLOSED: a connect/bind error within the startup window
+// aborts boot rather than serving a phantom broker. It dials the embedded PubSub
+// by default — CLOUD_KAFKA_PUBSUB_URL points it at an external one instead — so
+// there is never a silent half-embed.
 package kafka
 
 import (
@@ -42,17 +41,12 @@ const startupProbe = 3 * time.Second
 // broker holds the running adaptor so Shutdown can stop it. Set once by Mount.
 var broker *protocol.Broker
 
-// Mount starts the embedded Kafka adaptor when CLOUD_KAFKA_ENABLED is set.
+// Mount starts the embedded Kafka adaptor over the embedded JetStream.
 func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("kafka.Mount: nil deps.Logger")
 	}
 	log := deps.Logger.New("subsystem", "kafka")
-
-	if !envBool("CLOUD_KAFKA_ENABLED") {
-		log.Info("kafka adaptor disabled (set CLOUD_KAFKA_ENABLED=true to serve the Kafka wire protocol in-process over embedded JetStream)")
-		return nil
-	}
 
 	port, err := envInt("CLOUD_KAFKA_PORT", 9092)
 	if err != nil {
@@ -109,15 +103,6 @@ func Shutdown(_ context.Context) error {
 		broker = nil
 	}
 	return nil
-}
-
-func envBool(k string) bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(k))) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
-	}
 }
 
 func envInt(k string, def int) (int, error) {
