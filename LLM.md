@@ -191,7 +191,7 @@ package at once (`cmd/cloud` alone links >6GB).
 
 ## Two hosts: `cmd/cloud` links every app, `cmd/host` links none
 
-The app count is `len(manifest.Apps)` — 113 at `b3ba3f11`
+The app count is `len(manifest.Apps)` — 113 at `e88ea216`
 (`grep -c '^\s*{Name: ' manifest/apps.go`), and the standing figures below were
 each measured against a smaller fleet. Treat every absolute in this section as a
 measurement with provenance, not as a live count; re-measure before quoting one.
@@ -800,8 +800,9 @@ one before it.
 
 ## The typed migration: one registry entry, or a route and nothing else
 
-Measured at `b3ba3f11`, and re-measurable — do not trust these numbers past the
-next few merges, run the commands:
+Measured at `e88ea216`, and re-measurable — do not trust these numbers past the
+next few merges, run the commands. (They moved by two operations between the
+branch point and the merge; that is the rate.)
 
     # typed ops (the generic package-level registrars; types are INFERRED,
     # so they read as ordinary calls — bracket syntax appears only in comments)
@@ -814,8 +815,8 @@ next few merges, run the commands:
 
 The discriminator is `zip.X(` (package-qualified generic) versus `<receiver>.X(`
 (method on `*zip.App`/Router) — NOT the presence of square brackets. The
-published document is the honest denominator: `openapi.yaml` carries **1396
-operations across 982 paths, of which 164 have a description.** The other ~1230
+published document is the honest denominator: `openapi.yaml` carries **1398
+operations across 984 paths, of which 164 have a description.** The other ~1234
 are route only — no MCP tool, no CLI command, no SDK method, no schema, no
 prose.
 
