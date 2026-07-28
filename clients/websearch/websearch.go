@@ -123,6 +123,12 @@ type firecrawlData struct {
 }
 
 func scrapeHandler(w http.ResponseWriter, r *http.Request) {
+	scrapeScoped(w, r, crawl.Scope{})
+}
+
+// scrapeScoped serves one scrape under a caller scope, so scraped pages land in
+// the same corpus /v1/crawl fills — one crawl, one archive, whichever door was used.
+func scrapeScoped(w http.ResponseWriter, r *http.Request, s crawl.Scope) {
 	// Bearer auth (firecrawl always sends Authorization: Bearer <key>); fail
 	// closed if unconfigured.
 	want := apiKey()
@@ -142,7 +148,7 @@ func scrapeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	page, err := crawl.Fetch(r.Context(), req.URL)
+	page, err := crawl.Read(r.Context(), s, req.URL)
 	if err != nil {
 		writeJSON(w, http.StatusOK, firecrawlResponse{Success: false, Error: err.Error()})
 		return
@@ -209,7 +215,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return searchKeyed(c)
 	})
 
-	scrape := zip.AdaptNetHTTP(http.HandlerFunc(scrapeHandler))
+	// Scope resolved at the zip layer where the verified principal lives; the
+	// service caller (chat) has none and lands in the shared prefix. See crawl.scope.
+	scrape := func(c *zip.Ctx) error {
+		org, _ := principal.Org(c)
+		s := crawl.Scope{Org: org, Project: principal.Project(c)}
+		return zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			scrapeScoped(w, r, s)
+		}))(c)
+	}
 	// Firecrawl builds {apiUrl}/{version}/scrape; pin firecrawlVersion:v1 so the
 	// client POSTs /v1/websearch/v1/scrape. Also accept the bare /scrape.
 	g.Post("/v1/scrape", scrape)
