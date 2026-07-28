@@ -97,16 +97,12 @@ func (a App) remote() (zip.Plugin, bool) {
 	if err != nil || byID == nil {
 		return zip.Plugin{}, false
 	}
-	// Same ladder as on disk: a dedicated artifact wins, else the multi-call one
-	// serving this app. One published binary answers all 108 — 196MB instead of
-	// 4.4GB, because the ~36MB core every plugin links is shipped once.
+	// One rung, on disk and here alike: this app's own published binary for the
+	// running platform, keyed by name+os+arch so one index serves a mixed-arch
+	// fleet. No multi-call fallback — every subsystem publishes its own artifact.
 	at, ok := byID[key(a.Name, runtime.GOOS, runtime.GOARCH)]
-	var args []string
 	if !ok {
-		if at, ok = byID[key(MultiCall, runtime.GOOS, runtime.GOARCH)]; !ok {
-			return zip.Plugin{}, false
-		}
-		args = []string{"--enable=" + a.Name}
+		return zip.Plugin{}, false
 	}
 	// Sum is what makes fetching code safe to execute: zip verifies before
 	// chmod, and caches by digest, so restart and rollback touch no network.
@@ -114,7 +110,6 @@ func (a App) remote() (zip.Plugin, bool) {
 		Name: a.Name,
 		URL:  at.url,
 		Sum:  at.sum,
-		Args: args,
 		Lazy: !a.Eager,
 	}, true
 }

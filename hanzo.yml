@@ -20,25 +20,17 @@ images:
     dockerfile: native/flags/Dockerfile
     repo: ghcr.io/hanzoai/cloud-flags
 
-# The plugin lane, and NOT a second builder of the image above: this is the
-# static binary a host with no plugins in its image fetches at run time
-# (manifest/release.go), which the image's cgo+libsqlcipher /cloud cannot be —
-# a plugin runs on whatever base its host happens to be.
-#
-# ONE entry for 108 apps. manifest.MultiCall is this binary, and every app
-# resolves to it with a different --enable, so the index names it once: 195MiB
-# published against 4520MiB for a binary per app, of which 35MiB each is the
-# core all of them link.
-binaries:
-  - name: cloud
-    main: ./cmd/cloud
-    platforms: [linux/amd64, linux/arm64]
-
-# Where binaries: publishes — hanzoai/s3, not a GitHub release. Artifacts and
-# the binaries.json naming them land under <bucket>/<repo>/<tag>/, so
-# CLOUD_PLUGINS is one immutable URL per tag and 400MiB a release never touches
-# a storage quota we do not own.
-bucket: plugins
+# NO binaries: lane. Every subsystem now ships as its OWN cmd/<app> binary, and
+# the per-app binaries travel INSIDE the release image — the Dockerfile builds the
+# light host plus one binary per app into /plugins beside it, and the host resolves
+# each plugin as a file on disk (manifest.App.Plugin). There is no longer a single
+# multi-call binary that one binaries: entry could publish to cover the whole fleet;
+# 112 per-app entries would blow the artifact lane's 16-binary bound, and its
+# out:-glob path names every file with one recipe name (incompatible with the
+# per-app, per-arch index manifest/release.go reads). So the image IS the
+# distribution. The CLOUD_PLUGINS runtime path (manifest/release.go) remains a valid
+# opt-in for a plugin-less host, to be fed by a dedicated per-arch publisher if one
+# is ever needed — not by this 16-bounded lane.
 
 test:
   - name: native-flags
@@ -60,38 +52,36 @@ test:
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
       go vet ./...
   - name: generated-current
-    # apps.Wire() is the single source of truth for the subsystem set; cmd/<app>
-    # and manifest/apps.go are DERIVED from it by cmd/gen-app-cmds, and the
-    # generator is idempotent. So a clean tree after re-running it is the whole
-    # invariant — and a dirty one means someone edited Wire() without
-    # regenerating, which leaves the light host routing to binaries that do not
-    # exist (or not routing to ones that do). Pure AST parse: no build, seconds.
+    # manifest/apps.go is the hand-authored source of truth for the subsystem set.
+    # cmd/gen-app-cmds scaffolds a cmd/<app>/main.go for any manifest app that
+    # lacks one and refuses a cmd/<app> the manifest does not list — the bijection
+    # that keeps the light host from routing to a binary that is not there (or a
+    # binary from going unrouted). It never rewrites an existing main (those are
+    # source), so it is idempotent: a clean tree after running it is the whole
+    # invariant. It reads manifest.Apps as a value; seconds, no fleet build.
     run: |
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
       go run ./cmd/gen-app-cmds
-      # --porcelain, not `git diff`: a NEW subsystem in Wire() produces a NEW
+      # --porcelain, not `git diff`: a NEW manifest app scaffolds a NEW
       # cmd/<app>/main.go, which is untracked and therefore invisible to a diff.
       # The failure that matters most is exactly the one a diff would miss.
-      #
-      # Scoped to the files the generator OWNS. Pointing it at cmd/ wholesale
-      # would also fail on anything else untracked there — a scratch harness, a
-      # local experiment — which is a red build for a reason that has nothing to
-      # do with the manifest.
-      stale=$(git status --porcelain -- 'cmd/*/main.go' manifest/apps.go)
+      # Scoped to cmd/*/main.go, the files the generator owns.
+      stale=$(git status --porcelain -- 'cmd/*/main.go')
       if [ -n "$stale" ]; then
-        echo "::error::cmd/ or manifest/ is stale — apps.Wire() changed without 'make generate'. Run it and commit."
+        echo "::error::a manifest app has no cmd/<app> (or one is stale) — run 'make generate' and commit. An orphan cmd/<app> fails the generator itself, above."
         echo "$stale"
         exit 1
       fi
   - name: host-is-light
     # The light host's ONE property is that it links no subsystem: it knows where
     # each app lives and what path it answers, never what the app does. That is
-    # what keeps it at 316 packages against cmd/cloud's 3108, and it is a
-    # property of the IMPORT GRAPH, so it is checked with the import graph rather
-    # than with a size threshold nobody can interpret. One stray import of a
-    # clients/* package (or of apps) drags the whole graph back in, and the only
-    # symptom would be a slow build — this turns that into a failed one.
+    # what keeps it at ~395 packages while the fleet's subsystem graphs total
+    # thousands, and it is a property of the IMPORT GRAPH, so it is checked with
+    # the import graph rather than with a size threshold nobody can interpret. One
+    # stray import of a clients/* package drags a subsystem's whole graph back in,
+    # and the only symptom would be a slow build — this turns that into a failed
+    # one. (There is no package apps to leak anymore; it is gone.)
     run: |
       set -e
       # CGO_ENABLED=0 to match `make host`: the cgo graph carries one extra
@@ -112,12 +102,13 @@ test:
     # last-write-wins is exactly the class of bug the manifest's call-graph walk
     # caught when clients/git's /:org/:repo was swallowing its neighbours.
     #
-    # It also pins FRESHNESS in both directions, which is why it earns its own
-    # entry rather than riding go-unit: openapi.yaml is verified against the live
-    # router by TestOpenAPIYAML, and this verifies the woven subsets against
-    # openapi.yaml — so a route change that regenerates one and not the other
-    # goes red here, in seconds, instead of shipping a wrong SDK. Links no
-    # subsystem and mounts nothing but the openapi endpoint itself.
+    # It also pins FRESHNESS, which is why it earns its own entry rather than
+    # riding go-unit: the monolith is gone, so the woven document IS openapi.yaml —
+    # `make openapi` writes it through this same weave, and this verifies the
+    # committed subsets weave back to the committed golden byte for byte. A route
+    # change that regenerates one and not the other goes red here, in seconds,
+    # instead of shipping a wrong SDK. Links no subsystem and mounts nothing but
+    # the openapi endpoint itself.
     run: |
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
