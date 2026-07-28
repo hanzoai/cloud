@@ -60,7 +60,7 @@ FROM ${SKILLS_IMAGE} AS skills
 # ── native flags evaluator staticlib (prebuilt → /libhanzo_flags.a) ──────────
 FROM ${FLAGS_IMAGE} AS flagslib
 
-FROM ghcr.io/hanzoai/mirror/golang:1.26-alpine3.22@sha256:47d47cb5cc3c7dac409dcb6c3a98a6263571218046cd02d709527feef804a77c AS build
+FROM ghcr.io/hanzoai/mirror/golang:1.26.5-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS build
 # go.mod is the ONE place the Go version is declared.
 #
 # The golang image ships GOTOOLCHAIN=local, which makes the image's own Go the
