@@ -525,6 +525,19 @@ func (s *Store) EnsureSystemAuthor(ctx context.Context, id, org, githubLogin str
 	if err != nil && !isUnique(err) {
 		return Author{}, fmt.Errorf("ensure system author: %w", err)
 	}
+	if err != nil {
+		// The row already exists — ENSURE means ensure. The maintainer org's author
+		// IS the system author by definition, so a row left CONNECTED by an earlier
+		// manual connect (before this path existed) must still earn; leaving it
+		// un-approved silently blocks "pay ourselves" forever. Only that one
+		// transition is made: a negotiated share_bps stands, and a SUSPENDED author
+		// stays suspended (un-suspending is an operator decision, not a side effect).
+		if _, uerr := s.db.ExecContext(ctx,
+			`UPDATE authors SET status=?, approved_at=? WHERE org=? AND status=?`,
+			StatusApproved, now, org, StatusConnected); uerr != nil {
+			return Author{}, fmt.Errorf("approve system author: %w", uerr)
+		}
+	}
 	return s.GetByOrg(ctx, org)
 }
 
