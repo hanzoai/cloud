@@ -152,6 +152,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
   actor_org  TEXT    NOT NULL DEFAULT '',
   actor_sub  TEXT    NOT NULL DEFAULT '',
   actor_email TEXT   NOT NULL DEFAULT '',
+  actor_home TEXT    NOT NULL DEFAULT '',  -- set ONLY on a cross-org (impersonated) action
   action     TEXT    NOT NULL,
   res_type   TEXT    NOT NULL DEFAULT '',
   res_id     TEXT    NOT NULL DEFAULT '',
@@ -178,6 +179,51 @@ CREATE INDEX IF NOT EXISTS ix_audit_ts         ON audit_log(ts);
 `
 	if _, err := r.db.Exec(ddl); err != nil {
 		return fmt.Errorf("audit: migrate: %w", err)
+	}
+	// CREATE TABLE IF NOT EXISTS does nothing to a table that already exists, so a
+	// trail written before actor_home existed needs the column added explicitly.
+	// It MUST exist: Verify rehydrates each record from its columns and recomputes
+	// the hash, so a field that is written but not persisted would come back empty
+	// and every impersonation record would be reported as TAMPERED — a false alarm
+	// on the one control that must never cry wolf.
+	//
+	// Additive, defaulted, and idempotent: existing rows read back actor_home='',
+	// which (omitempty) canonicalizes exactly as before, so their stored hashes
+	// still verify. See TestVerify_HomeFieldIsHashCompatible.
+	if err := r.addColumn("actor_home"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// addColumn adds a TEXT NOT NULL DEFAULT '' column to audit_log if it is not
+// already present. Idempotent by inspection (PRAGMA table_info) rather than by
+// swallowing the duplicate-column error, so a REAL migration failure still
+// surfaces instead of being mistaken for "already applied".
+func (r *Recorder) addColumn(name string) error {
+	rows, err := r.db.Query(`PRAGMA table_info(audit_log)`)
+	if err != nil {
+		return fmt.Errorf("audit: migrate: table_info: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var (
+			cid, notnull, pk int
+			col, typ         string
+			dflt             sql.NullString
+		)
+		if err := rows.Scan(&cid, &col, &typ, &notnull, &dflt, &pk); err != nil {
+			return fmt.Errorf("audit: migrate: table_info scan: %w", err)
+		}
+		if col == name {
+			return nil // already present
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("audit: migrate: table_info rows: %w", err)
+	}
+	if _, err := r.db.Exec(`ALTER TABLE audit_log ADD COLUMN ` + name + ` TEXT NOT NULL DEFAULT ''`); err != nil {
+		return fmt.Errorf("audit: migrate: add column %s: %w", name, err)
 	}
 	return nil
 }
@@ -256,12 +302,12 @@ func (r *Recorder) Append(ctx context.Context, rec Record) (Record, error) {
 func (r *Recorder) insert(ctx context.Context, rec Record) error {
 	_, err := r.db.ExecContext(ctx, `
 INSERT INTO audit_log (
-  seq, ts, actor_org, actor_sub, actor_email, action, res_type, res_id,
+  seq, ts, actor_org, actor_sub, actor_email, actor_home, action, res_type, res_id,
   auth_method, is_admin, result, status, reason, source_ip, user_agent,
   request_id, method, path, before, after, prev_hash, hash
-) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		rec.Seq, rec.Time.Format(time.RFC3339Nano),
-		rec.Actor.Org, rec.Actor.Sub, rec.Actor.Email,
+		rec.Actor.Org, rec.Actor.Sub, rec.Actor.Email, rec.Actor.Home,
 		rec.Action, rec.Resource.Type, rec.Resource.ID,
 		rec.Auth.Method, boolToInt(rec.Auth.IsAdmin),
 		rec.Outcome.Result, rec.Outcome.Status, rec.Outcome.Reason,
