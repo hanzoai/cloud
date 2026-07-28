@@ -8,23 +8,25 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// forkReq is the body of POST /v1/projects/fork: which template to fork and,
+// forkReq is the body of POST /v1/projects/fork: which parent to fork and,
 // optionally, the target project name/slug. Both target fields default from the
-// template (name = template title, slug = slugify(title)) when omitted.
+// parent (name = its title, slug = the parent slug) when omitted.
 type forkReq struct {
-	Slug string `json:"slug"` // template slug to fork (required)
-	Name string `json:"name"` // target project name (optional; defaults to template title)
+	Slug string `json:"slug"` // parent slug to fork — catalog template or published project (required)
+	Name string `json:"name"` // target project name (optional; defaults to the parent's title)
 	// Target overrides the derived project slug (optional; defaults to the
-	// template slug). Kept distinct from Slug so callers can rename on fork.
+	// parent slug). Kept distinct from Slug so callers can rename on fork.
 	Target string `json:"target"`
 }
 
-// fork creates a real Project seeded from a starter-kit template. It reads the
-// ONE embedded gallery catalog (templates.Get — no catalog copy here), maps the
-// template's freeform framework label to the projects build-hint enum, and then
-// funnels through the SAME createProject path POST /v1/projects uses — so slug
-// validation, org scoping, ID minting, and conflict handling are not duplicated.
-// Returns 201 with the created project.
+// fork creates a real Project seeded from a PUBLISHED EXAMPLE — either a
+// starter-kit template from the ONE embedded gallery catalog, or any live project
+// on the platform (an example a seeded creator published, or another org's app
+// serving at <slug>.hanzo.app). It funnels through the SAME createProject path
+// POST /v1/projects uses — so slug validation, org scoping, ID minting, and
+// conflict handling are not duplicated — and stamps the parent it actually
+// resolved onto the child as ForkedFrom, so attribution is a fact recorded at
+// fork time rather than a claim reconstructed later. Returns 201.
 func fork(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := org(c)
 	if !ok {
@@ -36,32 +38,51 @@ func fork(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	slug := strings.TrimSpace(body.Slug)
 	if slug == "" {
-		return zip.ErrBadRequest("template slug is required")
+		return zip.ErrBadRequest("slug is required")
 	}
-	t, found := templates.Get(slug)
-	if !found {
-		return zip.ErrNotFound("template not found")
+	req, err := seedFrom(s, c, slug)
+	if err != nil {
+		return err
 	}
+	// Caller overrides land on top of the parent's defaults; lineage is not one of
+	// them (createReq.ForkedFrom is json:"-", set by seedFrom).
+	if n := strings.TrimSpace(body.Name); n != "" {
+		req.Name = n
+	}
+	if t := strings.TrimSpace(body.Target); t != "" {
+		req.Slug = t
+	}
+	return createProject(s, c, org, req)
+}
 
-	// Seed the CreateProject from the template: name = title (or override),
-	// slug = target override or the template slug, framework mapped from the
-	// template's label, repo = the gallery source (a git fork URL).
-	name := strings.TrimSpace(body.Name)
-	if name == "" {
-		name = t.Title
+// seedFrom resolves the fork parent and returns the createReq it seeds. Catalog
+// FIRST: a curated template slug is a stable public name and must keep meaning the
+// same thing even if some org later publishes a live project under it. Falling
+// back to the unique live owner of the slug is the SAME resolution the sites edge
+// uses to serve <slug>.hanzo.app, so "what you can browse is what you can fork".
+// A live parent contributes its repo, so the child builds from the same source;
+// the parent's deployed BYTES are never copied — releases are per-tenant by
+// design, so the fork publishes its own.
+func seedFrom(s *cloud.Service[state], c *zip.Ctx, slug string) (createReq, error) {
+	if t, found := templates.Get(slug); found {
+		req := createReq{
+			Name: t.Title, Slug: t.Slug, Description: t.Description,
+			Framework: mapFramework(t.Framework), ForkedFrom: t.Slug,
+		}
+		req.Repo.URL = t.Source
+		return req, nil
+	}
+	p, err := s.State.store.ResolveUniqueLiveSlug(c.Context(), slug)
+	if err != nil {
+		return createReq{}, zip.ErrNotFound("no template or published project with that slug")
 	}
 	req := createReq{
-		Name:        name,
-		Slug:        strings.TrimSpace(body.Target),
-		Description: t.Description,
-		Framework:   mapFramework(t.Framework),
+		Name: p.Name, Slug: p.Slug, Description: p.Description,
+		Framework: p.Framework, ForkedFrom: p.Org + "/" + p.Slug,
 	}
-	if req.Slug == "" {
-		req.Slug = t.Slug
-	}
-	req.Repo.URL = t.Source
-
-	return createProject(s, c, org, req)
+	req.Repo.URL = p.RepoURL
+	req.Repo.Branch = p.RepoBranch
+	return req, nil
 }
 
 // mapFramework maps a template's freeform framework label (e.g. "Next.js 14.2 +
