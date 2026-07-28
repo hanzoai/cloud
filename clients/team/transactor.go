@@ -242,9 +242,7 @@ func (s *session) handle(payload []byte) []byte {
 	case "domainRequest":
 		return s.domainRequest(req.ID, req.Params)
 	case "searchFulltext":
-		// Full-text is served by hanzoai/search, not the SQLite data plane; until
-		// that proxy lands an empty result keeps queries non-fatal.
-		return s.result(req.ID, map[string]any{"docs": []any{}, "total": 0})
+		return s.searchFulltext(req.ID, req.Params)
 	case "loadChunk":
 		return s.result(req.ID, map[string]any{"idx": 0, "docs": []any{}, "finished": true})
 	case "getDomainHash":
