@@ -238,9 +238,10 @@ func isBasePath(p string) bool {
 		p == "/_" || strings.HasPrefix(p, "/_/")
 }
 
-// analyticsHostHandler ingests a published site's OWN analytics beacon (the
-// anonymous POST a page emits on unload) on the site host — host-as-project-ref
-// (HIP-0014), the exact twin of baseHostHandler. Nil (the default) leaves a site
+// analyticsHost is the site-host analytics-beacon carve: the EXACT set of ingest
+// paths, each already bound to the handler that ingests a published site's OWN
+// beacon (the anonymous POST a page emits on unload) — host-as-project-ref
+// (HIP-0014), the exact twin of baseHostHandler. Empty (the default) leaves a site
 // host 405-ing a beacon POST; analytics.Mount installs it. The org comes ONLY from
 // the resolved Site (the subdomain / bound custom host), never the caller — the
 // SAME server-supplied tenant key the file plane and the base carve trust, so a
@@ -248,16 +249,14 @@ func isBasePath(p string) bool {
 // body/header claim. The authenticated GET read lenses on api.hanzo.ai
 // (/v1/analytics/overview|timeseries|top) are untouched: this carve is POST-only
 // and never runs on an API host.
-var analyticsHostHandler func(org string, c *zip.Ctx) error
-
-// SetAnalyticsHostHandler installs the per-org analytics ingest handler (see
-// analyticsHostHandler).
-func SetAnalyticsHostHandler(h func(org string, c *zip.Ctx) error) { analyticsHostHandler = h }
-
-// analyticsPaths is the EXACT set of site-host analytics-beacon INGEST paths: the
-// canonical door at /v1/event, the deprecated Segment/beacon wire at
-// /v1/analytics{,/batch}, and the deprecated PostHog wire at /v1/insights/e (kept so
-// beacons already deployed on published sites don't break mid-migration).
+//
+// ONE map, because the carve asks one question — "is this an ingest door, and which
+// one?" — and a lookup answers both halves at once. This file used to answer the
+// first half from a path literal of its own while analytics answered the second,
+// and the two had drifted: /v1/tracker and /v1/ingest were routed ingest doors this
+// set did not name, so the same beacon was admitted on an API host and refused here.
+// The set now arrives from the package that owns ingest, derived from the same list
+// it registers its routes from, so the two surfaces cannot disagree again.
 //
 // It is an exact set and not a prefix. `HasPrefix(p, "/v1/analytics")` also swallowed
 // every READ lens — /v1/analytics/overview, /timeseries, /top, /health — leaving the
@@ -267,16 +266,30 @@ func SetAnalyticsHostHandler(h func(org string, c *zip.Ctx) error) { analyticsHo
 // carve silently starts routing it to the beacon handler with a host-derived org. The
 // set names what ingest actually is, so the method check is a second line rather than
 // the only one, and a new /v1/analytics/* route is out by default.
-var analyticsPaths = map[string]bool{
-	"/v1/event":           true,
-	"/v1/analytics":       true,
-	"/v1/analytics/batch": true,
-	"/v1/insights/e":      true,
-}
+var analyticsHost map[string]func(org string, c *zip.Ctx) error
 
-// isAnalyticsPath reports whether a path targets the site-host analytics-beacon
-// ingest (analyticsPaths). The Middleware carve additionally gates on POST.
-func isAnalyticsPath(p string) bool { return analyticsPaths[p] }
+// SetAnalyticsHost installs the site-host ingest carve (see analyticsHost): the
+// ingest paths bound to their handlers. A nil or empty map disables the carve.
+func SetAnalyticsHost(h map[string]func(org string, c *zip.Ctx) error) { analyticsHost = h }
+
+// analyticsIngest returns the site-host ingest handler for a request, and whether
+// this request is site-host ingest at all. POST is a second, independent line: a
+// read lens that grows a POST still has to be named a door to be carved.
+//
+// The match is BYTE-EXACT on the raw request target (resolveKey documents that
+// c.Path() is unescaped and unnormalized by anything upstream), and deliberately
+// stricter than the router: an encoded or denormalized spelling of a door — %65vent,
+// a trailing slash, a dot segment — misses and is served as static, even where Fiber
+// would still route it. This carve hands a request a tenant derived from its Host, so
+// it admits only the exact strings it was handed; every near-miss fails to the static
+// serve rather than into ingest.
+func analyticsIngest(c *zip.Ctx) (func(org string, c *zip.Ctx) error, bool) {
+	if c.Method() != http.MethodPost {
+		return nil, false
+	}
+	h, ok := analyticsHost[c.Path()]
+	return h, ok
+}
 
 func (s *Server) Middleware() zip.Handler {
 	return func(c *zip.Ctx) error {
@@ -287,9 +300,9 @@ func (s *Server) Middleware() zip.Handler {
 					return baseHostHandler(site.Org, c)
 				}
 			}
-			if analyticsHostHandler != nil && c.Method() == http.MethodPost && isAnalyticsPath(c.Path()) {
+			if h, ok := analyticsIngest(c); ok {
 				if site, ok := s.resolveLivePinned(c.Context(), slug, firstParty); ok {
-					return analyticsHostHandler(site.Org, c)
+					return h(site.Org, c)
 				}
 			}
 			return s.serve(c, slug, firstParty)
@@ -299,8 +312,8 @@ func (s *Server) Middleware() zip.Handler {
 				if baseHostHandler != nil && isBasePath(c.Path()) {
 					return baseHostHandler(site.Org, c)
 				}
-				if analyticsHostHandler != nil && c.Method() == http.MethodPost && isAnalyticsPath(c.Path()) {
-					return analyticsHostHandler(site.Org, c)
+				if h, ok := analyticsIngest(c); ok {
+					return h(site.Org, c)
 				}
 				return s.serveCustom(c, site)
 			}

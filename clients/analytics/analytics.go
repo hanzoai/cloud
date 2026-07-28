@@ -100,10 +100,8 @@ func build(b cloud.Base) (state, error) {
 
 // installHostCarve wires the published-site-host beacon ingest (the twin of base's
 // sites.SetBaseHostHandler): a page served on a site host can POST its OWN analytics
-// beacon to the canonical /v1/event (or the deprecated /v1/analytics{,/batch} and
-// /v1/insights/e beacons kept working mid-migration) and have it ingested into
-// hanzo.events under the site's resolved Org — the server-supplied, host-derived
-// tenant, never a body/header claim.
+// beacon to an ingest door and have it ingested into hanzo.events under the site's
+// resolved Org — the server-supplied, host-derived tenant, never a body/header claim.
 //
 // It goes STRAIGHT to the ANONYMOUS lane (publicIngest), and this is the honest
 // description of the door rather than a policy applied to it: sites.Middleware runs
@@ -124,25 +122,25 @@ func build(b cloud.Base) (state, error) {
 // CLOUD_ANALYTICS_PUBLIC_CAPTURE (publicCaptureEnabled, default ON) — so a site
 // host accepts its own beacons out of the box, and turning public capture off also
 // removes this carve (a site host then 405s a beacon POST, unchanged). sites.Middleware
-// gates the carve on method POST and on an exact ingest-path set, so the authenticated
-// GET read lenses are never hijacked.
+// gates the carve on method POST and on the exact path set handed to it here, so the
+// authenticated GET read lenses are never hijacked.
+//
+// That set is doors (event.go) — the SAME list routes registers — so a site host
+// carves exactly the doors an API host routes. sites is handed each path already
+// bound to its handler, which is why it holds no path literal of its own: the map it
+// looks a beacon up in IS the dispatch, so membership and wire are one decision and
+// a door added or deleted tomorrow moves both surfaces at once.
 func installHostCarve(b cloud.Base) {
 	if !publicCaptureEnabled() {
 		b.Log.Info("analytics public-host ingest carve disabled", "flag", publicCaptureEnv)
 		return
 	}
-	sites.SetAnalyticsHostHandler(func(org string, c *zip.Ctx) error {
-		// Only the WIRE differs per path; capability and tenant are the same for all
-		// three, which is the whole point of routing them through one lane.
-		if c.Path() == "/v1/insights/e" { // deprecated PostHog-wire beacon
-			return publicIngest(c, decodeInsights, org, sourcePostHog)
-		}
-		if c.Path() == "/v1/event" { // the canonical door, canonical wire
-			return publicIngest(c, decodeIngest, org, sourceEvent)
-		}
-		return publicIngest(c, decodeIngest, org, sourceCapture) // /v1/analytics{,/batch}
-	})
-	b.Log.Info("analytics public-host ingest carve enabled", "flag", publicCaptureEnv)
+	carve := make(map[string]func(string, *zip.Ctx) error, len(doors))
+	for _, d := range doors {
+		carve[d.path] = d.anon
+	}
+	sites.SetAnalyticsHost(carve)
+	b.Log.Info("analytics public-host ingest carve enabled", "flag", publicCaptureEnv, "doors", len(carve))
 }
 
 // routes registers the analytics surface. Health owns /v1/analytics/health
@@ -154,36 +152,25 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/analytics/timeseries", cloud.Handle(s, timeseries))
 	app.Get("/v1/analytics/top", cloud.Handle(s, top))
 
-	// Capture (WRITE) side — the ingest that fills hanzo.events. POST /v1/event
-	// (event.go) is the ONE canonical front door serving EVERY auth context (IAM
-	// bearer | pk_ publishable key | site-host-forced | ANONYMOUS, public.go) and
-	// EVERY wire shape (Event | [Event] | {batch}) into the ONE write core
-	// (ingestEvents). Every other route below is a thin alias/shim delegating to it.
-	app.Post("/v1/event", cloud.Handle(s, eventIngest))
+	// Capture (WRITE) side — the ingest that fills hanzo.events. Every ingest door
+	// is registered HERE and only here, from doors (event.go): one Post per declared
+	// door, no hand-written path beside it. A door contributes its WIRE and nothing
+	// else — admission (handle) and the write core (ingestEvents) are shared — so
+	// this is one pipeline behind N paths, and a path that is not in doors is not an
+	// ingest door anywhere: not routed, and not carved on a site host either.
+	for _, d := range doors {
+		app.Post(d.path, cloud.Handle(s, d.ingest))
+	}
 
-	// /v1/ingest — a THIN DEPRECATED ALIAS of /v1/event (delegates to the exact
-	// eventHandle logic: pk_ auth now lives on the canonical door). /v1/ingest/keys
-	// mints a pk_ for the caller's org (minting is a distinct concern, not ingest);
-	// /v1/errors is the type:'error' read lens (validated principal — reads never
-	// accept the write-only key).
-	app.Post("/v1/ingest", cloud.Handle(s, ingest))
+	// The rest of the write plane is NOT ingest: /v1/ingest/keys mints a pk_ for the
+	// caller's org (minting is a distinct concern), and /v1/errors is the type:'error'
+	// read lens — a validated principal, since a read never accepts the write-only key.
 	app.Get("/v1/errors", cloud.Handle(s, errorsLens))
 
-	// DEPRECATED foreign-protocol ingest shims — external-SDK compat ONLY; no Hanzo
-	// surface uses these (Hanzo surfaces POST /v1/event). They normalize their own
-	// wire onto CaptureEvent and funnel through the SAME write core (log a one-shot
-	// deprecation, keep working so external Segment/beacon callers are unbroken).
-	// /v1/analytics{,/batch} and /v1/tracker speak the Segment/beacon CaptureBatch
-	// wire; /v1/tracker is a bare route (never collides with /v1/tracker/projects*).
-	app.Post("/v1/analytics", cloud.Handle(s, capture))
-	app.Post("/v1/analytics/batch", cloud.Handle(s, capture))
-	app.Post("/v1/tracker", cloud.Handle(s, capture))
-
-	// /v1/insights — console reads over the SAME engine + the DEPRECATED PostHog-
-	// wire ingest shim (/v1/insights/e → the ONE write core; external PostHog SDK
-	// compat only). Flags live at /v1/flags.
+	// /v1/insights — console reads over the SAME engine. The PostHog-wire INGEST at
+	// /v1/insights/e is a door and is registered in the loop above. Flags live at
+	// /v1/flags.
 	app.Get("/v1/insights/health", cloud.Handle(s, insightsHealth))
-	app.Post("/v1/insights/e", cloud.Handle(s, insightsIngest))
 	app.Get("/v1/insights/events", cloud.Handle(s, insightsEvents))
 }
 

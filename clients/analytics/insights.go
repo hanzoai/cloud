@@ -9,9 +9,15 @@ package analytics
 // ONE datastore client. Flags stay at /v1/flags (the native flags engine) —
 // this namespace deliberately does not duplicate them.
 //
+// The PostHog wire is why /v1/insights/e is a DOOR and not an alias: external SDKs
+// emit this shape and insights.hanzo.ai rewrites every PostHog ingest path onto it,
+// so no canonical-wire door can serve them. decodeInsights below is the whole of
+// that difference — the door is declared in doors (event.go) and shares admission,
+// the write core and the receipt with /v1/event.
+//
 // Routes (org resolved SERVER-SIDE — same tenant gates as the rest):
 //
-//	POST /v1/insights/e       PostHog-compatible ingest: one event or {batch:[...]}
+//	POST /v1/insights/e       PostHog wire ingest: one event or {batch:[...]} (a door)
 //	GET  /v1/insights/events  recent events for the org (console read; limit<=200)
 //	GET  /v1/insights/health  liveness of the unified surface
 //
@@ -125,17 +131,6 @@ func decodeInsights(body []byte) ([]CaptureEvent, error) {
 		caps[i] = e.toCapture()
 	}
 	return caps, nil
-}
-
-// insightsIngest answers POST /v1/insights/e — a DEPRECATED foreign-protocol shim for
-// the PostHog wire. External-SDK compat ONLY; no Hanzo surface uses it (Hanzo surfaces
-// POST /v1/event). Only the WIRE differs from the canonical door, so only the decoder
-// differs: admission, the write core and the receipt are the ONE shared pipeline
-// (handle, event.go). It used to resolve its own tenant and fall back to the request
-// Host — see the note where captureTenant used to live (capture.go).
-func insightsIngest(s *cloud.Service[state], c *zip.Ctx) error {
-	deprecated(s, c, "/v1/event")
-	return handle(c, decodeInsights, sourcePostHog)
 }
 
 // insightsEvents answers GET /v1/insights/events — the console's recent-events
