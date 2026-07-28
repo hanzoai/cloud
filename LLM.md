@@ -559,6 +559,39 @@ keeps the wrapped data key beside it as `<path>.dek`, so moving the `.db` alone
 strands the key and every document becomes undecryptable — data loss that presents
 as an empty index.
 
+## The cross-org catalog (`clients/catalog`, `/v1/catalog`)
+
+Everything the fleet has built — hanzo, lux and zoo repos, plus every site this
+deployment serves — as ONE searchable corpus. It owns no store: the rows live in
+`clients/index` under the uid `catalog`, so relevance, paging and encryption at rest
+are the index's. What catalog adds is the one thing a per-org index cannot express,
+a corpus that spans orgs, and it does that with a SECOND corpus rather than a
+weaker filter:
+
+- `~catalog` is the published, world-readable corpus. The leading `~` is
+  load-bearing: an org id is minted from a validated IAM owner claim and IAM org
+  slugs begin with an alphanumeric, so no principal can ever BE `~catalog`.
+- the caller's own org holds their private rows, read with `principal.Org` and
+  nothing else. Another tenant never RUNS the query that would return them.
+
+**There is no write route, on purpose.** The first cut had `PUT /v1/catalog` behind
+`principal.IsSuperAdmin`; that gate is correct and unusable, because SuperAdmin is
+human-only here and a cron would have needed a second fabric credential. Instead
+`sync.go` reconciles the corpus in-process every hour (first pass delayed 90s so a
+boot never waits on the network) from the public repos of the source orgs
+(`CLOUD_CATALOG_ORGS`, default the fleet) and `projects.LiveSites`. A failed source
+keeps the last good corpus — a GitHub outage must not prune the catalog to empty.
+
+Which corpus a row lands in IS the tenancy rule: a public repo is public by
+definition, our OWN org's live sites (`CLOUD_CATALOG_PLATFORM_ORG`, default `hanzo`)
+are published because they are the demos a visitor is meant to fork, and every other
+org's live sites land in that org's corpus. `TestSyncRoutesSitesByOrg` asserts the
+routing itself, because that is where a customer's project would leak.
+
+`index.Reconcile` is `index.Query`'s mirror and the only in-process WRITE seam: a
+full-corpus swap (upsert everything, delete what is gone) because the truth lives
+upstream and a re-run must converge.
+
 ## Fetching the web (`clients/crawl`, `/v1/crawl`)
 
 In-binary fetch + extract + markdown. It replaced a call to a standalone crawler
