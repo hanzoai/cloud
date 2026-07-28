@@ -332,7 +332,15 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			// path grants NEITHER global NOR org admin, and the audience widening can never
 			// be leveraged into an admin surface. Like every authorityHeader it is stripped
 			// on ingress and re-injected ONLY here from validated claims, unforgeable.
-			if claims.IsAdmin && !isMachinePrincipal(claims) {
+			// The fact has TWO signed sources and needs both: `isAdmin` (the
+			// platform's own super-users) and the EFFECTIVE org's role in the signed
+			// membership set (`orgs[].role == "admin"` — how a normal org's admin
+			// carries their adminness, and the ONLY place it appears). Reading only
+			// isAdmin demoted every org admin to a plain member, so the org-scoped
+			// admin surfaces refused their own owner. Keyed on effOrg, not on the
+			// home org: the bit must describe the org the request ACTS in, so
+			// switching to an org you merely belong to never carries admin across.
+			if (claims.IsAdmin || isOrgAdmin(claims.Orgs, effOrg)) && !isMachinePrincipal(claims) {
 				req.Header.Set("X-User-IsOrgAdmin", "true")
 			}
 			sanitizeSubScopes(c, effOrg, claims.mintedProject(), cliApp, claims.mintedBillingAccount())
