@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"testing"
 	"time"
 
@@ -95,4 +96,60 @@ func TestPurgerEmptyTagsIsNoop(t *testing.T) {
 	if err := p.PurgeTags(context.Background()); err != nil {
 		t.Fatalf("empty PurgeTags: %v", err)
 	}
+}
+
+// TestAssertHTMLPassthroughPatchesOnlyDrift is the regression guard for the
+// savor.hanzo.app outage: the zone had email_obfuscation ON, so Cloudflare
+// rewrote every email address in the served markup and React's hydration
+// compared markup it never rendered — #418/#425 → #423 → "Application error"
+// on the slow loads. The assertion must turn a drifted rewriter OFF and must
+// leave a compliant one alone (a needless PATCH burns the shared account's
+// quota on every pod start).
+func TestAssertHTMLPassthroughPatchesOnlyDrift(t *testing.T) {
+	state := map[string]string{"email_obfuscation": "on", "rocket_loader": "off"}
+	var patched []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := path.Base(r.URL.Path)
+		if r.Method == http.MethodPatch {
+			var body struct {
+				Value string `json:"value"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("patch %s: decode: %v", id, err)
+			}
+			state[id] = body.Value
+			patched = append(patched, id+"="+body.Value)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true, "result": map[string]string{"id": id, "value": state[id]},
+		})
+	}))
+	defer srv.Close()
+
+	p := testPurger("tok", "zone1", srv.URL, srv.Client())
+	p.AssertHTMLPassthrough(context.Background())
+
+	if len(patched) != 1 || patched[0] != "email_obfuscation=off" {
+		t.Fatalf("patched = %v, want exactly [email_obfuscation=off]", patched)
+	}
+	for id, want := range rewriters {
+		if state[id] != want {
+			t.Errorf("zone %s = %q, want %q", id, state[id], want)
+		}
+	}
+}
+
+// An unconfigured or unauthorized zone must never be fatal: the site server has
+// to boot and serve even when it cannot read Cloudflare — the same degradation
+// PurgeTags documents.
+func TestAssertHTMLPassthroughDegradesSoftly(t *testing.T) {
+	testPurger("", "", "http://127.0.0.1:0", &http.Client{Timeout: time.Second}).
+		AssertHTMLPassthrough(context.Background())
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+	testPurger("tok", "zone1", srv.URL, srv.Client()).
+		AssertHTMLPassthrough(context.Background())
 }

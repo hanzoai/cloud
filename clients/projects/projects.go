@@ -263,6 +263,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	routes(app, s)
 
+	// The site edge must hand the browser the bytes we published, unedited: a
+	// Cloudflare zone with an HTML rewriter on breaks every hydrating app the
+	// plane serves (see sites.rewriters). Assert it off-thread so a slow or
+	// unreachable Cloudflare cannot delay the mount, and fail-soft — it only ever
+	// logs.
+	go s.State.cf.AssertHTMLPassthrough(context.Background())
+
 	b.Log.Info("projects mounted", "bucket", s.State.blob.bucket, "s3", s.State.blob.configured(),
 		"ai", s.State.ai != nil, "apex", s.State.apex, "billing", s.State.bill.Enabled(), "brand", deps.Brand)
 	return nil

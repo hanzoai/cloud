@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -257,6 +259,114 @@ func (p *Purger) call(ctx context.Context, tags []string) error {
 	}
 	p.log.Info("cloudflare purge ok", "tags", tags)
 	return nil
+}
+
+// rewriters are the Cloudflare zone settings that REWRITE the HTML we serve, and
+// the value each must hold for a published site to work. Every one of them edits
+// the markup between our S3 object and the browser:
+//
+//   - email_obfuscation: replaces every email address in the body with a
+//     <a class="__cf_email__" data-cfemail="…">[email protected]</a> placeholder plus
+//     an injected decoder script that swaps the real address back in at runtime.
+//   - rocket_loader: rewrites and defers every <script> tag, reordering execution.
+//
+// Both are silent, both are per-zone, and both are fatal to any framework that
+// HYDRATES: React compares the markup it receives against the markup it renders,
+// and on a mismatch it discards the entire server tree and re-renders the root on
+// the client (React #418/#425 → #423). A page that survives that re-render merely
+// looks slow; a page whose client render then throws shows only "Application
+// error: a client-side exception has occurred". savor.hanzo.app was the second
+// case, and 12 live sites carried the rewrite. Nothing in the deployed bytes was
+// wrong — the edge was editing them in flight.
+//
+// This is a correctness invariant of the static plane, not a preference, so it is
+// asserted HERE — the one file that holds this deployment's zone — and not left to
+// a dashboard toggle nobody can see from the code.
+var rewriters = map[string]string{
+	"email_obfuscation": "off",
+	"rocket_loader":     "off",
+}
+
+// AssertHTMLPassthrough makes the zone deliver our HTML byte-for-byte: it reads
+// each rewriting setting and PATCHes only the ones that drifted. Idempotent, so
+// the startup path calls it unconditionally; it costs one GET per setting and a
+// PATCH only on drift.
+//
+// It degrades exactly like PurgeTags: unconfigured or unauthorized is a Warn, not
+// a failure — a token that cannot read zone settings must never stop the site
+// server from booting. The Warn names the setting and the value it needs, so an
+// operator can fix it from the log line alone.
+func (p *Purger) AssertHTMLPassthrough(ctx context.Context) {
+	if !p.Configured() {
+		p.log.Warn("cloudflare html-passthrough unchecked (CF_API_TOKEN/CF_ZONE_ID unset)")
+		return
+	}
+	for _, id := range sortedKeys(rewriters) {
+		want := rewriters[id]
+		got, err := p.zoneSetting(ctx, http.MethodGet, id, "")
+		if err != nil {
+			p.log.Warn("cloudflare zone setting unreadable", "setting", id, "want", want, "err", err)
+			continue
+		}
+		if got == want {
+			continue
+		}
+		if _, err := p.zoneSetting(ctx, http.MethodPatch, id, want); err != nil {
+			p.log.Warn("cloudflare zone rewrites our html and could not be turned off",
+				"setting", id, "is", got, "want", want, "err", err)
+			continue
+		}
+		p.log.Info("cloudflare zone setting corrected (it was rewriting served html)",
+			"setting", id, "was", got, "now", want)
+	}
+}
+
+// zoneSetting GETs or PATCHes one zone setting and returns its resulting value.
+// A PATCH sends {"value": v}; a GET sends no body.
+func (p *Purger) zoneSetting(ctx context.Context, method, id, value string) (string, error) {
+	var body io.Reader
+	if method == http.MethodPatch {
+		payload, err := json.Marshal(map[string]string{"value": value})
+		if err != nil {
+			return "", fmt.Errorf("cf setting %s: marshal: %w", id, err)
+		}
+		body = bytes.NewReader(payload)
+	}
+	url := strings.TrimRight(p.api, "/") + "/zones/" + p.zoneID + "/settings/" + id
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return "", fmt.Errorf("cf setting %s: request: %w", id, err)
+	}
+	req.Header.Set("Authorization", "Bearer "+p.token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("cf setting %s: do: %w", id, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode/100 != 2 {
+		return "", fmt.Errorf("cf setting %s: status %d", id, resp.StatusCode)
+	}
+	var out struct {
+		Result struct {
+			Value string `json:"value"`
+		} `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", fmt.Errorf("cf setting %s: decode: %w", id, err)
+	}
+	return out.Result.Value, nil
+}
+
+// sortedKeys keeps the assertion order (and therefore the log) stable.
+func sortedKeys(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // CacheTag is the ONE canonical edge cache-tag for a project's site objects. The
