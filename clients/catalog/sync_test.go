@@ -245,10 +245,13 @@ func publish(t *testing.T, repos []Entry) []Entry {
 	return pub
 }
 
-// restore swaps the live-sites seam for the duration of one test.
+// restore swaps BOTH of the corpus's outside seams for the duration of one test:
+// the live-sites read, and the page read the admission gate does over them. No
+// test reaches the network for either.
 func restore(t *testing.T, sites []projects.LiveSite) {
 	t.Helper()
 	prev := liveSites
 	liveSites = func(context.Context) ([]projects.LiveSite, error) { return sites, nil }
 	t.Cleanup(func() { liveSites = prev })
+	serve(t, nil) // unreadable ⇒ unjudged ⇒ published, so routing is what is asserted
 }
