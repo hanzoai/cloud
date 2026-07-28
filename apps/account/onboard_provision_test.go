@@ -20,7 +20,7 @@ func TestOnboardFirstRun_ProvisionsOnce(t *testing.T) {
 
 	iamSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/v1/iam/get-user":
+		case "/v1/iam/users/get":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"status": "ok",
 				"data":   map[string]any{"owner": "landing", "name": "dave"},

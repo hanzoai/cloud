@@ -18,7 +18,7 @@
 // org-scoped (Owner,Name) Project resource. This plane REFLECTS them read-only via
 // the clean iam's in-process project store (github.com/hanzoai/iam/pkg/store over
 // the embedded IAM's orm.DB, no HTTP hop) — mirroring clients/platform/projects.go —
-// and never persists a CD-side project row. The retired Casdoor iam-v1 object store
+// and never persists a CD-side project row. The retired iam-v1 object store
 // is GONE.
 package deploy
 

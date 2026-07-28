@@ -47,8 +47,8 @@ func TestIAMEmbedBehindMiddlewareChain(t *testing.T) {
 	// the composition root. The gate reads it through the exact production path — no
 	// hand-written price closure standing in for a declaration.
 	index(t, &Config{Enable: []string{"iam", "probe"}},
-		MountSpec{Name: "iam", Price: Free, Prefixes: iamAuthPrefixes},
-		MountSpec{Name: "probe", Price: 1, Prefixes: []string{"/v1/probe"}},
+		Plugin{Name: "iam", Price: Free, Prefixes: iamAuthPrefixes},
+		Plugin{Name: "probe", Price: 1, Prefixes: []string{"/v1/probe"}},
 	)
 	app.Use(BillingGate(m, DefaultPrice))
 
@@ -74,7 +74,7 @@ func TestIAMEmbedBehindMiddlewareChain(t *testing.T) {
 		method, path string
 	}{
 		{http.MethodPost, "/v1/iam/oauth/token"},
-		{http.MethodPost, "/v1/iam/oauth/access_token"},
+		{http.MethodPost, "/v1/iam/oauth/token"},
 		{http.MethodPost, "/v1/iam/login"},
 		{http.MethodGet, "/v1/iam/.well-known/jwks"},
 		{http.MethodGet, "/v1/iam/.well-known/openid-configuration"},
@@ -134,8 +134,8 @@ var iamAuthPrefixes = []string{"/v1/iam", "/login/oauth", "/.well-known"}
 // path in the binary and this test would pass having measured nothing.
 func TestDefaultPriceExemptsIAM(t *testing.T) {
 	index(t, &Config{Enable: []string{"iam", "probe"}},
-		MountSpec{Name: "iam", Price: Free, Prefixes: iamAuthPrefixes},
-		MountSpec{Name: "probe", Price: 1, Prefixes: []string{"/v1/probe"}},
+		Plugin{Name: "iam", Price: Free, Prefixes: iamAuthPrefixes},
+		Plugin{Name: "probe", Price: 1, Prefixes: []string{"/v1/probe"}},
 	)
 	if got := PriceOf(controlPricedPath).Cents(); got != 1 {
 		t.Fatalf("the declared 1c control resolved to %dc — the index is not live, so the "+
@@ -143,7 +143,7 @@ func TestDefaultPriceExemptsIAM(t *testing.T) {
 	}
 	for _, path := range []string{
 		"/v1/iam/oauth/token",
-		"/v1/iam/oauth/access_token",
+		"/v1/iam/oauth/token",
 		"/v1/iam/login",
 		"/v1/iam/.well-known/jwks",
 		"/.well-known/openid-configuration",

@@ -144,7 +144,7 @@ func TestEdgeRequiresPrincipal(t *testing.T) {
 	defer iam.Close()
 	app := edgeApp(t, iam.URL)
 
-	res, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, "/v1/iam/get-users", nil))
+	res, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, "/v1/iam/users", nil))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -104,7 +104,7 @@ func WriteSpec(path string, app *zip.App) error {
 // one here would publish routes api.hanzo.ai does not serve, and would make the
 // woven document disagree with the fully-mounted golden — which is the equality
 // the composition proof rests on.
-func dumpSpec(specs []MountSpec, path string) error {
+func dumpSpec(specs []Plugin, path string) error {
 	cfg, done, err := SpecConfig()
 	if err != nil {
 		return err

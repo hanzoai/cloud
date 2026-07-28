@@ -136,7 +136,7 @@ func login(s *cloud.Service[state], ctx *zip.Ctx) error {
 // brokerIAMToken performs the client_credentials exchange at IAM and returns the
 // access token + its lifetime, or an HTTP status to surface on failure. A 4xx from
 // IAM (bad/unknown credential) maps to 401; a 5xx or transport failure maps to 502
-// (upstream). hanzo.id (Casdoor) expects the credential in the form body, matching
+// (upstream). hanzo.id expects the credential in the form body, matching
 // cloud's own proven client_credentials call (clients/aihttp AuthStyleInParams).
 func brokerIAMToken(s *cloud.Service[state], ctx context.Context, clientID, clientSecret string) (token string, expiresIn int64, status int) {
 	form := url.Values{
@@ -172,7 +172,7 @@ func brokerIAMToken(s *cloud.Service[state], ctx context.Context, clientID, clie
 		return "", 0, http.StatusBadGateway
 	}
 	if decoded.AccessToken == "" {
-		// A 200 with no token (Casdoor may 200 an {"error":...}) is an auth failure.
+		// A 200 with no token (IAM may 200 an {"error":...}) is an auth failure.
 		return "", 0, http.StatusUnauthorized
 	}
 	return decoded.AccessToken, decoded.ExpiresIn, http.StatusOK
