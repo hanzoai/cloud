@@ -26,6 +26,7 @@ import (
 	"context"
 	"mime"
 	"net/http"
+	"net/url"
 	"path"
 	"regexp"
 	"strings"
@@ -618,14 +619,24 @@ func (s *Server) errorPage(c *zip.Ctx, status int, msg string) error {
 }
 
 // resolveKey turns a request path into a cleaned, tenant-relative key fragment.
-// This is the traversal boundary: it roots the path at "/", runs path.Clean
-// (which resolves every "." and ".." segment against that root), then strips the
-// leading "/". The result provably contains no ".." segment, so joining it under
-// a fixed prefix can never escape that prefix — regardless of how many "..",
-// backslashes, or percent-encoded dots the client sends (fasthttp has already
-// percent-decoded + normalized c.Path(); this re-clean is the defensive guarantee
-// that does not depend on that normalization).
+// This is the traversal boundary: it percent-decodes, roots the path at "/",
+// runs path.Clean (which resolves every "." and ".." segment against that root),
+// then strips the leading "/". The result provably contains no ".." segment, so
+// joining it under a fixed prefix can never escape that prefix — regardless of
+// how many "..", backslashes, or percent-encoded dots the client sends.
+//
+// Decoding is FIRST and it is not optional. c.Path() is the RAW request target —
+// zip hands back Fiber's path verbatim, nothing upstream unescapes it — while an
+// object key is stored decoded, so an encoded request could never match its own
+// file. Next.js names a dynamic route's chunk after the literal segment
+// (app/blog/[slug]/page-*.js), every browser sends that as %5Bslug%5D, and so
+// every dynamic page on hanzo.app 404'd its own JS and rendered without ever
+// hydrating. Decoding before Clean also means "%2e%2e" is collapsed as the
+// traversal it is, rather than surviving as an opaque literal.
 func resolveKey(reqPath string) string {
+	if dec, err := url.PathUnescape(reqPath); err == nil {
+		reqPath = dec // malformed escapes stay verbatim: a miss, never an error
+	}
 	p := strings.ReplaceAll(reqPath, `\`, "/")
 	if !strings.HasPrefix(p, "/") {
 		p = "/" + p
