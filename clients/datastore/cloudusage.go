@@ -85,6 +85,13 @@ var cloudUsageColumnMigrations = []string{
 	`ALTER TABLE hanzo.cloud_usage ADD COLUMN IF NOT EXISTS project String`,
 }
 
+// createDatabase makes the target database idempotently, the same first step
+// clients/sbom takes. ai's version omits it because ai's write path only ever
+// runs where the ai router already created the database; cloud's read path has no
+// such guarantee — on a fresh warehouse these readers ARE the first writer, and a
+// CREATE TABLE against a database that does not exist fails.
+const createDatabase = `CREATE DATABASE IF NOT EXISTS hanzo`
+
 var cloudUsageReady atomic.Bool
 
 // EnsureCloudUsage creates hanzo.cloud_usage if absent, then applies the additive
@@ -97,6 +104,9 @@ func EnsureCloudUsage(ctx context.Context) error {
 	}
 	if !Ready() {
 		return fmt.Errorf("datastore not connected")
+	}
+	if err := Exec(ctx, createDatabase); err != nil {
+		return fmt.Errorf("ensure database: %w", err)
 	}
 	if err := Exec(ctx, cloudUsageTableDDL); err != nil {
 		return err
