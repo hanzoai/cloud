@@ -282,10 +282,23 @@ func (g *api) authStart(c *zip.Ctx) error {
 }
 
 // providerHint is the ONE mapping from the SPA's provider path segment to the
-// IAM provider_hint that makes hanzo.id auto-federate straight into the social
-// provider (hint values are the IAM provider record names, e.g.
+// IAM provider_hint param (hint values are the IAM provider record names, e.g.
 // "provider-github"). An explicit provider_hint query passes through verbatim;
 // "openid" — the plain Hanzo SSO — carries none.
+//
+// MEASURED: the hint is currently a NO-OP end to end, and the gap is upstream.
+// hanzo.id's login app does honour it, but the endpoint authStart calls strips
+// it first:
+//
+//	GET /v1/iam/oauth/authorize?...&provider_hint=provider-google
+//	  -> 302 /login/oauth/authorize?client_id&redirect_uri&response_type&scope&state
+//	                                                        (no provider_hint)
+//
+// The Location is byte-identical with and without the param. So /auth/google
+// lands on the same Hanzo SSO page as /auth/openid. That is not a hole — every
+// path still runs IAM's authorize flow — it just buys nothing today. If the
+// federation shortcut is wanted, the fix is param passthrough in IAM's
+// /v1/iam/oauth/authorize, NOT more code here.
 func providerHint(provider, explicit string) string {
 	if explicit = strings.TrimSpace(explicit); explicit != "" {
 		return explicit
@@ -548,7 +561,9 @@ func (g *api) rpc(c *zip.Ctx) error {
 	// pin THIS answer; it cannot pin an absence.
 	case "login", "loginAsGuest", "loginOtp", "signUp", "signUpOtp", "signUpJoin",
 		"validateOtp", "join", "joinByToken", "exchangeGuestToken",
-		"changePassword", "restorePassword", "requestPasswordReset":
+		"changePassword", "restorePassword", "requestPasswordReset",
+		"confirm", "createAccessLink", "checkJoin", "checkAutoJoin",
+		"refreshHanzoAssistantToken":
 		return g.fail(c, statusUnauthorized(signInAtIssuer))
 
 	default:
