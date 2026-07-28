@@ -102,44 +102,40 @@ func (e insightsEvent) toCapture() CaptureEvent {
 	}
 }
 
-// insightsIngest answers POST /v1/insights/e — a DEPRECATED foreign-protocol shim
-// for the PostHog wire. External-SDK compat ONLY; no Hanzo surface uses it (Hanzo
-// surfaces POST /v1/event). It normalizes the PostHog single/batch shape onto
-// CaptureEvent and funnels through the ONE write core (ingestEvents, source=posthog);
-// it keeps captureTenant's brand-host path so anonymous external PostHog-wire traffic
-// is unbroken — the path the strict canonical door deliberately refuses.
-func insightsIngest(s *cloud.Service[state], c *zip.Ctx) error {
-	deprecated(s, c, "/v1/event")
-	org, ok := captureTenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer or a recognized brand host required")
+// decodeInsights is the PostHog WIRE's decoder — the second and last `decode` in this
+// package (decodeIngest is the other). Pure over the raw bytes, exactly like its twin,
+// so the ONE pipeline can be handed a wire instead of forking per door: it accepts the
+// single-event and {batch:[…]} PostHog shapes and yields the SAME []CaptureEvent the
+// write core consumes. An empty/whitespace-only body ⇒ no events (an honest empty
+// receipt, not an error), matching decodeIngest.
+func decodeInsights(body []byte) ([]CaptureEvent, error) {
+	if firstNonWS(body) >= len(body) {
+		return nil, nil
 	}
-	return insightsWithOrg(org, c)
-}
-
-// insightsWithOrg is the PostHog-wire decode+ingest core with the tenant supplied
-// EXPLICITLY by the caller — the twin of captureWithOrg for the PostHog beacon
-// shape. The /v1/insights/e alias resolves org via captureTenant; the site-host
-// carve FORCES org from the resolved Site (host-derived, never the caller/body).
-// Both funnel through the ONE write core (ingestEvents, source=posthog).
-func insightsWithOrg(org string, c *zip.Ctx) error {
-	var body insightsBody
-	if err := c.Bind(&body); err != nil {
-		return zip.ErrBadRequest("malformed insights payload")
+	var b insightsBody
+	if err := json.Unmarshal(body, &b); err != nil {
+		return nil, err
 	}
-	events := body.Batch
-	if len(events) == 0 && body.Event != "" {
-		events = []insightsEvent{body.insightsEvent}
+	events := b.Batch
+	if len(events) == 0 && b.Event != "" {
+		events = []insightsEvent{b.insightsEvent}
 	}
 	caps := make([]CaptureEvent, len(events))
 	for i, e := range events {
 		caps[i] = e.toCapture()
 	}
-	res, err := ingestEvents(c.Context(), org, sourcePostHog, caps)
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusOK, res)
+	return caps, nil
+}
+
+// insightsIngest answers POST /v1/insights/e — a DEPRECATED foreign-protocol shim for
+// the PostHog wire. External-SDK compat ONLY; no Hanzo surface uses it (Hanzo surfaces
+// POST /v1/event). Only the WIRE differs from the canonical door, so only the decoder
+// differs: admission, the write core and the receipt are the ONE shared pipeline
+// (handle, event.go). It used to resolve its own tenant and fall back to the request
+// Host — see the note where captureTenant used to live (capture.go).
+func insightsIngest(s *cloud.Service[state], c *zip.Ctx) error {
+	deprecated(s, c, "/v1/event")
+	return handle(c, decodeInsights, sourcePostHog)
 }
 
 // insightsEvents answers GET /v1/insights/events — the console's recent-events

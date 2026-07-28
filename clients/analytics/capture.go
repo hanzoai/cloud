@@ -588,42 +588,18 @@ func projectKey(c *zip.Ctx) string {
 	return ""
 }
 
-// captureTenant resolves the tenant a batch is attributed to, in strict trust
-// order:
+// There is deliberately no captureTenant here. The deprecated aliases used to resolve
+// their own tenant, and their last resort was the request Host: an unattested POST to
+// a recognized brand host (cloud.BrandForHostOK) was attributed to that brand's REAL
+// org — 'hanzo', 'lux', 'zoo' — at FULL CaptureEvent capability. Anyone on the
+// internet could therefore set a Host header and inject revenue, orders, personId and
+// groupId rows into a brand's own partition, which the /v1/analytics overview + top
+// lenses, /v1/analytics/campaign and the GTM funnel (clients/guide) all read.
 //
-//  1. A VALIDATED principal always wins (authenticated product traffic → its own
-//     org; this also covers a Hanzo key sent as a bearer, which SanitizeIdentity
-//     has already resolved to a principal upstream).
-//  2. Otherwise, if the caller PRESENTS a project key out-of-band (posthog-js /
-//     insights-go: api_key in the body/query/x-api-key), resolve it to its org
-//     through the ONE IAM key seam. This FAILS CLOSED: a presented-but-unresolvable
-//     key is refused (→ 403), NEVER falling through to the brand-host fallback —
-//     attributing a keyed request to the wrong (brand-public) partition would be a
-//     cross-tenant write.
-//  3. Only for TRULY anonymous traffic (no principal, no key) is the tenant the
-//     PUBLIC brand org derived SERVER-SIDE from the request Host via the
-//     white-label registry — never a client-claimed org. An unrecognized Host is
-//     refused (we never dump anonymous events into a default org).
-//
-// Returns ("", false) when the caller must be answered 403.
-func captureTenant(c *zip.Ctx) (string, bool) {
-	if org, ok := tenant(c); ok {
-		return org, true
-	}
-	if key := projectKey(c); key != "" {
-		if org, ok := resolveKeyOrg(c.Context(), key); ok {
-			return org, true
-		}
-		return "", false // presented key that does not resolve → fail CLOSED
-	}
-	if !publicCaptureEnabled() {
-		return "", false
-	}
-	if brand, ok := cloud.BrandForHostOK(strings.TrimSpace(c.Fiber().Host())); ok {
-		return brand, true
-	}
-	return "", false
-}
+// That was a per-DOOR copy of a decision that belongs to the TRUST LEVEL. Both alias
+// handlers now call handle (event.go) like every other door: a credential resolves to
+// its own org at full capability, and a credential-less caller gets the anonymous
+// projection under publicTenant. A Host header no longer names a tenant anywhere.
 
 // ── ONE write core ───────────────────────────────────────────────────────────
 
@@ -727,32 +703,13 @@ func ingestEvents(ctx context.Context, org, source string, evs []CaptureEvent) (
 	return CaptureResult{Accepted: len(rows), Dropped: dropped}, nil
 }
 
-// capture ingests a Segment/beacon batch into hanzo.events, tenant-scoped. It is a
-// DEPRECATED foreign-protocol shim behind /v1/analytics, /v1/analytics/batch, and
-// /v1/tracker — external-SDK compat ONLY; no Hanzo surface uses these (Hanzo
-// surfaces POST /v1/event). It funnels through the ONE ingest core (ingestBody via
-// captureWithOrg) and keeps captureTenant's brand-host path for anonymous external
-// marketing traffic, which the strict canonical door deliberately refuses.
+// capture ingests a Segment/beacon batch into hanzo.events. It is a DEPRECATED
+// foreign-protocol shim behind /v1/analytics, /v1/analytics/batch, and /v1/tracker —
+// external-SDK compat ONLY; no Hanzo surface uses these (Hanzo surfaces POST
+// /v1/event). It speaks the SAME wire as the canonical door (the CaptureBatch envelope
+// decodeIngest already accepts), so the alias is literally the canonical pipeline with
+// a different origin tag: ONE admission decision, ONE write core, no room to drift.
 func capture(s *cloud.Service[state], c *zip.Ctx) error {
 	deprecated(s, c, "/v1/event")
-	org, ok := captureTenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer or a recognized brand host required")
-	}
-	return captureWithOrg(org, c)
-}
-
-// captureWithOrg is the Segment/beacon ingest with the tenant supplied EXPLICITLY by
-// the caller — the ONE write path shared by two org sources:
-//   - the /v1/analytics{,/batch}, /v1/tracker aliases resolve org via captureTenant
-//     (validated principal | project key | brand host) and call this;
-//   - the site-host carve (sites.SetAnalyticsHostHandler) FORCES org from the
-//     resolved Site (server-supplied, host-derived — never the caller/body) and
-//     calls this.
-//
-// It funnels through the ONE ingest core (ingestBody, source=capture), which is
-// wire-tolerant — so the Segment {batch} envelope this wire speaks decodes through
-// the SAME decoder as the canonical door; org is never read from the body.
-func captureWithOrg(org string, c *zip.Ctx) error {
-	return ingestBody(c, org, sourceCapture)
+	return handle(c, decodeIngest, sourceCapture)
 }
