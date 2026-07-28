@@ -373,6 +373,28 @@ func (s *Store) Upsert(ctx context.Context, org, uid, primaryKey string, docs []
 	return tx.Commit()
 }
 
+// PKs lists an index's primary keys. Reconcile needs the KEYS and not the
+// documents to work out what a full-corpus swap must prune; reading the doc
+// column to throw it away would pull a whole corpus into memory for a set
+// difference.
+func (s *Store) PKs(ctx context.Context, org, uid string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT pk FROM docs WHERE org=? AND uid=?`, org, uid)
+	if err != nil {
+		return nil, fmt.Errorf("index: list keys: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var pk string
+		if err := rows.Scan(&pk); err != nil {
+			return nil, err
+		}
+		out = append(out, pk)
+	}
+	return out, rows.Err()
+}
+
 // Document reads one stored document verbatim.
 func (s *Store) Document(ctx context.Context, org, uid, pk string) (json.RawMessage, error) {
 	var doc string
