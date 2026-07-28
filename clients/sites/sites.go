@@ -24,6 +24,7 @@ package sites
 
 import (
 	"context"
+	"encoding/json"
 	"mime"
 	"net/http"
 	"net/url"
@@ -596,11 +597,44 @@ func (s *Server) streamObject(c *zip.Ctx, site Site, obj *s3.Object, size int64,
 // default 404. The 404.html is fetched from the SAME prefix (tenant-bounded) and
 // streamed, not buffered.
 func (s *Server) notFound(c *zip.Ctx, cli *s3.Client, site Site) error {
+	// A missing DATA asset is answered in the media type it asked for, never with
+	// markup. A single-page app fetches its data files and calls .json() on the
+	// result; handing that call an HTML page (the site's 404.html, or ours) turns
+	// "the file is not deployed" into
+	//
+	//     Unexpected token '<', "<!doctype "... is not valid JSON
+	//
+	// thrown from inside minified vendor code with no URL attached — which is the
+	// error hanzo-team (a missing /config.json) and edge (a missing
+	// presets/wigglewobble.json) BOTH surfaced, from two unrelated causes. The
+	// status was always an honest 404; only the body lied about its type. Answering
+	// in-type makes .json() succeed and hands the app the path that is missing, so
+	// the next person reads the cause instead of a parser's opinion of an HTML
+	// doctype. 404.html is for humans reading a page, so a data request never gets
+	// it. Keyed off the SAME contentType() the 200 path uses — one type table.
+	if isJSON(contentType(resolveKey(c.Path()))) {
+		c.SetHeader("Content-Type", "application/json; charset=utf-8")
+		c.SetHeader("Cache-Control", "no-cache")
+		body, err := json.Marshal(map[string]string{"error": "not found", "path": c.Path()})
+		if err != nil { // unreachable: two strings always marshal
+			return s.errorPage(c, http.StatusNotFound, "page not found")
+		}
+		return c.Bytes(http.StatusNotFound, body)
+	}
 	obj, info, ok := s.open(c.Context(), cli, site.Bucket, objectKey(site.Prefix, "404.html"))
 	if ok {
 		return s.streamObject(c, site, obj, info.Size, "text/html; charset=utf-8", "no-cache", http.StatusNotFound)
 	}
 	return s.errorPage(c, http.StatusNotFound, "page not found")
+}
+
+// isJSON reports whether a media type is JSON — the bare type or any +json
+// structured suffix (application/manifest+json, application/ld+json), which are
+// all parsed with JSON.parse by the code that fetched them.
+func isJSON(ct string) bool {
+	base, _, _ := strings.Cut(ct, ";")
+	base = strings.TrimSpace(base)
+	return base == "application/json" || base == "text/json" || strings.HasSuffix(base, "+json")
 }
 
 // errorPage renders a minimal, honest HTML status page. It never leaks internal
