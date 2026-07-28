@@ -86,8 +86,12 @@ done
 [ -d "$SUITE" ] || fail "Playwright suite not found at $SUITE — set SUITE=<path to universe/e2e>"
 
 # ── build ────────────────────────────────────────────────────────────────────
-say "building bin/cloud"
-make build >/dev/null
+# The host AND every app. `make build` is the light host alone, which loads apps
+# as plugins from ./bin — so with only the host present every app route answers
+# 503 and the suite fails on a product that is fine. Parallel because the fleet is
+# 112 independent links; warm runs are seconds.
+say "building the host and $(make -s -n apps 2>/dev/null | grep -c 'go build' || echo '?') app binaries"
+make -j"$(nproc 2>/dev/null || echo 4)" ship >/dev/null
 
 # The console bundle is go:embed'd at COMPILE time. A fresh clone carries only the
 # fallback shell, and the UI spec says so rather than pretending.
@@ -132,17 +136,56 @@ say "booting cloud on $BASE (data: $DATA_DIR)"
 ./bin/cloud --enable=iam,base,kms,marketing,notify,billing,commerce,tracker --brand=hanzo --listen=":$HTTP_PORT" >"$LOG" 2>&1 &
 CLOUD_PID=$!
 
-# Readiness is the health LISTENER answering ok — not the HTTP port, which 404s
-# /healthz, and not a sleep. If the process dies we say so immediately.
+# Readiness is the HOST answering /healthz on its own app port. Liveness belongs to
+# the host rather than to any app: it must answer while every plugin is still cold,
+# or a lazily-started fleet fails its probe before the first real request arrives.
+# There is no separate health listener in the light host — waiting on one is
+# waiting on a port nothing binds, which reads as "cloud never came up" when in
+# fact it came up fine. Not a sleep; if the process dies we say so immediately.
 for i in $(seq 1 90); do
   kill -0 "$CLOUD_PID" 2>/dev/null || { tail -30 "$LOG"; fail "cloud exited during boot"; }
-  if curl -fsS "http://127.0.0.1:${HEALTH_PORT}/healthz" 2>/dev/null | grep -q '"status":"ok"'; then
+  if curl -fsS "$BASE/healthz" 2>/dev/null | grep -q '"status":"ok"'; then
     say "ready in ${i}s"
     break
   fi
   [ "$i" = 90 ] && { tail -30 "$LOG"; fail "cloud did not become ready in 90s"; }
   sleep 1
 done
+
+# WAKE THE FLEET FIRST. Apps are their own processes now and the host starts each
+# on the first request that reaches its prefix, so every assertion below — the IAM
+# seed, the drip engine, commerce's embed — is about a process that does not exist
+# until something asks it for something. Checking the log before that reads a boot
+# that has not happened yet and fails a stack that is fine.
+#
+# The prefixes come from the host's OWN "loaded plugin" lines rather than a list
+# kept here: the host already knows what it routes where, and a second copy would
+# be the thing that goes stale when an app moves. The response does not matter —
+# 401, 403 and 404 all mean the child answered, which is the point.
+WANT="$(grep -o '"name":"[^"]*","prefix"' "$LOG" | cut -d'"' -f4 | sort -u)"
+say "waking $(echo "$WANT" | wc -w) apps"
+grep -o '"prefix":"[^"]*"' "$LOG" | cut -d'"' -f4 | sort -u | while read -r pfx; do
+  curl -fsS -o /dev/null --max-time 30 "$BASE$pfx" >/dev/null 2>&1 || true
+done
+
+# WAIT for them, do not just poke them. An app's unix socket is created by
+# rpc.Listen once it is actually serving, so the socket IS the readiness signal —
+# the same fact Dial relies on ("a socket means the app is up"). Polling it beats
+# a sleep and beats grepping the log, because it is the thing the next caller will
+# itself depend on.
+#
+# commerce is the one that makes this necessary: it runs migrations and seeds a
+# catalog before it listens, which takes longer than the host's start timeout, and
+# a spec that asks billing for a balance in that window gets "no such file or
+# directory" for a ledger that is merely still booting.
+for app in $WANT; do
+  for _ in $(seq 1 60); do
+    [ -S "$DATA_DIR/run/$app.sock" ] && break
+    sleep 1
+  done
+  [ -S "$DATA_DIR/run/$app.sock" ] || say "note: $app never served its socket — specs touching it will fail"
+done
+say "up: $(ls "$DATA_DIR/run" 2>/dev/null | wc -l) sockets"
 
 # The seed is non-fatal inside cloud (a missing file only WARNS), so verify it
 # actually applied — an unseeded IAM has no signing cert and can issue no token.
