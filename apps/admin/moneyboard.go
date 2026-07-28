@@ -172,32 +172,28 @@ func (o ops) Money(ctx context.Context, _ *core.None) (*MoneyOut, error) {
 	return &MoneyOut{Status: core.OK, Data: &board}, nil
 }
 
-// reserve reads the platform reserve fund FROM THE TREASURY APP, over the socket
-// when it is co-located and over the network when it is not (cloud.Dial).
+// reserve reads the platform reserve FROM THE TREASURY APP, over its unix
+// socket, as native ZAP (cloud.Dial + rpc.go): one frame out, one frame in,
+// and the int64 is read straight out of the reply's wire bytes — no JSON on
+// the path at either end.
 //
-// It used to be an import — `treasury.ReserveCents(ctx)` — which resolved against
-// treasury's `mounted` package global. admin is its own binary, so treasury never
-// mounted there and that call returned 0 every single time. The board printed a
-// zero balance and called it the truth, at a cost of ~691 packages linked into
-// admin to produce it.
+// It used to be an import — treasury.ReserveCents(ctx) — which resolved
+// against treasury's `mounted` package global. admin is its own binary, so
+// that call returned 0 every time, and the board printed a zero balance and
+// called it the truth. The error is RETURNED, not swallowed, so the board can
+// say "could not reach the treasury" instead of "you have no money" — the
+// distinction the import could not make.
 //
-// The error is RETURNED, not swallowed, so the board can say "could not reach the
-// treasury" instead of "you have no money" — the distinction the old code could
-// not make, because a failed import and an empty fund look identical.
-//
-// c carries the SuperAdmin principal core.Admit already validated; the treasury
-// re-checks it on its own admin route, so this delegates authority rather than
-// assuming it.
+// c carries the SuperAdmin principal core.Admit already validated; it rides
+// the envelope's capability slot and treasury re-checks it on its side —
+// delegation, never escalation.
 func reserve(ctx context.Context, c *zip.Ctx) (money.Cents, error) {
-	var out struct {
-		Report struct {
-			ReserveCents int64 `json:"reserveCents"`
-		} `json:"report"`
-	}
-	if err := cloud.Dial("treasury").As(c).Get(ctx, "", "/v1/admin/treasury", &out); err != nil {
+	out, err := cloud.Dial("treasury").As(c).Call(ctx, "treasury.reserve", nil)
+	if err != nil {
 		return 0, err
 	}
-	return money.Cents(out.Report.ReserveCents), nil
+	cents, err := cloud.I64(out)
+	return money.Cents(cents), err
 }
 
 // grantSource reports grant freshness, including the two ways the total can be less
