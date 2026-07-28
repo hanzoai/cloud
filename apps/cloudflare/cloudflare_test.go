@@ -450,3 +450,45 @@ func TestStoredAccountSkipsDiscovery(t *testing.T) {
 		t.Fatal("live discovery happened despite a stored account id")
 	}
 }
+
+// TestZonePurge pins the cache-purge contract: it is a WRITE (org admin only), it
+// refuses a body that would purge nothing, and it forwards exactly one selector.
+func TestZonePurge(t *testing.T) {
+	const zone = "0123456789abcdef0123456789abcdef"
+	rec := &capture{}
+	app := harness(t, map[string]string{"acme": "tok"}, rec, nil)
+	path := "/v1/cloudflare/zones/" + zone + "/purge"
+
+	// A non-admin org member may look at zones but may not drop the cache: a purge
+	// sends every subsequent request to the origin.
+	if code, _, _ := doReq(t, app, http.MethodPost, path, "u1", "acme", false, `{"purge_everything":true}`); code != http.StatusForbidden {
+		t.Fatalf("non-admin purge = %d, want 403", code)
+	}
+
+	// Neither selector set. Cloudflare answers 200 to this and purges nothing, which
+	// reads as success to a caller that purged nothing — refuse it here instead.
+	if code, _, _ := doReq(t, app, http.MethodPost, path, "u1", "acme", true, `{}`); code != http.StatusBadRequest {
+		t.Fatalf("empty purge body = %d, want 400", code)
+	}
+	// Both selectors set is ambiguous, not additive.
+	if code, _, _ := doReq(t, app, http.MethodPost, path, "u1", "acme", true,
+		`{"purge_everything":true,"files":["https://x/y"]}`); code != http.StatusBadRequest {
+		t.Fatalf("ambiguous purge body = %d, want 400", code)
+	}
+
+	// The happy path reaches Cloudflare at the zone-scoped purge coordinate. The
+	// three refusals above never reached upstream, so the last captured request is
+	// this one.
+	if code, _, _ := doReq(t, app, http.MethodPost, path, "u1", "acme", true, `{"purge_everything":true}`); code != http.StatusOK {
+		t.Fatalf("admin purge = %d, want 200", code)
+	}
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.reqs) == 0 {
+		t.Fatal("nothing reached Cloudflare")
+	}
+	last := rec.reqs[len(rec.reqs)-1]
+	if last.method != http.MethodPost || last.path != "/zones/"+zone+"/purge_cache" {
+		t.Fatalf("upstream = %s %s, want POST the zone purge_cache coordinate", last.method, last.path)
+	}
+}
