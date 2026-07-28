@@ -29,7 +29,8 @@
 // Surface:
 //
 //	GET /v1/catalog   search + browse: ?q= &org= &kind= &archetype= &language=
-//	                  &forkable=true|false   (absent = both; see filter)
+//	                  &forkable=true|false &official=true|false
+//	                  (absent = both; see filter)
 //
 // There is no write route. The corpus reconciles itself (sync.go), which is why
 // there is no credential that could publish into the published catalog at all.
@@ -94,6 +95,18 @@ type Entry struct {
 	Forkable bool   `json:"forkable"`
 	Stars    int    `json:"stars,omitempty"`
 	Updated  string `json:"updated,omitempty"`
+	// Official and Upstream/License are AUTHORSHIP. Official is the platform-gated
+	// first-party marker (projects.Project.Official, raised only by an admin);
+	// Upstream/License credit the third-party work an entry was published from.
+	// Together they are the difference between "we built this" and "somebody else
+	// built this and we are showing it to you" — which a directory titled with our
+	// own three orgs has no business leaving to the reader.
+	//
+	// Official follows Forkable in NOT being omitempty, for the same reason: false
+	// is an answer, and omitted it could not be told from "nobody said".
+	Official bool   `json:"official"`
+	Upstream string `json:"upstream,omitempty"`
+	License  string `json:"license,omitempty"`
 	// Scope is provenance, not storage: "public" for a row from the published
 	// corpus, "org" for one only this caller can see. A UI that cannot tell them
 	// apart cannot warn before sharing a link.
@@ -204,6 +217,7 @@ func filter(in []Entry, c *zip.Ctx) []Entry {
 	org, arch := strings.ToLower(c.Query("org")), strings.ToLower(c.Query("archetype"))
 	lang, kind := strings.ToLower(c.Query("language")), strings.ToLower(c.Query("kind"))
 	fork, forkSet := boolQuery(c, "forkable")
+	first, firstSet := boolQuery(c, "official")
 	out := in[:0]
 	for _, e := range in {
 		switch {
@@ -211,7 +225,8 @@ func filter(in []Entry, c *zip.Ctx) []Entry {
 			arch != "" && strings.ToLower(e.Archetype) != arch,
 			lang != "" && strings.ToLower(e.Language) != lang,
 			kind != "" && strings.ToLower(e.Kind) != kind,
-			forkSet && e.Forkable != fork:
+			forkSet && e.Forkable != fork,
+			firstSet && e.Official != first:
 			continue
 		}
 		out = append(out, e)
@@ -231,11 +246,12 @@ func boolQuery(c *zip.Ctx, name string) (v, ok bool) {
 // trues rendered {true: everything} and told a caller there was a choice where
 // there was none.
 func facet(in []Entry) map[string]counts {
-	f := map[string]counts{"org": {}, "archetype": {}, "language": {}, "kind": {}, "forkable": {}}
+	f := map[string]counts{"org": {}, "archetype": {}, "language": {}, "kind": {}, "forkable": {}, "official": {}}
 	for _, e := range in {
 		for dim, v := range map[string]string{
 			"org": e.Org, "archetype": e.Archetype, "language": e.Language,
 			"kind": e.Kind, "forkable": strconv.FormatBool(e.Forkable),
+			"official": strconv.FormatBool(e.Official),
 		} {
 			if v != "" {
 				f[dim][v]++
