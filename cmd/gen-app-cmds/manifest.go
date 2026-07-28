@@ -59,6 +59,11 @@ type manifestRow struct {
 	name     string
 	prefixes []string
 	eager    bool
+
+	// registers records whether the app's own package registers any absolute
+	// route path, as opposed to only declaring a subtree or falling back to the
+	// convention. It is not written to the manifest; dropLayers reads it.
+	registers bool
 }
 
 // manifest resolves every Wire entry to a row, in Wire order — which IS the
@@ -68,42 +73,100 @@ type manifestRow struct {
 func manifest(root string, specs []spec, eager map[string]bool) []manifestRow {
 	var rows []manifestRow
 	for _, s := range specs {
-		pre, why := prefixesFor(root, s)
+		pre, registers, why := prefixesFor(root, s)
 		if len(pre) == 0 {
 			fmt.Printf("no manifest row: %s — %s\n", s.name, why)
 			continue
 		}
-		rows = append(rows, manifestRow{name: s.name, prefixes: pre, eager: eager[s.name]})
+		rows = append(rows, manifestRow{name: s.name, prefixes: pre, eager: eager[s.name], registers: registers})
 	}
-	return rows
+	return dropLayers(rows)
 }
 
-// prefixesFor answers what paths s serves, or why that cannot be established.
-func prefixesFor(root string, s spec) ([]string, string) {
+// dropLayers removes an app that registers no route of its own AND whose every
+// declared prefix is claimed, exactly, by an app mounted AFTER it. Both halves
+// are needed and each rules out a whole class on its own:
+//
+//   - Registering nothing is not enough. pubsub owns a NATS listener and metrics
+//     answers through a module; neither is a layer.
+//   - Being shadowed is not enough either. storage and provisioning both derive
+//     /v1/s3, and tracker and analytics both derive /v1/tracker — in each pair
+//     the EARLIER app is the real owner and wins the router's first match,
+//     exactly as it does linked in. Nothing is dropped there.
+//
+// Together they describe one thing: a middleware layer. zen is it. zen declares
+// /v1 to install a Claim on that subtree, serves the requests naming a zen*
+// model in-process, and c.Next()s every other one to ai's /v1 catch-all. In one
+// binary that fall-through is a route lookup. Across a process boundary it does
+// not exist — the host picks ONE child, the request leaves, and nothing comes
+// back to try the next candidate — so mounting the layer would take every /v1
+// request ai serves and 404 all but zen*. A layer ships INSIDE the owner's
+// binary or it does not ship; saying so here is why /v1/chat/completions reaches
+// ai at all.
+//
+// The test is exact prefix equality, never subtree coverage: ai's /v1 covers
+// nearly every app in the fleet as a subtree, and reading that as subsumption
+// would empty the manifest.
+func dropLayers(rows []manifestRow) []manifestRow {
+	var out []manifestRow
+	for i, r := range rows {
+		if r.registers {
+			out = append(out, r)
+			continue
+		}
+		later := map[string]bool{}
+		for _, q := range rows[i+1:] {
+			for _, p := range q.prefixes {
+				later[p] = true
+			}
+		}
+		owns := false
+		for _, p := range r.prefixes {
+			if !later[p] {
+				owns = true
+				break
+			}
+		}
+		if !owns {
+			fmt.Printf("no manifest row: %s — it registers no route of its own, and every prefix it declares (%s) is answered by an app mounted after it: a middleware layer over that plane, not a process the router can send a request to\n",
+				r.name, strings.Join(r.prefixes, " "))
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// prefixesFor answers what paths s serves, whether s REGISTERS any of them
+// itself (dropLayers' second half), or why that cannot be established.
+func prefixesFor(root string, s spec) ([]string, bool, string) {
 	// A PluginSpec entry already IS a plugin: the composition root passed its
 	// prefixes to zip.Load literally, so they are stated, not inferred.
 	if len(s.pluginPrefixes) > 0 {
-		return normalize(s.pluginPrefixes), ""
+		return normalize(s.pluginPrefixes), true, ""
 	}
 	if s.why != "" {
 		// No lean standalone binary exists to mount, so a row would promise a
 		// process that cannot be started. Same cause, same fix, as the fat stub.
-		return nil, "it has no standalone binary — " + s.why
-	}
-	// A declared Prefixes field is the composition root naming what the subsystem
-	// owns. It outranks anything read out of the package, because it is the
-	// statement MountAll itself already trusts to bound the subsystem's middleware.
-	if s.prefixes != nil {
-		if p := declaredPrefixes(root, s.prefixes, s.imports); len(p) > 0 {
-			return normalize(p), ""
-		}
+		return nil, false, "it has no standalone binary — " + s.why
 	}
 	var found []string
 	for _, e := range entries(root, s) {
 		found = append(found, routePrefixes(e.dir, e.fn)...)
 	}
-	if p := normalize(found); len(p) > 0 {
-		return p, ""
+	registered := normalize(found)
+	// A declared Prefixes field is the composition root naming what the subsystem
+	// owns. It outranks anything read out of the package, because it is the
+	// statement MountAll itself already trusts to bound the subsystem's middleware
+	// — but a declaration is not a registration, so what the package actually
+	// registers still travels, separately, for dropLayers to read.
+	if s.prefixes != nil {
+		if p := declaredPrefixes(root, s.prefixes, s.imports); len(p) > 0 {
+			return normalize(p), len(registered) > 0, ""
+		}
+	}
+	if len(registered) > 0 {
+		return registered, true, ""
 	}
 	// Nothing declared and nothing registered: fall back to the convention
 	// MountSpec.Prefixes documents and Serve's generic liveness route already
@@ -112,7 +175,7 @@ func prefixesFor(root string, s spec) ([]string, string) {
 	// here: for one that really has no HTTP surface (a bus consumer) the mount is
 	// inert, and a LAZY inert mount means the child never starts at all.
 	fmt.Printf("convention prefix: %s — declares no Prefixes and registers no absolute route path; mounting at /v1/%s\n", s.name, s.name)
-	return []string{"/v1/" + s.name}, ""
+	return []string{"/v1/" + s.name}, false, ""
 }
 
 // entry is one route-registering function and the package it lives in.
@@ -222,7 +285,7 @@ func routePrefixes(dir, fn string) []string {
 	}
 	var out []string
 	for _, pkg := range pkgs {
-		consts := pkgStrings(pkg)
+		vals := pkgStrings(pkg)
 		funcs := map[string][]*ast.FuncDecl{}
 		for _, f := range pkg.Files {
 			for _, d := range f.Decls {
@@ -231,25 +294,50 @@ func routePrefixes(dir, fn string) []string {
 				}
 			}
 		}
-		type visit struct {
-			name   string
-			groups map[string]bool // parameters this call passed a group into
+		// Which parameter positions receive a group, per callee name, over the
+		// WHOLE package — computed before anything is read for paths, and to a
+		// fixed point so a group handed down two levels is still known to be one.
+		//
+		// It is per NAME, not per declaration, because without type information
+		// three distinct `register` methods are one name. That conflation is
+		// resolved deliberately toward "group": mistaking the root app for a group
+		// loses a root-level prefix, which 404s where you can see it, while
+		// mistaking a group for the root app invents a root prefix that silently
+		// swallows every sibling's traffic.
+		grouped := map[string]map[int]bool{}
+		for changed := true; changed; {
+			changed = false
+			for name, decls := range funcs {
+				for _, fd := range decls {
+					_, calls := walk(fd, vals, groupParams(fd, grouped[name]))
+					for _, c := range calls {
+						for i := range c.groupArgs {
+							if grouped[c.name] == nil {
+								grouped[c.name] = map[int]bool{}
+							}
+							if !grouped[c.name][i] {
+								grouped[c.name][i] = true
+								changed = true
+							}
+						}
+					}
+				}
+			}
 		}
 		seen := map[string]bool{}
-		for queue := []visit{{name: fn}}; len(queue) > 0; {
-			v := queue[0]
+		for queue := []string{fn}; len(queue) > 0; {
+			name := queue[0]
 			queue = queue[1:]
-			key := v.name + "|" + strings.Join(sortedKeys(v.groups), ",")
-			if seen[key] {
+			if seen[name] {
 				continue
 			}
-			seen[key] = true
-			for _, fd := range funcs[v.name] {
-				paths, calls := walk(fd, consts, v.groups)
+			seen[name] = true
+			for _, fd := range funcs[name] {
+				paths, calls := walk(fd, vals, groupParams(fd, grouped[name]))
 				out = append(out, paths...)
 				for _, c := range calls {
-					for _, callee := range funcs[c.name] {
-						queue = append(queue, visit{name: c.name, groups: groupParams(callee, c.groupArgs)})
+					if funcs[c.name] != nil {
+						queue = append(queue, c.name)
 					}
 				}
 			}
@@ -287,24 +375,29 @@ func groupParams(fd *ast.FuncDecl, args map[int]bool) map[string]bool {
 	return out
 }
 
-func sortedKeys(m map[string]bool) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
 // walk reads one function body: the absolute route paths it registers, and the
-// package functions it calls. groupParams names this body's own parameters that
+// package functions it calls. inGroups names this body's own parameters that
 // the caller bound to a group.
-func walk(fd *ast.FuncDecl, pkgVals map[string][]string, groupParams map[string]bool) (paths []string, calls []callSite) {
+func walk(fd *ast.FuncDecl, pkgVals map[string][]string, inGroups map[string]bool) (paths []string, calls []callSite) {
 	groups := map[string]bool{}
-	for p := range groupParams {
+	for p := range inGroups {
 		groups[p] = true
 	}
 	vals := bind(fd, pkgVals)
+	// Which calls this body makes purely for their EFFECT. A Group whose result
+	// is thrown away installs middleware on a subtree and registers nothing —
+	// zen's a.Group("/v1", z.Claim()) — while an assigned one is the root of a
+	// route tree the app owns (team's tg := app.Group("/v1/team")). Same method,
+	// opposite meanings, and only the statement around it tells them apart.
+	discarded := map[*ast.CallExpr]bool{}
+	ast.Inspect(fd.Body, func(n ast.Node) bool {
+		if st, ok := n.(*ast.ExprStmt); ok {
+			if call, ok := st.X.(*ast.CallExpr); ok {
+				discarded[call] = true
+			}
+		}
+		return true
+	})
 	// Group bindings first, in a pass of their own: a body may register on a
 	// group before the line that creates it is reached in AST order (a closure),
 	// and mistaking a group for the app is what invents a bogus root prefix.
@@ -363,16 +456,32 @@ func walk(fd *ast.FuncDecl, pkgVals map[string][]string, groupParams map[string]
 			// A method on a package value (h.register(tg)) is followed by name;
 			// the receiver is irrelevant since only this package is searched.
 			calls = append(calls, callSite{name: f.Sel.Name, groupArgs: groupArgs})
-			if !routerMethods[f.Sel.Name] || len(call.Args) == 0 || relative(f.X, groups) {
+			if !routerMethods[f.Sel.Name] {
 				return true
 			}
-			paths = append(paths, evalStrings(call.Args[0], vals)...)
+			if f.Sel.Name == "Group" && len(call.Args) > 1 && discarded[call] {
+				return true // middleware on a subtree, not a route on one
+			}
+			// Two registration forms, one meaning. The method form puts the
+			// router in the receiver and the path first: app.Get("/v1/x", h).
+			// The TYPED form is a generic function with the router as its first
+			// argument and the path second: zip.Get(reg, "/v1/x", h). Subsystems
+			// are being converted to the typed form (it is what earns an
+			// operation its schema), so reading only the method form means an
+			// app's prefixes silently shrink as it is modernized.
+			router, at := f.X, 0
+			if id, ok := f.X.(*ast.Ident); ok && id.Name == "zip" && len(call.Args) >= 2 {
+				router, at = call.Args[0], 1
+			}
+			if len(call.Args) <= at || relative(router, groups) {
+				return true
+			}
+			paths = append(paths, evalStrings(call.Args[at], vals)...)
 		}
 		return true
 	})
 	return paths, calls
 }
-
 
 // bind adds the local string values a body introduces to the package-level ones:
 // the variable of a range over a []string, and a plain alias of one. Both are
@@ -446,30 +555,58 @@ func relative(x ast.Expr, groups map[string]bool) bool {
 // agentskills' wellKnown+"/index.json", exec's range over prefixes. A route
 // spelled that way exists nowhere as a literal; without this the app reads as
 // registering nothing and silently drops off the host.
+// It resolves to a FIXED POINT rather than in one pass, because a value is
+// routinely built from one declared in another file — deploy's
+// loginPath = dashPrefix + "/login" — and ast.Package holds its files in a MAP.
+// One pass therefore resolved such a name only when Go's randomized map order
+// happened to visit its dependency first, and the generated manifest differed
+// between runs of the SAME tree: deploy's /v1/deploy/{login,callback,logout}
+// appeared about half the time. Iterating until nothing new resolves makes the
+// output a function of the source and nothing else, which is what lets CI
+// regenerate and diff.
 func pkgStrings(pkg *ast.Package) map[string][]string {
 	out := map[string][]string{}
-	for _, f := range pkg.Files {
-		for _, d := range f.Decls {
-			gd, ok := d.(*ast.GenDecl)
-			if !ok || (gd.Tok != token.CONST && gd.Tok != token.VAR) {
-				continue
-			}
-			for _, sp := range gd.Specs {
-				vs, ok := sp.(*ast.ValueSpec)
-				if !ok || len(vs.Names) != len(vs.Values) {
+	for changed := true; changed; {
+		changed = false
+		for _, f := range pkg.Files {
+			for _, d := range f.Decls {
+				gd, ok := d.(*ast.GenDecl)
+				if !ok || (gd.Tok != token.CONST && gd.Tok != token.VAR) {
 					continue
 				}
-				for i, v := range vs.Values {
-					if s := evalStrings(v, out); len(s) > 0 {
-						out[vs.Names[i].Name] = s
-					} else if s := sliceStrings(v, out); len(s) > 0 {
-						out[vs.Names[i].Name] = s
+				for _, sp := range gd.Specs {
+					vs, ok := sp.(*ast.ValueSpec)
+					if !ok || len(vs.Names) != len(vs.Values) {
+						continue
+					}
+					for i, v := range vs.Values {
+						s := evalStrings(v, out)
+						if len(s) == 0 {
+							s = sliceStrings(v, out)
+						}
+						name := vs.Names[i].Name
+						if len(s) > 0 && !sameStrings(out[name], s) {
+							out[name] = s
+							changed = true
+						}
 					}
 				}
 			}
 		}
 	}
 	return out
+}
+
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // pkgDirStrings is pkgStrings for a directory not already parsed.
