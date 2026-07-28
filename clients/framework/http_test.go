@@ -3,6 +3,7 @@ package framework
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/hanzoai/doctype"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -378,7 +379,7 @@ func TestPasswordRedactedOverWire(t *testing.T) {
 	}
 	var doc map[string]any
 	_ = json.Unmarshal(body, &doc)
-	if doc["secret"] != redactedMarker {
+	if doc["secret"] != doctype.RedactedMarker {
 		t.Fatalf("secret want redacted marker, got %v", doc["secret"])
 	}
 }
