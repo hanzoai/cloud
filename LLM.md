@@ -506,11 +506,16 @@ added, `activate` must also verify the bytes still exist before flipping — tod
 `ActivateRelease` proves only that the ROW exists, which is sufficient only while
 nothing can prune the bytes out from under it.
 
-It is driven by the GitHub App. A push arrives HMAC-verified at
-`/v1/connector/github/webhook`, which fires `cloud.OnGitPush` — the SAME
-single-registrant seam the embedded git server uses, not a second CI — and
-`clients/platform` decides what the push means: an app tracking the repo rebuilds,
-and cloud's own upstream cuts a release. Cloud is the machine, so it calls the
+**Three transports, one trigger.** A push reaches `cloud.OnGitPush` — the
+single-registrant seam, never a second CI — from the embedded git server
+(`clients/git/smart_http.go`), the GitHub App (`/v1/connector/github/webhook`), and
+the canonical forge (`/v1/git/webhook`, `clients/git/webhook.go`). The third exists
+because git.hanzo.ai is a SEPARATE process: its pushes never touch our receive-pack,
+so without that door the host we call canonical builds nothing and only the mirror
+releases. Both webhook transports HMAC-verify fail-closed and drop bot-authored
+pushes through the one `cloud.IsBotActor`, so a release cannot retrigger itself.
+`clients/platform` is the only place that decides what a push MEANS: an app tracking
+the repo rebuilds, and cloud's own upstream cuts a release. Cloud is the machine, so it calls the
 release in-process and the build token is never handed to a caller. The trigger runs
 BEFORE the token mint and the mirror, because a build reads from GitHub and must not
 be lost to a sync outage.
