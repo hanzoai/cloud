@@ -163,6 +163,12 @@ func resolve(dataDir string) Posture {
 		if k, ok := decode(b.Key); ok {
 			root = k
 			cek.SetMasterKey(k)
+		} else {
+			// A bundle with no data-plane key still installs the service credentials,
+			// but the first store open will fail closed — and the reason lives HERE,
+			// at the broker, not in the cek error thirty frames later. Saying nothing
+			// is how this package's predecessor bug worked.
+			bootErr = fmt.Errorf("credz: broker at %s sent no data-plane key; store opens will fail closed", sock)
 		}
 		loaded = install(b.Env)
 		bootFrom = sock
