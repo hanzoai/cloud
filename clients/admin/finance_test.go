@@ -60,7 +60,7 @@ func TestFinance_RealAggregation(t *testing.T) {
 		t.Fatalf("finance: got %d (body=%s)", resp.StatusCode, body)
 	}
 	var env struct {
-		Status string      `json:"status"`
+		Status string              `json:"status"`
 		Data   finance.FinanceData `json:"data"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {

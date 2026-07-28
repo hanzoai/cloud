@@ -8,7 +8,7 @@ package admin
 // clients/automations/connector_waitlist.go bridges), so there is ONE waitlist system,
 // not two: the cockpit reads its list and issues a grant AGAINST it.
 //
-// SECURITY. Both routes are SuperAdmin only (mounted behind s.guard). A grant is a
+// SECURITY. Both routes are SuperAdmin only (gated by core.Admit). A grant is a
 // privileged mutation, so it is written to cloud's tamper-evident audit trail
 // (action "admin.waitlist.grant", resource "waitlist"). The engine secret is never a
 // client claim — it is injected from KMS into the process env by the deployment.
@@ -25,10 +25,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/admin/core"
-	"github.com/zap-proto/zip"
 )
 
 const (
@@ -46,7 +44,7 @@ func waitlistConfig() (base, secret string, ok bool) {
 
 // waitlistProxy issues a server-authed request to the waitlist engine and returns its
 // raw JSON body + status. Bounded read; Bearer secret; never forwards a client header.
-func waitlistProxy(s *cloud.Service[core.State], ctx context.Context, method, target, secret string, body []byte) (json.RawMessage, int, error) {
+func waitlistProxy(ctx context.Context, method, target, secret string, body []byte) (json.RawMessage, int, error) {
 	var rdr io.Reader
 	if body != nil {
 		rdr = bytes.NewReader(body)
@@ -72,17 +70,34 @@ func waitlistProxy(s *cloud.Service[core.State], ctx context.Context, method, ta
 	return json.RawMessage(raw), resp.StatusCode, nil
 }
 
-// waitlist answers GET /v1/admin/waitlist — the leaderboard/list for one waitlist,
-// proxied from the engine (GET /v1/waitlist/list?waitlist=&page=&pageSize=). Honest
-// "not configured" empty when the engine is absent on this deployment (never fabricated).
-func waitlist(s *cloud.Service[core.State], c *zip.Ctx) error {
+// waitlist reads one waitlist's leaderboard from the Hanzo waitlist engine — position,
+// points and referral standing per entry — proxied server-authed with the engine secret,
+// never a client credential.
+//
+// The engine's payload is forwarded VERBATIM as data; the console normalizes it. When
+// the engine is not configured on this deployment the read still succeeds, with an empty
+// object and a msg saying so, so the panel shows an honest not-wired state instead of an
+// error the operator would chase.
+//
+// Example: {"waitlist":"chat","page":"1","pageSize":"50"}
+// Response: {"status":"ok","msg":"","data":{"entries":[{"email":"ada@acme.com","points":120,
+// "position":7}],"total":842}}
+func waitlist(ctx context.Context, in *waitlistIn) (*rawOut, error) {
+	if _, err := core.Admit(ctx); err != nil {
+		return nil, err
+	}
 	base, secret, configured := waitlistConfig()
 	if !configured {
-		return c.JSON(200, map[string]any{"status": "ok", "msg": "the waitlist engine is not configured on this deployment", "data": map[string]any{}, "data2": 0})
+		return &rawOut{
+			Status: core.OK,
+			Msg:    "the waitlist engine is not configured on this deployment",
+			Data:   map[string]any{},
+			Data2:  core.Total(0),
+		}, nil
 	}
 	q := url.Values{}
-	for _, k := range []string{"waitlist", "page", "pageSize"} {
-		if v := strings.TrimSpace(c.Query(k)); v != "" {
+	for k, v := range map[string]string{"waitlist": in.Waitlist, "page": in.Page, "pageSize": in.PageSize} {
+		if v = strings.TrimSpace(v); v != "" {
 			q.Set(k, v)
 		}
 	}
@@ -90,46 +105,74 @@ func waitlist(s *cloud.Service[core.State], c *zip.Ctx) error {
 	if len(q) > 0 {
 		target += "?" + q.Encode()
 	}
-	raw, code, err := waitlistProxy(s, c.Context(), http.MethodGet, target, secret, nil)
+	raw, code, err := waitlistProxy(ctx, http.MethodGet, target, secret, nil)
 	if err != nil {
-		return core.Fail(c, err.Error())
+		return &rawOut{Status: core.Err, Msg: err.Error()}, nil
 	}
 	if code/100 != 2 {
-		return core.Fail(c, fmt.Sprintf("waitlist engine returned http %d", code))
+		return &rawOut{Status: core.Err, Msg: fmt.Sprintf("waitlist engine returned http %d", code)}, nil
 	}
-	return core.OK(c, raw) // data = the engine list payload verbatim (the console normalizes)
+	// data = the engine list payload verbatim (the console normalizes).
+	return &rawOut{Status: core.OK, Data: raw}, nil
+}
+
+// waitlistIn is the GET /v1/admin/waitlist query. Each value is forwarded to the engine
+// only when non-empty, so the engine applies its own defaults.
+type waitlistIn struct {
+	// Waitlist is the waitlist slug to read (e.g. "chat"). The engine decides what an
+	// empty slug means.
+	Waitlist string `json:"waitlist"`
+	// Page is the 1-based page number.
+	Page string `json:"page"`
+	// PageSize is entries per page.
+	PageSize string `json:"pageSize"`
 }
 
 // waitlistBoostRequest is the POST /v1/admin/waitlist/boost body.
 type waitlistBoostRequest struct {
+	// Waitlist is the waitlist slug the grant lands on. Required.
 	Waitlist string `json:"waitlist"`
-	Email    string `json:"email"`
-	RefCode  string `json:"refCode"`
-	Points   int    `json:"points"`
-	Reason   string `json:"reason"`
+	// Email identifies the entry to boost. Either this or RefCode is required.
+	Email string `json:"email"`
+	// RefCode identifies the entry by its referral code, when the email is unknown.
+	RefCode string `json:"refCode"`
+	// Points is how many points to award. Must be positive — this seam exists to move
+	// someone UP toward the cutoff.
+	Points int `json:"points"`
+	// Reason is the operator's justification. Not sent to the engine; it is recorded on
+	// the audit row, which is the point of asking for it.
+	Reason string `json:"reason"`
 }
 
-// waitlistBoost answers POST /v1/admin/waitlist/boost — grant a user waitlist points to
-// move them up toward the access cutoff. It funnels through the engine's verified grant
-// seam (POST /v1/waitlist/award, source="grant" — the one path that honors an explicit
-// points amount) and audits the grant to cloud's tamper-evident trail.
-func waitlistBoost(s *cloud.Service[core.State], c *zip.Ctx) error {
+// waitlistBoost grants a user waitlist points, moving them up toward the access cutoff.
+// This is the access lever: the cutoff itself does not move, the person does.
+//
+// It funnels through the engine's verified grant seam (POST /v1/waitlist/award with
+// source="grant" — the ONE path that honours an explicit points amount) and writes a
+// tamper-evident audit row either way, so a FAILED grant is recorded too. The reason
+// field goes only to that row.
+//
+// Example: {"waitlist":"chat","email":"ada@acme.com","points":50,"reason":"design partner"}
+// Response: {"status":"ok","msg":"","data":{"email":"ada@acme.com","points":170,"position":3}}
+func (o ops) waitlistBoost(ctx context.Context, in *waitlistBoostRequest) (*rawOut, error) {
+	c, err := core.Admit(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s := o.s
 	base, secret, configured := waitlistConfig()
 	if !configured {
-		return core.Fail(c, "the waitlist engine is not configured on this deployment")
+		return &rawOut{Status: core.Err, Msg: "the waitlist engine is not configured on this deployment"}, nil
 	}
-	var body waitlistBoostRequest
-	if err := c.Bind(&body); err != nil {
-		return core.Fail(c, "invalid request body")
-	}
+	body := *in
 	body.Waitlist = strings.TrimSpace(body.Waitlist)
 	body.Email = strings.TrimSpace(body.Email)
 	body.RefCode = strings.TrimSpace(body.RefCode)
 	if body.Waitlist == "" || (body.Email == "" && body.RefCode == "") {
-		return core.Fail(c, "waitlist and (email or refCode) are required")
+		return &rawOut{Status: core.Err, Msg: "waitlist and (email or refCode) are required"}, nil
 	}
 	if body.Points <= 0 {
-		return core.Fail(c, "points must be a positive number")
+		return &rawOut{Status: core.Err, Msg: "points must be a positive number"}, nil
 	}
 
 	payload := map[string]any{"waitlist": body.Waitlist, "source": "grant", "points": body.Points}
@@ -140,7 +183,7 @@ func waitlistBoost(s *cloud.Service[core.State], c *zip.Ctx) error {
 		payload["refCode"] = body.RefCode
 	}
 	enc, _ := json.Marshal(payload)
-	raw, code, err := waitlistProxy(s, c.Context(), http.MethodPost, base+"/v1/waitlist/award", secret, enc)
+	raw, code, err := waitlistProxy(ctx, http.MethodPost, base+"/v1/waitlist/award", secret, enc)
 
 	target := body.Email
 	if target == "" {
@@ -156,10 +199,10 @@ func waitlistBoost(s *cloud.Service[core.State], c *zip.Ctx) error {
 		audit.Outcome{Result: result, Status: code})
 
 	if err != nil {
-		return core.Fail(c, err.Error())
+		return &rawOut{Status: core.Err, Msg: err.Error()}, nil
 	}
 	if code/100 != 2 {
-		return core.Fail(c, fmt.Sprintf("waitlist grant failed (http %d): %s", code, strings.TrimSpace(string(raw))))
+		return &rawOut{Status: core.Err, Msg: fmt.Sprintf("waitlist grant failed (http %d): %s", code, strings.TrimSpace(string(raw)))}, nil
 	}
-	return core.OK(c, raw)
+	return &rawOut{Status: core.OK, Data: raw}, nil
 }

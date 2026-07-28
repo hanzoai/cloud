@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -51,33 +50,32 @@ var telegramAPIBase = "https://api.telegram.org"
 // stored as an oauth_nonce (org,telegram); the webhook's /start handler claims it to
 // bind chat→org. It is short (128-bit hex) so it fits Telegram's 64-char `start`
 // payload limit.
-func telegramConnect(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required to connect an integration")
-	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
+// Response: {"authorizeUrl":"https://t.me/hanzo_bot?start=9f3c1d2e4b5a6c7d8e9f0a1b2c3d4e5f"}
+func (o ops) telegramConnect(ctx context.Context, _ *noArgs) (*authorizeOut, error) {
+	org, err := authed(ctx, "a validated principal is required to connect an integration")
+	if err != nil {
+		return nil, err
 	}
 	if !telegramConfigured() {
-		return zip.Errorf(http.StatusServiceUnavailable, "telegram integration is not configured on this deployment")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "telegram integration is not configured on this deployment")
 	}
 	username := telegramBotUsername()
 	if username == "" {
-		return zip.Errorf(http.StatusServiceUnavailable, "telegram integration is missing TELEGRAM_BOT_USERNAME")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "telegram integration is missing TELEGRAM_BOT_USERNAME")
 	}
-	if _, err := s.State.store.GCNonces(c.Context(), staleNonceCutoff()); err != nil {
-		s.Log.Warn("telegram: nonce gc", "err", err)
+	if _, gerr := o.s.State.store.GCNonces(ctx, staleNonceCutoff()); gerr != nil {
+		o.s.Log.Warn("telegram: nonce gc", "err", gerr)
 	}
 	code, err := genToken()
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	if err := s.State.store.PutNonce(c.Context(), code, org, "telegram"); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "code: %v", err)
+	if err := o.s.State.store.PutNonce(ctx, code, org, "telegram"); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "code: %v", err)
 	}
-	deepLink := "https://t.me/" + url.PathEscape(username) + "?start=" + url.QueryEscape(code)
-	return c.JSON(http.StatusOK, map[string]any{"authorizeUrl": deepLink})
+	return &authorizeOut{
+		AuthorizeURL: "https://t.me/" + url.PathEscape(username) + "?start=" + url.QueryEscape(code),
+	}, nil
 }
 
 // ── webhook ─────────────────────────────────────────────────────────────────

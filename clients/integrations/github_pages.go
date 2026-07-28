@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -91,37 +90,88 @@ type githubPagesSite struct {
 // ── request bodies (client, camelCase) ───────────────────────────────────────
 
 type githubPagesEnableReq struct {
-	Branch    string `json:"branch"`    // legacy source branch; defaults to the repo's default branch
-	Path      string `json:"path"`      // "/" or "/docs"
-	BuildType string `json:"buildType"` // "workflow" builds via GitHub Actions; else a branch source
+	// Repo is the repository, from the :repo path segment.
+	Repo string `json:"repo"`
+	// Branch is the legacy source branch; empty defaults to the repo's own default
+	// branch. Ignored when buildType is "workflow".
+	Branch string `json:"branch"`
+	// Path is the source directory within the branch: "/" (the default) or "/docs".
+	// GitHub allows no others.
+	Path string `json:"path"`
+	// BuildType selects the builder: "workflow" builds via GitHub Actions, anything
+	// else builds from the branch source above.
+	BuildType string `json:"buildType"`
 }
+
+// ref is the repo this request addresses, normalized like every other :repo op.
+func (r githubPagesEnableReq) ref() repoRef { return repoRef{Repo: r.Repo} }
 
 // githubPagesUpdateReq updates a live site. A nil pointer leaves a field unchanged;
 // CNAME=="" clears the custom domain, a non-empty CNAME sets it.
 type githubPagesUpdateReq struct {
-	CNAME         *string `json:"cname"`
-	HTTPSEnforced *bool   `json:"httpsEnforced"`
-	BuildType     string  `json:"buildType"`
-	Branch        string  `json:"branch"`
-	Path          string  `json:"path"`
+	// Repo is the repository, from the :repo path segment.
+	Repo string `json:"repo"`
+	// CNAME is the custom domain. Omit to leave it alone, "" to clear it, or a
+	// valid FQDN to set it.
+	CNAME *string `json:"cname"`
+	// HTTPSEnforced toggles GitHub's enforce-HTTPS bit. Omit to leave it alone.
+	HTTPSEnforced *bool `json:"httpsEnforced"`
+	// BuildType switches the builder: "legacy" or "workflow". Empty leaves it.
+	BuildType string `json:"buildType"`
+	// Branch switches the legacy source branch. Empty leaves the source alone.
+	Branch string `json:"branch"`
+	// Path is the source directory to pair with Branch: "/" (the default) or
+	// "/docs". Read only when Branch is given.
+	Path string `json:"path"`
+}
+
+// ref is the repo this request addresses, normalized like every other :repo op.
+func (r githubPagesUpdateReq) ref() repoRef { return repoRef{Repo: r.Repo} }
+
+// githubPagesUpdatedOut acknowledges an update. The site's new state is a GET away;
+// GitHub's PUT answers no body of its own.
+type githubPagesUpdatedOut struct {
+	// Repo is the repository that was updated.
+	Repo string `json:"repo"`
+	// Updated is always true — a failure is an HTTP error, never this shape.
+	Updated bool `json:"updated"`
+}
+
+// githubPagesDisabledOut acknowledges that the site was deleted.
+type githubPagesDisabledOut struct {
+	// Repo is the repository whose site was deleted.
+	Repo string `json:"repo"`
+	// Disabled is always true — a failure is an HTTP error, never this shape.
+	Disabled bool `json:"disabled"`
 }
 
 // ── response views (client, camelCase) ───────────────────────────────────────
 
 type githubPagesSource struct {
+	// Branch is the branch the site builds from.
 	Branch string `json:"branch"`
-	Path   string `json:"path"`
+	// Path is the directory within that branch: "/" or "/docs".
+	Path string `json:"path"`
 }
 
 type githubPagesView struct {
-	Repo          string             `json:"repo"`
-	Status        string             `json:"status,omitempty"` // "built" | "building" | "errored"
-	URL           string             `json:"url,omitempty"`    // the live site URL (html_url)
-	CNAME         string             `json:"cname,omitempty"`  // custom domain, if set
-	Custom404     bool               `json:"custom404"`
-	BuildType     string             `json:"buildType,omitempty"`
-	HTTPSEnforced bool               `json:"httpsEnforced"`
-	Source        *githubPagesSource `json:"source,omitempty"`
+	// Repo is the repository the site belongs to.
+	Repo string `json:"repo"`
+	// Status is GitHub's build state: "built", "building" or "errored". Absent
+	// before the first build.
+	Status string `json:"status,omitempty"`
+	// URL is the live site (GitHub's html_url).
+	URL string `json:"url,omitempty"`
+	// CNAME is the custom domain, absent when none is set.
+	CNAME string `json:"cname,omitempty"`
+	// Custom404 is whether the repo ships its own 404 page.
+	Custom404 bool `json:"custom404"`
+	// BuildType is the builder in use: "legacy" (branch source) or "workflow".
+	BuildType string `json:"buildType,omitempty"`
+	// HTTPSEnforced is GitHub's enforce-HTTPS bit.
+	HTTPSEnforced bool `json:"httpsEnforced"`
+	// Source is the branch + path the site builds from. Absent under "workflow".
+	Source *githubPagesSource `json:"source,omitempty"`
 }
 
 func pagesView(repo string, s githubPagesSite) githubPagesView {
@@ -346,59 +396,64 @@ func rateLimited(status int, body []byte, hdr http.Header) (bool, string) {
 // (principal org, DNS-1123 org, valid repo grammar, grant check) is enforced in ONE
 // place and every action is uniformly 404 for a repo the org's installation cannot
 // touch — before any request body is read.
-func pagesTarget(c *zip.Ctx) (string, pagesRepo, error) {
-	org, ok := principal.Org(c)
-	if !ok {
-		return "", pagesRepo{}, zip.ErrForbidden("a validated principal is required")
-	}
-	if !validOrg(org) {
-		return "", pagesRepo{}, zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	repo := strings.TrimSuffix(strings.TrimSpace(c.Param("repo")), ".git")
-	if !validRepoName(repo) {
-		return "", pagesRepo{}, zip.ErrBadRequest("repo must be a valid repository name")
-	}
-	pr, err := resolveGrantedRepo(c.Context(), org, repo)
+// pagesTarget is ONE resolver for both handler shapes: the org comes off the
+// request CONTEXT (cloud.Bridge parks it at /v1/integrations), so a typed op and
+// the raw /builds handler resolve their target through the same three steps —
+// principal gate, repo-name grammar, grant lookup.
+func pagesTarget(ctx context.Context, repo string) (pagesRepo, error) {
+	org, err := authed(ctx, principalRequired)
 	if err != nil {
-		return "", pagesRepo{}, err
+		return pagesRepo{}, err
 	}
-	return repo, pr, nil
+	if !validRepoName(repo) {
+		return pagesRepo{}, zip.ErrBadRequest("repo must be a valid repository name")
+	}
+	return resolveGrantedRepo(ctx, org, repo)
 }
 
-// githubPagesGet returns the repo's Pages status, live URL, and custom domain.
-func githubPagesGet(_ *cloud.Service[state], c *zip.Ctx) error {
-	repo, pr, err := pagesTarget(c)
+// githubPagesGet returns the repo's Pages status, live URL, custom domain and build
+// source. The repo is resolved against the org installation's GRANTED set, so a
+// caller can never address a repo the App was not granted; 404 when the repo has no
+// Pages site.
+//
+// Example: {"repo":"widgets"}
+// Response: {"repo":"widgets","status":"built","url":"https://acme.github.io/widgets/","cname":"docs.acme.com","custom404":false,"buildType":"legacy","httpsEnforced":true,"source":{"branch":"main","path":"/docs"}}
+func (o ops) githubPagesGet(ctx context.Context, in *repoRef) (*githubPagesView, error) {
+	repo := in.name()
+	pr, err := pagesTarget(ctx, repo)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	status, body, hdr, callErr := pr.request(c.Context(), http.MethodGet, "", nil)
+	status, body, hdr, callErr := pr.request(ctx, http.MethodGet, "", nil)
 	if callErr != nil {
-		return zip.Errorf(http.StatusBadGateway, "github pages: %v", callErr)
+		return nil, zip.Errorf(http.StatusBadGateway, "github pages: %v", callErr)
 	}
 	if status == http.StatusNotFound {
-		return zip.Errorf(http.StatusNotFound, "github pages is not enabled for this repository")
+		return nil, zip.Errorf(http.StatusNotFound, "github pages is not enabled for this repository")
 	}
 	if status/100 != 2 {
-		return pagesErr(status, body, hdr)
+		return nil, pagesErr(status, body, hdr)
 	}
 	var site githubPagesSite
 	if err := json.Unmarshal(body, &site); err != nil {
-		return zip.Errorf(http.StatusBadGateway, "github decode: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "github decode: %v", err)
 	}
-	return c.JSON(http.StatusOK, pagesView(repo, site))
+	v := pagesView(repo, site)
+	return &v, nil
 }
 
-// githubPagesEnable creates/configures the Pages site. With buildType=="workflow" the
-// site builds via GitHub Actions; otherwise it builds from a branch source (defaulting
-// to the repo's default branch when none is given).
-func githubPagesEnable(_ *cloud.Service[state], c *zip.Ctx) error {
-	repo, pr, err := pagesTarget(c)
+// githubPagesEnable creates the repo's Pages site and answers 201 Created with it.
+// With buildType "workflow" the site builds via GitHub Actions; otherwise it builds
+// from a branch source, defaulting to the repo's own default branch when none is
+// given. Only "/" and "/docs" are legal source paths (GitHub's rule).
+//
+// Example: {"repo":"widgets","branch":"main","path":"/docs"}
+// Response: {"repo":"widgets","status":"building","url":"https://acme.github.io/widgets/","custom404":false,"buildType":"legacy","httpsEnforced":true,"source":{"branch":"main","path":"/docs"}}
+func (o ops) githubPagesEnable(ctx context.Context, in *githubPagesEnableReq) (*githubPagesView, error) {
+	repo := in.ref().name()
+	pr, err := pagesTarget(ctx, repo)
 	if err != nil {
-		return err
-	}
-	var in githubPagesEnableReq
-	if err := c.Bind(&in); err != nil {
-		return err
+		return nil, err
 	}
 	out := map[string]any{}
 	if strings.EqualFold(strings.TrimSpace(in.BuildType), "workflow") {
@@ -409,40 +464,44 @@ func githubPagesEnable(_ *cloud.Service[state], c *zip.Ctx) error {
 			branch = pr.defaultBranch
 		}
 		if branch == "" {
-			return zip.ErrBadRequest("provide branch (source) or buildType=workflow")
+			return nil, zip.ErrBadRequest("provide branch (source) or buildType=workflow")
 		}
 		if !validGitRef(branch) {
-			return zip.ErrBadRequest("branch is not a valid git ref")
+			return nil, zip.ErrBadRequest("branch is not a valid git ref")
 		}
 		path, perr := normalizePagesPath(in.Path)
 		if perr != nil {
-			return perr
+			return nil, perr
 		}
 		out["source"] = map[string]string{"branch": branch, "path": path}
 	}
 	raw, _ := json.Marshal(out)
-	status, body, hdr, callErr := pr.request(c.Context(), http.MethodPost, "", raw)
+	status, body, hdr, callErr := pr.request(ctx, http.MethodPost, "", raw)
 	if callErr != nil {
-		return zip.Errorf(http.StatusBadGateway, "github pages: %v", callErr)
+		return nil, zip.Errorf(http.StatusBadGateway, "github pages: %v", callErr)
 	}
 	if status/100 != 2 {
-		return pagesErr(status, body, hdr)
+		return nil, pagesErr(status, body, hdr)
 	}
 	var site githubPagesSite
 	_ = json.Unmarshal(body, &site)
-	return c.JSON(http.StatusCreated, pagesView(repo, site))
+	// A creator, so 201 — the one status a typed op cannot state in its signature.
+	cloud.Created(ctx)
+	v := pagesView(repo, site)
+	return &v, nil
 }
 
-// githubPagesUpdate sets/clears the custom domain (cname) and updates HTTPS
-// enforcement, build type, or source. Only the provided fields are sent to GitHub.
-func githubPagesUpdate(_ *cloud.Service[state], c *zip.Ctx) error {
-	repo, pr, err := pagesTarget(c)
+// githubPagesUpdate sets or clears the custom domain (cname) and updates HTTPS
+// enforcement, build type, or source. ONLY the provided fields are sent to GitHub,
+// so an update never resets a setting the caller did not mention.
+//
+// Example: {"repo":"widgets","cname":"docs.acme.com","httpsEnforced":true}
+// Response: {"repo":"widgets","updated":true}
+func (o ops) githubPagesUpdate(ctx context.Context, in *githubPagesUpdateReq) (*githubPagesUpdatedOut, error) {
+	repo := in.ref().name()
+	pr, err := pagesTarget(ctx, repo)
 	if err != nil {
-		return err
-	}
-	var in githubPagesUpdateReq
-	if err := c.Bind(&in); err != nil {
-		return err
+		return nil, err
 	}
 	out := map[string]any{}
 	if in.CNAME != nil {
@@ -453,7 +512,7 @@ func githubPagesUpdate(_ *cloud.Service[state], c *zip.Ctx) error {
 		case validCustomDomain(cn):
 			out["cname"] = cn
 		default:
-			return zip.ErrBadRequest("cname must be a valid domain name")
+			return nil, zip.ErrBadRequest("cname must be a valid domain name")
 		}
 	}
 	if in.HTTPSEnforced != nil {
@@ -461,59 +520,66 @@ func githubPagesUpdate(_ *cloud.Service[state], c *zip.Ctx) error {
 	}
 	if bt := strings.TrimSpace(in.BuildType); bt != "" {
 		if bt != "legacy" && bt != "workflow" {
-			return zip.ErrBadRequest("buildType must be legacy or workflow")
+			return nil, zip.ErrBadRequest("buildType must be legacy or workflow")
 		}
 		out["build_type"] = bt
 	}
 	if br := strings.TrimSpace(in.Branch); br != "" {
 		if !validGitRef(br) {
-			return zip.ErrBadRequest("branch is not a valid git ref")
+			return nil, zip.ErrBadRequest("branch is not a valid git ref")
 		}
 		path, perr := normalizePagesPath(in.Path)
 		if perr != nil {
-			return perr
+			return nil, perr
 		}
 		out["source"] = map[string]string{"branch": br, "path": path}
 	}
 	if len(out) == 0 {
-		return zip.ErrBadRequest("no fields to update (cname, httpsEnforced, buildType, or branch)")
+		return nil, zip.ErrBadRequest("no fields to update (cname, httpsEnforced, buildType, or branch)")
 	}
 	raw, _ := json.Marshal(out)
-	status, body, hdr, callErr := pr.request(c.Context(), http.MethodPut, "", raw)
+	status, body, hdr, callErr := pr.request(ctx, http.MethodPut, "", raw)
 	if callErr != nil {
-		return zip.Errorf(http.StatusBadGateway, "github pages: %v", callErr)
+		return nil, zip.Errorf(http.StatusBadGateway, "github pages: %v", callErr)
 	}
 	if status == http.StatusNotFound {
-		return zip.Errorf(http.StatusNotFound, "github pages is not enabled for this repository")
+		return nil, zip.Errorf(http.StatusNotFound, "github pages is not enabled for this repository")
 	}
 	if status/100 != 2 {
-		return pagesErr(status, body, hdr)
+		return nil, pagesErr(status, body, hdr)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"repo": repo, "updated": true})
+	return &githubPagesUpdatedOut{Repo: repo, Updated: true}, nil
 }
 
-// githubPagesDisable deletes the Pages site.
-func githubPagesDisable(_ *cloud.Service[state], c *zip.Ctx) error {
-	repo, pr, err := pagesTarget(c)
+// githubPagesDisable deletes the repo's Pages site. 404 when there is none, so a
+// caller can tell "turned it off" from "there was nothing on".
+//
+// Example: {"repo":"widgets"}
+// Response: {"repo":"widgets","disabled":true}
+func (o ops) githubPagesDisable(ctx context.Context, in *repoRef) (*githubPagesDisabledOut, error) {
+	repo := in.name()
+	pr, err := pagesTarget(ctx, repo)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	status, body, hdr, callErr := pr.request(c.Context(), http.MethodDelete, "", nil)
+	status, body, hdr, callErr := pr.request(ctx, http.MethodDelete, "", nil)
 	if callErr != nil {
-		return zip.Errorf(http.StatusBadGateway, "github pages: %v", callErr)
+		return nil, zip.Errorf(http.StatusBadGateway, "github pages: %v", callErr)
 	}
 	if status == http.StatusNotFound {
-		return zip.Errorf(http.StatusNotFound, "github pages is not enabled for this repository")
+		return nil, zip.Errorf(http.StatusNotFound, "github pages is not enabled for this repository")
 	}
 	if status/100 != 2 {
-		return pagesErr(status, body, hdr)
+		return nil, pagesErr(status, body, hdr)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"repo": repo, "disabled": true})
+	return &githubPagesDisabledOut{Repo: repo, Disabled: true}, nil
 }
 
 // githubPagesBuild requests a Pages rebuild and returns the queued build's status.
+// RAW (202 Accepted): the build is queued at GitHub, not completed here.
 func githubPagesBuild(_ *cloud.Service[state], c *zip.Ctx) error {
-	repo, pr, err := pagesTarget(c)
+	repo := strings.TrimSuffix(strings.TrimSpace(c.Param("repo")), ".git")
+	pr, err := pagesTarget(c.Context(), repo)
 	if err != nil {
 		return err
 	}

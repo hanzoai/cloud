@@ -21,10 +21,10 @@
 package git
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -38,60 +38,132 @@ const maxBlobBytes = 1 << 20 // 1 MiB
 
 // ---- JSON DTOs (mirror the console GitApi normalizers verbatim) ----
 
+// refJSON is one named ref and the commit it points at.
 type refJSON struct {
+	// Name is the short ref name ("main", "v1.2.0"), not the full refs/… path.
 	Name string `json:"name"`
-	SHA  string `json:"sha"`
+	// SHA is the full commit hash the ref resolves to.
+	SHA string `json:"sha"`
 }
 
+// refsJSON is a repo's ref advertisement for a browser.
 type refsJSON struct {
+	// Branches are the repo's heads; empty on a repo with no commits.
 	Branches []refJSON `json:"branches"`
-	Tags     []refJSON `json:"tags"`
-	Default  string    `json:"default"`
+	// Tags are the repo's tags; empty when there are none.
+	Tags []refJSON `json:"tags"`
+	// Default is the branch name a caller gets when it asks for no ref.
+	Default string `json:"default"`
 }
 
+// treeEntryJSON is one immediate child of a directory.
 type treeEntryJSON struct {
+	// Name is the entry's own name, no directory part.
 	Name string `json:"name"`
+	// Path is the entry's full repo-relative path.
 	Path string `json:"path"`
-	Type string `json:"type"` // "tree" | "blob"
-	Size int64  `json:"size"`
-	Mode string `json:"mode"` // octal, e.g. "100644" / "040000" / "120000"
+	// Type is "tree" for a directory, "blob" for a file.
+	Type string `json:"type"`
+	// Size is the file's byte length; 0 for a directory.
+	Size int64 `json:"size"`
+	// Mode is the octal git file mode ("100644", "040000", "120000").
+	Mode string `json:"mode"`
 }
 
+// treeJSON is one directory listing.
+type treeJSON struct {
+	// Entries are the immediate children, directories before files.
+	Entries []treeEntryJSON `json:"entries"`
+}
+
+// blobJSON is one file at one revision.
 type blobJSON struct {
-	Path      string `json:"path"`
-	Size      int64  `json:"size"`
-	Encoding  string `json:"encoding"` // "utf8" | "base64"
-	Content   string `json:"content"`
-	Binary    bool   `json:"binary"`
-	Truncated bool   `json:"truncated"`
-}
-
-type commitJSON struct {
-	SHA         string `json:"sha"`
-	ShortSHA    string `json:"shortSha"`
-	Message     string `json:"message"`
-	AuthorName  string `json:"authorName"`
-	AuthorEmail string `json:"authorEmail"`
-	Date        string `json:"date"`
-}
-
-type readmeJSON struct {
-	Path     string `json:"path"`
-	Content  string `json:"content"`
+	// Path is the file's repo-relative path.
+	Path string `json:"path"`
+	// Size is the file's byte length in the repo, whatever was returned below.
+	Size int64 `json:"size"`
+	// Encoding is how Content is carried: "utf8" verbatim, or "base64".
 	Encoding string `json:"encoding"`
+	// Content is the file's bytes, empty when Truncated.
+	Content string `json:"content"`
+	// Binary marks content git could not treat as text; it comes back base64.
+	Binary bool `json:"binary"`
+	// Truncated marks a file past the 1 MiB view cap. No content is sent —
+	// clone the repo for it.
+	Truncated bool `json:"truncated"`
+}
+
+// commitJSON is one commit as the history view reports it.
+type commitJSON struct {
+	// SHA is the full commit hash.
+	SHA string `json:"sha"`
+	// ShortSHA is the abbreviated hash a UI displays.
+	ShortSHA string `json:"shortSha"`
+	// Message is the commit's SUBJECT — its first line only.
+	Message string `json:"message"`
+	// AuthorName is the commit author's name.
+	AuthorName string `json:"authorName"`
+	// AuthorEmail is the commit author's email.
+	AuthorEmail string `json:"authorEmail"`
+	// Date is the author date, RFC 3339 UTC.
+	Date string `json:"date"`
+}
+
+// commitsJSON is one page of history.
+type commitsJSON struct {
+	// Commits are newest first.
+	Commits []commitJSON `json:"commits"`
+}
+
+// readmeJSON is the repo's root README.
+type readmeJSON struct {
+	// Path is the file the README was found at (README.md, README, …).
+	Path string `json:"path"`
+	// Content is the file's text, verbatim and unrendered.
+	Content string `json:"content"`
+	// Encoding is always "utf8" — a README is text by definition.
+	Encoding string `json:"encoding"`
+}
+
+// ---- typed inputs ----
+
+// revRef addresses a repo at a revision: the shared In of the browse ops.
+type revRef struct {
+	// Name is the repo to read, from the :name path segment.
+	Name string `json:"name"`
+	// Ref is a branch, tag or commit; empty means the repo's HEAD.
+	Ref string `json:"ref"`
+}
+
+// pathRef addresses a path inside a repo at a revision.
+type pathRef struct {
+	// Name is the repo to read, from the :name path segment.
+	Name string `json:"name"`
+	// Ref is a branch, tag or commit; empty means the repo's HEAD.
+	Ref string `json:"ref"`
+	// Path is repo-relative; empty is the tree root. Traversal is stripped.
+	Path string `json:"path"`
+}
+
+// logRef addresses a history query.
+type logRef struct {
+	// Name is the repo to read, from the :name path segment.
+	Name string `json:"name"`
+	// Ref is the branch, tag or commit to walk back from; empty means HEAD.
+	Ref string `json:"ref"`
+	// Path narrows the history to commits touching it; empty walks the whole ref.
+	Path string `json:"path"`
+	// Limit caps the page. Anything not positive means 50; the cap is 100.
+	Limit int `json:"limit"`
 }
 
 // ---- handlers ----
 
-// browseTarget resolves the caller's org, the named repo, its Repository, and the
-// requested ref (?ref=, "" ⇒ HEAD/default) to a revision — the shared preamble for
-// tree/blob/commits/readme. Mirrors the uiTree/uiBlob guard, org-scoped.
-func browseTarget(s *cloud.Service[state], c *zip.Ctx) (Repository, Revision, error) {
-	o, ok := org(c)
-	if !ok {
-		return nil, "", zip.ErrForbidden("X-Org-Id required")
-	}
-	r, found := findRepo(s, c.Context(), o, normalizeName(c.Param("name")))
+// browseTarget resolves the named repo, its Repository, and the requested ref
+// ("" ⇒ HEAD/default) to a revision — the shared preamble for tree/blob/commits/
+// readme. Mirrors the uiTree/uiBlob guard, scoped to the caller's tenant.
+func browseTarget(s *cloud.Service[state], ctx context.Context, t tenant, name, ref string) (Repository, Revision, error) {
+	r, found := findRepo(s, ctx, t.org, normalizeName(name))
 	if !found {
 		return nil, "", zip.ErrNotFound("repo not found")
 	}
@@ -99,41 +171,57 @@ func browseTarget(s *cloud.Service[state], c *zip.Ctx) (Repository, Revision, er
 	if err != nil {
 		return nil, "", zip.ErrNotFound("empty repository")
 	}
-	rev, _, err := repo.Resolve(c.Context(), strings.TrimSpace(c.Query("ref")))
+	rev, _, err := repo.Resolve(ctx, strings.TrimSpace(ref))
 	if err != nil {
 		return nil, "", zip.ErrNotFound("unknown ref")
 	}
 	return repo, rev, nil
 }
 
-// browseRefs lists the repo's branches + tags + default branch. Unlike the others it
-// tolerates an empty repo (no HEAD) — it still reports the (empty) ref sets + default.
-func browseRefs(s *cloud.Service[state], c *zip.Ctx) error {
-	o, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// browseRefs lists a repo's branches, tags and default branch — what a branch
+// picker needs in one call. Unlike the other read ops it tolerates a repo with no
+// commits: the ref sets come back empty and the default branch is still named.
+//
+// Example: {"name": "widgets"}
+//
+//	Response: {"branches": [{"name": "main", "sha": "a1b2c3d4"}], "tags": [],
+//		"default": "main"}
+func (o ops) browseRefs(ctx context.Context, in *repoRef) (*refsJSON, error) {
+	t, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	r, found := findRepo(s, c.Context(), o, normalizeName(c.Param("name")))
+	r, found := findRepo(o.s, ctx, t.org, normalizeName(in.Name))
 	if !found {
-		return zip.ErrNotFound("repo not found")
+		return nil, zip.ErrNotFound("repo not found")
 	}
 	out := refsJSON{Branches: []refJSON{}, Tags: []refJSON{}, Default: firstNonEmptyStr(r.DefaultBranch, defaultBranchName)}
-	if repo, err := openRepository(s, r); err == nil {
-		branches, tags, _ := repo.Refs(c.Context())
+	if repo, err := openRepository(o.s, r); err == nil {
+		branches, tags, _ := repo.Refs(ctx)
 		out.Branches, out.Tags = refsToJSON(branches), refsToJSON(tags)
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
-// browseTree lists the immediate children of a subtree at a ref, dirs first then files.
-func browseTree(s *cloud.Service[state], c *zip.Ctx) error {
-	repo, rev, err := browseTarget(s, c)
+// browseTree lists the immediate children of one directory at one revision,
+// directories before files. It does not recurse — walk down a level at a time.
+//
+// Example: {"name": "widgets", "ref": "main", "path": "cmd"}
+//
+//	Response: {"entries": [{"name": "server", "path": "cmd/server", "type": "tree",
+//		"size": 0, "mode": "040000"}]}
+func (o ops) browseTree(ctx context.Context, in *pathRef) (*treeJSON, error) {
+	t, err := tenantOf(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	entries, err := repo.Tree(c.Context(), rev, cleanTreePath(c.Query("path")))
+	repo, rev, err := browseTarget(o.s, ctx, t, in.Name, in.Ref)
 	if err != nil {
-		return zip.ErrNotFound("no such directory")
+		return nil, err
+	}
+	entries, err := repo.Tree(ctx, rev, cleanTreePath(in.Path))
+	if err != nil {
+		return nil, zip.ErrNotFound("no such directory")
 	}
 	out := make([]treeEntryJSON, 0, len(entries))
 	for _, e := range entries {
@@ -143,26 +231,36 @@ func browseTree(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		out = append(out, treeEntryJSON{Name: e.Name, Path: e.Path, Type: kind, Size: e.Size, Mode: e.Mode})
 	}
-	return c.JSON(http.StatusOK, map[string]any{"entries": out})
+	return &treeJSON{Entries: out}, nil
 }
 
-// browseBlob returns a single file's bytes at a ref+path (utf8 inline, or base64 for
-// binary; truncated past maxBlobBytes).
-func browseBlob(s *cloud.Service[state], c *zip.Ctx) error {
-	repo, rev, err := browseTarget(s, c)
+// browseBlob returns one file's bytes at one revision. Text comes back verbatim,
+// binary comes back base64, and a file past the 1 MiB view cap comes back marked
+// truncated with NO content — the client is expected to clone instead.
+//
+// Example: {"name": "widgets", "ref": "main", "path": "go.mod"}
+//
+//	Response: {"path": "go.mod", "size": 42, "encoding": "utf8",
+//		"content": "module widgets\n", "binary": false, "truncated": false}
+func (o ops) browseBlob(ctx context.Context, in *pathRef) (*blobJSON, error) {
+	t, err := tenantOf(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	fp := cleanTreePath(c.Query("path"))
+	repo, rev, err := browseTarget(o.s, ctx, t, in.Name, in.Ref)
+	if err != nil {
+		return nil, err
+	}
+	fp := cleanTreePath(in.Path)
 	if fp == "" {
-		return zip.ErrBadRequest("path is required")
+		return nil, zip.ErrBadRequest("path is required")
 	}
-	b, err := repo.Blob(c.Context(), rev, fp, maxBlobBytes)
+	b, err := repo.Blob(ctx, rev, fp, maxBlobBytes)
 	if err != nil {
 		if errors.Is(err, ErrNoPath) {
-			return zip.ErrNotFound("no such file")
+			return nil, zip.ErrNotFound("no such file")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "read blob: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "read blob: %v", err)
 	}
 	out := blobJSON{Path: b.Path, Size: b.Size, Encoding: "utf8", Truncated: b.Truncated, Binary: b.Binary}
 	switch {
@@ -174,28 +272,36 @@ func browseBlob(s *cloud.Service[state], c *zip.Ctx) error {
 	default:
 		out.Content = string(b.Content)
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
-// browseCommits returns the ref's history (or a file's history when ?path is set),
-// newest first, capped at ?limit (default 50, max 100).
-func browseCommits(s *cloud.Service[state], c *zip.Ctx) error {
-	repo, rev, err := browseTarget(s, c)
+// browseCommits walks a ref's history newest first, or one path's history when a
+// path is given. There is no cursor: the page is the newest `limit` commits.
+//
+// Example: {"name": "widgets", "ref": "main", "limit": 2}
+//
+//	Response: {"commits": [{"sha": "a1b2c3d4e5f6", "shortSha": "a1b2c3d",
+//		"message": "add the widget service", "authorName": "Ada",
+//		"authorEmail": "ada@hanzo.ai", "date": "2026-07-01T10:00:00Z"}]}
+func (o ops) browseCommits(ctx context.Context, in *logRef) (*commitsJSON, error) {
+	t, err := tenantOf(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	repo, rev, err := browseTarget(o.s, ctx, t, in.Name, in.Ref)
+	if err != nil {
+		return nil, err
 	}
 	limit := 50
-	if q := strings.TrimSpace(c.Query("limit")); q != "" {
-		if n, e := strconv.Atoi(q); e == nil && n > 0 {
-			limit = n
-		}
+	if in.Limit > 0 {
+		limit = in.Limit
 	}
 	if limit > 100 {
 		limit = 100
 	}
-	changes, err := repo.Log(c.Context(), rev, cleanTreePath(c.Query("path")), limit)
+	changes, err := repo.Log(ctx, rev, cleanTreePath(in.Path), limit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "log: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "log: %v", err)
 	}
 	out := []commitJSON{}
 	for _, cm := range changes {
@@ -208,20 +314,29 @@ func browseCommits(s *cloud.Service[state], c *zip.Ctx) error {
 			Date:        cm.When.UTC().Format(time.RFC3339),
 		})
 	}
-	return c.JSON(http.StatusOK, map[string]any{"commits": out})
+	return &commitsJSON{Commits: out}, nil
 }
 
-// browseReadme returns the rendered-as-text README at the tree root; 404 when none.
-func browseReadme(s *cloud.Service[state], c *zip.Ctx) error {
-	repo, rev, err := browseTarget(s, c)
+// browseReadme returns the README at the tree root as plain text — unrendered, so
+// the caller decides how to present it. A repo with no README is not found.
+//
+// Example: {"name": "widgets", "ref": "main"}
+//
+//	Response: {"path": "README.md", "content": "# widgets\n", "encoding": "utf8"}
+func (o ops) browseReadme(ctx context.Context, in *revRef) (*readmeJSON, error) {
+	t, err := tenantOf(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	name, content, ok := readmeAt(c.Context(), repo, rev)
+	repo, rev, err := browseTarget(o.s, ctx, t, in.Name, in.Ref)
+	if err != nil {
+		return nil, err
+	}
+	name, content, ok := readmeAt(ctx, repo, rev)
 	if !ok {
-		return zip.ErrNotFound("no readme")
+		return nil, zip.ErrNotFound("no readme")
 	}
-	return c.JSON(http.StatusOK, readmeJSON{Path: name, Content: content, Encoding: "utf8"})
+	return &readmeJSON{Path: name, Content: content, Encoding: "utf8"}, nil
 }
 
 // ---- shared read helpers ----

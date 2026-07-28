@@ -26,6 +26,7 @@
 package visor
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -99,45 +100,56 @@ func requireClusterAdmin(c *zip.Ctx) error {
 
 // ---- handlers ----
 
+// k8sClusterRef addresses ONE DOKS cluster.
+type k8sClusterRef struct {
+	// ID is the provider's DOKS cluster id. Visor scopes the lookup to the caller's
+	// org, so another tenant's id resolves to not-found rather than their cluster.
+	ID string `json:"id"`
+}
+
 // listK8sClusters lists the org's DOKS clusters (Visor, house account) folded with
 // the org's BYO clusters — ONE fleet cluster view under the unified k8s noun. A Visor
 // outage is logged and skipped so a down optional provider never hides the BYO list.
-func listK8sClusters(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+//
+// Response: {"clusters":[{"doksClusterId":"cl-1","doClusterId":"cl-1","name":"prod","region":"nyc3","status":"running","nodePools":[],"nodeCount":0,"kind":"managed"}]}
+func (o ops) listK8sClusters(ctx context.Context, _ *noArgs) (*clusterList, error) {
+	c, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
 	}
 	var clusters []visorKubernetesCluster
-	if err := s.State.cl.call(c, http.MethodGet, "/v1/k8s/clusters", q("owner", org), nil, &clusters); err != nil {
-		s.Log.Warn("visor k8s clusters failed; returning BYO-only cluster list", "org", org, "err", err)
+	if err := o.State.cl.call(c, http.MethodGet, "/v1/k8s/clusters", q("owner", org), nil, &clusters); err != nil {
+		o.Log.Warn("visor k8s clusters failed; returning BYO-only cluster list", "org", org, "err", err)
 		clusters = nil
 	}
 	out := make([]clusterView, 0, len(clusters))
 	for _, kc := range clusters {
 		out = append(out, k8sClusterView(kc))
 	}
-	out = append(out, byoClusters(s, org, project(c))...)
-	return c.JSON(http.StatusOK, map[string]any{"clusters": out})
+	out = append(out, byoClusters(o.Service, org, project(c))...)
+	return &clusterList{Clusters: out}, nil
 }
 
 // getK8sCluster returns one cluster's detail: node pools + worker nodes. Visor scopes
 // the lookup to the org (a foreign or missing id resolves to not-found), so a tenant
 // can never read another tenant's cluster by guessing an id.
-func getK8sCluster(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+//
+// Response: {"doksClusterId":"cl-1","name":"prod","region":"nyc3","status":"running","nodePools":[{"poolId":"p-1","name":"gpu","size":"gpu-h100x8-640gb","count":1}],"nodeSize":"gpu-h100x8-640gb","nodeCount":1,"kind":"managed","nodes":[{"id":"node-1","name":"node-1","status":"active"}]}
+func (o ops) getK8sCluster(ctx context.Context, in *k8sClusterRef) (*clusterDetailView, error) {
+	c, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
 	}
-	id := strings.TrimSpace(c.Param("id"))
+	id := strings.TrimSpace(in.ID)
 	if id == "" {
-		return zip.ErrBadRequest("cluster id required")
+		return nil, zip.ErrBadRequest("cluster id required")
 	}
 	var d visorKubernetesClusterDetail
-	if err := s.State.cl.call(c, http.MethodGet, "/v1/k8s/clusters/"+id, q("owner", org), nil, &d); err != nil {
-		return err
+	if err := o.State.cl.call(c, http.MethodGet, "/v1/k8s/clusters/"+id, q("owner", org), nil, &d); err != nil {
+		return nil, err
 	}
 	if d.ID == "" && d.Name == "" {
-		return zip.ErrNotFound("cluster not found")
+		return nil, zip.ErrNotFound("cluster not found")
 	}
 	view := clusterDetailView{clusterView: k8sClusterView(d.visorKubernetesCluster)}
 	view.NodePools = make([]nodePoolView, 0, len(d.NodePools))
@@ -155,95 +167,114 @@ func getK8sCluster(s *cloud.Service[state], c *zip.Ctx) error {
 	for _, m := range d.Nodes {
 		view.Nodes = append(view.Nodes, toMachineView(m))
 	}
-	return c.JSON(http.StatusOK, view)
+	return &view, nil
 }
 
 // createClusterReq is the provision body: identity, placement, version and ONE seed
 // node pool. It IS Visor's CreateClusterSpec shape, so it forwards without re-mapping.
 type createClusterReq struct {
-	Name     string `json:"name"`
-	Region   string `json:"region"`
+	// Name is the cluster's name. Required.
+	Name string `json:"name"`
+	// Region is the provider region slug (e.g. "nyc3"). Required.
+	Region string `json:"region"`
+	// Version is the Kubernetes version slug; empty takes the provider default.
 	Version  string `json:"version,omitempty"`
 	NodePool struct {
-		Name  string `json:"name,omitempty"`
-		Size  string `json:"size"`
-		Count int    `json:"count"`
+		// Name is the seed pool's name; empty takes the provider default.
+		Name string `json:"name,omitempty"`
+		// Size is the provider size slug for each node. Required.
+		Size string `json:"size"`
+		// Count is how many nodes the seed pool starts with. At least 1.
+		Count int `json:"count"`
 	} `json:"nodePool"`
 }
 
-// createK8sCluster provisions a DOKS cluster for the caller's org. ADMIN-GATED: real
-// infrastructure spend on the house account. Validated at this boundary, then Visor
-// owns provisioning + the hanzo-org ownership tag.
-func createK8sCluster(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// createK8sCluster provisions a DOKS cluster for the caller's org and answers 201.
+// ADMIN-GATED — a SuperAdmin, or an OrgAdmin of the caller's own org — because
+// provisioning spends real infrastructure on the house account. The request is
+// validated at this boundary, then Visor owns provisioning and the hanzo-org
+// ownership tag.
+//
+// Example: {"name":"prod","region":"nyc3","nodePool":{"name":"gpu","size":"gpu-h100x8-640gb","count":2}}
+// Response: {"doksClusterId":"cl-1","doClusterId":"cl-1","name":"prod","region":"nyc3","status":"provisioning","nodePools":[],"nodeCount":0,"kind":"managed"}
+func (o ops) createK8sCluster(ctx context.Context, in *createClusterReq) (*clusterView, error) {
+	c, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if err := requireClusterAdmin(c); err != nil {
-		return err
+		return nil, err
 	}
-	var body createClusterReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
 	body.Name = strings.TrimSpace(body.Name)
 	body.Region = strings.TrimSpace(body.Region)
 	body.NodePool.Size = strings.TrimSpace(body.NodePool.Size)
 	if body.Name == "" {
-		return zip.ErrBadRequest("'name' is required")
+		return nil, zip.ErrBadRequest("'name' is required")
 	}
 	if body.Region == "" {
-		return zip.ErrBadRequest("'region' is required")
+		return nil, zip.ErrBadRequest("'region' is required")
 	}
 	if body.NodePool.Size == "" {
-		return zip.ErrBadRequest("'nodePool.size' is required")
+		return nil, zip.ErrBadRequest("'nodePool.size' is required")
 	}
 	if body.NodePool.Count < 1 {
-		return zip.ErrBadRequest("'nodePool.count' must be at least 1")
+		return nil, zip.ErrBadRequest("'nodePool.count' must be at least 1")
 	}
 	var kc visorKubernetesCluster
-	if err := s.State.cl.call(c, http.MethodPost, "/v1/k8s/clusters", q("owner", org), body, &kc); err != nil {
-		return err
+	if err := o.State.cl.call(c, http.MethodPost, "/v1/k8s/clusters", q("owner", org), body, &kc); err != nil {
+		return nil, err
 	}
-	return c.JSON(http.StatusCreated, k8sClusterView(kc))
+	cloud.Created(ctx)
+	v := k8sClusterView(kc)
+	return &v, nil
 }
 
-// deleteK8sCluster destroys a DOKS cluster by id. ADMIN-GATED, like create. Visor
-// scopes the delete to the org (refuses a foreign id), so this can only ever remove
-// the caller org's own cluster.
-func deleteK8sCluster(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// deleteK8sCluster destroys a DOKS cluster by id and answers 204. ADMIN-GATED, like
+// create. Visor scopes the delete to the org (refuses a foreign id), so this can
+// only ever remove the caller org's own cluster.
+func (o ops) deleteK8sCluster(ctx context.Context, in *k8sClusterRef) (*struct{}, error) {
+	c, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if err := requireClusterAdmin(c); err != nil {
-		return err
+		return nil, err
 	}
-	id := strings.TrimSpace(c.Param("id"))
+	id := strings.TrimSpace(in.ID)
 	if id == "" {
-		return zip.ErrBadRequest("cluster id required")
+		return nil, zip.ErrBadRequest("cluster id required")
 	}
-	if err := s.State.cl.call(c, http.MethodDelete, "/v1/k8s/clusters/"+id, q("owner", org), nil, nil); err != nil {
-		return err
+	if err := o.State.cl.call(c, http.MethodDelete, "/v1/k8s/clusters/"+id, q("owner", org), nil, nil); err != nil {
+		return nil, err
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
+}
+
+// nodeList is the fleet-wide worker inventory: every DOKS node as a machine.
+type nodeList struct {
+	// Nodes is one row per worker node, in the SAME machineView shape the machines
+	// surface emits — a node IS a machine.
+	Nodes []machineView `json:"nodes"`
 }
 
 // listK8sNodes returns every DOKS worker node in the org's clusters as a machine —
 // the SAME set the fleet folds in (managedMachines), exposed directly under the k8s
 // noun. House account (hanzo-org cluster tag) + BYOC, deduped by Visor.
-func listK8sNodes(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+//
+// Response: {"nodes":[{"id":"node-1","name":"node-1","region":"nyc3","type":"s-4vcpu-8gb","status":"active","vcpu":4}]}
+func (o ops) listK8sNodes(ctx context.Context, _ *noArgs) (*nodeList, error) {
+	c, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
 	}
 	var nodes []visorMachine
-	if err := s.State.cl.call(c, http.MethodGet, "/v1/k8s/nodes", q("owner", org), nil, &nodes); err != nil {
-		return err
+	if err := o.State.cl.call(c, http.MethodGet, "/v1/k8s/nodes", q("owner", org), nil, &nodes); err != nil {
+		return nil, err
 	}
 	out := make([]machineView, 0, len(nodes))
 	for _, m := range nodes {
 		out = append(out, toMachineView(m))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"nodes": out})
+	return &nodeList{Nodes: out}, nil
 }

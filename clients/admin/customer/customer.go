@@ -13,7 +13,7 @@
 //     forbidden user at login AND at token issuance, so a suspended customer cannot sign
 //     in or mint a fresh token. Fully reversible.
 //
-// SECURITY. Every route is mounted behind core.Guard (SuperAdmin only, fail-closed).
+// SECURITY. Every op calls core.Admit (SuperAdmin only, fail-closed) on its first line.
 // The write actions REPLAY THE CALLER'S OWN SuperAdmin credential to IAM, and each is
 // recorded to cloud's tamper-evident audit trail with a redacted BEFORE/AFTER.
 package customer
@@ -31,7 +31,6 @@ import (
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/admin/iam"
-	"github.com/zap-proto/zip"
 )
 
 // ── wire shapes (operator contract) ──────────────────────────────────────────
@@ -89,15 +88,39 @@ type CustomerDetailData struct {
 	Transactions []CustomerTxn  `json:"transactions"`
 }
 
+// CustomersOut is the GET /v1/admin/customers envelope. data2 == len(data): the list is
+// every customer, unpaginated.
+type CustomersOut struct {
+	Status string        `json:"status"`
+	Msg    string        `json:"msg"`
+	Data   []CustomerRow `json:"data"`
+	Data2  *int          `json:"data2,omitempty"`
+}
+
 // ── GET /v1/admin/customers — the fleet customer list ────────────────────────
 
-// Customers answers GET /v1/admin/customers.
-func Customers(s *cloud.Service[core.State], c *zip.Ctx) error {
-	ctx := c.Context()
+// Customers lists every customer org at a glance, sorted by slug: owner email, plan,
+// suspend status, member count, balance, month-to-date spend and MRR.
+//
+// Each row costs one IAM read plus the org's money reads, fanned out under a fixed
+// concurrency ceiling so a large fleet cannot stampede the upstreams. Every read is
+// best-effort per row: an upstream miss degrades THAT field to its honest zero rather
+// than failing the fleet.
+//
+// Response: {"status":"ok","msg":"","data":[{"org":"acme","display":"Acme",
+// "ownerEmail":"ada@acme.com","plan":"pro","status":"active","users":7,"balanceCents":5000,
+// "spendCents":12500,"mrrCents":9900,"created":"2026-01-04T00:00:00Z",
+// "lastActive":"2026-07-26T18:00:00Z"}],"data2":1}
+func (o ops) Customers(ctx context.Context, _ *core.None) (*CustomersOut, error) {
+	c, err := core.Admit(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s := o.s
 	cr := core.CallerCreds(c)
 	orgs, err := core.ListOrgs(s, ctx, cr)
 	if err != nil {
-		return core.Fail(c, err.Error())
+		return &CustomersOut{Status: core.Err, Msg: err.Error()}, nil
 	}
 
 	rows := make([]CustomerRow, len(orgs))
@@ -115,7 +138,7 @@ func Customers(s *cloud.Service[core.State], c *zip.Ctx) error {
 	wg.Wait()
 
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Org < rows[j].Org })
-	return core.OKList(c, rows, len(rows))
+	return &CustomersOut{Status: core.OK, Data: rows, Data2: core.Total(len(rows))}, nil
 }
 
 // enrichCustomer folds one org's real IAM + commerce reads into a customer row. Each read
@@ -144,20 +167,27 @@ func enrichCustomer(s *cloud.Service[core.State], ctx context.Context, cr iam.Cr
 // ── GET /v1/admin/customers/:org — one customer's detail ─────────────────────
 
 // CustomerDetail answers GET /v1/admin/customers/:org.
-func CustomerDetail(s *cloud.Service[core.State], c *zip.Ctx) error {
-	ctx := c.Context()
+func (o ops) CustomerDetail(ctx context.Context, in *OrgIn) (*CustomerDetailOut, error) {
+	c, err := core.Admit(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s := o.s
 	cr := core.CallerCreds(c)
-	org := customerOrgParam(c)
+	org := strings.TrimSpace(in.Org)
 	if org == "" {
-		return core.Fail(c, "org is required")
+		return &CustomerDetailOut{Status: core.Err, Msg: "org is required"}, nil
 	}
 
-	o, err := core.FindOrg(s, ctx, cr, org)
+	row, err := core.FindOrg(s, ctx, cr, org)
 	if err != nil {
-		return core.Fail(c, err.Error())
+		return &CustomerDetailOut{Status: core.Err, Msg: err.Error()}, nil
 	}
-	if o == nil {
-		return c.JSON(404, map[string]any{"status": "error", "msg": "customer not found", "data": nil})
+	if row == nil {
+		// 404 with the envelope body: the status is the addition, not a different
+		// contract, so the console decodes this exactly like any other failure.
+		c.Status(404)
+		return &CustomerDetailOut{Status: core.Err, Msg: "customer not found"}, nil
 	}
 
 	users, _ := orgUsers(s, ctx, cr, org)
@@ -195,46 +225,107 @@ func CustomerDetail(s *cloud.Service[core.State], c *zip.Ctx) error {
 		})
 	}
 
-	return core.OK(c, CustomerDetailData{
+	return &CustomerDetailOut{Status: core.OK, Data: &CustomerDetailData{
 		Org:          org,
-		Display:      core.Display(o.DisplayName, org),
+		Display:      core.Display(row.DisplayName, org),
 		OwnerEmail:   ownerEmail(users),
 		Plan:         plan.Name,
 		Status:       statusOf(users),
-		Created:      o.CreatedTime,
+		Created:      row.CreatedTime,
 		BalanceCents: credits,
 		SpendCents:   spend,
 		MRRCents:     int64(plan.MRR),
 		APIKeys:      apiKeys,
 		Users:        rows,
 		Transactions: ledger,
-	})
+	}}, nil
 }
 
 // ── POST /v1/admin/customers/:org/credit — grant credit ──────────────────────
 
-// GrantCredit answers POST /v1/admin/customers/:org/credit — a staff credit grant to the
-// path org, funneled through the ONE core credit-write path (core.ApplyGrant).
-func GrantCredit(s *cloud.Service[core.State], c *zip.Ctx) error {
-	org := customerOrgParam(c)
+// GrantCredit issues a staff credit grant to the org named in the path — a comp, refund
+// or promo — through the ONE credit-write path core.ApplyGrant, which validates the
+// amount against the per-grant cap, checks the org exists, moves the money and records
+// the tamper-evident audit row.
+//
+// The credit lands on the account account.Payer resolves, NOT necessarily the org: name
+// a member of a pooled org and the pool is credited. The receipt echoes the subject so
+// the caller can see which.
+//
+// Example: {"amountCents":5000,"currency":"usd","reason":"launch comp","source":"trial"}
+// Response: {"status":"ok","msg":"","data":{"org":"acme","subject":"acme","grantedCents":5000,
+// "currency":"usd","source":"trial","balanceCents":10000,
+// "balanceExact":"100.000000000000000000","transactionId":"tx_01J"}}
+func (o ops) GrantCredit(ctx context.Context, in *GrantIn) (*core.GrantOut, error) {
+	c, err := core.Admit(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s := o.s
+	org := strings.TrimSpace(in.Org)
 	if org == "" {
-		return core.Fail(c, "org is required")
+		return &core.GrantOut{Status: core.Err, Msg: "org is required"}, nil
 	}
-	var req core.CreditRequest
-	if err := c.Bind(&req); err != nil {
-		return core.Fail(c, "invalid request body")
-	}
-	return core.ApplyGrant(s, c, org, req)
+	return core.ApplyGrant(s, c, org, in.credit())
+}
+
+// OrgIn addresses ONE customer by the org slug in the path. It is the input of every
+// per-customer op that carries no body.
+type OrgIn struct {
+	// Org is the tenant slug from the path.
+	Org string `json:"org"`
+}
+
+// CustomerDetailOut is the GET /v1/admin/customers/:org envelope.
+type CustomerDetailOut struct {
+	Status string              `json:"status"`
+	Msg    string              `json:"msg"`
+	Data   *CustomerDetailData `json:"data"`
+}
+
+// AccessChange is what a suspend or reactivate DID, per user. A partial failure is
+// reported honestly here rather than masked as a clean success.
+type AccessChange struct {
+	// Org is the tenant acted on.
+	Org string `json:"org"`
+	// Suspended is the state applied: true for suspend, false for reactivate.
+	Suspended bool `json:"suspended"`
+	// Affected lists the usernames that were updated.
+	Affected []string `json:"affected"`
+	// Failed lists the usernames that were NOT updated. Non-empty means the org is in
+	// a mixed state and the action should be retried.
+	Failed []string `json:"failed"`
+}
+
+// AccessOut is the envelope of the suspend and reactivate ops.
+type AccessOut struct {
+	Status string        `json:"status"`
+	Msg    string        `json:"msg"`
+	Data   *AccessChange `json:"data"`
 }
 
 // ── POST /v1/admin/customers/:org/{suspend,reactivate} — access control ──────
 
-// SuspendCustomer forbids every member of the org (cuts login + token issuance).
-func SuspendCustomer(s *cloud.Service[core.State], c *zip.Ctx) error { return setForbidden(s, c, true) }
+// SuspendCustomer cuts off every member of the org: IAM refuses a forbidden user at
+// login AND at token issuance, so a suspended customer can neither sign in nor mint a
+// fresh token. Fully reversible with ReactivateCustomer.
+//
+// The result names every user updated and every user that was NOT — a partial failure
+// leaves the org in a mixed state and says so instead of reporting a clean success.
+//
+// Response: {"status":"ok","msg":"","data":{"org":"acme","suspended":true,
+// "affected":["ada","bob"],"failed":[]}}
+func (o ops) SuspendCustomer(ctx context.Context, in *OrgIn) (*AccessOut, error) {
+	return o.setForbidden(ctx, in.Org, true)
+}
 
-// ReactivateCustomer restores access for every member of the org.
-func ReactivateCustomer(s *cloud.Service[core.State], c *zip.Ctx) error {
-	return setForbidden(s, c, false)
+// ReactivateCustomer restores access for every member of the org, undoing a suspend. It
+// reports the same per-user breakdown.
+//
+// Response: {"status":"ok","msg":"","data":{"org":"acme","suspended":false,
+// "affected":["ada","bob"],"failed":[]}}
+func (o ops) ReactivateCustomer(ctx context.Context, in *OrgIn) (*AccessOut, error) {
+	return o.setForbidden(ctx, in.Org, false)
 }
 
 // setForbidden flips IAM `isForbidden` on every member of the org — suspend
@@ -243,25 +334,30 @@ func ReactivateCustomer(s *cloud.Service[core.State], c *zip.Ctx) error {
 // SuperAdmin credential so IAM authorizes it. Best-effort per user with an aggregated
 // result: a partial failure is reported honestly (affected vs failed), never masked as a
 // clean success. The action is recorded with a redacted before/after user tally.
-func setForbidden(s *cloud.Service[core.State], c *zip.Ctx, forbidden bool) error {
-	ctx := c.Context()
+func (o ops) setForbidden(ctx context.Context, want string, forbidden bool) (*AccessOut, error) {
+	c, err := core.Admit(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s := o.s
 	cr := core.CallerCreds(c)
-	org := customerOrgParam(c)
+	org := strings.TrimSpace(want)
 	if org == "" {
-		return core.Fail(c, "org is required")
+		return &AccessOut{Status: core.Err, Msg: "org is required"}, nil
 	}
 
-	o, err := core.FindOrg(s, ctx, cr, org)
+	row, err := core.FindOrg(s, ctx, cr, org)
 	if err != nil {
-		return core.Fail(c, err.Error())
+		return &AccessOut{Status: core.Err, Msg: err.Error()}, nil
 	}
-	if o == nil {
-		return c.JSON(404, map[string]any{"status": "error", "msg": "customer not found", "data": nil})
+	if row == nil {
+		c.Status(404)
+		return &AccessOut{Status: core.Err, Msg: "customer not found"}, nil
 	}
 
 	users, err := orgUsers(s, ctx, cr, org)
 	if err != nil {
-		return core.Fail(c, err.Error())
+		return &AccessOut{Status: core.Err, Msg: err.Error()}, nil
 	}
 
 	beforeForbidden := 0
@@ -302,12 +398,12 @@ func setForbidden(s *cloud.Service[core.State], c *zip.Ctx, forbidden bool) erro
 		map[string]any{"suspended": forbidden, "affected": affected, "failed": failed},
 		audit.Outcome{Result: result, Status: 200, Reason: reason})
 
-	return core.OK(c, map[string]any{
-		"org":       org,
-		"suspended": forbidden,
-		"affected":  affected,
-		"failed":    failed,
-	})
+	return &AccessOut{Status: core.OK, Data: &AccessChange{
+		Org:       org,
+		Suspended: forbidden,
+		Affected:  affected,
+		Failed:    failed,
+	}}, nil
 }
 
 // ── aggregation + derivation helpers ─────────────────────────────────────────
@@ -376,6 +472,3 @@ func lastActiveOf(users []iam.User) string {
 	}
 	return last
 }
-
-// customerOrgParam reads + trims the :org path param.
-func customerOrgParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("org")) }
