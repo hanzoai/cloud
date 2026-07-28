@@ -126,7 +126,6 @@ import (
 	// otel-collector, prometheus, gonum — linked into cloud whether or not any
 	// Wire entry referenced it. Unlinking a subsystem means deleting its import,
 	// not just its mount.
-	"github.com/hanzoai/cloud/clients/paas"
 	"github.com/hanzoai/cloud/clients/plan"
 	"github.com/hanzoai/cloud/clients/platform"
 	"github.com/hanzoai/cloud/clients/plugin"
@@ -322,10 +321,9 @@ func Wire() []cloud.MountSpec {
 		// recipient via wallets.ResolvePaymentTarget) and provides the Enforce
 		// middleware a marketplace applies to its priced routes.
 		{Name: "x402", Price: cloud.Free, Mount: x402.Mount, Shutdown: cloud.CtxShutdown(x402.Shutdown)},
-		{Name: "paas", Price: cloud.Free, Mount: paas.Mount, OwnsHealth: true},
 		// GitOps deploy dashboard /v1/deploy/* (the ArgoCD-grade fleet view over the
-		// operator App CRs). After paas so the release seam paas installs is registered
-		// before a gitops rollback delegates to it; owns its own /v1/deploy/health.
+		// operator App CRs). After platform so the release seam platform installs is
+		// registered before a gitops rollback delegates to it; owns /v1/deploy/health.
 		{Name: "deploy", Price: cloud.Free, Mount: deploy.Mount, OwnsHealth: true},
 		{Name: "functions", Price: cloud.Metered, Mount: functions.Mount},
 		{Name: "tracker", Price: cloud.Metered, Mount: tracker.Mount},
