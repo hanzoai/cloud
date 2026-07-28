@@ -1,6 +1,17 @@
 // Copyright 2026 Hanzo AI Inc. All Rights Reserved.
 
-package apps
+// Package zen wires the hanzoai/zen serving layer into a cloud binary.
+//
+// It cannot live in package cloud — it reaches hanzoai/ai/controllers for the
+// warehouse row, and hanzoai/ai imports hanzoai/cloud, so that direction is an
+// import cycle. It lived in package apps for that reason, and the cost was that
+// the composition root's zen entry named an apps-local helper, which
+// cmd/gen-app-cmds cannot express: zen got the fat stub (every subsystem linked)
+// and no manifest row. A sibling package that imports both is legal.
+//
+// `zen` inside this file is the MODULE (github.com/hanzoai/zen); a package's own
+// name is not in scope within it, so the import owns the identifier.
+package zen
 
 import (
 	"context"
@@ -20,7 +31,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// mountZen mounts zen co-resident in the unified cloud binary. zen is the ONE
+// Mount mounts zen co-resident in the unified cloud binary. zen is the ONE
 // serving layer for the zen model family; it owns identity, routing, the 1M
 // context ladder, vision, tools, and the Anthropic↔OpenAI codec. ai stays the
 // auth+billing+discovery seam and the /v1/models authority; it no longer carries
@@ -58,7 +69,7 @@ import (
 //
 // It is wired BEFORE ai in Wire() so Claim's c.Next() falls through to ai's
 // catch-all. zen's catalog reads its upstream keys from KMS via the Key resolver.
-func mountZen(a cloud.Router, deps cloud.Deps) error {
+func Mount(a cloud.Router, deps cloud.Deps) error {
 	z, err := zen.New(zen.Config{
 		Logger: deps.Logger,
 		Key:    zenKeyResolver(deps.KMS),

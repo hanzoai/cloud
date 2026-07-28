@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package apps
+package commerce
 
 // starter_test.go proves the one claim a starter grant lives or dies on: the money
 // lands at the address the SPEND GATE READS. A grant that credits a wallet the gate
