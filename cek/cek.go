@@ -191,6 +191,25 @@ func Encrypting() bool {
 	return err == nil && len(k) == 32
 }
 
+// Master returns the resolved data-plane key, or nil when none is configured.
+//
+// It exists for ONE caller — the credential broker, which hands the same key to
+// every child process in the deployment. That is not a convenience: the children
+// open the SAME encrypted files, so a child that resolved a key of its own would
+// write a store no sibling could read. The broker therefore has to be able to
+// state which key this deployment settled on, including the dev key a keyless
+// build installs for itself.
+//
+// It resolves (and so memoizes) exactly like Encrypting, and must be called
+// after any SetMasterKey/EnsureDevKey — the same ordering every caller here has.
+func Master() []byte {
+	k, err := resolveMaster()
+	if err != nil {
+		return nil
+	}
+	return k
+}
+
 // inMemory reports whether path names an in-memory database rather than a file.
 // SQLite spells that ":memory:", or any file: URI carrying mode=memory (including
 // the shared-cache form, where several handles address ONE in-memory database by

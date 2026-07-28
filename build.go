@@ -12,6 +12,7 @@ import (
 	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/clients/commerce/transport"
 	"github.com/hanzoai/cloud/clients/metering"
+	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/org"
 	"github.com/hanzoai/ha"
 	"github.com/hanzoai/metrics"
@@ -62,17 +63,14 @@ import (
 func BuildDeps(cfg *Config) Deps {
 	logger := luxlog.New("cloud")
 
-	// The dev key must be installed HERE, before the first store opens — cek
-	// memoizes the resolved master on first use, and the first open is edge.New
-	// below. Installing it in Serve (which is where it used to happen) is 46 lines
-	// too late: the once has already cached "no key", so a pure-Go build with no
-	// KMS key configured fails every subsequent open — the audit store among them,
-	// which is fatal — while logging that a dev key was active. It self-gates on a
-	// configured key and on a codec-linked build, so production reaches neither
-	// the key nor this warning and still fails closed exactly as before.
-	if cek.EnsureDevKey() {
-		logger.Warn("data-plane encryption ACTIVE with a DEV key (pure-Go build, no KMS key configured — dev/CI only)")
-	}
+	// Credentials, before anything opens a store. cek memoizes the resolved master
+	// on the FIRST use, and the first use is edge.New at the bottom of this
+	// function — so a key installed any later is installed after the once has
+	// already cached "no key", and every subsequent open fails while the log
+	// cheerfully reports a key was active. That was the bug. Boot is
+	// sync.Once-guarded and Serve calls it earlier still; this call is what covers
+	// every caller that builds deps directly.
+	logCredz(logger, credz.Boot(DataDir()))
 
 	logger.Info(
 		"building deps",
@@ -1094,6 +1092,24 @@ func MountAll(app *zip.App, specs []MountSpec, cfg *Config, deps Deps) error {
 		logger.Info("mounted subsystem", "name", spec.Name)
 	}
 	return nil
+}
+
+// logCredz surfaces how this process resolved its credentials. It is a log line
+// and nothing branches on it — but it is the log line whose absence let a boot
+// announce a dev key it had not installed, so the posture is now stated as the
+// resolved value plus, when a broker pull failed, the reason it failed.
+func logCredz(log luxlog.Logger, p credz.Posture) {
+	_, n, from := credz.Resolved()
+	switch p {
+	case credz.Root:
+		log.Info("credentials: ROOT (key from my own environment; scrubbed so children do not inherit it)", "from", from)
+	case credz.Leaf:
+		log.Info("credentials: LEAF (pulled from the credz broker)", "from", from, "secrets", n)
+	case credz.Dev:
+		log.Warn("credentials: DEV key (no key configured and no broker — dev/CI only)", "broker", credz.Err())
+	default:
+		log.Warn("credentials: NONE on a production build — store opens fail closed", "broker", credz.Err())
+	}
 }
 
 // masterKeyBytes decodes the base64 KMS master (CLOUD_KMS_MASTER_KEY_REF) into
