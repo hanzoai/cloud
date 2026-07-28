@@ -97,6 +97,14 @@ const (
 	// methodCredits is the ONE payout method that issues a commerce grant; every other
 	// method (wire/paypal/check/…) is a record-only cash disbursement.
 	methodCredits = "credits"
+	// The settlement kinds — WHERE a payout's money actually landed, recorded on the
+	// payout row (see Payout.Settlement). settlementTreasury is INTERNAL ACCOUNTING:
+	// a first-party author (our own maintained templates and the seeded example
+	// creators) settles into our own reserve fund, and saying so on the row is what
+	// keeps it from ever being read as an independent creator's earnings.
+	settlementTreasury = "treasury"
+	settlementWallet   = "wallet"
+	settlementCash     = "cash"
 	// verifyFile is the repo-root file the file-verification method reads; it must
 	// contain the author's verify code on the repo's default branch.
 	verifyFile = "hanzo.json"
@@ -753,7 +761,8 @@ func issuePayout(s *cloud.Service[state], ctx context.Context, a Author, amountC
 		return Payout{}, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	// Reserve against pending FIRST (atomic guard) — a payout can never exceed owed.
-	payout, err := s.State.store.RecordPayout(ctx, payoutID, a.ID, amountCents, method, reference, time.Now().Unix())
+	payout, err := s.State.store.RecordPayout(ctx, payoutID, a.ID, amountCents, method, reference,
+		settlementOf(s, a, method), time.Now().Unix())
 	if err != nil {
 		return Payout{}, err // errNotFound | errInsufficientPending | internal
 	}
@@ -816,6 +825,21 @@ func issuePayout(s *cloud.Service[state], ctx context.Context, a Author, amountC
 // credits the reserve fund instead of an external wallet.
 func isTreasuryAuthor(s *cloud.Service[state], a Author) bool {
 	return s.State.maintainerOrg != "" && a.Org == s.State.maintainerOrg
+}
+
+// settlementOf names where this payout's money will land — the SAME branch
+// issuePayout then takes, decided once and stored on the row so the books are read
+// from a captured fact rather than re-derived from a maintainerOrg that may be
+// reconfigured later.
+func settlementOf(s *cloud.Service[state], a Author, method string) string {
+	switch {
+	case isTreasuryAuthor(s, a):
+		return settlementTreasury
+	case method == methodCredits:
+		return settlementWallet
+	default:
+		return settlementCash
+	}
 }
 
 // adminSweep answers POST /v1/admin/authors/sweep — the periodic accrual path. It
@@ -1202,11 +1226,16 @@ type payoutView struct {
 	Method      string `json:"method"`
 	Reference   string `json:"reference,omitempty"`
 	Txn         string `json:"txn,omitempty"`
-	CreatedAt   int64  `json:"createdAt"`
+	// Settlement discloses treasury-vs-wallet-vs-cash on every payout, to the author
+	// and to the admin mirror alike — the disclosure that keeps a first-party
+	// settlement legible as internal accounting.
+	Settlement string `json:"settlement,omitempty"`
+	CreatedAt  int64  `json:"createdAt"`
 }
 
 func payoutViewOf(p Payout) payoutView {
-	return payoutView{ID: p.ID, AmountCents: p.AmountCents, Method: p.Method, Reference: p.Reference, Txn: p.Txn, CreatedAt: p.CreatedAt}
+	return payoutView{ID: p.ID, AmountCents: p.AmountCents, Method: p.Method, Reference: p.Reference,
+		Txn: p.Txn, Settlement: p.Settlement, CreatedAt: p.CreatedAt}
 }
 
 func payoutViews(ps []Payout) []payoutView {
