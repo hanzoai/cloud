@@ -42,10 +42,12 @@ help: ## Show this help.
 
 # Go drops comments at compile time, so this build-time pass is the ONLY way a
 # typed handler's prose and examples reach the document — zipdoc lifts them into
-# zipdoc_gen.go, which registers them with zip.Describe at init. The file is NOT
-# committed, so a fresh checkout has none: an app built without this step ships a
-# binary whose /v1/openapi.json is missing every description, and whose subset
-# would then disagree with the fleet golden that was generated with them.
+# zipdoc_gen.go, which registers them with zip.Describe at init. The files ARE
+# committed today, deliberately: the root make targets and a bare `go build` do
+# not run this step, and until every path regenerates (the Dockerfile now does,
+# this per-app chain always has), an untracked file means a binary whose
+# /v1/openapi.json is missing every description. `make test` runs zipdoc -check,
+# so a lift that drifts from its source turns CI red instead of shipping stale.
 #
 # It is a prerequisite of `build`, not of `openapi`, because the generated file
 # is compiled INTO the binary — running it after the build would be too late.
