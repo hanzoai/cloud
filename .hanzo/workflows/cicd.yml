@@ -195,7 +195,7 @@ jobs:
           # place that builds. A green compile here would also have proved
           # nothing extra; the containment claim is entirely about which
           # packages are reachable, which is what the graph answers.
-          for m in $(go list ./cmd/...); do
+          for m in $(go list ./cmd/... ./plugin/...); do
             if go list -deps "$m" | grep -qx 'github.com/hanzoai/cloud/apps/controlplane'; then
               echo "::error::$m links apps/controlplane into a real binary — containment breach"
               exit 1
