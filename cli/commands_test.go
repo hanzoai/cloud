@@ -54,11 +54,11 @@ func withCloud(t *testing.T, h http.HandlerFunc) string {
 	return srv.URL
 }
 
-// apps list hits the LIVE board path /v1/paas/apps and renders the fleet table.
+// apps list hits the LIVE board path /v1/platform/fleet and renders the fleet table.
 func TestAppsListCommandTable(t *testing.T) {
 	withPlatform(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/paas/apps" {
-			t.Errorf("apps path = %s, want /v1/paas/apps", r.URL.Path)
+		if r.URL.Path != "/v1/platform/fleet" {
+			t.Errorf("apps path = %s, want /v1/platform/fleet", r.URL.Path)
 		}
 		_ = json.NewEncoder(w).Encode(AppsList{
 			Apps: []AppView{
@@ -112,11 +112,11 @@ func TestAppsListCommandJSON(t *testing.T) {
 	}
 }
 
-// apps get hits /v1/paas/apps/{app}.
+// apps get hits /v1/platform/fleet/{app}.
 func TestAppsGetCommand(t *testing.T) {
 	withPlatform(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/paas/apps/iam" {
-			t.Errorf("path = %s, want /v1/paas/apps/iam", r.URL.Path)
+		if r.URL.Path != "/v1/platform/fleet/iam" {
+			t.Errorf("path = %s, want /v1/platform/fleet/iam", r.URL.Path)
 		}
 		_ = json.NewEncoder(w).Encode(AppView{ID: "hanzoai/iam/main", Org: "hanzoai", App: "iam", Env: "main", DeclaredTag: "v1.2.3", Health: "green", Phase: "Running"})
 	})
@@ -131,10 +131,10 @@ func TestAppsGetCommand(t *testing.T) {
 	}
 }
 
-// deploy hits /v1/paas/apps/{app}/deploy — a rolling restart, org from identity.
+// deploy hits /v1/platform/fleet/{app}/deploy — a rolling restart, org from identity.
 func TestDeployCommand(t *testing.T) {
 	withPlatform(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/paas/apps/app-x/deploy" || r.URL.Query().Get("env") != "main" {
+		if r.URL.Path != "/v1/platform/fleet/app-x/deploy" || r.URL.Query().Get("env") != "main" {
 			t.Errorf("redeploy request = %s?%s", r.URL.Path, r.URL.RawQuery)
 		}
 		w.WriteHeader(202)
@@ -163,7 +163,7 @@ func TestDeployRequiresEnv(t *testing.T) {
 // deploy --env selects the lifecycle namespace via the ?env query param.
 func TestDeployCommandEnv(t *testing.T) {
 	withPlatform(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/paas/apps/chat/deploy" || r.URL.Query().Get("env") != "test" {
+		if r.URL.Path != "/v1/platform/fleet/chat/deploy" || r.URL.Query().Get("env") != "test" {
 			t.Errorf("deploy env request = %s?%s", r.URL.Path, r.URL.RawQuery)
 		}
 		w.WriteHeader(202)
