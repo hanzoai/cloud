@@ -297,10 +297,30 @@ USER 65532:65532
 #
 # Host mode is the same image with the command replaced — `["/sbin/tini","--","/host"]`.
 # tini matters MORE there, not less: the host's children are /cloud processes that
-# fork git and friends of their own. Two things to check before switching a
-# deployment over, because neither fails loudly: the host binds :8080 and :9653 but
-# NOT the :9090 ops port (serve.go leaves it unbound for a plugin, since N children
-# cannot share one port), so anything scraping 9090 must move to the child or be
-# dropped; and the children need a writable directory for their sockets, which as
-# uid 65532 on a read-only rootfs means mounting one.
+# fork git and friends of their own. Three things to check before switching a
+# deployment over, because none of them fails loudly:
+#
+#  1. CREDENTIALS ARE NOT SCOPED IN HOST MODE YET. /cloud calls credz.Boot, which
+#     takes CLOUD_KMS_MASTER_KEY_REF OUT of its environment before it spawns
+#     anything, so its children inherit no root key and must ask the broker for a
+#     per-app bundle — that is where the identity fix (credz/launch: the launcher
+#     stamps each child's app, the broker verifies it) is actually load-bearing.
+#     /host does NOT call credz.Boot. It has no store to open and nothing to
+#     decrypt, so it never had a reason to — but that means the root key is still
+#     in its environment when zip spawns each child with os.Environ(), every child
+#     resolves the Root posture from that inherited key, and none of them asks the
+#     broker at all. The scoping is bypassed, not broken: every child holds the
+#     root key and can open any store, exactly as it did before credz existed.
+#     /host already stamps every child's launch token and hands the secret to the
+#     kms child, so closing this is one credz.Boot call in cmd/host — deliberately
+#     not made here, because a light host that imports credz drags cek →
+#     modernc/sqlite + sqlcipher into a ~395-package build whose entire reason to
+#     exist is being small. The fix belongs with that dependency question, and
+#     until it lands, host mode is a routing topology and not a credential
+#     boundary. The DEPLOYED entrypoint is /cloud (below), where it is a boundary.
+#  2. The host binds :8080 and :9653 but NOT the :9090 ops port (serve.go leaves
+#     it unbound for a plugin, since N children cannot share one port), so anything
+#     scraping 9090 must move to the child or be dropped.
+#  3. The children need a writable directory for their sockets, which as uid 65532
+#     on a read-only rootfs means mounting one.
 ENTRYPOINT ["/sbin/tini", "--", "/cloud"]

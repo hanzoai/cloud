@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/credz"
+	"github.com/hanzoai/cloud/credz/launch"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -46,8 +47,8 @@ type childView struct {
 // TestMain gives this package the plugin-child half. The child runs the REAL
 // boot path — credz.Boot, exactly as cloud.Serve calls it — rather than a
 // test-only accessor, so what this proves is what production does. A child is
-// identified by the kernel from its argv, which is why it has to be a real
-// process really named after an app (see bootAs).
+// identified by the token its LAUNCHER stamped on it, which is why it has to be
+// a real process this test really started (see bootAs).
 func TestMain(m *testing.M) {
 	// The PARENT is the broker, so it boots the way the live broker does: the root
 	// key in its own environment, taken by credz.Boot into cek before any store
@@ -89,7 +90,8 @@ func TestEmbeddedClientIsACredzSource(t *testing.T) {
 // TestBrokerServesTheSealedStoreScoped is the acceptance test for the whole
 // mechanism: the app that owns a secret reads it out of the sealed store through
 // the broker, and the app that does not is refused — not by an ACL it could argue
-// with, but because the store path is built from who the kernel says it is.
+// with, but because the store path is built from the app its launcher stamped on
+// it, which it cannot choose.
 func TestBrokerServesTheSealedStoreScoped(t *testing.T) {
 	dir := t.TempDir()
 	c, err := New(Config{DataDir: dir, MasterKeyB64: base64.StdEncoding.EncodeToString(testMaster)}, luxlog.New("test"))
@@ -148,6 +150,13 @@ func TestBrokerServesTheSealedStoreScoped(t *testing.T) {
 	if strings.Contains(ai.Proc, "sk-live-ai-provider-key") {
 		t.Fatal("the provider key is readable in the child's /proc/self/environ")
 	}
+	// The launch token is single-use: Boot reads it and takes it out, so anything
+	// this child execs inherits an environment that cannot answer for it. It is
+	// still in the child's /proc/self/environ — that is the honest limit stated in
+	// credz/launch, and it is why this asserts the scrub and not secrecy.
+	if v, ok := ai.Getenv[launch.TokenEnv]; ok {
+		t.Fatalf("%s survived Boot as %q — every process this child starts could present it", launch.TokenEnv, v)
+	}
 
 	billing := bootAs(t, "billing", dir)
 	if billing.Getenv["COMMERCE_SERVICE_TOKEN"] != "svc-billing-token" {
@@ -186,8 +195,15 @@ func publishFor(t *testing.T, c *Client, dir string) {
 	t.Cleanup(func() { _ = closer.Close() })
 }
 
-// bootAs boots a child the kernel will name `app`, through the real credz.Boot,
-// and returns what that child can see.
+// bootAs boots a child THIS PROCESS LAUNCHED as `app`, through the real
+// credz.Boot, and returns what that child can see.
+//
+// The stamp is what makes it that app — credz.LaunchSecret() is the same secret
+// this process handed its broker in publishFor, so this test binary is playing
+// the launcher exactly as cloud.PluginSpec and cmd/host do. Without it every
+// child is refused, which is the correct failure and the reason this line is not
+// optional. The binary is still symlinked to <app> so a regression that started
+// reading argv again would be visible rather than harmless.
 func bootAs(t *testing.T, app, dir string) childView {
 	t.Helper()
 	self, err := os.Executable()
@@ -201,8 +217,9 @@ func bootAs(t *testing.T, app, dir string) childView {
 	cmd := exec.Command(bin)
 	// No root key and no credentials in the child's environment: everything it
 	// ends up with, it got from the broker. This is the spawn shape zip produces
-	// minus the one variable a launcher must no longer be carrying.
-	cmd.Env = append(scrubbed(os.Environ()), bootInEnv+"="+dir)
+	// minus the one variable a launcher must no longer be carrying, plus the one
+	// a launcher must now be stamping.
+	cmd.Env = append(scrubbed(os.Environ()), bootInEnv+"="+dir, launch.Env(credz.LaunchSecret(), app))
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("%s boot: %v", app, err)
