@@ -236,9 +236,18 @@ func TestMount_HostCarve_EmptyBatchOK(t *testing.T) {
 	}
 }
 
-// TestMount_HostCarve_CustomDomainForcesOrg: the carve fires for a bound custom
-// domain too, forcing that Site's Org.
-func TestMount_HostCarve_CustomDomainForcesOrg(t *testing.T) {
+// TestMount_HostCarve_CustomDomainCarves: the carve fires for a bound custom domain
+// too — REACHABILITY, which is all a status code can show. It does not prove WHOSE org
+// the beacon was filed under, and it used to be named as though it did.
+//
+// That fact is pinned where it is decided: sites.Middleware resolves the host, and
+// clients/sites' TestMiddlewareAnalyticsCarveCustomDomain asserts the org handed to
+// the carve handler is the resolved Site's and that the resolver saw the full host.
+// Everything after that argument — publicIngest → the write core → tenant_id — is the
+// same code for both host shapes and is pinned end-to-end on the slug host by
+// TestSiteHostLaneWritesTheResolvedSiteOrg, so asserting the row again here would be a
+// second place answering one question.
+func TestMount_HostCarve_CustomDomainCarves(t *testing.T) {
 	app := carveApp(t, "yadota")
 	code := postHost(t, app, "yadota.tech", "/v1/analytics",
 		`{"batch":[{"type":"pageview"}]}`, map[string]string{"X-Org-Id": "attacker"})
