@@ -4,6 +4,7 @@ package cloud
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/zap-proto/zip"
@@ -18,9 +19,18 @@ func TestListenOn_PluginServesTheSocketItWasGiven(t *testing.T) {
 	sock := t.TempDir() + "/wallets.sock"
 	t.Setenv(zip.AddrEnv, sock)
 
-	addrs, ops := listenOn(testListenCfg())
-	if want := []string{sock}; !reflect.DeepEqual(addrs, want) {
-		t.Fatalf("addrs = %q, want %q — the host waits on that socket and nothing else", addrs, want)
+	t.Setenv(runDirEnv, t.TempDir())
+	addrs, ops := listenOn(testListenCfg(), []MountSpec{{Name: "wallets"}})
+	// The host's socket comes FIRST: it blocks in waitListening on that one, and a
+	// peer socket bound ahead of it would let the host see "up" before the address
+	// it actually waits on accepts.
+	if len(addrs) == 0 || addrs[0] != sock {
+		t.Fatalf("addrs = %q, want the host socket %q first — that is the one it waits on", addrs, sock)
+	}
+	// The app still serves its canonical peer path, so a co-located caller reaches
+	// it over ZAP rather than falling out to the public edge.
+	if want := PeerSocket("wallets"); !slices.Contains(addrs, want) {
+		t.Fatalf("addrs = %q, missing the peer socket %q", addrs, want)
 	}
 	// Second-order bug: one ops port, N children. Binding it here means every
 	// plugin after the first dies on "address already in use", and the host's
@@ -35,8 +45,12 @@ func TestListenOn_PluginServesTheSocketItWasGiven(t *testing.T) {
 func TestListenOn_StandaloneBindsTheConfiguredPorts(t *testing.T) {
 	t.Setenv(zip.AddrEnv, "") // zip.Addr treats empty as unset — started directly
 
-	addrs, ops := listenOn(testListenCfg())
-	if want := []string{":9653", "http://:8080"}; !reflect.DeepEqual(addrs, want) {
+	t.Setenv(runDirEnv, t.TempDir())
+	addrs, ops := listenOn(testListenCfg(), []MountSpec{{Name: "wallets"}})
+	// Every transport in parallel over one route surface: the peer UDS (ZAP), the
+	// machine TCP (ZAP), and HTTP for the edge — which is also what carries WS/SSE.
+	want := []string{PeerSocket("wallets"), ":9653", "http://:8080"}
+	if !reflect.DeepEqual(addrs, want) {
 		t.Fatalf("addrs = %q, want %q", addrs, want)
 	}
 	if ops != ":9090" {
