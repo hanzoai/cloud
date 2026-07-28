@@ -39,7 +39,7 @@ hanzo:
   # OIDC issuer — REQUIRED. Without this the IAM mount refuses and the
   # process exits at start.
   iamIssuer: https://iam.hanzo.id
-  # Comma-separated subsystem list (empty = all imported in cmd/cloud).
+  # Comma-separated subsystem list (empty = all in manifest/apps.go).
   # Payments + Vault are NEVER co-resident per HIP-0106 PCI isolation;
   # leave them off unless you fully understand the implications.
   #

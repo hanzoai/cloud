@@ -40,7 +40,7 @@ var weaveOut = flag.String("weave", "", "write the woven document to this path (
 // goldenPath and specDir are relative to this package's directory.
 const (
 	goldenPath = "../openapi.yaml"
-	specDir    = "../cmd"
+	specDir    = "../plugin"
 )
 
 // parts reads every app's subset, in manifest.Apps mount order — which is the

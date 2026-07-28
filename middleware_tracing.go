@@ -26,7 +26,7 @@ import (
 
 // TracerName is the instrumentation scope for cloud's HTTP request spans. It is
 // resolved off the GLOBAL tracer provider — the ZAP provider installed once by
-// the composition root (cmd/cloud initTelemetry) — so a request span ships over
+// the composition root (cloud.Serve initTelemetry, in each plugin) — so a request span ships over
 // the SAME ZAP wire to hanzoai/datastore as every log and GenAI span. One
 // transport, one provider.
 const TracerName = "hanzo-cloud"

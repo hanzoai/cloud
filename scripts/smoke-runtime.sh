@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # smoke-runtime.sh — boot the cloud binary and probe the mounted HTTP surface.
 #
-# Complements cmd/cloud-smoke (which exercises the in-process mount path).
-# This script exercises the REAL ./cmd/cloud binary end-to-end: build, boot
+# Complements the in-process cmd/cloud test (which exercises the mount path).
+# This script exercises the REAL ./cmd/cloud host + its plugins end-to-end: build,
+# boot
 # with the "default safe" --enable list, curl the endpoints that should return
 # 200/401 per the HIP-0106 contract, kill the process, exit non-zero if any
 # endpoint regresses.
@@ -64,6 +65,20 @@ if [[ ! -x "${BIN}" ]]; then
   mkdir -p "$(dirname "${BIN}")"
   go build -ldflags='-s -w' -o "${BIN}" ./cmd/cloud
 fi
+
+# Host mode: the router resolves each subsystem as a sibling binary beside itself
+# (manifest.App.Plugin), so the enabled plugins must sit next to ${BIN} or their
+# first request 502s "fork/exec: no such file". Build the ones this smoke enables;
+# a name with no plugin/<name> is skipped with a warning rather than failing the
+# whole run (the enable list may carry a not-yet-ported subsystem).
+BIN_DIR="$(dirname "${BIN}")"
+for a in ${ENABLE//,/ }; do
+  if [[ -d "./plugin/${a}" ]]; then
+    [[ -x "${BIN_DIR}/${a}" ]] || { log "building plugin ${a}"; go build -ldflags='-s -w' -o "${BIN_DIR}/${a}" "./plugin/${a}"; }
+  else
+    log "WARN: no plugin/${a} — enabled but not built (skipped)"
+  fi
+done
 
 log "data dir: ${DATA_DIR}"
 log "log file: ${LOG_FILE}"

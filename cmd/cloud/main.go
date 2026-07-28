@@ -1,0 +1,226 @@
+// Command cloud is the Hanzo Cloud router: one binary that serves the whole API
+// by mounting every subsystem as its own process, started on the first request
+// that reaches it.
+//
+// It IS the shipped binary now — the fused monolith that imported apps and linked
+// all 112 subsystem graphs into one ~3105-package link is gone. This host knows
+// only where each app lives and what path it answers — never what the app does —
+// so it links zip, the generated manifest, and the light webui console embed, and
+// nothing else. A subsystem changing rebuilds itself; the host is untouched.
+//
+// Lazy is what makes 112 services affordable. Mounting them eagerly costs 112
+// processes, 112 resident sets and 112 startup times at boot for a set that is
+// mostly idle. Mounted lazily, an app nobody calls costs a route entry and a
+// struct; the cost moves to the first request that needs it. The subsystems that
+// cannot wait for a request — the ones that own a listener or a background
+// loop — say so in apps.go's `eager` map and start with the host.
+//
+// The apps themselves are unchanged and unaware: each is the same plugin/<name>
+// binary that already exists, serving the same routes through the same
+// cloud.Serve middleware it would serve standalone. Identity, billing and
+// telemetry run in the app's own process, where they already ran.
+//
+// The host is the FRONT DOOR, so it owns three things no plugin can: it serves
+// the white-labelled console at "/" (webui, mounted last so every app prefix
+// wins); it threads the deployment's operator flags to the children as CLOUD_*
+// env (run→forward); and it SCOPES CREDENTIALS — it scrubs the KMS root key from
+// its own environment so no child inherits it, and hands it to the kms broker
+// child alone (run→childEnv), the boundary credz was built for.
+//
+// Deployment is one directory: the host plus its plugins, which is what the image
+// already ships. Point CLOUD_<NAME>_ADDR at an instance running elsewhere, or
+// CLOUD_<NAME>_BIN at a specific build, to override one of them.
+package main
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"os/signal"
+	"sort"
+	"strings"
+	"syscall"
+
+	"github.com/hanzoai/cloud/credz/launch"
+	"github.com/hanzoai/cloud/manifest"
+	"github.com/hanzoai/cloud/webui"
+	"github.com/zap-proto/zip"
+)
+
+func main() {
+	listen := flag.String("listen", getenv("CLOUD_LISTEN", ":8080"), "HTTP listen address")
+	zapAddr := flag.String("zap", getenv("CLOUD_ZAP_LISTEN", ":9653"), "ZAP-RPC listen address")
+	enable := flag.String("enable", os.Getenv("CLOUD_ENABLE"), "comma-separated subsystems to mount; empty mounts all")
+
+	// The operator flags helm and universe pass to the ENTRYPOINT. The host
+	// consumes none of them itself — it is a router; it opens no store and
+	// validates no token — but the per-app CHILDREN read them from the environment
+	// (cloud.LoadConfig), so the host re-publishes each non-empty one as its
+	// CLOUD_* variable before it spawns anything, and the children inherit it
+	// through os.Environ(). A flag the host silently DROPPED would be a silent
+	// misconfig — a lux deployment left validating tokens against hanzo.id.
+	brand := flag.String("brand", "", "white-label brand → CLOUD_BRAND")
+	domain := flag.String("domain", "", "primary public domain → CLOUD_DOMAIN")
+	dataDir := flag.String("data-dir", "", "on-disk data root → CLOUD_DATA_DIR")
+	iamIssuer := flag.String("iam-issuer", "", "OIDC issuer for JWT validation → CLOUD_IAM_ISSUER")
+	flag.Parse()
+
+	forward(map[string]string{
+		"CLOUD_BRAND":      *brand,
+		"CLOUD_DOMAIN":     *domain,
+		"CLOUD_DATA_DIR":   *dataDir,
+		"CLOUD_IAM_ISSUER": *iamIssuer,
+	})
+
+	if err := run(*listen, *zapAddr, *enable); err != nil {
+		fmt.Fprintln(os.Stderr, "cloud:", err)
+		os.Exit(1)
+	}
+}
+
+// forward re-publishes the operator flags as the CLOUD_* environment the per-app
+// children read, so a value set once on the entrypoint reaches every subsystem
+// through zip's append(os.Environ(), …) spawn. An EMPTY value is skipped, never
+// written: a helm template that renders `--iam-issuer=` (the value unset) must
+// not CLOBBER a CLOUD_IAM_ISSUER already in the environment with an empty string.
+func forward(kv map[string]string) {
+	for k, v := range kv {
+		if v != "" {
+			_ = os.Setenv(k, v)
+		}
+	}
+}
+
+func run(addr, zapAddr, enable string) error {
+	app := zip.New(zip.Config{AppName: "cloud"})
+
+	// Liveness belongs to the HOST, not to any app: it must answer while every
+	// plugin is still cold, or a lazy fleet fails its readiness probe before the
+	// first real request ever arrives and gets restarted forever.
+	app.Get("/healthz", func(c *zip.Ctx) error {
+		return c.JSON(200, map[string]string{"status": "ok"})
+	})
+
+	// Mint this host's child-signing secret and take the KMS root key OUT of the
+	// host's own environment — both BEFORE the first Load spawns an eager child.
+	secret, rootKey := stampAndScrub()
+
+	on := enabled(enable)
+	for _, a := range manifest.Apps {
+		if on != nil && !on[a.Name] {
+			continue
+		}
+		p := a.Plugin()
+		// Per-plugin, on the plugin's OWN Env, which zip appends to that ONE
+		// child's environment: a scoped token for every child, and — for the
+		// broker alone — the launch secret and the root key. A token or key placed
+		// in the host's os.Environ() would reach every child alike and prove
+		// nothing about any of them (#51).
+		p.Env = append(p.Env, childEnv(a.Name, secret, rootKey)...)
+		if err := app.Add(zip.Load(p, a.Prefixes...)); err != nil {
+			return err
+		}
+		delete(on, a.Name)
+	}
+	// A name that matched nothing is a typo, and the symptom of tolerating one is
+	// a subsystem that is simply absent from a deployment with no error anywhere.
+	if len(on) > 0 {
+		return fmt.Errorf("--enable names %v, which the manifest does not list — run `make generate` if the app is new, else fix the name", keys(on))
+	}
+
+	// The console at "/" is the HOST's, because the host is the front door: every
+	// SPA route (/, /signin, /dashboard, …) is under no app prefix, so it reaches
+	// the host's catch-all rather than a plugin. Registered LAST — after every app
+	// prefix — so a real /v1 route always wins and only unmatched paths fall
+	// through to the white-labelled shell. The embed is the light webui leaf
+	// (stdlib + the brand registry), so owning "/" costs the host the console
+	// bytes, not the fleet's package graph.
+	if err := webui.Mount(app); err != nil {
+		return fmt.Errorf("console: %w", err)
+	}
+
+	// SIGTERM must reach the children. zip drains its shutdown hooks LIFO, and
+	// every Load registered one that stops its process, so this is what keeps a
+	// rollout from leaving orphans behind. (On Linux each child also carries
+	// Pdeathsig, which covers a host that dies without getting here.)
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-stop
+		_ = app.Shutdown()
+	}()
+
+	// Both transports, same router — the pair cloud.Serve listens on. A bare
+	// address is ZAP (zip's default scheme); HTTP has to be spelled out, and
+	// omitting it is why a curl against the host answers with a frame-size error
+	// instead of JSON.
+	return app.Listen(zapAddr, "http://"+addr)
+}
+
+// stampAndScrub mints this launcher's child-signing secret and takes the KMS root
+// key OUT of the host's OWN environment, returning it for re-injection into the
+// broker child alone (childEnv). It is one function so the boot order is one
+// fact: zip builds every child's environment as append(os.Environ(), Plugin.Env
+// …), and Go keeps the FIRST occurrence of a duplicated key — so a root key left
+// in the host's environment reaches EVERY child and CANNOT be scrubbed by a later
+// Env entry. Unset here, it reaches only the child whose Plugin.Env carries it.
+// The host needs the key for nothing of its own: it opens no store and decrypts
+// nothing. Split out from run so a test can prove the host's environment no
+// longer carries the key after it runs.
+func stampAndScrub() (secret, rootKey string) {
+	secret = launch.Secret()
+	rootKey = os.Getenv(launch.RootEnv)
+	_ = os.Unsetenv(launch.RootEnv)
+	return secret, rootKey
+}
+
+// childEnv is the environment the host stamps onto ONE plugin child's
+// zip.Plugin.Env: a scoped launch token (credz/launch.Env) for EVERY child,
+// naming the app it was started as; and — for the broker child ALONE — the launch
+// secret it verifies those tokens with and the KMS root key it needs to be Root
+// and unseal the store. Every OTHER child therefore comes up with a per-app token
+// and NO root key, and must ask the broker for its scoped bundle: the credz
+// boundary, now the default entrypoint. rootKey is "" in a keyless dev run, and a
+// broker handed no key stays unkeyed rather than being handed an empty one.
+func childEnv(app, secret, rootKey string) []string {
+	env := []string{launch.Env(secret, app)}
+	if app == launch.Broker {
+		env = append(env, launch.SecretEnv+"="+secret)
+		if rootKey != "" {
+			env = append(env, launch.RootEnv+"="+rootKey)
+		}
+	}
+	return env
+}
+
+// enabled parses the subsystem allowlist. nil means every app, which is the
+// default and the shape a full deployment runs.
+func enabled(list string) map[string]bool {
+	list = strings.TrimSpace(list)
+	if list == "" {
+		return nil
+	}
+	on := map[string]bool{}
+	for _, n := range strings.Split(list, ",") {
+		if n = strings.TrimSpace(n); n != "" {
+			on[n] = true
+		}
+	}
+	return on
+}
+
+func keys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func getenv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}

@@ -23,8 +23,10 @@ source for the generated per-language SDKs.
 - `/v1/` only, never `/api/`. Voice: "Hanzo — the Open AI Cloud."
 
 ## Install / run
-- `docker run -p 8080:8080 ghcr.io/hanzoai/cloud:vX.Y.Z` (pin a released tag) ·
-  `go install github.com/hanzoai/cloud/cmd/hanzo@latest` · `brew install hanzoai/tap/hanzo`
+- `docker run -p 8080:8080 ghcr.io/hanzoai/cloud:vX.Y.Z` (pin a released tag)
+- The `hanzo` CLI is NOT built here — it is the Rust binary in `~/work/hanzo/cli`
+  (`curl hanzo.sh` · `brew install hanzoai/tap/hanzo`). This module serves `/v1`
+  and ships plugins; it does not ship a CLI. See "The `hanzo` CLI" below.
 - Build in MODULE mode only: `make build` / `GOWORK=off go build <named target>` —
   never workspace mode (see "Build & module graph" below). `make build` is the
   light host; `make plugin APP=<x>` is the one app you are editing; `make ship`
@@ -33,13 +35,14 @@ source for the generated per-language SDKs.
   `make plugins` was DELETED for exactly that reason (62c7f52d).
 
 ## Key entry points
-- `cmd/cloud` — server binary · `cmd/hanzo` (`cli/`) — control CLI · `webui.go` — embedded console
-- `apps/apps.go:Wire()` — composition root (the one ordered subsystem slice)
+- `cmd/cloud` — the light host (server binary + ENTRYPOINT) · `plugin/<app>` — one binary per subsystem · `webui/` — embedded console
+- `manifest/apps.go` — the app set; the host mounts a plugin per entry (the old
+  `apps/apps.go:Wire()` composition root was deleted with the mega build, 22f4fc64)
 - `deps.go` / `cloud.Deps` — process-wide handles · `apps/<name>/` — every subsystem
 - `openapi/` — the document pipeline: the spec is a projection of the live router,
   and `openapi.yaml` at the root is a GOLDEN of it (written by `make openapi`,
   verified by `make test` — not a second source)
-- `manifest/apps.go` — GENERATED from `Wire()`; what `cmd/host` knows about the fleet
+- `manifest/apps.go` — hand-authored source of truth; what `cmd/cloud` knows about the fleet
 
 ---
 
@@ -176,7 +179,7 @@ Test modes: `make test` is pure-Go (`CGO_ENABLED=0`). Encrypted-at-rest OrgDB
 tests (`cek`, `CLOUD_KMS_MASTER_KEY_REF` set) REQUIRE `CGO_ENABLED=1` +
 libsqlcipher (`cek/cek.go` refuses to encrypt in pure-Go); those run only in the
 Dockerfile's dedicated `-tags libsqlite3` CGO stage, and fail under `make test`
-by design (apps/git, kms, flags, x402, cmd/kmsreseal, finance). Bundle-embed
+by design (apps/git, kms, flags, x402, plugin/kmsreseal, finance). Bundle-embed
 tests (apps/tasks/ui) need `make deploy-ui` first (real bundle is gitignored).
 
 Store-heavy subsystem tests are fsync-bound, not CPU-bound. A mount opens its own
@@ -189,53 +192,46 @@ cross-subsystem harness (`apps/guide/drivehome_e2e_test.go`) in under a second.
 Prefer one package per `go test` invocation regardless: `./...` links every main
 package at once (`cmd/cloud` alone links >6GB).
 
-## Two hosts: `cmd/cloud` links every app, `cmd/host` links none
+## One host: `cmd/cloud` links the router, `plugin/<app>` links each subsystem
 
-The app count is `len(manifest.Apps)` — 113 at `e88ea216`
-(`grep -c '^\s*{Name: ' manifest/apps.go`), and the standing figures below were
-each measured against a smaller fleet. Treat every absolute in this section as a
+The app count is `len(manifest.Apps)` — 112 at this writing
+(`grep -c '^\s*{Name: ' manifest/apps.go`). Treat every absolute below as a
 measurement with provenance, not as a live count; re-measure before quoting one.
 
-`cmd/cloud` imports `apps` and therefore links every subsystem graph into one
-binary — **3108 packages**, 212 MB, 9.5s to link with a fully warm cache (minutes
-cold) at 3.8 GiB peak RSS, and a relink for every app that changes. `cmd/host` is
-the same API served a different way: it links `zip` and `manifest` and stops
-(**316 packages**, 19 MB, 0.6s link, 13 MB RSS), mounts each app as a
-`zip.Plugin`, and starts a child on the FIRST REQUEST that reaches its prefix. An
-app nobody calls costs a route entry, not a process; a woken one costs ~27 MB.
+There is NO fused binary. The mega link that once dominated a release — one
+binary that imported `apps` and linked every subsystem graph into a ~3108-package
+monolith — is GONE (deleted at 22f4fc64 with `apps.Wire()`). `cmd/cloud` IS the
+light host now, and the ENTRYPOINT the image ships: it links `zip`, the generated
+`manifest`, and the light `webui` console embed and stops (**~399 packages**,
+~28 MB, sub-second link), mounts each app as a `zip.Plugin`, and starts a child
+on the FIRST REQUEST that reaches its prefix. An app nobody calls costs a route
+entry, not a process. The apps that own a listener or a background loop
+(`manifest.App.Eager`) start WITH the host instead.
 
-**The host is the default.** `make build` builds it; `make plugin APP=<x>` builds
-the one app you edited (1.3s after a real source change).
+Each subsystem is its OWN binary at `plugin/<app>`, linking only that app's graph
+through `cloud.Serve` — never the fleet. `ls cmd/` shows exactly `cloud/`; `ls
+plugin/` shows the ~116 per-app + tool dirs. A dedicated plugin binary is ~40 MB
+of which ~35 MB is the core every plugin also links; that duplication is the
+deliberate price of never linking the fleet union into one mega binary again.
 
-**There is ONE artifact, invoked two ways.** A dedicated plugin binary is ~40 MB
-of which ~35 MB is the core every other plugin also links, so 108 of them measure
-4.41 GB of duplicated code — already stripped, `-s -w` is the default `LDFLAGS`,
-there is no symbol win left in it. The multi-call binary is that core ONCE
-(196 MB) and serves any app via `cloud --enable=<name>`; `manifest.MultiCall`
-(manifest/plugin.go:49) is its name. That invocation is not a second mode:
-`--enable` is the flag `cloud.Serve` has always taken (config.go:483), so a child
-started that way is byte-for-byte the process a dedicated `cmd/<name>` binary
-would be — same `Serve`, same middleware, same `ZIP_ADDR` contract. **Monolith
-and plugin are not two artifacts to keep in sync; they are one artifact under two
-invocations,** which is why `make ship` links two things (`host monolith`,
-Makefile:120) and the image ships `/cloud` + `/host` as run modes of itself
-(Dockerfile:182-194).
+**The host is the default.** `make build` (= `make cloud`) builds it; `make plugin
+APP=<x>` builds the one app you edited; `make ship` builds the host + one binary
+per app. The image ships `/cloud` (ENTRYPOINT) plus one `/plugins/<app>` beside
+it, and the host resolves each plugin as a sibling file (`manifest.App.Plugin`).
 
-`make plugins` is DELETED, deliberately (62c7f52d). It linked 100+ binaries back
-to back, which exhausted a tmpfs `/tmp` and OOM'd a 128 GiB box, so it had to
-build sequentially at `-p=2`; the forced `TMPDIR` went with it. Do not
-reintroduce it — the set it built is what the multi-call binary replaced.
-
-The default ENTRYPOINT stays `/cloud` on measured grounds, not inertia: five apps
-in one process cost 166 MB PSS, and the same five as host+children cost 388 MB,
-because every child pays its own Go runtime and its own `BuildDeps`
-(Dockerfile:196-200). Process isolation is worth buying deliberately for a
-subsystem that needs it — never fleet-wide by default.
+The host is the FRONT DOOR, so it owns what no plugin can: it serves the
+white-labelled console at `/` (the light `webui` leaf, mounted last so every app
+prefix wins), threads the deployment's `--brand/--domain/--data-dir/--iam-issuer`
+flags to the children as `CLOUD_*` env, and SCOPES CREDENTIALS — it scrubs the
+KMS root key from its own environment and hands it to the `kms` broker child
+alone (see the credz section).
 
 The host knows three facts per app and no more — name, prefixes, eager-or-lazy —
-and they are DERIVED from `apps.Wire()`, never hand-maintained. `make generate`
-runs `cmd/gen-app-cmds`, which reads Wire ONCE and emits both `cmd/<app>/main.go`
-and `manifest/apps.go`, so an app cannot exist in one and not the other. Prefixes
+and they live in `manifest/apps.go`, the hand-authored source of truth. `make
+generate` runs `plugin/gen-app-cmds`, which reads `manifest.Apps` ONCE and
+scaffolds a `plugin/<app>/main.go` for any app missing one, validating the two
+are in bijection (every app has a main, every main is an app) so neither drifts.
+Prefixes
 come from, in order: the `PluginSpec` call's own arguments, a declared
 `Prefixes:` field, then the absolute paths the app's package registers — read by
 walking the call graph from the entry's Mount function (per FUNCTION, because
@@ -257,12 +253,12 @@ Wire entry: `Prefixes:` outranks the walk.
 
 `cloud.Serve` honours the plugin side of the contract in ONE place, `listenOn`:
 with `ZIP_ADDR` set the process serves that socket and binds no ops port, so
-every generated `cmd/<app>` is a valid plugin with no code of its own. Without
+every generated `plugin/<app>` is a valid plugin with no code of its own. Without
 that, each child binds cfg's fixed `:8080/:9653/:9090`, the host never sees it
 listen, and all but the first die on "address already in use".
 
 CI pins both properties from `hanzo.yml`: `generated-current` re-runs the
-generator and fails on a dirty tree; `host-is-light` fails if `cmd/host`'s import
+generator and fails on a dirty tree; `host-is-light` fails if `cmd/cloud`'s import
 graph reaches `apps` or any `apps/*`.
 
 ### Where a subsystem's binary comes from — ONE ladder, and the last rung is the network
@@ -366,8 +362,8 @@ for the credentials of the app it is.**
   process start and holds it in memory, so no spawned child inherits it.
 - **Who brokers**: the process that read the root key from its own environment
   AND owns the sealed store (`deps.KMS` is the embedded client). That is the KMS
-  subsystem — exactly one process. `cmd/host` links no store and brokers nothing
-  (but it does still pass the key down — see host mode below).
+  subsystem — exactly one process. `cmd/cloud` links no store and brokers nothing —
+  and no longer passes the key down: it scrubs it (see host mode below).
 - **Who asks**: every other `cloud` process, at the top of `Serve`, before
   `LoadConfig` and before any store opens.
 - **Identity comes from the launcher** (`credz/launch`, stdlib-only leaf). The
@@ -377,8 +373,8 @@ for the credentials of the app it is.**
   proof are one variable, so neither half can be recombined with another's. Two
   spawn sites, both per-plugin and never `os.Environ()`: `cloud.PluginSpec` (the
   launcher *is* the broker, secret minted in-process and never emitted) and
-  `cmd/host` (mints it, stamps every child, hands `CREDZ_LAUNCH_SECRET` to the
-  `kms` child alone). `credz.Boot` reads the token once and unsets it.
+  `cmd/cloud` (mints it, stamps every child, hands `CREDZ_LAUNCH_SECRET` AND the
+  root key to the `kms` child alone). `credz.Boot` reads the token once and unsets it.
 
   This replaces reading the peer's argv out of `/proc` (#51). `SO_PEERCRED` is
   kernel-authenticated for pid/uid but **argv is not** — a process picks its own
@@ -392,11 +388,17 @@ for the credentials of the app it is.**
   forgery, **not** against a peer that reads its neighbours. A real same-uid
   boundary means the socket becomes the credential (launcher pre-connects, passes
   the fd as an `ExtraFile`), which is a change to `zip`'s spawn contract.
-- **Host mode is not switched over**: `cmd/host` stamps tokens but does not call
-  `credz.Boot`, so it still passes `CLOUD_KMS_MASTER_KEY_REF` down via
-  `os.Environ()` and every child resolves ROOT without ever asking the broker —
-  scoping bypassed, not broken. The deployed entrypoint is `/cloud` (fused),
-  where the fix is live. See the Dockerfile's host-mode note.
+- **Host mode scopes credentials** (`cmd/cloud`, the deployed entrypoint): the
+  host does NOT call `credz.Boot` — importing `credz` would drag `cek` →
+  modernc/sqlite + sqlcipher into the ~400-package host whose whole point is being
+  small — so it does the scrub itself with the stdlib `credz/launch` leaf.
+  `stampAndScrub` reads `CLOUD_KMS_MASTER_KEY_REF` and `os.Unsetenv`s it from the
+  host's OWN environment (zip builds every child's env from `os.Environ()`, so a
+  key left here reaches every child), stamps each child its scoped `CREDZ_TOKEN`,
+  and re-injects the root key onto the `kms` broker child's `Plugin.Env` ALONE.
+  Every generic child comes up with a token and NO root key and must ask the
+  broker — the boundary, now the default entrypoint (`cmd/cloud/main_test.go`
+  pins it: a dns child's env has `CREDZ_TOKEN` and not `CLOUD_KMS_MASTER_KEY_REF`).
 - **Scope is derived, not configured** — the manifest names every app, the store
   holds every secret, and the path is built from the app the launcher stamped:
 
@@ -440,7 +442,7 @@ running it after the build would be too late), `build` (its own lean binary into
 `./bin`), `test`, `vet`, `openapi` (its own spec subset; `openapi: build`, since
 a spec generated from a stale binary is a lie), `clean`, `help`. A target written
 once per app would be one place per app for them to disagree, and nobody edits a
-hundred files at once. `clean` removes binaries only: `cmd/<app>/openapi.json` is
+hundred files at once. `clean` removes binaries only: `plugin/<app>/openapi.json` is
 a committed artifact, like the fleet's `openapi.yaml`, and clean removes what a
 build wrote, not what a build publishes.
 
@@ -455,12 +457,12 @@ Both invocations work — `make -C apps/tasks openapi` from the root and
 `cd apps/tasks && make openapi` — because `mk/plugin.mk` derives every path
 from the including Makefile's own location, never from the caller's cwd. That is
 what makes the OSS/private split a move rather than a rewrite: an extracted
-`apps/<app>` + `cmd/<app>` + `mk/` keeps the paths intact.
+`apps/<app>` + `plugin/<app>` + `mk/` keeps the paths intact.
 
 `APPS` is a list and is never inferred from the directory name — four packages
 are not named after their app (`zt`→zero-trust, `eval`→evals, `auditlog`→audit,
 `plugin`→plugins) and `apps/account` backs two mounts. Three apps (authz,
-licensing, metrics) are external modules with a `cmd/<app>` and no source
+licensing, metrics) are external modules with a `plugin/<app>` and no source
 directory here; `mk/fleet.mk` runs them through the same recipe by name.
 `mk/go.mk` is the toolchain contract every includer shares (GOWORK=off, TMPDIR on
 disk, `-p=2`, the dev KMS key, the FTS5 tag).
@@ -541,10 +543,10 @@ package under `apps/<name>` that obeys these seams — nothing more.
     (`fork/exec /o11y: no such file`). The Dockerfile DERIVES the list by grepping
     `PluginSpec("…"` out of `apps/apps.go` rather than keeping a second copy —
     unlinking o11y without adding a build step once cost five consecutive
-    releases — and FAILS the build if a declared plugin has no `cmd/<name>`,
+    releases — and FAILS the build if a declared plugin has no `plugin/<name>`,
     rather than at a pod's first boot. **Unlinking a subsystem means building it
     somewhere else, not just deleting the import.** This is only for `PluginSpec`
-    apps: under `cmd/host`, every OTHER app has no dedicated binary in the image
+    apps: under `cmd/cloud`, every OTHER app has no dedicated binary in the image
     and resolves down the ladder to `/cloud --enable=<name>`, which is why that
     path needs no per-app build step at all.
 - **Client seams.** Cross-subsystem calls go through a narrow in-process interface
@@ -661,10 +663,12 @@ document pipeline" below.)
   at the root is a checked-in GOLDEN — written by the same code path that serves
   the live document, verified on every `make test`. It is a rendering, not a
   source; `openapi.Register` adds a registry of BODIES, never of routes.) The
-  drift guard is `cmd/cloud/openapi_test.go`: a BIJECTION over the fully-mounted
-  `apps.Wire()` — every live route appears as an operation, every operation is
-  backed by a live route. It is the only test whose failure means the document
-  lies. The test LOGS its size and pins only the bijection, so never quote that
+  drift guard is `openapi/weave_test.go` (`TestFleetIsTheWeaveOfItsApps`): it
+  weaves every app's own subset (`plugin/<app>/openapi.json`, each emitted by that
+  app's own binary) into the fleet document and requires it to equal `openapi.yaml`
+  byte for byte — every live route appears, and two apps cannot claim one path.
+  There is no fully-mounted binary left to read; it is the only test whose failure
+  means the document lies. The test LOGS its size and pins only the bijection, so never quote that
   size as a fact here: it grows every time a subsystem gains a route, and a
   quoted count is stale the next week (api.hanzo.ai measured 1467 operations /
   1064 paths / 167 products against a doc that still claimed 983/692/109). Count
@@ -805,10 +809,10 @@ one before it.
   documents OF THE SAME API compare unequal over a title string. `Version` is the
   API CONTRACT version — `v1` forever, house law — never the build's:
   `cloud.Version` here would make every build differ from the committed golden.
-- **`openapi.yaml` is a GOLDEN of the live router, and the ONE artifact cloud
-  publishes.** `make openapi` writes it (`-update`); `make test`, and therefore
-  CI, verifies it with the same test and no flag (`TestOpenAPIYAML`,
-  cmd/cloud/openapi_yaml_test.go). Same code path both ways — there is no second
+- **`openapi.yaml` is a GOLDEN, woven from the per-app subsets, and the ONE
+  artifact cloud publishes.** `make openapi` writes it (through the weave,
+  `-weave`); `make test`, and therefore CI, verifies it with the same weave and no
+  flag (`TestFleetIsTheWeaveOfItsApps`, openapi/weave_test.go). Same code path both ways — there is no second
   generator to disagree with, and no way to change a route without either
   regenerating the file or turning the build red. It is serialised through JSON
   because JSON is what the document IS (the same value served at
@@ -890,7 +894,7 @@ migration silently strips request shapes from every generated CLI and SDK.
   golden, not an invariant. A new subsystem lands RED until `frozen` names it.
   That is the design — the failure is the review prompt — but do not "fix" it by
   loosening the test.
-- **Committed per-app subsets (`cmd/<app>/openapi.json`) go stale when routes
+- **Committed per-app subsets (`plugin/<app>/openapi.json`) go stale when routes
   change.** The weave gate catches it: `TestFleetIsTheWeaveOfItsApps` compares the
   composition against `openapi.yaml`, so an app whose subset no longer matches its
   routes fails there — and a MISSING subset fails immediately, naming the file.
@@ -1523,21 +1527,45 @@ The org an inbound webhook belongs to comes from the App INSTALLATION id via the
 acked `200 {"ignored":"unknown installation"}` and silently does nothing — a 200 on
 that path is not evidence it worked; check for sync/build activity.
 
-## The `hanzo` CLI targets THIS binary — one contract, one IAM login
+## The `hanzo` CLI is Rust and GENERATED — one contract, one IAM login
 
-The `hanzo` CLI (`cli/`) is the same unified binary; its control-plane verbs speak the
-routes THIS process serves, authorized off a plain `hanzo login` (the IAM access token is
-the final bearer fallback — no `--platform-token`). The ONE contract, no TS-Dokploy drift:
+The `hanzo` CLI is the RUST binary at `~/work/hanzo/cli`. It is the only one. This
+module has shipped no CLI since `cmd/hanzo` was deleted (22f4fc64) — it serves `/v1`
+and ships plugins. Its control-plane verbs speak the routes THIS process serves,
+authorized off a plain `hanzo auth login` (the IAM access token is the final bearer
+fallback — no `--platform-token`).
 
-- `hanzo apps list|get`  → `GET /v1/platform/fleet[/{app}]`  (`apps/platform` fleet.go
-  drift board)
-- `hanzo deploy <app>`   → `POST /v1/platform/fleet/{app}/deploy` — a zero-downtime ROLLING
-  RESTART (stamps the Deployment pod-template `hanzo.ai/restartedAt` annotation; never
-  changes the declared TAG — that stays a git commit CD reconciles). `--env` picks the ns.
-- `hanzo clusters list|get` → `GET /v1/clusters`  (`apps/visor`, tenant-scoped)
-- `hanzo build`          → `POST /v1/runner`  (native buildkit fabric). With `--image` it
-  builds a container image; with NO `--image` it reads the repo's own `hanzo.yml`
-  (`binaries:` + `bucket:`) and builds the ARTIFACT lane instead — see below.
+The CLI does not import this module and never will: its cloud surface is GENERATED
+from a spec. `genspec` joins the authored master (`hanzoai/openapi` `hanzo.yaml`)
+with a live route table into `spec/cloud.json`, and `genproduct` emits
+`src/commands/product/generated.rs` from that. The registry can only REFUTE an
+authored operation, never add one — so a route this module serves reaches no command
+until `hanzoai/openapi` authors it. When a verb is missing from the CLI, author the
+route there; do not hand-write the command.
+
+- `hanzo platform fleet list|get` → `GET /v1/platform/fleet[/{app}]` (`apps/platform`
+  fleet.go drift board). `--env`/`--health`/`--drift` filter it.
+- `hanzo platform fleet deploy <app>` → `POST /v1/platform/fleet/{app}/deploy` — a
+  zero-downtime ROLLING RESTART (stamps the Deployment pod-template
+  `hanzo.ai/restartedAt` annotation; never changes the declared TAG — that stays a
+  git commit CD reconciles). `--env` picks the ns.
+- `hanzo cluster list|show` → `apps/visor`, tenant-scoped.
+
+`cli/` (Go, package `cli`, ~10.4k lines) is NOT built and NOT importable by anything
+here — zero importers, no `main`, no Makefile target. It is retained ONLY as the
+reference for the client-side tools not yet ported to Rust: the GPU worker daemon
+(`gpu.go`/`studio.go` — hardware enumeration, the claim/heartbeat loop, ComfyUI
+supervision, systemd install), `agent publish`'s local half, and `engine install`.
+Rust's `node join` is a one-shot registration, not that daemon. Do not add to `cli/`,
+do not wire it into a build, and do not delete it until those are ported — deleting
+it destroys the only spec for work that is owed.
+
+`POST /v1/runner` (native buildkit fabric) has no CLI verb today: it is served here
+but unauthored in `hanzoai/openapi`, and the bare name `runner` is already taken by
+the Rust CLI's CI-runner daemon. Authoring it needs a name decision first. Called
+directly, with `image:` it builds a container image; with NO `image:` it reads the
+repo's own `hanzo.yml` (`binaries:` + `bucket:`) and builds the ARTIFACT lane
+instead — see below.
 
 ### `/v1/runner` builds ANY project, not only a Dockerfile
 
@@ -1747,45 +1775,71 @@ another's ledger. The specs are `describe.configure({mode:'serial'})` — not by
 preference, but because they all move the same balance and the suite is otherwise
 `fullyParallel`.
 
-## Encryption at rest: cek is the gate, and per-principal binding is not done yet
+## Encryption at rest: cek is the gate, and it binds the owner
 
-`cek.Open` is the ONE encryption-at-rest gate — ~50 stores, plus IAM's identity store
-(`apps/iam.openStore`, which previously opened through `iamserver.OpenSQLite` and
-left `iam/iam2.db` beginning with the literal `SQLite format 3` magic). If you add a
-store, open it through cek; if a store is not in the envelope it has no `.dek` sidecar
-beside it, and that absence is the check worth running on any new data dir:
+`cek.Open(principal, path)` is the ONE encryption-at-rest gate. The principal comes
+first because it is a question the caller must answer, not one it can forget:
+`cek.Global` for a platform store, `cek.Org(slug)` for a tenant's. `cek.User(id)` exists
+for the per-user partition, which has no store yet.
+
+If you add a store, open it through cek. A store inside the envelope has a `.dek`
+sidecar beside it; one outside does not, and this is the check worth running on any data
+dir — note it looks for the SIDECAR, because on a pure-Go build the codec envelope keys
+the file out of band and the database may not exist at that path at all:
 
     find $DATA_DIR -name '*.db' -printf '%P\n' | while read -r r; do
       printf '%-40s dek=%s\n' "$r" "$([ -f "$DATA_DIR/$r.dek" ] && echo yes || echo NO)"; done
 
-**What cek binds today, and what it does not.** The KEK derives from a random per-file
-id, NOT from the principal:
+**The derivation.** The KEK binds (owner, file) and never the path, so a store survives a
+move but not a change of owner:
 
-    KEK = HKDF-SHA256(master, lp("global") || lp(hex(fileID)))
+    tenant:   KEK = HKDF(master, lp("org") || lp(slug || "/" || hex(fileID)))
+    platform: KEK = HKDF(master, lp("global") || lp(hex(fileID)))
 
-`PrincipalOrg` and `PrincipalUser` — which `hanzoai/sqlite` provides and `commerce`
-uses — appear ZERO times in cloud; `const principalType = sqlitedrv.PrincipalGlobal`
-is the only one. So confidentiality between orgs DOES hold (every file has its own
-random DEK under its own KEK, and one org's key cannot read another's file), but there
-is no BINDING: `OrgDB` knows the validated org slug and discards it one call later at
-`openOrgDB → cek.Open(path)`. A `{db,.dek}` pair is therefore valid in any org's
-directory, so a PV-write adversary could swap two of our own stores between tenants.
-cek's header names this as a deliberate non-goal; it stops being one the moment
-tenant-isolation-under-node-compromise is in scope.
+The platform form is byte-identical to what every store on disk was written under, which
+`TestGlobalDerivationIsUnchanged` asserts against an independently written reference — so
+the platform fleet cannot be silently orphaned. Only tenant stores gained an owner.
 
-**The shape of the fix, when it is taken up.** Bind BOTH principal and file, so the
-per-file KEK survives:
+**Migration is an operation, not a fallback.** `cek.Rebind(from, to, path)` rewraps one
+sidecar; `cek.RebindOrgs(dataDir, platformSlug)` is the walk over `{DataDir}/orgs`. It
+rewrites no database page and never opens the file, so it is safe on a store too large to
+copy and a failure cannot corrupt data. Already-bound reports `ErrNotBound` and counts as
+skipped, so the walk converges rather than pretending to be a transaction; a sidecar that
+unwraps under NEITHER principal is a real error, because an operator must not read
+corruption as success.
 
-    KEK = DeriveKey(master, PrincipalOrg, orgSlug + "/" + hex(fileID))
-    AAD = PrincipalAAD(same)
+There is deliberately no legacy path inside `Open`. A second derivation tried on failure
+would mean every open silently accepts two answers forever — which is exactly what made
+the old binding unenforceable.
 
-(`SanitizeOrg` guarantees the slug has no "/", so the id stays injective.) It cannot be
-a flag day: every existing sidecar is wrapped under the legacy global derivation, so
-open must try the principal-bound derivation, fall back to legacy on unwrap failure,
-and rewrap the sidecar on success. That is safe because rewrapping touches only the
-sidecar — the DEK and fileID never change and no page is rewritten, the same property
-master-key rotation already relies on — and because a half-migrated fleet reads either
-form. `cek.Open` grows a principal parameter (~50 call sites pass an explicit Global).
+⚠️ **Deploy order.** A volume written before the binding must be rebound before its
+tenants can open their stores. Run `RebindOrgs` against the data dir, then start.
 
-**Still outside the envelope:** `tasks/_/default.db`. `hanzoai/tasks`'s `EmbedConfig`
-has no key field, so that one is an upstream change, not a cloud one.
+**IAM's store is `iam/global.db`** and opens through cek like everything else. It is named
+for its principal partition, not for a version — it previously opened through
+`iamserver.OpenSQLite`, which has no key to give it, and sat in plaintext.
+
+**Still outside the envelope:** `tasks/<org>/<namespace>.db`. `hanzoai/tasks`'s
+`EmbedConfig` has no key field, so that is an upstream change.
+
+## Inter-app calls: ZAP over UDS
+
+`dial.go` is the ONE way one app calls another. Local resolves to the callee's unix
+socket at `{DataDir}/run/<app>.sock`, remote to TLS, and `Dial(app)` picks by whether the
+socket exists — so an app can move hosts and no call site changes.
+
+The socket is also the authorization boundary: `credz` authenticates its peers with
+`SO_PEERCRED`, so a 0600 socket proves who is calling without a credential to mint,
+rotate or hand-shake, and nothing is reachable from the network.
+
+**DIRECTED: the wire is ZAP, on both legs.** The socket transport currently frames plain
+HTTP, on the reasoning that ZAP ops are already zip handlers so swapping only `net.Conn`
+keeps one protocol. That reasoning is why the change must be ZAP on BOTH local and remote
+— framing local calls as ZAP while remote stays HTTP would give one typed op two wire
+formats, which is the thing the original decision was avoiding. One protocol, one router,
+one set of typed ops; the transport underneath is a socket or a TLS conn.
+
+Two callers are not there yet, both upstream: `hanzoai/tasks` speaks ZAP already but its
+SDK takes host:port only (`newZAPTransport(opts.HostPort, …)`, pinned by
+`TestDialRequiresHostPort`), and pubsub/NATS cannot use a unix socket for client
+connections at all, so `psembed` stays TCP until that is patched.
