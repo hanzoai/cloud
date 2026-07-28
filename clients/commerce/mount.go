@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-// commerce.go mounts the hanzoai/commerce MODULE into the unified cloud binary
+// mount.go mounts the hanzoai/commerce MODULE into a cloud binary
 // (HIP-0106) via the NATIVE co-residence contract: commerce registers its routes
 // directly on the HOST's zip app (EmbedConfig.App) — one router, one specificity
 // space, zero handler adaptation. This adapter narrows cloud.Deps, boots the
@@ -9,11 +9,11 @@
 // PCI SCOPE. Commerce is a LIGHT ROUTER, NOT in PCI-DSS scope: tokens + intent IDs
 // only, NEVER a PAN. PAN-touching paths call the out-of-process Payments / Vault
 // (ZAP-RPC); when those clients are absent the payment handlers fail closed while
-// tenant config + admin stay served — mountCommerce warns loudly at startup.
+// tenant config + admin stay served — Mount warns loudly at startup.
 //
 // FAIL-SOFT. A broken Embed does NOT crash the binary: commerce degrades to a 503
 // on its own prefixes while every co-resident subsystem stays up.
-package apps
+package commerce
 
 import (
 	"context"
@@ -25,7 +25,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	accountclient "github.com/hanzoai/cloud/clients/account"
-	"github.com/hanzoai/cloud/clients/commerce"
 	"github.com/hanzoai/cloud/clients/commerce/transport"
 	financeclient "github.com/hanzoai/cloud/clients/finance"
 	"github.com/hanzoai/cloud/clients/principal"
@@ -48,16 +47,22 @@ func init() {
 	// package cloud) because the commerce client's entitlement client imports
 	// clients/plan, which imports cloud: the hook keeps the package graph acyclic.
 	cloud.RegisterCommerceClientFactory(func(cfg *cloud.Config, _ log.Logger) cloud.CommerceClient {
-		return commerce.InProcessClient(cfg.Brand)
+		return InProcessClient(cfg.Brand)
 	})
 }
 
-// commercePrefixes is every root path the commerce surface owns on the shared
+// Prefixes is every root path the commerce surface owns on the shared
 // app. Under the native SharedApp contract most of these are registered by
 // commerce's own setupRoutes; the list is the fail-closed 503 set AND the wire
-// contract commerce_prefix_test pins — the route families a session gate or the
-// AI /v1/* catch-all must never swallow:
-var commercePrefixes = []string{
+// contract prefix_test pins — the route families a session gate or the
+// AI /v1/* catch-all must never swallow.
+//
+// It is exported because the composition root DECLARES it (apps.Wire's commerce
+// entry, Prefixes: commerce.Prefixes), which is what puts commerce on the light
+// host's manifest. Derived instead, the walk would read the `app.Group("/v1")`
+// this file opens for the store/catalog/plan bundle as a claim on ALL of /v1 and
+// hand commerce every request in the fleet. Same list, one owner, stated once.
+var Prefixes = []string{
 	"/v1/commerce", // public checkout + tenant + catalog + deposits
 	"/_/commerce",  // tenant-admin surface
 	// The BARE store surface: GET /v1/store/current (the org-scoped default
@@ -72,7 +77,7 @@ var commercePrefixes = []string{
 	// POST /v1/catalog/seed — the SuperAdmin CRUD admin.hanzo.ai's editor drives.
 	// commerce's setupRoutes wires only the PUBLIC read (/v1/commerce/catalog);
 	// the CRUD lives on the standalone /v1 bundle (api.Route → catalogApi.AdminRoute),
-	// which the co-resident embed skips, so mountCommerce mounts it below on the
+	// which the co-resident embed skips, so Mount mounts it below on the
 	// same /v1 gate chain. Own the prefix here so it reaches commerce (each handler
 	// is requireSuperAdmin-gated) instead of the AI /v1/* balance catch-all.
 	"/v1/catalog",
@@ -80,7 +85,7 @@ var commercePrefixes = []string{
 	// /v1/plans/entries + POST /v1/plans/seed (increment 3a) — the SuperAdmin CRUD
 	// the console plan editor drives. The PUBLIC read stays GET /v1/billing/plans;
 	// this CRUD rides the /v1 bundle (api.Route → planApi.AdminRoute), which the
-	// embed skips, so mountCommerce mounts it below. Own the prefix so it reaches
+	// embed skips, so Mount mounts it below. Own the prefix so it reaches
 	// commerce (each handler requireSuperAdmin-gated), not the AI /v1/* 402 gate.
 	"/v1/plans",
 	// Payment-provider webhook receiver (POST /v1/billing/webhooks/:provider —
@@ -95,13 +100,13 @@ var commercePrefixes = []string{
 	"/v1/billing/auto-recharge",
 }
 
-// mountCommerce boots commerce ON the shared zip app (native co-residence).
+// Mount boots commerce ON the shared zip app (native co-residence).
 // commerce's own setupRoutes registers /v1/commerce/* and /_/commerce/*
 // directly; the standalone-only surfaces (bare /healthz, legacy /admin SPA,
 // checkout SPA root catch-all, Listen) are skipped by the SharedApp contract.
 // This adapter registers the remaining wire-contract families with commerce's
-// own gate chains (see commercePrefixes).
-func mountCommerce(app *zip.App, deps cloud.Deps) error {
+// own gate chains (see Prefixes).
+func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("commerce: nil app")
 	}
@@ -169,7 +174,7 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 		return nil
 	}
 
-	// The BARE /v1/store surface (see commercePrefixes). Group-scoped chain
+	// The BARE /v1/store surface (see Prefixes). Group-scoped chain
 	// mirrors the standalone /v1 bundle: gated request context, host, IAM
 	// resolution; store.Route's own tokenRequired arg gates the CRUD.
 	storeV1 := app.Group("/v1")
@@ -429,7 +434,7 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 	//   - the commerce client reads the Embedded's datastore DIRECTLY (entitlements +
 	//     BalanceCents) — no HTTP shape at all.
 	transport.SetApp(app.Fiber())
-	commerce.PublishEmbedded(embedded)
+	PublishEmbedded(embedded)
 
 	// Usage-cap enforcement on the FINANCE path. The unified binary records usage in
 	// the finance ledger (fin.RecordUsage), NOT commerce's transaction store — which
@@ -459,7 +464,7 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 // matches group middleware by PREFIX, not by the handle a route registered on —
 // so on the shared `/v1` it wraps every subsystem mounted AFTER commerce and
 // flattens their typed zip.HTTPError (403/400/…) into a blanket 500 (the store
-// envelope always renders 500). Guarded by commercePrefixes, the envelope stays on
+// envelope always renders 500). Guarded by Prefixes, the envelope stays on
 // commerce and every other subsystem renders its own status via zip's default
 // handler — the pre-commerce subsystems (kms, o11y, …) already do; this makes the
 // post-commerce ones (projects, agents, wallets, …) match.
@@ -474,10 +479,10 @@ func commerceErrorScope() zip.Handler {
 }
 
 // hasCommercePrefix reports whether path is a commerce-owned root (an exact prefix
-// or a child of one), the SAME ownership commercePrefixes encodes for the
+// or a child of one), the SAME ownership Prefixes encodes for the
 // fail-closed mount.
 func hasCommercePrefix(path string) bool {
-	for _, p := range commercePrefixes {
+	for _, p := range Prefixes {
 		if path == p || strings.HasPrefix(path, p+"/") {
 			return true
 		}
@@ -491,7 +496,7 @@ func mountCommerceFailClosed(app cloud.Router) {
 		c.SetHeader("Content-Type", "application/json")
 		return c.Bytes(http.StatusServiceUnavailable, []byte(`{"error":"commerce unavailable","code":503}`))
 	}
-	for _, p := range commercePrefixes {
+	for _, p := range Prefixes {
 		app.All(p+"/*", failed)
 	}
 }

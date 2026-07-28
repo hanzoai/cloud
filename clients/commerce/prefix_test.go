@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package apps
+package commerce
 
 import (
 	"io"
@@ -35,14 +35,14 @@ func TestCommercePrefixesPinned(t *testing.T) {
 		"/v1/catalog":               false,
 		"/v1/plans":                 false,
 	}
-	for _, p := range commercePrefixes {
+	for _, p := range Prefixes {
 		if _, ok := want[p]; ok {
 			want[p] = true
 		}
 	}
 	for p, ok := range want {
 		if !ok {
-			t.Errorf("commercePrefixes missing %q — the route falls through to the wrong owner", p)
+			t.Errorf("Prefixes missing %q — the route falls through to the wrong owner", p)
 		}
 	}
 }
@@ -63,7 +63,7 @@ func TestStoreSurfaceRoutedToCommerceNotAIGate(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"store":{"id":"karma-store"}}`)
 	}))
-	for _, p := range commercePrefixes {
+	for _, p := range Prefixes {
 		app.All(p+"/*", commerce)
 	}
 
