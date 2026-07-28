@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/zap-proto/zip"
 )
@@ -59,13 +60,33 @@ const maxBriefBytes = 8 << 10 // 8 KiB
 // validation + responsiveness guarantee as the raw deploy_site path (siteFromFiles).
 // A nil ai is an honest error (the caller answers 503); a parse/validation failure
 // is returned so the caller answers 400.
-func generateSite(ctx context.Context, ai cloud.AIClient, model, brief string) (name string, st *site, err error) {
+//
+// org and payer are REQUIRED, and they are the whole reason this signature has them.
+// cloud's inference decorator gates and debits on the request's billing org, and its
+// one exempt path is the empty string: `if org == "" { return nil }` in the gate and a
+// log line instead of a debit in the record. This call named neither, so POST /v1/sites
+// charged its flat hosting fee and gave the model tokens away — on the SAME request
+// that had already resolved the payer for that fee. The tokens are the expensive half.
+func generateSite(ctx context.Context, ai cloud.AIClient, model, brief, org, payer string) (name string, st *site, err error) {
 	if ai == nil {
 		return "", nil, errors.New("inference is not configured")
+	}
+	// Refuse to spend on behalf of nobody, BEFORE the call. billedOrg falls back to Org
+	// when BillingOrg is empty, so one of the two is enough; neither is the exempt case,
+	// and serving it means giving the tokens away. buildSite already 403s without an org,
+	// so this cannot fire for the live route — it is here so the exemption stays
+	// unreachable through this function for whoever calls it next.
+	if strings.TrimSpace(org) == "" && strings.TrimSpace(payer) == "" {
+		return "", nil, errors.New("site generation needs a billing org: an unattributed completion is exempt from the meter")
 	}
 	resp, err := ai.ChatCompletion(ctx, &cloud.ChatRequest{
 		Model:  model,
 		Prompt: responsiveGuidance + "\n\nBrief: " + brief,
+		// Org is the EFFECTIVE org (data scope: BYO keys, RAG); BillingOrg is the HOME
+		// org that PAYS — the same address gateHosting reserved the hosting fee against,
+		// so one request cannot bill two different ledgers.
+		Org:        org,
+		BillingOrg: payer,
 	})
 	if err != nil {
 		return "", nil, fmt.Errorf("inference: %w", err)
@@ -316,7 +337,10 @@ func buildSite(s *cloud.Service[state], c *zip.Ctx) error {
 		return cloud.DenyResource(c, gErr)
 	}
 
-	name, st, err := generateSite(c.Context(), s.State.ai, strings.TrimSpace(body.Model), brief)
+	// principal.Ledger(c) is the payer gateHosting just reserved the fee against — the
+	// tokens must land on the same ledger, resolved the same way, or the request bills
+	// its two halves to two different accounts.
+	name, st, err := generateSite(c.Context(), s.State.ai, strings.TrimSpace(body.Model), brief, org, principal.Ledger(c))
 	if err != nil {
 		return zip.ErrBadRequest("site generation failed: " + err.Error())
 	}
