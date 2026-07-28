@@ -172,6 +172,15 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 go build -ldflags="-s -w" -o /smoke ./cmd/smoke
+# o11y is the first subsystem that is NOT linked in: cloud fork/execs it as a
+# separate process at mount time, so unlike every other subsystem it has to exist
+# as a FILE in this image. It did not, and the mount is not optional — boot died
+# with `mount o11y: zip: Load(o11y): start: fork/exec /o11y: no such file or
+# directory` and the smoke gate reported "never reached listening". The gate did
+# its job; the binary was simply never added here when the app landed.
+RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
+    CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5" -ldflags="-s -w" -o /o11y ./cmd/o11y
 # Prove the SHIPPED binary binds sqlite3_* to libsqlcipher, not a plaintext libsqlite3.
 RUN readelf -d /cloud | grep -qE 'NEEDED.*(sqlcipher|sqlite3)' || { echo "FATAL: /cloud links no sqlite/sqlcipher .so"; exit 1; }; \
     ! ldd /cloud 2>/dev/null | grep -E 'libsqlite3' | grep -vq 'libsqlcipher' || { echo "FATAL: /cloud resolves a NON-sqlcipher libsqlite3 (plaintext risk)"; exit 1; }
@@ -215,6 +224,7 @@ COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /etc/group /etc/group
 COPY --from=build /cloud /cloud
 COPY --from=build /smoke /smoke
+COPY --from=build /o11y /o11y
 EXPOSE 8080 9090 9653
 USER 65532:65532
 # tini as PID 1 forwards signals to /cloud unchanged (so SIGTERM still drains
