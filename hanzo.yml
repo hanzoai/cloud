@@ -39,6 +39,48 @@ test:
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
       go vet ./...
+  - name: generated-current
+    # apps.Wire() is the single source of truth for the subsystem set; cmd/<app>
+    # and manifest/apps.go are DERIVED from it by cmd/gen-app-cmds, and the
+    # generator is idempotent. So a clean tree after re-running it is the whole
+    # invariant — and a dirty one means someone edited Wire() without
+    # regenerating, which leaves the light host routing to binaries that do not
+    # exist (or not routing to ones that do). Pure AST parse: no build, seconds.
+    run: |
+      set -e
+      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      go run ./cmd/gen-app-cmds
+      # --porcelain, not `git diff`: a NEW subsystem in Wire() produces a NEW
+      # cmd/<app>/main.go, which is untracked and therefore invisible to a diff.
+      # The failure that matters most is exactly the one a diff would miss.
+      #
+      # Scoped to the files the generator OWNS. Pointing it at cmd/ wholesale
+      # would also fail on anything else untracked there — a scratch harness, a
+      # local experiment — which is a red build for a reason that has nothing to
+      # do with the manifest.
+      stale=$(git status --porcelain -- 'cmd/*/main.go' manifest/apps.go)
+      if [ -n "$stale" ]; then
+        echo "::error::cmd/ or manifest/ is stale — apps.Wire() changed without 'make generate'. Run it and commit."
+        echo "$stale"
+        exit 1
+      fi
+  - name: host-is-light
+    # The light host's ONE property is that it links no subsystem: it knows where
+    # each app lives and what path it answers, never what the app does. That is
+    # what keeps it at ~317 packages against cmd/cloud's 3105, and it is a
+    # property of the IMPORT GRAPH, so it is checked with the import graph rather
+    # than with a size threshold nobody can interpret. One stray import of a
+    # clients/* package (or of apps) drags the whole graph back in, and the only
+    # symptom would be a slow build — this turns that into a failed one.
+    run: |
+      set -e
+      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      leak=$(go list -deps ./cmd/host | grep -E '^github.com/hanzoai/cloud/(apps|clients)' || true)
+      if [ -n "$leak" ]; then
+        echo "::error::cmd/host links subsystem code, which defeats the point of the light host: $leak"
+        exit 1
+      fi
+      echo "OK: cmd/host links $(go list -deps ./cmd/host | wc -l) packages and no subsystem"
   - name: go-unit
     run: |
       set -e

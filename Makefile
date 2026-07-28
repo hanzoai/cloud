@@ -47,7 +47,18 @@ OPENAPI_DIR    ?= ../openapi
 # that runs them, and needs a real libsqlcipher to do it.
 CGO_ENABLED     ?= 0
 
-.PHONY: help native webui deploy-ui agentskills build build-standalone run smoke test test-cgo test-codec vet tidy docker docker-push clean
+# Every app the light host mounts, read from the generated manifest — the same
+# list cmd/host links, so `make plugins` cannot build a set that differs from the
+# one the host expects to find beside it.
+APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
+
+# Linking a cloud binary is a multi-GiB act, and the Go LINKER writes its
+# temporaries to TMPDIR (not GOTMPDIR). On a host where /tmp is a tmpfs that is
+# RAM, so `make plugins` — 100+ links back to back — exhausts it. Point it at
+# disk by default; override for a box where /tmp is real.
+export TMPDIR ?= $(HOME)/.cache/go-tmp
+
+.PHONY: help native webui deploy-ui agentskills build build-standalone host plugins plugin generate run smoke test test-cgo test-codec vet tidy docker docker-push clean
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -86,6 +97,40 @@ build: ## Build the unified cloud binary into ./bin/cloud (embeds whatever webui
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$(BIN) $(PKG)
 
 build-standalone: webui build ## Build the REAL 1-binary console: console build:embed → webui/dist → go build.
+
+# THE LIGHT HOST. `build` above links every subsystem into one binary (3105
+# packages, ~570MB, minutes to link). This one links zip and the generated
+# manifest — 316 packages, under a second — because it knows only where each app
+# lives and which paths it answers. The apps run as their own processes, started
+# on the first request that reaches them, so the host's build does not grow when
+# a subsystem does.
+host: ## Build the light host into ./bin/host (links zip + the manifest, none of the apps).
+	@mkdir -p bin $(TMPDIR)
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$@ ./cmd/$@
+	@echo ">> bin/host — $$(CGO_ENABLED=$(CGO_ENABLED) $(GO) list -deps ./cmd/host | wc -l) packages, $$(du -h bin/host | cut -f1)"
+
+# Sequential and -p=2 on purpose: each link peaks in the GiBs, and building a
+# hundred of them in parallel is how this OOMs a 128GiB box.
+plugins: ## Build every app the manifest mounts into ./bin — the host's plugins. Slow by construction.
+	@mkdir -p bin $(TMPDIR)
+	@for a in $(APPS); do \
+	  printf '>> %s\n' "$$a"; \
+	  GOFLAGS=-p=2 CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$$a ./cmd/$$a || exit 1; \
+	done
+	@echo ">> $(words $(APPS)) plugins in ./bin"
+
+plugin: ## Build ONE app into ./bin: make plugin APP=wallets.
+	@test -n "$(APP)" || { echo "usage: make plugin APP=<name>"; echo "apps: $(APPS)"; exit 1; }
+	@test -d cmd/$(APP) || { echo "no cmd/$(APP) — run 'make generate', or check the name against 'make plugin' with no APP"; exit 1; }
+	@mkdir -p bin $(TMPDIR)
+	GOFLAGS=-p=2 CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$(APP) ./cmd/$(APP)
+
+# apps.Wire() is the single source of truth for the subsystem set. This derives
+# BOTH artifacts from it in one parse — the per-app standalone mains and the
+# host's manifest — so a subsystem added there cannot be missing from either.
+# Idempotent: a no-op run leaves the tree clean, which is what lets CI diff it.
+generate: ## Regenerate cmd/<app>/main.go + manifest/apps.go from apps.Wire().
+	$(GO) run ./cmd/gen-app-cmds
 
 # NOTE: cloud builds ONLY the `cloud` binary — the stateless unified API. The Go
 # `hanzo` CLI (cmd/hanzo + cli/) is RETIRED: the shipped `hanzo` is the Rust CLI
