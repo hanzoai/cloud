@@ -448,14 +448,14 @@ func Serve(specs []MountSpec, enable []string) error {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	addrs, ops := listenOn(cfg)
+
 	listenErr := make(chan error, 1)
-	go func() {
-		deps.Logger.Info("health listening", "addr", cfg.HealthListenAddr)
-		if err := healthSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			listenErr <- fmt.Errorf("health listen: %w", err)
-		}
-	}()
-	go func() {
+	if ops == "" {
+		// Plugin child (see listenOn): the ops port belongs to the host, which
+		// answers liveness for the whole fleet while its children are still cold.
+		deps.Logger.Info("listening as plugin", "addr", addrs[0], "enabled", cfg.Enable, "brand", cfg.Brand)
+	} else {
 		deps.Logger.Info("listening",
 			"http", cfg.ListenAddr,
 			"zap", cfg.ZAPListenAddr,
@@ -463,12 +463,14 @@ func Serve(specs []MountSpec, enable []string) error {
 			"brand", cfg.Brand,
 			"domain", cfg.Domain,
 		)
-		// ONE app, TWO transports: ZAP is the primary machine transport
-		// (PLAINTEXT TCP over :9653 — parity with prior HTTP; needs mesh mTLS), plain HTTP the edge/browser extra. Both serve the
-		// identical route surface, so /v1/* answers over either. Serve returns
-		// the first listener error.
-		listenErr <- app.Listen(cfg.ZAPListenAddr, "http://"+cfg.ListenAddr)
-	}()
+		go func() {
+			deps.Logger.Info("health listening", "addr", ops)
+			if err := healthSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				listenErr <- fmt.Errorf("health listen: %w", err)
+			}
+		}()
+	}
+	go func() { listenErr <- app.Listen(addrs...) }()
 
 	select {
 	case <-ctx.Done():
@@ -514,6 +516,30 @@ func Serve(specs []MountSpec, enable []string) error {
 	// only after requests quiesce. A hook error is joined into the returned error,
 	// never fatal to the others.
 	return app.ShutdownWithContext(shutdownCtx)
+}
+
+// listenOn is the ONE decision about where this process serves: the addresses
+// for the app, and the ops port for the liveness/metrics contract — empty when
+// this process must not bind one.
+//
+// A host that composed this binary as a plugin started it with a private unix
+// socket in ZIP_ADDR and is blocked in zip's waitListening until that socket
+// accepts; binding cfg's fixed ports instead means the host never sees the
+// child come up, kills it as failed, and the mounted prefix 502s on its first
+// request. Every plugin in a fleet is handed the same cfg, so they would also
+// fight over one :8080/:9653/:9090 and all but the first would die on "address
+// already in use". zip.Addr is the whole plugin side of that contract and this
+// is the one place cloud honours it, which is what makes every generated
+// cmd/<app> binary a valid plugin without a line of its own.
+func listenOn(cfg *Config) (addrs []string, ops string) {
+	if sock := zip.Addr(""); sock != "" {
+		return []string{sock}, ""
+	}
+	// ONE app, TWO transports: ZAP is the primary machine transport (PLAINTEXT
+	// TCP over :9653 — parity with prior HTTP; needs mesh mTLS), plain HTTP the
+	// edge/browser extra. Both serve the identical route surface, so /v1/*
+	// answers over either.
+	return []string{cfg.ZAPListenAddr, "http://" + cfg.ListenAddr}, cfg.HealthListenAddr
 }
 
 // healthMux is the liveness/readiness + metrics contract on the ops port
