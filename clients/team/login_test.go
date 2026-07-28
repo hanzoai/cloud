@@ -16,33 +16,42 @@ import (
 
 const testPassword = "hunter2-Sup3rSecret!"
 
-// TestPasswordRPCIsRefused proves hanzo.team has NO password door.
+// TestCredentialVerbsAreRefused proves hanzo.team establishes no session from a
+// credential it handled itself. hanzo.id is the only way in.
 //
-// The account RPC used to accept {"method":"login", email, password} and walk
-// the IAM password grant server-side. It authenticated correctly — and that was
-// the problem: a session minted here never passes through hanzo.id, so it skips
-// the identity check and the training-data consent that gate a first session.
-// The credential-entry surface belongs on the issuer, not on every product host.
-//
-// A deployed SPA build can still render the form (the front image's
-// HIDE_LOCAL_LOGIN gate is broken), so this must fail at the BACKEND: even a
-// correct email and password get no session.
-func TestPasswordRPCIsRefused(t *testing.T) {
+// This asserts the PRESENCE of a specific refusal, not the absence of a handler.
+// The distinction is the whole test. An earlier version probed the "login" verb
+// and checked only that no token came back — and it passed with passwordLogin
+// restored verbatim, because `mountTeam` resolves iamEndpoint to production
+// hanzo.id, which refused these invented credentials with a 401 that satisfied
+// every assertion. It could not tell "handler deleted" from "handler present,
+// IAM refused THESE credentials", and it made a live outbound credential POST to
+// production on every run. Pinning the refusal code kills both problems: a
+// restored handler cannot answer account:status:Unauthorized with this message,
+// and nothing leaves the process.
+func TestCredentialVerbsAreRefused(t *testing.T) {
 	app := mountTeam(t)
-	for _, body := range []string{
-		`{"method":"login","params":{"email":"ada@acme.io","password":"` + testPassword + `"}}`,
-		`{"method":"login","params":{"email":"","password":""}}`,
-	} {
+
+	// Every verb the account client can send that would mint a session from a
+	// credential. loginAsGuest and exchangeGuestToken are in here deliberately:
+	// they are the same bypass class, one line from the door just closed.
+	verbs := []string{
+		"login", "loginAsGuest", "loginOtp", "signUp", "signUpOtp", "signUpJoin",
+		"validateOtp", "join", "joinByToken", "exchangeGuestToken",
+		"changePassword", "restorePassword", "requestPasswordReset",
+	}
+
+	for _, verb := range verbs {
+		body := `{"method":"` + verb + `","params":{"email":"ada@acme.io","password":"` + testPassword + `"}}`
 		req := httptest.NewRequest(http.MethodPost, "http://hanzo.team/v1/team/account", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := app.Fiber().Test(req)
 		if err != nil {
-			t.Fatalf("login rpc: %v", err)
+			t.Fatalf("%s: %v", verb, err)
 		}
 		raw, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 
-		// The refusal must carry NO session material, whatever its shape.
 		var out struct {
 			Result *struct {
 				Token   string `json:"token"`
@@ -51,20 +60,49 @@ func TestPasswordRPCIsRefused(t *testing.T) {
 			Error *Status `json:"error"`
 		}
 		if err := json.Unmarshal(raw, &out); err != nil {
-			t.Fatalf("decode %s: %v", raw, err)
+			t.Fatalf("%s decode %s: %v", verb, raw, err)
 		}
+
+		// No session material, in any form.
 		if out.Result != nil && out.Result.Token != "" {
-			t.Fatalf("password login minted a session token — the door is open: %s", raw)
+			t.Fatalf("%s minted a session token — the door is open: %s", verb, raw)
 		}
-		if out.Error == nil {
-			t.Fatalf("password login was not refused: %s", raw)
-		}
-		// And no Set-Cookie may establish a session out of band.
 		for _, ck := range resp.Header.Values("Set-Cookie") {
 			if strings.HasPrefix(ck, authCookie+"=") || strings.HasPrefix(ck, iamTokenCookie+"=") {
-				t.Fatalf("refusal set a session cookie: %s", ck)
+				t.Fatalf("%s set a session cookie: %s", verb, ck)
 			}
 		}
+
+		// And THE refusal — the assertion a resurrected handler cannot forge.
+		if out.Error == nil {
+			t.Fatalf("%s was not refused: %s", verb, raw)
+		}
+		if out.Error.Code != "account:status:Unauthorized" {
+			t.Fatalf("%s refused with %q, want account:status:Unauthorized (a handler answered instead of the door)", verb, out.Error.Code)
+		}
+		if got, _ := out.Error.Params["message"].(string); got != signInAtIssuer {
+			t.Fatalf("%s message = %q, want %q", verb, got, signInAtIssuer)
+		}
+	}
+}
+
+// TestUnknownMethodDoesNotEchoUnbounded pins the one caller-controlled string
+// that rides back in an error. The RPC body is capped only by the 16MB gateway
+// limit, so an unbounded echo lets the caller size our response.
+func TestUnknownMethodDoesNotEchoUnbounded(t *testing.T) {
+	app := mountTeam(t)
+	huge := strings.Repeat("A", 5000)
+	req := httptest.NewRequest(http.MethodPost, "http://hanzo.team/v1/team/account",
+		strings.NewReader(`{"method":"`+huge+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("unknown method: %v", err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if len(raw) > 512 {
+		t.Fatalf("unknown-method reply is %d bytes — the method name is echoed unbounded", len(raw))
 	}
 }
 
