@@ -2,8 +2,8 @@ package answer
 
 // read.go — the READ stage: the loop's fourth stage, between rank and synthesize.
 // Search gives a ~600-char snippet; a research-grade answer needs the PAGE. read()
-// fetches the top sources through the ONE crawl (self-hosted Hanzo Crawl / Crawl4AI
-// behind ai/object) and replaces each Source's Snippet with the fetched markdown.
+// fetches the top sources through the ONE crawl (clients/crawl, in this binary) and
+// replaces each Source's Snippet with the fetched markdown.
 //
 // It enriches, it never re-identifies: URL/Title/Engine/Favicon are untouched, so
 // the `sources` frame the client already rendered stays valid. It is also STRICTLY
@@ -13,12 +13,10 @@ package answer
 import (
 	"context"
 	"strings"
-	"sync"
 
-	aiobject "github.com/hanzoai/ai/object"
 	luxlog "github.com/luxfi/log"
 
-	"github.com/hanzoai/cloud"
+	crawlpkg "github.com/hanzoai/cloud/clients/crawl"
 )
 
 const (
@@ -45,7 +43,7 @@ var crawl = crawlPages
 // read fetches the top sources and swaps each Snippet for the page's markdown.
 // top<=0 (search/news) is a no-op — those modes ground on snippets and stay fast.
 // Never returns an error: every failure path yields the sources unchanged.
-func read(ctx context.Context, log luxlog.Logger, srcs []Source, top int) []Source {
+func read(ctx context.Context, log luxlog.Logger, scope crawlpkg.Scope, srcs []Source, top int) []Source {
 	if top <= 0 || len(srcs) == 0 {
 		return srcs
 	}
@@ -61,7 +59,7 @@ func read(ctx context.Context, log luxlog.Logger, srcs []Source, top int) []Sour
 	}
 
 	text := make(map[string]string, top)
-	for _, p := range crawl(ctx, log, urls) {
+	for _, p := range crawl(ctx, log, scope, urls) {
 		if md := strings.TrimSpace(p.Markdown); md != "" {
 			text[p.URL] = md
 		}
@@ -74,45 +72,106 @@ func read(ctx context.Context, log luxlog.Logger, srcs []Source, top int) []Sour
 	return srcs
 }
 
-// crawlPages runs the batch through the self-hosted Hanzo Crawl service and
-// returns only the pages that actually came back. Failures yield nothing — the
-// caller keeps the search snippets.
+// crawlPages fetches each URL through the in-binary crawl and returns the pages
+// that came back. Failures yield nothing for that URL — the caller keeps the
+// search snippet.
 //
-// The crawl runs on its own goroutine so ctx (the loop's 90s bound, or a client
-// disconnect) cancels the WAIT even though the pinned ai/object.Crawl takes no
-// ctx; the in-flight HTTP call still ends on its own 30s transport timeout. This
-// collapses to a direct ctx-carrying call at the next ai bump — the ctx-threaded
-// signature ships in hanzoai/ai on this same branch.
-func crawlPages(ctx context.Context, log luxlog.Logger, urls []string) []Page {
-	done := make(chan []Page, 1) // buffered: the goroutine never blocks after we give up
-	var once sync.Once
-	send := func(p []Page) { once.Do(func() { done <- p }) }
-
-	// Contained, not bare. This goroutine parses pages we did not author, so it is
-	// one of the likeliest places in the binary to panic — and an unrecovered panic
-	// on a spawned goroutine kills the PROCESS, taking every other tenant with it
-	// (middleware.Recover covers only the request goroutine). The inner defer is
-	// registered first so it runs first: the caller is answered with "no pages"
-	// before the panic is recovered and logged, otherwise the loop would sit out its
-	// entire wall clock waiting for a result that is never coming.
-	cloud.Go(log, "answer.crawl", []any{"urls", len(urls)}, func() {
-		defer send(nil)
-		res, err := aiobject.Crawl(urls)
-		if err != nil {
-			return
-		}
-		out := make([]Page, 0, len(res))
-		for _, r := range res {
-			if r.Success {
-				out = append(out, Page{URL: r.URL, Markdown: r.Markdown})
-			}
-		}
-		send(out)
-	})
-	select {
-	case pages := <-done:
-		return pages
-	case <-ctx.Done():
-		return nil
+// This is the collapse the previous comment promised, and it went further than a
+// ctx-threaded signature: there is no crawl SERVICE left to call. It used to reach
+// ai/object.Crawl, which dialled crawl.hanzo.svc.cluster.local:11235 — a name that
+// does not resolve. Every research and deep answer therefore read zero pages and
+// silently degraded to snippets, which is the failure mode this stage is explicitly
+// allowed to have, so nothing ever looked broken.
+//
+// Because clients/crawl.Fetch takes a ctx, the machinery that used to be needed
+// here is gone rather than rebound: one goroutine to make an uncancellable batch
+// call cancellable, a sync.Once to keep the abandoned goroutine from blocking on
+// send. Fetch honours ctx directly, so the loop's 90s bound and a client
+// disconnect now reach the socket instead of merely ending the wait while the
+// request ran on unattended.
+//
+// Per URL, not per batch: one slow page no longer decides when the others arrive,
+// and a page that panics the HTML parser costs its own slot instead of the set. The
+// collector owns `out` alone — the workers only send — so results are assembled
+// without a mutex and a straggler that lands after ctx expires writes to a buffered
+// channel nobody reads, which is safe rather than a race.
+//
+// Pages are read through crawlpkg.Read, so a research loop that revisits a URL —
+// across a re-ask, a follow-up, or a later re-index — pays the network once and
+// reads the corpus after. The scope is the DATA org, never the payer: the corpus
+// is the tenant's data, and filing it under whoever happened to fund the answer
+// would put one org's pages in another's prefix.
+//
+// Page.URL is the url we ASKED for, never Read's post-redirect final url. read()
+// keys its map by this and matches it against the Source's own URL; handing back
+// the redirected address would silently fail that match on exactly the pages that
+// redirect, and the answer would drop them while looking like it read them.
+func crawlPages(ctx context.Context, log luxlog.Logger, scope crawlpkg.Scope, urls []string) []Page {
+	type slot struct {
+		i    int
+		page Page
 	}
+	// Buffered to exactly the worker count: every worker sends once and none can
+	// block, so a straggler that finishes after ctx expired exits cleanly instead of
+	// leaking on an unread channel.
+	ch := make(chan slot, len(urls))
+
+	for i, u := range urls {
+		go func(i int, u string) {
+			p := Page{URL: u}
+			// One defer, ordered deliberately: recover FIRST, then send. This worker
+			// parses markup we did not author, the likeliest place in the binary to
+			// panic, and an unrecovered panic on a spawned goroutine kills the
+			// PROCESS with every tenant on it — middleware.Recover only ever covered
+			// the request goroutine. Sending inside the same defer guarantees the
+			// collector is answered on the panic path too; a worker that died
+			// silently would cost the loop its whole wall clock waiting for a result
+			// that is not coming.
+			defer func() {
+				// log is nil on some call paths (and in tests) — a nil deref inside
+				// the recover defer would turn a contained panic back into a process
+				// kill, at the worst possible moment.
+				if r := recover(); r != nil && log != nil {
+					log.Error("crawl worker panicked (recovered; answer degrades to snippet)", "url", u, "panic", r)
+				}
+				ch <- slot{i, p}
+			}()
+			got, err := crawlpkg.Read(ctx, scope, u)
+			if err != nil || got == nil {
+				return // p keeps an empty Markdown: this source stays on its snippet
+			}
+			p.Markdown = got.Markdown
+		}(i, u)
+	}
+
+	// The collector is the ONLY writer of slots, so ranked order survives without a
+	// mutex over shared state.
+	slots := make([]Page, len(urls))
+	for n := 0; n < len(urls); n++ {
+		select {
+		case s := <-ch:
+			slots[s.i] = s.page
+		case <-ctx.Done():
+			// Out of budget. Return what has LANDED rather than nothing: pages
+			// already read are worth more to the synthesis than a clean slate.
+			return landed(slots)
+		}
+	}
+	return landed(slots)
+}
+
+// landed drops the slots nothing came back for, in rank order.
+//
+// The seam promises "the pages that came back", so handing out zero-value Pages
+// would break that contract for every caller — a URL of "" matches no Source, and a
+// cancelled crawl would report a list of nothing-shaped pages instead of an empty
+// one.
+func landed(slots []Page) []Page {
+	out := make([]Page, 0, len(slots))
+	for _, p := range slots {
+		if p.URL != "" && p.Markdown != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
