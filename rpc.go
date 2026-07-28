@@ -49,23 +49,38 @@ import (
 // the edge (middleware_identity.go), carried in the envelope's capability slot
 // so the callee applies its OWN authorization to the SAME principal. A zero
 // Ident is anonymous, and a method that needs authority refuses it.
+//
+// TWO ADMIN SCOPES, TWO FIELDS. Admin is platform sudo (owner == the reserved
+// admin org, X-User-IsAdmin); OrgAdmin is admin OF ONE'S OWN org (the IAM
+// isAdmin bit, X-User-IsOrgAdmin). apps/principal calls conflating them a
+// privilege escalation, so the capability carries them apart — a callee that
+// admits an org admin can say so without having to read "holds an org" as
+// "administers it". Both headers are stripped on ingress and re-minted only
+// from validated claims, so neither is forgeable off the gateway.
 type Ident struct {
-	Org     string
-	User    string
-	Email   string
-	Project string
-	Admin   bool
+	Org      string
+	User     string
+	Email    string
+	Project  string
+	Admin    bool
+	OrgAdmin bool
 }
 
 // Ident wire layout. Both pack and parse live in this file, so the two halves
 // cannot drift — the same discipline zapface keeps for its own frames.
+//
+// The bools sit in the padding the four text pointers already round up to, so
+// identFixed stays 40 and the frame does not grow. A peer built before OrgAdmin
+// existed sends that byte as zero and reads it as false — an older caller is
+// never mistaken for an org admin, and an older callee simply does not ask.
 const (
-	identOrgOff     = 0
-	identUserOff    = 8
-	identEmailOff   = 16
-	identProjectOff = 24
-	identAdminOff   = 32
-	identFixed      = 40
+	identOrgOff      = 0
+	identUserOff     = 8
+	identEmailOff    = 16
+	identProjectOff  = 24
+	identAdminOff    = 32
+	identOrgAdminOff = 33
+	identFixed       = 40
 )
 
 func packIdent(id Ident) []byte {
@@ -79,6 +94,7 @@ func packIdent(id Ident) []byte {
 	ob.SetText(identEmailOff, id.Email)
 	ob.SetText(identProjectOff, id.Project)
 	ob.SetBool(identAdminOff, id.Admin)
+	ob.SetBool(identOrgAdminOff, id.OrgAdmin)
 	ob.FinishAsRoot()
 	return b.Finish()
 }
@@ -93,11 +109,12 @@ func parseIdent(b []byte) Ident {
 	}
 	r := m.Root()
 	return Ident{
-		Org:     r.Text(identOrgOff),
-		User:    r.Text(identUserOff),
-		Email:   r.Text(identEmailOff),
-		Project: r.Text(identProjectOff),
-		Admin:   r.Bool(identAdminOff),
+		Org:      r.Text(identOrgOff),
+		User:     r.Text(identUserOff),
+		Email:    r.Text(identEmailOff),
+		Project:  r.Text(identProjectOff),
+		Admin:    r.Bool(identAdminOff),
+		OrgAdmin: r.Bool(identOrgAdminOff),
 	}
 }
 
