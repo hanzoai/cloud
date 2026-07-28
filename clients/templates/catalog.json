@@ -1397,5 +1397,100 @@
     "source": "https://github.com/hanzo-templates/desktop-recorder",
     "preview": "https://desktop-recorder.hanzo.app/preview.png",
     "demo": "https://desktop-recorder.hanzo.app"
+  },
+  {
+    "slug": "godot-arcade",
+    "title": "Orb Runner",
+    "category": "Games/3D",
+    "description": "A complete 3D arcade game in ~150 lines of GDScript, exported to WebAssembly by Godot 4.",
+    "framework": "Godot 4.4 (Web export)",
+    "features": [
+      "3D physics",
+      "WASM engine",
+      "Keyboard/gamepad",
+      "COOP/COEP ready",
+      "MIT"
+    ],
+    "useCase": "Browser games and 3D product demos",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/godot-arcade",
+    "preview": "https://godot-arcade.hanzo.app/preview.png"
+  },
+  {
+    "slug": "unity-webgl",
+    "title": "Unity WebGL",
+    "category": "Games/3D",
+    "description": "A real Unity WebGL build served cross-origin-isolated, so SharedArrayBuffer is available to multithreaded builds.",
+    "framework": "Unity 6 (WebGL)",
+    "features": [
+      "Unity runtime",
+      "crossOriginIsolated",
+      "SharedArrayBuffer",
+      "application/wasm MIME",
+      "Apache-2.0"
+    ],
+    "useCase": "Shipping an existing Unity project to the web",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/unity-webgl",
+    "preview": "https://unity-webgl.hanzo.app/preview.png"
+  },
+  {
+    "slug": "three-webgpu",
+    "title": "Neon Reef",
+    "category": "Games/3D",
+    "description": "WebGPU-first Three.js scene with automatic WebGL2 fallback: TSL node materials and 900 instanced shards in one draw call.",
+    "framework": "three.js 0.185 (WebGPU)",
+    "features": [
+      "WebGPU",
+      "WebGL2 fallback",
+      "TSL node materials",
+      "Instancing",
+      "MIT"
+    ],
+    "useCase": "3D landing pages and product configurators",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/three-webgpu",
+    "preview": "https://three-webgpu.hanzo.app/preview.png"
+  },
+  {
+    "slug": "rapier-physics",
+    "title": "Fracture Yard",
+    "category": "Games/3D",
+    "description": "Rigid-body sandbox where Rapier3D (Rust compiled to WASM) owns the simulation and three.js only draws it.",
+    "framework": "Rapier3D + three.js",
+    "features": [
+      "WASM physics",
+      "CCD projectiles",
+      "Live solver cost",
+      "Shadow mapping",
+      "MIT/Apache-2.0"
+    ],
+    "useCase": "Simulation, training and physics-driven demos",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/rapier-physics",
+    "preview": "https://rapier-physics.hanzo.app/preview.png"
+  },
+  {
+    "slug": "voxel-craft",
+    "title": "Chunk",
+    "category": "Games/3D",
+    "description": "First-person voxel sandbox: procedural terrain, face-culled chunk meshing, place/break editing that re-meshes only what changed.",
+    "framework": "three.js 0.185",
+    "features": [
+      "Procedural terrain",
+      "Chunk meshing",
+      "Pointer lock",
+      "Voxel editing",
+      "MIT"
+    ],
+    "useCase": "Sandbox games and world builders",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/voxel-craft",
+    "preview": "https://voxel-craft.hanzo.app/preview.png"
   }
 ]
