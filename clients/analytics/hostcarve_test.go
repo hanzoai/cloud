@@ -47,7 +47,7 @@ func (r liveResolver) ResolveOrg(_ context.Context, org, slug string) (sites.Sit
 }
 
 // carveApp mounts analytics (which installs the site-host ingest carve via
-// sites.SetAnalyticsHostHandler) BEHIND the sites host-router middleware, then
+// sites.SetAnalyticsHost) BEHIND the sites host-router middleware, then
 // points the resolver at one live Site. A POST to the site host is intercepted by
 // the middleware and forced to Site.Org; a POST to any other host falls through to
 // the normal /v1/analytics route.
@@ -66,7 +66,7 @@ func carveApp(t *testing.T, org string) *zip.App {
 	sites.SetResolver(liveResolver{org: org})
 	t.Cleanup(func() {
 		sites.SetResolver(nil)
-		sites.SetAnalyticsHostHandler(nil)
+		sites.SetAnalyticsHost(nil)
 	})
 	return app
 }
