@@ -1,41 +1,46 @@
-// paas.go — the cluster-facing half of the native Hanzo PaaS control plane.
+// fleet.go — the platform's view of its OWN service tier.
 //
-// It mounts /v1/paas/* on the unified cloud binary and reads the operator's
+// It mounts /v1/platform/fleet on the unified cloud binary and reads the operator's
 // `hanzo.ai/v1` `App` CustomResource — the one workload kind the fleet runs on:
 //
-//	GET  /v1/paas/apps            — the fleet drift board (inventory.ts): list every
-//	                                operator App CR across the platform namespaces,
-//	                                read declared vs running tag + health from the CR
-//	                                (+ its status), and attach the drift verdict
-//	                                (drift.go / apps-drift.ts).
-//	GET  /v1/paas/apps/:app       — one app row by CR name.
-//	POST /v1/paas/apps/:app/deploy— zero-downtime ROLLING RESTART of the app's
-//	                                Deployment (the `kubectl rollout restart`
-//	                                mechanism): re-pulls the DECLARED image, recreates
-//	                                pods gracefully. It never changes the declared
-//	                                TAG (that stays a git commit, the one thing Hanzo
-//	                                CD's selfHeal reconciles), so there is no drift to
-//	                                revert. This is `hanzo deploy`.
-//	GET  /v1/paas/health          — real k8s reachability + App CRD presence.
+//	GET  /v1/platform/fleet            — the fleet drift board: list every operator
+//	                                     App CR across the platform namespaces, read
+//	                                     declared vs running tag + health from the CR
+//	                                     (+ its status), and attach the drift verdict
+//	                                     (drift.go).
+//	GET  /v1/platform/fleet/:app       — one app row by CR name.
+//	POST /v1/platform/fleet/:app/deploy— zero-downtime ROLLING RESTART of the app's
+//	                                     Deployment (the `kubectl rollout restart`
+//	                                     mechanism): re-pulls the DECLARED image,
+//	                                     recreates pods gracefully. It never changes the
+//	                                     declared TAG (that stays a git commit, the one
+//	                                     thing Hanzo CD's selfHeal reconciles), so there
+//	                                     is no drift to revert. This is `hanzo deploy`.
+//
+// FLEET vs PROJECTS/:project/APPS — two collections, two names. `fleet` is the
+// PLATFORM's own tier (the shared services the platform itself runs on: iam, kms,
+// gateway, …), observed from the operator App CRs. `projects/:project/apps` is a
+// CUSTOMER's apps, owned by platform's own store. They answer different questions,
+// so they carry different names under the one /v1/platform prefix. This file used to
+// be a second top-level product (`/v1/paas`) — the same platform under a second
+// name, which is exactly the duplicate definition the one-way rule forbids.
 //
 // SECURITY — every route is authorized off ONE IAM identity, exactly like the
-// /v1/runner build path (clients/platform/runner.go): the guard admits a validated
-// principal (principal.Validated) who is a SuperAdmin OR an OrgAdmin, and each
-// handler then CONFINES a non-super caller to its own org's platform namespaces
+// /v1/runner build path (runner.go): the guard admits a validated principal
+// (principal.Validated) who is a SuperAdmin OR an OrgAdmin, and each handler then
+// CONFINES a non-super caller to its own org's platform namespaces
 // (scopedNamespaces, keyed on principal.Org — never a client header). A SuperAdmin
 // observes/acts on the whole fleet; an OrgAdmin only on the namespaces its org owns;
 // a plain member or an unauthenticated caller is refused 403. So a tenant admin can
 // never observe — or restart — another org's, or a platform, app, and the platform
-// operator drives the board off a plain `hanzo login` with no shared token. The
-// user-facing per-app PaaS view still lives in console; this is the CLI/operator
-// surface.
+// operator drives the board off a plain `hanzo login` with no shared token.
 //
 // k8s client: built in-process from the in-cluster service account
 // (rest.InClusterConfig) with a KUBECONFIG fallback for local/dev — the identical
-// construction clients/ml uses. When no kubeconfig is resolvable the subsystem
-// mounts anyway and every endpoint fails closed (503 + the real init error; the
-// health route reports "degraded"), never status-theater.
-package paas
+// construction clients/ml uses. When no kubeconfig is resolvable the board mounts
+// anyway and every endpoint fails closed (503 + the real init error; the shared
+// /v1/platform/health route reports "degraded"), never status-theater.
+package platform
 
 import (
 	"context"
@@ -129,7 +134,7 @@ const nsScanTTL = 60 * time.Second
 // which is narrower than the truth — a tenant admin can lose visibility of its own
 // namespace, never gain visibility of someone else's. nsClass still filters, so a
 // namespace that is not ours can never enter the set however discovery goes.
-func discoverNamespaces(s *cloud.Service[state], ctx context.Context) []string {
+func discoverNamespaces(s *cloud.Service[fleetState], ctx context.Context) []string {
 	cache := s.State.scan
 	if cache != nil {
 		cache.mu.Lock()
@@ -190,10 +195,10 @@ var appNameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 // to a floating tag is possible, but the drift board then flags it loudly).
 var imageRepoRE = regexp.MustCompile(`^[a-z0-9][a-z0-9._/-]*[a-z0-9]$`)
 
-const userAgent = "hanzo-cloud-paas"
+const fleetUserAgent = "hanzo-cloud-platform-fleet"
 
-// state is paas's own data; shared deps live in the embedded cloud.Base.
-type state struct {
+// fleetState is the fleet board's own data; shared deps live in the embedded cloud.Base.
+type fleetState struct {
 	dyn     dynamic.Interface // nil when no kubeconfig resolved (fail-closed)
 	initErr string            // why dyn is nil, surfaced by health + ready()
 
@@ -212,54 +217,51 @@ type nsCache struct {
 	at time.Time
 }
 
-// Mount wires the /v1/paas/* surface onto app. Every handler is behind the IAM
-// guard (SuperAdmin or OrgAdmin, org-confined), then reads/patches the operator
-// App CRs + their Deployments.
-func Mount(app cloud.Router, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "paas", build, routes)
-}
-
-// build resolves the in-process k8s dynamic client (fail-closed: when no kubeconfig
-// resolves the subsystem still mounts and every endpoint 503s honestly).
-func build(b cloud.Base) (state, error) {
-	st := state{scan: &nsCache{}}
-	if dyn, err := newDynamic(); err != nil {
+// buildFleet resolves the in-process k8s dynamic client (fail-closed: when no
+// kubeconfig resolves the board still mounts and every endpoint 503s honestly).
+func buildFleet(b cloud.Base) fleetState {
+	st := fleetState{scan: &nsCache{}}
+	if dyn, err := newFleetDynamic(); err != nil {
 		st.initErr = err.Error()
-		b.Log.Warn("kubernetes client unavailable; /v1/paas endpoints will fail closed", "err", err)
+		b.Log.Warn("kubernetes client unavailable; /v1/platform/fleet will fail closed", "err", err)
 	} else {
 		st.dyn = dyn
 	}
-	b.Log.Info("paas control plane mounted",
-		"prefix", "/v1/paas", "k8s", st.dyn != nil, "brand", b.Brand, "env", b.Env)
-	return st, nil
+	b.Log.Info("fleet board mounted",
+		"prefix", "/v1/platform/fleet", "k8s", st.dyn != nil, "brand", b.Brand, "env", b.Env)
+	return st
 }
 
-// routes registers the /v1/paas/* surface. Every mutating/observing route is behind
-// the IAM guard (SuperAdmin or org-confined OrgAdmin); the health probe is public
-// (real k8s reachability).
-func routes(app cloud.Router, s *cloud.Service[state]) {
-	g := app.Group("/v1/paas")
-	g.Get("/apps", guard(s, cloud.Handle(s, listApps)))
-	g.Get("/apps/:app", guard(s, cloud.Handle(s, getApp)))
-	// MUTATION is superadmin-only (operatorGuard), NOT the broader read guard: the
+// fleetRoutes registers the /v1/platform/fleet surface. Every mutating/observing
+// route is behind the IAM guard (SuperAdmin or org-confined OrgAdmin).
+//
+// It is a SIBLING of the /v1/platform/projects/:project/apps surface, not a second
+// copy of it: `fleet` is the platform's OWN service tier (the operator App CRs the
+// platform runs on), `projects/:project/apps` is a CUSTOMER's apps. Two different
+// collections need two different names — calling both "apps" under one prefix would
+// be the duplicate definition this fold exists to remove.
+func fleetRoutes(app cloud.Router, s *cloud.Service[fleetState]) {
+	g := app.Group("/v1/platform/fleet")
+	g.Get("", fleetGuard(s, cloud.Handle(s, listFleet)))
+	g.Get("/:app", fleetGuard(s, cloud.Handle(s, getFleetApp)))
+	// MUTATION is superadmin-only (fleetOperatorGuard), NOT the broader read guard: the
 	// only namespaces this board scans are the platform's OWN tier (hanzo{,-testnet,
 	// -devnet}), so a rolling restart here recreates a SHARED platform service
 	// (iam/kms/gateway/…). Per the 2026-07-08 admin-org P0 a brand-org ("hanzo")
 	// admin is a CUSTOMER-org admin, not a platform operator — restarting prod iam is
 	// a platform-operator action. Gating the read board (below) any wider is bounded
 	// (observe, audit-logged); gating a restart wider is a live DoS lever (RED H1).
-	g.Post("/apps/:app/deploy", operatorGuard(s, cloud.Handle(s, deploy)))
-	g.Get("/health", cloud.Handle(s, health))
+	g.Post("/:app/deploy", fleetOperatorGuard(s, cloud.Handle(s, deployFleet)))
 
 	// Native release seam: install the first-party CR-rollout hook (build.go's
 	// RegisterServiceReleaser inversion) so a proven, clean-semver image rolls onto
 	// its Service CR here — the direct-CR replacement for the image-update.yml
-	// GitOps hop (release.go).
+	// GitOps hop (rollout.go).
 	registerReleaser(s)
 
 	// In-process fleet seam: publish THIS board's observer so the admin god-view
 	// (/v1/admin/products + the overview drift KPIs) reuses the SAME App-CR + drift
-	// observation instead of forking a second k8s client (fleet.go).
+	// observation instead of forking a second k8s client (observer.go).
 	PublishFleet(fleetObserver{s: s})
 }
 
@@ -277,7 +279,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // This mirrors runner.go's org attribution (default to the caller's org, refuse a
 // foreign one) for a READ/RESTART surface. Broadening from SuperAdmin-only lets the
 // platform operator drive the board off a plain `hanzo login` with no shared token.
-func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
+func fleetGuard(s *cloud.Service[fleetState], h zip.Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
 		if !principal.Validated(c) {
 			return zip.ErrForbidden("authentication required (run `hanzo login`)")
@@ -297,7 +299,7 @@ func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 // customer-org admin only"). A validated OrgAdmin who is not a SuperAdmin is refused
 // 403 here, closing the fleet-restart DoS lever (RED H1) while the read board stays
 // on the broader guard.
-func operatorGuard(s *cloud.Service[state], h zip.Handler) zip.Handler {
+func fleetOperatorGuard(s *cloud.Service[fleetState], h zip.Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
 		if !principal.Validated(c) {
 			return zip.ErrForbidden("authentication required (run `hanzo login`)")
@@ -317,7 +319,7 @@ func operatorGuard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 // from the validated principal — never a client header — so it cannot be widened by
 // a forged X-Org-Id. An OrgAdmin whose org owns no scanned namespace gets an empty
 // set (an empty board / a clean 404), never another org's data.
-func scopedNamespaces(s *cloud.Service[state], ctx context.Context, c *zip.Ctx) []string {
+func scopedNamespaces(s *cloud.Service[fleetState], ctx context.Context, c *zip.Ctx) []string {
 	all := discoverNamespaces(s, ctx)
 	if principal.IsSuperAdmin(c) {
 		return all
@@ -340,7 +342,7 @@ func scopedNamespaces(s *cloud.Service[state], ctx context.Context, c *zip.Ctx) 
 // in prod-first scan order. It composes the AUTH confinement (scopedNamespaces) with
 // the optional env SELECTION — orthogonal: env can only narrow WITHIN the caller's
 // own authorized set, never reach outside it.
-func targetNamespaces(s *cloud.Service[state], ctx context.Context, c *zip.Ctx) []string {
+func targetNamespaces(s *cloud.Service[fleetState], ctx context.Context, c *zip.Ctx) []string {
 	nss := scopedNamespaces(s, ctx, c)
 	env := strings.TrimSpace(c.Query("env"))
 	if env == "" {
@@ -400,8 +402,8 @@ type AppView struct {
 // listApps returns the whole fleet's drift board, ordered deterministically
 // (org, app, env). Optional narrowing filters mirror the platform board:
 // ?env=, ?health=, ?drift=1 (only rows that are actually drifting), ?org=.
-func listApps(s *cloud.Service[state], c *zip.Ctx) error {
-	if err := ready(s); err != nil {
+func listFleet(s *cloud.Service[fleetState], c *zip.Ctx) error {
+	if err := fleetReady(s); err != nil {
 		return err
 	}
 	// Observe only the namespaces this caller is authorized for: the whole fleet for
@@ -414,7 +416,7 @@ func listApps(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 
 	env := strings.TrimSpace(c.Query("env"))
-	health := strings.TrimSpace(c.Query("health"))
+	fleetHealth := strings.TrimSpace(c.Query("health"))
 	org := strings.TrimSpace(c.Query("org"))
 	driftOnly := c.Query("drift") == "1" || c.Query("drift") == "true"
 
@@ -424,7 +426,7 @@ func listApps(s *cloud.Service[state], c *zip.Ctx) error {
 		if env != "" && v.Env != env {
 			continue
 		}
-		if health != "" && v.Health != health {
+		if fleetHealth != "" && v.Health != fleetHealth {
 			continue
 		}
 		if org != "" && v.Org != org {
@@ -453,11 +455,11 @@ func listApps(s *cloud.Service[state], c *zip.Ctx) error {
 // getApp returns one service row by CR name. Scans the platform namespaces in
 // env order (main→test→dev) and returns the first match, so the bare app name
 // resolves to production by default.
-func getApp(s *cloud.Service[state], c *zip.Ctx) error {
-	if err := ready(s); err != nil {
+func getFleetApp(s *cloud.Service[fleetState], c *zip.Ctx) error {
+	if err := fleetReady(s); err != nil {
 		return err
 	}
-	name := reqApp(c)
+	name := fleetReqApp(c)
 	if !appNameRE.MatchString(name) {
 		return zip.ErrBadRequest("app must be a DNS-1123 label")
 	}
@@ -467,7 +469,7 @@ func getApp(s *cloud.Service[state], c *zip.Ctx) error {
 			if apierrors.IsNotFound(err) {
 				continue
 			}
-			return k8sErr(s, "get", err)
+			return fleetK8sErr(s, "get", err)
 		}
 		repository, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "repository")
 		return c.JSON(http.StatusOK, observeCR(obj, ns, envOf(ns), runningTagOf(s, c.Context(), ns, name, repository)))
@@ -479,7 +481,7 @@ func getApp(s *cloud.Service[state], c *zip.Ctx) error {
 // authorized set, per scopedNamespaces) and maps each to an AppView. A namespace
 // that does not exist / is empty is skipped, never fatal (the board must still
 // render the reachable namespaces).
-func observeFleet(s *cloud.Service[state], ctx context.Context, namespaces []string) ([]AppView, error) {
+func observeFleet(s *cloud.Service[fleetState], ctx context.Context, namespaces []string) ([]AppView, error) {
 	var views []AppView
 	for _, ns := range namespaces {
 		// Running state: one Deployment list per namespace, indexed by name — the
@@ -493,7 +495,7 @@ func observeFleet(s *cloud.Service[state], ctx context.Context, namespaces []str
 			if apierrors.IsNotFound(err) {
 				continue
 			}
-			return nil, k8sErr(s, "list", err)
+			return nil, fleetK8sErr(s, "list", err)
 		}
 		for i := range list.Items {
 			cr := &list.Items[i]
@@ -535,11 +537,11 @@ const restartedAtAnnotation = "hanzo.ai/restartedAt"
 // Hanzo CD's selfHeal reconciles from universe git, so a tag change is still a git
 // commit (the one way to change WHAT runs). A restart re-runs WHAT IS DECLARED with
 // no drift for CD to revert — the honest, GitOps-compatible "redeploy this app".
-func deploy(s *cloud.Service[state], c *zip.Ctx) error {
-	if err := ready(s); err != nil {
+func deployFleet(s *cloud.Service[fleetState], c *zip.Ctx) error {
+	if err := fleetReady(s); err != nil {
 		return err
 	}
-	name := reqApp(c)
+	name := fleetReqApp(c)
 	if !appNameRE.MatchString(name) {
 		return zip.ErrBadRequest("app must be a DNS-1123 label")
 	}
@@ -564,9 +566,9 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 		if apierrors.IsNotFound(err) {
 			return zip.ErrNotFound("app " + name + " has no Deployment to restart in " + ns)
 		}
-		return k8sErr(s, "restart", err)
+		return fleetK8sErr(s, "restart", err)
 	}
-	s.Log.Info("paas rolling restart", "app", name, "namespace", ns, "restartedAt", restartedAt, "actor", principal.Owner(c))
+	s.Log.Info("fleet rolling restart", "app", name, "namespace", ns, "restartedAt", restartedAt, "actor", principal.Owner(c))
 	return c.JSON(http.StatusAccepted, map[string]any{
 		"ok": true, "app": name, "namespace": ns, "env": envOf(ns), "restartedAt": restartedAt,
 	})
@@ -577,7 +579,7 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 // release path (release.go) uses this — it is a machine rollout with no per-caller
 // identity to confine — so it keeps the full scan. Returns a clean 404 when the App
 // exists in none of them.
-func resolveTarget(s *cloud.Service[state], ctx context.Context, name string) (string, error) {
+func resolveTarget(s *cloud.Service[fleetState], ctx context.Context, name string) (string, error) {
 	return resolveTargetIn(s, ctx, name, scanOrder())
 }
 
@@ -585,43 +587,22 @@ func resolveTarget(s *cloud.Service[state], ctx context.Context, name string) (s
 // identity-scoped deploy/getApp pass the caller's authorized set so an OrgAdmin can
 // never resolve (and thus restart/read) an app outside its own org. An empty list
 // (an OrgAdmin owning no scanned namespace) resolves to a clean 404, never a leak.
-func resolveTargetIn(s *cloud.Service[state], ctx context.Context, name string, namespaces []string) (string, error) {
+func resolveTargetIn(s *cloud.Service[fleetState], ctx context.Context, name string, namespaces []string) (string, error) {
 	for _, ns := range namespaces {
 		if _, err := s.State.dyn.Resource(k8s.Apps).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err == nil {
 			return ns, nil
 		} else if !apierrors.IsNotFound(err) {
-			return "", k8sErr(s, "get", err)
+			return "", fleetK8sErr(s, "get", err)
 		}
 	}
 	return "", zip.ErrNotFound("app " + name + " not found in the platform namespaces")
 }
 
-// ── health ────────────────────────────────────────────────────────────────
-
-// health is a REAL probe: it verifies the API server is reachable and that the
-// App CRD — the kind the fleet runs on, and the kind the board is useless without
-// — is served, and reports the actual state. 200 only when everything is ok; 503
-// + the real reason otherwise (never status-theater). Not admin-gated — liveness
-// must be probe-able by the platform/operator without a JWT.
-func health(s *cloud.Service[state], c *zip.Ctx) error {
-	res := map[string]any{"service": "paas", "status": "ok"}
-	if s.State.dyn == nil {
-		res["status"], res["k8s"], res["error"] = "degraded", false, s.State.initErr
-		return c.JSON(http.StatusServiceUnavailable, res)
-	}
-	if _, err := s.State.dyn.Resource(k8s.Apps).Namespace("hanzo").List(c.Context(), metav1.ListOptions{Limit: 1}); err != nil {
-		res["status"], res["k8s"], res["crd"], res["error"] = "degraded", true, false, err.Error()
-		return c.JSON(http.StatusServiceUnavailable, res)
-	}
-	res["k8s"], res["crd"] = true, true
-	return c.JSON(http.StatusOK, res)
-}
-
 // ── k8s plumbing ────────────────────────────────────────────────────────────
 
-func ready(s *cloud.Service[state]) error {
+func fleetReady(s *cloud.Service[fleetState]) error {
 	if s.State.dyn == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "paas: kubernetes client not configured: %s", s.State.initErr)
+		return zip.Errorf(http.StatusServiceUnavailable, "platform fleet: kubernetes client not configured: %s", s.State.initErr)
 	}
 	return nil
 }
@@ -629,7 +610,7 @@ func ready(s *cloud.Service[state]) error {
 // k8sErr maps a raw API error to an honest gateway-level error. RBAC denials name
 // the missing access so the operator knows exactly what to grant the cloud service
 // account (get/list on apps.hanzo.ai). Mirrors ml.k8sErr.
-func k8sErr(s *cloud.Service[state], op string, err error) error {
+func fleetK8sErr(s *cloud.Service[fleetState], op string, err error) error {
 	s.Log.Error("k8s op failed", "op", op, "resource", k8s.Apps.Resource, "err", err)
 	if apierrors.IsForbidden(err) {
 		return zip.Errorf(http.StatusBadGateway,
@@ -642,7 +623,7 @@ func k8sErr(s *cloud.Service[state], op string, err error) error {
 // newDynamic builds the dynamic client from the in-cluster service account,
 // falling back to KUBECONFIG / ~/.kube/config for local/dev — identical to
 // clients/ml.newDynamic.
-func newDynamic() (dynamic.Interface, error) {
+func newFleetDynamic() (dynamic.Interface, error) {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		cc := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
@@ -652,17 +633,17 @@ func newDynamic() (dynamic.Interface, error) {
 			return nil, fmt.Errorf("no in-cluster config and no kubeconfig: %w", err)
 		}
 	}
-	cfg.UserAgent = userAgent
+	cfg.UserAgent = fleetUserAgent
 	return dynamic.NewForConfig(cfg)
 }
 
 // ── pure mapping helpers (unit-tested without a cluster) ─────────────────────
 
-func reqApp(c *zip.Ctx) string { return strings.ToLower(strings.TrimSpace(c.Param("app"))) }
+func fleetReqApp(c *zip.Ctx) string { return strings.ToLower(strings.TrimSpace(c.Param("app"))) }
 
 // scanOrder returns the platform namespaces in a stable env order (main first),
 // so a bare app-name read/deploy resolves to production before test/dev.
-// Every entry MUST classify under nsClass (asserted in paas_test.go) — nsClass is
+// Every entry MUST classify under nsClass (asserted in fleet_test.go) — nsClass is
 // the one place that decides what a namespace means, and a namespace listed here
 // but unclassified would render rows with an empty tenant, i.e. rows no OrgAdmin
 // could ever be confined to. hanzo-mainnet was missing until 2026-07-25, so its
@@ -720,12 +701,12 @@ func nonEmpty(in []string) []string {
 // inventory.ts healthFromDeployment semantics: desired 0 ⇒ yellow (intentionally
 // scaled to zero, not unhealthy), ready>=desired ⇒ green, some ready ⇒ yellow,
 // none ⇒ red. Empty when the status carries no replica counts yet.
-func healthFromStatus(status map[string]any) string {
-	desired, hasDesired := nestedInt(status, "replicas")
-	ready, _ := nestedInt(status, "readyReplicas")
+func fleetHealthFromStatus(status map[string]any) string {
+	desired, hasDesired := fleetNestedInt(status, "replicas")
+	fleetReady, _ := fleetNestedInt(status, "readyReplicas")
 	if !hasDesired {
 		// Fall back to availableReplicas if the operator only reports that.
-		if avail, ok := nestedInt(status, "availableReplicas"); ok {
+		if avail, ok := fleetNestedInt(status, "availableReplicas"); ok {
 			if avail > 0 {
 				return "green"
 			}
@@ -736,10 +717,10 @@ func healthFromStatus(status map[string]any) string {
 	if desired == 0 {
 		return "yellow"
 	}
-	if ready >= desired {
+	if fleetReady >= desired {
 		return "green"
 	}
-	if ready > 0 {
+	if fleetReady > 0 {
 		return "yellow"
 	}
 	return "red"
@@ -772,7 +753,7 @@ func observeCR(obj *unstructured.Unstructured, namespace, env, runningTag string
 		DeclaredTag: declaredTag,
 		RunningTag:  runningTag,
 		LatestTag:   "", // GH-release reader is a follow-up phase (release-reader.ts)
-		Health:      healthFromStatus(status),
+		Health:      fleetHealthFromStatus(status),
 		Phase:       phase,
 		Cluster:     "hanzo-k8s",
 		Namespace:   namespace,
@@ -786,7 +767,7 @@ func observeCR(obj *unstructured.Unstructured, namespace, env, runningTag string
 // later matches against the CR's declared repo, in runningTagOf; here we index by
 // name and keep the first container's tag as the default). Best-effort: any list
 // error yields an empty map so the board still renders declared/health/phase.
-func runningTagsIn(s *cloud.Service[state], ctx context.Context, namespace string) map[string]string {
+func runningTagsIn(s *cloud.Service[fleetState], ctx context.Context, namespace string) map[string]string {
 	out := map[string]string{}
 	list, err := s.State.dyn.Resource(k8s.Deployments).Namespace(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -805,7 +786,7 @@ func runningTagsIn(s *cloud.Service[state], ctx context.Context, namespace strin
 // whose image repo equals the CR's declared repo (so a sidecar like replicate/otel
 // is never mistaken for the app), falling back to the first container. Mirrors
 // inventory.ts runningTagFromDeployment. Best-effort: any error → "".
-func runningTagOf(s *cloud.Service[state], ctx context.Context, namespace, name, declaredRepository string) string {
+func runningTagOf(s *cloud.Service[fleetState], ctx context.Context, namespace, name, declaredRepository string) string {
 	d, err := s.State.dyn.Resource(k8s.Deployments).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return ""
@@ -815,7 +796,7 @@ func runningTagOf(s *cloud.Service[state], ctx context.Context, namespace, name,
 
 // nestedInt reads an integer-valued key from an unstructured map, tolerating the
 // int64/float64 the k8s decoder may produce.
-func nestedInt(m map[string]any, key string) (int, bool) {
+func fleetNestedInt(m map[string]any, key string) (int, bool) {
 	if m == nil {
 		return 0, false
 	}

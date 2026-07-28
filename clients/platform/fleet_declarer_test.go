@@ -1,4 +1,4 @@
-package paas
+package platform
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 // TestAppsGVR pins the operator App CR identity — the kind the fleet runs on. A
 // typo here silently blinds the whole board, exactly as reading only `services`
 // did (7 rows rendered for a 69-app fleet).
-func TestAppsGVR(t *testing.T) {
+func TestFleetAppsGVR(t *testing.T) {
 	want := schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "apps"}
 	if k8s.Apps != want {
 		t.Fatalf("k8s.Apps = %v, want %v", k8s.Apps, want)
