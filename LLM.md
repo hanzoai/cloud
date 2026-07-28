@@ -1156,3 +1156,46 @@ what proves the debit is real rather than cosmetic); and one org's spend never m
 another's ledger. The specs are `describe.configure({mode:'serial'})` — not by
 preference, but because they all move the same balance and the suite is otherwise
 `fullyParallel`.
+
+## Encryption at rest: cek is the gate, and per-principal binding is not done yet
+
+`cek.Open` is the ONE encryption-at-rest gate — ~50 stores, plus IAM's identity store
+(`clients/iam.openStore`, which previously opened through `iamserver.OpenSQLite` and
+left `iam/iam2.db` beginning with the literal `SQLite format 3` magic). If you add a
+store, open it through cek; if a store is not in the envelope it has no `.dek` sidecar
+beside it, and that absence is the check worth running on any new data dir:
+
+    find $DATA_DIR -name '*.db' -printf '%P\n' | while read -r r; do
+      printf '%-40s dek=%s\n' "$r" "$([ -f "$DATA_DIR/$r.dek" ] && echo yes || echo NO)"; done
+
+**What cek binds today, and what it does not.** The KEK derives from a random per-file
+id, NOT from the principal:
+
+    KEK = HKDF-SHA256(master, lp("global") || lp(hex(fileID)))
+
+`PrincipalOrg` and `PrincipalUser` — which `hanzoai/sqlite` provides and `commerce`
+uses — appear ZERO times in cloud; `const principalType = sqlitedrv.PrincipalGlobal`
+is the only one. So confidentiality between orgs DOES hold (every file has its own
+random DEK under its own KEK, and one org's key cannot read another's file), but there
+is no BINDING: `OrgDB` knows the validated org slug and discards it one call later at
+`openOrgDB → cek.Open(path)`. A `{db,.dek}` pair is therefore valid in any org's
+directory, so a PV-write adversary could swap two of our own stores between tenants.
+cek's header names this as a deliberate non-goal; it stops being one the moment
+tenant-isolation-under-node-compromise is in scope.
+
+**The shape of the fix, when it is taken up.** Bind BOTH principal and file, so the
+per-file KEK survives:
+
+    KEK = DeriveKey(master, PrincipalOrg, orgSlug + "/" + hex(fileID))
+    AAD = PrincipalAAD(same)
+
+(`SanitizeOrg` guarantees the slug has no "/", so the id stays injective.) It cannot be
+a flag day: every existing sidecar is wrapped under the legacy global derivation, so
+open must try the principal-bound derivation, fall back to legacy on unwrap failure,
+and rewrap the sidecar on success. That is safe because rewrapping touches only the
+sidecar — the DEK and fileID never change and no page is rewritten, the same property
+master-key rotation already relies on — and because a half-migrated fleet reads either
+form. `cek.Open` grows a principal parameter (~50 call sites pass an explicit Global).
+
+**Still outside the envelope:** `tasks/_/default.db`. `hanzoai/tasks`'s `EmbedConfig`
+has no key field, so that one is an upstream change, not a cloud one.
