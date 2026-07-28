@@ -16,7 +16,7 @@ var Apps = []App{
 	{Name: "account", Prefixes: []string{"/v1/commerce/topup/rails", "/v1/commerce/topup/wallet", "/v1/csrf", "/v1/embed-status", "/v1/iam/keys", "/v1/iam/onboard"}},
 	{Name: "iam", Prefixes: []string{"/login/oauth", "/v1/iam"}},
 	{Name: "base", Prefixes: []string{"/v1/base", "/v1/collections", "/v1/waitlist"}},
-	{Name: "o11y", Prefixes: []string{"/v1/o11y"}, Eager: true},
+	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/sentry"}, Eager: true},
 	{Name: "authz", Prefixes: []string{"/v1/authz/check", "/v1/authz/health", "/v1/authz/policies", "/v1/authz/readyz"}},
 	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1/billing/auto-recharge", "/v1/billing/webhooks", "/v1/catalog", "/v1/commerce", "/v1/plans", "/v1/store"}},
 	{Name: "licensing", Prefixes: []string{"/v1/licensing"}},
