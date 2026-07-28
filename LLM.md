@@ -43,29 +43,76 @@ map, not the spec. One noun, one owner, one route family. No plane reads another
 plane's store; imports flow custody-ward only (channels -> integrations, never
 reverse).
 
+Tier is adjudicated by `GET /v1/openapi.json` on the deployment, never by a
+branch name — a branch is deleted at merge, so a row that cites one rots into
+"not built yet" and the next engineer rebuilds a shipped plane. Op counts below
+are the CONCRETE operations that spec names on api.hanzo.ai; they move, the
+ownership does not. A product fronted by a catch-all (`/v1/iam/*` proxies the
+whole identity surface to the IAM service) would make a count a lie by omission,
+so its row says opaque — same rule as "Catch-alls are opaque, by construction".
+
 | Route | Noun | Owner | Tier |
 | --- | --- | --- | --- |
-| `/v1/connectors` | Custody: per-user BYO external accounts | `clients/integrations` (extends; user scope new) | In flight (branch `feat/connectors`) |
-| `/v1/channels` | Transport: portable message envelope, DM pairing, send + inbox | `clients/channels` (new) | Planned (branch `feat/channels` reserved; no transport code yet) |
-| `/v1/sync` | Data: bidirectional sync engine | `clients/sync` | Shipped |
-| `/v1/automations` | Workflows: flows/runs, goja piece runtime | `clients/automations` | Shipped |
-| `/v1/compute/bots` | Hosting: `@hanzo/bot` Node containers | `clients/bots` | Shipped |
-| `/v1/tasks` | Durable engine | `clients/tasks` | Shipped |
-| `/v1/gpus` + fleet | BYO GPU presence | `clients/fleet` + `clients/visor` | Shipped |
-| `/v1/cloud` | Cloud accounts: link DO/AWS/GCP/Azure, discover native k8s clusters, fold into the fleet | `clients/venue` (new) | In flight (branch `feat/cloud-account-connectors`; blue-held for red) |
-| `/v1/blueprint` | Cost: OSS-template SBOM (compose→images) + compute-cost estimate | `clients/blueprint` (new) | Shipped |
-| IAM | Identity: users, orgs, roles | IAM | Shipped |
-| KMS | Secret custody: sealed secrets | `clients/kms` | Shipped |
+| `/v1/connectors` | Custody: per-user BYO external accounts | `clients/integrations` (both planes; user scope) | Shipped — 8 ops |
+| `/v1/channels` | Transport: portable message envelope, DM pairing, send + inbox | `clients/channels` | Shipped — 8 ops |
+| `/v1/sync` | Data: bidirectional sync engine | `clients/sync` | Shipped — 7 ops |
+| `/v1/automations` | Workflows: flows/runs, goja piece runtime | `clients/automations` | Shipped — 20 ops |
+| `/v1/bots` | A bot RUN on a surface | `clients/bots` | Shipped — 4 ops |
+| `/v1/compute/bots` | A bot MACHINE (kind=bot + agent binding) | `clients/visor` — NOT `clients/bots` | Shipped — 5 ops |
+| `/v1/tasks` | Durable engine | `clients/tasks` | Shipped — 11 ops |
+| `/v1/machines` `/v1/gpus` `/v1/fleet` `/v1/clusters` `/v1/k8s` `/v1/compute` | Compute: provisioned + BYO machines, GPUs, k8s clusters | `clients/visor` (+ `clients/fleet` registry) | Shipped — 33 ops |
+| `/v1/cloud` | Cloud accounts: link DO/AWS/GCP/Azure, discover native k8s clusters, fold into the fleet | `clients/venue` | Shipped — 5 ops |
+| `/v1/blueprint` | Cost: OSS-template SBOM (compose→images) + compute-cost estimate | `clients/blueprint` | Shipped — 3 ops |
+| `/v1/iam` | Identity: users, orgs, roles | `clients/iam` | Shipped — opaque (catch-all, see below) |
+| `/v1/kms` | Secret custody: sealed secrets | `clients/kms` | Shipped — 7 ops |
 
-Custody invariants: secrets sealed in KMS at
-`/orgs/{org}/users/{user}/connectors/{provider}/{label}`, never in SQLite rows;
-verify before store. Refresh is single-flight with rotation resealing; the CLI
-does local browser PKCE and posts the bundle to
-`POST /v1/connectors/:provider/credential`; cloud owns device-code flows.
+`/v1/bots` and `/v1/compute/bots` are two nouns with two owners; the row above
+pairs each with the package that REGISTERS it. Pairing `/v1/compute/bots` with
+`clients/bots` is the merge "Bot is three values" (below) exists to forbid.
+
+Custody invariants: secrets sealed in KMS, never in SQLite rows; verify before
+store. Two scopes, two paths, one rule — the path is built from the VALIDATED
+principal, never a client field:
+
+    /orgs/{org}/users/{user}/connectors/{provider}/{label}   per-user (integrations)
+    /orgs/{org}/cloud/{provider}/{label}                     per-org  (venue)
+
+Refresh is single-flight with rotation resealing; the CLI does local browser
+PKCE and posts the bundle to `POST /v1/connectors/:provider/credential`; cloud
+owns device-code flows.
 
 Transport invariants: typed actions (`command|url|select|approval`), no raw
 string sniffing; pairing codes 8 chars, 1h TTL, max 3 pending per account,
 owner bootstrap on first approval.
+
+### Folding a cloud account's k8s clusters into the fleet — the ONE way
+
+An org's own DigitalOcean/AWS/GCP clusters reach the fleet by exactly three
+calls. There is no second cluster registry and no import path that skips them:
+
+1. **Link** — `POST /v1/cloud/{provider}/accounts` (body carries the credential;
+   `label` defaults to `default`). Verifies the credential LIVE, seals it in the
+   org's KMS namespace, discovers the account's clusters and folds them.
+2. **Re-sync** — `POST /v1/cloud/{provider}/accounts/{label}/sync` re-discovers
+   and re-folds that one account. This is the ONLY refresh verb; it is
+   idempotent and acts on the fleet shard recorded at link time.
+3. **Read** — `GET /v1/clusters`. Discovered clusters appear here beside managed
+   (visor-provisioned) and BYO (hand-pasted kubeconfig) ones and run work
+   identically. `DELETE /v1/cloud/{provider}/accounts/{label}` detaches them and
+   forgets the credential.
+
+Discovery ends at `fleet.Register` — exactly where `visor.attachCluster` ends —
+which is what makes "discovered" and "attached" the same kind of cluster
+afterwards. Do not add a cluster store; extend the fold.
+
+**`visor` is an agent name, not a query surface.** `clients/visor` OWNS the
+compute plane, but it serves it at the nouns above (`/v1/machines`,
+`/v1/clusters`, `/v1/gpus`, `/v1/fleet`, `/v1/k8s`, `/v1/compute`) — never under
+`/v1/visor`. The only live `/v1/visor` route is `GET /v1/visor/health`, and that
+one is not visor's: `serve.go` auto-mounts `/v1/<name>/health` for every
+subsystem that does not set `OwnsHealth`. So do not look for the fleet under
+`/v1/visor/*` and do not mount anything there — the node-side agent reports
+presence, and presence is read back at `/v1/fleet`.
 
 Container boundary is permanent for native-module, host-filesystem, loop-state,
 and vendor-Node work (agent loop, exec/PTY, harnesses, browser, voice, codecs,
@@ -73,8 +120,10 @@ Node-bound channels, plugin SDK/loader). The Node plugin SDK is never ported to
 Go; cloud extensibility is connectors/automations/tools.
 
 Port roadmap (P1-P15) lives in HIP-0129; do not restate it here. Every claim
-carries its tier: Shipped (on main, named package/route), In flight (named
-pre-main branch), Planned (backlog id or named reservation).
+carries its tier, and Shipped is the only one with durable evidence — a named
+package plus a route in the live spec. In flight/Planned cite a branch or a
+backlog id, both of which disappear on merge, so re-check either against
+`/v1/openapi.json` before believing it and promote the row when it answers.
 
 ## Build & module graph — standalone module, NOT a go.work member
 
@@ -254,9 +303,13 @@ embedded underneath.
   and every other function in `openapi/` is a pure function of that `[]Route`.
   There is NO checked-in spec file to hand-maintain and no second registry. The
   drift guard is `cmd/cloud/openapi_test.go`: a BIJECTION over the fully-mounted
-  `apps.Wire()` (983 operations / 692 paths / 109 products) — every live route
-  appears as an operation, every operation is backed by a live route. It is the
-  only test whose failure means the document lies.
+  `apps.Wire()` — every live route appears as an operation, every operation is
+  backed by a live route. It is the only test whose failure means the document
+  lies. The test LOGS its size and pins only the bijection, so never quote that
+  size as a fact here: it grows every time a subsystem gains a route, and a
+  quoted count is stale the next week (api.hanzo.ai measured 1467 operations /
+  1064 paths / 167 products against a doc that still claimed 983/692/109). Count
+  the live spec when you need a number.
 - **Reading the LIVE router is the only total source.** `POST /v1/kms/auth/login`
   is registered as `Group("/v1/kms/auth").Post("/login")` — no grep can find that
   path; only the assembled router knows it. And the route set is a function of
@@ -647,11 +700,12 @@ validated principal who is SuperAdmin OR OrgAdmin, then each handler CONFINES a 
 caller to the platform namespaces its own validated org owns (`scopedNamespaces`, keyed on
 `principal.Org` — a tenant admin can never observe/restart another org's, or a platform,
 app; `?org=` cannot widen it). The rolling restart needs `patch` on `apps/deployments`
-(ClusterRole/cloud, universe `infra/k8s/cloud/rbac.yaml`). There is NO `/v1/apps`,
-`/v1/org/{org}/cluster`, or `/v1/platform/projects` CLI path — the first two never existed
-here (TS-Dokploy contract, 404), and `/v1/platform/*` needs a co-resident IAM store this
-deployment does not fold in (IAM runs as a separate svc) so it 500s; the live apps backend
-is `/v1/paas`, whose board reads k8s directly with no IAM-store dependency.
+(ClusterRole/cloud, universe `infra/k8s/cloud/rbac.yaml`). There is NO `/v1/apps` or
+`/v1/org/{org}/cluster` CLI path — both are the TS-Dokploy contract, never served here
+(404 live). `/v1/platform/*` IS served (29 paths live, projects + apps + sites) and no
+longer 500s on a missing co-resident IAM store — it answers the ordinary gate
+(`403 {"error":"X-Org-Id required"}` unauthenticated). The CLI still targets `/v1/paas`
+for the apps board, which reads k8s directly with no IAM-store dependency.
 
 ## GTM: `/v1/campaign` orchestration → channels → connectors → analytics
 
