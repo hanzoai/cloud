@@ -198,7 +198,7 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     set -eu; mkdir -p /plugins; \
-    names="$(grep -o 'PluginSpec("[a-z0-9-]*"' apps/apps.go | cut -d'"' -f2 | sort -u)"; \
+    names="$(grep -o 'PluginSpec("[a-z0-9-]*"' apps/apps.go | cut -d'"' -f2 | sort -u || true)"; \
     [ -n "$names" ] || { echo "FATAL: no PluginSpec found in apps/apps.go — the derivation broke, not the plugin list"; exit 1; }; \
     for p in $names; do \
       [ -d "./cmd/$p" ] || { echo "FATAL: plugin '$p' is declared in Wire but has no cmd/$p"; exit 1; }; \
