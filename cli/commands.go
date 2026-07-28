@@ -47,7 +47,7 @@ func newTab(w io.Writer) *tabwriter.Writer {
 }
 
 // ---------------------------------------------------------------------------
-// apps — the fleet drift board (GET /v1/paas/apps). Org-confined server-side by
+// apps — the fleet drift board (GET /v1/platform/fleet). Org-confined server-side by
 // the IAM identity: a superadmin sees the whole fleet, an org-admin only its own.
 // ---------------------------------------------------------------------------
 
@@ -131,7 +131,7 @@ func newAppsCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 }
 
 // ---------------------------------------------------------------------------
-// deploy — POST /v1/paas/apps/{app}/deploy: a zero-downtime rolling restart.
+// deploy — POST /v1/platform/fleet/{app}/deploy: a zero-downtime rolling restart.
 // ---------------------------------------------------------------------------
 
 func newDeployCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {

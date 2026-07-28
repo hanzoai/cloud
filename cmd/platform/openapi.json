@@ -58,7 +58,7 @@
         ]
       }
     },
-    "/v1/platform/fleet/": {
+    "/v1/platform/fleet": {
       "get": {
         "operationId": "get_v1_platform_fleet",
         "tags": [

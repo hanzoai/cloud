@@ -22,6 +22,9 @@
     },
     {
       "name": "iam"
+    },
+    {
+      "name": "keys"
     }
   ],
   "paths": {
@@ -82,6 +85,26 @@
         "operationId": "post_v1_iam_onboard",
         "tags": [
           "iam"
+        ]
+      }
+    },
+    "/v1/keys": {
+      "delete": {
+        "operationId": "delete_v1_keys",
+        "tags": [
+          "keys"
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_keys",
+        "tags": [
+          "keys"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_keys",
+        "tags": [
+          "keys"
         ]
       }
     }
