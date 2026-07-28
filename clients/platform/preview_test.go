@@ -28,7 +28,7 @@ func crImage(t *testing.T, k *k8sClient, ns, name string) string {
 // seedImageApp creates a project + image-source app for the org (helper).
 func seedImageApp(t *testing.T, app *zip.App, org, project, name string) {
 	t.Helper()
-	do(t, app, http.MethodPost, "/v1/platform/projects", org, map[string]any{"name": project})
+	seedProject(t, app, org, project)
 	code, body := do(t, app, http.MethodPost, "/v1/platform/projects/"+project+"/apps", org, map[string]any{
 		"name": name, "source": "image",
 		"image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1"},
