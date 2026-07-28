@@ -56,9 +56,11 @@ import (
 
 	iamserver "github.com/hanzoai/iam/server"
 	"github.com/hanzoai/orm"
+	ormdb "github.com/hanzoai/orm/db"
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/cek"
 )
 
 // Prefixes are the canonical absolute prefixes the IAM identity surface owns —
@@ -105,7 +107,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return nil
 	}
 
-	db, err := iamserver.OpenSQLite(dbPath)
+	db, err := openStore(dbPath)
 	if err != nil {
 		log.Error("iam store open failed — serving fail-closed 503 (cloud stays up; standalone iam pod unaffected)", "err", err, "path", dbPath)
 		mountFailClosed(app)
@@ -138,6 +140,53 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	log.Info("iam embedded in-process (clean iam-v2, zip-native + hanzoai/orm — Casdoor iam-v1 retired)", "db", dbPath, "prefixes", Prefixes)
 	return nil
+}
+
+// openStore opens IAM's store through cek — the SAME encryption-at-rest gate every
+// other cloud store opens through — and layers the ORM over that handle.
+//
+// It replaces iamserver.OpenSQLite, which builds its own pool from a plain path and
+// has no key to give it: orm's SQLiteDBConfig carries no master key, so that path
+// wrote `iam/iam2.db` with the literal `SQLite format 3` header — every identity, org
+// membership, and credential hash readable from a lifted PV snapshot or an in-cluster
+// volume read. That is precisely the exposure cek exists to remove, and cek's own doc
+// claims "encrypted at rest is a property of the open path"; this store was the
+// counterexample. The hashes are argon2id, so a lifted file was never a password
+// disclosure — but the identity graph and every credential record were in the clear.
+//
+// No new crypto: cek mints the per-file DEK, wraps it, migrates any existing plaintext
+// file in place and shreds the plaintext copy once the encrypted store is proven
+// readable, exactly as it does for ~50 other stores. ONE envelope, one owner.
+//
+// ONE connection serves reads and writes, which is what AdaptSQLDB documents and what
+// every per-org store already does (OrgDB pins MaxOpenConns(1)). It is also required
+// rather than merely tidy: on a pure-Go build the codec envelope is single-writer, so
+// a second pool over the same keyed file is not an option to begin with.
+func openStore(path string) (orm.DB, error) {
+	conn, err := cek.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("iam: open store: %w", err)
+	}
+	// The same serialized-writer + WAL posture openOrgDB applies. cek returns a keyed
+	// handle, not a configured one, so the pragmas are the caller's to set — and
+	// iamserver.OpenSQLite used to set them via its own config.
+	conn.SetMaxOpenConns(1)
+	for _, pragma := range []string{
+		"PRAGMA busy_timeout=5000",
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA foreign_keys=ON",
+	} {
+		if _, err := conn.Exec(pragma); err != nil {
+			_ = conn.Close()
+			return nil, fmt.Errorf("iam: pragma %q: %w", pragma, err)
+		}
+	}
+	sdb, err := ormdb.AdaptSQLDB(conn)
+	if err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("iam: adapt store: %w", err)
+	}
+	return orm.AdaptDB(sdb), nil
 }
 
 // paths derives IAM's SQLite file and init_data.json path from cloud.Deps. The store
