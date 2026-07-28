@@ -1,7 +1,7 @@
 // Package flags is cloud's NATIVE feature-flag engine: definitions live in
 // per-(org, project) SQLite (cloud.OrgDB — {DataDir}/orgs/{org}/projects/{project}/
 // flags.db, encrypted at rest via cek) and evaluation runs in-process through the
-// embedded hanzo-flags Rust evaluator (native/flags, FFI) with PostHog-compatible
+// embedded hanzo-flags evaluator (github.com/hanzoai/flags/go) with PostHog-compatible
 // semantics: rollout hash, full property-operator set, variants, payloads. Stateless
 // and scalable by construction — no KV, no network hop, every pod evaluates from its
 // own hot in-memory copy of the definitions.
@@ -19,9 +19,8 @@
 //     behavior, zero regression; the first cockpit write creates the definition
 //     and takes effect within one cache TTL (default 15s), no redeploy.
 //
-// FAIL-SAFE. When the native engine is absent (!cgo) or a store read fails,
-// evaluation degrades to env fallback -> literal default and the HTTP surface says
-// so honestly — never fail-wrong.
+// FAIL-SAFE. When a store read fails, evaluation degrades to env fallback ->
+// literal default and the HTTP surface says so honestly — never fail-wrong.
 //
 // ── THE POLICY PRIMITIVE ─────────────────────────────────────────────────────────
 //
@@ -150,11 +149,11 @@ type Client struct {
 
 var mounted *Client
 
-func (c *Client) configured() bool { return c != nil && c.stores != nil && engineAvailable }
+func (c *Client) configured() bool { return c != nil && c.stores != nil }
 
-// evaluateProject runs the native engine over one (org, project) store for one
+// evaluateProject runs the engine over one (org, project) store for one
 // evaluation context. The definitions read is a local SQLite scan; the evaluation
-// is a pure in-memory FFI call.
+// is a pure in-memory function call.
 func (c *Client) evaluateProject(org, project string, ctx []byte) (json.RawMessage, error) {
 	if !c.configured() {
 		return nil, fmt.Errorf("flags: engine not configured")
@@ -429,7 +428,7 @@ type state struct {
 }
 
 // Mount opens the per-org definition stores, installs the process-wide evaluation
-// seam, and registers the /v1/flags surface. The native engine being absent (!cgo)
+// seam, and registers the /v1/flags surface. A store that cannot be opened
 // degrades every switch to env/default and the HTTP surface reports it — never an
 // error at boot.
 func Mount(app cloud.Router, deps cloud.Deps) error {
@@ -454,7 +453,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	b := cloud.NewBase(deps, "flags")
 	svc := &cloud.Service[state]{Base: b, State: state{client: c}}
 	routes(app, svc)
-	log.Info("flags engine ready", "engine", "hanzo-flags", "native", engineAvailable, "ttlSeconds", int(c.ttl.Seconds()), "switches", len(Defs()))
+	log.Info("flags engine ready", "engine", "hanzo-flags", "ttlSeconds", int(c.ttl.Seconds()), "switches", len(Defs()))
 	return nil
 }
 

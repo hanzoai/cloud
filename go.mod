@@ -16,6 +16,7 @@ require (
 	github.com/hanzoai/account v0.2.0
 	github.com/hanzoai/commerce v1.49.25
 	github.com/hanzoai/decimal v0.1.1
+	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
 	github.com/hanzoai/iam v1.33.26
 	github.com/hanzoai/kafka v1.2.1
