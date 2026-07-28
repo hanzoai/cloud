@@ -67,6 +67,7 @@ and reports this 5-route plane as 29. Two products, one string prefix.
 | `/v1/machines` `/v1/gpus` `/v1/fleet` `/v1/clusters` `/v1/k8s` `/v1/compute` | Compute: provisioned + BYO machines, GPUs, k8s clusters | `clients/visor` (+ `clients/fleet` registry) | Shipped — 33 ops |
 | `/v1/cloud` | Cloud accounts: link DO/AWS/GCP/Azure, discover native k8s clusters, fold into the fleet | `clients/venue` | Shipped — 5 ops |
 | `/v1/blueprint` | Cost: OSS-template SBOM (compose→images) + compute-cost estimate | `clients/blueprint` | Shipped — 3 ops |
+| `/v1/templates` | Starter kits: ONE entry per template, shapes as variants | `clients/templates` | Shipped — 2 ops |
 | `/v1/iam` | Identity: users, orgs, roles | `clients/iam` | Shipped — opaque (catch-all, see below) |
 | `/v1/kms` | Secret custody: sealed secrets | `clients/kms` | Shipped — 7 ops |
 
@@ -591,6 +592,29 @@ routing itself, because that is where a customer's project would leak.
 `index.Reconcile` is `index.Query`'s mirror and the only in-process WRITE seam: a
 full-corpus swap (upsert everything, delete what is gone) because the truth lives
 upstream and a re-run must converge.
+
+## Starter kits (`clients/templates`, `/v1/templates`)
+
+One embedded catalog, read-only, and **one template is one entry**. The shapes a
+template ships in — FORMAT (`-html`/`-react`/`-bootstrap`), PAGE (folio's
+about/contact/grid-3-fluid) and THEME — are `variants` inside that entry, chosen
+at fork time: `POST /v1/projects/fork {"slug":"prism","variant":"react"}`.
+
+Spending a slug per shape is what the catalog used to do, and it cost more than
+tidiness: one portfolio kit held 26 rows, and because a multi-page kit's "variant"
+IS its page-list index, two of those rows deployed demos that rendered a bare
+column of links — byte-identical to each other. The catalog also carried the same
+72 templates TWICE, under two naming generations of hanzoai/gallery (upstream
+`brainwave`/`xora-react` vs Hanzo `synapse`/`prism-react`); they join 1:1 on the
+gallery `id`, which is how 141 rows became 44.
+
+`Template.Variant(id)` is the ONE resolution rule — no preference yields the
+default shape, a single-shape template answers with itself — so no caller
+branches on `len(Variants)`. A non-default shape carries its id into the derived
+project slug (`prism` + `react` → `prism-react`) so two shapes coexist in an org;
+`ForkedFrom` still records the template, because a shape is not another parent.
+`TestVariantsAreOptionsNotSiblings` forbids the regression: no variant id may
+also be a catalog slug.
 
 ## Fetching the web (`clients/crawl`, `/v1/crawl`)
 
