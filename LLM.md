@@ -912,6 +912,48 @@ migration silently strips request shapes from every generated CLI and SDK.
 
 ## Cross-subsystem seams that are values, not places
 
+- **AN AGGREGATOR CALLS; IT DOES NOT IMPORT.** Apps are separate binaries, so a Go
+  import can no longer reach another app's data — `treasury.ReserveCents()`
+  compiles inside `apps/admin` and returns the zero value, because treasury never
+  mounts there. Every such read was silently blank AND cost the caller the whole
+  dependency graph to be blank. The ONE replacement is the internal plane
+  (`dial.go` + `rpc.go`): native ZAP frames over the callee's unix socket, no
+  HTTP, no network fallback, no second scheme.
+
+      out, err := cloud.Dial("commerce").As(c).Call(ctx, "finance.balance", payload)
+
+  `As(h)` delegates the caller's principal (anything with `Header(string) string`;
+  a `*zip.Ctx` satisfies it — and `core.Admit(ctx)` RETURNS one, so an admin op
+  has it already). `For(org)` names the tenant when there is no request to
+  delegate from, which is the background-loop case. A missing socket is an
+  ERROR — "that app is not running here" — never a zero value, which is exactly
+  the lie the imports told. Serving side: `cloud.Expose("<app>.<verb>", fn)` from
+  the app's Mount, `cloud.Ident` for the delegated principal, `cloud.Fault(status,
+  msg)` for a refusal the caller sees verbatim (402 vs 403 vs 404 vs 503).
+- **One socket path, named once.** `cloud.PeerSocket(app)` →
+  `{CLOUD_RUN_DIR | CLOUD_DATA_DIR/run | /run/hanzo}/<app>.sock`, and it is the
+  SAME function `serve.go` binds and `Call` resolves, so a server and its callers
+  cannot disagree about where an app lives. A lazily-spawned plugin binds it on
+  boot, so `Dial` reaches a child the host started on demand. Directory 0700,
+  socket 0600: the filesystem is the reachable surface and the kernel enforces who
+  may connect, which is why a forwarded principal is sound here and would not be
+  over a network.
+- **The org rides the CAPABILITY, never the payload.** Every org-scoped method
+  takes its tenant from `who.Org` (the envelope's capability slot) and refuses an
+  empty one. Do not add an org field to a request payload — a caller that can name
+  its own org can name another tenant's books. Prefer making it UNREPRESENTABLE
+  over validating it away: `finance.balance` carries `(subject, currency)` and has
+  no org field at all, so there is no check to forget. `rpc_tenant_test.go` proves
+  this adversarially against the real transport, and the property is live —
+  an org-less call to a running deployment answers
+  `403: balance: no org on the capability`.
+- **Wire contracts live in `payloads.go`, imported by BOTH ends.** Hand-written ZAP
+  in wire layout, never JSON; scalars ride `PutI64`/`I64`, repeated records travel
+  as inner frames (see `PutFiles`/`Files`). Putting the request/reply structs in
+  the OWNING app instead is what made `apps/billing` import `apps/commerce` to name
+  two structs — 1246 packages for a DTO. One definition, neither end importing the
+  other. Measured: `plugin/admin` 2261 → 1115 packages, `apps/billing` 1246 → 945,
+  and two boards that had been reporting zeros started reporting the truth.
 - **The per-principal MCP plane is callable in-process.** `apps/automations`
   decomplects tool dispatch from its front doors: `dispatchTool` is the ONE core
   (resolve `<connector>_<action>` → run with a Token bound to the VALIDATED org),
