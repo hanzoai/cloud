@@ -2,7 +2,9 @@
 // document. The spec is not a description of the router — it IS the router,
 // read through app.Fiber().GetRoutes() at request time. There is no checked-in
 // spec file and no second route registry, so the document cannot drift: the only
-// way to change it is to change the routes it is read from.
+// way to change it is to change the routes it is read from. (Register adds a
+// registry of BODIES, never of routes: a declared schema renders only on a route
+// the router carries, so the paths remain the router's alone.)
 //
 // This mirrors the rule zapface/wire.go states for transports — two transports,
 // ONE dispatch path. ZAP and OpenAPI are two PROJECTIONS of one route table.
@@ -154,9 +156,16 @@ type Tag struct {
 	Name string `json:"name"`
 }
 
-// Schema is the sliver of JSON Schema this generator can honestly assert.
+// Schema is the sliver of JSON Schema this generator can honestly assert:
+// primitive types for path parameters, and — for routes whose subsystem
+// declared its bodies via Register — objects, arrays, and $refs derived by
+// reflection from the handler's own binding structs.
 type Schema struct {
-	Type string `json:"type"`
+	Type                 string             `json:"type,omitempty"`
+	Ref                  string             `json:"$ref,omitempty"`
+	Items                *Schema            `json:"items,omitempty"`
+	Properties           map[string]*Schema `json:"properties,omitempty"`
+	AdditionalProperties *Schema            `json:"additionalProperties,omitempty"`
 }
 
 // Parameter is an OpenAPI parameter object. Only PATH parameters are emitted:
@@ -172,15 +181,20 @@ type Parameter struct {
 
 // Operation is one operation.
 //
-// There is no Responses field, and that is an honest answer rather than a gap.
-// OpenAPI 3.1 makes `responses` OPTIONAL (3.0 required it), so omitting it is
-// valid — and a fabricated `200: {description: ok}` on ~900 routes would assert
-// a status code and content type this generator has no evidence for. Absent
-// beats invented.
+// RequestBody and Responses appear ONLY for routes whose owning subsystem
+// declared its body types via Register — reflection over the very structs the
+// handler binds, so a stated schema cannot drift from the code either. For
+// every other route both stay absent, and that is an honest answer rather than
+// a gap: OpenAPI 3.1 makes `responses` OPTIONAL (3.0 required it), and a
+// fabricated `200: {description: ok}` on ~900 routes would assert a status
+// code and content type this generator has no evidence for. Absent beats
+// invented; Register is how a subsystem supplies the evidence.
 type Operation struct {
-	OperationID string      `json:"operationId"`
-	Tags        []string    `json:"tags,omitempty"`
-	Parameters  []Parameter `json:"parameters,omitempty"`
+	OperationID string               `json:"operationId"`
+	Tags        []string             `json:"tags,omitempty"`
+	Parameters  []Parameter          `json:"parameters,omitempty"`
+	RequestBody *RequestBody         `json:"requestBody,omitempty"`
+	Responses   map[string]*Response `json:"responses,omitempty"`
 }
 
 // PathItem maps a lowercased HTTP method to its operation.
@@ -212,7 +226,12 @@ type PathItem map[string]*Operation
 //     types it unmarshals internally. cloud.Handle[S] does not help: its type
 //     parameter S is the SERVICE (service.go:90), not the payload. cloud.Typed
 //     does not help either: it is an any→*zip.App mount adapter.
-//   - response body schema / status codes — same dead end, at the far end.
+//     What cannot be DERIVED can still be DECLARED: Register (register.go) is
+//     the seam a subsystem uses to state its binding structs once, next to its
+//     route table, and the schema is reflected from those structs.
+//   - response body schema / status codes — same dead end, at the far end,
+//     with the same declaration seam (the success shape under a "2XX" range,
+//     because the exact code lives in the handler body).
 //   - query and header parameters — read positionally via c.Query("k") at
 //     runtime; not part of the match, so the router has never heard of them.
 //   - auth requirements — enforced by middleware and by guards wrapped around
@@ -234,12 +253,19 @@ type PathItem map[string]*Operation
 // cannot typecheck a request body or pretty-print a response from it, and behind
 // a catch-all it cannot enumerate subcommands at all.
 //
-// The path to schemas is not a better reader; it is zip's typed ops
-// (zip.Get[In,Out]) which carry the In/Out Go types. Every handler migrated to a
-// typed op earns real schema — and an MCP tool, from the same registry (zip's
-// THIRD projection, zip/mcp.go). That is a per-handler refactor of business
-// logic, not a generator change, and it composes with this: GetRoutes() already
-// includes typed ops, so migration adds detail without changing the pipeline.
+// The path to schemas is not a better reader. Two seams exist, both anchored in
+// the handler's own Go types so neither can drift:
+//
+//   - Register (register.go): a subsystem declares its binding structs for a
+//     route it already serves — no handler change, schema by reflection. A
+//     registration renders ONLY when the router carries the route, so the
+//     document still cannot disagree with the router; schemas are additive
+//     metadata on routes that exist.
+//   - zip's typed ops (zip.Get[In,Out]), which carry the In/Out types in the
+//     handler signature itself and also earn an MCP tool from the same registry
+//     (zip's THIRD projection, zip/mcp.go). That is a per-handler refactor of
+//     business logic, and it composes with this: GetRoutes() already includes
+//     typed ops, so migration adds detail without changing the pipeline.
 //
 // # Chained handlers are not collisions
 //
@@ -268,19 +294,25 @@ type PathItem map[string]*Operation
 // requirement is that (method, path) → operation stay injective, which From
 // enforces via operationId uniqueness.
 type Document struct {
-	OpenAPI string              `json:"openapi"`
-	Info    Info                `json:"info"`
-	Servers []Server            `json:"servers,omitempty"`
-	Tags    []Tag               `json:"tags,omitempty"`
-	Paths   map[string]PathItem `json:"paths"`
+	OpenAPI    string              `json:"openapi"`
+	Info       Info                `json:"info"`
+	Servers    []Server            `json:"servers,omitempty"`
+	Tags       []Tag               `json:"tags,omitempty"`
+	Paths      map[string]PathItem `json:"paths"`
+	Components *Components         `json:"components,omitempty"`
 }
 
-// From builds the document from route data. Pure — no router, no I/O.
+// From builds the document from route data. No router, no I/O — its inputs are
+// the routes, plus the package registry of declared bodies (Register), which is
+// written only at init time and is therefore fixed by the time any document is
+// built.
 //
 // It refuses on a duplicate operationId rather than emit a document a generator
 // would mis-consume. That check subsumes the only ambiguity the spec can suffer:
 // two routes sharing a (method, path) derive the same id, so an injective
-// (method, path) → operation map is exactly what uniqueness buys.
+// (method, path) → operation map is exactly what uniqueness buys. It refuses
+// equally when two DIFFERENT Go types claim one component name — a silent merge
+// would hand an SDK generator a lie.
 func From(rs []Route, info Info, servers ...Server) (*Document, error) {
 	doc := &Document{
 		OpenAPI: "3.1.0",
@@ -291,6 +323,7 @@ func From(rs []Route, info Info, servers ...Server) (*Document, error) {
 
 	products := map[string]bool{}
 	opIDs := map[string]string{} // operationId → "METHOD path", for the clash message
+	comp := newComponents()
 
 	for _, r := range rs {
 		path, params := translate(r.Path)
@@ -312,10 +345,22 @@ func From(rs []Route, info Info, servers ...Server) (*Document, error) {
 			})
 		}
 
+		// Declared bodies attach ONLY here — to a route the router carries. A
+		// registration without a live route never renders, which is what keeps
+		// the registry unable to contradict the router.
+		if reg := registered(r.Method, r.Path); reg != nil {
+			if err := reg.apply(op, comp); err != nil {
+				return nil, err
+			}
+		}
+
 		if doc.Paths[path] == nil {
 			doc.Paths[path] = PathItem{}
 		}
 		doc.Paths[path][strings.ToLower(r.Method)] = op
+	}
+	if len(comp.schemas) > 0 {
+		doc.Components = &Components{Schemas: comp.schemas}
 	}
 
 	for p := range products {
