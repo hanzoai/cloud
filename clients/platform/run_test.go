@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"github.com/hanzoai/cloud/clients/principal"
 	"context"
 	"encoding/json"
 	"github.com/hanzoai/cloud/clients/k8s"
@@ -20,6 +21,8 @@ import (
 func TestRunCreatesAutoscaledServiceCR(t *testing.T) {
 	k := fakeK8s()
 	app := mountAppK8s(t, k)
+	// /v1/run resolves the org\'s default project; it no longer creates one.
+	seedProject(t, app, "maxpower", principal.DefaultProject)
 
 	code, body := do(t, app, http.MethodPost, "/v1/run", "maxpower", map[string]any{
 		"name":     "api",

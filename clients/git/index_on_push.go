@@ -3,13 +3,10 @@ package git
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud"
-	tasksclient "github.com/hanzoai/tasks/pkg/sdk/client"
 	"github.com/hanzoai/tasks/pkg/sdk/temporal"
-	tasksworker "github.com/hanzoai/tasks/pkg/sdk/worker"
 	"github.com/hanzoai/tasks/pkg/sdk/workflow"
 )
 
@@ -39,8 +36,12 @@ import (
 // push is skipped — indexing it would clobber the canonical index. The reactor gates on
 // the repo's symbolic HEAD and only the pushed tip commit is indexed.
 
-// indexQueue is this workflow family's own task queue (<service>-<purpose>).
-const indexQueue = "code-index"
+// indexQ is this reactor's durable queue on the ONE engine (see reactor.go).
+var indexQ = &queue{
+	name: "code-index",
+	wf:   IndexRepoWorkflow,
+	acts: []any{IndexRepoActivity},
+}
 
 // IndexedFile is one text file handed across the seam to the code index: its
 // repo-relative path and content.
@@ -113,61 +114,11 @@ func indexOnPush(s *cloud.Service[state], ctx context.Context, ev cloud.Lifecycl
 
 // ---- durable enqueue (producer) + worker ----
 
-var errEngineNotReady = fmt.Errorf("tasks engine not ready")
-
 // enqueueIndex starts a durable IndexRepoWorkflow for one push. The workflow id is
 // keyed by commit so the same push never double-indexes (ExecuteWorkflow is idempotent
 // on the id) and a redelivery is a no-op.
 func enqueueIndex(ctx context.Context, in indexInput) error {
-	cli, err := indexEngineClient()
-	if err != nil {
-		return err
-	}
-	_, err = cli.ExecuteWorkflow(ctx, tasksclient.StartWorkflowOptions{
-		ID:        fmt.Sprintf("code.index:%s:%s:%s", in.Org, in.Repo, in.Commit),
-		TaskQueue: indexQueue,
-	}, IndexRepoWorkflow, in)
-	return err
-}
-
-var (
-	indexClientMu sync.Mutex
-	indexClient   tasksclient.Client
-)
-
-// indexEngineClient lazily dials the ONE embedded engine and registers the index
-// worker (once, process-lifetime), memoizing the client. Dialed on the always-
-// registered `default` namespace — the embedded engine registers only `default` at
-// boot, so a per-org namespace would block; isolation rides in the workflow input
-// (indexInput.Org), mirroring ai's durable ingest. The engine is nil until
-// wireDurableIngest runs (after MountAll), long before any push — but a nil engine
-// fails soft to inline indexing.
-func indexEngineClient() (tasksclient.Client, error) {
-	indexClientMu.Lock()
-	defer indexClientMu.Unlock()
-	if indexClient != nil {
-		return indexClient, nil
-	}
-	eng := cloud.EmbeddedTasks()
-	if eng == nil {
-		return nil, errEngineNotReady
-	}
-	cli, err := tasksclient.Dial(tasksclient.Options{
-		HostPort:  fmt.Sprintf("127.0.0.1:%d", eng.ZAPPort()),
-		Namespace: "default",
-	})
-	if err != nil {
-		return nil, fmt.Errorf("code-index dial engine: %w", err)
-	}
-	w := tasksworker.New(cli, indexQueue, tasksworker.Options{})
-	w.RegisterWorkflow(IndexRepoWorkflow)
-	w.RegisterActivity(IndexRepoActivity)
-	if err := w.Start(); err != nil {
-		cli.Close()
-		return nil, fmt.Errorf("code-index worker start: %w", err)
-	}
-	indexClient = cli
-	return cli, nil
+	return indexQ.start(ctx, fmt.Sprintf("code.index:%s:%s:%s", in.Org, in.Repo, in.Commit), in)
 }
 
 // IndexRepoWorkflow indexes one repo's pushed tip as a single durable activity, with
