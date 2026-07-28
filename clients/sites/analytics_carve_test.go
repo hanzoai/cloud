@@ -50,25 +50,61 @@ func postReq(host, path, body string) *http.Request {
 	return req
 }
 
-// TestIsAnalyticsPath pins the ingest-path predicate: the CANONICAL door /v1/event
-// and the deprecated beacon ingest paths match (the read lenses match the
-// /v1/analytics prefix too, but the Middleware carve gates on POST — they are GET on
-// api.hanzo.ai, never a site host); everything else on a site host falls through to
-// the static serve.
+// TestIsAnalyticsPath pins the ingest-path predicate as an EXACT SET: the canonical
+// door /v1/event plus the deprecated beacon ingest paths, and nothing else. Everything
+// else on a site host falls through to the static serve.
+//
+// The READ lenses are the point of the exact set. `HasPrefix(p, "/v1/analytics")` also
+// matched /v1/analytics/overview|timeseries|top|health, leaving the carve's POST check
+// as the only thing keeping a read path out of the beacon handler — so a lens's
+// exposure hung on the verb it happened to be mounted under. They are OUT of the set
+// now, and stay out even if one grows a POST.
 func TestIsAnalyticsPath(t *testing.T) {
-	yes := []string{"/v1/event", "/v1/analytics", "/v1/analytics/batch", "/v1/insights/e",
-		"/v1/analytics/overview", "/v1/analytics/timeseries", "/v1/analytics/top"}
+	yes := []string{"/v1/event", "/v1/analytics", "/v1/analytics/batch", "/v1/insights/e"}
 	for _, p := range yes {
 		if !isAnalyticsPath(p) {
 			t.Errorf("isAnalyticsPath(%q) = false, want true", p)
 		}
 	}
-	no := []string{"/v1/base", "/v1/base/collections", "/v1/tracker",
-		"/v1/insights", "/v1/insights/events", "/v1/insights/health", "/", "/index.html"}
+	no := []string{
+		// the read lenses — never ingest, whatever verb they carry
+		"/v1/analytics/overview", "/v1/analytics/timeseries", "/v1/analytics/top", "/v1/analytics/health",
+		// no prefix match: a future /v1/analytics/* route is out by default
+		"/v1/analytics/anything", "/v1/analytics/batch/extra", "/v1/eventx", "/v1/insights/e/extra",
+		"/v1/base", "/v1/base/collections", "/v1/tracker",
+		"/v1/insights", "/v1/insights/events", "/v1/insights/health", "/", "/index.html",
+	}
 	for _, p := range no {
 		if isAnalyticsPath(p) {
 			t.Errorf("isAnalyticsPath(%q) = true, want false", p)
 		}
+	}
+}
+
+// TestMiddlewareAnalyticsCarveReadLensPostNotHijacked is the behavioral half of the
+// exact set: a POST to a read-lens path on a site host must NOT reach the ingest carve.
+// Under the old prefix predicate the method check was the only guard, so this case
+// depended entirely on the lenses never accepting a POST.
+func TestMiddlewareAnalyticsCarveReadLensPostNotHijacked(t *testing.T) {
+	fr := &fakeResolver{found: true, site: Site{Org: "hanzo", Slug: "yadota", Bucket: "b", Prefix: "hanzo/yadota", Status: "live"}}
+	SetResolver(fr)
+	defer SetResolver(nil)
+	h := &captureHostHandler{kind: "analytics"}
+	SetAnalyticsHostHandler(h.handle)
+	defer SetAnalyticsHostHandler(nil)
+	app := newTestApp(testServer())
+
+	for _, p := range []string{"/v1/analytics/overview", "/v1/analytics/timeseries", "/v1/analytics/top", "/v1/analytics/health"} {
+		resp, err := app.Fiber().Test(postReq("yadota.hanzo.app", p, beaconBody))
+		if err != nil {
+			t.Fatalf("POST %s: %v", p, err)
+		}
+		if resp.Header.Get("X-Carve") == "analytics" {
+			t.Errorf("POST %s routed to the ingest carve — a read lens is not an ingest path", p)
+		}
+	}
+	if orgs, _ := h.seen(); len(orgs) != 0 {
+		t.Fatalf("the ingest carve fired for a read-lens path (%v)", orgs)
 	}
 }
 
