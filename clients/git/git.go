@@ -221,6 +221,14 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// Push generated files without a local git client (hanzo.app builder).
 	// A distinct trailing segment, so it never shadows the :org/:repo routes.
 	g.Post("/repos/:name/push", cloud.Handle(s, pushFiles))
+	// Canonical-forge push ingest (webhook.go): git.hanzo.ai is a separate process,
+	// so its pushes reach the ONE push-to-deploy trigger through this door. A static
+	// segment that never shadows the :org/:repo smart-HTTP routes; PUBLIC at the JWT
+	// layer, HMAC-authed inside. cloud.Terminal writes the handler's bad-signature
+	// 401 / malformed-body 400 in-band so the commerce /v1 ErrorHandlerJSON
+	// (co-mounted ahead) cannot flatten it to 500 — the same reject-parity
+	// /v1/connector/github/webhook carries.
+	g.Post("/webhook", cloud.Terminal(cloud.Handle(s, webhook)))
 	// SSH public-key registry (per-user keys for `git clone git@…`).
 	g.Post("/keys", cloud.Handle(s, registerKey))
 	g.Get("/keys", cloud.Handle(s, listKeys))
