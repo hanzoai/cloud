@@ -10,6 +10,7 @@
 //
 //	GET /v1/git/repos/:name/refs                 → { branches, tags, default }
 //	GET /v1/git/repos/:name/tree?ref&path        → { entries: [ {name,path,type,size,mode} ] }
+//	GET /v1/git/repos/:name/paths?ref&glob       → { rev, paths: [ … ] }   (delivery inventory)
 //	GET /v1/git/repos/:name/blob?ref&path        → { path,size,encoding,content,binary,truncated }
 //	GET /v1/git/repos/:name/commits?ref&path&limit → { commits: [ {sha,shortSha,message,author*,date} ] }
 //	GET /v1/git/repos/:name/readme?ref           → { path, content, encoding }
@@ -109,6 +110,14 @@ type commitJSON struct {
 	Date string `json:"date"`
 }
 
+// pathsJSON is the set of paths a glob selected, at the revision it resolved to.
+type pathsJSON struct {
+	// Rev is the full revision the ref resolved to — pin follow-up reads to it.
+	Rev string `json:"rev"`
+	// Paths are repo-relative file paths, sorted. Directories are never returned.
+	Paths []string `json:"paths"`
+}
+
 // commitsJSON is one page of history.
 type commitsJSON struct {
 	// Commits are newest first.
@@ -143,6 +152,17 @@ type pathRef struct {
 	Ref string `json:"ref"`
 	// Path is repo-relative; empty is the tree root. Traversal is stripped.
 	Path string `json:"path"`
+}
+
+// globRef addresses a SET of paths inside a repo at a revision.
+type globRef struct {
+	// Name is the repo to read, from the :name path segment.
+	Name string `json:"name"`
+	// Ref is a branch, tag or commit; empty means the repo's HEAD.
+	Ref string `json:"ref"`
+	// Glob selects files, matched segment by segment so `*` never crosses a `/`.
+	// `**` matches zero or more whole segments.
+	Glob string `json:"glob"`
 }
 
 // logRef addresses a history query.
@@ -232,6 +252,36 @@ func (o ops) browseTree(ctx context.Context, in *pathRef) (*treeJSON, error) {
 		out = append(out, treeEntryJSON{Name: e.Name, Path: e.Path, Type: kind, Size: e.Size, Mode: e.Mode})
 	}
 	return &treeJSON{Entries: out}, nil
+}
+
+// browsePaths lists every file a glob selects at one revision, plus the revision
+// it resolved to. It is the read a delivery generator makes: one call answers
+// "what is the inventory at this commit", where walking the tree a level at a
+// time would be a request per directory.
+//
+// Returning the resolved revision matters as much as the paths. A generator that
+// lists at `main` and then reads files at `main` can straddle a push and build
+// from two different commits; pinning the returned rev makes the whole read
+// consistent.
+//
+// Example: {"name": "universe", "ref": "main", "glob": "charts/app/values/*/*.yaml"}
+func (o ops) browsePaths(ctx context.Context, in *globRef) (*pathsJSON, error) {
+	t, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(in.Glob) == "" {
+		return nil, zip.ErrBadRequest("glob is required")
+	}
+	repo, rev, err := browseTarget(o.s, ctx, t, in.Name, in.Ref)
+	if err != nil {
+		return nil, err
+	}
+	paths, err := MatchPaths(ctx, repo, rev, in.Glob)
+	if err != nil {
+		return nil, err
+	}
+	return &pathsJSON{Rev: rev.String(), Paths: paths}, nil
 }
 
 // browseBlob returns one file's bytes at one revision. Text comes back verbatim,
