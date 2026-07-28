@@ -10,13 +10,16 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/hanzoai/cloud/credz/launch"
 )
 
 // helperEnv makes this test binary run the CLIENT half of the protocol when set.
-// A grant cannot be proven in-process: the broker identifies its peer from the
-// kernel's record of that peer's argv, so proving the scope boundary needs a real
-// process really named after an app. Symlinking the test binary to <app> gives
-// exactly that, and it is the same argv shape manifest.App.Plugin produces.
+// A grant cannot be proven in-process: the broker takes the peer's uid from the
+// kernel and refuses a connection it cannot place, so proving the boundary needs
+// a real child process on a real socket. The child is symlinked to <app> as
+// well — not because that decides anything any more, but because a test that
+// stopped producing forgeable argv could no longer prove argv is ignored.
 const helperEnv = "CREDZ_TEST_PULL_FROM"
 
 // resolveEnv makes this test binary resolve a posture and print it. cek's master
@@ -27,7 +30,9 @@ const resolveEnv = "CREDZ_TEST_RESOLVE_IN"
 
 func TestMain(m *testing.M) {
 	if sock := os.Getenv(helperEnv); sock != "" {
-		b, err := pull(sock)
+		// token() is the real read-and-scrub the boot path uses, so what this
+		// helper presents is what a plugin child presents.
+		b, err := pull(sock, token())
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(3)
@@ -129,20 +134,22 @@ func serveTest(t *testing.T, src Source) string {
 	return filepath.Join(dir, SockName)
 }
 
-// pullAs runs the client half from a process the kernel will report as `app`,
-// and returns the bundle it received.
-func pullAs(t *testing.T, app, sock string) (bundle, error) {
+// child runs the client half in a real process whose argv[0] is argv and whose
+// environment carries env, and returns the bundle it received. The two things a
+// peer can control — what it is called and what it presents — are separate
+// parameters here, which is the only way to ask which of them the broker acts on.
+func child(t *testing.T, argv, sock string, env ...string) (bundle, error) {
 	t.Helper()
 	self, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
-	bin := filepath.Join(t.TempDir(), app)
+	bin := filepath.Join(t.TempDir(), argv)
 	if err := os.Symlink(self, bin); err != nil {
 		t.Fatal(err)
 	}
 	cmd := exec.Command(bin)
-	cmd.Env = append(os.Environ(), helperEnv+"="+sock)
+	cmd.Env = append(append(os.Environ(), helperEnv+"="+sock), env...)
 	out, err := cmd.Output()
 	if err != nil {
 		return bundle{}, err
@@ -154,14 +161,31 @@ func pullAs(t *testing.T, app, sock string) (bundle, error) {
 	return b, nil
 }
 
+// launchAs is the legitimate shape: a child the launcher started as `app` and
+// stamped accordingly. LaunchSecret() is the same process-global secret Publish
+// gave the broker, which is exactly the fused topology — the launcher and the
+// broker are one process.
+func launchAs(t *testing.T, app, sock string) (bundle, error) {
+	t.Helper()
+	return child(t, app, sock, launch.Env(LaunchSecret(), app))
+}
+
+// forgeAs is the attack: a child that presents whatever it likes, spelled
+// longhand because an attacker does not call our helper. Every call must be
+// REFUSED — the helper exits non-zero and the error is the pass condition.
+func forgeAs(t *testing.T, argv, tok, sock string) (bundle, error) {
+	t.Helper()
+	return child(t, argv, sock, launch.TokenEnv+"="+tok)
+}
+
 // TestScopeIsTheCallersOwnAndNothingElse is the whole point of the package: the
 // app that owns a secret gets it, and the app that does not is not merely
 // unauthorized — it is never offered the path, because the path is built from
-// who the kernel says it is.
+// the app the LAUNCHER stamped and from nothing the peer said.
 func TestScopeIsTheCallersOwnAndNothingElse(t *testing.T) {
 	sock := serveTest(t, store())
 
-	ai, err := pullAs(t, "ai", sock)
+	ai, err := launchAs(t, "ai", sock)
 	if err != nil {
 		t.Fatalf("ai pull: %v", err)
 	}
@@ -171,7 +195,7 @@ func TestScopeIsTheCallersOwnAndNothingElse(t *testing.T) {
 		"CLOUD_AI_BASE_URL": "http://ai.hanzo.svc",
 	})
 
-	billing, err := pullAs(t, "billing", sock)
+	billing, err := launchAs(t, "billing", sock)
 	if err != nil {
 		t.Fatalf("billing pull: %v", err)
 	}
@@ -194,7 +218,7 @@ func TestScopeIsTheCallersOwnAndNothingElse(t *testing.T) {
 // That was bug #1.
 func TestEveryAppGetsTheDataPlaneKey(t *testing.T) {
 	sock := serveTest(t, store())
-	b, err := pullAs(t, "dns", sock) // a manifest app with nothing filed for it
+	b, err := launchAs(t, "dns", sock) // a manifest app with nothing filed for it
 	if err != nil {
 		t.Fatalf("pull: %v", err)
 	}
@@ -208,47 +232,75 @@ func TestEveryAppGetsTheDataPlaneKey(t *testing.T) {
 }
 
 // TestPeerThatIsNotAnAppGetsNothing — the broker answers apps, and "app" is a
-// closed set the manifest defines. A process that is not one gets no bundle at
-// all, not an empty one.
+// closed set the manifest defines. This is the defence-in-depth gate, so the
+// token here is VALID: the launcher itself is made to stamp a name the manifest
+// does not list, and the grant is still refused rather than becoming a store
+// path under a scope nobody provisioned.
 func TestPeerThatIsNotAnAppGetsNothing(t *testing.T) {
 	sock := serveTest(t, store())
-	if b, err := pullAs(t, "definitely-not-an-app", sock); err == nil {
+	if b, err := launchAs(t, "definitely-not-an-app", sock); err == nil {
 		t.Fatalf("an unknown peer was served a bundle: %+v", b)
 	}
 }
 
-// TestMultiCallPeerIsTheAppItEnables covers the other spawn shape: one binary
-// named `cloud`, told which app to be.
-func TestAppOf(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		argv []string
-		want string
-		err  bool
-	}{
-		{"dedicated binary", []string{"/opt/hanzo/ai"}, "ai", false},
-		{"multi-call", []string{"/opt/hanzo/cloud", "--enable=billing"}, "billing", false},
-		{"multi-call single dash", []string{"/opt/hanzo/cloud", "-enable=dns"}, "dns", false},
-		{"multi-call with other flags", []string{"/opt/hanzo/cloud", "-addr=:8080", "--enable=kms"}, "kms", false},
-		// Two apps in one process would need two scopes, and merging them is how
-		// one plugin quietly acquires another's credentials.
-		{"multi-call two apps", []string{"/opt/hanzo/cloud", "--enable=ai,billing"}, "", true},
-		{"multi-call no app", []string{"/opt/hanzo/cloud"}, "", true},
-		{"not an app", []string{"/usr/bin/curl"}, "", true},
-		{"unknown enable", []string{"/opt/hanzo/cloud", "--enable=nope"}, "", true},
-		{"empty", nil, "", true},
+// TestArgvDoesNotDecideScope is the fix for #51, stated as the one experiment
+// that can tell the old broker from the new one.
+//
+// The child is named `billing` — the exact spoof that used to work, and the same
+// argv shape manifest.App.Plugin produces for a dedicated binary — while the
+// token it presents is the one the launcher stamped for `ai`. If argv were still
+// consulted the two would disagree and the answer would be billing's scope (or a
+// refusal). It comes back as ai's, whole: argv is not read, and the launcher's
+// stamp is the only thing that names an app.
+func TestArgvDoesNotDecideScope(t *testing.T) {
+	sock := serveTest(t, store())
+
+	b, err := child(t, "billing", sock, launch.Env(LaunchSecret(), "ai"))
+	if err != nil {
+		t.Fatalf("a child with a valid ai token was refused: %v", err)
+	}
+	want(t, "ai(argv=billing)", b.Env, map[string]string{
+		"IAM_URL":           "http://iam.hanzo.svc",
+		"CLOUD_AI_API_KEY":  "sk-ai-secret",
+		"CLOUD_AI_BASE_URL": "http://ai.hanzo.svc",
+	})
+	if v, ok := b.Env["STRIPE_KEY"]; ok {
+		t.Fatalf("argv still decides the scope: a process named `billing` got billing's key %q", v)
+	}
+	t.Logf("argv=billing token=ai → %v (argv ignored)", keysOf(b.Env))
+}
+
+// TestForgedIdentityIsRefused is the other half: with argv no longer consulted,
+// everything a peer CAN still control has to be worthless. Each case is a
+// different way to claim an app without the launcher having said so, and every
+// one of them must come back with no bundle at all — not an empty one, and not
+// one carrying the data-plane key.
+func TestForgedIdentityIsRefused(t *testing.T) {
+	sock := serveTest(t, store())
+	stolen := launch.Env(LaunchSecret(), "ai")          // the shape a real stamp has
+	mac := stolen[len(launch.TokenEnv+"=ai:"):]         // ai's proof, on its own
+	elsewhere := launch.Env(launch.Secret(), "billing") // a valid token from another launcher
+
+	for _, tc := range []struct{ name, argv, tok string }{
+		// The pre-fix attack: be named after the app, say nothing else.
+		{"argv alone, no token", "billing", ""},
+		// The other pre-fix attack: the multi-call binary claiming an app.
+		{"multi-call argv, no token", "cloud", ""},
+		{"a bare claim with no proof", "billing", "billing"},
+		{"a hand-written proof", "billing", "billing:" + strings.Repeat("00", 32)},
+		{"a proof that is not hex", "billing", "billing:not-hex"},
+		// Claim and proof are ONE variable precisely so this cannot be assembled.
+		{"ai's proof under billing's name", "billing", "billing:" + mac},
+		// A secret this broker never minted signs nothing this broker accepts.
+		{"a token from another launcher", "billing", elsewhere[len(launch.TokenEnv+"="):]},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := appOf(tc.argv)
-			if tc.err {
-				if err == nil {
-					t.Fatalf("appOf(%v) = %q, want an error", tc.argv, got)
-				}
-				return
+			b, err := forgeAs(t, tc.argv, tc.tok, sock)
+			if err == nil {
+				t.Fatalf("FORGERY SUCCEEDED: argv=%q token=%q was served %v (key=%q)",
+					tc.argv, tc.tok, keysOf(b.Env), b.Key)
 			}
-			if err != nil || got != tc.want {
-				t.Fatalf("appOf(%v) = (%q, %v), want %q", tc.argv, got, err, tc.want)
-			}
+			t.Logf("refused: argv=%q token=%q", tc.argv, tc.tok)
 		})
 	}
 }
@@ -269,7 +321,7 @@ func TestAppSecretOverridesShared(t *testing.T) {
 		"/orgs/admin/svc/_shared/IAM_URL": "shared",
 		"/orgs/admin/svc/ai/IAM_URL":      "ai-specific",
 	})
-	b, err := pullAs(t, "ai", sock)
+	b, err := launchAs(t, "ai", sock)
 	if err != nil {
 		t.Fatal(err)
 	}

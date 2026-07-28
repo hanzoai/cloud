@@ -4,6 +4,9 @@ package cloud
 
 import (
 	"github.com/zap-proto/zip"
+
+	"github.com/hanzoai/cloud/credz"
+	"github.com/hanzoai/cloud/credz/launch"
 )
 
 // PluginSpec returns a MountSpec that serves prefixes from a SEPARATE binary
@@ -41,6 +44,19 @@ func PluginSpec(name string, price Price, p zip.Plugin, prefixes ...string) Moun
 	if p.Name == "" {
 		p.Name = name
 	}
+
+	// The child's identity, stamped by the process that starts it — because this
+	// process IS the credz broker (Serve holds the root key and publishes the
+	// socket), so what is signed here is what is verified there, with the secret
+	// never leaving the process. Without this a child has nothing to present and
+	// is refused, which is the correct direction: a plugin nobody vouched for gets
+	// no scope rather than a free choice of one.
+	//
+	// Plugin.Env, never os.Environ(): zip appends this to ONE child's environment.
+	// Putting a token in the launcher's own environment would hand every child the
+	// same one and re-open the hole this closes (#51).
+	p.Env = append(p.Env, launch.Env(credz.LaunchSecret(), p.Name))
+
 	return MountSpec{
 		Name:  name,
 		Price: price,

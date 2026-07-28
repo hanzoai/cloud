@@ -8,7 +8,10 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/credz/launch"
 )
 
 // Source is the secret store the broker reads. It is deliberately two methods:
@@ -59,7 +62,7 @@ func Publish(p Posture, src Source, dataDir, adminOrg string, log Logger) (io.Cl
 	if err != nil {
 		return nil, err
 	}
-	b := &broker{ln: ln, src: src, org: adminOrg, log: log}
+	b := &broker{ln: ln, src: src, org: adminOrg, log: log, secret: LaunchSecret()}
 	go b.serve()
 	log.Info("credz broker LISTENING (this process holds the root key and the sealed store)",
 		"sock", sock, "admin_org", adminOrg)
@@ -99,7 +102,17 @@ type broker struct {
 	src Source
 	org string
 	log Logger
+	// secret verifies the tokens this deployment's launcher stamped. Taken once
+	// at Publish rather than read per request so the broker cannot start
+	// answering under one secret and finish under another.
+	secret string
 }
+
+// maxRequest bounds what a peer may send before it has proven anything: the
+// greeting plus one token line. Generous by an order of magnitude and still
+// small enough that an unauthenticated peer cannot make the broker hold a buffer
+// on its behalf.
+const maxRequest = 512
 
 func (b *broker) Close() error {
 	err := b.ln.Close() // unlinks the socket: Go's UnixListener owns the file it bound
@@ -123,28 +136,44 @@ func (b *broker) handle(c *net.UnixConn) {
 	defer c.Close()
 	_ = c.SetDeadline(time.Now().Add(dialTimeout))
 
-	// Identity BEFORE anything the peer sent: the kernel's answer is the only one
-	// that counts, and reading the peer's bytes first invites treating them as
-	// input to who it is.
+	// The kernel first, for the one thing the kernel can actually answer: is this
+	// peer one of MY OWN processes. peerPID fails on any other uid. The pid it
+	// returns is for the audit line and nothing else — see peer_linux.go for why
+	// nothing about the process itself may name the app.
 	pid, err := peerPID(c)
 	if err != nil {
 		b.log.Warn("credz REFUSED: no peer identity", "err", err)
 		return
 	}
-	argv, err := peerArgv(pid)
-	if err != nil {
-		b.log.Warn("credz REFUSED: cannot read peer argv", "pid", pid, "err", err)
+
+	r := bufio.NewReader(io.LimitReader(c, maxRequest))
+	line, err := r.ReadString('\n')
+	if err != nil || line != hello {
+		b.log.Warn("credz REFUSED: bad protocol", "pid", pid)
 		return
 	}
-	app, err := appOf(argv)
+	tok, err := r.ReadString('\n')
 	if err != nil {
-		b.log.Warn("credz REFUSED: peer is not a known app", "pid", pid, "err", err)
+		b.log.Warn("credz REFUSED: no launch token", "pid", pid, "err", err)
 		return
 	}
 
-	line, err := bufio.NewReader(io.LimitReader(c, int64(len(hello)))).ReadString('\n')
-	if err != nil || line != hello {
-		b.log.Warn("credz REFUSED: bad protocol", "app", app, "pid", pid)
+	// THE identity check. The token opens only under the secret this process
+	// minted (or, in the host topology, was handed as the broker), so what comes
+	// back is the name the LAUNCHER stamped — never a name the peer chose. A
+	// child that was started without a stamp, or that wrote its own, gets ""
+	// here, and "" is not an app.
+	app := launch.Open(b.secret, strings.TrimSuffix(tok, "\n"))
+	if app == "" {
+		b.log.Warn("credz REFUSED: launch token does not verify", "pid", pid)
+		return
+	}
+	// Defence in depth, and it costs one map lookup. launch.Open already proves
+	// the launcher issued this name, so reaching here means the launcher stamped
+	// something the manifest does not list — a real disagreement between the two,
+	// worth refusing loudly rather than turning into a store path.
+	if !appNames[app] {
+		b.log.Warn("credz REFUSED: launcher stamped an app the manifest does not list", "app", app, "pid", pid)
 		return
 	}
 

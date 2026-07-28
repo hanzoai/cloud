@@ -21,26 +21,27 @@
 // appears in /proc/<pid>/environ, which is the kernel's snapshot of the argument
 // page as it was passed. Same interface, none of the exposure.
 //
-// IDENTITY IS NOT YET SOUND — READ THIS BEFORE RELYING ON THE SCOPE.
-// A client sends no name and no token; the broker reads SO_PEERCRED off the
-// connection and resolves the peer's argv through /proc (see scope.go).
-// SO_PEERCRED is kernel-authenticated for pid/uid, but ARGV IS NOT: a process
-// chooses its own argv[0] at execve, so any same-uid process can present itself
-// as any app and receive that app's bundle. Demonstrated: a binary named
-// `spoof` was granted `billing`'s and then `ai`'s bundle, and the broker logged
-// both as legitimate grants.
+// WHERE IDENTITY COMES FROM. The launcher, and only the launcher. It stamps a
+// per-child token into zip.Plugin.Env at spawn; the child presents it here; the
+// broker verifies it against the secret it holds (credz/launch). Nothing the
+// peer chose about itself decides its scope.
 //
-// So the per-app scope below is a partition against ACCIDENT — a subsystem
-// cannot read a credential it was never given, and 107 processes stop carrying
-// secrets they never use — but it is NOT a boundary against a compromised
-// process running code of its own. Treat every plugin in a pod as holding
-// everything any plugin can ask for until the launcher asserts identity.
+// It used to. The broker took SO_PEERCRED's pid and read the peer's argv out of
+// /proc — but execve takes argv from the caller, so any same-uid process could
+// exec itself as `billing` and be handed billing's scope, and the broker logged
+// it as a legitimate grant. SO_PEERCRED remains, doing the two things it can
+// actually do: the uid check that says the peer is one of this deployment's own
+// processes, and the pid in the audit line.
 //
-// THE FIX, which needs the spawner: only the launcher knows which app it started
-// as which pid, so identity has to come from the launcher's own spawn record and
-// not from the child's self-report — a per-plugin nonce set in zip.Plugin.Env,
-// or a pre-connected socket passed as an ExtraFile. Both live in
-// manifest/plugin.go + cmd/host, which is why they are not done here.
+// THE HONEST LIMIT. The token is in the child's environment, which the same uid
+// can read at /proc/<pid>/environ, and every plugin in the pod IS that uid. So
+// the cost of impersonating an app went from nothing to "first steal a live
+// peer's token", and a stolen token buys exactly the one app it was stolen from.
+// That is a real boundary against accident and against casual forgery; it is NOT
+// a boundary against a peer that reads its neighbours. Making it one means the
+// socket becomes the credential — the launcher pre-connects and passes the fd as
+// an ExtraFile, which nothing can name or copy — and that is a change to zip's
+// spawn contract, not to this package. See credz/launch for the full statement.
 //
 // THE THREE POSTURES, resolved once at Boot:
 //
@@ -74,6 +75,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/credz/launch"
 )
 
 // RootEnv is the ONE variable a production deployment provisions. It carries the
@@ -118,7 +120,41 @@ var (
 	loaded   int    // how many scoped names the bundle installed
 	bootErr  error  // why a broker pull failed, for the boot log; never fatal
 	bootFrom string // where the bundle came from, for the boot log
+
+	secretOnce sync.Once
+	secret     string // the launcher's token-signing secret; see LaunchSecret
 )
+
+// LaunchSecret is the key this process signs its children's identities with, and
+// the key its broker verifies them against. One value for both because in the
+// fused topology they are one process: /cloud holds the root key, serves the
+// broker, AND spawns the plugin children whose tokens it will later be asked to
+// open. Two values there would be two ways to spell one fact, and the second one
+// would be the bug.
+//
+// It is adopted from the environment when it is there and minted when it is not,
+// which is the difference between the two topologies rather than a mode:
+//
+//   - Fused (/cloud) — nothing to adopt, so it is minted here and never leaves
+//     the process. Children get tokens; nothing gets the secret.
+//   - Host (cmd/host) — the launcher is the host and the broker is a child, so
+//     the secret has to cross that one edge. cmd/host mints it and hands it to
+//     the broker child ALONE, which adopts it here.
+//
+// Scrubbed on adoption for the same reason RootEnv is: a process holding this
+// can mint any app's identity, and leaving it in the environment hands that
+// power to anything the broker ever execs.
+func LaunchSecret() string {
+	secretOnce.Do(func() {
+		if s := os.Getenv(launch.SecretEnv); s != "" {
+			secret = s
+			_ = os.Unsetenv(launch.SecretEnv)
+			return
+		}
+		secret = launch.Secret()
+	})
+	return secret
+}
 
 // Boot resolves this process's credentials and installs them: the root key into
 // cek, the scoped service credentials into the environment. It runs exactly once
@@ -159,6 +195,12 @@ func KeyB64() string {
 
 // resolve is Boot's body, split out so it is testable without the sync.Once.
 func resolve(dataDir string) Posture {
+	// The launcher's stamp, taken before anything branches: whichever posture
+	// this process turns out to be, the token has served its purpose the moment
+	// it is read, and a token left in the environment is one more thing a child
+	// of THIS process could present as its own.
+	tok := token()
+
 	// 1. My own environment. This process is the root of the credential tree.
 	if k, ok := decode(os.Getenv(RootEnv)); ok {
 		root = k
@@ -174,7 +216,7 @@ func resolve(dataDir string) Posture {
 	// 2. The broker. No key of my own, so I am a child: ask the process that has
 	// one for the credentials of the app I am.
 	sock := filepath.Join(dataDir, SockName)
-	b, err := pull(sock)
+	b, err := pull(sock, tok)
 	if err == nil {
 		if k, ok := decode(b.Key); ok {
 			root = k
@@ -231,10 +273,25 @@ func install(env map[string]string) int {
 	return n
 }
 
+// token takes the launcher's stamp out of the environment, and takes it OUT:
+// single-use, exactly as RootEnv is scrubbed and for the same reason. This
+// process asks the broker once, at boot, so the token has no second use — and
+// anything this process execs afterwards inherits an environment that cannot
+// answer for it.
+func token() string {
+	t := os.Getenv(launch.TokenEnv)
+	_ = os.Unsetenv(launch.TokenEnv)
+	return t
+}
+
 // pull performs the client half of the handshake: connect, announce the protocol
-// version, read the bundle. It sends no identity — the broker takes that from the
-// kernel — so there is nothing here to forge and nothing to leak.
-func pull(sock string) (bundle, error) {
+// version, present the launcher's stamp, read the bundle.
+//
+// The stamp is the whole request body. A child says nothing else about itself —
+// no name, no path, no flag — because the only identity the broker accepts is
+// one it can verify it issued, and giving a child a second field to fill in is
+// giving it something to argue with.
+func pull(sock, tok string) (bundle, error) {
 	var b bundle
 	c, err := net.DialTimeout("unix", sock, dialTimeout)
 	if err != nil {
@@ -242,7 +299,7 @@ func pull(sock string) (bundle, error) {
 	}
 	defer c.Close()
 	_ = c.SetDeadline(time.Now().Add(dialTimeout))
-	if _, err := c.Write([]byte(hello)); err != nil {
+	if _, err := c.Write([]byte(hello + tok + "\n")); err != nil {
 		return b, fmt.Errorf("credz: hello: %w", err)
 	}
 	if err := json.NewDecoder(c).Decode(&b); err != nil {
@@ -251,9 +308,11 @@ func pull(sock string) (bundle, error) {
 	return b, nil
 }
 
-// hello is the whole request. Versioned so a broker and a child from different
-// builds fail loudly instead of misreading each other's frames.
-const hello = "credz/1\n"
+// hello is the protocol version. Bumped to 2 when the request grew its second
+// line: a v1 child sends no token and would hang until the broker's deadline, so
+// the version says which frame shape is on the wire and a mismatched pair fails
+// at the greeting instead of somewhere less obvious.
+const hello = "credz/2\n"
 
 // decode parses the base64 root key and enforces its length. A malformed key is
 // reported as "no key" so the caller falls through to the next posture rather

@@ -366,27 +366,39 @@ for the credentials of the app it is.**
   process start and holds it in memory, so no spawned child inherits it.
 - **Who brokers**: the process that read the root key from its own environment
   AND owns the sealed store (`deps.KMS` is the embedded client). That is the KMS
-  subsystem — exactly one process. `cmd/host` stays light; it holds nothing.
+  subsystem — exactly one process. `cmd/host` links no store and brokers nothing
+  (but it does still pass the key down — see host mode below).
 - **Who asks**: every other `cloud` process, at the top of `Serve`, before
   `LoadConfig` and before any store opens.
-- **Identity is NOT sound yet — do not merge this to main as a security boundary.**
-  No token, no name in the request: the broker reads `SO_PEERCRED` and resolves
-  the peer's argv through `/proc`, accepting both spawn shapes the manifest
-  produces (`<dir>/<app>`, `cloud --enable=<app>`) checked against
-  `manifest.Apps`. `SO_PEERCRED` is kernel-authenticated for pid/uid — **argv is
-  not**. A process picks its own `argv[0]` at `execve`, so any same-uid process
-  can present itself as any app and receive that app's bundle, *including the
-  root key*. Demonstrated: a binary named `spoof` was granted `billing`'s and then
-  `ai`'s bundle and logged as a legitimate grant both times.
+- **Identity comes from the launcher** (`credz/launch`, stdlib-only leaf). The
+  launcher stamps `CREDZ_TOKEN=<app>:<hex hmac-sha256(secret, app)>` into that
+  ONE child's `zip.Plugin.Env` at spawn; the child presents it; the broker opens
+  it with the secret it holds and gates the result on `manifest.Apps`. Claim and
+  proof are one variable, so neither half can be recombined with another's. Two
+  spawn sites, both per-plugin and never `os.Environ()`: `cloud.PluginSpec` (the
+  launcher *is* the broker, secret minted in-process and never emitted) and
+  `cmd/host` (mints it, stamps every child, hands `CREDZ_LAUNCH_SECRET` to the
+  `kms` child alone). `credz.Boot` reads the token once and unsets it.
 
-  So today this partitions credentials against **accident** (107 processes stop
-  carrying secrets they never use) and not against a **compromised** process. The
-  fix has to come from the spawner, which is the only party that knows which app
-  it started as which pid: a per-plugin nonce in `zip.Plugin.Env`, or a
-  pre-connected socket passed as an `ExtraFile` — both in `manifest/plugin.go` +
-  `cmd/host`.
+  This replaces reading the peer's argv out of `/proc` (#51). `SO_PEERCRED` is
+  kernel-authenticated for pid/uid but **argv is not** — a process picks its own
+  `argv[0]` at `execve`, so any same-uid process could present itself as any app
+  and be handed that app's bundle *including the root key*. `SO_PEERCRED` stays
+  for the two things it can do: the uid check, and the pid in the audit line.
+- **The limit, stated honestly**: the token is in the child's environment, which
+  the same uid can read at `/proc/<pid>/environ`. So the cost of impersonating an
+  app went from *nothing* to *first steal a live peer's token*, and a stolen token
+  buys only the app it was stolen from — a boundary against accident and casual
+  forgery, **not** against a peer that reads its neighbours. A real same-uid
+  boundary means the socket becomes the credential (launcher pre-connects, passes
+  the fd as an `ExtraFile`), which is a change to `zip`'s spawn contract.
+- **Host mode is not switched over**: `cmd/host` stamps tokens but does not call
+  `credz.Boot`, so it still passes `CLOUD_KMS_MASTER_KEY_REF` down via
+  `os.Environ()` and every child resolves ROOT without ever asking the broker —
+  scoping bypassed, not broken. The deployed entrypoint is `/cloud` (fused),
+  where the fix is live. See the Dockerfile's host-mode note.
 - **Scope is derived, not configured** — the manifest names every app, the store
-  holds every secret, and the path is built from the peer's identity:
+  holds every secret, and the path is built from the app the launcher stamped:
 
       /orgs/{adminOrg}/svc/_shared/{NAME}   every app
       /orgs/{adminOrg}/svc/{app}/{NAME}     that app only
@@ -398,8 +410,9 @@ for the credentials of the app it is.**
       {"path":"/svc/ai","name":"CLOUD_AI_API_KEY","env":"default","value":"sk-…"}
 
   No second registry and no code change to add a credential. The `billing`
-  process is never handed `/svc/ai` — subject to the identity caveat above, which
-  is what decides whether "never handed" also means "cannot obtain".
+  process is never handed `/svc/ai`: the path is built from the app the launcher
+  stamped, so a peer cannot spell a path — only present the token for the one it
+  was started as.
 - **The environment stays the interface**: the bundle is installed with
   `os.Setenv`, so all 108 apps keep reading `os.Getenv` unchanged — and a value
   set after `execve` never appears in `/proc/<pid>/environ`.
