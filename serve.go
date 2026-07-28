@@ -518,7 +518,7 @@ func Serve(specs []MountSpec, enable []string) error {
 	// Durable ingest: embed the ONE tasks engine in-process + inject the per-org dialer
 	// into ai (long github/crawl/s3 ingests run as durable workflows; upload stays
 	// inline). Fail-soft — inline fallback if the engine can't start. See durable.go.
-	wireDurableIngest(ctx, deps)
+	wireDurableIngest(ctx, deps, procName(specs))
 
 	// Health/metrics listener (HealthListenAddr, default :9090). Serves the
 	// liveness/readiness contract the platform probes hit (/healthz, /readyz)
@@ -632,6 +632,17 @@ func listenOn(cfg *Config) (addrs []string, ops string) {
 	// and whichever binds first answers the other's callers in a framing they
 	// cannot parse. That surfaced as "promise 0 for 1" on a balance read.
 	return []string{cfg.ZAPListenAddr, "http://" + cfg.ListenAddr}, cfg.HealthListenAddr
+}
+
+// procName names the process by what it serves. A single-app binary is that app; a
+// host that mounts several is "cloud". It exists so per-process resources (the
+// durable engine's port and store) can say whose they are instead of contending for
+// one global name.
+func procName(specs []MountSpec) string {
+	if len(specs) == 1 {
+		return specs[0].Name
+	}
+	return "cloud"
 }
 
 // healthMux is the liveness/readiness + metrics contract on the ops port
