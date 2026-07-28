@@ -2,7 +2,11 @@ package projects
 
 import (
 	"context"
+	"errors"
 	"testing"
+
+	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/sites"
 )
 
 func TestOperatorOrgsFromEnv(t *testing.T) {
@@ -94,5 +98,64 @@ func TestResolveHostCustomDomain(t *testing.T) {
 	}
 	if got.Org != "yadota" || got.Slug != "yadota" || got.Status != "live" {
 		t.Fatalf("resolved %+v, want org=yadota slug=yadota status=live", got)
+	}
+}
+
+// TestSelfHostsAreNotClaimable proves the claim gate refuses every host WE run,
+// not just the published-site apex. `api.hanzo.ai` — the production API host —
+// used to pass this gate: the serve gate excluded it so it could never serve, but
+// the claim row is first-come and global, so the claim permanently DENIED the host
+// to its real owner (verified against production: a customer claimed it and the
+// hanzo org was then refused 409 on its own hostname).
+func TestSelfHostsAreNotClaimable(t *testing.T) {
+	// One source, set exactly as sites.New does at startup.
+	sites.SetSelfDomains([]string{"hanzo.app", "hanzo.ai"})
+	t.Cleanup(func() { sites.SetSelfDomains(nil) })
+
+	s := &cloud.Service[state]{State: state{apex: "hanzo.app"}}
+	for _, h := range []string{"hanzo.ai", "api.hanzo.ai", "console.hanzo.ai", "hanzo.app", "anything.hanzo.app"} {
+		if !ours(s, h) {
+			t.Errorf("%q is a host we operate but the claim gate would allow it", h)
+		}
+	}
+	// A genuine customer domain is unaffected — this gate must never widen past ours.
+	for _, h := range []string{"shop.yadota.tech", "yadota.tech", "hanzo.ai.evil.test"} {
+		if ours(s, h) {
+			t.Errorf("%q is a customer domain but the claim gate refused it", h)
+		}
+	}
+}
+
+// TestUnbindHostReleasesOnlyOurOwn proves a released host becomes claimable again
+// and that the release is tenant-scoped. Until releaseDomain existed there was no
+// writer that could drop a row at all — setDomains only adds, and delete-project
+// unbinds the bare slug alone — so a mistyped or retired domain was held forever.
+func TestUnbindHostReleasesOnlyOurOwn(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	for _, org := range []string{"yadota", "acme"} {
+		if err := s.CreateProject(ctx, mkProject(org, org, org)); err != nil {
+			t.Fatalf("create %s: %v", org, err)
+		}
+	}
+	if err := s.BindHost(ctx, "yadota.tech", "yadota", "yadota", 100); err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+	// A non-owner "release" is a scoped no-op — it must not drop someone else's row.
+	if err := s.UnbindHost(ctx, "yadota.tech", "acme", "acme"); err != nil {
+		t.Fatalf("noop release: %v", err)
+	}
+	if _, err := s.ResolveHost(ctx, "yadota.tech"); err != nil {
+		t.Fatal("a non-owner release dropped the owner's host")
+	}
+	// The owner releases it, and only then may another org claim it.
+	if err := s.BindHost(ctx, "yadota.tech", "acme", "acme", 200); !errors.Is(err, errHostTaken) {
+		t.Fatalf("still-held host rebind = %v, want errHostTaken", err)
+	}
+	if err := s.UnbindHost(ctx, "yadota.tech", "yadota", "yadota"); err != nil {
+		t.Fatalf("owner release: %v", err)
+	}
+	if err := s.BindHost(ctx, "yadota.tech", "acme", "acme", 300); err != nil {
+		t.Fatalf("released host must be claimable again, got %v", err)
 	}
 }

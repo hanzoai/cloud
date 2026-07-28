@@ -34,14 +34,20 @@ import (
 // Global is set because zip.Load registers under the prefixes it was given.
 // Handing it a scoped Router would nest them under the subsystem name and the
 // routes would answer somewhere nobody is asking.
-func PluginSpec(name string, p zip.Plugin, prefixes ...string) MountSpec {
+// price is a positional argument for the same reason Global is set below: a plugin
+// serves its prefixes from another process, and NOTHING downstream of this spec can
+// see what happens in there — so what the surface costs has to be stated by whoever
+// decides to mount it, exactly as it is for a linked-in subsystem. Variadic prefixes
+// force it ahead of them; that is the only reason it sits where it does.
+func PluginSpec(name string, price Price, p zip.Plugin, prefixes ...string) MountSpec {
 	if p.Name == "" {
 		p.Name = name
 	}
 	return MountSpec{
-		Name: name,
+		Name:  name,
+		Price: price,
 		// Stated once, and it reaches both places that care. zip routes on it, and
-		// indexSubsystems reads it for the boot inventory (/v1/admin/subsystems) and
+		// Declare reads it for the boot inventory (/v1/admin/subsystems) and
 		// the per-request subsystem attribution tracing hangs off. Leaving it empty
 		// falls back to the /v1/<name> convention, which for a plugin owning a second
 		// subtree means that subtree's traffic is attributed to NOBODY and the admin
