@@ -226,42 +226,56 @@ func installationRepos(ctx context.Context, token string) ([]githubRepo, error) 
 // ── handlers: list + import ──────────────────────────────────────────────────
 
 type githubRepoView struct {
-	Name          string `json:"name"`
-	FullName      string `json:"fullName"`
-	Private       bool   `json:"private"`
+	// Name is the repository's short name within the installation.
+	Name string `json:"name"`
+	// FullName is GitHub's owner/name.
+	FullName string `json:"fullName"`
+	// Private is GitHub's visibility bit for the repo.
+	Private bool `json:"private"`
+	// DefaultBranch is the repo's default branch at GitHub.
 	DefaultBranch string `json:"defaultBranch"`
-	Imported      bool   `json:"imported"`
-	SyncStatus    string `json:"syncStatus"` // "synced" | "conflict" | "" (not imported)
-	LastSyncedAt  string `json:"lastSyncedAt,omitempty"`
-	HTMLURL       string `json:"htmlUrl,omitempty"`
+	// Imported is whether this repo has been mirrored into git.hanzo.ai.
+	Imported bool `json:"imported"`
+	// SyncStatus is "synced", "conflict", or "" when the repo is not imported.
+	SyncStatus string `json:"syncStatus"`
+	// LastSyncedAt is the last successful mirror, RFC 3339 UTC. Absent if never.
+	LastSyncedAt string `json:"lastSyncedAt,omitempty"`
+	// HTMLURL is the repo's page at GitHub.
+	HTMLURL string `json:"htmlUrl,omitempty"`
+}
+
+// githubReposOut is the org's granted repository set.
+type githubReposOut struct {
+	// Repos is every repo the installation grants. Never null; [] when none.
+	Repos []githubRepoView `json:"repos"`
 }
 
 // githubRepos lists the org's granted GitHub repositories, each annotated with its
-// native import + sync status. Org-authed: the org comes from the validated
-// principal, and the granted set is bounded to THAT org's installation token — an
-// org can never enumerate another org's repos.
-func githubRepos(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	tok, herr := githubTokenForOrg(c.Context(), org)
-	if herr != nil {
-		return herr
-	}
-	repos, err := installationRepos(c.Context(), tok)
+// native import + sync status from the git object plane. Org-authed: the org comes
+// from the validated principal, and the granted set is bounded to THAT org's
+// installation token — an org can never enumerate another org's repos. The console
+// polls it to watch an import flip a repo to imported.
+//
+// Response: {"repos":[{"name":"widgets","fullName":"acme/widgets","private":true,"defaultBranch":"main","imported":true,"syncStatus":"synced","lastSyncedAt":"2026-07-01T10:00:00Z","htmlUrl":"https://github.com/acme/widgets"}]}
+func (o ops) githubRepos(ctx context.Context, _ *noArgs) (*githubReposOut, error) {
+	org, err := authed(ctx, principalRequired)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "list github repositories: %v", err)
+		return nil, err
+	}
+	tok, herr := githubTokenForOrg(ctx, org)
+	if herr != nil {
+		return nil, herr
+	}
+	repos, err := installationRepos(ctx, tok)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "list github repositories: %v", err)
 	}
 	names := make([]string, 0, len(repos))
 	for _, r := range repos {
 		names = append(names, r.Name)
 	}
 	// Best-effort status roll-up from the git object plane (nil if git is unmounted).
-	status, _ := cloud.GitRepoStatuses(c.Context(), org, "", names)
+	status, _ := cloud.GitRepoStatuses(ctx, org, "", names)
 	out := make([]githubRepoView, 0, len(repos))
 	for _, r := range repos {
 		v := githubRepoView{
@@ -280,7 +294,7 @@ func githubRepos(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		out = append(out, v)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"repos": out})
+	return &githubReposOut{Repos: out}, nil
 }
 
 type githubImportReqBody struct {

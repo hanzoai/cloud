@@ -1,14 +1,13 @@
 package customer
 
 import (
+	"context"
 	"encoding/json"
 	"strconv"
 	"strings"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/admin/core"
-	"github.com/zap-proto/zip"
 )
 
 // The GRANTS surface (/v1/admin/grants) — the operator cockpit's credit-grant ledger. A
@@ -46,21 +45,57 @@ type grantAfter struct {
 	TransactionID string `json:"transactionId"`
 }
 
-// Grants answers GET /v1/admin/grants — the credit-grant ledger across ALL orgs, newest
-// first, projected from the audit trail. Filters: ?org, ?result (success|error), ?limit.
-// Honest empty when no local audit store is configured.
-func Grants(s *cloud.Service[core.State], c *zip.Ctx) error {
+// GrantsIn is the GET /v1/admin/grants filter.
+type GrantsIn struct {
+	// Org filters by the ACTOR's org (the staff org that issued the grant), which is
+	// rarely what a reader wants — the target org is a row field, not a filter.
+	Org string `json:"org"`
+	// Result filters by outcome: "success" or "error". Empty returns both, which is
+	// the point of this view — a refused grant is as interesting as a granted one.
+	Result string `json:"result"`
+	// Limit caps the rows returned. Default 200.
+	Limit string `json:"limit"`
+}
+
+// GrantsOut is the GET /v1/admin/grants envelope. data2 is the store's total for the
+// filter, which can exceed len(data) when limit truncates.
+type GrantsOut struct {
+	Status string     `json:"status"`
+	Msg    string     `json:"msg"`
+	Data   []GrantRow `json:"data"`
+	Data2  *int       `json:"data2,omitempty"`
+}
+
+// Grants reads the credit-grant ledger across ALL orgs, newest first — who granted what
+// to whom, when, and from which money bucket.
+//
+// It is a PROJECTION of the tamper-evident audit trail, not a second store: every grant
+// is written there as action "admin.customer.credit", so this view cannot drift from
+// what actually happened, and FAILED grants appear too.
+//
+// A deployment with no local audit store has no history to project, and says so with an
+// empty list and a msg rather than an error.
+//
+// Example: {"result":"success","limit":"50"}
+// Response: {"status":"ok","msg":"","data":[{"org":"acme","amountCents":5000,"currency":"usd",
+// "source":"trial","reason":"launch comp","actor":"z@hanzo.ai","createdAt":"2026-07-26T18:00:00Z",
+// "transactionId":"tx_01J","result":"success"}],"data2":1}
+func (o ops) Grants(ctx context.Context, in *GrantsIn) (*GrantsOut, error) {
+	if _, err := core.Admit(ctx); err != nil {
+		return nil, err
+	}
+	s := o.s
 	if s.State.AuditStore == nil {
-		return c.JSON(200, map[string]any{
-			"status": "ok",
-			"msg":    "grant history is unavailable (no local audit store configured on this deployment)",
-			"data":   []GrantRow{},
-			"data2":  0,
-		})
+		return &GrantsOut{
+			Status: core.OK,
+			Msg:    "grant history is unavailable (no local audit store configured on this deployment)",
+			Data:   []GrantRow{},
+			Data2:  core.Total(0),
+		}, nil
 	}
 
 	limit := 200
-	if v := strings.TrimSpace(c.Query("limit")); v != "" {
+	if v := strings.TrimSpace(in.Limit); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			limit = n
 		}
@@ -69,14 +104,14 @@ func Grants(s *cloud.Service[core.State], c *zip.Ctx) error {
 	f := audit.Filter{
 		Resource: "credit", // res_type of every grant audit row
 		Action:   "admin.customer.credit",
-		Org:      strings.TrimSpace(c.Query("org")),    // actor org (rarely filtered)
-		Result:   strings.TrimSpace(c.Query("result")), // "" = all (success+error)
+		Org:      strings.TrimSpace(in.Org),    // actor org (rarely filtered)
+		Result:   strings.TrimSpace(in.Result), // "" = all (success+error)
 		Limit:    limit,
 	}
 
-	rows, total, err := s.State.AuditStore.Query(c.Context(), f)
+	rows, total, err := s.State.AuditStore.Query(ctx, f)
 	if err != nil {
-		return core.Fail(c, err.Error())
+		return &GrantsOut{Status: core.Err, Msg: err.Error()}, nil
 	}
 
 	out := make([]GrantRow, 0, len(rows))
@@ -114,42 +149,62 @@ func Grants(s *cloud.Service[core.State], c *zip.Ctx) error {
 		})
 	}
 
-	return c.JSON(200, map[string]any{
-		"status": "ok",
-		"msg":    "",
-		"data":   out,
-		"data2":  total,
-	})
+	return &GrantsOut{Status: core.OK, Data: out, Data2: core.Total(total)}, nil
 }
 
-// issueGrantRequest is the POST /v1/admin/grants body: the credit fields plus the target
-// org (which the per-customer route carries in its path instead).
-type issueGrantRequest struct {
-	Org         string `json:"org"`
-	User        string `json:"user"` // optional member to credit; empty is the org itself
-	AmountCents int64  `json:"amountCents"`
-	Currency    string `json:"currency"`
-	Reason      string `json:"reason"`
-	Source      string `json:"source"` // "trial" (default) | "prepaid"
+// GrantIn is the input of BOTH credit-grant ops. They differ only in where the target
+// org comes from — the path on /v1/admin/customers/:org/credit, the body on
+// /v1/admin/grants — and the URL wins where both are present, so one type serves both
+// and there is one contract to read.
+type GrantIn struct {
+	// Org is the tenant to credit. Required.
+	Org string `json:"org"`
+	// User optionally names a MEMBER to credit, by bare IAM username. Empty credits
+	// the org. Which of the two the money actually lands on is decided by
+	// account.Payer, not here: a pooled org keeps one balance whatever is named.
+	User string `json:"user"`
+	// AmountCents is the credit, in whole cents. Must be positive and within the
+	// per-grant cap.
+	AmountCents int64 `json:"amountCents"`
+	// Currency is the ISO code, lower-cased. Empty means usd.
+	Currency string `json:"currency"`
+	// Reason is the operator's justification, recorded on the audit row.
+	Reason string `json:"reason"`
+	// Source is the money bucket: "trial" (default) for a non-cash comp that is never
+	// refundable, or "prepaid" for real money. Anything unknown falls back to trial.
+	Source string `json:"source"`
 }
 
-// IssueGrant answers POST /v1/admin/grants — issue a credit grant to any org from the
-// operator Grants view (org in the body). It funnels through the SAME core.ApplyGrant
-// POST /v1/admin/customers/:org/credit uses, so there is exactly ONE credit-write path.
-func IssueGrant(s *cloud.Service[core.State], c *zip.Ctx) error {
-	var body issueGrantRequest
-	if err := c.Bind(&body); err != nil {
-		return core.Fail(c, "invalid request body")
+// credit projects the request onto the ONE credit-write contract. Org is not part of it
+// — it addresses the ledger, and ApplyGrant takes it separately.
+func (in *GrantIn) credit() core.CreditRequest {
+	return core.CreditRequest{
+		User:        in.User,
+		AmountCents: in.AmountCents,
+		Currency:    in.Currency,
+		Reason:      in.Reason,
+		Source:      in.Source,
 	}
-	org := strings.TrimSpace(body.Org)
+}
+
+// IssueGrant issues a credit grant to any org from the operator Grants view, with the
+// target named in the body. It funnels through the SAME core.ApplyGrant that
+// POST /v1/admin/customers/:org/credit uses, so there is exactly ONE credit-write path
+// and one audit trail behind both.
+//
+// Example: {"org":"acme","amountCents":5000,"currency":"usd","reason":"launch comp","source":"trial"}
+// Response: {"status":"ok","msg":"","data":{"org":"acme","subject":"acme","grantedCents":5000,
+// "currency":"usd","source":"trial","balanceCents":10000,
+// "balanceExact":"100.000000000000000000","transactionId":"tx_01J"}}
+func (o ops) IssueGrant(ctx context.Context, in *GrantIn) (*core.GrantOut, error) {
+	c, err := core.Admit(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s := o.s
+	org := strings.TrimSpace(in.Org)
 	if org == "" {
-		return core.Fail(c, "org is required")
+		return &core.GrantOut{Status: core.Err, Msg: "org is required"}, nil
 	}
-	return core.ApplyGrant(s, c, org, core.CreditRequest{
-		User:        body.User,
-		AmountCents: body.AmountCents,
-		Currency:    body.Currency,
-		Reason:      body.Reason,
-		Source:      body.Source,
-	})
+	return core.ApplyGrant(s, c, org, in.credit())
 }

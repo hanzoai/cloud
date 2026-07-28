@@ -36,8 +36,11 @@ func mountWithStore(t *testing.T) (*auditstore.Recorder, func(method, path strin
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	s := &cloud.Service[core.State]{State: core.State{AdminOrg: "admin", AuditStore: rec}}
-	app.Get("/v1/admin/audit", core.Guard(s, Records))
-	app.Get("/v1/admin/audit/verify", core.Guard(s, Verify))
+	// Mirror the real mount: the request bridge, then the typed ops. A typed op sees
+	// the caller only through the bridge, so registering routes without it would test
+	// a wiring that cannot exist.
+	app.Group("/v1/admin").Use(cloud.Bridge())
+	Routes(app, s)
 	fa := app.Fiber()
 
 	do := func(method, p string, hdr map[string]string) (*http.Response, []byte) {
@@ -205,7 +208,8 @@ func TestAdminAudit_DeniedWithoutSuperAdmin(t *testing.T) {
 func TestAdminAudit_VerifyWithoutStore(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	s := &cloud.Service[core.State]{State: core.State{AdminOrg: "admin"}} // no auditStore
-	app.Get("/v1/admin/audit/verify", core.Guard(s, Verify))
+	app.Group("/v1/admin").Use(cloud.Bridge())
+	Routes(app, s)
 	req := httptest.NewRequest("GET", "/v1/admin/audit/verify", nil)
 	for k, v := range superAdmin {
 		req.Header.Set(k, v)

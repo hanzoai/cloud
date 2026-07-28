@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -56,39 +55,62 @@ func planListCents(plan string) int64 {
 
 // Promo is a launch-promo definition (a small, seeded set — today just the one).
 type Promo struct {
-	Code           string `json:"code"`
-	Description    string `json:"description"`
-	PercentOff     int    `json:"percentOff"`
-	MaxRedemptions int    `json:"maxRedemptions"`
-	TeamSeatCap    int    `json:"teamSeatCap"`
-	Plans          string `json:"plans"` // csv of eligible plan ids
-	Active         bool   `json:"active"`
-	CreatedAt      int64  `json:"createdAt"`
+	// Code is the promo id, e.g. "first1000".
+	Code string `json:"code"`
+	// Description is the human-readable offer.
+	Description string `json:"description"`
+	// PercentOff is the discount applied to ONE month's list price.
+	PercentOff int `json:"percentOff"`
+	// MaxRedemptions is the hard fleet-wide cap; the redemption past it is
+	// declined.
+	MaxRedemptions int `json:"maxRedemptions"`
+	// TeamSeatCap is how many Team seats bill at the promo rate; seats beyond it
+	// bill at list.
+	TeamSeatCap int `json:"teamSeatCap"`
+	// Plans is the csv of eligible plan ids ("pro,max,team").
+	Plans string `json:"plans"`
+	// Active is false for a promo that is no longer offered; an inactive promo
+	// quotes as ineligible and refuses to redeem.
+	Active bool `json:"active"`
+	// CreatedAt is unix seconds.
+	CreatedAt int64 `json:"createdAt"`
 }
 
 // Redemption is one org's use of a promo.
 type Redemption struct {
-	Code          string `json:"code"`
-	Org           string `json:"-"`
-	Plan          string `json:"plan"`
-	Seats         int    `json:"seats"`
-	Instrument    string `json:"-"`
-	CreditCents   int64  `json:"creditCents"`
+	// Code is the promo redeemed.
+	Code       string `json:"code"`
+	Org        string `json:"-"`
+	Instrument string `json:"-"`
+	// Plan and Seats are what was redeemed against.
+	Plan  string `json:"plan"`
+	Seats int    `json:"seats"`
+	// CreditCents is the discount value credited to the org's wallet — the promo
+	// is realized as a NON-CASH credit, not a subscription coupon.
+	CreditCents int64 `json:"creditCents"`
+	// CreditEntryID is the finance ledger entry that credit landed in.
 	CreditEntryID string `json:"creditEntryId"`
-	RedeemedAt    int64  `json:"redeemedAt"`
+	// RedeemedAt is unix seconds.
+	RedeemedAt int64 `json:"redeemedAt"`
 }
 
 // Quote is a pure eligibility + math result (no side effects).
 type Quote struct {
-	Code          string `json:"code"`
-	Plan          string `json:"plan"`
-	Seats         int    `json:"seats"`
-	Eligible      bool   `json:"eligible"`
-	Reason        string `json:"reason,omitempty"`
-	ListCents     int64  `json:"listCents"`
-	ChargeCents   int64  `json:"chargeCents"`
-	DiscountCents int64  `json:"discountCents"`
-	Remaining     int    `json:"remaining"`
+	// Code, Plan and Seats echo what was quoted.
+	Code  string `json:"code"`
+	Plan  string `json:"plan"`
+	Seats int    `json:"seats"`
+	// Eligible says whether a redeem would be accepted right now; Reason says
+	// why not when it would not.
+	Eligible bool   `json:"eligible"`
+	Reason   string `json:"reason,omitempty"`
+	// ListCents is the undiscounted month price, ChargeCents what would be
+	// charged, DiscountCents the difference — all in USD cents.
+	ListCents     int64 `json:"listCents"`
+	ChargeCents   int64 `json:"chargeCents"`
+	DiscountCents int64 `json:"discountCents"`
+	// Remaining is how many redemptions are left under the fleet-wide cap.
+	Remaining int `json:"remaining"`
 }
 
 // promo sentinel errors → HTTP status.
@@ -323,38 +345,107 @@ func (s *Store) redeem(ctx context.Context, p Promo, org, plan string, seats int
 
 // ---- handlers ----
 
-func listPromos(s *cloud.Service[state], c *zip.Ctx) error {
-	if _, ok := tenant(c); !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	promos, err := s.State.store.ListPromos(c.Context())
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
-	}
-	out := make([]map[string]any, 0, len(promos))
-	for _, p := range promos {
-		n, _ := s.State.store.CountRedemptions(c.Context(), p.Code)
-		out = append(out, map[string]any{"promo": p, "redeemed": n, "remaining": max0(p.MaxRedemptions - n)})
-	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+// PromoRef addresses one promo.
+type PromoRef struct {
+	// Code is the promo code from the path, e.g. "first1000".
+	Code string `json:"code"`
 }
 
-// quotePromo is the pure eligibility + math endpoint (no side effects).
-func quotePromo(s *cloud.Service[state], c *zip.Ctx) error {
-	if _, ok := tenant(c); !ok {
-		return zip.ErrForbidden("org scope required")
+// QuoteQuery asks what a promo would cost a given plan and seat count.
+type QuoteQuery struct {
+	// Code is the promo code from the path.
+	Code string `json:"code"`
+	// Plan is the plan being priced: pro, max or team. Anything else (including
+	// the free Developer plan) has no list price and so nothing to discount.
+	Plan string `json:"plan"`
+	// Seats is the Team seat count; 0 means 1, and it is ignored for the
+	// single-seat plans.
+	Seats int `json:"seats"`
+}
+
+// PromoStatus is one promo with its live redemption counters.
+type PromoStatus struct {
+	Promo Promo `json:"promo"`
+	// Redeemed is how many orgs have taken it, Remaining how many are left under
+	// the fleet-wide cap.
+	Redeemed  int `json:"redeemed"`
+	Remaining int `json:"remaining"`
+}
+
+// PromoList is every promo the deployment offers.
+type PromoList struct {
+	Data []PromoStatus `json:"data"`
+}
+
+// RedeemInput redeems a promo for the caller's org.
+type RedeemInput struct {
+	// Code is the promo code from the path.
+	Code string `json:"code"`
+	// Plan is the plan being redeemed against: pro, max or team.
+	Plan string `json:"plan"`
+	// Seats is the Team seat count; 0 means 1. Seats beyond the promo's
+	// teamSeatCap bill at list.
+	Seats int `json:"seats"`
+	// Instrument identifies the payment method. It is the anti-farming key: one
+	// redemption per instrument, fleet-wide.
+	Instrument string `json:"instrument"`
+}
+
+// RedeemResult is a completed redemption and the month-one math behind it.
+type RedeemResult struct {
+	Redemption Redemption `json:"redemption"`
+	// ChargeCents is what month one costs after the discount, DiscountCents the
+	// credit that produced it.
+	ChargeCents   int64 `json:"chargeCents"`
+	DiscountCents int64 `json:"discountCents"`
+	// AlreadyRedeemed is true when this org had already taken the promo and the
+	// call was an idempotent replay — nothing was credited a second time.
+	AlreadyRedeemed bool `json:"alreadyRedeemed"`
+}
+
+// listPromos returns every promo the deployment offers with its live counters:
+// how many orgs have redeemed it and how many redemptions remain under the cap.
+// The promos are fleet-wide, not per-org — only the counters move.
+//
+// Response: {"data": [{"promo": {"code": "first1000", "percentOff": 90, "maxRedemptions": 1000, "active": true}, "redeemed": 137, "remaining": 863}]}
+func (o ops) listPromos(ctx context.Context, _ *struct{}) (*PromoList, error) {
+	if _, err := tenant(ctx); err != nil {
+		return nil, err
 	}
-	p, err := s.State.store.GetPromo(c.Context(), strings.TrimSpace(c.Param("code")))
+	promos, err := o.s.State.store.ListPromos(ctx)
 	if err != nil {
-		return mapErr(err, "promo not found")
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
-	plan := strings.ToLower(strings.TrimSpace(c.Query("plan")))
-	seats, _ := strconv.Atoi(strings.TrimSpace(c.Query("seats")))
+	out := make([]PromoStatus, 0, len(promos))
+	for _, p := range promos {
+		n, _ := o.s.State.store.CountRedemptions(ctx, p.Code)
+		out = append(out, PromoStatus{Promo: p, Redeemed: n, Remaining: max0(p.MaxRedemptions - n)})
+	}
+	return &PromoList{Data: out}, nil
+}
+
+// quotePromo prices a promo against a plan and seat count. It is PURE: nothing
+// is redeemed, credited or counted, so it is safe to call from a pricing page on
+// every keystroke. An inactive promo or an exhausted cap quotes ineligible with
+// the reason rather than erroring.
+//
+// Example: {"code": "first1000", "plan": "team", "seats": 12}
+// Response: {"code": "first1000", "plan": "team", "seats": 12, "eligible": true, "listCents": 19900, "chargeCents": 418900, "discountCents": 179100, "remaining": 863}
+func (o ops) quotePromo(ctx context.Context, in *QuoteQuery) (*Quote, error) {
+	if _, err := tenant(ctx); err != nil {
+		return nil, err
+	}
+	p, err := o.s.State.store.GetPromo(ctx, strings.TrimSpace(in.Code))
+	if err != nil {
+		return nil, mapErr(err, "promo not found")
+	}
+	plan := strings.ToLower(strings.TrimSpace(in.Plan))
+	seats := in.Seats
 	if seats <= 0 {
 		seats = 1
 	}
 	charge, discount, ok, reason := p.quote(plan, seats)
-	n, _ := s.State.store.CountRedemptions(c.Context(), p.Code)
+	n, _ := o.s.State.store.CountRedemptions(ctx, p.Code)
 	remaining := max0(p.MaxRedemptions - n)
 	if !p.Active || remaining == 0 {
 		ok = false
@@ -364,75 +455,76 @@ func quotePromo(s *cloud.Service[state], c *zip.Ctx) error {
 			reason = "promo is not active"
 		}
 	}
-	return c.JSON(http.StatusOK, Quote{
+	return &Quote{
 		Code: p.Code, Plan: plan, Seats: seats, Eligible: ok, Reason: reason,
 		ListCents: planListCents(plan), ChargeCents: charge, DiscountCents: discount, Remaining: remaining,
-	})
+	}, nil
 }
 
-// redeemPromo redeems the promo for the caller's org.
-func redeemPromo(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	p, err := s.State.store.GetPromo(c.Context(), strings.TrimSpace(c.Param("code")))
+// redeemPromo redeems the promo for the caller's org, crediting the discount
+// value to its wallet through the finance ledger. Three guards run under one
+// lock so the cap cannot be raced past: the fleet-wide redemption cap, one
+// redemption per org, and one per payment instrument.
+//
+// It is IDEMPOTENT: an org that already redeemed gets its original redemption
+// back with alreadyRedeemed true and is not credited twice.
+//
+// Example: {"code": "first1000", "plan": "pro", "seats": 1, "instrument": "pm_1QxYz2AbCdEf"}
+func (o ops) redeemPromo(ctx context.Context, in *RedeemInput) (*RedeemResult, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return mapErr(err, "promo not found")
+		return nil, err
+	}
+	p, err := o.s.State.store.GetPromo(ctx, strings.TrimSpace(in.Code))
+	if err != nil {
+		return nil, mapErr(err, "promo not found")
 	}
 	if !p.Active {
-		return zip.ErrConflict("promo is not active")
+		return nil, zip.ErrConflict("promo is not active")
 	}
-	var body struct {
-		Plan       string `json:"plan"`
-		Seats      int    `json:"seats"`
-		Instrument string `json:"instrument"`
-	}
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	seats := body.Seats
+	seats := in.Seats
 	if seats <= 0 {
 		seats = 1
 	}
-	charge, discount, eligible, reason := p.quote(body.Plan, seats)
+	charge, discount, eligible, reason := p.quote(in.Plan, seats)
 	if !eligible {
-		return zip.ErrBadRequest(reason)
+		return nil, zip.ErrBadRequest(reason)
 	}
-	r, already, err := s.State.store.redeem(c.Context(), p, org, strings.ToLower(strings.TrimSpace(body.Plan)), seats, strings.TrimSpace(body.Instrument), discount, finance.Current(), time.Now().Unix())
+	r, already, err := o.s.State.store.redeem(ctx, p, org, strings.ToLower(strings.TrimSpace(in.Plan)), seats, strings.TrimSpace(in.Instrument), discount, finance.Current(), time.Now().Unix())
 	switch {
 	case errors.Is(err, errPromoExhausted):
-		return zip.ErrConflict("promo redemption cap reached")
+		return nil, zip.ErrConflict("promo redemption cap reached")
 	case errors.Is(err, errInstrumentUsed):
-		return zip.ErrForbidden("payment instrument already redeemed this promo")
+		return nil, zip.ErrForbidden("payment instrument already redeemed this promo")
 	case errors.Is(err, errFinanceUnavailable):
-		return zip.Errorf(http.StatusServiceUnavailable, "billing ledger unavailable; try again")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "billing ledger unavailable; try again")
 	case err != nil:
-		return zip.Errorf(http.StatusInternalServerError, "redeem: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "redeem: %v", err)
 	}
-	status := http.StatusCreated
-	if already {
-		status = http.StatusOK
+	if !already {
+		cloud.Created(ctx)
 	}
-	return c.JSON(status, map[string]any{
-		"redemption": r, "chargeCents": charge, "discountCents": discount, "alreadyRedeemed": already,
-	})
+	return &RedeemResult{Redemption: r, ChargeCents: charge, DiscountCents: discount, AlreadyRedeemed: already}, nil
 }
 
-// getRedemption returns the caller org's own redemption (org-scoped read).
-func getRedemption(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	r, found, err := s.State.store.GetRedemption(c.Context(), strings.TrimSpace(c.Param("code")), org)
+// getRedemption returns the caller org's OWN redemption of a promo — an
+// org-scoped read, so it can never surface another tenant's. Not found when this
+// org has not redeemed it.
+//
+// Example: {"code": "first1000"}
+func (o ops) getRedemption(ctx context.Context, in *PromoRef) (*Redemption, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "redemption: %v", err)
+		return nil, err
+	}
+	r, found, err := o.s.State.store.GetRedemption(ctx, strings.TrimSpace(in.Code), org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "redemption: %v", err)
 	}
 	if !found {
-		return zip.ErrNotFound("no redemption for this org")
+		return nil, zip.ErrNotFound("no redemption for this org")
 	}
-	return c.JSON(http.StatusOK, r)
+	return &r, nil
 }
 
 // max0 clamps a count to >= 0.

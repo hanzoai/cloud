@@ -43,7 +43,7 @@ package admin
 // OLTP Postgres (object.RoutingEvent), NOT the OLAP warehouse, so the honest
 // warehouse-side progress signal is the eval-score trend, not a routing table.
 //
-// SUPERADMIN ONLY (the core.Guard wrap in admin.go), all-orgs, no org filter — the
+// SUPERADMIN ONLY (core.Admit, the op's first line), all-orgs, no org filter — the
 // one place a fleet operator crosses tenants for AI/eval metrics; a non-admin bearer
 // is refused 403 before a single row is read. Fail-closed.
 //
@@ -57,39 +57,38 @@ package admin
 // bucket interval is a server-side constant — injection-safe.
 
 import (
+	"context"
 	"strconv"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/datastore"
-	"github.com/zap-proto/zip"
 )
 
 // Fully-qualified datastore tables. admin only READS these — the ai gateway owns
 // hanzo.cloud_usage, O11yAI owns o11y_ai.observations, and the eval telemetry
 // store (clients/eval) owns hanzo.eval_traces / hanzo.eval_scores.
 const (
-	aimUsageTable  = "hanzo.cloud_usage"
-	aimO11yAIObs = "o11y_ai.observations"
-	aimEvalTraces  = "hanzo.eval_traces"
-	aimEvalScores  = "hanzo.eval_scores"
-	aimTopN        = 12
+	aimUsageTable = "hanzo.cloud_usage"
+	aimO11yAIObs  = "o11y_ai.observations"
+	aimEvalTraces = "hanzo.eval_traces"
+	aimEvalScores = "hanzo.eval_scores"
+	aimTopN       = 12
 )
 
 // aiMetrics is the whole AI-metrics board payload.
 type aiMetrics struct {
-	Range          string           `json:"range"`
-	Start          string           `json:"start"`
-	End            string           `json:"end"`
-	O11yAI       aimO11yAI      `json:"o11yAi"`
-	Usage          aimUsage         `json:"usage"`
-	Evals          aimEvals         `json:"evals"`
-	TopModels      []aimModelStat   `json:"topModels"`      // cloud_usage per-model (populated today)
+	Range        string           `json:"range"`
+	Start        string           `json:"start"`
+	End          string           `json:"end"`
+	O11yAI       aimO11yAI        `json:"o11yAi"`
+	Usage        aimUsage         `json:"usage"`
+	Evals        aimEvals         `json:"evals"`
+	TopModels    []aimModelStat   `json:"topModels"`    // cloud_usage per-model (populated today)
 	O11yAIModels []aimLfModelStat `json:"o11yAiModels"` // o11y_ai per-model (honest-empty today)
-	ScoreNames     []aimScoreStat   `json:"scoreNames"`     // eval_scores per score-name
-	EvalRuns       []aimRunStat     `json:"evalRuns"`       // recent eval runs (progress)
-	ScoreSeries    []aimScorePoint  `json:"scoreSeries"`    // avg eval score over time (progress trend)
+	ScoreNames   []aimScoreStat   `json:"scoreNames"`   // eval_scores per score-name
+	EvalRuns     []aimRunStat     `json:"evalRuns"`     // recent eval runs (progress)
+	ScoreSeries  []aimScorePoint  `json:"scoreSeries"`  // avg eval score over time (progress trend)
 }
 
 // aimO11yAI is the fleet-wide O11yAI generation rollup (honest-empty today).
@@ -165,29 +164,40 @@ type aimScorePoint struct {
 	Count    int64   `json:"count"`
 }
 
-// aimetrics answers GET /v1/admin/aimetrics. ?range=24h|7d|30d bounds the window
-// (default 30d). SUPERADMIN ONLY (core.Guard). Every signal degrades independently:
-// a table that is absent or errors contributes its zero-value, never a failure — the
-// board always renders what the datastore actually holds.
-func aimetrics(s *cloud.Service[core.State], c *zip.Ctx) error {
-	ctx := c.Context()
-	rangeLabel := o11yRange(c.Query("range"))
+// aimetrics is the fleet AI board: O11yAI generations (count, cost, avg/p95 latency,
+// per-model), per-model usage from the live cloud_usage ledger, and the eval plane
+// (traces, scores, score names, runs, and the average-score trend).
+//
+// Every signal degrades INDEPENDENTLY — a table that is absent or errors contributes its
+// zero value and the read still succeeds. O11yAI latency is a SEPARATE query from
+// generations and cost on purpose: a Nullable end_time or a column mismatch there must
+// not zero the two numbers that did read.
+//
+// Example: {"range":"7d"}
+// Response: {"status":"ok","msg":"","data":{"range":"7d","start":"2026-07-20T00:00:00Z",
+// "end":"2026-07-27T00:00:00Z","topModels":[],"o11yAiModels":[],"scoreNames":[],
+// "evalRuns":[],"scoreSeries":[]}}
+func aimetrics(ctx context.Context, in *rangeIn) (*aimetricsOut, error) {
+	if _, err := core.Admit(ctx); err != nil {
+		return nil, err
+	}
+	rangeLabel := o11yRange(in.Range)
 	since := computeSince(rangeLabel)
 	payload := aiMetrics{
-		Range:          rangeLabel,
-		Start:          since.Format(time.RFC3339),
-		End:            time.Now().UTC().Format(time.RFC3339),
-		TopModels:      []aimModelStat{},
+		Range:        rangeLabel,
+		Start:        since.Format(time.RFC3339),
+		End:          time.Now().UTC().Format(time.RFC3339),
+		TopModels:    []aimModelStat{},
 		O11yAIModels: []aimLfModelStat{},
-		ScoreNames:     []aimScoreStat{},
-		EvalRuns:       []aimRunStat{},
-		ScoreSeries:    []aimScorePoint{},
+		ScoreNames:   []aimScoreStat{},
+		EvalRuns:     []aimRunStat{},
+		ScoreSeries:  []aimScorePoint{},
 	}
 
 	// Honest-empty when the warehouse is not connected: the board renders its zero
 	// state, never a fabricated fleet.
 	if !datastore.Ready() {
-		return core.OK(c, payload)
+		return &aimetricsOut{Status: core.OK, Data: &payload}, nil
 	}
 
 	sinceTS := chTS(since) // DateTime literal — cloud_usage.timestamp, o11y_ai.start_time, eval_*.ts
@@ -236,7 +246,14 @@ func aimetrics(s *cloud.Service[core.State], c *zip.Ctx) error {
 		payload.ScoreSeries = scoreSeriesFromRows(rows)
 	}
 
-	return core.OK(c, payload)
+	return &aimetricsOut{Status: core.OK, Data: &payload}, nil
+}
+
+// aimetricsOut is the GET /v1/admin/aimetrics envelope.
+type aimetricsOut struct {
+	Status string     `json:"status"`
+	Msg    string     `json:"msg"`
+	Data   *aiMetrics `json:"data"`
 }
 
 // ── pure SQL builders (static SQL + one positional time bound; unit-tested) ──

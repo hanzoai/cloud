@@ -13,7 +13,7 @@ package visor
 // are per-org isolated. Billed a nominal management fee (customer brings the compute).
 
 import (
-	"encoding/json"
+	"context"
 	"net/http"
 	"strings"
 
@@ -28,67 +28,96 @@ import (
 // service) — no bespoke env var. Customer brings compute; Hanzo meters the mgmt plane.
 const byoClusterKind = "byo-cluster"
 
-// attachCluster (POST /v1/clusters) attaches a BYO cluster to the caller's org: a
-// kubeconfig body = BYO attach (validated, KMS-sealed, added to the fleet). Managed
-// provisioning (a provider+spec body → Visor) is the future sibling variant.
-func attachCluster(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// clusterAttach is the BYO attach body: the cluster's name and the kubeconfig that
+// reaches it. The kubeconfig is KMS-sealed at rest and never echoed back.
+type clusterAttach struct {
+	// Name is the fleet-local name for the cluster; lower-cased, and the key the
+	// detach route addresses it by. Required.
+	Name string `json:"name"`
+	// Kubeconfig is the cluster's kubeconfig, verbatim. Required — a body without
+	// one is not an attach.
+	Kubeconfig string `json:"kubeconfig"`
+	// Provider is a free-form label for where the cluster runs ("gke", "on-prem");
+	// it is display only, not a routing key.
+	Provider string `json:"provider"`
+	// Default marks this the org's default cluster for scheduling.
+	Default bool `json:"default"`
+}
+
+// clusterDetached names the cluster a detach removed.
+type clusterDetached struct {
+	// Detached is the lower-cased fleet name that was removed.
+	Detached string `json:"detached"`
+}
+
+// attachCluster attaches a BYO cluster to the caller's org — the kubeconfig is
+// validated, KMS-sealed and added to the fleet — and answers 201 with the cluster
+// as it now appears on GET /v1/clusters. Billed the nominal management fee: the
+// customer brings the compute, Hanzo meters the management plane.
+//
+// Example: {"name":"lab","kubeconfig":"apiVersion: v1\nkind: Config\n...","provider":"on-prem","default":false}
+// Response: {"name":"lab","region":"on-prem","status":"attached","nodePools":[],"nodeCount":3,"kind":"byo","nvidiaGpu":2}
+func (o ops) attachCluster(ctx context.Context, in *clusterAttach) (*clusterView, error) {
+	c, org, err := scope(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var req struct {
-		Name       string `json:"name"`
-		Kubeconfig string `json:"kubeconfig"`
-		Provider   string `json:"provider"`
-		Default    bool   `json:"default"`
-	}
-	if err := json.Unmarshal(c.Body(), &req); err != nil {
-		return zip.Errorf(http.StatusBadRequest, "invalid JSON body: %v", err)
-	}
-	name := strings.ToLower(strings.TrimSpace(req.Name))
+	name := strings.ToLower(strings.TrimSpace(in.Name))
 	if name == "" {
-		return zip.ErrBadRequest("'name' is required")
+		return nil, zip.ErrBadRequest("'name' is required")
 	}
-	if strings.TrimSpace(req.Kubeconfig) == "" {
-		return zip.ErrBadRequest("'kubeconfig' is required (BYO cluster attach)")
+	if strings.TrimSpace(in.Kubeconfig) == "" {
+		return nil, zip.ErrBadRequest("'kubeconfig' is required (BYO cluster attach)")
 	}
-	if !s.State.fleet.Enabled() {
-		return zip.Errorf(http.StatusServiceUnavailable, "BYO cluster attach not configured on this deployment (KMS required)")
+	if !o.State.fleet.Enabled() {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "BYO cluster attach not configured on this deployment (KMS required)")
 	}
 	// Nominal management-fee gate (fail-closed, per-org — billing keys on the paying
 	// org, not the project sub-scope).
 	fee := cloud.ResourceFeeCents("CLOUD_COMPUTE_FEE_CENTS", byoClusterKind)
 	_, projectValidated := principal.ValidatedProject(c)
-	if err := s.State.bill.Gate(c.Context(), principal.Ledger(c), principal.Project(c), projectValidated, byoClusterKind, fee); err != nil {
-		return cloud.DenyResource(c, err)
+	if err := o.State.bill.Gate(c.Context(), principal.Ledger(c), principal.Project(c), projectValidated, byoClusterKind, fee); err != nil {
+		return nil, cloud.DenyResource(c, err)
 	}
-	rec, err := s.State.fleet.Register(c.Context(), org, project(c), name, req.Kubeconfig, req.Provider, req.Default)
+	rec, err := o.State.fleet.Register(c.Context(), org, project(c), name, in.Kubeconfig, in.Provider, in.Default)
 	if err != nil {
-		return zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
+		return nil, zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
 	}
-	s.State.bill.Meter(principal.Ledger(c), principal.Project(c), byoClusterKind, fee, c.RequestID(), cloud.ClientIP(c))
-	return c.JSON(http.StatusCreated, byoToClusterView(rec))
+	o.State.bill.Meter(principal.Ledger(c), principal.Project(c), byoClusterKind, fee, c.RequestID(), cloud.ClientIP(c))
+	cloud.Created(ctx)
+	v := byoToClusterView(rec)
+	return &v, nil
 }
 
-// detachCluster (DELETE /v1/clusters/:id) removes a BYO cluster from the org's fleet.
-// Only touches BYO clusters; managed node-pool deletes use the deeper pool routes.
-func detachCluster(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	name := strings.ToLower(strings.TrimSpace(c.Param("id")))
-	if name == "" {
-		return zip.ErrBadRequest("cluster id required")
-	}
-	found, err := s.State.fleet.Deregister(org, project(c), name)
+// clusterRef addresses ONE BYO cluster in the org's fleet.
+type clusterRef struct {
+	// ID is the cluster's fleet name (the `name` it was attached under), matched
+	// lower-cased.
+	ID string `json:"id"`
+}
+
+// detachCluster removes a BYO cluster from the caller org's fleet. It only ever
+// touches BYO clusters — a managed cluster's nodes are removed through the node-pool
+// routes — and answers 404 when the name is not in this org's fleet.
+//
+// Response: {"detached":"lab"}
+func (o ops) detachCluster(ctx context.Context, in *clusterRef) (*clusterDetached, error) {
+	c, org, err := scope(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "detach: %v", err)
+		return nil, err
+	}
+	name := strings.ToLower(strings.TrimSpace(in.ID))
+	if name == "" {
+		return nil, zip.ErrBadRequest("cluster id required")
+	}
+	found, err := o.State.fleet.Deregister(org, project(c), name)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "detach: %v", err)
 	}
 	if !found {
-		return zip.ErrNotFound("BYO cluster not found in your fleet")
+		return nil, zip.ErrNotFound("BYO cluster not found in your fleet")
 	}
-	return c.JSON(http.StatusOK, map[string]any{"detached": name})
+	return &clusterDetached{Detached: name}, nil
 }
 
 // byoClusters returns the org+project's BYO clusters as clusterViews for the fleet

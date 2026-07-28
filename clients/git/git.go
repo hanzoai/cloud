@@ -90,21 +90,46 @@ var mounted atomic.Pointer[cloud.Service[state]]
 
 // ---- HTTP response shapes ----
 
+// repoView is one repo as the control plane reports it.
 type repoView struct {
-	ID            string   `json:"id"`
-	Org           string   `json:"org"`
-	Project       string   `json:"project,omitempty"`
-	Name          string   `json:"name"`
-	Description   string   `json:"description,omitempty"`
-	DefaultBranch string   `json:"defaultBranch"`
-	Public        bool     `json:"public"`
-	Branches      []string `json:"branches,omitempty"`
-	Head          string   `json:"head,omitempty"`
-	CloneURL      string   `json:"cloneUrl"`
-	SSHURL        string   `json:"sshUrl"`
-	SizeBytes     int64    `json:"sizeBytes"`
-	CreatedAt     string   `json:"createdAt"`
-	UpdatedAt     string   `json:"updatedAt,omitempty"`
+	// ID is the repo's stable, prefixed identifier ("repo_" + 128 random bits).
+	ID string `json:"id"`
+	// Org owns the repo — the gateway-minted X-Org-Id, and the isolation key.
+	Org string `json:"org"`
+	// Project is the optional sub-scope the repo lives in; absent for the org's
+	// default scope.
+	Project string `json:"project,omitempty"`
+	// Name is the org-unique handle, and the last path segment of both URLs below.
+	Name string `json:"name"`
+	// Description is the caller-supplied blurb (max 4KiB).
+	Description string `json:"description,omitempty"`
+	// DefaultBranch is where HEAD points on a fresh repo ("main").
+	DefaultBranch string `json:"defaultBranch"`
+	// Public grants ANONYMOUS read (fetch) only; push and the whole control plane
+	// stay org-authed.
+	Public bool `json:"public"`
+	// Branches are the repo's branch names. Read live, so the detail view carries
+	// them and a list row does not.
+	Branches []string `json:"branches,omitempty"`
+	// Head is the resolved HEAD commit, empty on an empty repo.
+	Head string `json:"head,omitempty"`
+	// CloneURL is the HTTPS smart-HTTP remote `git clone` takes.
+	CloneURL string `json:"cloneUrl"`
+	// SSHURL is the scp-style SSH remote (git@host:org/repo.git).
+	SSHURL string `json:"sshUrl"`
+	// SizeBytes is the repo's measured on-disk size, re-measured on create, after
+	// each push, and after a gc. This is the number billing meters.
+	SizeBytes int64 `json:"sizeBytes"`
+	// CreatedAt is RFC 3339 UTC.
+	CreatedAt string `json:"createdAt"`
+	// UpdatedAt is RFC 3339 UTC, empty until the first write.
+	UpdatedAt string `json:"updatedAt,omitempty"`
+}
+
+// repoList is the collection envelope every git list op answers with.
+type repoList struct {
+	// Data holds the repos in scope, most recently updated first.
+	Data []repoView `json:"data"`
 }
 
 func rfc3339(unix int64) string {
@@ -148,6 +173,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("git.Mount: nil app")
 	}
+	// git registers TYPED ops, which live on the *zip.App's registry (ops.go).
+	// Resolved before anything is built so a Router that cannot carry them fails
+	// the mount rather than serving a surface no projection knows about.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("git.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
 	if deps.Logger == nil {
 		return fmt.Errorf("git.Mount: nil deps.Logger")
 	}
@@ -176,7 +208,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}}
 	mounted.Store(s)
 
-	routes(app, s)
+	routes(app, zapp, s)
 	registerLifecycleReactors()
 	// Install the git object-plane importer so the integrations plane (GitHub App)
 	// can create + mirror-in + fast-forward-sync repos with no integrations⇄git cycle.
@@ -206,54 +238,67 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // routes registers the git control plane + smart-HTTP + SSH-key + ZAP surface.
-func routes(app cloud.Router, s *cloud.Service[state]) {
+//
+// Two registrars, one router. zip.<Verb>(zapp, …) registers a TYPED op — a route
+// plus the registry entry OpenAPI / MCP / the CLI are projected from (ops.go) —
+// and takes the ABSOLUTE path, since the registry keys on it. g.<Verb>(…) stays
+// for the routes a typed op cannot express: a 201, a raw pack stream, an HTML
+// page. The two are interleaved in the ORIGINAL order because fiber resolves by
+// registration order, and that order is load-bearing here (see below).
+func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
+	o := ops{s: s}
 	g := app.Group("/v1/git")
+	// The principal bridge first: every typed op below reads its tenant off the
+	// request context, and a Use only runs ahead of routes registered after it.
+	g.Use(bridgePrincipal)
 
 	// Control plane (JSON). Static /repos + /usage register before the
 	// smart-HTTP :org/:repo params so a real org can never shadow them.
 	g.Post("/repos", cloud.Handle(s, create))
-	g.Get("/repos", cloud.Handle(s, list))
-	g.Get("/usage", cloud.Handle(s, usage))
-	g.Get("/repos/:name", cloud.Handle(s, get))
-	g.Patch("/repos/:name", cloud.Handle(s, patchRepo))
-	g.Delete("/repos/:name", cloud.Handle(s, del))
+	zip.Get(zapp, "/v1/git/repos", o.listRepos)
+	zip.Get(zapp, "/v1/git/usage", o.usage)
+	zip.Get(zapp, "/v1/git/repos/:name", o.getRepo)
+	zip.Patch(zapp, "/v1/git/repos/:name", o.setVisibility)
+	zip.Delete(zapp, "/v1/git/repos/:name", o.deleteRepo)
 	// Push generated files without a local git client (hanzo.app builder).
 	// A distinct trailing segment, so it never shadows the :org/:repo routes.
-	g.Post("/repos/:name/push", cloud.Handle(s, pushFiles))
+	zip.Post(zapp, "/v1/git/repos/:name/push", o.pushFiles)
 	// SSH public-key registry (per-user keys for `git clone git@…`).
 	g.Post("/keys", cloud.Handle(s, registerKey))
-	g.Get("/keys", cloud.Handle(s, listKeys))
-	g.Delete("/keys/:id", cloud.Handle(s, deleteKey))
+	zip.Get(zapp, "/v1/git/keys", o.listKeys)
+	zip.Delete(zapp, "/v1/git/keys/:id", o.deleteKey)
 	// Mirror an external repo into <org>/:name (creates the repo on first use).
 	// A distinct trailing segment, so it never shadows the :org/:repo smart-HTTP
 	// routes below.
-	g.Post("/repos/:name/mirror", cloud.Handle(s, mirror))
+	zip.Post(zapp, "/v1/git/repos/:name/mirror", o.mirror)
 	// Repack a repo with a reachability bitmap + commit-graph so its next clone
 	// serves fast (bitmap reuse, no full object-graph walk). Distinct trailing
 	// segment, like /mirror — never shadows the :org/:repo smart-HTTP routes.
-	g.Post("/repos/:name/gc", cloud.Handle(s, maintain))
+	zip.Post(zapp, "/v1/git/repos/:name/gc", o.gc)
 
 	// Repo-lifecycle config: Slack-channel subscriptions (notify.go) + downstream
 	// mirror targets (mirror_out.go). Distinct trailing segments, so they never
 	// shadow the :org/:repo smart-HTTP routes below. Org-scoped like every repo op.
 	g.Post("/repos/:name/subscriptions", cloud.Handle(s, subscribe))
-	g.Get("/repos/:name/subscriptions", cloud.Handle(s, listSubscriptions))
-	g.Delete("/repos/:name/subscriptions/:id", cloud.Handle(s, unsubscribe))
+	zip.Get(zapp, "/v1/git/repos/:name/subscriptions", o.listSubscriptions)
+	zip.Delete(zapp, "/v1/git/repos/:name/subscriptions/:id", o.unsubscribe)
 	g.Post("/repos/:name/mirrors", cloud.Handle(s, addMirror))
-	g.Get("/repos/:name/mirrors", cloud.Handle(s, listMirrors))
-	g.Delete("/repos/:name/mirrors/:id", cloud.Handle(s, deleteMirror))
+	zip.Get(zapp, "/v1/git/repos/:name/mirrors", o.listMirrors)
+	zip.Delete(zapp, "/v1/git/repos/:name/mirrors/:id", o.deleteMirror)
 
 	// Read/browse surface (JSON) for the console repo-browser: refs, tree, blob,
 	// commits, readme. ref + path ride as ?ref=&path= query params (the UI's own
 	// convention), so a slashed branch is unambiguous. Distinct trailing segments —
 	// they never shadow the :org/:repo smart-HTTP routes below. Org-scoped like every
 	// repo op; the JSON twin of the HTML browser in ui.go (one set of read helpers).
-	g.Get("/repos/:name/refs", cloud.Handle(s, browseRefs))
-	g.Get("/repos/:name/tree", cloud.Handle(s, browseTree))
-	g.Get("/repos/:name/blob", cloud.Handle(s, browseBlob))
-	g.Get("/repos/:name/commits", cloud.Handle(s, browseCommits))
-	g.Get("/repos/:name/readme", cloud.Handle(s, browseReadme))
+	zip.Get(zapp, "/v1/git/repos/:name/refs", o.browseRefs)
+	zip.Get(zapp, "/v1/git/repos/:name/tree", o.browseTree)
+	zip.Get(zapp, "/v1/git/repos/:name/blob", o.browseBlob)
+	zip.Get(zapp, "/v1/git/repos/:name/commits", o.browseCommits)
+	zip.Get(zapp, "/v1/git/repos/:name/readme", o.browseReadme)
 
 	// Smart-HTTP git protocol. These live under /v1/git/:org/:repo/* so
 	// `git clone https://<host>/v1/git/<org>/<repo>.git` works natively.
@@ -347,51 +392,56 @@ type createReq struct {
 	Public      bool   `json:"public"`
 }
 
+// create answers 201, which a typed op cannot express — zip writes 200 for a
+// value and 204 for none, with no status seam — so it stays a raw handler. The
+// core it calls is the same one the ZAP procedure and the CLI reach.
 func create(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+	t, err := tenantFrom(c)
+	if err != nil {
+		return err
 	}
 	var body createReq
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
-	view, err := coreCreate(s, c.Context(), org, projectScope(c), body)
+	view, err := coreCreate(s, c.Context(), t.org, t.project, body)
 	if err != nil {
 		return createErr(err)
 	}
 	return c.JSON(http.StatusCreated, view)
 }
 
-// patchReq carries the mutable repo settings. Pointer fields distinguish
-// "absent" from "zero" so a PATCH changes exactly what the caller sent.
-type patchReq struct {
+// patchIn carries the mutable repo settings. Public is a pointer so "absent" and
+// "false" are distinguishable and a PATCH changes exactly what the caller sent.
+type patchIn struct {
+	// Name is the repo to update, from the :name path segment.
+	Name string `json:"name"`
+	// Public flips anonymous read access. Omit it and the request is refused —
+	// there is nothing else to update yet.
 	Public *bool `json:"public"`
 }
 
-// patchRepo serves PATCH /v1/git/repos/:name — today that is the visibility
-// bit. Org-authed like every control-plane op; a public repo grants anonymous
-// READ only (smart_http.go), never write.
-func patchRepo(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// setVisibility flips a repo's public bit, the one mutable repo setting today.
+// Public grants ANONYMOUS fetch only; push and the whole control plane stay
+// org-authed. Returns the updated repo.
+//
+// Example: {"name": "widgets", "public": true}
+func (o ops) setVisibility(ctx context.Context, in *patchIn) (*repoView, error) {
+	t, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body patchReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	if in.Public == nil {
+		return nil, zip.ErrBadRequest("nothing to update (supported: public)")
 	}
-	if body.Public == nil {
-		return zip.ErrBadRequest("nothing to update (supported: public)")
-	}
-	view, err := coreSetVisibility(s, c.Context(), org, projectScope(c), c.Param("name"), *body.Public)
+	view, err := coreSetVisibility(o.s, ctx, t.org, t.project, in.Name, *in.Public)
 	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("repo not found")
+		return nil, zip.ErrNotFound("repo not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+		return nil, internalErr(err)
 	}
-	return c.JSON(http.StatusOK, view)
+	return &view, nil
 }
 
 // createErr maps a coreCreate error to its HTTP status. The ONE mapping the REST
@@ -424,75 +474,115 @@ func provision(s *cloud.Service[state], ctx context.Context, store *Store, r Rep
 	return nil
 }
 
-func list(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	out, err := coreList(s, c.Context(), org, projectScope(c))
+// listRepos returns the repos in the caller's scope, most recently updated
+// first. The scope is the request principal's — the gateway-minted org and its
+// optional project — never anything off the wire, so a caller only ever sees its
+// own. Rows carry no branches or HEAD; read one repo for those.
+//
+// Example: {}
+//
+//	Response: {"data": [{"id": "repo_9f3c", "org": "acme", "name": "widgets",
+//		"defaultBranch": "main", "public": false,
+//		"cloneUrl": "https://api.hanzo.ai/v1/git/acme/widgets.git",
+//		"sshUrl": "git@git.hanzo.ai:acme/widgets.git", "sizeBytes": 4096,
+//		"createdAt": "2026-07-01T10:00:00Z"}]}
+func (o ops) listRepos(ctx context.Context, _ *noInput) (*repoList, error) {
+	t, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	out, err := coreList(o.s, ctx, t.org, t.project)
+	if err != nil {
+		return nil, internalErr(err)
+	}
+	return &repoList{Data: out}, nil
 }
 
-func get(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// getRepo returns one repo with its live ref state: every branch name and the
+// resolved HEAD commit. Both are read from the object store on each call, so an
+// empty repo reports no branches and an empty head rather than failing. A repo
+// outside the caller's scope is not found.
+//
+// Example: {"name": "widgets"}
+func (o ops) getRepo(ctx context.Context, in *repoRef) (*repoView, error) {
+	t, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	view, err := coreGet(s, c.Context(), org, projectScope(c), c.Param("name"))
+	view, err := coreGet(o.s, ctx, t.org, t.project, in.Name)
 	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("repo not found")
+		return nil, zip.ErrNotFound("repo not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+		return nil, internalErr(err)
 	}
-	return c.JSON(http.StatusOK, view)
+	return &view, nil
 }
 
-func del(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// deleteRepo removes a repo's metadata and purges its storage. Answers 204 with
+// no body. The metadata row is the source of truth for existence, so a storage
+// purge that fails is logged and the delete still succeeds — and a second call
+// is a 404, not a second delete.
+//
+// Example: {"name": "widgets"}
+func (o ops) deleteRepo(ctx context.Context, in *repoRef) (*noContent, error) {
+	t, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	err := coreDelete(s, c.Context(), org, projectScope(c), c.Param("name"))
+	err = coreDelete(o.s, ctx, t.org, t.project, in.Name)
 	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("repo not found")
+		return nil, zip.ErrNotFound("repo not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+		return nil, internalErr(err)
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // ---- usage / billing ----
 
+// usageRepo is one repo's share of the org's storage bill.
 type usageRepo struct {
-	Name      string `json:"name"`
-	Project   string `json:"project,omitempty"`
-	SizeBytes int64  `json:"sizeBytes"`
+	// Name is the repo's org-unique handle.
+	Name string `json:"name"`
+	// Project is the sub-scope the repo lives in; absent for the default scope.
+	Project string `json:"project,omitempty"`
+	// SizeBytes is the repo's on-disk size at its last measurement.
+	SizeBytes int64 `json:"sizeBytes"`
 }
 
+// usageView is the org's storage rollup.
 type usageView struct {
-	Org        string      `json:"org"`
-	TotalBytes int64       `json:"totalBytes"`
-	Repos      []usageRepo `json:"repos"`
+	// Org the rollup is for.
+	Org string `json:"org"`
+	// TotalBytes is the sum over Repos — the org's whole git footprint.
+	TotalBytes int64 `json:"totalBytes"`
+	// Repos is every repo the org owns, across every project sub-scope.
+	Repos []usageRepo `json:"repos"`
 }
 
-// usage returns per-repo + total storage bytes for the tenant — the queryable,
-// per-tenant number commerce/o11y meter on. Org-wide (across every project) so
-// a billing consumer sees the whole tenant footprint in one call.
-func usage(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	out, err := coreUsage(s, c.Context(), org)
+// usage returns per-repo and total storage bytes for the caller's org — the
+// queryable, per-tenant number commerce and o11y meter on. It spans EVERY
+// project sub-scope, unlike the repo list, so a billing consumer sees the whole
+// tenant footprint in one call. Sizes are last-measured values (create, push,
+// mirror and gc each re-measure), not a live walk of the disk.
+//
+// Example: {}
+//
+//	Response: {"org": "acme", "totalBytes": 12288,
+//		"repos": [{"name": "widgets", "sizeBytes": 4096},
+//			{"name": "site", "project": "web", "sizeBytes": 8192}]}
+func (o ops) usage(ctx context.Context, _ *noInput) (*usageView, error) {
+	t, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, out)
+	out, err := coreUsage(o.s, ctx, t.org)
+	if err != nil {
+		return nil, internalErr(err)
+	}
+	return &out, nil
 }
 
 // recordUsage re-measures a repo's on-disk size, persists it, and emits the

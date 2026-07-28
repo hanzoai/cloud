@@ -28,7 +28,7 @@ package admin
 //   - Logs       → o11y_logs.distributed_logs_v2 : fleet log volume + volume-over-time
 //   - LLM gens   → o11y_ai.observations      : generations + cost (fleet-wide; honest-empty today)
 //
-// SUPERADMIN ONLY (the s.guard wrap in admin.go): the gateway strips a client
+// SUPERADMIN ONLY (core.Admit, the op's first line): the gateway strips a client
 // X-Org-Id and re-mints from the JWT owner, and this handler applies NO org filter,
 // so it is the ONE place a fleet operator crosses tenants — a non-admin bearer is
 // refused 403 before a single row is read. Fail-closed.
@@ -41,14 +41,13 @@ package admin
 // server-side constant — injection-safe.
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/datastore"
-	"github.com/zap-proto/zip"
 )
 
 // Fully-qualified datastore tables. admin only READS these — the ZAP collector
@@ -57,7 +56,7 @@ const (
 	o11yUsageTable   = "hanzo.cloud_usage"
 	o11yTraceTable   = "o11y_traces.distributed_o11y_index_v3"
 	o11yLogTable     = "o11y_logs.distributed_logs_v2"
-	o11yAIObs  = "o11y_ai.observations"
+	o11yAIObs        = "o11y_ai.observations"
 	o11yTopN         = 10
 	o11yServiceLimit = 12
 )
@@ -144,13 +143,27 @@ type o11yLLM struct {
 	CostUsd     float64 `json:"costUsd"`
 }
 
-// o11y answers GET /v1/admin/o11y. ?range=24h|7d|30d bounds the window (default 30d).
-// SUPERADMIN ONLY (s.guard). Every signal degrades independently: a table that is
-// absent or errors contributes its zero-value, never a failure — the fleet board
-// always renders what the datastore actually holds.
-func o11y(s *cloud.Service[core.State], c *zip.Ctx) error {
-	ctx := c.Context()
-	rangeLabel := o11yRange(c.Query("range"))
+// o11y is the fleet-wide observability board: LLM usage (requests, tokens, cost,
+// errors, top orgs, top models), trace RED metrics (count, p50/p95/p99 latency in ms,
+// error rate, top services), fleet log volume, and the O11yAI generation rollup — all
+// aggregated across EVERY tenant, with no org filter applied.
+//
+// Every signal degrades INDEPENDENTLY. A table that is absent or errors contributes its
+// zero value and the read still succeeds, so the board renders exactly what the
+// warehouse holds rather than failing whole because one of four sources is missing.
+// Same when the warehouse is not connected at all: the zero board, never a fabricated
+// fleet.
+//
+// Example: {"range":"7d"}
+// Response: {"status":"ok","msg":"","data":{"range":"7d","start":"2026-07-20T00:00:00Z",
+// "end":"2026-07-27T00:00:00Z","totals":{"requests":10420,"tokens":8100000,"costCents":41200,
+// "errors":37},"series":[],"logSeries":[],"topOrgs":[],"topModels":[],"topServices":[],
+// "llm":{"generations":0,"costUsd":0}}}
+func o11y(ctx context.Context, in *rangeIn) (*o11yOut, error) {
+	if _, err := core.Admit(ctx); err != nil {
+		return nil, err
+	}
+	rangeLabel := o11yRange(in.Range)
 	since := computeSince(rangeLabel)
 	payload := o11yGlobal{
 		Range:       rangeLabel,
@@ -166,7 +179,7 @@ func o11y(s *cloud.Service[core.State], c *zip.Ctx) error {
 	// Honest-empty when the warehouse is not connected: the board renders its zero
 	// state, never a fabricated fleet.
 	if !datastore.Ready() {
-		return core.OK(c, payload)
+		return &o11yOut{Status: core.OK, Data: &payload}, nil
 	}
 
 	sinceTS := chTS(since)         // DateTime literal — cloud_usage.timestamp, traces.timestamp
@@ -211,7 +224,14 @@ func o11y(s *cloud.Service[core.State], c *zip.Ctx) error {
 		payload.LLM = o11yLLM{Generations: chInt64(r["gens"]), CostUsd: chFloat64(r["cost"])}
 	}
 
-	return core.OK(c, payload)
+	return &o11yOut{Status: core.OK, Data: &payload}, nil
+}
+
+// o11yOut is the GET /v1/admin/o11y envelope.
+type o11yOut struct {
+	Status string      `json:"status"`
+	Msg    string      `json:"msg"`
+	Data   *o11yGlobal `json:"data"`
 }
 
 // ── pure SQL builders (static SQL + one positional time bound; unit-tested) ──

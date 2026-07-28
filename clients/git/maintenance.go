@@ -9,7 +9,6 @@ import (
 
 	luxlog "github.com/luxfi/log"
 
-	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -95,27 +94,43 @@ func (s *storage) maintain(ctx context.Context, org, project, name string) error
 	return runMaintenance(ctx, s.absRepoPath(org, project, name))
 }
 
-// maintain (handler) repacks a tenant's repo with a bitmap + commit-graph so its
-// next clone serves fast. POST, idempotent, bounded + pack-slotted. Org-scoped
-// like every repo op — the org comes only from the validated principal, never the
-// URL — and the repo name is identifier-validated before it reaches the seam.
-func maintain(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// gcOut reports a completed repack.
+type gcOut struct {
+	// Repo is the repo that was repacked.
+	Repo string `json:"repo"`
+	// SizeBytes is the size measured AFTER the repack — usually smaller, since
+	// repacking drops the packs it supersedes.
+	SizeBytes int64 `json:"sizeBytes"`
+	// Maintained is always true; the call fails rather than reporting false.
+	Maintained bool `json:"maintained"`
+}
+
+// gc repacks a repo into one bitmapped pack and rewrites its commit-graph, so
+// the next clone reuses the bitmap instead of walking the whole object graph.
+// Idempotent, and safe to interrupt — git swaps both artifacts atomically. It
+// runs under one pack slot with the same memory bounds as a clone, so it can
+// block behind heavy pack traffic rather than compete with it. Storage usage is
+// re-measured afterwards, since a repack reclaims space.
+//
+// Example: {"name": "widgets"}
+//
+//	Response: {"repo": "widgets", "sizeBytes": 3072, "maintained": true}
+func (o ops) gc(ctx context.Context, in *repoRef) (*gcOut, error) {
+	t, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	name := normalizeName(c.Param("name"))
+	name := normalizeName(in.Name)
 	if !nameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+		return nil, zip.ErrBadRequest("name must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
-	project := projectScope(c)
-	if err := s.State.storage.maintain(c.Context(), org, project, name); err != nil {
+	if err := o.s.State.storage.maintain(ctx, t.org, t.project, name); err != nil {
 		if errors.Is(err, errNotFound) {
-			return zip.ErrNotFound("repo not found")
+			return nil, zip.ErrNotFound("repo not found")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "maintain: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "maintain: %v", err)
 	}
 	// Repack reclaims redundant packs — re-measure so usage reflects the new size.
-	size := recordUsage(s, context.WithoutCancel(c.Context()), org, project, name)
-	return c.JSON(http.StatusOK, map[string]any{"repo": name, "sizeBytes": size, "maintained": true})
+	size := recordUsage(o.s, context.WithoutCancel(ctx), t.org, t.project, name)
+	return &gcOut{Repo: name, SizeBytes: size, Maintained: true}, nil
 }

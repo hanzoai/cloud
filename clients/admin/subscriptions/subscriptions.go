@@ -1,6 +1,6 @@
 // Package subscriptions is the fleet SUBSCRIPTION view (/v1/admin/subscriptions) —
 // every tenant's plan subscription: customer/org, plan, status, monthly-normalized
-// MRR, and the current-period start/renews. SuperAdmin only (core.Guard).
+// MRR, and the current-period start/renews. SuperAdmin only (core.Admit).
 //
 // It reads the ONE shared warehouse (commerce.events) — the table the commerce
 // analytics collector lands every subscription-lifecycle event in — over the SAME
@@ -14,14 +14,13 @@
 package subscriptions
 
 import (
+	"context"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/datastore"
-	"github.com/zap-proto/zip"
 )
 
 // defaultLimit caps the fleet subscription list when the caller sends none.
@@ -44,21 +43,23 @@ type SubscriptionRow struct {
 // Subscriptions answers GET /v1/admin/subscriptions.
 //
 //	GET /v1/admin/subscriptions?org=&status=&limit=
-func Subscriptions(s *cloud.Service[core.State], c *zip.Ctx) error {
-	ctx := c.Context()
-	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
-	wantOrg := strings.TrimSpace(c.Query("org"))
-	limit := parseLimit(c.Query("limit"))
+func Subscriptions(ctx context.Context, in *SubscriptionsIn) (*SubscriptionsOut, error) {
+	if _, err := core.Admit(ctx); err != nil {
+		return nil, err
+	}
+	status := strings.ToLower(strings.TrimSpace(in.Status))
+	wantOrg := strings.TrimSpace(in.Org)
+	limit := parseLimit(in.Limit)
 
 	// Honest-empty when the warehouse is not connected or the collector's events
 	// table is not provisioned yet (the emitter is still being wired).
 	if !core.BillingEventsReady(ctx) {
-		return core.OKList(c, []SubscriptionRow{}, 0)
+		return &SubscriptionsOut{Status: core.OK, Data: []SubscriptionRow{}, Data2: core.Total(0)}, nil
 	}
 
 	rows, err := datastore.Query(ctx, subscriptionsSQL())
 	if err != nil {
-		return core.Fail(c, "subscriptions query: "+err.Error())
+		return &SubscriptionsOut{Status: core.Err, Msg: "subscriptions query: " + err.Error()}, nil
 	}
 	all := subscriptionRowsFromRows(rows)
 
@@ -83,7 +84,27 @@ func Subscriptions(s *cloud.Service[core.State], c *zip.Ctx) error {
 	if len(out) > limit {
 		out = out[:limit]
 	}
-	return core.OKList(c, out, total)
+	return &SubscriptionsOut{Status: core.OK, Data: out, Data2: core.Total(total)}, nil
+}
+
+// SubscriptionsIn is the GET /v1/admin/subscriptions filter.
+type SubscriptionsIn struct {
+	// Status filters on the subscription's LATEST lifecycle status (active, trialing,
+	// canceled, …), matched case-insensitively.
+	Status string `json:"status"`
+	// Org filters to one tenant, matched exactly.
+	Org string `json:"org"`
+	// Limit caps the rows returned. data2 still reports the full match count.
+	Limit string `json:"limit"`
+}
+
+// SubscriptionsOut is the GET /v1/admin/subscriptions envelope. data2 is the count
+// BEFORE limit truncates.
+type SubscriptionsOut struct {
+	Status string            `json:"status"`
+	Msg    string            `json:"msg"`
+	Data   []SubscriptionRow `json:"data"`
+	Data2  *int              `json:"data2,omitempty"`
 }
 
 // subscriptionsSQL resolves each subscription's LATEST lifecycle state from

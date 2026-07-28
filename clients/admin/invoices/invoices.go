@@ -1,7 +1,7 @@
 // Package invoices is the fleet INVOICE view (/v1/admin/invoices) — every issued
 // invoice across every tenant: number, org, amount, status, issue + due date, plus the
 // id a future detail view fetches /v1/billing/invoices/:id with. SuperAdmin only
-// (core.Guard).
+// (core.Admit).
 //
 // It reads the ONE shared warehouse (commerce.events) — the table the commerce
 // analytics collector lands every invoice-lifecycle event in — over the SAME client
@@ -14,14 +14,13 @@
 package invoices
 
 import (
+	"context"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/datastore"
-	"github.com/zap-proto/zip"
 )
 
 // defaultLimit caps the fleet invoice list when the caller sends none.
@@ -44,21 +43,23 @@ type InvoiceRow struct {
 // Invoices answers GET /v1/admin/invoices.
 //
 //	GET /v1/admin/invoices?org=&status=&limit=
-func Invoices(s *cloud.Service[core.State], c *zip.Ctx) error {
-	ctx := c.Context()
-	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
-	wantOrg := strings.TrimSpace(c.Query("org"))
-	limit := parseLimit(c.Query("limit"))
+func Invoices(ctx context.Context, in *InvoicesIn) (*InvoicesOut, error) {
+	if _, err := core.Admit(ctx); err != nil {
+		return nil, err
+	}
+	status := strings.ToLower(strings.TrimSpace(in.Status))
+	wantOrg := strings.TrimSpace(in.Org)
+	limit := parseLimit(in.Limit)
 
 	// Honest-empty when the warehouse is not connected or the collector's events
 	// table is not provisioned yet (the emitter is still being wired).
 	if !core.BillingEventsReady(ctx) {
-		return core.OKList(c, []InvoiceRow{}, 0)
+		return &InvoicesOut{Status: core.OK, Data: []InvoiceRow{}, Data2: core.Total(0)}, nil
 	}
 
 	rows, err := datastore.Query(ctx, invoicesSQL())
 	if err != nil {
-		return core.Fail(c, "invoices query: "+err.Error())
+		return &InvoicesOut{Status: core.Err, Msg: "invoices query: " + err.Error()}, nil
 	}
 	all := invoiceRowsFromRows(rows)
 
@@ -78,7 +79,27 @@ func Invoices(s *cloud.Service[core.State], c *zip.Ctx) error {
 	if len(out) > limit {
 		out = out[:limit]
 	}
-	return core.OKList(c, out, total)
+	return &InvoicesOut{Status: core.OK, Data: out, Data2: core.Total(total)}, nil
+}
+
+// InvoicesIn is the GET /v1/admin/invoices filter.
+type InvoicesIn struct {
+	// Status filters on the invoice's LATEST lifecycle status (paid, open, void, …),
+	// matched case-insensitively.
+	Status string `json:"status"`
+	// Org filters to one tenant, matched exactly.
+	Org string `json:"org"`
+	// Limit caps the rows returned. data2 still reports the full match count.
+	Limit string `json:"limit"`
+}
+
+// InvoicesOut is the GET /v1/admin/invoices envelope. data2 is the count BEFORE limit
+// truncates, so the console can say "showing 50 of 812".
+type InvoicesOut struct {
+	Status string       `json:"status"`
+	Msg    string       `json:"msg"`
+	Data   []InvoiceRow `json:"data"`
+	Data2  *int         `json:"data2,omitempty"`
 }
 
 // invoicesSQL resolves each invoice's LATEST lifecycle state from commerce.events

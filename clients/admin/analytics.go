@@ -21,7 +21,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/admin/iam"
-	"github.com/zap-proto/zip"
 )
 
 // ── wire shapes (operator contract) ──────────────────────────────────────────
@@ -93,11 +92,30 @@ type analyticsSlice struct {
 
 // ── handler ──────────────────────────────────────────────────────────────────
 
-func analytics(s *cloud.Service[core.State], c *zip.Ctx) error {
-	ctx := c.Context()
+// analytics is the SaaS product-analytics board over the caller's tenant window: active
+// customers, new and churned, retention, MRR, ARPU, the usage trend and the top
+// customers by spend — every number folded from the commerce ledger, not sampled.
+//
+// The window is the caller's, not the fleet's: a SuperAdmin gets every org, a
+// white-label admin only their own subtree (core.ScopedOrgs, the one scope predicate).
+//
+// sources[] carries each upstream's freshness so a partial read is VISIBLE rather than
+// silently low: a ledger that answered for only some orgs marks commerce-ledger degraded
+// instead of publishing an undercount as healthy.
+//
+// Example: {"range":"30d"}
+// Response: {"status":"ok","msg":"","data":{"range":"30d","interval":"day",
+// "generatedAt":"2026-07-27T00:00:00Z","sources":[{"name":"iam","ok":true,"rows":2,
+// "lastSync":"2026-07-27T00:00:00Z"}]}}
+func (o ops) analytics(ctx context.Context, in *rangeIn) (*analyticsOut, error) {
+	c, err := core.AdmitScoped(ctx, o.s)
+	if err != nil {
+		return nil, err
+	}
+	s := o.s
 	cr := core.CallerCreds(c)
 	now := time.Now().UTC()
-	rangeStr := normalizeRange(c.Query("range"))
+	rangeStr := normalizeRange(in.Range)
 	since, interval, _ := rangeWindow(rangeStr, now)
 
 	var sources []core.SourceStatus
@@ -106,7 +124,7 @@ func analytics(s *cloud.Service[core.State], c *zip.Ctx) error {
 	// gets ONLY their own subtree — the ONE tenant-scope predicate (core.ScopedOrgs).
 	orgs, err := core.ScopedOrgs(s, ctx, c, cr)
 	if err != nil {
-		return core.Fail(c, err.Error())
+		return &analyticsOut{Status: core.Err, Msg: err.Error()}, nil
 	}
 	sources = append(sources, core.SrcOf("iam", nil, len(orgs), now.Format(time.RFC3339)))
 
@@ -135,7 +153,14 @@ func analytics(s *cloud.Service[core.State], c *zip.Ctx) error {
 	})
 	data.GeneratedAt = now.Format(time.RFC3339)
 	data.Sources = sources
-	return core.OK(c, data)
+	return &analyticsOut{Status: core.OK, Data: &data}, nil
+}
+
+// analyticsOut is the GET /v1/admin/analytics envelope.
+type analyticsOut struct {
+	Status string         `json:"status"`
+	Msg    string         `json:"msg"`
+	Data   *analyticsData `json:"data"`
 }
 
 // analyticsInput is everything computeAnalytics needs — no I/O, so the whole SaaS

@@ -42,41 +42,66 @@ const (
 	enrollCanceled  = "canceled"
 )
 
-// Sequence is a drip campaign definition.
+// Sequence is a drip campaign definition. It is also the INPUT of create, with
+// ID/CreatedAt/UpdatedAt assigned by the server.
 type Sequence struct {
-	ID        string `json:"id"`
-	Org       string `json:"-"`
-	Name      string `json:"name"`
-	Status    string `json:"status"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	// ID is the server-assigned sequence id ("seq_" + 128 random bits).
+	ID  string `json:"id"`
+	Org string `json:"-"`
+	// Name is the sequence's label. Required, trimmed, capped at 1024 bytes.
+	Name string `json:"name"`
+	// Status is the lifecycle: draft, active or archived. Empty means draft, and
+	// ONLY an active sequence accepts enrollments.
+	Status string `json:"status"`
+	// CreatedAt and UpdatedAt are unix seconds, both server-assigned.
+	CreatedAt int64 `json:"createdAt"`
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 // Step is one message in a sequence. DelaySeconds is measured from the previous
 // step's send (from enrollment for the first step).
 type Step struct {
-	ID           string `json:"id"`
-	Org          string `json:"-"`
-	SequenceID   string `json:"sequenceId"`
-	Idx          int    `json:"idx"`
-	DelaySeconds int64  `json:"delaySeconds"`
-	Subject      string `json:"subject"`
-	Body         string `json:"body"`
-	CreatedAt    int64  `json:"createdAt"`
+	// ID is the server-assigned step id ("step_" + 128 random bits).
+	ID  string `json:"id"`
+	Org string `json:"-"`
+	// SequenceID is the sequence this step belongs to.
+	SequenceID string `json:"sequenceId"`
+	// Idx is the step's 0-based position, assigned by appending: a new step
+	// always lands after the last one.
+	Idx int `json:"idx"`
+	// DelaySeconds is how long after the previous step this one sends (after
+	// enrollment, for step 0).
+	DelaySeconds int64 `json:"delaySeconds"`
+	// Subject is the email subject line, capped at 1024 bytes.
+	Subject string `json:"subject"`
+	// Body is the message text. Required. The signed one-click unsubscribe link
+	// is appended to it at send time.
+	Body string `json:"body"`
+	// CreatedAt is unix seconds, server-assigned.
+	CreatedAt int64 `json:"createdAt"`
 }
 
 // Enrollment is one contact walking one sequence.
 type Enrollment struct {
-	ID          string `json:"id"`
-	Org         string `json:"-"`
-	SequenceID  string `json:"sequenceId"`
-	Address     string `json:"address"`
-	Channel     string `json:"channel"`
-	CurrentStep int    `json:"currentStep"`
-	Status      string `json:"status"`
-	NextRunAt   int64  `json:"nextRunAt"`
-	EnrolledAt  int64  `json:"enrolledAt"`
-	UpdatedAt   int64  `json:"updatedAt"`
+	// ID is the server-assigned enrollment id ("enr_" + 128 random bits).
+	ID  string `json:"id"`
+	Org string `json:"-"`
+	// SequenceID is the sequence being walked.
+	SequenceID string `json:"sequenceId"`
+	// Address is the normalized (lower-cased, trimmed) recipient.
+	Address string `json:"address"`
+	// Channel is the delivery surface the steps go out on.
+	Channel string `json:"channel"`
+	// CurrentStep is the index of the step that sends next.
+	CurrentStep int `json:"currentStep"`
+	// Status is active, completed or canceled.
+	Status string `json:"status"`
+	// NextRunAt is the unix time the current step comes due; 0 once the walk has
+	// ended. It IS the schedule — durable in SQLite, so it survives restarts.
+	NextRunAt int64 `json:"nextRunAt"`
+	// EnrolledAt and UpdatedAt are unix seconds.
+	EnrolledAt int64 `json:"enrolledAt"`
+	UpdatedAt  int64 `json:"updatedAt"`
 }
 
 func (s *Store) migrateSequences() error {
@@ -450,134 +475,219 @@ func processDue(ctx context.Context, s *cloud.Service[state], now int64, limit i
 
 // ---- handlers ----
 
-func createSequence(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
+// SequenceRef addresses one sequence.
+type SequenceRef struct {
+	// ID is the sequence id from the path, as returned by create.
+	ID string `json:"id"`
+}
+
+// SequenceList is a page of sequences, most recently updated first.
+type SequenceList struct {
+	// Data is the page; an empty array when the org has no sequence.
+	Data []Sequence `json:"data"`
+}
+
+// SequenceView is one sequence together with its ordered steps.
+type SequenceView struct {
+	Sequence Sequence `json:"sequence"`
+	// Steps are in send order (idx ascending); empty for a sequence with no
+	// messages yet, which enrolls fine and completes immediately.
+	Steps []Step `json:"steps"`
+}
+
+// SequenceStatus is a sequence's lifecycle state — the input AND the result of
+// setting it, because the wire shape is the same fact either way.
+type SequenceStatus struct {
+	// ID is the sequence id from the path.
+	ID string `json:"id"`
+	// Status is draft, active or archived. Required; there is no default here,
+	// unlike on create. Only an active sequence accepts enrollments.
+	Status string `json:"status"`
+}
+
+// StepInput appends one message to a sequence.
+type StepInput struct {
+	// SequenceID is the sequence id from the path (the route's :id).
+	SequenceID string `json:"id"`
+	// DelaySeconds is how long after the previous step this one sends (after
+	// enrollment, for the first step). Must be >= 0.
+	DelaySeconds int64 `json:"delaySeconds"`
+	// Subject is the email subject line, capped at 1024 bytes.
+	Subject string `json:"subject"`
+	// Body is the message text. Required.
+	Body string `json:"body"`
+}
+
+// StepList is a sequence's steps in send order.
+type StepList struct {
+	Data []Step `json:"data"`
+}
+
+// EnrollmentQuery pages one sequence's enrollments.
+type EnrollmentQuery struct {
+	// ID is the sequence id from the path.
+	ID string `json:"id"`
+	// Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.
+	Limit int `json:"limit"`
+}
+
+// EnrollmentList is a page of enrollments, most recently enrolled first.
+type EnrollmentList struct {
+	Data []Enrollment `json:"data"`
+}
+
+// EnrollmentRef addresses one enrollment within its sequence.
+type EnrollmentRef struct {
+	// ID is the sequence id from the path.
+	ID string `json:"id"`
+	// EID is the enrollment id from the path, as returned by a single-address
+	// enroll.
+	EID string `json:"eid"`
+}
+
+// createSequence registers a drip sequence in the caller's org. Name is
+// required; status defaults to draft, and a sequence must be ACTIVE before it
+// will accept enrollments. The id, createdAt and updatedAt of the input are
+// ignored — the server assigns them.
+//
+// Example: {"name": "Trial onboarding", "status": "draft"}
+func (o ops) createSequence(ctx context.Context, in *Sequence) (*Sequence, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body Sequence
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name := clip(body.Name)
+	name := clip(in.Name)
 	if name == "" {
-		return zip.ErrBadRequest("name is required")
+		return nil, zip.ErrBadRequest("name is required")
 	}
 	status := "draft"
-	if body.Status != "" {
-		if !seqStatuses[body.Status] {
-			return zip.ErrBadRequest("status must be one of draft, active, archived")
+	if in.Status != "" {
+		if !seqStatuses[in.Status] {
+			return nil, zip.ErrBadRequest("status must be one of draft, active, archived")
 		}
-		status = body.Status
+		status = in.Status
 	}
 	id, err := genID("seq")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
-	seq, err := s.State.store.CreateSequence(c.Context(), Sequence{ID: id, Org: org, Name: name, Status: status, CreatedAt: now, UpdatedAt: now})
+	seq, err := o.s.State.store.CreateSequence(ctx, Sequence{ID: id, Org: org, Name: name, Status: status, CreatedAt: now, UpdatedAt: now})
 	if err != nil {
-		return mapErr(err, "")
+		return nil, mapErr(err, "")
 	}
-	return c.JSON(http.StatusCreated, seq)
+	cloud.Created(ctx)
+	return &seq, nil
 }
 
-func listSequences(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	rows, err := s.State.store.ListSequences(c.Context(), org, limitOf(c))
+// listSequences returns the org's drip sequences, most recently updated first.
+//
+// Example: {"limit": 50}
+func (o ops) listSequences(ctx context.Context, in *Page) (*SequenceList, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+	rows, err := o.s.State.store.ListSequences(ctx, org, limitOf(in.Limit))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+	}
+	return &SequenceList{Data: rows}, nil
 }
 
-func getSequence(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	seq, err := s.State.store.GetSequence(c.Context(), org, idParam(c))
+// getSequence returns one of the caller org's sequences together with its steps
+// in send order. A sequence belonging to another org reads as not found.
+//
+// Example: {"id": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248"}
+func (o ops) getSequence(ctx context.Context, in *SequenceRef) (*SequenceView, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return mapErr(err, "sequence not found")
+		return nil, err
 	}
-	steps, err := s.State.store.ListSteps(c.Context(), org, seq.ID)
+	seq, err := o.s.State.store.GetSequence(ctx, org, strings.TrimSpace(in.ID))
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "steps: %v", err)
+		return nil, mapErr(err, "sequence not found")
 	}
-	return c.JSON(http.StatusOK, map[string]any{"sequence": seq, "steps": steps})
+	steps, err := o.s.State.store.ListSteps(ctx, org, seq.ID)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "steps: %v", err)
+	}
+	return &SequenceView{Sequence: seq, Steps: steps}, nil
 }
 
-// setSequenceStatus flips draft/active/archived (activation gate for sending).
-func setSequenceStatus(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	var body struct {
-		Status string `json:"status"`
-	}
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if !seqStatuses[body.Status] {
-		return zip.ErrBadRequest("status must be one of draft, active, archived")
-	}
-	updated, err := s.State.store.SetSequenceStatus(c.Context(), org, idParam(c), body.Status, time.Now().Unix())
+// setSequenceStatus flips draft/active/archived — the activation gate for
+// sending, since only an active sequence accepts enrollments. It does not touch
+// enrollments already walking: archiving stops new ones, not in-flight ones.
+//
+// Example: {"id": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248", "status": "active"}
+func (o ops) setSequenceStatus(ctx context.Context, in *SequenceStatus) (*SequenceStatus, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "status: %v", err)
+		return nil, err
+	}
+	if !seqStatuses[in.Status] {
+		return nil, zip.ErrBadRequest("status must be one of draft, active, archived")
+	}
+	id := strings.TrimSpace(in.ID)
+	updated, err := o.s.State.store.SetSequenceStatus(ctx, org, id, in.Status, time.Now().Unix())
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "status: %v", err)
 	}
 	if !updated {
-		return zip.ErrNotFound("sequence not found")
+		return nil, zip.ErrNotFound("sequence not found")
 	}
-	return c.JSON(http.StatusOK, map[string]any{"id": idParam(c), "status": body.Status})
+	return &SequenceStatus{ID: id, Status: in.Status}, nil
 }
 
-func addStep(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
+// addStep appends a message to the END of a sequence: the new step's idx is one
+// past the last, so steps arrive in the order they are added. Body is required
+// and delaySeconds must be >= 0. Adding a step does not disturb enrollments
+// already walking — one that has passed this index simply never sees it.
+//
+// Example: {"delaySeconds": 86400, "subject": "Day 1: your first model call", "body": "Here is how to make your first request…"}
+func (o ops) addStep(ctx context.Context, in *StepInput) (*Step, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	seqID := idParam(c)
-	if _, err := s.State.store.GetSequence(c.Context(), org, seqID); err != nil {
-		return mapErr(err, "sequence not found")
+	seqID := strings.TrimSpace(in.SequenceID)
+	if _, err := o.s.State.store.GetSequence(ctx, org, seqID); err != nil {
+		return nil, mapErr(err, "sequence not found")
 	}
-	var body Step
-	if err := c.Bind(&body); err != nil {
-		return err
+	if clip(in.Body) == "" {
+		return nil, zip.ErrBadRequest("body is required")
 	}
-	if clip(body.Body) == "" {
-		return zip.ErrBadRequest("body is required")
-	}
-	if body.DelaySeconds < 0 {
-		return zip.ErrBadRequest("delaySeconds must be >= 0")
+	if in.DelaySeconds < 0 {
+		return nil, zip.ErrBadRequest("delaySeconds must be >= 0")
 	}
 	id, err := genID("step")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	step, err := s.State.store.AddStep(c.Context(), Step{
-		ID: id, Org: org, SequenceID: seqID, DelaySeconds: body.DelaySeconds,
-		Subject: clip(body.Subject), Body: body.Body, CreatedAt: time.Now().Unix(),
+	step, err := o.s.State.store.AddStep(ctx, Step{
+		ID: id, Org: org, SequenceID: seqID, DelaySeconds: in.DelaySeconds,
+		Subject: clip(in.Subject), Body: in.Body, CreatedAt: time.Now().Unix(),
 	})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "add step: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "add step: %v", err)
 	}
-	return c.JSON(http.StatusCreated, step)
+	cloud.Created(ctx)
+	return &step, nil
 }
 
-func listStepsHandler(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	rows, err := s.State.store.ListSteps(c.Context(), org, idParam(c))
+// listSteps returns one sequence's steps in send order.
+//
+// Example: {"id": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248"}
+func (o ops) listSteps(ctx context.Context, in *SequenceRef) (*StepList, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "steps: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+	rows, err := o.s.State.store.ListSteps(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "steps: %v", err)
+	}
+	return &StepList{Data: rows}, nil
 }
 
 // EnrollInput names WHO to enroll: exactly one of a single address or an
@@ -586,9 +696,17 @@ func listStepsHandler(s *cloud.Service[state], c *zip.Ctx) error {
 // audience fanned into a one-step sequence, NOT a second blast engine, so every
 // message it produces still walks the drip engine and the ONE send gate.
 type EnrollInput struct {
-	Address    string `json:"address"`
+	// ID is the sequence id from the path.
+	ID string `json:"id"`
+	// Address is a single recipient, normalized (lower-cased, trimmed) before
+	// use. Give this OR audienceId, never both and never neither.
+	Address string `json:"address"`
+	// AudienceID fans the sequence out over a saved audience, resolved live to
+	// the org's mailable customers. Email only.
 	AudienceID string `json:"audienceId"`
-	Channel    string `json:"channel"`
+	// Channel is the delivery surface; empty means email. An audience resolves
+	// mailboxes, so an audience enroll must be email.
+	Channel string `json:"channel"`
 }
 
 // EnrollResult reports the fan-out. EnrollmentID is set only when a single
@@ -597,10 +715,17 @@ type EnrollInput struct {
 // the idempotence that makes re-POSTing a partially-applied announcement safe:
 // it resumes rather than double-drips anyone.
 type EnrollResult struct {
-	Resolved        int    `json:"resolved"`
-	Enrolled        int    `json:"enrolled"`
-	AlreadyEnrolled int    `json:"alreadyEnrolled"`
-	EnrollmentID    string `json:"enrollmentId,omitempty"`
+	// Resolved is how many addresses the request named — 1 for an address, the
+	// audience's deliverable count for an audience.
+	Resolved int `json:"resolved"`
+	// Enrolled is how many started a walk on this call.
+	Enrolled int `json:"enrolled"`
+	// AlreadyEnrolled is how many this sequence had already taken and were left
+	// alone.
+	AlreadyEnrolled int `json:"alreadyEnrolled"`
+	// EnrollmentID names the walk, and is present ONLY for a single-address
+	// enroll — a fan-out has many, and reporting one of them would be a lie.
+	EnrollmentID string `json:"enrollmentId,omitempty"`
 }
 
 // recipients resolves an enroll request's WHO into addresses: the one address it
@@ -633,38 +758,42 @@ func recipients(ctx context.Context, s *cloud.Service[state], org, channel strin
 }
 
 // enroll adds one contact or a whole audience to a sequence and schedules the
-// first step for each. An enrollment is only accepted for an ACTIVE sequence (a
-// draft sends nothing). Enrolling is all this does: the message itself is sent
-// later by the drip engine, through the suppression gate, so an opted-out
-// customer can be enrolled here and still never be mailed.
-func enroll(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	seqID := idParam(c)
-	seq, err := s.State.store.GetSequence(c.Context(), org, seqID)
+// first step for each. The sequence must be ACTIVE (a draft sends nothing), and
+// the request must name exactly one of address or audienceId.
+//
+// Enrolling is ALL this does: the message itself is sent later by the drip
+// engine, through the suppression gate, so an opted-out customer can be enrolled
+// here and still never be mailed. Re-posting is safe — an address this sequence
+// already took is counted in alreadyEnrolled and never double-dripped — which is
+// what makes retrying a partially-applied announcement a resume rather than a
+// second send.
+//
+// Example: {"audienceId": "aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a", "channel": "email"}
+// Response: {"resolved": 412, "enrolled": 409, "alreadyEnrolled": 3}
+func (o ops) enroll(ctx context.Context, in *EnrollInput) (*EnrollResult, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return mapErr(err, "sequence not found")
+		return nil, err
+	}
+	seqID := strings.TrimSpace(in.ID)
+	seq, err := o.s.State.store.GetSequence(ctx, org, seqID)
+	if err != nil {
+		return nil, mapErr(err, "sequence not found")
 	}
 	if seq.Status != "active" {
-		return zip.ErrBadRequest("sequence must be active to enroll")
+		return nil, zip.ErrBadRequest("sequence must be active to enroll")
 	}
-	var body EnrollInput
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	channel, okCh := normChannel(body.Channel)
+	channel, okCh := normChannel(in.Channel)
 	if !okCh {
-		return zip.ErrBadRequest("unknown channel")
+		return nil, zip.ErrBadRequest("unknown channel")
 	}
-	addrs, err := recipients(c.Context(), s, org, channel, body)
+	addrs, err := recipients(ctx, o.s, org, channel, *in)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	first, hasFirst, err := s.State.store.GetStep(c.Context(), org, seqID, 0)
+	first, hasFirst, err := o.s.State.store.GetStep(ctx, org, seqID, 0)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "first step: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "first step: %v", err)
 	}
 	now := time.Now().Unix()
 	status, nextRun := enrollActive, int64(0)
@@ -678,9 +807,9 @@ func enroll(s *cloud.Service[state], c *zip.Ctx) error {
 	for _, addr := range addrs {
 		id, err := genID("enr")
 		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 		}
-		e, err := s.State.store.Enroll(c.Context(), Enrollment{
+		e, err := o.s.State.store.Enroll(ctx, Enrollment{
 			ID: id, Org: org, SequenceID: seqID, Address: addr, Channel: channel,
 			CurrentStep: 0, Status: status, NextRunAt: nextRun, EnrolledAt: now, UpdatedAt: now,
 		})
@@ -688,7 +817,7 @@ func enroll(s *cloud.Service[state], c *zip.Ctx) error {
 		case errors.Is(err, errConflict):
 			out.AlreadyEnrolled++
 		case err != nil:
-			return zip.Errorf(http.StatusInternalServerError, "enroll: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "enroll: %v", err)
 		default:
 			out.Enrolled++
 			out.EnrollmentID = e.ID
@@ -697,32 +826,43 @@ func enroll(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(addrs) != 1 {
 		out.EnrollmentID = ""
 	}
-	return c.JSON(http.StatusCreated, out)
+	cloud.Created(ctx)
+	return &out, nil
 }
 
-func listEnrollments(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	rows, err := s.State.store.ListEnrollments(c.Context(), org, idParam(c), limitOf(c))
+// listEnrollments returns who is walking one sequence, most recently enrolled
+// first, with each walk's current step and next due time.
+//
+// Example: {"id": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248", "limit": 100}
+func (o ops) listEnrollments(ctx context.Context, in *EnrollmentQuery) (*EnrollmentList, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "enrollments: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+	rows, err := o.s.State.store.ListEnrollments(ctx, org, strings.TrimSpace(in.ID), limitOf(in.Limit))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "enrollments: %v", err)
+	}
+	return &EnrollmentList{Data: rows}, nil
 }
 
-func cancelEnrollment(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	canceled, err := s.State.store.CancelEnrollment(c.Context(), org, c.Param("eid"), time.Now().Unix())
+// cancelEnrollment stops one walk mid-sequence and answers 204: no further step
+// is sent, and steps already delivered are not recalled. Only an ACTIVE
+// enrollment can be canceled — one already completed or canceled reads as not
+// found.
+//
+// Example: {"id": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248", "eid": "enr_2a8d6f0b4c1e9375a0d2f6b8c4e19f73"}
+func (o ops) cancelEnrollment(ctx context.Context, in *EnrollmentRef) (*struct{}, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "cancel: %v", err)
+		return nil, err
+	}
+	canceled, err := o.s.State.store.CancelEnrollment(ctx, org, in.EID, time.Now().Unix())
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "cancel: %v", err)
 	}
 	if !canceled {
-		return zip.ErrNotFound("active enrollment not found")
+		return nil, zip.ErrNotFound("active enrollment not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }

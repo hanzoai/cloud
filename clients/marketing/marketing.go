@@ -41,11 +41,21 @@
 // proven there — claimed-once delivery, the suppression gate, the signed
 // unsubscribe footer — which is precisely why there is no blast engine beside it.
 //
-// TENANT ISOLATION is enforced SERVER-SIDE on every request: the org is
-// principal.Org(c) — the value SanitizeIdentity minted from the VALIDATED bearer
-// owner claim (HIP-0026) — NEVER a client-supplied header. Every store query
-// filters WHERE org=?, so one tenant can never read or mutate another's data.
-// serve.go auto-registers GET /v1/marketing/health (no OwnsHealth here).
+// EVERY ROUTE IS A TYPED OP. Each one registers through zip.Get/Post/Put/Delete
+// with concrete In/Out structs, so the surface is ONE registry with N
+// projections: REST, the OpenAPI document, the MCP tool list and the CLI are all
+// derived from these same registrations. Nothing about them is written twice —
+// the prose in each handler's doc comment is lifted into the spec by the
+// build-time cmd/zipdoc pass, because Go does not keep comments at run time.
+//
+// TENANT ISOLATION is enforced SERVER-SIDE on every request: the org is the
+// value SanitizeIdentity minted from the VALIDATED bearer owner claim (HIP-0026),
+// carried to the typed seam by cloud.Bridge and read back with
+// principal.OrgFrom — NEVER a client-supplied header and never an In field.
+// Every store query filters WHERE org=?, so one tenant can never read or mutate
+// another's data. The MCP projection carries no principal, so every org-scoped
+// op refuses there through that same gate. serve.go auto-registers
+// GET /v1/marketing/health (no OwnsHealth here).
 package marketing
 
 import (
@@ -57,7 +67,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -65,6 +74,8 @@ import (
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
+
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 const (
 	// maxField caps a single text field so an unbounded body can't amplify the
@@ -94,7 +105,9 @@ type state struct {
 	store *Store
 }
 
-// mounted is the active service so Shutdown can release the store.
+// mounted is the active service so Shutdown can release the store, and so the
+// durable sweep (DripSweepActivity) reaches the SAME store and KMS the request
+// path uses — one engine, one store, one send gate.
 var mounted *cloud.Service[state]
 
 // Mount wires the marketing surface onto app per HIP-0106. It keeps a package
@@ -110,6 +123,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("marketing.Mount: empty DataDir")
 	}
+	// marketing registers TYPED ops, which live on the *zip.App's registry — the
+	// one value OpenAPI, MCP and the CLI are projected from. A Router that is not
+	// backed by one must fail the mount rather than serve routes no projection knows.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("marketing.Mount: router is not backed by a *zip.App; typed ops have nowhere to register")
+	}
 	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
 		return fmt.Errorf("marketing.Mount: data dir: %w", err)
 	}
@@ -121,7 +141,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: b, State: state{store: store}}
 	mounted = s
 
-	routes(app, s)
+	routes(app, zapp, s)
 
 	// Bind the drip + calendar engine to the durable tasks clock. The engine is
 	// wired after MountAll, so this waits for it in the background (fail-soft: no
@@ -132,69 +152,97 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// routes registers the whole GTM surface (all org-scoped, /v1 only). Route
-// registration order is publish order; zip is first-match, and each path here has
+// routes registers the whole GTM surface (all org-scoped, /v1 only). EVERY route
+// is a typed op: zip.<Verb>(zapp, …) registers the route AND the registry entry
+// OpenAPI / MCP / the CLI are projected from, and it takes the ABSOLUTE path
+// because the registry keys on it.
+//
+// Registration order is publish order; zip is first-match, and each path here has
 // a distinct shape (segment count), so none shadows another.
-func routes(app cloud.Router, s *cloud.Service[state]) {
-	g := app.Group("/v1/marketing")
-	g.Get("/summary", cloud.Handle(s, summary))
+func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
+	o := ops{s: s}
+	// The bridge FIRST: fiber runs middleware in registration order, so one
+	// installed after these leaves would never run — and every org-scoped op below
+	// resolves its tenant through it. Bounded to marketing's own subtree.
+	app.Group("/v1/marketing").Use(cloud.Bridge())
+
+	zip.Get(zapp, "/v1/marketing/summary", o.summary)
 
 	// Campaigns (create / schedule / status).
-	g.Get("/campaigns", cloud.Handle(s, listCampaigns))
-	g.Post("/campaigns", cloud.Handle(s, createCampaign))
-	g.Get("/campaigns/:id", cloud.Handle(s, getCampaign))
-	g.Put("/campaigns/:id", cloud.Handle(s, updateCampaign))
-	g.Post("/campaigns/:id/schedule", cloud.Handle(s, scheduleCampaign))
-	g.Delete("/campaigns/:id", cloud.Handle(s, deleteCampaign))
+	zip.Get(zapp, "/v1/marketing/campaigns", o.listCampaigns)
+	zip.Post(zapp, "/v1/marketing/campaigns", o.createCampaign)
+	zip.Get(zapp, "/v1/marketing/campaigns/:id", o.getCampaign)
+	zip.Put(zapp, "/v1/marketing/campaigns/:id", o.updateCampaign)
+	zip.Post(zapp, "/v1/marketing/campaigns/:id/schedule", o.scheduleCampaign)
+	zip.Delete(zapp, "/v1/marketing/campaigns/:id", o.deleteCampaign)
 
 	// Email drip sequences (durable steps on the tasks engine).
-	g.Get("/sequences", cloud.Handle(s, listSequences))
-	g.Post("/sequences", cloud.Handle(s, createSequence))
-	g.Get("/sequences/:id", cloud.Handle(s, getSequence))
-	g.Post("/sequences/:id/status", cloud.Handle(s, setSequenceStatus))
-	g.Get("/sequences/:id/steps", cloud.Handle(s, listStepsHandler))
-	g.Post("/sequences/:id/steps", cloud.Handle(s, addStep))
-	g.Post("/sequences/:id/enroll", cloud.Handle(s, enroll))
-	g.Get("/sequences/:id/enrollments", cloud.Handle(s, listEnrollments))
-	g.Post("/sequences/:id/enrollments/:eid/cancel", cloud.Handle(s, cancelEnrollment))
+	zip.Get(zapp, "/v1/marketing/sequences", o.listSequences)
+	zip.Post(zapp, "/v1/marketing/sequences", o.createSequence)
+	zip.Get(zapp, "/v1/marketing/sequences/:id", o.getSequence)
+	zip.Post(zapp, "/v1/marketing/sequences/:id/status", o.setSequenceStatus)
+	zip.Get(zapp, "/v1/marketing/sequences/:id/steps", o.listSteps)
+	zip.Post(zapp, "/v1/marketing/sequences/:id/steps", o.addStep)
+	zip.Post(zapp, "/v1/marketing/sequences/:id/enroll", o.enroll)
+	zip.Get(zapp, "/v1/marketing/sequences/:id/enrollments", o.listEnrollments)
+	zip.Post(zapp, "/v1/marketing/sequences/:id/enrollments/:eid/cancel", o.cancelEnrollment)
 
 	// Audiences (cohort filters over the org's analytics events).
-	g.Get("/audiences", cloud.Handle(s, listAudiences))
-	g.Post("/audiences", cloud.Handle(s, createAudience))
-	g.Get("/audiences/:id", cloud.Handle(s, getAudience))
-	g.Get("/audiences/:id/preview", cloud.Handle(s, previewAudience))
-	g.Delete("/audiences/:id", cloud.Handle(s, deleteAudience))
+	zip.Get(zapp, "/v1/marketing/audiences", o.listAudiences)
+	zip.Post(zapp, "/v1/marketing/audiences", o.createAudience)
+	zip.Get(zapp, "/v1/marketing/audiences/:id", o.getAudience)
+	zip.Get(zapp, "/v1/marketing/audiences/:id/preview", o.previewAudience)
+	zip.Delete(zapp, "/v1/marketing/audiences/:id", o.deleteAudience)
 
 	// Promo codes (launch discount → non-cash wallet credit).
-	g.Get("/promos", cloud.Handle(s, listPromos))
-	g.Get("/promos/:code/eligibility", cloud.Handle(s, quotePromo))
-	g.Post("/promos/:code/redeem", cloud.Handle(s, redeemPromo))
-	g.Get("/promos/:code/redemption", cloud.Handle(s, getRedemption))
+	zip.Get(zapp, "/v1/marketing/promos", o.listPromos)
+	zip.Get(zapp, "/v1/marketing/promos/:code/eligibility", o.quotePromo)
+	zip.Post(zapp, "/v1/marketing/promos/:code/redeem", o.redeemPromo)
+	zip.Get(zapp, "/v1/marketing/promos/:code/redemption", o.getRedemption)
 
 	// Content calendar (scheduled posts + task-executed publish hooks).
-	g.Get("/calendar", cloud.Handle(s, listCalendarPosts))
-	g.Post("/calendar", cloud.Handle(s, createCalendarPost))
-	g.Get("/calendar/:id", cloud.Handle(s, getCalendarPost))
-	g.Put("/calendar/:id", cloud.Handle(s, updateCalendarPost))
-	g.Post("/calendar/:id/publish", cloud.Handle(s, publishCalendarPost))
-	g.Delete("/calendar/:id", cloud.Handle(s, deleteCalendarPost))
+	zip.Get(zapp, "/v1/marketing/calendar", o.listCalendarPosts)
+	zip.Post(zapp, "/v1/marketing/calendar", o.createCalendarPost)
+	zip.Get(zapp, "/v1/marketing/calendar/:id", o.getCalendarPost)
+	zip.Put(zapp, "/v1/marketing/calendar/:id", o.updateCalendarPost)
+	zip.Post(zapp, "/v1/marketing/calendar/:id/publish", o.publishCalendarPost)
+	zip.Delete(zapp, "/v1/marketing/calendar/:id", o.deleteCalendarPost)
 
 	// Suppression / unsubscribe. Management is org-scoped; the one-click
 	// unsubscribe is PUBLIC (signed token, no principal).
-	g.Get("/suppressions", cloud.Handle(s, listSuppressions))
-	g.Post("/suppressions", cloud.Handle(s, addSuppression))
-	g.Delete("/suppressions", cloud.Handle(s, removeSuppression))
-	g.Get("/unsubscribe", cloud.Handle(s, unsubscribe))
+	zip.Get(zapp, "/v1/marketing/suppressions", o.listSuppressions)
+	zip.Post(zapp, "/v1/marketing/suppressions", o.addSuppression)
+	zip.Delete(zapp, "/v1/marketing/suppressions", o.removeSuppression)
+	zip.Get(zapp, "/v1/marketing/unsubscribe", o.unsubscribe)
 }
 
 // ---- shared helpers (mirror clients/crm) ----
 
-// tenant resolves the org — the tenant-isolation KEY — for a request. It uses
-// principal.Org EXACTLY as SanitizeIdentity minted it from the validated IAM
-// owner claim (HIP-0026): never lowercased, stripped, or truncated.
-func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
+// ops binds the service to marketing's typed handlers. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value (o.listCampaigns). That is
+// also the only bound form cmd/zipdoc can lift prose from: it resolves a named
+// function or a method to its declaration, while a closure returned by a helper
+// is a call expression with nothing to read, so the doc comments would never
+// reach the spec. ops therefore carries STATE and no logic.
+type ops struct{ s *cloud.Service[state] }
 
-func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
+// tenant resolves the org — the tenant-isolation KEY — for an org-scoped op. The
+// org is EXACTLY what SanitizeIdentity minted from the validated IAM owner claim
+// (HIP-0026), carried across the typed seam by cloud.Bridge: never lowercased,
+// stripped, truncated, or read from the input, because an input is what the
+// caller says about itself.
+//
+// It is the ONE gate. An op that cannot name its tenant refuses with 403 rather
+// than reading across orgs — which is also what makes the auto-published MCP
+// projection safe, since POST /mcp carries no principal at all.
+func tenant(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("org scope required")
+	}
+	return org, nil
+}
 
 // genID returns a prefixed, collision-resistant id (prefix + 128 random bits).
 func genID(prefix string) (string, error) {
@@ -214,9 +262,10 @@ func clip(s string) string {
 	return s
 }
 
-func limitOf(c *zip.Ctx) int {
-	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if err != nil || n <= 0 {
+// limitOf bounds a caller's page size: absent, unparseable or non-positive means
+// defaultLimit, and nothing above maxLimit is honoured.
+func limitOf(n int) int {
+	if n <= 0 {
 		return defaultLimit
 	}
 	if n > maxLimit {
@@ -284,167 +333,219 @@ func mapErr(err error, notFoundMsg string) error {
 
 // ---- campaigns ----
 
-func createCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// CampaignRef addresses one campaign.
+type CampaignRef struct {
+	// ID is the campaign id from the path, as returned by create.
+	ID string `json:"id"`
+}
+
+// CampaignQuery filters the campaign list.
+type CampaignQuery struct {
+	// Status keeps only campaigns in that lifecycle state (draft, scheduled,
+	// active, paused, completed). Empty means every campaign.
+	Status string `json:"status"`
+	// Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.
+	Limit int `json:"limit"`
+}
+
+// CampaignList is a page of campaigns, most recently updated first.
+type CampaignList struct {
+	// Data is the page; an empty array when the org has no matching campaign.
+	Data []Campaign `json:"data"`
+}
+
+// ScheduleInput sets or clears a campaign's send time.
+type ScheduleInput struct {
+	// ID is the campaign id from the path.
+	ID string `json:"id"`
+	// ScheduledAt is the unix send time. 0 clears the schedule.
+	ScheduledAt int64 `json:"scheduledAt"`
+}
+
+// Summary is the org's campaign roll-up — the marketing overview cards.
+type Summary struct {
+	// Campaigns is how many campaigns the org has, Active how many are running.
+	Campaigns int `json:"campaigns"`
+	Active    int `json:"active"`
+	// Budget and Spend are the summed campaign budget and spend, in cents.
+	Budget int64 `json:"budget"`
+	Spend  int64 `json:"spend"`
+}
+
+// createCampaign registers a campaign in the caller's org. Name is required;
+// channel defaults to email and status to draft, and a future scheduledAt with
+// no explicit status makes the campaign "scheduled". Budget and spend are cents
+// and are clamped to >= 0. The id, createdAt and updatedAt of the input are
+// ignored — the server assigns them.
+//
+// Example: {"name": "Spring Launch", "channel": "meta", "objective": "signups", "budget": 50000, "scheduledAt": 1780000000}
+func (o ops) createCampaign(ctx context.Context, in *Campaign) (*Campaign, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body Campaign
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name := clip(body.Name)
+	name := clip(in.Name)
 	if name == "" {
-		return zip.ErrBadRequest("name is required")
+		return nil, zip.ErrBadRequest("name is required")
 	}
-	channel, okCh := normChannel(body.Channel)
+	channel, okCh := normChannel(in.Channel)
 	if !okCh {
-		return zip.ErrBadRequest("channel must be one of email, sms, social, meta, google, tiktok")
+		return nil, zip.ErrBadRequest("channel must be one of email, sms, social, meta, google, tiktok")
 	}
-	status, okSt := normStatus(body.Status)
+	status, okSt := normStatus(in.Status)
 	if !okSt {
-		return zip.ErrBadRequest("status must be one of draft, active, paused, completed")
+		return nil, zip.ErrBadRequest("status must be one of draft, active, paused, completed")
 	}
 	id, err := genID("camp")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	// A future send time implies the "scheduled" state unless the caller pinned
 	// another status explicitly.
-	if body.ScheduledAt > 0 && strings.TrimSpace(body.Status) == "" {
+	if in.ScheduledAt > 0 && strings.TrimSpace(in.Status) == "" {
 		status = "scheduled"
 	}
 	now := time.Now().Unix()
-	camp := Campaign{
+	saved, err := o.s.State.store.CreateCampaign(ctx, Campaign{
 		ID: id, Org: org, Name: name, Channel: channel, Status: status,
-		Objective: clip(body.Objective), Budget: nonNeg(body.Budget), Spend: nonNeg(body.Spend),
-		ScheduledAt: nonNeg(body.ScheduledAt), CreatedAt: now, UpdatedAt: now,
-	}
-	saved, err := s.State.store.CreateCampaign(c.Context(), camp)
+		Objective: clip(in.Objective), Budget: nonNeg(in.Budget), Spend: nonNeg(in.Spend),
+		ScheduledAt: nonNeg(in.ScheduledAt), CreatedAt: now, UpdatedAt: now,
+	})
 	if err != nil {
-		return mapErr(err, "")
+		return nil, mapErr(err, "")
 	}
-	return c.JSON(http.StatusCreated, saved)
+	cloud.Created(ctx)
+	return &saved, nil
 }
 
-func listCampaigns(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
-	rows, err := s.State.store.ListCampaigns(c.Context(), org, status, limitOf(c))
+// listCampaigns returns the org's campaigns, most recently updated first,
+// optionally narrowed to one lifecycle status.
+//
+// Example: {"status": "active", "limit": 25}
+func (o ops) listCampaigns(ctx context.Context, in *CampaignQuery) (*CampaignList, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+	rows, err := o.s.State.store.ListCampaigns(ctx, org, strings.ToLower(strings.TrimSpace(in.Status)), limitOf(in.Limit))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+	}
+	return &CampaignList{Data: rows}, nil
 }
 
-func getCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	camp, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
+// getCampaign returns one of the caller org's campaigns. A campaign belonging to
+// another org reads as not found.
+//
+// Example: {"id": "camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}
+func (o ops) getCampaign(ctx context.Context, in *CampaignRef) (*Campaign, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return mapErr(err, "campaign not found")
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, camp)
+	camp, err := o.s.State.store.GetCampaign(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, mapErr(err, "campaign not found")
+	}
+	return &camp, nil
 }
 
-func updateCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// updateCampaign replaces a campaign's editable fields. It is a full write, not
+// a patch: every field takes the value in the body, and an omitted one is
+// cleared. The id comes from the path — the body cannot retarget another
+// campaign — and createdAt is never rewritten.
+//
+// Example: {"name": "Spring Launch", "channel": "meta", "status": "active", "objective": "signups", "budget": 50000, "spend": 12500}
+func (o ops) updateCampaign(ctx context.Context, in *Campaign) (*Campaign, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body Campaign
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name := clip(body.Name)
+	name := clip(in.Name)
 	if name == "" {
-		return zip.ErrBadRequest("name is required")
+		return nil, zip.ErrBadRequest("name is required")
 	}
-	channel, okCh := normChannel(body.Channel)
+	channel, okCh := normChannel(in.Channel)
 	if !okCh {
-		return zip.ErrBadRequest("channel must be one of email, sms, social, meta, google, tiktok")
+		return nil, zip.ErrBadRequest("channel must be one of email, sms, social, meta, google, tiktok")
 	}
-	status, okSt := normStatus(body.Status)
+	status, okSt := normStatus(in.Status)
 	if !okSt {
-		return zip.ErrBadRequest("status must be one of draft, active, paused, completed")
+		return nil, zip.ErrBadRequest("status must be one of draft, active, paused, completed")
 	}
-	camp := Campaign{
-		ID: idParam(c), Org: org, Name: name, Channel: channel, Status: status,
-		Objective: clip(body.Objective), Budget: nonNeg(body.Budget), Spend: nonNeg(body.Spend),
-		ScheduledAt: nonNeg(body.ScheduledAt), UpdatedAt: time.Now().Unix(),
-	}
-	saved, err := s.State.store.UpdateCampaign(c.Context(), camp)
+	saved, err := o.s.State.store.UpdateCampaign(ctx, Campaign{
+		ID: strings.TrimSpace(in.ID), Org: org, Name: name, Channel: channel, Status: status,
+		Objective: clip(in.Objective), Budget: nonNeg(in.Budget), Spend: nonNeg(in.Spend),
+		ScheduledAt: nonNeg(in.ScheduledAt), UpdatedAt: time.Now().Unix(),
+	})
 	if err != nil {
-		return mapErr(err, "campaign not found")
+		return nil, mapErr(err, "campaign not found")
 	}
-	return c.JSON(http.StatusOK, saved)
+	return &saved, nil
 }
 
-func deleteCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	deleted, err := s.State.store.DeleteCampaign(c.Context(), org, idParam(c))
+// deleteCampaign removes one of the caller org's campaigns and answers 204. A
+// campaign belonging to another org reads as not found and is left untouched.
+//
+// Example: {"id": "camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}
+func (o ops) deleteCampaign(ctx context.Context, in *CampaignRef) (*struct{}, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, err
+	}
+	deleted, err := o.s.State.store.DeleteCampaign(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("campaign not found")
+		return nil, zip.ErrNotFound("campaign not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // scheduleCampaign sets a campaign's send time and moves it to "scheduled". A
 // scheduledAt of 0 clears the schedule and returns it to "draft".
-func scheduleCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	var body struct {
-		ScheduledAt int64 `json:"scheduledAt"`
-	}
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	camp, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
+//
+// Example: {"id": "camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60", "scheduledAt": 1780000000}
+func (o ops) scheduleCampaign(ctx context.Context, in *ScheduleInput) (*Campaign, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return mapErr(err, "campaign not found")
+		return nil, err
 	}
-	camp.ScheduledAt = nonNeg(body.ScheduledAt)
+	camp, err := o.s.State.store.GetCampaign(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, mapErr(err, "campaign not found")
+	}
+	camp.ScheduledAt = nonNeg(in.ScheduledAt)
 	if camp.ScheduledAt > 0 {
 		camp.Status = "scheduled"
 	} else if camp.Status == "scheduled" {
 		camp.Status = "draft"
 	}
 	camp.UpdatedAt = time.Now().Unix()
-	saved, err := s.State.store.UpdateCampaign(c.Context(), camp)
+	saved, err := o.s.State.store.UpdateCampaign(ctx, camp)
 	if err != nil {
-		return mapErr(err, "campaign not found")
+		return nil, mapErr(err, "campaign not found")
 	}
-	return c.JSON(http.StatusOK, saved)
+	return &saved, nil
 }
 
 // ---- summary ----
 
-func summary(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	total, active, budget, spend, err := s.State.store.Counts(c.Context(), org)
+// summary rolls up the caller org's campaigns: how many there are, how many are
+// active, and the summed budget and spend in cents.
+//
+// Response: {"campaigns": 12, "active": 3, "budget": 500000, "spend": 128400}
+func (o ops) summary(ctx context.Context, _ *struct{}) (*Summary, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "summary: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"campaigns": total, "active": active, "budget": budget, "spend": spend,
-	})
+	total, active, budget, spend, err := o.s.State.store.Counts(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "summary: %v", err)
+	}
+	return &Summary{Campaigns: total, Active: active, Budget: budget, Spend: spend}, nil
 }
 
 // Shutdown drains the drip poller and closes the marketing store. Idempotent.

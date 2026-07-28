@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -52,21 +53,34 @@ const (
 // tenant_id), honest-empty until the collector emits.
 const eventsTable = "hanzo.events"
 
-// Audience is a saved cohort filter.
+// Audience is a saved cohort filter. It is also the INPUT of create — the wire
+// shape is the same record either way — with ID/CreatedAt/UpdatedAt assigned by
+// the server.
 type Audience struct {
-	ID         string `json:"id"`
-	Org        string `json:"-"`
-	Name       string `json:"name"`
-	Event      string `json:"event"`
-	WindowDays int    `json:"windowDays"`
-	CreatedAt  int64  `json:"createdAt"`
-	UpdatedAt  int64  `json:"updatedAt"`
+	// ID is the server-assigned audience id ("aud_" + 128 random bits).
+	ID  string `json:"id"`
+	Org string `json:"-"`
+	// Name is the audience's label. Required, trimmed, capped at 1024 bytes.
+	Name string `json:"name"`
+	// Event is the analytics event a member must have fired. EMPTY MEANS NO
+	// FILTER: the audience is then every mailable customer in the org, and no
+	// warehouse is consulted.
+	Event string `json:"event"`
+	// WindowDays is how far back the event counts, ending now. 0 means 30 and
+	// nothing above 3650 is honoured. Ignored when Event is empty.
+	WindowDays int `json:"windowDays"`
+	// CreatedAt and UpdatedAt are unix seconds, both server-assigned.
+	CreatedAt int64 `json:"createdAt"`
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 // AudiencePreview is a live audience evaluation: how big the cohort is, and — the
 // question that decides whether a send is worth making — how many real customers
 // it actually reaches.
 type AudiencePreview struct {
+	// Available is false when the roster or the warehouse could not be read; the
+	// counts are then zero because nothing was measured, not because the cohort
+	// is empty, and Reason says which read failed.
 	Available bool   `json:"available"`
 	Reason    string `json:"reason,omitempty"`
 	// Count is the cohort size: distinct warehouse identifiers for an event
@@ -76,10 +90,14 @@ type AudiencePreview struct {
 	// Unmatched how many cohort identifiers named no customer. Unmatched is
 	// reported rather than hidden: it is the honest explanation for a cohort of
 	// 500 that mails 3.
-	Deliverable int      `json:"deliverable"`
-	Unmatched   int      `json:"unmatched"`
-	Sample      []string `json:"sample"` // cohort identifiers, never addresses
-	Source      string   `json:"source"`
+	Deliverable int `json:"deliverable"`
+	Unmatched   int `json:"unmatched"`
+	// Sample is up to 1000 cohort IDENTIFIERS — never addresses, which product
+	// analytics does not hold. Empty for an event-less (whole-org) audience.
+	Sample []string `json:"sample"`
+	// Source names where the cohort was read: the events table for an event
+	// audience, "iam:<org>" for the whole-org one.
+	Source string `json:"source"`
 }
 
 func (s *Store) migrateAudiences() error {
@@ -234,22 +252,42 @@ func evalAudience(ctx context.Context, org string, a Audience) AudiencePreview {
 
 // ---- handlers ----
 
-func createAudience(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
+// AudienceRef addresses one audience.
+type AudienceRef struct {
+	// ID is the audience id from the path, as returned by create.
+	ID string `json:"id"`
+}
+
+// Page is the bound shared by every list that filters on nothing but size.
+type Page struct {
+	// Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.
+	Limit int `json:"limit"`
+}
+
+// AudienceList is a page of audiences, most recently updated first.
+type AudienceList struct {
+	// Data is the page; an empty array when the org has saved no audience.
+	Data []Audience `json:"data"`
+}
+
+// createAudience saves a cohort filter for the caller's org. Name is required.
+// Omitting event saves the WHOLE-ORG audience — every mailable customer — which
+// needs no analytics warehouse; naming one narrows that roster to the customers
+// who fired it within windowDays.
+//
+// Example: {"name": "Model users, last 30d", "event": "model.invoked", "windowDays": 30}
+func (o ops) createAudience(ctx context.Context, in *Audience) (*Audience, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body Audience
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name := clip(body.Name)
+	name := clip(in.Name)
 	if name == "" {
-		return zip.ErrBadRequest("name is required")
+		return nil, zip.ErrBadRequest("name is required")
 	}
 	// No event means no filter: the audience is every mailable customer in the org.
-	event := clip(body.Event)
-	window := body.WindowDays
+	event := clip(in.Event)
+	window := in.WindowDays
 	if window <= 0 {
 		window = audDefaultWindowDays
 	}
@@ -258,66 +296,85 @@ func createAudience(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	id, err := genID("aud")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
-	a, err := s.State.store.CreateAudience(c.Context(), Audience{
+	a, err := o.s.State.store.CreateAudience(ctx, Audience{
 		ID: id, Org: org, Name: name, Event: event, WindowDays: window, CreatedAt: now, UpdatedAt: now,
 	})
 	if err != nil {
-		return mapErr(err, "")
+		return nil, mapErr(err, "")
 	}
-	return c.JSON(http.StatusCreated, a)
+	cloud.Created(ctx)
+	return &a, nil
 }
 
-func listAudiences(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	rows, err := s.State.store.ListAudiences(c.Context(), org, limitOf(c))
+// listAudiences returns the org's saved audiences, most recently updated first.
+//
+// Example: {"limit": 50}
+func (o ops) listAudiences(ctx context.Context, in *Page) (*AudienceList, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+	rows, err := o.s.State.store.ListAudiences(ctx, org, limitOf(in.Limit))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+	}
+	return &AudienceList{Data: rows}, nil
 }
 
-func getAudience(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	a, err := s.State.store.GetAudience(c.Context(), org, idParam(c))
+// getAudience returns one of the caller org's saved audiences. An audience
+// belonging to another org reads as not found.
+//
+// Example: {"id": "aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
+func (o ops) getAudience(ctx context.Context, in *AudienceRef) (*Audience, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return mapErr(err, "audience not found")
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, a)
+	a, err := o.s.State.store.GetAudience(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, mapErr(err, "audience not found")
+	}
+	return &a, nil
 }
 
-func deleteAudience(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	deleted, err := s.State.store.DeleteAudience(c.Context(), org, idParam(c))
+// deleteAudience removes one of the caller org's audiences and answers 204. It
+// deletes the saved filter only — no customer, event or enrollment is touched.
+//
+// Example: {"id": "aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
+func (o ops) deleteAudience(ctx context.Context, in *AudienceRef) (*struct{}, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, err
+	}
+	deleted, err := o.s.State.store.DeleteAudience(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("audience not found")
+		return nil, zip.ErrNotFound("audience not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
-// previewAudience evaluates the cohort live and returns count + sample.
-func previewAudience(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("org scope required")
-	}
-	a, err := s.State.store.GetAudience(c.Context(), org, idParam(c))
+// previewAudience evaluates the cohort LIVE — the same resolution an enrollment
+// would run — and reports how big it is and how many real mailboxes it reaches.
+// It is the honest answer to "is this send worth making": a cohort of 500 that
+// mails 3 says so, in deliverable and unmatched. Nothing is sent.
+//
+// Example: {"id": "aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}
+// Response: {"available": true, "count": 500, "deliverable": 3, "unmatched": 497, "sample": ["u_1", "u_2"], "source": "hanzo.events"}
+func (o ops) previewAudience(ctx context.Context, in *AudienceRef) (*AudiencePreview, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return mapErr(err, "audience not found")
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, evalAudience(c.Context(), org, a))
+	a, err := o.s.State.store.GetAudience(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, mapErr(err, "audience not found")
+	}
+	p := evalAudience(ctx, org, a)
+	return &p, nil
 }

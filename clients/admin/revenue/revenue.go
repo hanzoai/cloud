@@ -1,12 +1,14 @@
 // Package revenue is the fleet REVENUE aggregate (/v1/admin/revenue) — the operator's
 // money board: total prepaid balances held, total realized spend, MRR, a per-customer
-// revenue table, ARPU, and a real spend trend. SuperAdmin only (core.Guard).
+// revenue table, ARPU, and a real spend trend. SuperAdmin only (core.Admit).
 //
 // This is ORTHOGONAL to /v1/admin/finance: finance is the COGS/margin god-view (what WE
 // pay vendors); revenue is the CUSTOMER money view (what each customer holds/spends/
 // subscribes). Every number is a real commerce read; an unreachable org degrades to
 // honest zero, and a partial fleet read marks its source degraded.
 package revenue
+
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 import (
 	"context"
@@ -21,9 +23,20 @@ import (
 )
 
 // Routes registers the fleet revenue board (SuperAdmin only, cross-tenant profitability).
-func Routes(app cloud.Router, s *cloud.Service[core.State]) {
-	g := app.Group("/v1/admin")
-	g.Get("/revenue", core.Guard(s, Revenue))
+func Routes(z *zip.App, s *cloud.Service[core.State]) {
+	o := ops{s: s}
+	zip.Get(z, "/v1/admin/revenue", o.Revenue, zip.WithOperationID("adminRevenue"))
+}
+
+// ops binds the kernel to the typed handler: a TypedHandler has no parameter for the
+// service, so it arrives as a RECEIVER and the op is a method value.
+type ops struct{ s *cloud.Service[core.State] }
+
+// RevenueOut is the GET /v1/admin/revenue envelope.
+type RevenueOut struct {
+	Status string       `json:"status"`
+	Msg    string       `json:"msg"`
+	Data   *RevenueData `json:"data"`
 }
 
 // RevenueCustomer is one row of the per-customer revenue table.
@@ -50,15 +63,36 @@ type RevenueData struct {
 	Sources            []core.SourceStatus `json:"sources"`
 }
 
-// Revenue answers GET /v1/admin/revenue.
-func Revenue(s *cloud.Service[core.State], c *zip.Ctx) error {
-	ctx := c.Context()
+// Revenue is the fleet money board: total prepaid balances held, total realized spend,
+// MRR, ARPU, a per-customer table sorted highest-revenue first, and a real 30-day spend
+// trend from the usage ledger.
+//
+// ORTHOGONAL to /v1/admin/finance, which is the COGS/margin view of what WE pay vendors.
+// This is the customer side: what each customer holds, spends and subscribes to.
+//
+// arpu divides realized spend by PAYING customers, not by all of them — a fleet of free
+// signups must not deflate the number. A customer counts as paying when it has spend or
+// MRR.
+//
+// An org whose money did not read degrades to honest zeros and marks the commerce source
+// degraded in sources[], so a partial fleet read is visible instead of quietly low.
+//
+// Response: {"status":"ok","msg":"","data":{"totalBalancesCents":250000,
+// "totalSpendCents":180000,"mrrCents":99000,"customers":42,"payingCustomers":11,
+// "arpuCents":16363,"perCustomer":[],"spendTrend":[],"generatedAt":"2026-07-27T00:00:00Z",
+// "sources":[{"name":"iam","ok":true,"rows":42,"lastSync":"2026-07-27T00:00:00Z"}]}}
+func (o ops) Revenue(ctx context.Context, _ *core.None) (*RevenueOut, error) {
+	c, err := core.Admit(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s := o.s
 	cr := core.CallerCreds(c)
 	now := time.Now().UTC()
 
 	orgs, err := core.ListOrgs(s, ctx, cr)
 	if err != nil {
-		return core.Fail(c, err.Error())
+		return &RevenueOut{Status: core.Err, Msg: err.Error()}, nil
 	}
 
 	// Per-org money, fanned out concurrently (balance + spend + plan/MRR).
@@ -119,7 +153,7 @@ func Revenue(s *cloud.Service[core.State], c *zip.Ctx) error {
 		sources = append(sources, core.SrcOf("commerce-ledger", core.ErrPartialRevenue, 0, nowStr))
 	}
 
-	return core.OK(c, RevenueData{
+	return &RevenueOut{Status: core.OK, Data: &RevenueData{
 		TotalBalancesCents: totalBal,
 		TotalSpendCents:    totalSpend,
 		MRRCents:           mrr,
@@ -130,7 +164,7 @@ func Revenue(s *cloud.Service[core.State], c *zip.Ctx) error {
 		SpendTrend:         trend,
 		GeneratedAt:        nowStr,
 		Sources:            sources,
-	})
+	}}, nil
 }
 
 // revenueOf reads one org's money view (balance + spend + plan/MRR). Returns (row, ok):

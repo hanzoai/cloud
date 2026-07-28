@@ -25,7 +25,7 @@ package admin
 // @hanzo/bot agent, a machine is raw compute visor opens — and each console lens
 // reuses this one endpoint with a different `?kind=` (Bots=bot, Machines=machine).
 //
-// SUPERADMIN ONLY (the s.guard wrap in admin.go), all-orgs by default; this is
+// SUPERADMIN ONLY (core.Admit, the op's first line), all-orgs by default; this is
 // an AGGREGATOR — admin holds no compute state, it only reads. Honest by
 // construction, exactly like the analytics events lens: no datastore connected, or
 // the events table not provisioned yet (the emitter is still being wired) → the
@@ -37,10 +37,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/datastore"
-	"github.com/zap-proto/zip"
 )
 
 // computeTable is the operator-owned compute-usage warehouse table (named to match
@@ -72,28 +70,66 @@ type computeLeaf struct {
 	LastTs     string `json:"lastTs"`
 }
 
-// compute answers GET /v1/admin/compute. ?kind=<kind> and ?org= narrow the
-// aggregate; ?range=24h|7d|30d bounds it (default 30d). SuperAdmin only.
-func compute(s *cloud.Service[core.State], c *zip.Ctx) error {
-	ctx := c.Context()
+// compute rolls the fleet's compute usage up to one row per (org, app, project, kind):
+// how many distinct machines ran in the window, how many are still active, what they
+// billed, and when each group last emitted an event. The console folds these into its
+// org → app → project tree.
+//
+// A machine counts as ACTIVE when its LATEST lifecycle event is not a terminal one
+// (stop/destroy/terminate/delete/off/shutdown/expire and their past tenses) — the same
+// fold the console applies, done in the warehouse so the count is over every machine and
+// not just the page.
+//
+// Honest-empty when the warehouse is not connected or hanzo.compute_usage is not
+// provisioned yet: an empty list, never a fabricated fleet.
+//
+// Example: {"kind":"bot","org":"acme","range":"7d"}
+// Response: {"status":"ok","msg":"","data":[{"org":"acme","app":"support","project":"default",
+// "kind":"bot","machines":4,"active":2,"spendCents":900,"lastTs":"2026-07-26T18:00:00Z"}],"data2":1}
+func compute(ctx context.Context, in *computeIn) (*computeOut, error) {
+	if _, err := core.Admit(ctx); err != nil {
+		return nil, err
+	}
 	// Honest-empty when the warehouse is not connected or the usage table is not
 	// provisioned yet (the visor/commerce emitter is still being wired).
 	if !datastore.Ready() || !computeTableExists(ctx) {
-		return core.OKList(c, []computeLeaf{}, 0)
+		return &computeOut{Status: core.OK, Data: []computeLeaf{}, Data2: core.Total(0)}, nil
 	}
 
 	// `kind` is an OPEN LowCardinality spectrum (bot | machine | cluster | nodepool |
 	// container | function | …), matched as a PLAIN STRING — no enum assumption. Each
 	// console lens passes its own kind; empty = all kinds. Case-normalized to the
 	// warehouse's lower-case convention.
-	kind := strings.ToLower(strings.TrimSpace(c.Query("kind")))
-	sql, args := buildComputeQuery(c.Query("range"), kind, strings.TrimSpace(c.Query("org")))
+	kind := strings.ToLower(strings.TrimSpace(in.Kind))
+	sql, args := buildComputeQuery(in.Range, kind, strings.TrimSpace(in.Org))
 	rows, err := datastore.Query(ctx, sql, args...)
 	if err != nil {
-		return core.Fail(c, "compute query: "+err.Error())
+		return &computeOut{Status: core.Err, Msg: "compute query: " + err.Error()}, nil
 	}
 	leaves := computeLeavesFromRows(rows)
-	return core.OKList(c, leaves, len(leaves))
+	return &computeOut{Status: core.OK, Data: leaves, Data2: core.Total(len(leaves))}, nil
+}
+
+// computeIn is the GET /v1/admin/compute query.
+type computeIn struct {
+	// Kind narrows to one workload class (bot | machine | cluster | nodepool |
+	// container | function | …). An OPEN spectrum matched as a plain string, lowercased
+	// to the warehouse's convention; empty means every kind.
+	Kind string `json:"kind"`
+	// Org narrows to one tenant. Empty means every tenant — this board is
+	// cross-tenant by nature.
+	Org string `json:"org"`
+	// Range is the lower time bound: 24h, 7d or 30d. Anything else reads as 30d.
+	Range string `json:"range"`
+}
+
+// computeOut is the GET /v1/admin/compute envelope. data2 == len(data): the roll-up is
+// one row per group, unpaginated.
+type computeOut struct {
+	Status string        `json:"status"`
+	Msg    string        `json:"msg"`
+	Data   []computeLeaf `json:"data"`
+	Data2  *int          `json:"data2,omitempty"`
 }
 
 // buildComputeQuery assembles the two-level roll-up (pure, so it is unit-tested).

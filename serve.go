@@ -299,6 +299,18 @@ func Serve(specs []MountSpec, enable []string) error {
 	// middleware_identity.go / auth_identity.go.
 	app.Use(IdentityMiddleware(cfg))
 
+	// Typed-op bridge. A zip.Get[In, Out] handler receives a context.Context and
+	// its decoded In and nothing else, so the per-request values it still needs —
+	// the validated org, the request a proxying subsystem forwards identity from,
+	// the slot a creator writes 201/202 into — cross on the context. It lives HERE
+	// rather than in each subsystem for two reasons: it must run AFTER the identity
+	// boundary above (the org it parks is only trustworthy once SanitizeIdentity
+	// has minted it) and BEFORE every typed route (fiber runs middleware in
+	// registration order, and MountAll registers routes below), and a subsystem
+	// whose routes are spread across several top-level nouns owns no single prefix
+	// to hang it on. See typed.go.
+	app.Use(Bridge())
+
 	// Console identity = the ONE validated principal, not the embedded casibase account
 	// model. When a principal is present, /v1/get-account reflects it so the operator
 	// UI's SuperAdmin gate sees the same owner+isAdmin every /v1/admin/* route already
