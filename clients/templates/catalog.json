@@ -1492,5 +1492,24 @@
     "rating": 5,
     "source": "https://github.com/hanzo-templates/voxel-craft",
     "preview": "https://voxel-craft.hanzo.app/preview.png"
+  },
+  {
+    "slug": "kart-racer",
+    "title": "Circuit",
+    "category": "Games/3D",
+    "description": "A drivable arcade racer where one Catmull-Rom track curve drives the road mesh, the on-track test, the lap checkpoints and the autopilot line.",
+    "framework": "three.js 0.185",
+    "features": [
+      "Drivable kart",
+      "Lap timing",
+      "Autopilot demo mode",
+      "Off-track grip loss",
+      "MIT"
+    ],
+    "useCase": "Arcade games and interactive brand experiences",
+    "tier": 1,
+    "rating": 5,
+    "source": "https://github.com/hanzo-templates/kart-racer",
+    "preview": "https://kart-racer.hanzo.app/preview.png"
   }
 ]
