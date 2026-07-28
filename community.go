@@ -15,7 +15,7 @@ import "context"
 // learns what a plan costs. What crosses the seam is only "this project is
 // visible to the world, or it is not".
 
-// CommunityEvent is one project's visibility as the world should see it.
+// Visibility is one project's visibility as the world should see it.
 //
 //   - Org/Slug identify the project, and Org is also its AUTHORSHIP: the account
 //     that pays for it. There is no separate author field because there is no
@@ -26,7 +26,7 @@ import "context"
 //   - Name/Description seed the repo the first time it is created; they are
 //     never re-imposed afterwards, so an author who edits their own README or
 //     repo description keeps it.
-type CommunityEvent struct {
+type Visibility struct {
 	Org         string
 	Slug        string
 	Name        string
@@ -34,32 +34,32 @@ type CommunityEvent struct {
 	Listed      bool
 }
 
-// communityPublisher is the registered visibility subscriber. clients/git (the
+// publisher is the registered visibility subscriber. clients/git (the
 // owner of the canonical repo plane) installs it in Mount. Exactly one
 // registration, like every other seam in this file's family.
-var communityPublisher func(ctx context.Context, ev CommunityEvent) error
+var publisher func(ctx context.Context, ev Visibility) error
 
-// RegisterCommunityPublisher installs the visibility subscriber. clients/git
+// RegisterPublisher installs the visibility subscriber. clients/git
 // calls this from its Mount when co-resident; it is the ONE inversion point that
 // lets a project's visibility reach its repo with no projects⇄git import cycle.
-func RegisterCommunityPublisher(f func(ctx context.Context, ev CommunityEvent) error) {
-	communityPublisher = f
+func RegisterPublisher(f func(ctx context.Context, ev Visibility) error) {
+	publisher = f
 }
 
-// CommunityPublisherRegistered reports whether the canonical git plane is
+// PublisherRegistered reports whether the canonical git plane is
 // co-resident. A caller uses it to be honest about whether a publish actually
 // reached a repo or was a no-op in a binary that does not host git.
-func CommunityPublisherRegistered() bool { return communityPublisher != nil }
+func PublisherRegistered() bool { return publisher != nil }
 
-// OnCommunityPublish applies a project's visibility to its canonical repo. It is
+// Publish applies a project's visibility to its canonical repo. It is
 // a no-op when nothing is registered (a binary without the git plane), and it is
 // deliberately IDEMPOTENT at the subscriber: callers fire it on every create,
 // visibility change and moderation rather than trying to detect transitions,
 // because a missed transition leaves a private project world-readable and no
 // caller-side diffing is worth that risk.
-func OnCommunityPublish(ctx context.Context, ev CommunityEvent) error {
-	if communityPublisher == nil {
+func Publish(ctx context.Context, ev Visibility) error {
+	if publisher == nil {
 		return nil
 	}
-	return communityPublisher(ctx, ev)
+	return publisher(ctx, ev)
 }
