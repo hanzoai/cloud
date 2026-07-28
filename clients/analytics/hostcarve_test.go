@@ -88,23 +88,27 @@ func postHost(t *testing.T, app *zip.App, host, path, body string, hdr map[strin
 	return resp.StatusCode
 }
 
-// TestMount_HostCarve_ForcesSiteOrg is the end-to-end proof: Mount wires the carve,
-// and a beacon POST to a LIVE site host is ingested as the site's Org even though
-// the request carries a forged org (body + X-Org-Id) and NO validated principal.
-// The discriminator is 503-not-403: the SAME shape 403s on the normal route
-// (TestCapture_ForgedOrgWithoutBearerForbidden / unknown-host), but here it passes
-// the tenant gate (org forced from the host) and stops only at the datastore-down
-// 503 — proving the org is server-supplied from the host, never the caller/body.
-func TestMount_HostCarve_ForcesSiteOrg(t *testing.T) {
+// TestMount_HostCarve_IngestsForSiteOrg is the end-to-end proof: Mount wires the carve,
+// and a page's OWN beacon POST to a LIVE site host is ingested for the site's Org even
+// though the request carries a forged org (body + X-Org-Id) and NO validated principal.
+// The discriminator is 503: the request passed the door and stopped only at the
+// datastore-down 503, so the org came from the host and never from the caller/body.
+//
+// The kinds here are pageview and error, because that is what the carve admits. The
+// carve runs BEFORE the identity boundary (serve.go: sites at 241, IdentityMiddleware
+// at 267), so nothing on a site host can be vouched for and every beacon takes the
+// ANONYMOUS lane — see TestMount_HostCarve_AnonymousCapabilityOnly for the other half.
+func TestMount_HostCarve_IngestsForSiteOrg(t *testing.T) {
+	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := carveApp(t, "hanzo")
 
 	// Segment/beacon wire on /v1/analytics + its /batch alias.
 	for _, p := range []string{"/v1/analytics", "/v1/analytics/batch"} {
 		code := postHost(t, app, "yadota.hanzo.app", p,
-			`{"batch":[{"type":"event","event":"signup_completed"}],"org":"attacker","properties":{"space":"attacker"}}`,
+			`{"batch":[{"type":"pageview","path":"/pricing"}],"org":"attacker","properties":{"space":"attacker"}}`,
 			map[string]string{"X-Org-Id": "attacker"})
 		if code != http.StatusServiceUnavailable {
-			t.Fatalf("beacon POST %s want 503 (ingested as site org, datastore down), got %d", p, code)
+			t.Fatalf("beacon POST %s want 503 (ingested for the site org, datastore down), got %d", p, code)
 		}
 	}
 
@@ -113,7 +117,27 @@ func TestMount_HostCarve_ForcesSiteOrg(t *testing.T) {
 		`{"event":"$pageview","distinct_id":"d","properties":{"space":"attacker"}}`,
 		map[string]string{"X-Org-Id": "attacker"})
 	if code != http.StatusServiceUnavailable {
-		t.Fatalf("insights beacon want 503 (ingested as site org), got %d", code)
+		t.Fatalf("insights beacon want 503 (ingested for the site org), got %d", code)
+	}
+}
+
+// TestMount_HostCarve_AnonymousCapabilityOnly is the other half, and the fix: the carve
+// authorizes a TENANT from the host, never a CAPABILITY. It used to call the
+// full-capability core with zero credential, so the same Host header that made a beacon
+// land in a site's org also let a stranger write a custom event name, revenue, personId
+// and groupId there. Now a credential-less beacon — which on a site host is every
+// beacon — gets the anonymous projection, so a non-allowlisted kind is refused storage
+// and reported in the honest receipt.
+func TestMount_HostCarve_AnonymousCapabilityOnly(t *testing.T) {
+	tightenPublicRate(t, 1_000_000, 1_000_000)
+	app := carveApp(t, "hanzo")
+	for _, p := range []string{"/v1/analytics", "/v1/analytics/batch", "/v1/event"} {
+		code := postHost(t, app, "yadota.hanzo.app", p,
+			`{"batch":[{"type":"event","event":"signup_completed","revenue":999,"groupId":"victim"}]}`,
+			map[string]string{"X-Org-Id": "attacker"})
+		if code != http.StatusOK {
+			t.Fatalf("site-host custom event on %s want 200 (all-dropped, never stored), got %d", p, code)
+		}
 	}
 }
 
@@ -157,15 +181,21 @@ func TestMount_HostCarve_GetNotHijacked(t *testing.T) {
 }
 
 // TestMount_HostCarve_NonSiteHostUsesNormalGate: on a NON-site host the middleware
-// Continues and the normal /v1/analytics route runs — so an anonymous unknown-host
-// beacon is refused 403 by captureTenant (the carve did not fire). This pins that
-// the forced-org path is host-scoped and does NOT weaken the normal ingest gate.
+// Continues and the normal /v1/analytics route runs — the carve did not fire, so the
+// beacon gets the normal door's anonymous lane (the reserved public tenant) rather than
+// any site's org. A pageview is admitted there (503) and a custom event is dropped, so
+// the host-scoped carve neither leaks a site org off-host nor weakens the normal gate.
 func TestMount_HostCarve_NonSiteHostUsesNormalGate(t *testing.T) {
+	tightenPublicRate(t, 1_000_000, 1_000_000)
 	app := carveApp(t, "hanzo")
-	code := postHost(t, app, "evil.example.com", "/v1/analytics",
-		`{"batch":[{"type":"pageview"}]}`, map[string]string{"X-Org-Id": "attacker"})
-	if code != http.StatusForbidden {
-		t.Fatalf("anonymous unknown-host beacon on the normal route want 403, got %d", code)
+	if code := postHost(t, app, "evil.example.com", "/v1/analytics",
+		`{"batch":[{"type":"pageview"}]}`, map[string]string{"X-Org-Id": "attacker"}); code != http.StatusServiceUnavailable {
+		t.Fatalf("anonymous unknown-host beacon want 503 (normal door's anonymous lane), got %d", code)
+	}
+	if code := postHost(t, app, "evil.example.com", "/v1/analytics",
+		`{"batch":[{"type":"event","event":"order_completed","revenue":99}]}`,
+		map[string]string{"X-Org-Id": "attacker"}); code != http.StatusOK {
+		t.Fatalf("anonymous unknown-host commerce want 200 all-dropped, got %d", code)
 	}
 }
 

@@ -12,37 +12,49 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// public.go — the ANONYMOUS lane of the ONE canonical event door.
+// public.go — the ANONYMOUS lane. EVERY credential-less write in this package lands
+// here, whichever door it arrived at.
 //
-// A logged-out visitor on a marketing surface carries no bearer and no key, so
-// eventTenant resolves nothing. This file is the lane such a request falls through
-// to, so a pageview or a browser error from a logged-out page lands in the warehouse
-// instead of being refused.
+// A logged-out visitor on a marketing surface, and a visitor on a customer's published
+// site, carry no bearer and no key, so eventTenant resolves nothing. This file is the
+// lane such a request falls through to, so a pageview or a browser error from a
+// logged-out page lands in the warehouse instead of being refused.
 //
 // Anonymous input is attested by nobody. It is therefore admitted under a policy the
 // vouched-for lane never applies, and the two lanes are SEPARATE FUNCTIONS rather
-// than one function with a mode flag: eventTenant → ingestBody is untouched by
+// than one function with a mode flag: handle's credentialed branch is untouched by
 // anything in this file, and every restriction below is unreachable from it.
 //
 // The policy is in two pieces and no more: the request-scoped gates (publicIngest)
 // and the pure decision (admitPublic).
 //
-//   - TENANT is publicTenant, a compile-time constant. admitPublic takes no request,
-//     so no header, query, or body field can influence the tenant an anonymous row
-//     carries: an anonymous write CANNOT land in a real org's partition, and there is
-//     no input that makes it do so.
-//   - KIND is an ALLOWLIST of two — pageview and error, what a marketing surface
-//     emits. `identify` and `group` (which name a person and a group) and every
-//     custom event are dropped, counted in the honest receipt, never stored.
+//   - CAPABILITY is decided by TRUST LEVEL, not by door. There is exactly one caller
+//     shape for this lane and no way to reach the write core at full capability
+//     without a credential: the functions that used to take an org and write
+//     unprojected (ingestBody / eventWithOrg / captureWithOrg / insightsWithOrg) are
+//     gone, so a door that resolved a tenant from a request Host has nowhere else to
+//     go. That is the isolation proof — not a check that can be bypassed, but an
+//     argument list that cannot express the alternative.
+//   - TENANT is the DOOR's, and admitPublic cannot influence it: the projection takes
+//     no *zip.Ctx and no org at all, so no header, query, or body field reaches
+//     attribution. There are exactly two anonymous tenants, both server-side:
+//     publicTenant (the compile-time constant every /v1 door passes) and the resolved
+//     Site's org on a published-site host, which is the SAME host-derived tenant the
+//     file plane and the Base carve already serve that host's bytes under.
+//   - KIND is an ALLOWLIST of two — pageview and error, what a marketing surface and a
+//     published site emit. `identify` and `group` (which name a person and a group)
+//     and every custom event — the whole commerce/billing/metering surface — are
+//     dropped, counted in the honest receipt, never stored.
 //   - NAME is server-chosen FROM the kind ($pageview | $error), so the anonymous name
 //     space is closed to two values: an anonymous caller can introduce neither a new
 //     name into the read lenses nor unbounded cardinality into the table's ORDER BY
 //     key.
 //   - FIELDS are a PROJECTION, not a filter: admitPublic builds a fresh CaptureEvent
 //     from the fields it names, so a field it does not name — personId, groupId,
-//     revenue, productId, refCode, signupWeek, and the entire client property bag —
-//     cannot reach the row. The only properties an anonymous row carries are the
-//     server-folded $exception and the write core's $source.
+//     revenue, productId, quantity, currency, refCode, channel, signupWeek, and the
+//     entire client property bag — cannot reach the row. The only properties an
+//     anonymous row carries are the server-folded $exception and the write core's
+//     $source.
 //   - BYTES and COUNT are bounded first, and REFUSED rather than truncated.
 //   - RATE is capped per client IP and, independently, per socket peer.
 //   - DNT / Sec-GPC on the wire is honored: nothing is stored and the receipt says so.
@@ -63,11 +75,17 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// publicTenant is the reserved tenant EVERY anonymous event is attributed to. The
-// '$' prefix is load-bearing: an IAM org slug is lowercase ASCII alphanumerics and
+// publicTenant is the reserved tenant every /v1 door attributes anonymous events to.
+// The '$' prefix is load-bearing: an IAM org slug is lowercase ASCII alphanumerics and
 // '-' (the IAM slugifier emits nothing else), so this value lies outside the org
 // namespace and cannot collide with a real tenant. It is also the reason the anonymous
-// stream is legible: a row's tenant_id alone says whether IAM vouched for it.
+// stream is legible: on an API host a row's tenant_id alone says whether IAM vouched
+// for it.
+//
+// It is a CONSTANT and not a fallback: nothing derives it from the request. The one
+// door that passes a different anonymous tenant is the published-site host, which
+// passes the org the site resolver returned for that host, so a customer's own site
+// analytics keep landing in the customer's org — under this same projection.
 const publicTenant = "$public"
 
 // maxPublicBytes / maxPublicBatch bound ONE anonymous request. @hanzo/event's default
@@ -208,12 +226,13 @@ func optedOut(c *zip.Ctx) bool {
 	return strings.TrimSpace(c.Header("Sec-GPC")) == "1"
 }
 
-// admitPublic is the anonymous door's WHOLE attribution decision, and it is PURE over
-// the decoded batch: it returns the tenant the rows will carry, the events that may be
-// stored, and how many were dropped. It takes no *zip.Ctx — there is no header, query,
-// or body field it could read a tenant from, so the returned org is always
-// publicTenant. That is the isolation proof: not a check that can be bypassed, but an
-// argument list that cannot express the alternative.
+// admitPublic is the anonymous lane's WHOLE capability decision, and it is PURE over
+// the decoded batch: it returns the events that may be stored and how many were
+// dropped. It decides WHAT, never WHERE — it takes no *zip.Ctx AND no org, so neither
+// a request field nor a caller argument can reach attribution through it. Where an
+// anonymous row lands is the DOOR's decision (publicIngest's org), and the doors pass
+// only server-side values: the publicTenant constant, or the org the site resolver
+// returned for the request's host.
 //
 // Each admitted event is REBUILT from the allowlisted fields rather than edited, so a
 // field this function does not name cannot reach the row. The stored name comes from
@@ -221,7 +240,7 @@ func optedOut(c *zip.Ctx) bool {
 // left nil: the shared tail (ingestDecoded) folds the typed error into
 // properties.$exception and the write core stamps $source, so an anonymous row's
 // properties hold exactly what the SERVER put there and nothing the caller sent.
-func admitPublic(evs []CaptureEvent) (string, []CaptureEvent, int) {
+func admitPublic(evs []CaptureEvent) ([]CaptureEvent, int) {
 	out := make([]CaptureEvent, 0, len(evs))
 	dropped := 0
 	for _, e := range evs {
@@ -247,18 +266,23 @@ func admitPublic(evs []CaptureEvent) (string, []CaptureEvent, int) {
 			Error:       e.Error,
 		})
 	}
-	return publicTenant, out, dropped
+	return out, dropped
 }
 
-// publicIngest answers an ANONYMOUS POST on the canonical door: the request-scoped
-// gates (capture flag, rate, size, opt-out) then the pure decision (admitPublic) then
-// the ONE write core. source stays the front door's origin tag — the TENANT, not the
-// tag, is what records that a row arrived unattested.
+// publicIngest answers a CREDENTIAL-LESS POST on any door: the request-scoped gates
+// (capture flag, rate, size, opt-out) then the pure decision (admitPublic) then the ONE
+// write core. dec is the door's wire; source stays the door's origin tag.
 //
-// It is reached only from eventHandle, and only when the caller presented no
-// credential at all: a presented-but-unresolvable key is refused there rather than
-// downgraded to anonymous.
-func publicIngest(c *zip.Ctx, source string) error {
+// org is where this lane's PROJECTED rows land, and it is the caller's ONLY influence
+// over the outcome. It is always a server-side value — publicTenant from handle, or a
+// resolved Site.Org from the published-site host — because the two callers are the only
+// two, and neither reads it from the request:
+//
+//   - handle reaches here only when the caller presented no credential at all; a
+//     presented-but-unresolvable key is refused there rather than downgraded.
+//   - the site-host carve reaches here unconditionally, because it runs BEFORE the
+//     identity boundary and so has no credential it could trust (see event.go).
+func publicIngest(c *zip.Ctx, dec decode, org, source string) error {
 	// CLOUD_ANALYTICS_PUBLIC_CAPTURE is the ONE existing anonymous-capture switch
 	// (it also gates the site-host carve). Off ⇒ the canonical door keeps its
 	// strict, principal-only contract.
@@ -272,7 +296,7 @@ func publicIngest(c *zip.Ctx, source string) error {
 	if len(body) > maxPublicBytes {
 		return zip.Errorf(http.StatusRequestEntityTooLarge, "event payload too large")
 	}
-	evs, err := decodeIngest(body)
+	evs, err := dec(body)
 	if err != nil {
 		return zip.ErrBadRequest("malformed event payload")
 	}
@@ -282,8 +306,8 @@ func publicIngest(c *zip.Ctx, source string) error {
 	if optedOut(c) {
 		return c.JSON(http.StatusOK, CaptureResult{Dropped: len(evs)})
 	}
-	// Rejoin the ONE pipeline: admission decided the tenant and the projection, and
-	// ingestDecoded (event.go) does the rest exactly as it does for a bearer.
-	org, admitted, dropped := admitPublic(evs)
+	// Rejoin the ONE pipeline: admission decided the projection, the door decided the
+	// tenant, and ingestDecoded (event.go) does the rest exactly as it does for a bearer.
+	admitted, dropped := admitPublic(evs)
 	return ingestDecoded(c, org, source, admitted, dropped)
 }
