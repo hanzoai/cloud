@@ -673,3 +673,121 @@ func TestSuperAdminGate_IsAdminOrgMembership(t *testing.T) {
 		})
 	}
 }
+
+// TestSanitizeIdentity_OrgAdminFromMembershipRole pins the production defect the
+// fleet board surfaced: a REAL org admin was refused from every org-scoped admin
+// surface with "admin required".
+//
+// IAM does not put a normal org's adminness in the top-level `isAdmin` claim —
+// that claim is for the platform's own super-users. It puts it in the signed
+// membership set, as orgs[].role. The boundary only read `isAdmin`, so a token
+// like the one production issues z@hanzo.ai — orgs:[{org:hanzo,role:admin}],
+// isAdmin absent — minted NO X-User-IsOrgAdmin, and GET /v1/paas/apps (now
+// /v1/platform/fleet) answered 403 "admin required" to the platform's own owner.
+//
+// The bit is keyed on the EFFECTIVE org, so it describes the org the request acts
+// in: admin of your home org does not follow you into an org you merely belong to.
+func TestSanitizeIdentity_OrgAdminFromMembershipRole(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("genkey: %v", err)
+	}
+	jwks := jwksServer(t, &key.PublicKey)
+	v := newIdentityValidator(testIssuer, jwks.URL, 0)
+	future := time.Now().Add(time.Hour)
+
+	var gotOrgAdmin, gotAdmin, gotOrg string
+	app := zip.New(zip.Config{})
+	app.Use(SanitizeIdentity(v, "admin"))
+	app.Get("/probe", func(cx *zip.Ctx) error {
+		gotAdmin = cx.Header("X-User-IsAdmin")
+		gotOrgAdmin = cx.Header("X-User-IsOrgAdmin")
+		gotOrg = cx.Org()
+		return cx.JSON(http.StatusOK, map[string]string{"ok": "1"})
+	})
+
+	// The production shape: no isAdmin claim, adminness only in orgs[].role.
+	prod := func(sel string, orgs []model.OrgRef) func(*http.Request) {
+		c := tokenClaims("hanzo-console", "hanzo", "z@hanzo.ai", false, future)
+		c.Orgs = orgs
+		f := bearer(signWith(t, key, c))
+		return func(r *http.Request) {
+			f(r)
+			if sel != "" {
+				r.Header.Set("X-Org-Id", sel)
+			}
+		}
+	}
+	memberOf := []model.OrgRef{{Org: "hanzo", Role: "admin"}, {Org: "zoo", Role: "member"}}
+
+	cases := []struct {
+		name                             string
+		mutate                           func(*http.Request)
+		wantAdmin, wantOrgAdmin, wantOrg string
+	}{
+		{
+			// THE REGRESSION: role-only adminness must mint the bit.
+			name:         "membership role admin mints the org-admin bit",
+			mutate:       prod("", memberOf),
+			wantOrgAdmin: "true",
+			wantOrg:      "hanzo",
+		},
+		{
+			// It is never platform sudo — that stays admin-org membership only.
+			name:         "membership role admin is not SuperAdmin",
+			mutate:       prod("", memberOf),
+			wantAdmin:    "",
+			wantOrgAdmin: "true",
+			wantOrg:      "hanzo",
+		},
+		{
+			// Keyed on the EFFECTIVE org: switching into an org you are a plain
+			// member of carries no admin. This is the confinement that makes
+			// reading the role safe.
+			name:         "admin does not follow an org switch to a member-only org",
+			mutate:       prod("zoo", memberOf),
+			wantOrgAdmin: "",
+			wantOrg:      "zoo",
+		},
+		{
+			// A plain member anywhere gets nothing — unchanged.
+			name:         "membership role member mints nothing",
+			mutate:       prod("", []model.OrgRef{{Org: "hanzo", Role: "member"}}),
+			wantOrgAdmin: "",
+			wantOrg:      "hanzo",
+		},
+		{
+			// Unforgeable: the role lives in the SIGNED set, so a client-sent role
+			// has no path in — only the claim decides.
+			name: "client-sent org-admin header still never survives",
+			mutate: func(r *http.Request) {
+				prod("", []model.OrgRef{{Org: "hanzo", Role: "member"}})(r)
+				r.Header.Set("X-User-IsOrgAdmin", "true")
+			},
+			wantOrgAdmin: "",
+			wantOrg:      "hanzo",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotAdmin, gotOrgAdmin, gotOrg = "", "", ""
+			req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+			tc.mutate(req)
+			resp, err := app.Fiber().Test(req)
+			if err != nil {
+				t.Fatalf("probe: %v", err)
+			}
+			_ = resp.Body.Close()
+			if gotOrgAdmin != tc.wantOrgAdmin {
+				t.Errorf("X-User-IsOrgAdmin = %q, want %q", gotOrgAdmin, tc.wantOrgAdmin)
+			}
+			if gotAdmin != tc.wantAdmin {
+				t.Errorf("X-User-IsAdmin = %q, want %q", gotAdmin, tc.wantAdmin)
+			}
+			if gotOrg != tc.wantOrg {
+				t.Errorf("org = %q, want %q", gotOrg, tc.wantOrg)
+			}
+		})
+	}
+}

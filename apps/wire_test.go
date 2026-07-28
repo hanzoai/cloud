@@ -62,7 +62,7 @@ var frozen = []struct {
 	{"link", false, true, false},            // new: unified AI login manager (/v1/links), after agents
 	{"wallets", false, true, false},         // was order 127
 	{"x402", false, true, false},            // new: x402 pay-per-use settlement (after wallets)            // was order 128
-	{"deploy", true, false, false},          // after paas (release seam), before functions
+	{"deploy", true, false, false},          // after platform (release seam), before functions
 	{"functions", false, false, false},      // was order 128
 	{"tracker", false, false, false},        // was order 129
 	{"templates", false, true, false},       // was order 129; per-org private templates added a store → Shutdown
