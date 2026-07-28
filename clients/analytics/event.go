@@ -318,9 +318,9 @@ type door struct {
 //
 //     ALMOST NOTHING CALLS THIS PATH DIRECTLY. Its live traffic arrives through the
 //     insights-cloud-ingest-rewrite middleware on insights.hanzo.ai (universe
-//     infra/k8s/ingress/routes.yaml), which matches EIGHT SDK spellings — /e, /batch,
-//     /capture and each one's trailing-slash form, the forms real PostHog SDKs
-//     actually send — and replacePath's them all to this one literal. Two things
+//     infra/k8s/ingress/routes.yaml), which matches EIGHT SDK spellings — /e, /v1/e,
+//     /batch, /capture and each one's trailing-slash form, the forms real PostHog
+//     SDKs actually send — and replacePath's them all to this one literal. Two things
 //     follow. This door must NEVER be sunset on a $source count: its callers do not
 //     name it, so $source='posthog' would not decay even after every SDK moved. And
 //     if that middleware is dropped or reordered below the catch-all, eight live
