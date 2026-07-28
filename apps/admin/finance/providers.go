@@ -33,12 +33,20 @@ import (
 // columns are theirs — DRY, never a second store).
 const usageTable = "hanzo.cloud_usage"
 
-// providerGrantsCents seeds KNOWN upstream promo-credit grants, in cents. 0 / absent
-// => no grant => paid-only. DO $26,000 is the first real row; OpenAI/Anthropic/
-// Cloudflare/Nebius/Telnyx land here (with their grant amounts) as the user drops keys.
-var providerGrantsCents = map[string]int64{
-	"do-ai": 2_600_000, // DigitalOcean $26,000 GenAI credit
-}
+// providerGrantsCents seeds upstream promo-credit grants, in cents, for providers
+// whose vendor we cannot ask. 0 / absent => no grant => paid-only.
+//
+// DO IS NO LONGER HERE, DELIBERATELY. Its grant is DISCOVERED from DO's own
+// invoices (digitalocean.CreditIssued) rather than declared, because the declared
+// value was wrong and a hand-entered vendor total is always one tranche away from
+// being wrong again: on 2026-07-28 this map said $26,000, the operator believed
+// $50,000, and DO's ledger showed $21,263.65 actually applied. The number nobody
+// could check was the one the dashboard rendered, and it rendered ~$22k of
+// headroom that did not exist.
+//
+// Providers added here (OpenAI/Anthropic/Cloudflare/Nebius/Telnyx) should move to
+// a discovered value the moment their API can report one.
+var providerGrantsCents = map[string]int64{}
 
 // ProviderCredit is one provider's upstream credit ledger row.
 type ProviderCredit struct {
@@ -62,6 +70,12 @@ func computeProviderCredits(ctx context.Context, s *cloud.Service[core.State]) [
 	names := map[string]struct{}{}
 	for p := range providerGrantsCents {
 		names[p] = struct{}{}
+	}
+	// do-ai carries a DISCOVERED grant rather than a seeded one, so it is named
+	// explicitly: it must appear on the board even in a month with zero warehouse
+	// burn, because "the credit ran out" is exactly the state worth showing.
+	if s.State.DO.Ready() {
+		names["do-ai"] = struct{}{}
 	}
 	for p := range burn {
 		if p != "" {
@@ -89,11 +103,22 @@ func computeProviderCredits(ctx context.Context, s *cloud.Service[core.State]) [
 					credit = 0
 				}
 				row.RemainingCents = credit
+				// The grant is DO's own number, not ours (see providerGrantsCents).
+				// On failure leave it 0 rather than substituting a guess: a fabricated
+				// grant reads as headroom, and headroom is the one thing nobody should
+				// ever infer. HasCredit/IsPaidOnly follow the discovered value, so an
+				// exhausted promo correctly classifies every later call as PAID.
+				if issued, ierr := s.State.DO.CreditIssued(ctx); ierr == nil {
+					grant = int64(issued)
+					row.GrantCents = grant
+				}
 				consumed := grant - credit
 				if consumed < 0 {
 					consumed = 0
 				}
 				row.BurnCents = consumed
+				row.HasCredit = credit > 0
+				row.IsPaidOnly = credit <= 0
 				if adb := AvgDailyBurnCents(int64(bal.Usage), now); adb > 0 {
 					rw := float64(credit) / float64(adb)
 					row.RunwayDays = &rw

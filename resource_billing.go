@@ -73,8 +73,9 @@ func NewResourceMeter(deps Deps, provider string) *ResourceMeter {
 	}
 }
 
-// Enabled reports whether billing will actually enforce (a commerce URL is
-// configured). When false, Gate allows and Meter is a no-op.
+// Enabled reports whether THIS process holds the ledger — a commerce URL is
+// configured here. False no longer means "nothing bills": once apps are their
+// own binaries the ledger usually lives one socket away, and Gate asks it.
 func (rm *ResourceMeter) Enabled() bool { return rm != nil && rm.m != nil && rm.m.Enabled() }
 
 // Gate is the pre-create balance gate. It returns:
@@ -105,8 +106,30 @@ func (rm *ResourceMeter) Enabled() bool { return rm != nil && rm.m != nil && rm.
 // hard-stop nor be evaded. service is intrinsically this meter's provider. Pass
 // ("", false) on a background/no-principal path (org- and service-scoped caps only).
 func (rm *ResourceMeter) Gate(ctx context.Context, org, project string, projectValidated bool, kind string, costCents int64) error {
-	if !rm.Enabled() || costCents <= 0 {
+	if costCents <= 0 {
 		return nil
+	}
+	// NEVER CONSTRUCTED is not the same as NO LOCAL LEDGER, and only the second
+	// is answerable by asking a peer:
+	//
+	//	rm == nil, or rm.m == nil  -> defensive. Serve always builds a meter with
+	//	                              a client, so this is a construction defect,
+	//	                              not a deployment shape. Allow, and above all
+	//	                              never panic — the peer path dereferences rm.
+	//	rm.m != nil, !Enabled()    -> real: this process holds no ledger because
+	//	                              the ledger lives with commerce. Ask it.
+	if rm == nil || rm.m == nil {
+		return nil
+	}
+	if !rm.Enabled() {
+		// No meter in THIS process, which is the normal case once apps are their own
+		// binaries: the ledger has one writer and it lives with commerce. Ask it.
+		//
+		// Allowing here — which is what "billing not configured" used to mean — turns
+		// every priced act free the moment an app is split out, and does it silently.
+		// The distinction that matters is "nobody bills in this deployment" versus
+		// "the biller is one socket away", and only the second is answerable.
+		return rm.gatePeer(ctx, org, project, projectValidated, costCents)
 	}
 	return rm.m.Authorize(ctx, metering.AuthInput{
 		User: org, Org: org, AmountCents: costCents,
@@ -152,7 +175,16 @@ func (rm *ResourceMeter) Meter(org, project, kind string, amountCents int64, req
 // richly. Like Meter it is fire-and-forget on a background context and a no-op
 // when billing is unconfigured or AmountCents<=0. kind is for the failure log.
 func (rm *ResourceMeter) MeterUsage(org, kind string, u metering.Usage) {
-	if !rm.Enabled() || (u.AmountCents <= 0 && u.AmountMicros <= 0) {
+	// Same defensive line as Gate: never-constructed records nothing and never
+	// panics; no-local-ledger asks the peer.
+	if rm == nil || rm.m == nil {
+		return
+	}
+	if u.AmountCents <= 0 && u.AmountMicros <= 0 {
+		return
+	}
+	if !rm.Enabled() {
+		rm.meterPeer(org, kind, u)
 		return
 	}
 	u.User = org // per-ORG billing: ledger keyed on the org slug.

@@ -50,16 +50,23 @@ func keyFileWith(t *testing.T, body string) string {
 	return p
 }
 
+// keyBody renders a one-pair LiveKit key file, or the EMPTY file that models a mounted
+// Secret with no key in it. Separate from mount because a test that asserts on the key
+// file's PATH has to create the file itself, and rebuilding this two-line rule at that
+// call site is how the two drift.
+func keyBody(key, secret string) string {
+	if key == "" && secret == "" {
+		return ""
+	}
+	return key + ": " + secret + "\n"
+}
+
 // mount stands the subsystem up against a real key FILE, which is how production
 // reads it (Secret livekit-keys/keys.yaml, mounted read-only) — not against env
 // scalars, which is the shape that turned out not to exist in the cluster.
 func mount(t *testing.T, team, key, secret string) *zip.App {
 	t.Helper()
-	body := ""
-	if key != "" || secret != "" {
-		body = key + ": " + secret + "\n"
-	}
-	return mountWithKeyFile(t, team, keyFileWith(t, body))
+	return mountWithKeyFile(t, team, keyFileWith(t, keyBody(key, secret)))
 }
 
 func mountWithKeyFile(t *testing.T, team, path string) *zip.App {
@@ -446,13 +453,31 @@ func TestMissingKeyFileIsLoud(t *testing.T) {
 // TestUnconfiguredReasonNeverReachesTheCaller: the 503 is reachable with no
 // credential at all, so it must state the fact and not enumerate our secret plumbing.
 // The reason belongs in the operator's log, which Mount writes.
+//
+// The leak set asserts the WHOLE reason string, not a list of fragments it happens to
+// contain today. Fragments are a proxy that a reworded reason silently escapes; the
+// reason itself is the actual property ("this string does not reach the caller") and it
+// holds for wordings nobody has written yet. The fragments stay as well, because they
+// also catch a body that assembles the plumbing without quoting the reason verbatim.
+//
+// `t.TempDir()` used to sit in this set and asserted NOTHING: called here it mints a
+// FRESH directory, never the one holding keys.yaml, so the element could not fail. An
+// assertion that cannot fail is worse than a missing one — it reads as coverage. The
+// non-empty guard below is what stops the same class of bug returning, because the
+// dangerous shape of this test is a reason that is "" (strings.Contains(body, "") is
+// always true, so an empty reason would flip it from vacuous to always-failing).
 func TestUnconfiguredReasonNeverReachesTheCaller(t *testing.T) {
-	app := mount(t, teamSecret, "", "")
+	path := keyFileWith(t, "")
+	app := mountWithKeyFile(t, teamSecret, path)
+	reason := load().reason // same env as the mount above, so this IS the reason it logged
+	if reason == "" {
+		t.Fatal("the fixture is CONFIGURED — there is no reason to withhold and this test proves nothing")
+	}
 	code, body := ask(t, app, roomIn(workspaceA), "person-42", "")
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("got %d, want 503", code)
 	}
-	for _, leak := range []string{"livekit-keys", "keys.yaml", "/etc/", "SERVER_SECRET", t.TempDir()} {
+	for _, leak := range []string{"livekit-keys", "keys.yaml", "/etc/", "SERVER_SECRET", path, reason} {
 		if strings.Contains(body, leak) {
 			t.Errorf("the 503 body leaks %q: %s", leak, body)
 		}
@@ -781,7 +806,8 @@ func TestHealthLeaksNothingUnauthenticated(t *testing.T) {
 		{"configured", teamSecret, apiKey, apiSecret, http.StatusOK},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			app := mount(t, tc.team, tc.key, tc.given)
+			path := keyFileWith(t, keyBody(tc.key, tc.given))
+			app := mountWithKeyFile(t, tc.team, path)
 			req := httptest.NewRequest(http.MethodGet, "/v1/meet/health", nil)
 			resp, err := app.Fiber().Test(req)
 			if err != nil {
@@ -792,7 +818,20 @@ func TestHealthLeaksNothingUnauthenticated(t *testing.T) {
 			if resp.StatusCode != tc.wantCode {
 				t.Errorf("health = %d, want %d", resp.StatusCode, tc.wantCode)
 			}
-			for _, leak := range []string{"livekit-keys", "keys.yaml", "/etc/", "SERVER_SECRET", apiKey, apiSecret, t.TempDir()} {
+			// A non-empty reason and a 503 are the SAME fact — state.reason IS
+			// "not configured" (state.ready is `reason == ""`), so pinning the
+			// correspondence keeps the leak set below honest in both directions. It
+			// also forbids the trap: appending an EMPTY reason to the leak set would
+			// make strings.Contains(body, "") true and fail every configured case, so
+			// the element is only added when it can actually discriminate.
+			leaks := []string{"livekit-keys", "keys.yaml", "/etc/", "SERVER_SECRET", apiKey, apiSecret, path}
+			reason := load().reason
+			if degraded := tc.wantCode == http.StatusServiceUnavailable; (reason != "") != degraded {
+				t.Fatalf("reason %q and status %d disagree about whether meet is configured", reason, tc.wantCode)
+			} else if degraded {
+				leaks = append(leaks, reason)
+			}
+			for _, leak := range leaks {
 				if strings.Contains(string(b), leak) {
 					t.Errorf("health body leaks %q: %s", leak, b)
 				}
