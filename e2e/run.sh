@@ -21,9 +21,9 @@ SUITE="${SUITE:-$ROOT/../universe/e2e}"
 HTTP_PORT="${HTTP_PORT:-18080}"
 HEALTH_PORT="${HEALTH_PORT:-19090}"
 ZAP_PORT="${ZAP_PORT:-19653}"
-# NOT configurable: cloud.durableZAPPort is a compile-time constant, and the drip
-# engine that delivers marketing mail is bound to it. See the preflight below.
-TASKS_PORT=19999
+# The cluster-reachable tasks listener. Isolated like every other port here so a
+# run does not collide with a dev stack — or another agent — already on this host.
+TASKS_GATED_PORT="${TASKS_GATED_PORT:-19998}"
 
 DATA_DIR="${DATA_DIR:-$(mktemp -d -t hanzo-e2e.XXXXXX)}"
 LOG="$DATA_DIR/cloud.log"
@@ -73,14 +73,14 @@ cleanup() {
 trap cleanup EXIT
 
 # ── preflight ────────────────────────────────────────────────────────────────
-# A bound port is not a warning here. 19999 in particular: if the embedded tasks
-# engine cannot bind it, cloud logs one line and carries on with the drip engine
-# IDLE — marketing mail is then never delivered and the mail spec fails with a
-# timeout that looks like a product bug. Refuse to start instead.
-for p in "$HTTP_PORT" "$HEALTH_PORT" "$ZAP_PORT" "$TASKS_PORT"; do
+# A bound port is not a warning here. 9999 in particular: it is the ONE
+# cluster-reachable tasks listener and still a compile-time constant, so a leftover
+# instance holding it stops this one from serving durable work to its consumers.
+# The per-process ingest engine now takes an ephemeral port, so it is not checked.
+for p in "$HTTP_PORT" "$HEALTH_PORT" "$ZAP_PORT" "$TASKS_GATED_PORT"; do
   if ss -ltn "sport = :$p" 2>/dev/null | grep -q LISTEN; then
     holder="$(ss -ltnp "sport = :$p" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1)"
-    fail "port $p is in use by pid ${holder:-?} — another cloud instance is up. Stop it (\`kill -9 ${holder:-<pid>}\`). The tasks ports $TASKS_PORT/9999 are compile-time constants, so two instances can never coexist on one host."
+    fail "port $p is in use by pid ${holder:-?} — another cloud instance is up. Stop it (\`kill -9 ${holder:-<pid>}\`). The gated tasks port $TASKS_GATED_PORT is a compile-time constant, so two instances can never coexist on one host."
   fi
 done
 [ -d "$SUITE" ] || fail "Playwright suite not found at $SUITE — set SUITE=<path to universe/e2e>"
@@ -108,6 +108,7 @@ fi
 export CLOUD_KMS_MASTER_KEY_REF="$(head -c 32 /dev/urandom | base64 -w0)"
 export CLOUD_DATA_DIR="$DATA_DIR"
 export CLOUD_ZAP_LISTEN=":$ZAP_PORT"
+export CLOUD_TASKS_GATED_PORT="$TASKS_GATED_PORT"
 export CLOUD_HEALTH_LISTEN=":$HEALTH_PORT"
 export initDataFile="$ROOT/e2e/init_data.json"   # camelCase: the key IAM reads
 export IAM_SERVICE_TOKEN="$SERVICE_TOKEN"

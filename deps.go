@@ -14,8 +14,8 @@ import (
 	"github.com/hanzoai/ha"
 	luxlog "github.com/luxfi/log"
 
-	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/apps/gateway/edge"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/types"
 )
 

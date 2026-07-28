@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/credz"
 	"github.com/hanzoai/cloud/internal/org"
 	"github.com/hanzoai/ha"
@@ -21,11 +21,11 @@ import (
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 
-	"github.com/hanzoai/cloud/clients"
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/gateway/edge"
 	"github.com/hanzoai/cloud/apps/money"
 	"github.com/hanzoai/cloud/apps/s3admin"
+	"github.com/hanzoai/cloud/clients"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -355,7 +355,12 @@ func pickKMSClient(cfg *Config, log luxlog.Logger) KMSClient {
 		log.Info("deps.KMS → ZAP RPC", "addr", cfg.KMSZAPAddr)
 		return clients.KMSRPCAt(cfg.KMSZAPAddr)
 	}
-	return clients.DisabledKMS()
+	// The store is not in this process, which is the normal case: exactly one holds
+	// it. Ask that one over the internal plane rather than reporting no KMS at all —
+	// DisabledKMS here is why an app in its own binary silently had no secrets, and
+	// a stored mail provider read back as "not configured".
+	log.Info("deps.KMS → the kms app over the internal plane")
+	return KMSPeer{}
 }
 
 // kmsClientFactory constructs the embedded in-process KMS client from cloud

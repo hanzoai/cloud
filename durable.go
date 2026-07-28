@@ -8,8 +8,10 @@ package cloud
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	tasksauth "github.com/hanzoai/tasks/pkg/auth"
@@ -31,6 +33,24 @@ const durableZAPPort = 19999
 // a consumer repoint changes only the host (tasks.hanzo.svc → cloud.hanzo.svc).
 const durableGatedZAPPort = 9999
 
+// gatedZAPPort is the cluster-reachable tasks listener. It defaults to the port
+// the retired tasksd exposed, so existing consumers keep their address, and
+// CLOUD_TASKS_GATED_PORT moves it.
+//
+// It needs to move because "two instances can never coexist on one host" stopped
+// being acceptable: apps are separate processes now, and a developer running a
+// second stack — or a second agent on a shared box — has no way to bring one up
+// while another holds the port. A fixed number is right for a deployment and wrong
+// for a workstation.
+func gatedZAPPort() int {
+	if v := strings.TrimSpace(os.Getenv("CLOUD_TASKS_GATED_PORT")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return durableGatedZAPPort
+}
+
 // embeddedTasks keeps the in-process engine alive for the process (a package ref the GC
 // won't collect) and lets Serve stop it on shutdown.
 var embeddedTasks *tasksengine.Embedded
@@ -51,16 +71,35 @@ func EmbeddedTasks() *tasksengine.Embedded { return embeddedTasks }
 // HTTP. Fail-soft by construction: any embed error leaves ai's dialer unset →
 // EnqueueIngest returns ErrTasksNotConfigured → the handler runs ingest inline (always
 // works). Called once, after MountAll (ai is mounted) and before Listen.
-func wireDurableIngest(ctx context.Context, deps Deps) {
+func wireDurableIngest(ctx context.Context, deps Deps, app string) {
 	// A stable data dir the engine owns. Cloud's container is distroless (no /tmp), so
 	// Embed's default os.MkdirTemp("") fallback fails — pin it to cloud's data root.
-	dataDir := filepath.Join(firstNonEmptyStr(deps.DataDir, "/data"), "tasks")
+	// PER PROCESS, both of them. Apps are their own binaries now, so a fixed port
+	// and a shared directory are two processes' worth of contention over one
+	// resource: seven of eight children lost the bind on durableZAPPort and ran with
+	// NO durable engine at all — marketing's drip queue among them, which is how a
+	// campaign resolved its audience and then mailed nobody. A shared store would be
+	// the same collision one layer down, since the engine's SQLite has one writer.
+	//
+	// The port is picked here rather than by the engine because its config treats 0
+	// as "use the default" rather than "pick a free one". Naming the app makes both
+	// resources say whose they are.
+	//
+	// This becomes a UNIX SOCKET the moment hanzoai/tasks can listen on one: a path
+	// per app needs no allocation and cannot collide, which is what the internal
+	// plane already does everywhere else.
+	dataDir := filepath.Join(firstNonEmptyStr(deps.DataDir, "/data"), "tasks", firstNonEmptyStr(app, "cloud"))
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		deps.Logger.Warn("durable ingest: data dir unavailable; ingest runs inline", "err", err)
 		return
 	}
+	port, err := freePort()
+	if err != nil {
+		deps.Logger.Warn("durable ingest: no free port; ingest runs inline", "err", err)
+		return
+	}
 	emb, err := tasksengine.Embed(ctx, tasksengine.EmbedConfig{
-		ZAPPort: durableZAPPort,
+		ZAPPort: port,
 		DataDir: dataDir,
 		NodeID:  "cloud-tasks",
 		// RequireIdentity defaults false: the engine is loopback-only and shares cloud's
@@ -80,7 +119,7 @@ func wireDurableIngest(ctx context.Context, deps Deps) {
 	ingestDialer = func(org string) (tasksclient.Client, error) {
 		return tasksclient.Dial(tasksclient.Options{HostPort: addr, Namespace: "default"})
 	}
-	deps.Logger.Info("durable ingest wired: in-process tasks engine", "addr", addr, "dataDir", dataDir)
+	deps.Logger.Info("durable ingest wired: in-process tasks engine", "app", app, "addr", addr, "dataDir", dataDir)
 
 	// Expose the SAME engine on a cluster-reachable, IDENTITY-GATED ZAP listener so the
 	// standalone tasksd's consumers (auto, hanzo-playground, platform) run their durable
@@ -90,19 +129,26 @@ func wireDurableIngest(ctx context.Context, deps Deps) {
 	// stays ungated (in-process ai-ingest shares cloud's trust boundary). Fail-soft: a
 	// missing issuer or a bind failure logs and leaves the gated surface down without
 	// touching ai-ingest.
+	// The GATED listener is a cluster-reachable port, so exactly one process may own
+	// it — and the one that should is the app that serves the Tasks product. Every
+	// process trying meant seven of eight logging "address already in use" for a
+	// listener they had no business exposing.
+	if app != "tasks" && app != "cloud" {
+		return
+	}
 	if deps.IAMIssuer == "" {
-		deps.Logger.Warn("durable tasks: no IAM issuer; gated cluster ZAP listener NOT exposed", "port", durableGatedZAPPort)
+		deps.Logger.Warn("durable tasks: no IAM issuer; gated cluster ZAP listener NOT exposed", "port", gatedZAPPort())
 		return
 	}
 	validator := tasksauth.NewValidator(tasksauth.JWTConfig{
 		Issuer:  deps.IAMIssuer,
 		JWKSURL: strings.TrimRight(deps.IAMIssuer, "/") + "/v1/iam/.well-known/jwks",
 	})
-	if err := emb.ServeGated(ctx, durableGatedZAPPort, validator); err != nil {
-		deps.Logger.Error("durable tasks: gated cluster ZAP listener failed to start", "err", err, "port", durableGatedZAPPort)
+	if err := emb.ServeGated(ctx, gatedZAPPort(), validator); err != nil {
+		deps.Logger.Error("durable tasks: gated cluster ZAP listener failed to start", "err", err, "port", gatedZAPPort())
 		return
 	}
-	deps.Logger.Info("durable tasks: gated cluster ZAP listener up", "port", durableGatedZAPPort, "issuer", deps.IAMIssuer)
+	deps.Logger.Info("durable tasks: gated cluster ZAP listener up", "port", gatedZAPPort(), "issuer", deps.IAMIssuer)
 }
 
 // firstNonEmptyStr returns the first non-empty string, else the last.
@@ -113,4 +159,17 @@ func firstNonEmptyStr(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+// freePort asks the kernel for an unused loopback port and hands back the number.
+// There is a window between closing this listener and the engine binding it, which
+// is acceptable for a per-process resource on loopback and disappears entirely once
+// the engine can take a unix path instead.
+func freePort() (int, error) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = l.Close() }()
+	return l.Addr().(*net.TCPAddr).Port, nil
 }
