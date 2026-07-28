@@ -25,8 +25,10 @@ source for the generated per-language SDKs.
 ## Install / run
 - `docker run -p 8080:8080 ghcr.io/hanzoai/cloud:vX.Y.Z` (pin a released tag) ·
   `go install github.com/hanzoai/cloud/cmd/hanzo@latest` · `brew install hanzoai/tap/hanzo`
-- Build in MODULE mode only: `make build` / `GOWORK=off go build ./...` — never
-  workspace mode (see "Build & module graph" below).
+- Build in MODULE mode only: `make build` / `GOWORK=off go build <named target>` —
+  never workspace mode (see "Build & module graph" below). `make build` is the
+  light host; `make plugin APP=<x>` is the one app you are editing. Do not run
+  `go build ./...` here — it links 100+ binaries at ~4.5 GiB each.
 
 ## Key entry points
 - `cmd/cloud` — server binary · `cmd/hanzo` (`cli/`) — control CLI · `webui.go` — embedded console
@@ -131,12 +133,20 @@ package at once (`cmd/cloud` alone links >6GB).
 ## Two hosts: `cmd/cloud` links every app, `cmd/host` links none
 
 `cmd/cloud` imports `apps` and therefore links all ~103 subsystem graphs into one
-binary — **3105 packages**, ~570 MB, minutes to link, and a relink for every app
-that changes. `cmd/host` is the same API served a different way: it links `zip`
-and `manifest` and stops (**316 packages**, 19 MB, sub-second link, 14 MB RSS),
-mounts each app as a `zip.Plugin`, and starts a child on the FIRST REQUEST that
-reaches its prefix. An app nobody calls costs a route entry, not a process; a
-woken one costs ~27 MB. Both entry points stay — `make build` and `make host`.
+binary — **3108 packages**, 212 MB, 9.5s to link with a fully warm cache (minutes
+cold) at 3.8 GiB peak RSS, and a relink for every app that changes. `cmd/host` is
+the same API served a different way: it links `zip` and `manifest` and stops
+(**316 packages**, 19 MB, 0.6s link, 13 MB RSS), mounts each app as a
+`zip.Plugin`, and starts a child on the FIRST REQUEST that reaches its prefix. An
+app nobody calls costs a route entry, not a process; a woken one costs ~27 MB.
+
+**The host is the default.** `make build` builds it; `make plugin APP=<x>` builds
+the one app you edited (1.3s after a real source change). The monolith is still
+there as `make monolith`, last in `make help` and marked SLOW FALLBACK, because
+the Dockerfile still ships `./cmd/cloud` — host+plugins cannot replace it until a
+plugin stops linking the whole core. Today the 106 plugins weigh 5.3 GB in `./bin`
+against the monolith's 212 MB, since each statically re-links the same
+~650-package root. That floor, not the app list, is what the image is waiting on.
 
 The host knows three facts per app and no more — name, prefixes, eager-or-lazy —
 and they are DERIVED from `apps.Wire()`, never hand-maintained. `make generate`
