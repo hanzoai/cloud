@@ -32,7 +32,8 @@
             "description": "Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.",
             "schema": {
               "type": "integer"
-            }
+            },
+            "example": 50
           }
         ],
         "responses": {
@@ -100,7 +101,8 @@
             "description": "ID is the audience id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
         ],
         "responses": {
@@ -124,7 +126,8 @@
             "description": "ID is the audience id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
         ],
         "responses": {
@@ -157,7 +160,8 @@
             "description": "ID is the audience id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"
           }
         ],
         "responses": {
@@ -201,7 +205,8 @@
             "description": "Status keeps only posts in that state (draft, scheduled, published,\nfailed, canceled). Empty means every post.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "scheduled"
           },
           {
             "name": "limit",
@@ -210,7 +215,8 @@
             "description": "Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.",
             "schema": {
               "type": "integer"
-            }
+            },
+            "example": 50
           }
         ],
         "responses": {
@@ -279,7 +285,8 @@
             "description": "ID is the post id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468"
           }
         ],
         "responses": {
@@ -303,7 +310,8 @@
             "description": "ID is the post id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468"
           }
         ],
         "responses": {
@@ -383,7 +391,8 @@
             "description": "ID is the post id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468"
           }
         ],
         "requestBody": {
@@ -429,7 +438,8 @@
             "description": "Status keeps only campaigns in that lifecycle state (draft, scheduled,\nactive, paused, completed). Empty means every campaign.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "active"
           },
           {
             "name": "limit",
@@ -438,7 +448,8 @@
             "description": "Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.",
             "schema": {
               "type": "integer"
-            }
+            },
+            "example": 25
           }
         ],
         "responses": {
@@ -508,7 +519,8 @@
             "description": "ID is the campaign id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
           }
         ],
         "responses": {
@@ -532,7 +544,8 @@
             "description": "ID is the campaign id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
           }
         ],
         "responses": {
@@ -614,7 +627,8 @@
             "description": "ID is the campaign id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"
           }
         ],
         "requestBody": {
@@ -697,7 +711,8 @@
             "description": "Code is the promo code from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "first1000"
           },
           {
             "name": "plan",
@@ -706,7 +721,8 @@
             "description": "Plan is the plan being priced: pro, max or team. Anything else (including\nthe free Developer plan) has no list price and so nothing to discount.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "team"
           },
           {
             "name": "seats",
@@ -715,7 +731,8 @@
             "description": "Seats is the Team seat count; 0 means 1, and it is ignored for the\nsingle-seat plans.",
             "schema": {
               "type": "integer"
-            }
+            },
+            "example": 12
           }
         ],
         "responses": {
@@ -758,7 +775,8 @@
             "description": "Code is the promo code from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "first1000"
           }
         ],
         "requestBody": {
@@ -807,7 +825,8 @@
             "description": "Code is the promo code from the path, e.g. \"first1000\".",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "first1000"
           }
         ],
         "responses": {
@@ -840,7 +859,8 @@
             "description": "Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.",
             "schema": {
               "type": "integer"
-            }
+            },
+            "example": 50
           }
         ],
         "responses": {
@@ -907,7 +927,8 @@
             "description": "ID is the sequence id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248"
           }
         ],
         "responses": {
@@ -992,7 +1013,8 @@
             "description": "ID is the sequence id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248"
           },
           {
             "name": "limit",
@@ -1001,7 +1023,8 @@
             "description": "Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.",
             "schema": {
               "type": "integer"
-            }
+            },
+            "example": 100
           }
         ],
         "responses": {
@@ -1034,7 +1057,8 @@
             "description": "ID is the sequence id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248"
           },
           {
             "name": "eid",
@@ -1043,7 +1067,8 @@
             "description": "EID is the enrollment id from the path, as returned by a single-address\nenroll.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "enr_2a8d6f0b4c1e9375a0d2f6b8c4e19f73"
           }
         ],
         "requestBody": {
@@ -1083,7 +1108,8 @@
             "description": "ID is the sequence id from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248"
           }
         ],
         "requestBody": {
@@ -1130,7 +1156,8 @@
             "description": "ID is the sequence id from the path, as returned by create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248"
           }
         ],
         "responses": {
@@ -1237,7 +1264,8 @@
             "description": "Channel is the surface opted out of: email, sms, social, meta, google or\ntiktok. Empty means email. Opting out of one leaves the others reachable.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "email"
           },
           {
             "name": "address",
@@ -1246,7 +1274,8 @@
             "description": "Address is the recipient, normalized (lower-cased, trimmed) so an opt-out\ncannot be slipped past on a case or whitespace difference. Required.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "person@example.com"
           },
           {
             "name": "reason",
@@ -1288,7 +1317,8 @@
             "description": "Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.",
             "schema": {
               "type": "integer"
-            }
+            },
+            "example": 100
           }
         ],
         "responses": {
@@ -1356,7 +1386,8 @@
             "description": "Org is the org the link was minted for.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "acme"
           },
           {
             "name": "channel",
@@ -1365,7 +1396,8 @@
             "description": "Channel is the surface to opt out of.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "email"
           },
           {
             "name": "address",
@@ -1374,7 +1406,8 @@
             "description": "Address is the recipient to opt out.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "person@example.com"
           },
           {
             "name": "token",
@@ -1383,7 +1416,8 @@
             "description": "Token is the HMAC over (org, channel, address). It is the ONLY authority\nhere — there is no principal — so it binds the request to one tuple and\nnothing else.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "9f2a…"
           }
         ],
         "responses": {
@@ -1441,32 +1475,7 @@
           "data": {
             "description": "Data is the page; an empty array when the org has saved no audience.",
             "items": {
-              "properties": {
-                "createdAt": {
-                  "description": "CreatedAt and UpdatedAt are unix seconds, both server-assigned.",
-                  "type": "integer"
-                },
-                "event": {
-                  "description": "Event is the analytics event a member must have fired. EMPTY MEANS NO\nFILTER: the audience is then every mailable customer in the org, and no\nwarehouse is consulted.",
-                  "type": "string"
-                },
-                "id": {
-                  "description": "ID is the server-assigned audience id (\"aud_\" + 128 random bits).",
-                  "type": "string"
-                },
-                "name": {
-                  "description": "Name is the audience's label. Required, trimmed, capped at 1024 bytes.",
-                  "type": "string"
-                },
-                "updatedAt": {
-                  "type": "integer"
-                },
-                "windowDays": {
-                  "description": "WindowDays is how far back the event counts, ending now. 0 means 30 and\nnothing above 3650 is honoured. Ignored when Event is empty.",
-                  "type": "integer"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/Audience"
             },
             "type": "array"
           }
@@ -1599,47 +1608,7 @@
           "data": {
             "description": "Data is the page; an empty array when the org has no matching campaign.",
             "items": {
-              "properties": {
-                "budget": {
-                  "description": "Budget and Spend are minor units (USD cents), clamped to \u003e= 0.",
-                  "type": "integer"
-                },
-                "channel": {
-                  "description": "Channel is the delivery surface: email, sms, social, meta, google or\ntiktok. Empty means email.",
-                  "type": "string"
-                },
-                "createdAt": {
-                  "description": "CreatedAt and UpdatedAt are unix seconds, both server-assigned.",
-                  "type": "integer"
-                },
-                "id": {
-                  "description": "ID is the server-assigned campaign id (\"camp_\" + 128 random bits).",
-                  "type": "string"
-                },
-                "name": {
-                  "description": "Name is the campaign's label. Required, trimmed, capped at 1024 bytes.",
-                  "type": "string"
-                },
-                "objective": {
-                  "description": "Objective is the free-text goal (\"signups\"), capped at 1024 bytes.",
-                  "type": "string"
-                },
-                "scheduledAt": {
-                  "description": "ScheduledAt is the unix send time; 0 means unscheduled. Setting it on a\ncampaign with no explicit status makes that status \"scheduled\".",
-                  "type": "integer"
-                },
-                "spend": {
-                  "type": "integer"
-                },
-                "status": {
-                  "description": "Status is the lifecycle: draft, scheduled, active, paused or completed.\nEmpty means draft.",
-                  "type": "string"
-                },
-                "updatedAt": {
-                  "type": "integer"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/Campaign"
             },
             "type": "array"
           }
@@ -1688,48 +1657,51 @@
         },
         "type": "object"
       },
+      "Enrollment": {
+        "properties": {
+          "address": {
+            "description": "Address is the normalized (lower-cased, trimmed) recipient.",
+            "type": "string"
+          },
+          "channel": {
+            "description": "Channel is the delivery surface the steps go out on.",
+            "type": "string"
+          },
+          "currentStep": {
+            "description": "CurrentStep is the index of the step that sends next.",
+            "type": "integer"
+          },
+          "enrolledAt": {
+            "description": "EnrolledAt and UpdatedAt are unix seconds.",
+            "type": "integer"
+          },
+          "id": {
+            "description": "ID is the server-assigned enrollment id (\"enr_\" + 128 random bits).",
+            "type": "string"
+          },
+          "nextRunAt": {
+            "description": "NextRunAt is the unix time the current step comes due; 0 once the walk has\nended. It IS the schedule — durable in SQLite, so it survives restarts.",
+            "type": "integer"
+          },
+          "sequenceId": {
+            "description": "SequenceID is the sequence being walked.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is active, completed or canceled.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "EnrollmentList": {
         "properties": {
           "data": {
             "items": {
-              "properties": {
-                "address": {
-                  "description": "Address is the normalized (lower-cased, trimmed) recipient.",
-                  "type": "string"
-                },
-                "channel": {
-                  "description": "Channel is the delivery surface the steps go out on.",
-                  "type": "string"
-                },
-                "currentStep": {
-                  "description": "CurrentStep is the index of the step that sends next.",
-                  "type": "integer"
-                },
-                "enrolledAt": {
-                  "description": "EnrolledAt and UpdatedAt are unix seconds.",
-                  "type": "integer"
-                },
-                "id": {
-                  "description": "ID is the server-assigned enrollment id (\"enr_\" + 128 random bits).",
-                  "type": "string"
-                },
-                "nextRunAt": {
-                  "description": "NextRunAt is the unix time the current step comes due; 0 once the walk has\nended. It IS the schedule — durable in SQLite, so it survives restarts.",
-                  "type": "integer"
-                },
-                "sequenceId": {
-                  "description": "SequenceID is the sequence being walked.",
-                  "type": "string"
-                },
-                "status": {
-                  "description": "Status is active, completed or canceled.",
-                  "type": "string"
-                },
-                "updatedAt": {
-                  "type": "integer"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/Enrollment"
             },
             "type": "array"
           }
@@ -1753,48 +1725,7 @@
         "properties": {
           "data": {
             "items": {
-              "properties": {
-                "body": {
-                  "description": "Body is the post text. Required.",
-                  "type": "string"
-                },
-                "channel": {
-                  "description": "Channel is the target network: x, facebook, instagram, linkedin, tiktok,\nyoutube or threads. Required — a post must name where it goes.",
-                  "type": "string"
-                },
-                "createdAt": {
-                  "description": "CreatedAt and UpdatedAt are unix seconds, both server-assigned.",
-                  "type": "integer"
-                },
-                "error": {
-                  "description": "Error is the exact reason the last publish attempt failed — the honest\nrecord behind a \"failed\" status, never a faked success.",
-                  "type": "string"
-                },
-                "id": {
-                  "description": "ID is the server-assigned post id (\"cal_\" + 128 random bits).",
-                  "type": "string"
-                },
-                "publishedAt": {
-                  "description": "PublishedAt is when the publish succeeded; 0 until it does.",
-                  "type": "integer"
-                },
-                "scheduledAt": {
-                  "description": "ScheduledAt is the unix publish time; 0 leaves the post a draft, and any\nvalue makes it \"scheduled\" for the durable sweep to pick up.",
-                  "type": "integer"
-                },
-                "status": {
-                  "description": "Status is draft, scheduled, published, failed or canceled. Server-owned.",
-                  "type": "string"
-                },
-                "title": {
-                  "description": "Title is the post's internal label, capped at 1024 bytes.",
-                  "type": "string"
-                },
-                "updatedAt": {
-                  "type": "integer"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/CalendarPost"
             },
             "type": "array"
           }
@@ -1810,59 +1741,65 @@
         },
         "type": "object"
       },
+      "Promo": {
+        "properties": {
+          "active": {
+            "description": "Active is false for a promo that is no longer offered; an inactive promo\nquotes as ineligible and refuses to redeem.",
+            "type": "boolean"
+          },
+          "code": {
+            "description": "Code is the promo id, e.g. \"first1000\".",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is unix seconds.",
+            "type": "integer"
+          },
+          "description": {
+            "description": "Description is the human-readable offer.",
+            "type": "string"
+          },
+          "maxRedemptions": {
+            "description": "MaxRedemptions is the hard fleet-wide cap; the redemption past it is\ndeclined.",
+            "type": "integer"
+          },
+          "percentOff": {
+            "description": "PercentOff is the discount applied to ONE month's list price.",
+            "type": "integer"
+          },
+          "plans": {
+            "description": "Plans is the csv of eligible plan ids (\"pro,max,team\").",
+            "type": "string"
+          },
+          "teamSeatCap": {
+            "description": "TeamSeatCap is how many Team seats bill at the promo rate; seats beyond it\nbill at list.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "PromoList": {
         "properties": {
           "data": {
             "items": {
-              "properties": {
-                "promo": {
-                  "properties": {
-                    "active": {
-                      "description": "Active is false for a promo that is no longer offered; an inactive promo\nquotes as ineligible and refuses to redeem.",
-                      "type": "boolean"
-                    },
-                    "code": {
-                      "description": "Code is the promo id, e.g. \"first1000\".",
-                      "type": "string"
-                    },
-                    "createdAt": {
-                      "description": "CreatedAt is unix seconds.",
-                      "type": "integer"
-                    },
-                    "description": {
-                      "description": "Description is the human-readable offer.",
-                      "type": "string"
-                    },
-                    "maxRedemptions": {
-                      "description": "MaxRedemptions is the hard fleet-wide cap; the redemption past it is\ndeclined.",
-                      "type": "integer"
-                    },
-                    "percentOff": {
-                      "description": "PercentOff is the discount applied to ONE month's list price.",
-                      "type": "integer"
-                    },
-                    "plans": {
-                      "description": "Plans is the csv of eligible plan ids (\"pro,max,team\").",
-                      "type": "string"
-                    },
-                    "teamSeatCap": {
-                      "description": "TeamSeatCap is how many Team seats bill at the promo rate; seats beyond it\nbill at list.",
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "redeemed": {
-                  "description": "Redeemed is how many orgs have taken it, Remaining how many are left under\nthe fleet-wide cap.",
-                  "type": "integer"
-                },
-                "remaining": {
-                  "type": "integer"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/PromoStatus"
             },
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "PromoStatus": {
+        "properties": {
+          "promo": {
+            "$ref": "#/components/schemas/Promo"
+          },
+          "redeemed": {
+            "description": "Redeemed is how many orgs have taken it, Remaining how many are left under\nthe fleet-wide cap.",
+            "type": "integer"
+          },
+          "remaining": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -1938,32 +1875,7 @@
             "type": "integer"
           },
           "redemption": {
-            "properties": {
-              "code": {
-                "description": "Code is the promo redeemed.",
-                "type": "string"
-              },
-              "creditCents": {
-                "description": "CreditCents is the discount value credited to the org's wallet — the promo\nis realized as a NON-CASH credit, not a subscription coupon.",
-                "type": "integer"
-              },
-              "creditEntryId": {
-                "description": "CreditEntryID is the finance ledger entry that credit landed in.",
-                "type": "string"
-              },
-              "plan": {
-                "description": "Plan and Seats are what was redeemed against.",
-                "type": "string"
-              },
-              "redeemedAt": {
-                "description": "RedeemedAt is unix seconds.",
-                "type": "integer"
-              },
-              "seats": {
-                "type": "integer"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/Redemption"
           }
         },
         "type": "object"
@@ -2038,28 +1950,7 @@
           "data": {
             "description": "Data is the page; an empty array when the org has no sequence.",
             "items": {
-              "properties": {
-                "createdAt": {
-                  "description": "CreatedAt and UpdatedAt are unix seconds, both server-assigned.",
-                  "type": "integer"
-                },
-                "id": {
-                  "description": "ID is the server-assigned sequence id (\"seq_\" + 128 random bits).",
-                  "type": "string"
-                },
-                "name": {
-                  "description": "Name is the sequence's label. Required, trimmed, capped at 1024 bytes.",
-                  "type": "string"
-                },
-                "status": {
-                  "description": "Status is the lifecycle: draft, active or archived. Empty means draft, and\nONLY an active sequence accepts enrollments.",
-                  "type": "string"
-                },
-                "updatedAt": {
-                  "type": "integer"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/Sequence"
             },
             "type": "array"
           }
@@ -2082,63 +1973,12 @@
       "SequenceView": {
         "properties": {
           "sequence": {
-            "properties": {
-              "createdAt": {
-                "description": "CreatedAt and UpdatedAt are unix seconds, both server-assigned.",
-                "type": "integer"
-              },
-              "id": {
-                "description": "ID is the server-assigned sequence id (\"seq_\" + 128 random bits).",
-                "type": "string"
-              },
-              "name": {
-                "description": "Name is the sequence's label. Required, trimmed, capped at 1024 bytes.",
-                "type": "string"
-              },
-              "status": {
-                "description": "Status is the lifecycle: draft, active or archived. Empty means draft, and\nONLY an active sequence accepts enrollments.",
-                "type": "string"
-              },
-              "updatedAt": {
-                "type": "integer"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/Sequence"
           },
           "steps": {
             "description": "Steps are in send order (idx ascending); empty for a sequence with no\nmessages yet, which enrolls fine and completes immediately.",
             "items": {
-              "properties": {
-                "body": {
-                  "description": "Body is the message text. Required. The signed one-click unsubscribe link\nis appended to it at send time.",
-                  "type": "string"
-                },
-                "createdAt": {
-                  "description": "CreatedAt is unix seconds, server-assigned.",
-                  "type": "integer"
-                },
-                "delaySeconds": {
-                  "description": "DelaySeconds is how long after the previous step this one sends (after\nenrollment, for step 0).",
-                  "type": "integer"
-                },
-                "id": {
-                  "description": "ID is the server-assigned step id (\"step_\" + 128 random bits).",
-                  "type": "string"
-                },
-                "idx": {
-                  "description": "Idx is the step's 0-based position, assigned by appending: a new step\nalways lands after the last one.",
-                  "type": "integer"
-                },
-                "sequenceId": {
-                  "description": "SequenceID is the sequence this step belongs to.",
-                  "type": "string"
-                },
-                "subject": {
-                  "description": "Subject is the email subject line, capped at 1024 bytes.",
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/Step"
             },
             "type": "array"
           }
@@ -2203,37 +2043,7 @@
         "properties": {
           "data": {
             "items": {
-              "properties": {
-                "body": {
-                  "description": "Body is the message text. Required. The signed one-click unsubscribe link\nis appended to it at send time.",
-                  "type": "string"
-                },
-                "createdAt": {
-                  "description": "CreatedAt is unix seconds, server-assigned.",
-                  "type": "integer"
-                },
-                "delaySeconds": {
-                  "description": "DelaySeconds is how long after the previous step this one sends (after\nenrollment, for step 0).",
-                  "type": "integer"
-                },
-                "id": {
-                  "description": "ID is the server-assigned step id (\"step_\" + 128 random bits).",
-                  "type": "string"
-                },
-                "idx": {
-                  "description": "Idx is the step's 0-based position, assigned by appending: a new step\nalways lands after the last one.",
-                  "type": "integer"
-                },
-                "sequenceId": {
-                  "description": "SequenceID is the sequence this step belongs to.",
-                  "type": "string"
-                },
-                "subject": {
-                  "description": "Subject is the email subject line, capped at 1024 bytes.",
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/Step"
             },
             "type": "array"
           }
@@ -2284,25 +2094,7 @@
         "properties": {
           "data": {
             "items": {
-              "properties": {
-                "address": {
-                  "description": "Address is the recipient, normalized (lower-cased, trimmed) so an opt-out\ncannot be slipped past on a case or whitespace difference. Required.",
-                  "type": "string"
-                },
-                "channel": {
-                  "description": "Channel is the surface opted out of: email, sms, social, meta, google or\ntiktok. Empty means email. Opting out of one leaves the others reachable.",
-                  "type": "string"
-                },
-                "createdAt": {
-                  "description": "CreatedAt is unix seconds, server-assigned.",
-                  "type": "integer"
-                },
-                "reason": {
-                  "description": "Reason is a free-text note, capped at 1024 bytes. The public one-click\nendpoint records \"one-click unsubscribe\".",
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/Suppression"
             },
             "type": "array"
           }
