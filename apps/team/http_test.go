@@ -329,7 +329,7 @@ func TestBotsReadRouteTenantGate(t *testing.T) {
 		t.Fatalf("validated GET /v1/team/bots = %d: %s", code, body)
 	}
 	var lr struct {
-		Bots []botView `json:"bots"`
+		Bots []botMember `json:"bots"`
 	}
 	if err := json.Unmarshal(body, &lr); err != nil {
 		t.Fatalf("bots list decode: %v (%s)", err, body)
@@ -526,7 +526,7 @@ func TestCallbackVerifiesOwner(t *testing.T) {
 			verify:   verify,
 		}
 		app := zip.New(zip.Config{Logger: luxlog.New("test")})
-		g.register(app.Group("/v1/team"), func(h zip.Handler) zip.Handler { return h })
+		g.register(app, func(h zip.Handler) zip.Handler { return h })
 		cb := httptest.NewRequest(http.MethodGet, "https://hanzo.team/v1/team/account/auth/openid/callback?code=ok&state=aaaa", nil)
 		cb.AddCookie(&http.Cookie{Name: stateCookie, Value: "aaaa|"})
 		resp, err := app.Fiber().Test(cb)

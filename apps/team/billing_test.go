@@ -17,6 +17,7 @@ import (
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/hanzoai/cloud/apps/team/wallet"
 	"github.com/hanzoai/cloud/types"
@@ -34,7 +35,12 @@ func billingApp(t *testing.T, commerce types.CommerceClient, planEnt func(contex
 	t.Cleanup(func() { _ = store.Close() })
 	b := &billingService{accounts: store, commerce: commerce, planEnt: planEnt, secret: testSecret}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	b.register(app.Group("/v1/team"), func(h zip.Handler) zip.Handler { return h })
+	// The SAME bridge Mount installs on this group. The plan read is a typed op,
+	// and a typed op receives only a context — the request its session token
+	// rides on crosses on that context or not at all. A harness that skipped it
+	// would be testing a wiring no deployment has.
+	app.Group(teamPrefix).Use(cloud.Bridge())
+	b.register(app, func(h zip.Handler) zip.Handler { return h })
 	return app, store
 }
 
