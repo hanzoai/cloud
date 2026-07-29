@@ -66,6 +66,20 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		port = p
 	}
 
+	// The bus's message-body ceiling. Zero means the embed default (8 MiB), which
+	// is deliberately well above NATS's own 1 MiB: the Kafka-wire adaptor rides
+	// this server, and its clients size themselves in MiB, so a 1 MiB bus caps
+	// every one of them and the failure surfaces on the PRODUCER as
+	// "Message size too large" — unfixable from the consumer side.
+	var maxPayload int32
+	if v := strings.TrimSpace(os.Getenv("CLOUD_PUBSUB_MAX_PAYLOAD")); v != "" {
+		n, err := strconv.ParseInt(v, 10, 32)
+		if err != nil || n <= 0 {
+			return fmt.Errorf("pubsub.Mount: bad CLOUD_PUBSUB_MAX_PAYLOAD %q (want a positive byte count)", v)
+		}
+		maxPayload = int32(n)
+	}
+
 	host := firstNonEmpty(os.Getenv("CLOUD_PUBSUB_HOST"), "0.0.0.0")
 
 	// Claim the address BEFORE handing it to the embedded server, because the
@@ -90,6 +104,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		Port:       port,
 		ServerName: firstNonEmpty(os.Getenv("CLOUD_PUBSUB_SERVER_NAME"), "cloud-pubsub-"+firstNonEmpty(deps.Brand, "hanzo")),
 		StoreDir:   dataDir,
+		MaxPayload: maxPayload,
 	})
 	if err != nil {
 		// Fail closed: a broken messaging plane must abort boot.

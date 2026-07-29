@@ -25,7 +25,7 @@ require (
 	github.com/hanzoai/otel-collector v1.2.0
 	github.com/hanzoai/plans v1.4.4
 	github.com/hanzoai/pricing v1.3.0
-	github.com/hanzoai/pubsub v1.0.0
+	github.com/hanzoai/pubsub v1.4.5
 	github.com/hanzoai/s3-go v1.0.0
 	github.com/hanzoai/sign v1.0.0
 	github.com/hanzoai/sqlite v0.4.0
@@ -101,6 +101,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.100 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/moby/term v0.5.2 // indirect
+	github.com/nats-io/nats-server/v2 v2.12.3 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible // indirect
