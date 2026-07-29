@@ -157,6 +157,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// here: balance, the prepaid gate, and the debit.
 	exposeBalance()
 	exposeMeter(deps.Metering)
+	exposeStarter()
+	exposeUsage()
 
 	if app == nil {
 		return fmt.Errorf("commerce: nil app")
