@@ -27,7 +27,7 @@ import (
 //
 // Surface (all org-scoped; /v1 only):
 //
-//	POST   /v1/company                     begin a formation                  -> Formation (201)
+//	POST   /v1/company                     begin a formation (201 new, 200 existing)
 //	GET    /v1/company                     the formation + next stages
 //	PUT    /v1/company/structure           set structure/jurisdiction/name
 //	POST   /v1/company/founders            set founders
