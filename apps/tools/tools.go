@@ -32,7 +32,9 @@ const (
 type state struct {
 	activation *ActivationStore
 	servers    *MCPServerStore
+	authored   *AuthoredStore // org-authored plugins (pluginbuild.go)
 	kms        types.KMSClient
+	ai         types.AIClient // generates plugin source from an API spec; nil ⇒ source-only builds
 	audit      *audit.Recorder
 }
 
@@ -61,6 +63,12 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		_ = activation.Close()
 		return fmt.Errorf("tools.Mount: open mcp-server store: %w", err)
 	}
+	authored, err := OpenAuthoredStore(filepath.Join(deps.DataDir, "tools-plugins.db"))
+	if err != nil {
+		_ = activation.Close()
+		_ = servers.Close()
+		return fmt.Errorf("tools.Mount: open authored-plugin store: %w", err)
+	}
 
 	// Install the activation store on the process-wide registry and register the two
 	// providers this package owns.
@@ -72,7 +80,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: b, State: state{
 		activation: activation,
 		servers:    servers,
+		authored:   authored,
 		kms:        deps.KMS,
+		ai:         deps.AI,
 		audit:      deps.Audit,
 	}}
 	mounted = s
@@ -98,6 +108,14 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/mcp", cloud.Handle(s, listBySource(SourceMCP)))
 	app.Get("/v1/plugins", cloud.Handle(s, listPlugins))
 
+	// The builder (pluginbuild.go). /v1/plugins lists what this deployment
+	// mounted; /authored is what THIS ORG built, which is a different set with a
+	// different lifecycle, so it is a subpath rather than a mixed collection.
+	pluginG := app.Group("/v1/plugins")
+	pluginG.Post("/build", cloud.Handle(s, buildPlugin))
+	pluginG.Get("/authored", cloud.Handle(s, listAuthored))
+	pluginG.Delete("/authored/:id", cloud.Handle(s, deleteAuthored))
+
 	// The external MCP server registry lives with /v1/mcp, not under /v1/tools:
 	// a server is a record an org creates, not a tool the registry enumerates.
 	mcpG := app.Group("/v1/mcp")
@@ -119,6 +137,11 @@ func Shutdown(_ context.Context) error {
 	}
 	if mounted.State.servers != nil {
 		if err := mounted.State.servers.Close(); err != nil && first == nil {
+			first = err
+		}
+	}
+	if mounted.State.authored != nil {
+		if err := mounted.State.authored.Close(); err != nil && first == nil {
 			first = err
 		}
 	}

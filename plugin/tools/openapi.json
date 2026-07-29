@@ -64,6 +64,40 @@
         ]
       }
     },
+    "/v1/plugins/authored": {
+      "get": {
+        "operationId": "get_v1_plugins_authored",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/plugins/authored/{id}": {
+      "delete": {
+        "operationId": "delete_v1_plugins_authored_by_id",
+        "tags": [
+          "tools"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/plugins/build": {
+      "post": {
+        "operationId": "post_v1_plugins_build",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
     "/v1/skills": {
       "get": {
         "operationId": "get_v1_skills",
