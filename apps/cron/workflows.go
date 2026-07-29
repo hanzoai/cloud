@@ -5,6 +5,7 @@ package cron
 import (
 	"context"
 	"fmt"
+	tasks "github.com/hanzoai/tasks/pkg/tasks"
 	"io"
 	"net/http"
 	"os"
@@ -192,5 +193,5 @@ func ReconcileActivity(ctx context.Context) error {
 	if eng == nil {
 		return fmt.Errorf("tasks engine not ready")
 	}
-	return reconcile(ctx, eng.View(org()), activityKube(), activityLog())
+	return reconcile(ctx, eng.View(tasks.Org(org())), activityKube(), activityLog())
 }

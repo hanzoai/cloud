@@ -7,6 +7,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/core"
 	ledger "github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/plane"
 )
 
 // BackfillIn is the POST /v1/admin/finance/backfill input.
@@ -65,14 +66,18 @@ func Backfill(ctx context.Context, in *BackfillIn) (*BackfillOut, error) {
 	// which would migrate nothing. A missing socket is an ERROR here — never a phantom
 	// zero the cutover would silently carry as "nothing to migrate".
 	//
-	// As(c) delegates the SuperAdmin core.Admit just validated; For(org) names the tenant
-	// being migrated, which is the org whose books the callee then scopes to.
-	out, err := cloud.Dial("commerce").As(c).For(org).Call(ctx, "finance.balance",
-		cloud.PutBalanceReq(org, "usd"))
+	// As(c, org) delegates the SuperAdmin core.Admit just validated and points it
+	// at the tenant being migrated, which is the org whose books the callee scopes
+	// to. The admin's own identity still travels whole and the callee re-checks it.
+	bal, err := cloud.Ask[plane.BalanceIn, plane.Balance](cloud.As(c, org), "commerce",
+		plane.FinanceBalance, &plane.BalanceIn{Subject: org, Currency: "usd"})
 	if err != nil {
 		return &BackfillOut{Status: core.Err, Msg: "read commerce balance: " + err.Error()}, nil
 	}
-	balanceCents, err := cloud.I64(out)
+	if bal == nil {
+		return &BackfillOut{Status: core.Err, Msg: "read commerce balance: commerce answered nothing"}, nil
+	}
+	balanceCents, err := bal.Amount.Minor()
 	if err != nil {
 		return &BackfillOut{Status: core.Err, Msg: "read commerce balance: " + err.Error()}, nil
 	}

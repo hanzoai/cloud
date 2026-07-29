@@ -14,7 +14,7 @@ require (
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.2.0
-	github.com/hanzoai/commerce v1.49.30
+	github.com/hanzoai/commerce v1.49.31
 	github.com/hanzoai/decimal v0.1.1
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
@@ -44,7 +44,7 @@ require (
 	github.com/zap-proto/fiber/v3 v3.2.1
 	github.com/zap-proto/go v1.3.0
 	github.com/zap-proto/md v0.1.0
-	github.com/zap-proto/zip v1.18.3
+	github.com/zap-proto/zip v1.18.4
 	go.opentelemetry.io/collector/component v1.54.0
 	go.opentelemetry.io/collector/confmap v1.54.0
 	go.opentelemetry.io/collector/confmap/provider/envprovider v1.50.0
@@ -79,17 +79,14 @@ require (
 	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/google/renameio/v2 v2.0.2 // indirect
-	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/hanzo-ds/mock v0.14.4 // indirect
 	github.com/hanzo-ds/sqlbuilder v1.42.2 // indirect
 	github.com/hanzo-ds/sqlparser v0.4.16 // indirect
-	github.com/hanzoai/builder v0.3.13 // indirect
 	github.com/hanzoai/csqlite v0.1.0 // indirect
 	github.com/hanzoai/go-cosyvoice v1.0.0 // indirect
 	github.com/hanzoai/go-openai-realtime v1.0.0 // indirect
 	github.com/hanzoai/go-openai-realtime/contrib/ws-gorilla v1.0.0 // indirect
 	github.com/hanzoai/sqlcipher v0.1.1 // indirect
-	github.com/hanzoai/xorm v1.4.4 // indirect
 	github.com/hanzokv/go/extra/kvcmd/v9 v9.22.0 // indirect
 	github.com/hanzokv/go/extra/kvotel/v9 v9.22.0 // indirect
 	github.com/hanzos3/go v1.0.0 // indirect
@@ -105,7 +102,6 @@ require (
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible // indirect
-	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
 	github.com/vultr/govultr/v3 v3.30.0 // indirect
 	github.com/zap-proto/http v0.3.1 // indirect
 	github.com/zap-proto/zap2pb v0.2.0 // indirect
@@ -454,7 +450,7 @@ require (
 	github.com/hanzoai/pubsub-go v1.53.0 // indirect
 	github.com/hanzoai/search-go v0.36.0 // indirect
 	github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible // indirect
-	github.com/hanzoai/tasks v1.52.3
+	github.com/hanzoai/tasks v1.52.4
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/go-metrics v0.5.4 // indirect
@@ -518,7 +514,7 @@ require (
 	github.com/luxfi/pq v1.1.0 // indirect
 	github.com/luxfi/pulsar v1.9.2
 	github.com/luxfi/threshold v1.12.3 // indirect
-	github.com/luxfi/zap v1.2.6
+	github.com/luxfi/zap v1.2.7
 	github.com/magefile/mage v1.17.1 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/mattn/go-runewidth v0.0.21 // indirect
@@ -701,7 +697,7 @@ require (
 	github.com/hanzoai/agent v0.1.3
 	github.com/hanzoai/ai v1.832.5
 	github.com/hanzoai/authz v1.10.7
-	github.com/hanzoai/base v1.5.8
+	github.com/hanzoai/base v1.5.11
 	github.com/hanzoai/licensing v0.1.5
 	github.com/hanzoai/metrics v1.110.2
 	github.com/hanzoai/o11y v1.5.34

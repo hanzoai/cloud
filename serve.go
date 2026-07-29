@@ -497,18 +497,19 @@ func Serve(plugins []Plugin, enable []string) error {
 		return fmt.Errorf("console: %w", err)
 	}
 
-	// Internal plane: native ZAP over this app's unix socket (rpc.go). Served
-	// for every mounted app name — methods Exposed during Mount are live by now —
-	// so Dial(app) resolving a socket always means "the app is up", and an up app
-	// answering 404 means version skew: two different, diagnosable facts.
+	// Internal plane: this app's typed ops over ZAP on its canonical unix socket
+	// (plane.go). Served for every mounted app name — the ops declared during
+	// Mount are live by now — so zip.DialApp(app) resolving a socket always means
+	// "the app is up", and an up app answering 404 for an op means version skew:
+	// two different, diagnosable facts.
 	for _, p := range plugins {
 		if p.Name == "" {
 			continue
 		}
-		if c, err := Listen(p.Name, deps.Logger); err != nil {
-			deps.Logger.Warn("rpc: socket not served", "app", p.Name, "err", err)
+		if stop, err := ServePlane(p.Name, deps.Logger); err != nil {
+			deps.Logger.Warn("plane: socket not served", "app", p.Name, "err", err)
 		} else {
-			defer func() { _ = c.Close() }()
+			defer func() { _ = stop() }()
 		}
 	}
 
@@ -626,11 +627,11 @@ func listenOn(cfg *Config) (addrs []string, ops string) {
 	//	:9653  — ZAP over TCP, the machine transport across hosts
 	//	:8080  — HTTP, the edge/browser leg (and WS + SSE)
 	//
-	// The app's UNIX socket is deliberately absent. It carries the internal plane's
-	// own protocol (zaprpc: method id, promise, capability) and rpc.Listen serves
-	// it — handing the same path to zip as well means two servers on one socket,
-	// and whichever binds first answers the other's callers in a framing they
-	// cannot parse. That surfaced as "promise 0 for 1" on a balance read.
+	// The app's canonical UNIX socket is deliberately absent HERE, and belongs to
+	// the plane app instead (plane.go): a typed op rides every transport its app
+	// listens on, so registering the internal ops on the edge-facing app would put
+	// the gate, the meter and the secret reads on :8080. Two apps, two address
+	// sets, and no path from the edge to an op that was never registered on it.
 	return []string{cfg.ZAPListenAddr, "http://" + cfg.ListenAddr}, cfg.HealthListenAddr
 }
 

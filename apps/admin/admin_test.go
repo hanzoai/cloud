@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/hanzoai/cloud/apps/admin/digitalocean"
 	"github.com/hanzoai/cloud/apps/admin/health"
 	"github.com/hanzoai/cloud/apps/admin/iam"
+	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
@@ -743,13 +745,20 @@ func TestMount_NilGuards(t *testing.T) {
 // registry and never fabricate a row.
 func servePlatformEmpty(t *testing.T) {
 	t.Helper()
-	t.Setenv("CLOUD_RUN_DIR", t.TempDir())
-	cloud.Expose("platform.fleet", func(context.Context, cloud.Ident, []byte) ([]byte, error) {
-		return cloud.PutApps(nil), nil
-	})
-	c, err := cloud.Listen("platform", nil)
-	if err != nil {
-		t.Fatalf("platform stand-in: %v", err)
+	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	app := zip.New(zip.Config{AppName: "platform"})
+	zip.Post[struct{}, plane.Fleet](app, "/platform/fleet",
+		func(context.Context, *struct{}) (*plane.Fleet, error) {
+			return &plane.Fleet{}, nil
+		}, zip.WithOperationID(plane.PlatformFleet))
+	go func() { _ = app.Listen(zip.SocketPath("platform")) }()
+	t.Cleanup(func() { _ = app.Shutdown() })
+	for i := 0; i < 200; i++ {
+		if c, derr := net.Dial("unix", zip.SocketPath("platform")); derr == nil {
+			_ = c.Close()
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	t.Cleanup(func() { _ = c.Close() })
+	t.Fatalf("platform stand-in never began listening at %s", zip.SocketPath("platform"))
 }

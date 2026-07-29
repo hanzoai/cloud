@@ -50,6 +50,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/money"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -641,18 +642,14 @@ func abs64(v int64) int64 {
 func peerTxns(ctx context.Context, org string) ([]commerceTxn, bool) {
 	ctx, cancel := context.WithTimeout(ctx, txnsPeerTimeout)
 	defer cancel()
-	reply, err := cloud.Dial("commerce").For(org).Call(ctx, "finance.txns",
-		cloud.PutBalanceReq(org, "usd"))
-	if err != nil {
+	reply, err := cloud.Ask[struct{}, plane.Txns](cloud.For(ctx, org), "commerce",
+		plane.FinanceTxns, &struct{}{})
+	if err != nil || reply == nil {
 		return nil, false
 	}
-	wire, err := cloud.Txns(reply)
-	if err != nil {
-		return nil, false
-	}
-	out := make([]commerceTxn, 0, len(wire))
-	for _, t := range wire {
-		amt, perr := money.ParseInt(t.Atto)
+	out := make([]commerceTxn, 0, len(reply.Rows))
+	for _, t := range reply.Rows {
+		amt, perr := money.ParseUSD(t.Amount.Decimal)
 		if perr != nil {
 			return nil, false // a total we cannot read exactly is not a total we report
 		}

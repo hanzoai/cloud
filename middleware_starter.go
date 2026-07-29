@@ -38,6 +38,7 @@ import (
 	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/hanzoai/commerce/billing/credit"
 	"github.com/hanzoai/commerce/billing/creditledger"
 	"github.com/zap-proto/zip"
@@ -239,10 +240,10 @@ func starterRef(subject string) string {
 // a restart retries it. Funding is not an authorization decision — the gate that
 // follows decides what an unfunded account may do, and it fails closed on its own.
 func grantStarterPeer(ctx context.Context, w principal.Wallet) (int64, error) {
-	ctx, cancel := context.WithTimeout(ctx, starterPeerTimeout)
+	ctx, cancel := context.WithTimeout(For(ctx, w.Ledger), starterPeerTimeout)
 	defer cancel()
-	out, err := Dial("commerce").For(w.Ledger).Call(ctx, "finance.starter",
-		PutBalanceReq(w.Account, "usd"))
+	out, err := Ask[plane.StarterIn, plane.Granted](ctx, "commerce", plane.FinanceStarter,
+		&plane.StarterIn{Subject: w.Account})
 	if err != nil {
 		// No ledger here and no peer serving one: this deployment has no money plane
 		// at all, which is a legitimate shape and not a fault. Inert, exactly as it
@@ -250,9 +251,12 @@ func grantStarterPeer(ctx context.Context, w principal.Wallet) (int64, error) {
 		// on every first request of every wallet in a deployment that does not bill.
 		return 0, nil
 	}
+	if out == nil {
+		return 0, nil // nothing granted, which is the "already funded" answer
+	}
 	// A peer that ANSWERED and could not be read is different: something is serving
-	// the method and disagreeing about its shape, which is worth surfacing.
-	return I64(out)
+	// the op and disagreeing about its shape, which is worth surfacing.
+	return out.Amount.Minor()
 }
 
 // starterPeerTimeout bounds the grant. It runs inside a request's middleware chain,
