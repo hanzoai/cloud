@@ -292,15 +292,22 @@ func Serve(plugins []Plugin, enable []string) error {
 	app.Use(EdgeCORS(deps.GatewayPolicy))
 	app.Use(EdgeRateLimit(deps.GatewayPolicy))
 
-	// Identity trust boundary. Runs before BillingGate (which reads c.User()/
-	// c.Org()) and every subsystem, so a downstream c.IsAdmin()/c.Org()/c.User()
-	// reflects a VALIDATED IAM principal — never a raw client header. This makes
-	// the gateway's "X-User-IsAdmin is never client-supplied" contract hold even
-	// when cloud-api is reached directly (in-cluster) instead of through the
-	// gateway, closing the forgeable-admin trust boundary. The admin claim is
-	// granted ONLY to a validated SuperAdmin (owner == AdminOrg). See
-	// middleware_identity.go / auth_identity.go.
-	app.Use(IdentityMiddleware(cfg))
+	// IDENTITY IS THE GATEWAY'S, AND IT IS VERIFIED EXACTLY ONCE.
+	//
+	// The edge strips whatever a client sent, validates the IAM token against
+	// IAM's JWKS, and mints the HIP-0026 header set from the verified claims.
+	// Everything behind it — these co-located plugins, and every sibling reached
+	// over ZAP on a unix socket — reads that assertion and forwards it unchanged.
+	//
+	// Cloud used to validate the same token a second time and re-mint the same
+	// headers from the same claims: a whole JWKS client, issuer set, audience
+	// allowlist and claim cache restating a decision made one hop earlier. Two
+	// implementations of one rule is one too many, and the second is the one that
+	// drifts.
+	//
+	// So there is no identity middleware here. c.Org(), c.User(), c.IsAdmin() and
+	// the principal predicates read the gateway's headers — which is what they
+	// always read; the difference is that nothing re-derives them.
 
 	// Typed-op bridge. A zip.Get[In, Out] handler receives a context.Context and
 	// its decoded In and nothing else, so the per-request values it still needs —
