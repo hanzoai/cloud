@@ -69,3 +69,87 @@ func exposeBalance() {
 		return cloud.PutI64(bal.Cents()), nil
 	})
 }
+
+// The welcome grant, published for the same reason the balance read is: the ledger
+// has one writer and it lives here.
+//
+// StarterGrant is middleware on EVERY app's chain, and it used to bail the moment
+// it found no local ledger — which, once apps became their own binaries, is every
+// process but this one. So a new account was never funded: it reached tracker or
+// billing, the grant looked for a ledger that was one socket away, and returned
+// silently. An org that should have started with the welcome credit started broke,
+// and the paywall refused it correctly for a reason nobody had chosen.
+//
+// The idempotency key is the ACCOUNT and nothing else, so asking twice — from two
+// processes, after a restart, or concurrently — grants once. That property lives in
+// finance, which dedups inside the same transaction as the insert; this method only
+// carries the question across.
+const starterMethod = "finance.starter"
+
+func exposeStarter() {
+	cloud.Expose(starterMethod, func(ctx context.Context, who cloud.Ident, req []byte) ([]byte, error) {
+		subject, _, err := cloud.BalanceReq(req)
+		if err != nil {
+			return nil, err
+		}
+		org := who.Org
+		if org == "" {
+			return nil, fmt.Errorf("starter: no org on the capability")
+		}
+		if subject == "" {
+			subject = org
+		}
+		cents, err := cloud.GrantStarter(ctx, org, subject)
+		if err != nil {
+			return nil, fmt.Errorf("starter: %w", err)
+		}
+		return cloud.PutI64(cents), nil
+	})
+}
+
+// The usage list, for the same reason as the balance and the grant: one writer,
+// and it is here.
+//
+// The reply is the product's OWN response envelope, relayed verbatim as opaque
+// bytes. That is not a JSON payload on the plane in the sense payloads.go forbids —
+// there is no internal contract being spelled here, only a body the caller already
+// knows how to render, moved across a process boundary it used to not have.
+const usageMethod = "finance.usage"
+
+// usageReadLimit matches what the co-resident reader asks for, so the page a
+// customer sees does not change with which process answered.
+const usageReadLimit = 2000
+
+func exposeUsage() {
+	cloud.Expose(usageMethod, func(ctx context.Context, who cloud.Ident, req []byte) ([]byte, error) {
+		// subject rides the balance request shape; the usage read is org-scoped, so
+		// the subject is carried for symmetry and the org comes from the capability.
+		_, _, err := cloud.BalanceReq(req)
+		if err != nil {
+			return nil, err
+		}
+		org := who.Org
+		if org == "" {
+			return nil, fmt.Errorf("usage: no org on the capability")
+		}
+		fin := financeclient.Current()
+		if fin == nil {
+			return nil, fmt.Errorf("usage: no ledger in the process that owns it")
+		}
+		lister, ok := fin.(interface {
+			ListUsage(context.Context, string, int) ([]financeclient.UsageRow, error)
+		})
+		if !ok {
+			return nil, fmt.Errorf("usage: this ledger does not list usage")
+		}
+		rows, err := lister.ListUsage(ctx, org, usageReadLimit)
+		if err != nil {
+			return nil, fmt.Errorf("usage: %w", err)
+		}
+		out := make([]cloud.UsageRow, 0, len(rows))
+		for _, r := range rows {
+			out = append(out, cloud.UsageRow{ID: r.ID, Model: r.Model, Cents: r.Cents, CreatedAt: r.CreatedAt})
+		}
+		return cloud.PutUsageRows(out), nil
+	})
+}

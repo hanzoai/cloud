@@ -635,3 +635,89 @@ func ReadVisibility(payload []byte) (Visibility, error) {
 		Listed: r.Bool(vListedOff),
 	}, nil
 }
+
+// ---- finance.usage: () -> usage rows ----
+//
+// The rows, not a rendered page. The ledger's owner knows what was debited; the
+// HTTP surface knows what its customers' usage page looks like. Sending the
+// envelope over the plane would put one app's response shape inside another app's
+// process, and would need the renderer to live with the ledger — which is the
+// import cycle that shape implies, made visible.
+
+const (
+	ucCountOff = 0
+	ucHdrFixed = 4
+)
+
+const (
+	uwIDOff      = 0
+	uwModelOff   = 8
+	uwCentsOff   = 16
+	uwCreatedOff = 24
+	uwFixed      = 32
+)
+
+// UsageRow is one recorded debit: the magnitude in USD minor units, the metered
+// unit it was for, and when.
+type UsageRow struct {
+	ID        string
+	Model     string
+	Cents     int64
+	CreatedAt int64
+}
+
+// PutUsageRows packs a finance.usage reply: a count header, then one frame each.
+func PutUsageRows(rows []UsageRow) []byte {
+	var out bytes.Buffer
+	h := zap.NewBuilder(ucHdrFixed + 16)
+	hb := h.StartObject(ucHdrFixed)
+	hb.SetUint32(ucCountOff, uint32(len(rows)))
+	hb.FinishAsRoot()
+	_ = writeFrame(&out, h.Finish())
+	for _, r := range rows {
+		b := zap.NewBuilder(len(r.ID) + len(r.Model) + uwFixed + 64)
+		rb := b.StartObject(uwFixed)
+		rb.SetText(uwIDOff, r.ID)
+		rb.SetText(uwModelOff, r.Model)
+		rb.SetInt64(uwCentsOff, r.Cents)
+		rb.SetInt64(uwCreatedOff, r.CreatedAt)
+		rb.FinishAsRoot()
+		_ = writeFrame(&out, b.Finish())
+	}
+	return out.Bytes()
+}
+
+// UsageRows unpacks one. A short payload is an error, never a shorter list: a
+// silently truncated usage page is a customer being shown less than they were
+// charged for.
+func UsageRows(payload []byte) ([]UsageRow, error) {
+	r := bytes.NewReader(payload)
+	hb, err := readFrame(r)
+	if err != nil {
+		return nil, fmt.Errorf("usage rows: header: %w", err)
+	}
+	hm, err := zap.Parse(hb)
+	if err != nil {
+		return nil, fmt.Errorf("usage rows: header: %w", err)
+	}
+	n := int(hm.Root().Uint32(ucCountOff))
+	out := make([]UsageRow, 0, n)
+	for i := 0; i < n; i++ {
+		fb, err := readFrame(r)
+		if err != nil {
+			return nil, fmt.Errorf("usage rows: %d of %d: %w", i+1, n, err)
+		}
+		fm, err := zap.Parse(fb)
+		if err != nil {
+			return nil, fmt.Errorf("usage rows: %d of %d: %w", i+1, n, err)
+		}
+		rr := fm.Root()
+		out = append(out, UsageRow{
+			ID:        rr.Text(uwIDOff),
+			Model:     rr.Text(uwModelOff),
+			Cents:     rr.Int64(uwCentsOff),
+			CreatedAt: rr.Int64(uwCreatedOff),
+		})
+	}
+	return out, nil
+}
