@@ -1885,3 +1885,60 @@ Two callers are not there yet, both upstream: `hanzoai/tasks` speaks ZAP already
 SDK takes host:port only (`newZAPTransport(opts.HostPort, …)`, pinned by
 `TestDialRequiresHostPort`), and pubsub/NATS cannot use a unix socket for client
 connections at all, so `psembed` stays TCP until that is patched.
+
+## After the split: a store has one owner, and everyone else asks
+
+`cmd/cloud` is a light plugin HOST. Each app is its own binary (`plugin/<app>/main.go`
+→ `cloud.Serve`), started lazily on the first request to its prefix, and a child's
+`--enable` contains ONLY its own name. So `cfg.Enabled("commerce")` is false in every
+process but commerce, `finance.Current()` is nil in every process but commerce, and
+`iamclient.DB()` is nil in every process but iam.
+
+`make build` builds the HOST ALONE. Use `make apps` (112 parallel targets; 53s cold,
+4.3s warm) or `make ship`. With only the host present every app route answers 503,
+which looks exactly like a broken product and is not one.
+
+**THE LAW.** A store has one owner. Any other process ASKS it — it never opens it, and
+it never reports "not configured" for something that is one socket away.
+
+    rpc.Listen(app)                     serves {DataDir}/run/<app>.sock (zaprpc)
+    cloud.Dial(app).For(org).Call(...)  is the caller
+    PeerSocket(app)                     is the ONE definition of that path
+
+Do not also hand that path to `app.Listen`. Two servers on one socket, and the loser's
+callers get a framing they cannot parse — it surfaces as `promise 0 for 1`.
+
+**Five subsystems broke this way**, each silently, each fixed by publishing a method
+from the owner: the prepaid gate (which ALLOWED — every priced act became free), the
+balance read (501 on funded accounts), the identity roster (campaigns mailed nobody),
+secrets (a stored provider read back as "not configured"), and the welcome grant (an
+org opened broke, and the paywall then refused it correctly for a reason nobody chose).
+credits/usage/ledger are three projections of ONE entry list and went together.
+
+Three rules fell out of doing it, and they are worth reusing:
+
+- **Peer ABSENT ⇒ fall back, or stay inert. Peer ANSWERED badly ⇒ error.** A missing
+  peer is the legitimate split-deploy (or no-money-plane) shape, and erroring there
+  502s a deployment that is working as designed. A corrupt reply rendered as zero is a
+  funded account shown as broke.
+- **The billed or read ORG rides the CAPABILITY, never the payload.** A caller that
+  could name the org in a body could bill or read another tenant.
+- **Send DATA, not a rendered view.** usage and txns carry ROWS; the HTTP surface
+  renders its own envelope. Sending the envelope would require the renderer to live
+  with the ledger, which is an import cycle (billing already imports commerce) — the
+  compiler tells you.
+
+**Wire contracts live in payloads.go and are ZAP, never JSON** — one file imported by
+both ends, so the halves cannot drift. Check it before adding a method: `finance.balance`
+already had a codec and a scalar reply already had `PutI64`/`I64` in rpc.go.
+
+**Money is not an int.** `hanzoai/money` is the general exact value; `apps/money` is
+USD at 18 decimals so an off-chain amount and an on-chain uint256 are the same integer.
+The ledger speaks the latter, so the wire carries `AttoString()` ↔ `ParseInt()` — exact
+by construction. Flatten to cents only at a boundary that is already cents-shaped.
+Alignment is NOT finished: ~46 `money.Amount` against ~308 `int64` cents.
+
+**One deployment, one key.** The credz broker IS kms (`launch.Broker`), so the host
+starts it first and eagerly; a child launched with a token WAITS for it and, failing
+that, holds no key rather than inventing a second one. A fallback here is how a fleet
+ends up running on two keys with nothing saying so.
