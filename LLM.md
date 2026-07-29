@@ -971,8 +971,13 @@ zip is getting multi-status `responses`, and these convert when it lands.
    (`TestTypedStepOpsFailClosed` pins exactly that) — but the document asserts
    something false and a generated client gains an argument. Same shape of gap as
    multi-status (#78): the wire fact exists and the declaration cannot say it.
-   `apps/integrations` adds SIX more, so the class is now ten and growing with
-   every converted tranche — `POST /v1/connectors/{id}/refresh`,
+   `apps/integrations` adds SIX more, and running the check below over the
+   committed subsets puts the class at **27 across 10 packages** — count it, do
+   not tally it in prose, because the enumerated instances are always the ones
+   somebody happened to look at. `apps/company` alone carries 6 (every one of its
+   `noInput` POSTs: `documents`, `esign`, `genesis`, `kyc`, `kyc/refresh`,
+   `skip`), which is the largest single share and was invisible until the check
+   existed. The integrations six are `POST /v1/connectors/{id}/refresh`,
    `…/connectors/{provider}/device/{flow}/poll`,
    `…/github/repos/{repo}/pages/builds`, `…/integrations/{provider}/disconnect`
    and `…/{provider}/verify` each publish a required body whose only properties
@@ -1018,7 +1023,7 @@ tree: they are disjoint, so agents do not collide in source.
 | tranche | apps | untyped |
 |---|---|---|
 | A | ~~integrations 47~~ (done: 22 typed, 19 refused), cloudflare 34, platform 32, projects 31, captable 31 | 128 |
-| B | git 28, agents 26, books 25, o11y 23, company 22 | 124 |
+| B | agents 26, git 24, books 11, o11y 11, ~~company 22~~ (2 left, both permanent) | 74 |
 | C | team 20, guide 20, crm 20, ~~ingress 19~~ (done), ~~framework 19~~ → 2, account 19 | 117 |
 | D | pricing 18, ml 18, automations 18, index 17, dataroom 17, compliance 17, affiliates 17 | 122 |
 | E | eval 16, social 13, esign 13, link 12, functions 12, commerce 12, billing 12 | 90 |
@@ -1100,6 +1105,44 @@ envelope cannot express (#78); and POST `/steps/{id}/do` also STREAMS SSE, where
 an op answers exactly one JSON value. The un-gated siblings `skip` and `reset` DO
 convert — the 409 branch is unreachable for them — which is the discriminator
 worth copying: split on the wire fact, not on the file.
+
+`apps/company` (20 of 22) is the split tranche taken to its FLOOR, and it is the
+one to read for what "left untyped" should cost you to claim. Its two refusals
+are not "not yet looked at" — each names one missing zip capability, and neither
+is closable in cloud:
+
+- POST `/fundraise/deck` takes the deck as the raw request BODY (any content
+  type, named by `?name=`). `hasBody("POST")` is unconditional (openapi.go:262)
+  and `op.invoke` json.Unmarshals whatever it is handed BEFORE the handler runs
+  (typed.go:227), so a typed In would answer a PDF with
+  `ErrBadRequest("invalid json body")` — the conversion does not merely
+  mis-DOCUMENT the route, it BREAKS it. Waits on a raw-body binding.
+- POST `/payment` reads no body at all and its success path is already op-shaped
+  (200 + `formationView`); only its DENIAL blocks. `cloud.DenyResource`
+  (resource_billing.go:217) renders the fleet-wide
+  `{"error":{"code","message"}}` (402 insufficient_balance / spend_cap_exceeded,
+  503 balance_unavailable) and zip's `HTTPError` (ctx.go:184) renders a FLAT
+  `{"status","code","error"}`. Same gap as guide's structured 409 (#78), and the
+  shim does not reach it: `Bridge` carries a STATUS back out, never a body, so
+  there is no way to type this without reshaping the error for every metered
+  client.
+
+What company DOES still ship is six instances of the bodyless-POST gap (#7) —
+`documents`, `esign`, `genesis`, `kyc`, `kyc/refresh` and `skip` each take
+`noInput` and therefore publish `requestBody: {required: true}` over an object
+with no properties, for a body they never read. That is zip's
+`hasBody("POST")` being unconditional, not a mistake in this package, and the
+wire is unharmed; it is recorded here because it is the largest single share of
+that class in the fleet and it converts for free the day zip can declare a
+bodyless POST.
+
+The lesson to copy is the standard of proof — the same one `integrations` arrived
+at above. Both refusals were re-verified against zip v1.18.3's own source rather
+than taken from the comment that claimed them, because "cannot be typed" is a
+claim about a DEPENDENCY, and a dependency moves. Re-check them when zip gains
+raw-body binding or multi-status/error bodies; until then the honest floor for
+this package is 20, and a fleet-wide count that keeps listing company as 22
+untyped is what sends the next agent to redo the work.
 
 `apps/framework` (17 of 19) is the other split, worth reading for the opposite
 reason: its two refusals are ONE missing capability rather than two wire facts.
