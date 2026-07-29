@@ -22,9 +22,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 
@@ -289,16 +291,77 @@ func TestTheLedgerSelectorStaysOnTheURLForBodyWrites(t *testing.T) {
 	}
 }
 
-// TestMetricsCannotBeTypedYet is the EVIDENCE for the one books route left untyped on
-// purpose. GET /v1/books/metrics answers MetricsResponse, which EMBEDS Metrics:
-// encoding/json flattens an embedded struct onto the wire, and zip's schema walk
-// publishes it as a NESTED property instead. Typing the route would therefore describe a
-// response no answer of it matches, and every generated SDK would model it wrong — worse
-// than no description at all.
-//
-// So the refusal is a measurement, not a claim, and this goes RED the day zip learns to
-// flatten — which is the day the route can be typed. Read the failure as the go-ahead.
-func TestMetricsCannotBeTypedYet(t *testing.T) {
+// filledMetrics is a Metrics with every field set to a distinct non-zero value, by
+// REFLECTION — so a field added to Metrics is filled automatically and the parity tests
+// below see it, rather than a hand-written literal quietly not knowing it exists.
+func filledMetrics(t *testing.T) Metrics {
+	t.Helper()
+	var m Metrics
+	v := reflect.ValueOf(&m).Elem()
+	for i := 0; i < v.NumField(); i++ {
+		f := v.Field(i)
+		switch f.Kind() {
+		case reflect.String:
+			f.SetString(fmt.Sprintf("x%d", i+1))
+		case reflect.Int, reflect.Int64:
+			f.SetInt(int64(i + 1))
+		default:
+			t.Fatalf("Metrics field %s has kind %s — teach filledMetrics to fill it",
+				v.Type().Field(i).Name, f.Kind())
+		}
+	}
+	return m
+}
+
+// TestMetricsResponseCarriesEveryMetricsField is the guard that made typing the metrics
+// route safe. MetricsResponse spells Metrics' fields out FLAT (zip's schema walk does not
+// flatten an embedded struct the way encoding/json does, so embedding would publish a
+// schema no answer matches) — and a spelled-out copy can drift: the next field added to
+// Metrics could silently never reach the wire. This pins the copy complete: every Metrics
+// field must marshal identically out of metricsResponseOf's result, and figures must be
+// the ONLY extra key. A new Metrics field goes red here until the Out and the constructor
+// carry it.
+func TestMetricsResponseCarriesEveryMetricsField(t *testing.T) {
+	m := filledMetrics(t)
+	mj, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("metrics marshal: %v", err)
+	}
+	rj, err := json.Marshal(metricsResponseOf(m))
+	if err != nil {
+		t.Fatalf("response marshal: %v", err)
+	}
+	var mm, rm map[string]json.RawMessage
+	if err := json.Unmarshal(mj, &mm); err != nil {
+		t.Fatalf("metrics keys: %v", err)
+	}
+	if err := json.Unmarshal(rj, &rm); err != nil {
+		t.Fatalf("response keys: %v", err)
+	}
+	for k, want := range mm {
+		got, ok := rm[k]
+		if !ok {
+			t.Errorf("Metrics field %q never reaches the wire — add it to MetricsResponse AND metricsResponseOf", k)
+			continue
+		}
+		if !bytes.Equal(got, want) {
+			t.Errorf("field %q: response carries %s, Metrics says %s — metricsResponseOf dropped or crossed it", k, got, want)
+		}
+	}
+	if _, ok := rm["figures"]; !ok {
+		t.Error("the response must carry the formatted figures")
+	}
+	if len(rm) != len(mm)+1 {
+		t.Errorf("MetricsResponse carries %d keys, want the %d Metrics keys + figures — an extra key is a wire change", len(rm), len(mm))
+	}
+}
+
+// TestMetricsSchemaMatchesItsWire closes the loop the old refusal measured: the PUBLISHED
+// MetricsResponse schema and the JSON the route answers must carry the same keys. This is
+// exactly the assertion that failed while MetricsResponse embedded Metrics (zip published
+// a nested "Metrics" property the wire never carries), and it is what keeps the document,
+// every generated SDK and the MCP tool honest about this payload from here on.
+func TestMetricsSchemaMatchesItsWire(t *testing.T) {
 	app := zip.New(zip.Config{})
 	zip.Get(app, "/probe", func(context.Context, *struct{}) (*MetricsResponse, error) { return nil, nil })
 	spec, err := json.Marshal(app.OpenAPISpec())
@@ -316,7 +379,7 @@ func TestMetricsCannotBeTypedYet(t *testing.T) {
 		t.Fatalf("spec decode: %v", err)
 	}
 	published := doc.Components.Schemas["MetricsResponse"].Properties
-	wire, err := json.Marshal(MetricsResponse{})
+	wire, err := json.Marshal(metricsResponseOf(filledMetrics(t)))
 	if err != nil {
 		t.Fatalf("wire: %v", err)
 	}
@@ -324,14 +387,49 @@ func TestMetricsCannotBeTypedYet(t *testing.T) {
 	if err := json.Unmarshal(wire, &onTheWire); err != nil {
 		t.Fatalf("wire decode: %v", err)
 	}
-	if _, nested := published["Metrics"]; !nested {
-		t.Errorf("zip no longer nests the embedded struct — type GET /v1/books/metrics")
+	for k := range onTheWire {
+		if _, ok := published[k]; !ok {
+			t.Errorf("the wire carries %q but the published schema does not — the document under-describes the route", k)
+		}
 	}
-	if _, flat := onTheWire["Metrics"]; flat {
-		t.Fatalf("MetricsResponse no longer flattens on the wire: %s", wire)
+	for k := range published {
+		if _, ok := onTheWire[k]; !ok {
+			t.Errorf("the published schema claims %q but the wire never carries it — the document invents a field", k)
+		}
 	}
-	if _, flat := published["mrr"]; flat != false {
-		t.Errorf("the published schema matches the wire now — type GET /v1/books/metrics")
+}
+
+// TestMetricsAnswersTheFlatSnapshot pins the metrics WIRE on the mounted surface: 200,
+// no-store, the snapshot keys FLAT at the top level (never nested under "Metrics"), and
+// the formatted figures beside them — the exact envelope the route answered before it was
+// typed.
+func TestMetricsAnswersTheFlatSnapshot(t *testing.T) {
+	app := mountBooks(t)
+	code, cache, body := hit(t, app, http.MethodGet, "/v1/books/metrics", "acme", nil)
+	if code != http.StatusOK || cache != "no-store" {
+		t.Fatalf("status %d cache %q, want 200/no-store (%s)", code, cache, body)
+	}
+	var got map[string]json.RawMessage
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("metrics body: %v (%s)", err, body)
+	}
+	if _, nested := got["Metrics"]; nested {
+		t.Fatalf("the snapshot must flatten onto the wire, got %s", body)
+	}
+	for _, k := range []string{"period", "months", "mrr", "arr", "revenue", "cogs", "burn", "grossProfit", "grossMarginBps", "netIncome", "cash", "deferredRevenue", "monthlyBurn", "runwayMonths", "figures"} {
+		if _, ok := got[k]; !ok {
+			t.Errorf("the snapshot must carry %q at the top level, got %s", k, body)
+		}
+	}
+	var resp MetricsResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("metrics decode: %v", err)
+	}
+	if len(resp.Figures) == 0 {
+		t.Error("an empty ledger still answers honest zero figures, formatted")
+	}
+	if resp.RunwayMonths != -1 {
+		t.Errorf("an org burning nothing has infinite runway (-1), got %d", resp.RunwayMonths)
 	}
 }
 

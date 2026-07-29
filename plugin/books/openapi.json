@@ -428,9 +428,54 @@
     "/v1/books/metrics": {
       "get": {
         "operationId": "get_v1_books_metrics",
+        "summary": "Metrics returns the org's deterministic SaaS-metrics snapshot over an optional\n(from, to] window — MRR, ARR, revenue, COGS, burn, gross margin, net income, cash,\ndeferred revenue, monthly burn and runway — as raw int64-cent figures AND the same\nfigures already formatted.",
+        "description": "Metrics returns the org's deterministic SaaS-metrics snapshot over an optional\n(from, to] window — MRR, ARR, revenue, COGS, burn, gross margin, net income, cash,\ndeferred revenue, monthly burn and runway — as raw int64-cent figures AND the same\nfigures already formatted. Every number is the ledger, aggregated the one way the books\ndefine it, never a guess; it is the grounded read the unified /v1/ask advisor replays.",
         "tags": [
           "books"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "sandbox",
+            "in": "query",
+            "required": false,
+            "description": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\".",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "From is the RFC3339 start of the window, exclusive. Empty means all time.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-01-01T00:00:00Z"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "To is the RFC3339 end of the window, inclusive. Empty means up to now.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "2026-06-30T23:59:59Z"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/pnl": {
@@ -1287,6 +1332,82 @@
             "type": "integer"
           },
           "description": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MetricsResponse": {
+        "properties": {
+          "arr": {
+            "description": "ARR is annualized recurring revenue in cents (MRR × 12).",
+            "type": "integer"
+          },
+          "burn": {
+            "description": "Burn is total expense in cents over the period.",
+            "type": "integer"
+          },
+          "cash": {
+            "description": "Cash is the bank + processor-clearing balance in cents as of To.",
+            "type": "integer"
+          },
+          "cogs": {
+            "description": "COGS is cost of goods sold in cents over the period.",
+            "type": "integer"
+          },
+          "deferredRevenue": {
+            "description": "DeferredRevenue is the customer-wallet liability in cents as of To.",
+            "type": "integer"
+          },
+          "figures": {
+            "description": "Figures is the same snapshot rendered through books' one money formatter.",
+            "items": {
+              "$ref": "#/components/schemas/Figure"
+            },
+            "type": "array"
+          },
+          "from": {
+            "description": "From is the RFC3339 start of the reporting window, exclusive; absent for all time.",
+            "type": "string"
+          },
+          "grossMarginBps": {
+            "description": "GrossMarginBps is GrossProfit / Revenue in basis points (7000 = 70%).",
+            "type": "integer"
+          },
+          "grossProfit": {
+            "description": "GrossProfit is Revenue − COGS, in cents.",
+            "type": "integer"
+          },
+          "monthlyBurn": {
+            "description": "MonthlyBurn is net cash burned per month in cents; 0 when not losing cash.",
+            "type": "integer"
+          },
+          "months": {
+            "description": "Months is the window length in whole months used to normalize MRR and burn.",
+            "type": "integer"
+          },
+          "mrr": {
+            "description": "MRR is monthly recurring revenue in cents.",
+            "type": "integer"
+          },
+          "netIncome": {
+            "description": "NetIncome is Revenue − Burn, in cents.",
+            "type": "integer"
+          },
+          "period": {
+            "description": "Period is the human window label, e.g. \"2026-07\" or \"all-time\".",
+            "type": "string"
+          },
+          "revenue": {
+            "description": "Revenue is recognized revenue in cents over the period.",
+            "type": "integer"
+          },
+          "runwayMonths": {
+            "description": "RunwayMonths is Cash / MonthlyBurn; -1 means infinite (the org is not burning).",
+            "type": "integer"
+          },
+          "to": {
+            "description": "To is the RFC3339 end of the reporting window, inclusive; absent for up to now.",
             "type": "string"
           }
         },
