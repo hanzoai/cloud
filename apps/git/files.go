@@ -77,27 +77,34 @@ func coreFiles(s *cloud.Service[state], ctx context.Context, t tenant, name, ref
 // is refused rather than defaulted — delivery reaching git with no principal
 // must fail, not read someone's repo.
 func exposeFiles() {
-	zip.Post[plane.FilesIn, plane.Files](cloud.Plane(), "/git/files",
-		func(ctx context.Context, in *plane.FilesIn) (*plane.Files, error) {
-			who := cloud.Who(ctx)
-			if who.Org == "" {
-				return nil, zip.ErrForbidden("git files: org required")
-			}
-			s := mounted.Load()
-			if s == nil {
-				return nil, zip.Errorf(503, "git not mounted")
-			}
-			rev, files, err := coreFiles(s, ctx, tenant{org: who.Org, project: who.Project}, in.Repo, in.Ref, in.Glob)
-			switch {
-			case errors.Is(err, errBadInput):
-				return nil, zip.ErrBadRequest("glob is required")
-			case errors.Is(err, errNotFound):
-				return nil, zip.ErrNotFound("repo, ref or revision not found")
-			case err != nil:
-				return nil, zip.Errorf(500, "%v", err)
-			}
-			return &plane.Files{Rev: rev, Files: files}, nil
-		},
+	zip.Post[plane.FilesIn, plane.Files](cloud.Plane(), "/git/files", planeFiles,
 		zip.WithOperationID(plane.GitFiles),
 		zip.WithSummary("A repo's files at one revision"))
+}
+
+// planeFiles reads the glob-selected files of one of the caller's repos at one
+// revision, returning the resolved commit and each file's path and contents.
+// The org is the CALLER's plane identity, never the argument — an anonymous
+// caller is refused — and the whole reply is read at one resolved commit, so a
+// caller can never assemble half an inventory from each side of a push. A named
+// handler, not a closure, so zipdoc can lift this prose into the registry.
+func planeFiles(ctx context.Context, in *plane.FilesIn) (*plane.Files, error) {
+	who := cloud.Who(ctx)
+	if who.Org == "" {
+		return nil, zip.ErrForbidden("git files: org required")
+	}
+	s := mounted.Load()
+	if s == nil {
+		return nil, zip.Errorf(503, "git not mounted")
+	}
+	rev, files, err := coreFiles(s, ctx, tenant{org: who.Org, project: who.Project}, in.Repo, in.Ref, in.Glob)
+	switch {
+	case errors.Is(err, errBadInput):
+		return nil, zip.ErrBadRequest("glob is required")
+	case errors.Is(err, errNotFound):
+		return nil, zip.ErrNotFound("repo, ref or revision not found")
+	case err != nil:
+		return nil, zip.Errorf(500, "%v", err)
+	}
+	return &plane.Files{Rev: rev, Files: files}, nil
 }

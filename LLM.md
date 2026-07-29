@@ -1040,7 +1040,7 @@ tree: they are disjoint, so agents do not collide in source.
 | tranche | apps | untyped |
 |---|---|---|
 | A | ~~integrations 47~~ (done: 22 typed, 19 refused), cloudflare 34, platform 32, projects 31, captable 31 | 128 |
-| B | agents 26, git 24, books 11, o11y 11, ~~company 22~~ (2 left, both permanent) | 74 |
+| B | agents 26, ~~git 24~~ (done: 24 typed, 24 refused — four wire families, apps/git/LLM.md), books 11, o11y 11, ~~company 22~~ (2 left, both permanent) | 50 |
 | C | team 20, guide 20, crm 20, ~~ingress 19~~ (done), ~~framework 19~~ → 2, ~~account 19~~ (done: 11 typed, 7 refused) | 117 |
 | D | pricing 18, ml 18, automations 18, index 17, dataroom 17, compliance 17, affiliates 17 | 122 |
 | E | eval 16, social 13, esign 13, link 12, functions 12, commerce 12, billing 12 | 90 |
@@ -1096,6 +1096,12 @@ route is a typed op. Five carry NO untyped route at all — `admin`, `marketing`
 `o11y` is the other end of the spectrum and worth reading for it: 12 of 20, with
 each of the 8 refusals named in its own LLM.md — verbatim status/body proxies, a
 `text/plain` receipt that must ACCEPT an unparseable body, and a wildcard.
+`git` is COMPLETE at 24 typed / 24 refused, and its 24 fall into exactly four
+wire families named in apps/git/LLM.md — a raw-byte HMAC webhook, the smart-HTTP
+pack protocol (6), server-rendered HTML (12), and the ZAP envelope adapters (5);
+its two `cloud.Plane()` ops are typed with NAMED handlers because a closure
+gives zipdoc nothing to lift (the closure form shipped once and left `zipdoc
+-check` red on main).
 The list moves every few merges: RE-MEASURE per app rather than trusting it, and
 note the count is a heuristic that reads `r.Header.Get("X-...")` as a route, so
 read the hits before believing a non-zero remainder (ingress's last "1" is one).
