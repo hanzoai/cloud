@@ -38,7 +38,10 @@ var Apps = []App{
 	{Name: "plan", Prefixes: []string{"/v1/plans"}},
 	{Name: "pricing", Prefixes: []string{"/v1/admin/catalog", "/v1/admin/enablement", "/v1/enablement", "/v1/pricing", "/v1/pricing-policy"}},
 	{Name: "storage", Prefixes: []string{"/v1/s3"}},
-	{Name: "provisioning", Prefixes: []string{"/v1/datastore", "/v1/docdb", "/v1/kv", "/v1/s3", "/v1/search", "/v1/sql", "/v1/vector"}},
+	// No "/v1/s3": storage owns it and registers every route under it
+	// (buckets, objects, health, op). provisioning registered nothing there, so
+	// the prefix only shadowed storage in the router's duplicate-pattern merge.
+	{Name: "provisioning", Prefixes: []string{"/v1/datastore", "/v1/docdb", "/v1/kv", "/v1/search", "/v1/sql", "/v1/vector"}},
 	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/gpu-charge", "/v1/billing/gpu-eligibility", "/v1/billing/payment-methods", "/v1/billing/usage", "/v1/finance/balance", "/v1/finance/credits", "/v1/finance/invoices", "/v1/finance/ledger", "/v1/finance/payment-methods", "/v1/finance/usage"}},
 	{Name: "rollingcap", Prefixes: []string{"/v1/rollingcap"}},
 	{Name: "account-bridge", Prefixes: []string{"/v1/billing", "/v1/commerce"}},
