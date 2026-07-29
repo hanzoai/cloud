@@ -1065,7 +1065,7 @@ tree: they are disjoint, so agents do not collide in source.
 | A | ~~integrations 47~~ (done: 22 typed, 19 refused), cloudflare 34, platform 32, projects 31, captable 31 | 128 |
 | B | agents 26, ~~git 24~~ (done: 24 typed, 24 refused — four wire families, apps/git/LLM.md), ~~books 11~~ (done: 20 typed, 5 refused — 3 raw-byte uploads, 2 unconditional-501 link stubs; each named at its registration and pinned by a wire test), o11y 11, ~~company 22~~ (2 left, both permanent) | 50 |
 | C | ~~team 20~~ (done: 9 typed, 10 refused), guide 20, crm 20, ~~ingress 19~~ (done), ~~framework 19~~ → 2, ~~account 19~~ (done: 11 typed, 7 refused) | 117 |
-| D | pricing 18, ml 18, automations 18, index 17, dataroom 17, compliance 17, affiliates 17 | 122 |
+| D | pricing 18, ml 18, ~~automations 18~~ (done: 14 typed, 4 refused), index 17, dataroom 17, compliance 17, affiliates 17 | 104 |
 | E | eval 16, social 13, esign 13, link 12, functions 12, commerce 12, billing 12 | 90 |
 | F | the ~70 remaining packages, 1–11 routes each | ~358 |
 
@@ -1106,9 +1106,9 @@ are route only — no MCP tool, no CLI command, no SDK method, no schema, no
 prose.
 
 The typed packages are `apps/admin` and its eight sub-packages, plus `apps/account`,
-`apps/agents`, `apps/company`, `apps/crm`, `apps/framework`, `apps/git`,
-`apps/guide`, `apps/ingress`, `apps/integrations`, `apps/marketing`, `apps/o11y`,
-`apps/plugin`, `apps/search`, `apps/team`, `apps/visor`.
+`apps/agents`, `apps/automations`, `apps/company`, `apps/crm`, `apps/framework`,
+`apps/git`, `apps/guide`, `apps/ingress`, `apps/integrations`, `apps/marketing`,
+`apps/o11y`, `apps/plugin`, `apps/search`, `apps/team`, `apps/visor`.
 `crm` is 19 of 20: its one refusal, the public Startup Program intake POST, is
 named at its registration — the IP rate limit and the pre-parse 64 KiB body cap
 are wire, and a typed op's MCP/CLI projections would publish an unmetered,
@@ -1152,6 +1152,23 @@ zip's `invoke` unmarshals BEFORE the handler (typed.go:227), so typing them woul
 turn that 200 into a 400 and retry-storm the platform. Do not group Teams and
 Telegram under "raw-byte signature": that was the prose's own error before it was
 checked against the code, and it is why the taxonomy now cites line numbers.
+
+`apps/automations` (14 of 18) converted with its wire pinned by its own HTTP
+tests (403 gating, 201 create, 204 delete, the byte-identical `/pieces` alias),
+and surfaced the two defects typing exists to surface: the group had NO
+`cloud.Bridge` — no typed op could ever have resolved its org there — and the
+package had no `//go:generate zipdoc` directive, so no prose could have reached
+the document. Its four refusals each name a wire fact at the registration AND
+the handler: POST `/flows/{id}/operations` answers TWO success bodies (the Flow
+on CHANGE_STATUS, else the FlowVersion — one Out cannot hold both, #78's
+family); POST `/runs/{id}/resume` takes an ARBITRARY JSON value (object, array,
+string, number, null) delivered verbatim to the waitpoint, size-gated on the
+RAW bytes; POST `/hooks/{source}/{event}` dedupes on a content hash of the RAW
+received bytes and reads two contract headers (X-Idempotency-Key,
+X-Causation-Depth); POST `/mcp` is JSON-RPC, which answers an unparseable body
+HTTP 200 with a -32700 error object where zip's pre-handler unmarshal would
+400. The MCP door's tools are not lost to the projections — `tools.Register`
+publishes every connector action on the unified tool plane.
 
 `apps/guide` (13 of 19) is the worked example of the SPLIT tranche, where a
 partition is not all-or-nothing. Six of its routes stay untyped and each names a
