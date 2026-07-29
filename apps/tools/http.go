@@ -322,14 +322,20 @@ func meterUnit(s *cloud.Service[state], c *zip.Ctx) {
 		cloud.ResourceFeeCents(feeEnvPrefix, meterKind), c.RequestID(), cloud.ClientIP(c))
 }
 
-// audrecord appends one audit record. Nil recorder → no-op.
+// audrecord appends one audit record for a tool call. Nil recorder → no-op.
 func audrecord(s *cloud.Service[state], c *zip.Ctx, org, resourceID, result string, status int) {
+	audrecordAction(s, c, "tools.call", org, resourceID, result, status)
+}
+
+// audrecordAction is audrecord with the action named: the plugin builder records
+// plugin.build, which is a different act on a different resource than a call.
+func audrecordAction(s *cloud.Service[state], c *zip.Ctx, action, org, resourceID, result string, status int) {
 	if s.State.audit == nil {
 		return
 	}
 	rec := audit.Record{
 		Actor:     audit.Actor{Org: org, Sub: c.User(), Email: c.UserEmail()},
-		Action:    "tools.call",
+		Action:    action,
 		Resource:  audit.Resource{Type: "tools", ID: resourceID},
 		Auth:      audit.AuthContext{Method: "gateway", IsAdmin: c.IsAdmin()},
 		Outcome:   audit.Outcome{Result: result, Status: status},
