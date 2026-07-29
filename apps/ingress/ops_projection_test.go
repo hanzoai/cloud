@@ -151,3 +151,55 @@ func TestSpecCarriesProse(t *testing.T) {
 		t.Errorf("described operations = %d, want %d", described, len(typedOps))
 	}
 }
+
+// TestToolsCarryTheirProse pins the MCP projection, the sibling of the one above
+// and the only one that goes QUIET instead of red. zip's tool list once read
+// op.Summary — a field cloud sets nowhere, because the doc comment is the source —
+// so every tool served an empty description over a nameless schema while the spec
+// looked perfect (fixed in zip v1.17.6; an older zip silently reverts it). Nothing
+// else in this package would notice: the spec test above reads a different field
+// of the same registry entry. So: every op is a tool, every tool carries its
+// handler's prose, and an op that takes input NAMES its fields — a model choosing
+// a tool from a list is doing what a human reading the spec does, with the same
+// words or with nothing.
+func TestToolsCarryTheirProse(t *testing.T) {
+	tools := map[string]map[string]any{}
+	for _, tool := range newOpsApp(t).MCPTools() {
+		name, _ := tool["name"].(string)
+		tools[name] = tool
+	}
+	if len(tools) != len(typedOps) {
+		t.Errorf("MCP tools = %d, want %d — an op no agent can call", len(tools), len(typedOps))
+	}
+	for name, tool := range tools {
+		if d, _ := tool["description"].(string); strings.TrimSpace(d) == "" {
+			t.Errorf("tool %s has no description — a nameless tool in every agent's list", name)
+		}
+	}
+	// The five no-input ops (status, tls, and the three lists) take nothing off the
+	// wire, so an empty schema is the truth for them. Every op that DOES take input
+	// must name what it takes: id from the URL, the object's own fields from the body.
+	for name, want := range map[string][]string{
+		"post_v1_ingress_routes":           {"host", "service", "tls"},
+		"put_v1_ingress_routes_id":         {"id", "host", "service"},
+		"delete_v1_ingress_routes_id":      {"id"},
+		"get_v1_ingress_routes_id":         {"id"},
+		"post_v1_ingress_services":         {"backends"},
+		"post_v1_ingress_middlewares":      {"type", "config"},
+		"delete_v1_ingress_middlewares_id": {"id"},
+		"put_v1_ingress_tls":               {"extraHosts"},
+	} {
+		tool, ok := tools[name]
+		if !ok {
+			t.Errorf("no MCP tool named %q — the op is invisible to agents", name)
+			continue
+		}
+		in, _ := tool["inputSchema"].(map[string]any)
+		props, _ := in["properties"].(map[string]any)
+		for _, f := range want {
+			if _, ok := props[f]; !ok {
+				t.Errorf("tool %s inputSchema has no %q — the agent cannot know to send it", name, f)
+			}
+		}
+	}
+}
