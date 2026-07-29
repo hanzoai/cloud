@@ -3,7 +3,7 @@ package team
 // This file is the account API the team SPA speaks to at
 // /v1/team/account — JSON-RPC over a single POST, plus the /providers,
 // /auth/{provider} and /cookie REST siblings. It is the FULL REWRITE of
-// github.com/hanzoai/team-go/pkg/account (account.go + types.go): the Base-DAO
+// github.com/hanzoai/team/pkg/account (account.go + types.go): the Base-DAO
 // `workspaces`/`members` collections become the raw-SQLite accountStore, and the
 // core.RequestEvent handlers become *zip.Ctx handlers. The IAM OAuth bridge
 // (authStart/authCallback/exchangeCode/userinfo/oauthBase) is kept as-is over

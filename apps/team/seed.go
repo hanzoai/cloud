@@ -2,7 +2,7 @@ package team
 
 // This file seeds a brand-new workspace's system spaces and runs the server-side
 // triggers (PersonSpace materialization) — ported VERBATIM from
-// github.com/hanzoai/team-go/pkg/transactor/seed.go.
+// github.com/hanzoai/team/pkg/transactor/seed.go.
 
 import (
 	"encoding/json"

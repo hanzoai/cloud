@@ -1,7 +1,7 @@
 package team
 
 // This file is the member→Person/Employee projection — the bots-as-members
-// vocabulary. It is ported from github.com/hanzoai/team-go/pkg/transactor's
+// vocabulary. It is ported from github.com/hanzoai/team/pkg/transactor's
 // ingest.go projection layer, scoped to Phase 1 (member roster). The chat
 // Channel/Message projections and the Base-collection mirror hooks are Phase 2
 // (chat/slack/files/mirror) and are intentionally NOT ported here.

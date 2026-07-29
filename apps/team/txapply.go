@@ -2,7 +2,7 @@ package team
 
 // This file applies platform Tx (Create/Update/Remove/Mixin/Collection/ApplyIf)
 // to the per-workspace docs store — ported VERBATIM from
-// github.com/hanzoai/team-go/pkg/transactor/txapply.go. It is the write path both
+// github.com/hanzoai/team/pkg/transactor/txapply.go. It is the write path both
 // the live SPA (tx RPC) and the in-process projection (Apply) run through.
 
 import (
