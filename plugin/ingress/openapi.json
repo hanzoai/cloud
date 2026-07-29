@@ -10,5 +10,225 @@
       "url": "https://api.hanzo.ai"
     }
   ],
-  "paths": {}
+  "tags": [
+    {
+      "name": "ingress"
+    }
+  ],
+  "paths": {
+    "/v1/ingress/middlewares": {
+      "get": {
+        "operationId": "get_v1_ingress_middlewares",
+        "tags": [
+          "ingress"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_ingress_middlewares",
+        "tags": [
+          "ingress"
+        ]
+      }
+    },
+    "/v1/ingress/middlewares/{id}": {
+      "delete": {
+        "operationId": "delete_v1_ingress_middlewares_by_id",
+        "tags": [
+          "ingress"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_ingress_middlewares_by_id",
+        "tags": [
+          "ingress"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_ingress_middlewares_by_id",
+        "tags": [
+          "ingress"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/ingress/routes": {
+      "get": {
+        "operationId": "get_v1_ingress_routes",
+        "tags": [
+          "ingress"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_ingress_routes",
+        "tags": [
+          "ingress"
+        ]
+      }
+    },
+    "/v1/ingress/routes/{id}": {
+      "delete": {
+        "operationId": "delete_v1_ingress_routes_by_id",
+        "tags": [
+          "ingress"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_ingress_routes_by_id",
+        "tags": [
+          "ingress"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_ingress_routes_by_id",
+        "tags": [
+          "ingress"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/ingress/services": {
+      "get": {
+        "operationId": "get_v1_ingress_services",
+        "tags": [
+          "ingress"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_ingress_services",
+        "tags": [
+          "ingress"
+        ]
+      }
+    },
+    "/v1/ingress/services/{id}": {
+      "delete": {
+        "operationId": "delete_v1_ingress_services_by_id",
+        "tags": [
+          "ingress"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "get": {
+        "operationId": "get_v1_ingress_services_by_id",
+        "tags": [
+          "ingress"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_ingress_services_by_id",
+        "tags": [
+          "ingress"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/ingress/status": {
+      "get": {
+        "operationId": "get_v1_ingress_status",
+        "tags": [
+          "ingress"
+        ]
+      }
+    },
+    "/v1/ingress/tls": {
+      "get": {
+        "operationId": "get_v1_ingress_tls",
+        "tags": [
+          "ingress"
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_ingress_tls",
+        "tags": [
+          "ingress"
+        ]
+      }
+    }
+  }
 }

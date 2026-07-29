@@ -1015,6 +1015,8 @@ github.com/hanzoai/commerce v1.49.25 h1:iPD33VF//7pMscTW3u1W0sL2ssNJSOuEGq514zjg
 github.com/hanzoai/commerce v1.49.25/go.mod h1:Bf3GqSiOwReC3vzK9Auqn4W5FfLQcwuAnb67Iv0mu4M=
 github.com/hanzoai/commerce v1.49.29 h1:1cS4/KcR35H4biyi2EIWXBonaJwOGq92AR+1VcsNQYQ=
 github.com/hanzoai/commerce v1.49.29/go.mod h1:k5OrYZkKCbc86NjkFHvf0UMyLqjp3juoLEZ8UUJpJjc=
+github.com/hanzoai/commerce v1.49.30 h1:4NfSRqNBcEbDzrt08fSPs3fybY5gX218V/YDb3yHD0A=
+github.com/hanzoai/commerce v1.49.30/go.mod h1:6F0+dCV9b/kEESBe1X1veIBqSCUHWwva/7mmdKZuA1A=
 github.com/hanzoai/csqlite v0.1.0 h1:suwC3dh0INlfP/U0Es6cDf6JNQ+2+GVLLATPWCUux6k=
 github.com/hanzoai/csqlite v0.1.0/go.mod h1:H31a/O6VXuklR9UBkgY++bmAK5uzVfXPqU0F6P9Wsos=
 github.com/hanzoai/dashscopego v0.6.0 h1:sLUepwcnVajaDgzlgfuJWkZblBg9UIalkpFUjXHx0Fg=
@@ -2079,6 +2081,8 @@ github.com/zap-proto/zap2pb v0.2.0 h1:sos6HnayhGMGLRO54px1InzimDzTZ2o5TSMEatYBjz
 github.com/zap-proto/zap2pb v0.2.0/go.mod h1:wD97Z2VTPabDq/4AMNL++PWnQ0YwEtajiuNkLGg3/18=
 github.com/zap-proto/zip v1.17.6 h1:Vl+ksBHaCZd/vdjeWVTf0NDd3mIyk0MkLGuDL1wtJsM=
 github.com/zap-proto/zip v1.17.6/go.mod h1:EKMmUX9wCPvpkhpMBQRqa17YVXNXRYEjj7X+65Y+J9E=
+github.com/zap-proto/zip v1.18.2 h1:FWxTOeq9q8awbkn3M0WCydha/Eb9OJZsO/T6FBiwxQY=
+github.com/zap-proto/zip v1.18.2/go.mod h1:EKMmUX9wCPvpkhpMBQRqa17YVXNXRYEjj7X+65Y+J9E=
 github.com/zeebo/assert v1.3.1 h1:vukIABvugfNMZMQO1ABsyQDJDTVQbn+LWSMy1ol1h6A=
 github.com/zeebo/assert v1.3.1/go.mod h1:Pq9JiuJQpG8JLJdtkwrJESF0Foym2/D9XMU5ciN/wJ0=
 github.com/zeebo/blake3 v0.2.4 h1:KYQPkhpRtcqh0ssGYcKLG1JYvddkEA8QwCM/yBqhaZI=
