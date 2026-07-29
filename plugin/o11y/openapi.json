@@ -48,20 +48,88 @@
     "/v1/o11y/annotation-queues": {
       "get": {
         "operationId": "get_v1_o11y_annotation-queues",
+        "summary": "ListAnnotationQueues returns a page of the caller org's human-review queues,\nnewest first, narrowed to the caller's project.",
+        "description": "ListAnnotationQueues returns a page of the caller org's human-review queues,\nnewest first, narrowed to the caller's project. Another org's queues are never\nvisible.",
         "tags": [
           "o11y"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page is the 1-based page to read. Default 1.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 1
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit is how many rows to return. Default 20, capped at 100.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 20
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/annQueueList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_o11y_annotation-queues",
+        "summary": "CreateAnnotationQueue creates a human-review queue in the caller's org and\nproject.",
+        "description": "CreateAnnotationQueue creates a human-review queue in the caller's org and\nproject. A name already used by another queue in the same project is a 409.",
         "tags": [
           "o11y"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "hallucination review",
+                "scoreConfigIds": [
+                  "quality"
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/createQueueReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/annQueueView"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/o11y/annotation-queues/{id}": {
       "delete": {
-        "operationId": "delete_v1_o11y_annotation-queues_by_id",
+        "operationId": "delete_v1_o11y_annotation-queues_id",
+        "summary": "DeleteAnnotationQueue removes one review queue and every item in it.",
+        "description": "DeleteAnnotationQueue removes one review queue and every item in it. A queue\nid belonging to another org answers the same 404 an unknown id does, so a\nprobe learns nothing about what exists.",
         "tags": [
           "o11y"
         ],
@@ -70,14 +138,30 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the annotation queue to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "annq_1"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/annQueueDeleted"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_o11y_annotation-queues_by_id",
+        "operationId": "get_v1_o11y_annotation-queues_id",
+        "summary": "GetAnnotationQueue returns one review queue with its pending and completed\ncounts and its first page of items.",
+        "description": "GetAnnotationQueue returns one review queue with its pending and completed\ncounts and its first page of items. A queue id belonging to another org is a\n404, never a cross-tenant read.",
         "tags": [
           "o11y"
         ],
@@ -86,14 +170,30 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the annotation queue to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "annq_1"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/annQueueDetailView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "patch": {
-        "operationId": "patch_v1_o11y_annotation-queues_by_id",
+        "operationId": "patch_v1_o11y_annotation-queues_id",
+        "summary": "UpdateAnnotationQueue changes a review queue's name, description or\nscore-config set.",
+        "description": "UpdateAnnotationQueue changes a review queue's name, description or\nscore-config set. A field the request omits is left alone. A name another\nqueue in the same project already uses is a 409; a queue id belonging to\nanother org is a 404.",
         "tags": [
           "o11y"
         ],
@@ -102,16 +202,46 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the annotation queue to update, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "annq_1"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "annq_1",
+                "name": "hallucination review v2"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/updateQueueIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/annQueueView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/o11y/annotation-queues/{id}/items": {
       "get": {
-        "operationId": "get_v1_o11y_annotation-queues_by_id_items",
+        "operationId": "get_v1_o11y_annotation-queues_id_items",
+        "summary": "ListAnnotationQueueItems returns a page of one review queue's items, newest\nfirst, optionally filtered to PENDING or COMPLETED.",
+        "description": "ListAnnotationQueueItems returns a page of one review queue's items, newest\nfirst, optionally filtered to PENDING or COMPLETED. A queue id belonging to\nanother org is a 404, never a cross-tenant list.",
         "tags": [
           "o11y"
         ],
@@ -120,14 +250,58 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the annotation queue whose items to list, from the path.",
             "schema": {
               "type": "string"
+            },
+            "example": "annq_1"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status filters to PENDING or COMPLETED items. Absent returns both.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "PENDING"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page is the 1-based page to read. Default 1.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit is how many rows to return. Default 20, capped at 100.",
+            "schema": {
+              "type": "integer"
             }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/annItemList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
-        "operationId": "post_v1_o11y_annotation-queues_by_id_items",
+        "operationId": "post_v1_o11y_annotation-queues_id_items",
+        "summary": "AddAnnotationQueueItems enqueues traces, observations or sessions on a review\nqueue.",
+        "description": "AddAnnotationQueueItems enqueues traces, observations or sessions on a review\nqueue. Each item names exactly one object, either by traceId / observationId /\nsessionId or by objectType plus objectId; every item enters PENDING. A queue\nid belonging to another org is a 404.",
         "tags": [
           "o11y"
         ],
@@ -136,16 +310,50 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the annotation queue to add to, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "annq_1"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "annq_1",
+                "items": [
+                  {
+                    "traceId": "tr_1"
+                  }
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/addItemsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/annItemsCreated"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/o11y/annotation-queues/{id}/items/{itemId}": {
       "patch": {
-        "operationId": "patch_v1_o11y_annotation-queues_by_id_items_by_itemid",
+        "operationId": "patch_v1_o11y_annotation-queues_id_items_itemId",
+        "summary": "UpdateAnnotationQueueItem moves one queue item between PENDING and COMPLETED\nand sets its assignee.",
+        "description": "UpdateAnnotationQueueItem moves one queue item between PENDING and COMPLETED\nand sets its assignee. Completing an item stamps its completedAt. An item that\nexists under a different queue answers the same 404 an unknown item does, and\nso does a queue belonging to another org.",
         "tags": [
           "o11y"
         ],
@@ -154,19 +362,50 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the annotation queue the item belongs to, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "annq_1"
           },
           {
             "name": "itemId",
             "in": "path",
             "required": true,
+            "description": "ItemID is the item to update, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "annqi_1"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "annq_1",
+                "itemId": "annqi_1",
+                "status": "COMPLETED"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/updateItemIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/annItemView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/o11y/api/v2/healthz": {
@@ -196,17 +435,116 @@
     "/v1/o11y/logs": {
       "get": {
         "operationId": "get_v1_o11y_logs",
+        "summary": "GetO11yLogs returns a page of one product's logs for the caller's org.",
+        "description": "GetO11yLogs returns a page of one product's logs for the caller's org. A\nnormal caller sees its OWN request stream, derived from org-tagged spans; a\nvalidated platform SuperAdmin sees the product's raw infra stdout stream\ninstead. Poll for a live tail by passing the previous response's nextCursor\nback as sinceNs. A well-formed product with no backing workload answers an\nempty page rather than an error; a malformed slug is a 400.",
         "tags": [
           "o11y"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "product",
+            "in": "query",
+            "required": false,
+            "description": "Product is the console product slug whose logs to read, e.g. \"kms\".\nRequired.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "kms"
+          },
+          {
+            "name": "sinceNs",
+            "in": "query",
+            "required": false,
+            "description": "SinceNs is the nanosecond cursor from a previous response's nextCursor.\nAbsent (0) reads the last `window` seconds instead.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "description": "Window is how many seconds back to read when there is no cursor.\nDefault 900, capped at 86400.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the returned lines. Default 200, capped at 1000.",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 200
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/logsResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/o11y/metrics": {
       "get": {
         "operationId": "get_v1_o11y_metrics",
+        "summary": "GetO11yMetrics returns one product's RED series — request rate, errors, p50\nand p95 latency — for the caller's org, plus that org's LLM usage rollup over\nthe same window.",
+        "description": "GetO11yMetrics returns one product's RED series — request rate, errors, p50\nand p95 latency — for the caller's org, plus that org's LLM usage rollup over\nthe same window. The series come from org-tagged request spans, so a tenant\nonly ever aggregates its own traffic; a validated platform SuperAdmin sees the\nwhole product's RED, while usage stays the caller's own org either way. A\nwell-formed product with no backing workload answers empty series; a malformed\nslug is a 400.",
         "tags": [
           "o11y"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "product",
+            "in": "query",
+            "required": false,
+            "description": "Product is the console product slug to read, e.g. \"kms\". Required.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "kms"
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "required": false,
+            "description": "Range is the window in seconds. Default 3600, capped at 604800 (7d).",
+            "schema": {
+              "type": "integer"
+            },
+            "example": 3600
+          },
+          {
+            "name": "stepSec",
+            "in": "query",
+            "required": false,
+            "description": "StepSec is the bucket width in seconds, clamped to [30, 3600]. Absent\npicks ~60 buckets across the range.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/metricsResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/o11y/query": {
@@ -236,9 +574,35 @@
     "/v1/o11y/status": {
       "get": {
         "operationId": "get_v1_o11y_status",
+        "summary": "GetO11yStatus reports whether a product's service is live: an in-cluster\nhealth probe with its measured latency, fused with the per-replica up\ninventory.",
+        "description": "GetO11yStatus reports whether a product's service is live: an in-cluster\nhealth probe with its measured latency, fused with the per-replica up\ninventory. Infra health is not tenant-partitioned — a service is up or down\nfor everyone — so any validated caller is served, but an unvalidated one is\nrefused. A product with no backing workload answers down/unknown-service\nwithout probing anything; a malformed slug is a 400.",
         "tags": [
           "o11y"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "product",
+            "in": "query",
+            "required": false,
+            "description": "Product is the console product slug to probe, e.g. \"kms\". Required.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "kms"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/statusResult"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/o11y/vm/query": {
@@ -483,6 +847,528 @@
             }
           }
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "addItemsIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the annotation queue to add to, from the path.",
+            "type": "string"
+          },
+          "items": {
+            "description": "Items are the objects to enqueue for review, 1–200 per request. Each names\nexactly one object.",
+            "items": {
+              "$ref": "#/components/schemas/itemInput"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "annItemList": {
+        "properties": {
+          "data": {
+            "description": "Data is the page of items.",
+            "items": {
+              "$ref": "#/components/schemas/annItemView"
+            },
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/listMeta",
+            "description": "Meta is the paging that produced it."
+          }
+        },
+        "type": "object"
+      },
+      "annItemView": {
+        "properties": {
+          "assignee": {
+            "description": "Assignee is the reviewer it is for, omitted when unassigned.",
+            "type": "string"
+          },
+          "completedAt": {
+            "description": "CompletedAt is when it was reviewed, omitted while pending.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when it was enqueued, RFC3339 in UTC.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the item's id.",
+            "type": "string"
+          },
+          "objectId": {
+            "description": "ObjectID is the referenced object's id.",
+            "type": "string"
+          },
+          "objectType": {
+            "description": "ObjectType is what it references: TRACE, OBSERVATION or SESSION.",
+            "type": "string"
+          },
+          "observationId": {
+            "description": "ObservationID echoes objectId when objectType is OBSERVATION.",
+            "type": "string"
+          },
+          "queueId": {
+            "description": "QueueID is the queue it belongs to.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "SessionID echoes objectId when objectType is SESSION.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is PENDING or COMPLETED.",
+            "type": "string"
+          },
+          "traceId": {
+            "description": "TraceID echoes objectId when objectType is TRACE.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when it last changed, RFC3339 in UTC.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "annItemsCreated": {
+        "properties": {
+          "data": {
+            "description": "Data is every item created by this request, in request order.",
+            "items": {
+              "$ref": "#/components/schemas/annItemView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "annQueueDeleted": {
+        "properties": {
+          "deleted": {
+            "description": "Deleted is true when the queue (and its items) were removed.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "annQueueDetailView": {
+        "properties": {
+          "completedCount": {
+            "description": "CompletedCount is how many have been reviewed.",
+            "type": "integer"
+          },
+          "createdAt": {
+            "description": "CreatedAt is when it was created, RFC3339 in UTC.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description is its free text, omitted when empty.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the queue's id.",
+            "type": "string"
+          },
+          "items": {
+            "description": "Items is the queue's first page of items (up to 100).",
+            "items": {
+              "$ref": "#/components/schemas/annItemView"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is its display handle.",
+            "type": "string"
+          },
+          "pendingCount": {
+            "description": "PendingCount is how many of its items are still awaiting review.",
+            "type": "integer"
+          },
+          "scoreConfigIds": {
+            "description": "ScoreConfigIDs are the eval score-configs reviewers grade against.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when it last changed, RFC3339 in UTC.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "annQueueList": {
+        "properties": {
+          "data": {
+            "description": "Data is the page of queues.",
+            "items": {
+              "$ref": "#/components/schemas/annQueueView"
+            },
+            "type": "array"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/listMeta",
+            "description": "Meta is the paging that produced it."
+          }
+        },
+        "type": "object"
+      },
+      "annQueueView": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when it was created, RFC3339 in UTC.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description is its free text, omitted when empty.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the queue's id.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is its display handle.",
+            "type": "string"
+          },
+          "scoreConfigIds": {
+            "description": "ScoreConfigIDs are the eval score-configs reviewers grade against.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when it last changed, RFC3339 in UTC.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "createQueueReq": {
+        "properties": {
+          "description": {
+            "description": "Description is optional free text, up to 512 characters.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the queue's display handle, 1–128 printable characters. It must be\nunique within the org's project. Required.",
+            "type": "string"
+          },
+          "scoreConfigIds": {
+            "description": "ScoreConfigIDs are the eval score-configs reviewers grade against.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "deployment": {
+        "properties": {
+          "instance": {
+            "type": "string"
+          },
+          "up": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "itemInput": {
+        "properties": {
+          "assignee": {
+            "description": "Assignee is the reviewer this item is for, up to 512 characters.",
+            "type": "string"
+          },
+          "objectId": {
+            "description": "ObjectID is the referenced object's id, paired with objectType.",
+            "type": "string"
+          },
+          "objectType": {
+            "description": "ObjectType is TRACE, OBSERVATION or SESSION — the generic form, paired\nwith objectId.",
+            "type": "string"
+          },
+          "observationId": {
+            "description": "ObservationID references an observation — the console-friendly form of\nobjectType=OBSERVATION.",
+            "type": "string"
+          },
+          "sessionId": {
+            "description": "SessionID references a session — the console-friendly form of\nobjectType=SESSION.",
+            "type": "string"
+          },
+          "traceId": {
+            "description": "TraceID references a trace — the console-friendly form of\nobjectType=TRACE.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "listMeta": {
+        "properties": {
+          "limit": {
+            "description": "Limit is how many rows one page holds.",
+            "type": "integer"
+          },
+          "page": {
+            "description": "Page is the 1-based page this response is.",
+            "type": "integer"
+          },
+          "totalItems": {
+            "description": "TotalItems is how many rows match in total.",
+            "type": "integer"
+          },
+          "totalPages": {
+            "description": "TotalPages is ceil(totalItems/limit), at least 1.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "logLine": {
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "severity": {
+            "description": "INFO | WARN | ERROR | ...",
+            "type": "string"
+          },
+          "source": {
+            "description": "\"infra\" (stdout) | \"request\" (org request log)",
+            "type": "string"
+          },
+          "ts": {
+            "description": "RFC3339 (UTC)",
+            "type": "string"
+          },
+          "tsNano": {
+            "description": "nanosecond cursor",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "logsResponse": {
+        "properties": {
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/logLine"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "description": "pass back as ?sinceNs for the next tail poll",
+            "type": "integer"
+          },
+          "product": {
+            "type": "string"
+          },
+          "view": {
+            "description": "\"infra\" (admin) | \"request\" (per-org)",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "metricsResponse": {
+        "properties": {
+          "product": {
+            "type": "string"
+          },
+          "range": {
+            "properties": {
+              "sinceSec": {
+                "type": "integer"
+              },
+              "stepSec": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          "series": {
+            "properties": {
+              "errors": {
+                "items": {
+                  "$ref": "#/components/schemas/point"
+                },
+                "type": "array"
+              },
+              "latencyP50Ms": {
+                "items": {
+                  "$ref": "#/components/schemas/point"
+                },
+                "type": "array"
+              },
+              "latencyP95Ms": {
+                "items": {
+                  "$ref": "#/components/schemas/point"
+                },
+                "type": "array"
+              },
+              "requests": {
+                "items": {
+                  "$ref": "#/components/schemas/point"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "summary": {
+            "properties": {
+              "errorRate": {
+                "type": "number"
+              },
+              "errors": {
+                "type": "integer"
+              },
+              "p95Ms": {
+                "type": "number"
+              },
+              "requests": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          "usage": {
+            "properties": {
+              "calls": {
+                "type": "integer"
+              },
+              "costCents": {
+                "type": "integer"
+              },
+              "series": {
+                "items": {
+                  "$ref": "#/components/schemas/usageBucket"
+                },
+                "type": "array"
+              },
+              "tokens": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "point": {
+        "properties": {
+          "t": {
+            "description": "T is the bucket start, RFC3339 in UTC.",
+            "type": "string"
+          },
+          "v": {
+            "description": "V is the bucket's value.",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "statusResult": {
+        "properties": {
+          "checkedAt": {
+            "type": "string"
+          },
+          "deployments": {
+            "items": {
+              "$ref": "#/components/schemas/deployment"
+            },
+            "type": "array"
+          },
+          "latencyMs": {
+            "type": "integer"
+          },
+          "product": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "up": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "updateItemIn": {
+        "properties": {
+          "assignee": {
+            "description": "Assignee replaces the reviewer this item is for, up to 512 characters.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the annotation queue the item belongs to, from the path.",
+            "type": "string"
+          },
+          "itemId": {
+            "description": "ItemID is the item to update, from the path.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is the item's new review state: PENDING or COMPLETED. Required.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "updateQueueIn": {
+        "properties": {
+          "description": {
+            "description": "Description replaces the free text when present, up to 512 characters.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the annotation queue to update, from the path.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name replaces the queue's display handle when present, 1–128 printable\ncharacters and unique within the project.",
+            "type": "string"
+          },
+          "scoreConfigIds": {
+            "description": "ScoreConfigIDs replaces the whole score-config set when present.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "usageBucket": {
+        "properties": {
+          "calls": {
+            "description": "Calls is how many LLM calls landed in the bucket.",
+            "type": "integer"
+          },
+          "costCents": {
+            "description": "CostCents is what they cost, in cents.",
+            "type": "integer"
+          },
+          "t": {
+            "description": "T is the bucket start, RFC3339 in UTC.",
+            "type": "string"
+          },
+          "tokens": {
+            "description": "Tokens is how many tokens they consumed.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }

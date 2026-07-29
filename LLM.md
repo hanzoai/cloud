@@ -977,10 +977,13 @@ prose.
 
 The typed packages are `apps/admin` and its eight sub-packages, plus `apps/agents`,
 `apps/company`, `apps/framework`, `apps/git`, `apps/ingress`, `apps/integrations`,
-`apps/marketing`, `apps/plugin`, `apps/search`, `apps/visor`.
+`apps/marketing`, `apps/o11y`, `apps/plugin`, `apps/search`, `apps/visor`.
 `apps/admin/core/typed.go` states the rule for that surface: every `/v1/admin/*`
 route is a typed op. Five carry NO untyped route at all — `admin`, `marketing`,
 `plugin`, `search` and now `ingress` (18 ops, converted whole in one pass).
+`o11y` is the other end of the spectrum and worth reading for it: 12 of 20, with
+each of the 8 refusals named in its own LLM.md — verbatim status/body proxies, a
+`text/plain` receipt that must ACCEPT an unparseable body, and a wildcard.
 The list moves every few merges: RE-MEASURE per app rather than trusting it, and
 note the count is a heuristic that reads `r.Header.Get("X-...")` as a route, so
 read the hits before believing a non-zero remainder (ingress's last "1" is one).
