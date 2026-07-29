@@ -8,11 +8,11 @@ package cloudflare
 // responses relay verbatim (no field loss).
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 
-	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -71,55 +71,81 @@ type PagesProjectCreate struct {
 
 // ── handlers ────────────────────────────────────────────────────────────────────
 
-func pagesList(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, acct, err := acctClient(s, c)
-	if err != nil {
-		return err
-	}
-	return cl.pass(c, http.MethodGet, "/accounts/"+acct+"/pages/projects", nil)
+// noInput is the In of an op addressed entirely by the caller's principal: it takes
+// nothing off the wire.
+type noInput struct{}
+
+// projectRef addresses one Pages project by name, from the path.
+type projectRef struct {
+	// Project is the Pages project name.
+	Project string `json:"project"`
 }
 
-func pagesGet(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, acct, err := acctClient(s, c)
+// PagesList lists the org's Cloudflare Pages projects. Any org member may read.
+func (o ops) pagesList(ctx context.Context, _ *noInput) (*cfResult, error) {
+	cl, acct, err := o.acctClient(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	proj, err := pathSeg(c, "project", nameRE)
-	if err != nil {
-		return err
-	}
-	return cl.pass(c, http.MethodGet, "/accounts/"+acct+"/pages/projects/"+proj, nil)
+	return cl.relay(ctx, http.MethodGet, "/accounts/"+acct+"/pages/projects", nil)
 }
 
-func pagesCreate(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, acct, err := acctWrite(s, c)
+// PagesGet reads one Cloudflare Pages project — its build config, deployment
+// configs and latest deployment. Any org member may read.
+//
+// Example: {"project": "marketing-site"}
+func (o ops) pagesGet(ctx context.Context, in *projectRef) (*cfResult, error) {
+	cl, acct, err := o.acctClient(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var in PagesProjectCreate
-	if err := json.Unmarshal(c.Body(), &in); err != nil {
-		return zip.ErrBadRequest("invalid request body")
+	proj, err := seg("project", in.Project, nameRE)
+	if err != nil {
+		return nil, err
+	}
+	return cl.relay(ctx, http.MethodGet, "/accounts/"+acct+"/pages/projects/"+proj, nil)
+}
+
+// PagesCreate creates a Cloudflare Pages project on the org's account. Requires
+// org admin. Only the modeled fields reach Cloudflare, so an unmodeled key in the
+// request is dropped rather than forwarded.
+//
+// Example: {"name": "marketing-site", "production_branch": "main"}
+func (o ops) pagesCreate(ctx context.Context, in *PagesProjectCreate) (*cfResult, error) {
+	cl, acct, err := o.acctWrite(ctx)
+	if err != nil {
+		return nil, err
 	}
 	if !nameRE.MatchString(strings.TrimSpace(in.Name)) {
-		return zip.ErrBadRequest("project name is invalid")
+		return nil, zip.ErrBadRequest("project name is invalid")
 	}
-	return cl.pass(c, http.MethodPost, "/accounts/"+acct+"/pages/projects", in)
+	return cl.relay(ctx, http.MethodPost, "/accounts/"+acct+"/pages/projects", *in)
 }
 
-func pagesDelete(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, acct, err := acctWrite(s, c)
+// PagesDelete deletes a Cloudflare Pages project, and with it every deployment it
+// has ever made. Requires org admin.
+//
+// Example: {"project": "marketing-site"}
+func (o ops) pagesDelete(ctx context.Context, in *projectRef) (*cfResult, error) {
+	cl, acct, err := o.acctWrite(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	proj, err := pathSeg(c, "project", nameRE)
+	proj, err := seg("project", in.Project, nameRE)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return cl.pass(c, http.MethodDelete, "/accounts/"+acct+"/pages/projects/"+proj, nil)
+	return cl.relay(ctx, http.MethodDelete, "/accounts/"+acct+"/pages/projects/"+proj, nil)
 }
 
-func pagesDeploy(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, acct, err := acctWrite(s, c)
+// pagesDeploy triggers a new Pages deployment. Requires org admin.
+//
+// NOT a typed op: a body this handler cannot parse is IGNORED — the deployment
+// falls back to the project's production branch — where a typed In answers 400.
+// Those are different contracts, and typing it would change what the route accepts.
+func (o ops) pagesDeploy(c *zip.Ctx) error {
+	ctx := c.Context()
+	cl, acct, err := o.acctWrite(ctx)
 	if err != nil {
 		return err
 	}
@@ -140,40 +166,59 @@ func pagesDeploy(s *cloud.Service[state], c *zip.Ctx) error {
 	return cl.pass(c, http.MethodPost, "/accounts/"+acct+"/pages/projects/"+proj+"/deployments", body)
 }
 
-func pagesDomainAdd(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, acct, err := acctWrite(s, c)
+// domainAddIn attaches a custom domain to a Pages project.
+type domainAddIn struct {
+	// Project is the Pages project name, from the path.
+	Project string `json:"project"`
+	// Name is the custom domain to attach, e.g. "www.acme.com".
+	Name string `json:"name"`
+}
+
+// PagesDomainAdd attaches a custom domain to a Cloudflare Pages project. Requires
+// org admin. Cloudflare owns validation and certificate issuance from here on.
+//
+// Example: {"project": "marketing-site", "name": "www.acme.com"}
+func (o ops) pagesDomainAdd(ctx context.Context, in *domainAddIn) (*cfResult, error) {
+	cl, acct, err := o.acctWrite(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	proj, err := pathSeg(c, "project", nameRE)
+	proj, err := seg("project", in.Project, nameRE)
 	if err != nil {
-		return err
-	}
-	var in struct {
-		Name string `json:"name"`
-	}
-	if err := json.Unmarshal(c.Body(), &in); err != nil {
-		return zip.ErrBadRequest("invalid request body")
+		return nil, err
 	}
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
-		return zip.ErrBadRequest("domain name is required")
+		return nil, zip.ErrBadRequest("domain name is required")
 	}
-	return cl.pass(c, http.MethodPost, "/accounts/"+acct+"/pages/projects/"+proj+"/domains", map[string]string{"name": name})
+	return cl.relay(ctx, http.MethodPost, "/accounts/"+acct+"/pages/projects/"+proj+"/domains",
+		map[string]string{"name": name})
 }
 
-func pagesDomainDelete(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, acct, err := acctWrite(s, c)
+// domainRef addresses one custom domain on one Pages project, both from the path.
+type domainRef struct {
+	// Project is the Pages project name.
+	Project string `json:"project"`
+	// Domain is the attached custom domain to detach.
+	Domain string `json:"domain"`
+}
+
+// PagesDomainDelete detaches a custom domain from a Cloudflare Pages project.
+// Requires org admin.
+//
+// Example: {"project": "marketing-site", "domain": "www.acme.com"}
+func (o ops) pagesDomainDelete(ctx context.Context, in *domainRef) (*cfResult, error) {
+	cl, acct, err := o.acctWrite(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	proj, err := pathSeg(c, "project", nameRE)
+	proj, err := seg("project", in.Project, nameRE)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	dom, err := pathSeg(c, "domain", nameRE)
+	dom, err := seg("domain", in.Domain, nameRE)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return cl.pass(c, http.MethodDelete, "/accounts/"+acct+"/pages/projects/"+proj+"/domains/"+dom, nil)
+	return cl.relay(ctx, http.MethodDelete, "/accounts/"+acct+"/pages/projects/"+proj+"/domains/"+dom, nil)
 }
