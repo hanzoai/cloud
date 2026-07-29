@@ -131,16 +131,23 @@ func routes(app cloud.Router, s *cloud.Service[*state]) {
 	// The customer-triggered ingestion of the caller's OWN org: reads commerce's
 	// transactions and posts the accounting twin. Idempotent, so a repeat is safe.
 	zip.Post(g, "/sync", o.sync)
+	// The AI Ask brain: a plain-language question answered from the org's real
+	// figures. Its body IS its In; the ?sandbox selector stays on the URL (query,
+	// typed.go), so typing described the route without moving it.
+	zip.Post(g, "/ask", o.ask)
 
-	// UNTYPED, and each for a stated reason — see LLM.md's typed migration. The
-	// metrics read returns MetricsResponse, which EMBEDS Metrics: zip v1.18.3's
-	// schema walk emits an embedded struct as a nested property (or drops it when
-	// its type is unexported) instead of flattening it, so typing this would
-	// publish a response schema that does not match the flat object on the wire —
-	// worse than none. The Ask brain's ?sandbox selector is query-only today, and
-	// a typed POST documents its input as a body, which would move it.
+	// UNTYPED, for a stated reason — see LLM.md's typed migration. The metrics read
+	// returns MetricsResponse, which EMBEDS Metrics: zip v1.18.3's schema walk emits
+	// an embedded struct as a NESTED property (openapi.go structSchema walks
+	// NumField and names each by its json tag, so the embedded field publishes as
+	// "Metrics": {…}) instead of flattening it the way encoding/json does. Typing it
+	// would publish a response schema no answer of this route matches, and every
+	// generated SDK would model it wrong — worse than none. Spelling the 15 Metrics
+	// fields out a second time on a flat Out would describe it correctly ONCE and
+	// then silently drop the next field added to Metrics off the wire, which is a
+	// worse bug than the one it fixes. The route is right; the generator has to
+	// learn embedding before the description can be true.
 	app.Get("/v1/books/metrics", cloud.Handle(s, metricsHandler))
-	app.Post("/v1/books/ask", cloud.Handle(s, askHandler))
 
 	// The shared BANK engine surface (bank_api.go): OFX/CSV import, connector sync,
 	// transaction + unreconciled reads, and the Plaid/Teller link plumbing stubs.

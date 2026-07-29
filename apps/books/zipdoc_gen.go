@@ -104,7 +104,9 @@ func init() {
 	zip.Describe("GET /v1/books/rules", zip.Doc{
 		Description: "ListRules returns the org's auto-categorization rules, highest priority first. A rule\nis a standing instruction — \"anything whose merchant contains X books to category Y\" —\nand it overrides a vendor's default category, so this is the list that decides how a\nfuture bill classifies itself.",
 		Fields: map[string]string{
-			"Rule.category":    "COA account number",
+			"Rule.category":    "Category is the COA expense account a matching bill books to. An upsert normalizes\na slug (\"cloud\") to its account number.",
+			"Rule.pattern":     "Pattern is the merchant substring the rule matches on, case-insensitively. It is\nalso the key an upsert writes by.",
+			"Rule.priority":    "Priority breaks ties: when several patterns match, the highest wins.",
 			"ledgerIn.sandbox": "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\"; anything else\nreads the live one.",
 			"rulesOut.rules":   "Rules is every rule the org has set, highest priority first — the order they\nare matched in.",
 		},
@@ -139,11 +141,68 @@ func init() {
 	zip.Describe("GET /v1/books/vendors", zip.Doc{
 		Description: "ListVendors returns the org's vendor book: each canonical vendor, the alias spellings a\nreceipt may print it under, and the expense account new bills from it default to. A\nvendor here is what makes a scanned bill self-classify instead of asking again.",
 		Fields: map[string]string{
-			"VendorRow.defaultCategory": "COA account number",
+			"VendorRow.aliases":         "Aliases are the other spellings a receipt may print the vendor under; a scan\nmatching any of them resolves to this vendor.",
+			"VendorRow.canonical":       "Canonical is the vendor's one true name, and the key an upsert writes by.",
+			"VendorRow.defaultCategory": "DefaultCategory is the COA expense account new bills from this vendor book to.\nAn upsert normalizes a slug (\"software\") to its account number.",
 			"ledgerIn.sandbox":          "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\"; anything else\nreads the live one.",
 			"vendorsOut.vendors":        "Vendors is every vendor the org has recorded, canonical name ascending.",
 		},
 		Example: json.RawMessage(`{"sandbox":"false"}`),
+	})
+	zip.Describe("POST /v1/books/ask", zip.Doc{
+		Description: "AskBooks answers a plain-language question about the caller's own books — \"what is my\nMRR?\", \"how long is my runway?\" — with figures taken from their ledger, never a guessed\nnumber. A deterministic keyword router picks the intent and reads the real metrics, and\nthose figures, followups and report sources are computed BEFORE any model call and are\nnever altered by one: the optional narration seam only rephrases the sentence, and it\ndegrades silently to the templated answer when no AI plane is wired. It is strictly\nread-only — it restates the books, it never posts to them.",
+		Fields: map[string]string{
+			"AskRequest.from":       "From is the RFC3339 start of the metric window. Empty means all time, treated as a\nsingle reporting period (see monthsBetween).",
+			"AskRequest.question":   "Question is the plain-language question about the org's books, e.g. \"what is my\nMRR?\". Longer than 2000 characters is truncated, never refused.",
+			"AskRequest.to":         "To is the RFC3339 end of the metric window. Empty means up to now.",
+			"AskResponse.answer":    "Answer is one or two sentences answering the question, every number in it taken\nfrom Figures.",
+			"AskResponse.figures":   "Figures are the grounded numbers the answer states, each already formatted.",
+			"AskResponse.followups": "Followups are sharper questions to ask next, chosen from the same intent.",
+			"AskResponse.sources":   "Sources name the books reports the figures were computed from — \"pnl\",\n\"balance-sheet\", \"trial-balance\".",
+			"Figure.label":          "Label names the metric, e.g. \"MRR\" or \"Runway\".",
+			"Figure.period":         "Period is the window the figure covers, e.g. \"2026-07\" or \"all-time\".",
+			"Figure.value":          "Value is the figure already formatted through books' own money formatter, so a\nconsumer never re-derives it.",
+		},
+		Example: json.RawMessage(`{"question":"how long is my runway?"}`),
+	})
+	zip.Describe("POST /v1/books/bank/sync", zip.Doc{
+		Description: "SyncBank pulls every connected bank (Plaid/Teller) for the caller's org, maps each\nfetched transaction to a posting and books it idempotently, then advances that\nconnector's cursor so the next sync resumes where this one stopped. One connector's\noutage is skipped rather than failing the whole sync. It reports the batch: how many\ntransactions were seen, how many vouchers posted, how many inflows reconciled against\nthe processor clearing account, how many raised a question, how many were own-account\ntransfers, and how many were already-processed no-ops. It is READ-ONLY against the\nbank — it ingests, it never sends money.",
+		Fields: map[string]string{
+			"BankTally.ingested":   "transactions seen",
+			"BankTally.posted":     "vouchers newly posted (outflow + reconciled)",
+			"BankTally.questions":  "unmatched inflows that raised a question",
+			"BankTally.reconciled": "inflows cleared against Square-clearing",
+			"BankTally.skipped":    "already-processed idempotent no-ops",
+			"BankTally.transfers":  "own-account moves recorded (no P&L)",
+		},
+	})
+	zip.Describe("POST /v1/books/rules", zip.Doc{
+		Description: "UpsertRule creates or updates one auto-categorization rule, keyed by its pattern —\nwriting a pattern that already exists REPLACES that row's category and priority. The\ncategory is normalized to a real COA expense account, and anything unrecognized becomes\n5900 Uncategorized rather than a guessed real account. It answers the row exactly as\nstored, so the caller sees the normalization. A rule overrides a vendor's default\ncategory, so this is the standing instruction that decides how a future bill classifies.",
+		Fields: map[string]string{
+			"Rule.category": "Category is the COA expense account a matching bill books to. An upsert normalizes\na slug (\"cloud\") to its account number.",
+			"Rule.pattern":  "Pattern is the merchant substring the rule matches on, case-insensitively. It is\nalso the key an upsert writes by.",
+			"Rule.priority": "Priority breaks ties: when several patterns match, the highest wins.",
+		},
+		Example: json.RawMessage(`{"pattern":"aws","category":"cloud","priority":5}`),
+	})
+	zip.Describe("POST /v1/books/scan/book", zip.Doc{
+		Description: "BookScan posts a reviewed scanned bill to the ledger. It is the scanner's ONLY write:\nthe voucher goes through the same post() choke point every other source uses, so it is\nchecked to balance (Σdebit == Σcredit) and is idempotent by (scan, scanId) — re-booking\nthe same scan answers posted=false and writes nothing. A bill whose economic identity\n(vendor, total, issue date) already posted under a DIFFERENT scan is refused 409 unless\noverride is set, which is what stops the same receipt re-scanned into a new file hash\nfrom double-booking. An unbalanced voucher is refused 400.",
+		Fields: map[string]string{
+			"BookRequest.override": "Override books this bill even when one of the SAME economic identity\n(vendor, total, issue date) already posted — the explicit human confirmation that a\nsame-looking bill is a genuine second spend, not the same receipt re-scanned.",
+			"BookRequest.scanId":   "ScanID is the scanned document's file hash, as GET /v1/books/inbox and the scan\ndraft report it. It is the idempotency key: re-booking the same scan writes nothing.",
+			"BookRequest.voucher":  "Voucher is the reviewed voucher to post. Its source is FORCED to (scan, scanId)\nserver-side, so it can never be booked under another source's key.",
+			"BookResponse.posted":  "Posted is true when this call wrote the voucher, false when the same scan had\nalready booked and nothing was written.",
+			"BookResponse.scanId":  "ScanID echoes the scan that was booked.",
+			"Leg.account":          "Account is the chart-of-accounts number this side posts to, e.g. \"5300\".",
+			"Leg.credit":           "Credit is the leg's credit in exact cents. Set this or Debit, not both.",
+			"Leg.debit":            "Debit is the leg's debit in exact cents. Set this or Credit, not both.",
+			"Voucher.description":  "Description is the human line for the event, e.g. the vendor a bill came from.",
+			"Voucher.legs":         "Legs are the sides of the posting. They must balance: Σdebit == Σcredit, give or\ntake the 2¢ round-off allowance.",
+			"Voucher.postingAt":    "PostingAt is the RFC3339 instant the event posts at — the time every statement\nwindow filters on.",
+			"Voucher.sourceId":     "SourceID is the source event's own id within that namespace. Together with\nSourceKind it is the key that makes a repeat posting a no-op.",
+			"Voucher.sourceKind":   "SourceKind is the idempotency namespace naming what booked this, e.g. \"scan\".",
+		},
+		Example: json.RawMessage(`{"scanId":"a5f3c1","voucher":{"description":"GitHub","legs":[{"account":"5300","debit":1234},{"account":"2001","credit":1234}]}}`),
 	})
 	zip.Describe("POST /v1/books/sync", zip.Doc{
 		Description: "Sync ingests the caller's OWN org from commerce into BOTH ledgers (live and sandbox)\nand reports how many new vouchers posted to each. It is idempotent — money that has\nalready been booked posts nothing on a repeat — and it is read-only against commerce:\nit never mints a deposit, a credit or a payout, only the accounting twin of money that\nalready moved.",
@@ -151,5 +210,14 @@ func init() {
 			"syncTally.live":    "Live is the number of vouchers newly posted to the live ledger.",
 			"syncTally.sandbox": "Sandbox is the number newly posted to the sandbox ledger.",
 		},
+	})
+	zip.Describe("POST /v1/books/vendors", zip.Doc{
+		Description: "UpsertVendor creates or updates one vendor in the org's vendor book, keyed by its\ncanonical name — writing a canonical name that already exists REPLACES that row's\naliases and default category. A category given as a slug (\"software\") is normalized to\nits real COA expense account, and anything unrecognized becomes 5900 Uncategorized\nrather than a guessed real account. It answers the row exactly as stored, so the caller\nsees the normalization. Recording a vendor is what makes future bills from it\nself-classify instead of asking again.",
+		Fields: map[string]string{
+			"VendorRow.aliases":         "Aliases are the other spellings a receipt may print the vendor under; a scan\nmatching any of them resolves to this vendor.",
+			"VendorRow.canonical":       "Canonical is the vendor's one true name, and the key an upsert writes by.",
+			"VendorRow.defaultCategory": "DefaultCategory is the COA expense account new bills from this vendor book to.\nAn upsert normalizes a slug (\"software\") to its account number.",
+		},
+		Example: json.RawMessage(`{"canonical":"GitHub","aliases":["github.com"],"defaultCategory":"software"}`),
 	})
 }

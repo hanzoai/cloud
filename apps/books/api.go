@@ -187,8 +187,10 @@ func (o booksOps) exportPackage(ctx context.Context, in *exportIn) (*FinancialPa
 	return &pkg, nil
 }
 
-// syncIn takes nothing off the wire: the op acts on the caller's own org, and both of
-// that org's ledgers, so there is nothing left to name.
+// syncIn takes nothing off the wire: a sync acts on the caller's own org, so there is
+// nothing left to name. It is the In of BOTH syncs — the commerce ingest here and the
+// bank connector pull (bank_api.go) — because "no input" is one shape, and two empty
+// structs would be one concept with two schema names in the published document.
 type syncIn struct{}
 
 // syncTally reports how many new vouchers each ledger posted.
