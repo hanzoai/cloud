@@ -350,12 +350,12 @@ func requestPrincipal(c *zip.Ctx) fleetPrincipal {
 	}
 }
 
-// capPrincipal reads one off a capability delegated over the internal plane. It
-// carries the SAME headers requestPrincipal reads, packed into the envelope by the
-// caller's Dial(...).As(c) — a peer can only pass on authority it already held, and
-// the org key goes through principal.OrgOf, the same decision Org applies to a
-// request. So a caller cannot widen itself by crossing the socket.
-func capPrincipal(who cloud.Ident) fleetPrincipal {
+// capPrincipal reads one off the identity a plane call carries. It is the SAME
+// set of headers requestPrincipal reads, forwarded by zip from the gateway's
+// assertion — a peer can only pass on authority it already held — and the org
+// key goes through principal.OrgOf, the same decision Org applies to a request.
+// So a caller cannot widen itself by crossing the socket.
+func capPrincipal(who zip.Caller) fleetPrincipal {
 	org, _ := principal.OrgOf(who.User, who.Org)
 	return fleetPrincipal{
 		validated: strings.TrimSpace(who.User) != "",

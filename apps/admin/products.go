@@ -20,6 +20,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/admin/core"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -84,17 +85,17 @@ type productRollup struct{ Total, Active, Drift int }
 // side where the observer lives. A platform that cannot be REACHED is an error,
 // because an unreachable estate and an empty estate must never look alike.
 func fleetProducts(ctx context.Context, c *zip.Ctx) ([]productRow, productRollup, error) {
-	reply, err := cloud.Dial("platform").As(c).Call(ctx, "platform.fleet", nil)
+	fleet, err := cloud.Ask[struct{}, plane.Fleet](cloud.As(c, ""), "platform",
+		plane.PlatformFleet, &struct{}{})
 	if err != nil {
 		return nil, productRollup{}, err
 	}
-	apps, err := cloud.Apps(reply)
-	if err != nil {
-		return nil, productRollup{}, err
+	if fleet == nil {
+		return nil, productRollup{}, nil
 	}
-	rows := make([]productRow, 0, len(apps))
+	rows := make([]productRow, 0, len(fleet.Apps))
 	var roll productRollup
-	for _, v := range apps {
+	for _, v := range fleet.Apps {
 		r := productFromView(v)
 		rows = append(rows, r)
 		roll.Total++
@@ -111,7 +112,7 @@ func fleetProducts(ctx context.Context, c *zip.Ctx) ([]productRow, productRollup
 // productFromView projects a paas fleet AppView onto a productRow: the declared/running tags
 // + operator-reconciled health/phase verbatim, the drift verdict rolled to a boolean +
 // severity, and the derived infra tier for the board's grouping.
-func productFromView(v cloud.App) productRow {
+func productFromView(v plane.App) productRow {
 	return productRow{
 		Name:          v.Name,
 		Kind:          v.Role, // the operator's OWN declared class (sql|kv|generic|ingress) or ""
@@ -141,7 +142,7 @@ func productFromView(v cloud.App) productRow {
 // for sql/kv/generic/ingress), so the board groups on this derivation. A declarative
 // `hanzo.ai/tier` label on the App CRs would make it authoritative — a universe/operator
 // follow-up; until then this stays the single, documented classifier (one place, no fork).
-func tierOf(v cloud.App) string {
+func tierOf(v plane.App) string {
 	// A workload in a tenant namespace is a customer / PaaS deployment, not platform infra.
 	// (Today the paas observer scans only the platform namespaces, so this is future-proofing
 	// for when the scan federates tenant/other clusters.)

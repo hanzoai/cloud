@@ -74,7 +74,7 @@ func startDrip(ctx context.Context, log luxlog.Logger) {
 		log.Warn("tasks engine never became ready — drip idle", "waited", dripEngineWait)
 		return
 	}
-	view := eng.View(dripOrg())
+	view := eng.View(tasksengine.Org(dripOrg()))
 	if err := view.RegisterNamespace(tasksengine.Namespace{
 		NamespaceInfo: tasksengine.NamespaceInfo{Name: dripNamespace},
 	}); err != nil {
@@ -82,7 +82,7 @@ func startDrip(ctx context.Context, log luxlog.Logger) {
 		return
 	}
 	cli, err := tasksclient.Dial(tasksclient.Options{
-		HostPort:  fmt.Sprintf("127.0.0.1:%d", eng.ZAPPort()),
+		Address:   eng.Address(),
 		Namespace: dripNamespace,
 	})
 	if err != nil {

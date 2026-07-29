@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/hanzoai/cloud"
 	iamclient "github.com/hanzoai/cloud/apps/iam"
+	"github.com/hanzoai/cloud/plane"
 	model "github.com/hanzoai/iam/pkg/model"
 	iamstore "github.com/hanzoai/iam/pkg/store"
 	"time"
@@ -56,16 +57,16 @@ func iamRoster(org string) ([]*model.User, error) {
 	// failure this file exists to refuse.
 	ctx, cancel := context.WithTimeout(context.Background(), rosterTimeout)
 	defer cancel()
-	out, err := cloud.Dial("iam").For(org).Call(ctx, "iam.mailable", nil)
+	roster, err := cloud.Ask[struct{}, plane.Roster](cloud.For(ctx, org), "iam",
+		plane.IAMMailable, &struct{}{})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errIAMUnavailable, err)
 	}
-	people, derr := cloud.Recipients(out)
-	if derr != nil {
-		return nil, fmt.Errorf("%w: decode roster: %v", errIAMUnavailable, derr)
+	if roster == nil {
+		return nil, fmt.Errorf("%w: iam answered nothing", errIAMUnavailable)
 	}
-	users := make([]*model.User, 0, len(people))
-	for _, p := range people {
+	users := make([]*model.User, 0, len(roster.Recipients))
+	for _, p := range roster.Recipients {
 		users = append(users, &model.User{Id: p.ID, Owner: p.Owner, Name: p.Name, Email: p.Email})
 	}
 	return users, nil
