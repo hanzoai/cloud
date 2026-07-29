@@ -265,20 +265,65 @@
     "/v1/agents/targets": {
       "get": {
         "operationId": "get_v1_agents_targets",
+        "summary": "ListTargets returns every machine registered to the caller's org, newest",
+        "description": "ListTargets returns every machine registered to the caller's org, newest\nfirst, each with its live session load.",
         "tags": [
           "agents"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/targetList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_agents_targets",
+        "summary": "RegisterTarget registers a machine as an agent target, or re-links one that is\nalready registered.",
+        "description": "RegisterTarget registers a machine as an agent target, or re-links one that is\nalready registered. Re-linking is idempotent and keyed on org+host+owner, so a\nmachine that reconnects refreshes its own row rather than piling up duplicates;\nit answers 200, while a first registration answers 201.",
         "tags": [
           "agents"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "host": "gpu-01",
+                "kind": "gpu",
+                "label": "workshop"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/targetReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/targetView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/agents/targets/{id}": {
       "delete": {
-        "operationId": "delete_v1_agents_targets_by_id",
+        "operationId": "delete_v1_agents_targets_id",
+        "summary": "DeleteTarget deregisters one machine.",
+        "description": "DeleteTarget deregisters one machine. Only its owner, or an org admin, may\nremove it; an unknown id, a cross-org id and a machine owned by someone else\nall answer the same not-found, so a probe learns nothing about what exists.",
         "tags": [
           "agents"
         ],
@@ -287,14 +332,30 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the target to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "tgt_1"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/targetDeleted"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_agents_targets_by_id",
+        "operationId": "get_v1_agents_targets_id",
+        "summary": "GetTarget returns one registered machine, with its live session load.",
+        "description": "GetTarget returns one registered machine, with its live session load.",
         "tags": [
           "agents"
         ],
@@ -303,14 +364,30 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the target to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "tgt_1"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/targetView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "patch": {
-        "operationId": "patch_v1_agents_targets_by_id",
+        "operationId": "patch_v1_agents_targets_id",
+        "summary": "PatchTarget updates one machine in place.",
+        "description": "PatchTarget updates one machine in place. Every field is optional; a field the\nrequest omits is left alone. A metrics patch IS a heartbeat — the server stamps\nits own clock, so a client can neither forge nor backdate staleness.",
         "tags": [
           "agents"
         ],
@@ -319,11 +396,39 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the target to update, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "tgt_1"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "tgt_1",
+                "status": "draining"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/patchTargetIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/targetView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/agents/targets/{id}/claim": {
@@ -472,6 +577,188 @@
             }
           }
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "GPU": {
+        "properties": {
+          "memory": {
+            "description": "VRAM bytes, 0 = unknown",
+            "type": "integer"
+          },
+          "model": {
+            "description": "\"GB10\", \"8060S\", \"RTX 4090\"",
+            "type": "string"
+          },
+          "vendor": {
+            "description": "nvidia | amd | apple | intel | ...",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Metrics": {
+        "properties": {
+          "at": {
+            "description": "unix seconds, server-stamped",
+            "type": "integer"
+          },
+          "gpuUtil": {
+            "description": "0..1 aggregate utilization",
+            "type": "number"
+          },
+          "load1": {
+            "type": "number"
+          },
+          "load15": {
+            "type": "number"
+          },
+          "load5": {
+            "type": "number"
+          },
+          "memFree": {
+            "description": "bytes",
+            "type": "integer"
+          },
+          "memUsed": {
+            "description": "bytes",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Spec": {
+        "properties": {
+          "arch": {
+            "description": "amd64 | arm64 | ...",
+            "type": "string"
+          },
+          "cpus": {
+            "description": "logical cores",
+            "type": "integer"
+          },
+          "gpus": {
+            "items": {
+              "$ref": "#/components/schemas/GPU"
+            },
+            "type": "array"
+          },
+          "memory": {
+            "description": "total RAM, bytes",
+            "type": "integer"
+          },
+          "os": {
+            "description": "linux | darwin | windows",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patchTargetIn": {
+        "properties": {
+          "id": {
+            "description": "ID is the target to update, from the path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "targetDeleted": {
+        "properties": {
+          "deleted": {
+            "description": "Deleted is true when the target was removed.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the target that was removed.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "targetList": {
+        "properties": {
+          "targets": {
+            "description": "Targets is every target registered to the caller's org.",
+            "items": {
+              "$ref": "#/components/schemas/targetView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "targetReq": {
+        "properties": {
+          "capacity": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/Metrics"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/Spec"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "targetView": {
+        "properties": {
+          "capacity": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/Metrics"
+          },
+          "metricsAt": {
+            "type": "string"
+          },
+          "running": {
+            "type": "integer"
+          },
+          "sessions": {
+            "type": "integer"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/Spec"
+          },
+          "status": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }
