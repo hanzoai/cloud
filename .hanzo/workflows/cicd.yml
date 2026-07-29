@@ -57,7 +57,17 @@ concurrency:
 jobs:
   # The test gate, driven by hanzo.yml.
   gate:
-    uses: hanzoai/ci/.hanzo/workflows/build.yml@v1
+    # `.github/workflows/`, not `.hanzo/workflows/`: at tag v1 the hanzoai/ci
+    # repo's `.hanzo/workflows/` is EMPTY and build.yml lives under
+    # `.github/workflows/` — which is also the import its own header documents.
+    #
+    # Pinned at the wrong path, the forge cannot even construct a run:
+    #   PrepareRun: InsertRun: read hanzoai/ci@v1:.hanzo/workflows/build.yml:
+    #   object does not exist
+    # InsertRun fails before any run row is written, so there is no failed run to
+    # look at — pushes and workflow_dispatch alike just silently do nothing. That
+    # is what dead CI looks like here: not red, absent.
+    uses: hanzoai/ci/.github/workflows/build.yml@v1
     with:
       # Not on a tag: release.go mints v* only after that SHA passed this gate
       # on main and built and smoked, so a tag build re-tests a proven commit —
