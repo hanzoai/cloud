@@ -3,8 +3,6 @@ package o11y
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud/apps/datastore"
@@ -33,15 +31,26 @@ const (
 )
 
 type point struct {
-	T string  `json:"t"` // RFC3339 bucket start (UTC)
+	// T is the bucket start, RFC3339 in UTC.
+	T string `json:"t"`
+	// V is the bucket's value.
 	V float64 `json:"v"`
 }
 
-type usagePoint struct {
-	T         string `json:"t"`
-	Calls     int64  `json:"calls"`
-	Tokens    int64  `json:"tokens"`
-	CostCents int64  `json:"costCents"`
+// usageBucket is one time bucket of an org's LLM usage. NOT admin's usagePoint
+// (a DAILY {date,requests,spendCents,tokens} roll-up on the fleet board): these
+// are two different shapes, and the fleet document has ONE schema namespace, so
+// they must not share a name — the weave gate refuses it, because a generated
+// SDK would bind whichever it read last.
+type usageBucket struct {
+	// T is the bucket start, RFC3339 in UTC.
+	T string `json:"t"`
+	// Calls is how many LLM calls landed in the bucket.
+	Calls int64 `json:"calls"`
+	// Tokens is how many tokens they consumed.
+	Tokens int64 `json:"tokens"`
+	// CostCents is what they cost, in cents.
+	CostCents int64 `json:"costCents"`
 }
 
 // metricsResponse is the scoped RED-metrics + usage response for one product.
@@ -58,10 +67,10 @@ type metricsResponse struct {
 		LatencyP95Ms []point `json:"latencyP95Ms"`
 	} `json:"series"`
 	Usage struct {
-		Calls     int64        `json:"calls"`
-		Tokens    int64        `json:"tokens"`
-		CostCents int64        `json:"costCents"`
-		Series    []usagePoint `json:"series"`
+		Calls     int64         `json:"calls"`
+		Tokens    int64         `json:"tokens"`
+		CostCents int64         `json:"costCents"`
+		Series    []usageBucket `json:"series"`
 	} `json:"usage"`
 	Summary struct {
 		Requests  int64   `json:"requests"`
@@ -176,23 +185,24 @@ func usageSeries(ctx context.Context, org string, rangeSec, stepSec int, resp *m
 		calls := asInt64(r["calls"])
 		tokens := asInt64(r["tokens"])
 		cost := asInt64(r["cost"])
-		resp.Usage.Series = append(resp.Usage.Series, usagePoint{T: t, Calls: calls, Tokens: tokens, CostCents: cost})
+		resp.Usage.Series = append(resp.Usage.Series, usageBucket{T: t, Calls: calls, Tokens: tokens, CostCents: cost})
 		resp.Usage.Calls += calls
 		resp.Usage.Tokens += tokens
 		resp.Usage.CostCents += cost
 	}
 	if resp.Usage.Series == nil {
-		resp.Usage.Series = []usagePoint{}
+		resp.Usage.Series = []usageBucket{}
 	}
 	return nil
 }
 
 // ── range/step + helpers ──────────────────────────────────────────────────────
 
-// boundRangeSec clamps the client `range` (seconds) to [1, maxRangeSec].
-func boundRangeSec(raw string) int {
-	n, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil || n <= 0 {
+// boundRangeSec clamps the client `range` (seconds) to [1, maxRangeSec]. A
+// missing or unparseable query value arrives as 0 and takes the default — the
+// same branch a malformed string took when this parsed the query itself.
+func boundRangeSec(n int) int {
+	if n <= 0 {
 		return defaultRangeSec
 	}
 	if n > maxRangeSec {
@@ -201,13 +211,11 @@ func boundRangeSec(raw string) int {
 	return n
 }
 
-// stepFor picks a bucket width: an explicit ?stepSec (clamped), else ~60 buckets
+// stepFor picks a bucket width: an explicit stepSec (clamped), else ~60 buckets
 // across the range (clamped to [minStepSec, maxStepSec]).
-func stepFor(rangeSec int, rawStep string) int {
-	if v := strings.TrimSpace(rawStep); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return clampInt(n, minStepSec, maxStepSec)
-		}
+func stepFor(rangeSec, step int) int {
+	if step > 0 {
+		return clampInt(step, minStepSec, maxStepSec)
 	}
 	return clampInt(rangeSec/60, minStepSec, maxStepSec)
 }
@@ -236,7 +244,7 @@ func ensureSeries(resp *metricsResponse) {
 		resp.Series.LatencyP95Ms = []point{}
 	}
 	if resp.Usage.Series == nil {
-		resp.Usage.Series = []usagePoint{}
+		resp.Usage.Series = []usageBucket{}
 	}
 }
 
