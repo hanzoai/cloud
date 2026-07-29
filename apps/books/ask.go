@@ -89,7 +89,7 @@ func (o booksOps) ask(ctx context.Context, in *AskRequest) (*AskResponse, error)
 	if len(q) > maxQuestion {
 		q = q[:maxQuestion]
 	}
-	st, err := o.s.State.storeFor(org, sandboxOf(query(ctx, "sandbox")))
+	st, err := o.s.State.storeFor(org, sandboxFrom(ctx))
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "books open failed")
 	}

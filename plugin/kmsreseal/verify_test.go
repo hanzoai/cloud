@@ -7,9 +7,9 @@ import (
 
 func TestVerify_MismatchDetected(t *testing.T) {
 	app, _, _ := newCloudApp(t)
-	src := newKMSClient("http://kms.hanzo.svc", newFakeStandalone())
+	src := newKMSClient("http://kms.hanzo.svc", standalone, newFakeStandalone())
 	fs := src.do.(*fakeStandalone)
-	dst := newKMSClient("http://cloud.hanzo.svc", cloudDoer{app})
+	dst := newKMSClient("http://cloud.hanzo.svc", embedded, cloudDoer{app})
 
 	// Migrate value A, then the source diverges to value B → verify must catch it.
 	fs.seed("hanzo", "p", "prod", "K", "value-A")
@@ -35,9 +35,9 @@ func TestVerify_MismatchDetected(t *testing.T) {
 
 func TestVerify_AbsentOnCloud(t *testing.T) {
 	app, _, _ := newCloudApp(t)
-	src := newKMSClient("http://kms.hanzo.svc", newFakeStandalone())
+	src := newKMSClient("http://kms.hanzo.svc", standalone, newFakeStandalone())
 	src.do.(*fakeStandalone).seed("hanzo", "p", "prod", "NOT_MIGRATED", "v")
-	dst := newKMSClient("http://cloud.hanzo.svc", cloudDoer{app})
+	dst := newKMSClient("http://cloud.hanzo.svc", embedded, cloudDoer{app})
 
 	inv := Inventory{Targets: []Target{{Org: "hanzo", Path: "p", Env: "prod", Key: "NOT_MIGRATED"}}}
 	vrep := verify(context.Background(), inv, src, dst, injectToken, injectToken)
@@ -48,8 +48,8 @@ func TestVerify_AbsentOnCloud(t *testing.T) {
 
 func TestVerify_EmptyFolderIsNonGreen(t *testing.T) {
 	app, _, _ := newCloudApp(t)
-	src := newKMSClient("http://kms.hanzo.svc", newFakeStandalone()) // seed NOTHING
-	dst := newKMSClient("http://cloud.hanzo.svc", cloudDoer{app})
+	src := newKMSClient("http://kms.hanzo.svc", standalone, newFakeStandalone()) // seed NOTHING
+	dst := newKMSClient("http://cloud.hanzo.svc", embedded, cloudDoer{app})
 
 	// A folder-sync CR whose source path holds no keys (billing-kms-sync shape).
 	inv := Inventory{Folders: []Target{{Org: "hanzo", Path: "billing-secrets", Env: "prod", Folder: true}}}
@@ -65,9 +65,10 @@ func TestVerify_EmptyFolderIsNonGreen(t *testing.T) {
 
 func TestVerify_OrgIsolationMatrixOnCloud(t *testing.T) {
 	app, _, _ := newCloudApp(t)
-	dst := newKMSClient("http://cloud.hanzo.svc", cloudDoer{app})
+	dst := newKMSClient("http://cloud.hanzo.svc", embedded, cloudDoer{app})
 
-	// org "hanzo" token reading org "acme"'s coordinate → 403; no-principal → 403.
+	// A URL naming org "acme", carrying a VALID org "hanzo" credential → 404 (cloud
+	// serves no tenant-naming route, so the reach does not exist); no-principal → 403.
 	iso := isolationProbe(context.Background(), dst, "org:hanzo", "hanzo", "acme", "p", "prod", "K")
 	if len(iso) != 2 {
 		t.Fatalf("isolation probes=%d, want 2", len(iso))
