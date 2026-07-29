@@ -104,7 +104,7 @@ type githubPagesEnableReq struct {
 }
 
 // ref is the repo this request addresses, normalized like every other :repo op.
-func (r githubPagesEnableReq) ref() repoRef { return repoRef{Repo: r.Repo} }
+func (r githubPagesEnableReq) ref() githubRepoRef { return githubRepoRef{Repo: r.Repo} }
 
 // githubPagesUpdateReq updates a live site. A nil pointer leaves a field unchanged;
 // CNAME=="" clears the custom domain, a non-empty CNAME sets it.
@@ -126,7 +126,7 @@ type githubPagesUpdateReq struct {
 }
 
 // ref is the repo this request addresses, normalized like every other :repo op.
-func (r githubPagesUpdateReq) ref() repoRef { return repoRef{Repo: r.Repo} }
+func (r githubPagesUpdateReq) ref() githubRepoRef { return githubRepoRef{Repo: r.Repo} }
 
 // githubPagesUpdatedOut acknowledges an update. The site's new state is a GET away;
 // GitHub's PUT answers no body of its own.
@@ -418,7 +418,7 @@ func pagesTarget(ctx context.Context, repo string) (pagesRepo, error) {
 //
 // Example: {"repo":"widgets"}
 // Response: {"repo":"widgets","status":"built","url":"https://acme.github.io/widgets/","cname":"docs.acme.com","custom404":false,"buildType":"legacy","httpsEnforced":true,"source":{"branch":"main","path":"/docs"}}
-func (o ops) githubPagesGet(ctx context.Context, in *repoRef) (*githubPagesView, error) {
+func (o ops) githubPagesGet(ctx context.Context, in *githubRepoRef) (*githubPagesView, error) {
 	repo := in.name()
 	pr, err := pagesTarget(ctx, repo)
 	if err != nil {
@@ -556,7 +556,7 @@ func (o ops) githubPagesUpdate(ctx context.Context, in *githubPagesUpdateReq) (*
 //
 // Example: {"repo":"widgets"}
 // Response: {"repo":"widgets","disabled":true}
-func (o ops) githubPagesDisable(ctx context.Context, in *repoRef) (*githubPagesDisabledOut, error) {
+func (o ops) githubPagesDisable(ctx context.Context, in *githubRepoRef) (*githubPagesDisabledOut, error) {
 	repo := in.name()
 	pr, err := pagesTarget(ctx, repo)
 	if err != nil {
@@ -575,30 +575,46 @@ func (o ops) githubPagesDisable(ctx context.Context, in *repoRef) (*githubPagesD
 	return &githubPagesDisabledOut{Repo: repo, Disabled: true}, nil
 }
 
-// githubPagesBuild requests a Pages rebuild and returns the queued build's status.
-// RAW (202 Accepted): the build is queued at GitHub, not completed here.
-func githubPagesBuild(_ *cloud.Service[state], c *zip.Ctx) error {
-	repo := strings.TrimSuffix(strings.TrimSpace(c.Param("repo")), ".git")
-	pr, err := pagesTarget(c.Context(), repo)
+// githubPagesBuildOut is the build GitHub queued. Status and URL come straight
+// from GitHub's own build object and are empty when it named neither.
+type githubPagesBuildOut struct {
+	// Repo is the repository the build was queued for.
+	Repo string `json:"repo"`
+	// Status is GitHub's build state at the moment it was queued ("queued").
+	Status string `json:"status"`
+	// URL is GitHub's API URL for the build, for polling it there.
+	URL string `json:"url"`
+}
+
+// GithubPagesBuild requests a Pages rebuild and returns the queued build's status.
+// The build is queued AT GITHUB, not completed here, so the answer is 202 Accepted
+// and its status is the one GitHub reported at queue time. 404 when the repository
+// has no Pages site, or when the org's installation was not granted it.
+//
+// Example: {"repo":"widgets"}
+// Response: {"repo":"widgets","status":"queued","url":"https://api.github.com/repos/acme/widgets/pages/builds/1"}
+func (o ops) githubPagesBuild(ctx context.Context, in *githubRepoRef) (*githubPagesBuildOut, error) {
+	repo := in.name()
+	pr, err := pagesTarget(ctx, repo)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	status, body, hdr, callErr := pr.request(c.Context(), http.MethodPost, "/builds", nil)
+	status, body, hdr, callErr := pr.request(ctx, http.MethodPost, "/builds", nil)
 	if callErr != nil {
-		return zip.Errorf(http.StatusBadGateway, "github pages: %v", callErr)
+		return nil, zip.Errorf(http.StatusBadGateway, "github pages: %v", callErr)
 	}
 	if status == http.StatusNotFound {
-		return zip.Errorf(http.StatusNotFound, "github pages is not enabled for this repository")
+		return nil, zip.Errorf(http.StatusNotFound, "github pages is not enabled for this repository")
 	}
 	if status/100 != 2 {
-		return pagesErr(status, body, hdr)
+		return nil, pagesErr(status, body, hdr)
 	}
 	var b struct {
 		URL    string `json:"url"`
 		Status string `json:"status"`
 	}
 	_ = json.Unmarshal(body, &b)
-	return c.JSON(http.StatusAccepted, map[string]any{"repo": repo, "status": b.Status, "url": b.URL})
+	return &githubPagesBuildOut{Repo: repo, Status: b.Status, URL: b.URL}, nil
 }
 
 // normalizePagesPath enforces GitHub Pages' only two legal source paths: the repo
