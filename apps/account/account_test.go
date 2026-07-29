@@ -328,7 +328,7 @@ func TestKeys_MintGetRevoke_ScopedToCaller(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("get pre-mint: want 200, got %d (%s)", code, body)
 	}
-	var st keyList
+	var st apiKeyList
 	mustJSON(t, body, &st)
 	if len(st.Keys) != 0 {
 		t.Fatalf("pre-mint key set should be empty: %s", body)
@@ -422,7 +422,7 @@ func TestKeys_PublishableTypeIsAFieldNotAnEndpoint(t *testing.T) {
 	// A publishable key is LISTED WITH ITS FULL VALUE — it is public by construction
 	// and useless to its holder if it cannot be read back.
 	_, body = call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", "")
-	var st keyList
+	var st apiKeyList
 	mustJSON(t, body, &st)
 	if len(st.Keys) != 1 || st.Keys[0].Type != "publishable" {
 		t.Fatalf("want one publishable key listed, got %s", body)
@@ -442,7 +442,7 @@ func TestKeys_TypesAreIndependent(t *testing.T) {
 	call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", `{"type":"secret"}`)
 	call(t, app, http.MethodPost, "/v1/keys", "alice", "acme", `{"type":"publishable"}`)
 
-	var st keyList
+	var st apiKeyList
 	_, body := call(t, app, http.MethodGet, "/v1/keys", "alice", "acme", "")
 	mustJSON(t, body, &st)
 	if len(st.Keys) != 2 {
@@ -716,7 +716,7 @@ func TestIAMKeysBeatsWildcard(t *testing.T) {
 	if strings.Contains(string(body), "iam-wildcard") {
 		t.Fatalf("/v1/iam/keys reached the wildcard, not the native handler: %s", body)
 	}
-	var st keyList
+	var st apiKeyList
 	mustJSON(t, body, &st) // native response shape
 
 	// POST /v1/iam/keys (mint) must ALSO hit the native handler and target the derived id.

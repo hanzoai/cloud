@@ -41,6 +41,21 @@
 // Both share one state shape + the process-wide CSRF key (csrf.go), so a token minted at
 // /v1/csrf verifies on the /v1/billing|commerce writes.
 //
+// TYPED OPS. Nine of these are typed ops (zip.Get/Post with real In/Out types), so
+// each is ONE registry entry the REST route, the OpenAPI operation's schema and
+// prose, the MCP tool, the CLI command and every generated SDK method all derive
+// from. Nine routes are deliberately NOT, and the reason is the wire in both cases:
+//
+//   - DELETE /v1/keys and DELETE /v1/iam/keys select the key class from `?type=`
+//     with a fallback to the JSON BODY, and a typed DELETE carries no body (zip's
+//     hasBody). Typing them would silently revoke the wrong credential for a caller
+//     that sends the class in the body, so they keep their raw handler until that
+//     fallback is retired on purpose.
+//   - The /v1/billing/* and /v1/commerce/* bridges are catch-alls: the path is a
+//     wildcard remainder, the body is forwarded verbatim to another service and the
+//     answer is that service's bytes and status. There is no In and no Out to name —
+//     they are opaque by construction, not by omission.
+//
 // TENANCY. The caller is resolved from the VALIDATED identity headers ONLY
 // (principal.Validated / c.Org() / c.User()), the same trust boundary every mutating
 // subsystem uses. The IAM id targeted is DERIVED as `<owner>/<name>` from those
@@ -114,7 +129,9 @@ func MountAccount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("account.MountAccount: nil deps.Logger")
 	}
 	s := newService(deps)
-	routesAccount(s, app)
+	if err := routesAccount(s, app); err != nil {
+		return err
+	}
 	s.Log.Info("account self-service surface mounted",
 		"iam", s.State.iam.base, "configured", s.State.iam.configured(), "brand", s.Brand)
 	return nil
@@ -135,11 +152,56 @@ func MountBridge(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by
+// `make -C apps/account openapi`.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // routesAccount wires the specific self-service routes (order 48).
-func routesAccount(s *cloud.Service[state], app cloud.Router) {
+func routesAccount(s *cloud.Service[state], app cloud.Router) error {
+	// Bridge FIRST: a typed op receives only a context, so the request facts its
+	// signature drops — here the VALIDATED principal every route resolves its caller
+	// from — reach it by being parked there. fiber runs middleware in registration
+	// order, so this must precede the leaves below. Serve installs one app-wide too
+	// and nesting is harmless (the inner one is what the handler sees); this one is
+	// what makes the subsystem self-sufficient when it is mounted on a bare app,
+	// which is exactly what its own tests do.
+	//
+	// It goes through Use, not Group(prefix, mw): account's routes are spread across
+	// six top-level nouns, so it owns no single prefix to hang a group on — and
+	// Router.Use is the door that fans middleware out over the prefixes the
+	// composition root declared for this subsystem, which is precisely that set.
+	app.Use(cloud.Bridge())
+
+	// The typed registrars take the App behind the Router: a typed op is a route
+	// PLUS a registry entry, and the registry lives on the App (scope.go). A
+	// subsystem that cannot reach it must fail its mount rather than serve routes no
+	// projection knows about.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("account.MountAccount: router exposes no zip.App, so no typed op could be registered")
+	}
+	o := ops{s: s}
+
+	// The five request pipelines, each declared once. `With` composes middleware
+	// around a leaf at registration time (limit(csrf(handler))) and carries into the
+	// typed registration, so a typed op is gated exactly as the untyped route beside
+	// it — a decorator that dropped the gate there would register the op ungated.
+	// The trailing Group is the path prefix these routes share, and each op's
+	// identity is that prefix composed with its leaf.
+	limit, csrf := rateLimit(s.State.writesRL), requireCSRF(s)
+	deprecated := deprecatedFor("/v1/keys")
+	open := app.Group("/v1")                                      // reads: no gate
+	write := zapp.With(limit, csrf).Group("/v1")                  // money writes
+	guard := zapp.With(csrf).Group("/v1")                         // a write that is not rate-limited
+	alias := zapp.With(deprecated).Group("/v1")                   // deprecated read alias
+	aliasWrite := zapp.With(deprecated, limit, csrf).Group("/v1") // deprecated write alias
+
 	// GET /v1/csrf issues the anti-CSRF token the embedded SPA echoes as X-CSRF-Token on
 	// every money write (csrf.go). Safe (read-only), same-origin.
-	app.Get("/v1/csrf", cloud.Handle(s, issueCSRFToken))
+	zip.Get(open, "/csrf", o.issueCSRFToken)
 	// The caller's own API keys. ONE noun, the methods carry the operations, and the
 	// key TYPE (publishable | secret) is a FIELD — the concept had four names
 	// (/v1/iam/mint-user-keys, /v1/iam/revoke-user-keys, /v1/iam/keys,
@@ -155,9 +217,15 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) {
 	// Reads are open; every state-changing WRITE is wrapped: requireCSRF blocks a
 	// cross-site ambient-cookie forgery, and rateLimit caps per-IP frequency (cloud is
 	// reachable off-gateway).
-	app.Get("/v1/keys", cloud.Handle(s, getKey))
-	app.Post("/v1/keys", rateLimit(s, s.State.writesRL, requireCSRF(s, cloud.Handle(s, mintKey))))
-	app.Delete("/v1/keys", rateLimit(s, s.State.writesRL, requireCSRF(s, cloud.Handle(s, revokeKey))))
+	zip.Get(open, "/keys", o.getKey)
+	zip.Post(write, "/keys", o.mintKey)
+	// DELETE stays UNTYPED, deliberately. keyType() reads the key class from `?type=`
+	// and FALLS BACK TO THE JSON BODY, and a typed DELETE carries no body at all
+	// (zip's hasBody: GET/HEAD/DELETE) — so typing it would make a body-selected
+	// revoke silently revoke the caller's SECRET key instead of the publishable one
+	// it named. That is a wire change on a credential-revocation route, so the route
+	// keeps its raw handler until the body fallback is retired on purpose. See LLM.md.
+	app.Delete("/v1/keys", limit(csrf(cloud.Handle(s, revokeKey))))
 	// DEPRECATED alias of /v1/keys, kept because the go:embed console addresses it
 	// directly (src/lib/api/keys.ts, IS_EMBED build) against cloud's own origin,
 	// where it is not shadowed by the edge. The SAME handlers — an alias, never a
@@ -165,21 +233,22 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) {
 	// These SPECIFIC routes MUST register before clients/iam's /v1/iam/* wildcard
 	// (order 50 > 48) so Fiber's first-match scan hits the native handler
 	// (TestIAMKeysBeatsWildcard).
-	app.Get("/v1/iam/keys", deprecatedFor("/v1/keys", cloud.Handle(s, getKey)))
-	app.Post("/v1/iam/keys", deprecatedFor("/v1/keys", rateLimit(s, s.State.writesRL, requireCSRF(s, cloud.Handle(s, mintKey)))))
-	app.Delete("/v1/iam/keys", deprecatedFor("/v1/keys", rateLimit(s, s.State.writesRL, requireCSRF(s, cloud.Handle(s, revokeKey)))))
-	app.Post("/v1/iam/onboard", requireCSRF(s, cloud.Handle(s, onboard)))
+	zip.Get(alias, "/iam/keys", o.getKey)
+	zip.Post(aliasWrite, "/iam/keys", o.mintKey)
+	app.Delete("/v1/iam/keys", deprecated(limit(csrf(cloud.Handle(s, revokeKey)))))
+	zip.Post(guard, "/iam/onboard", o.onboard)
 	// Console module embed-entitlement + reachability probe (embed.go).
-	app.Get("/v1/embed-status", cloud.Handle(s, embedStatus))
+	zip.Get(open, "/embed-status", o.embedStatus)
 	// HUSD wallet top-up (on-chain verify → commerce credit). A SPECIFIC commerce route
 	// that must beat the /v1/commerce/* bridge (122) AND the commerce embed (100) — so it
 	// mounts here at 48, ahead of both.
-	app.Post("/v1/commerce/topup/wallet", rateLimit(s, s.State.writesRL, requireCSRF(s, cloud.Handle(s, walletTopup))))
+	zip.Post(write, "/commerce/topup/wallet", o.walletTopup)
 	// The accepted rails are public on-chain data (chain, token, treasury), read by
 	// the browser to render the send UI. A GET with no side effects and no secret,
 	// so it needs neither CSRF nor the write limiter — but it MUST sit beside the
 	// POST at this priority, or the /v1/commerce/* bridge swallows it.
-	app.Get("/v1/commerce/topup/rails", cloud.Handle(s, topupRails))
+	zip.Get(open, "/commerce/topup/rails", o.topupRails)
+	return nil
 }
 
 // routesBridge wires the per-tenant catch-all data bridges (order 122).
@@ -192,17 +261,54 @@ func routesBridge(s *cloud.Service[state], app cloud.Router) {
 	// billingForwardable allowlist decides that, per method, and 404s everything else
 	// BEFORE the admin service token is attached. Widening this pattern grants nothing on
 	// its own; adding a line to that table is the only way to expose an endpoint.
+	csrf := requireCSRF(s)
 	app.Get("/v1/billing/*", cloud.Handle(s, billingData))
-	app.Post("/v1/billing/*", requireCSRF(s, cloud.Handle(s, billingData)))
+	app.Post("/v1/billing/*", csrf(cloud.Handle(s, billingData)))
 	// Per-tenant STORE DATA bridge — the canonical /v1/commerce/* the console calls,
 	// forwarded to commerce's bare store surface /v1/<kind> with the admin service token
 	// and SCOPED to the validated caller's own org (commerce.go). Registered AFTER the
 	// commerce embed (100 < 122) so the embed wins when enabled. Full CRUD.
 	app.Get("/v1/commerce/*", cloud.Handle(s, commerceData))
-	app.Post("/v1/commerce/*", requireCSRF(s, cloud.Handle(s, commerceData)))
-	app.Put("/v1/commerce/*", requireCSRF(s, cloud.Handle(s, commerceData)))
-	app.Patch("/v1/commerce/*", requireCSRF(s, cloud.Handle(s, commerceData)))
-	app.Delete("/v1/commerce/*", requireCSRF(s, cloud.Handle(s, commerceData)))
+	app.Post("/v1/commerce/*", csrf(cloud.Handle(s, commerceData)))
+	app.Put("/v1/commerce/*", csrf(cloud.Handle(s, commerceData)))
+	app.Patch("/v1/commerce/*", csrf(cloud.Handle(s, commerceData)))
+	app.Delete("/v1/commerce/*", csrf(cloud.Handle(s, commerceData)))
+}
+
+// ops binds the service to the typed account ops. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value (o.mintKey), which is also
+// the only bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
+
+// noInput is the In of an op that takes nothing off the wire: it is addressed
+// entirely by the caller's own validated principal.
+type noInput struct{}
+
+// requestCaller is resolveCaller for a typed op. Account's entire surface is the
+// signed-in caller's OWN account, and resolving them needs more of the validated
+// principal than the tenant: the user id (X-User-Id), the IAM username
+// (X-User-Name) and validated-ness itself, none of which principal.OrgFrom
+// carries. So this package reaches for the REQUEST, in this ONE function, and
+// every op asks it rather than reading headers of its own.
+//
+// It fails closed off the HTTP path (the CLI's LocalInvoke, where there is no
+// request): no request, no attested caller, no account — the same refusal an
+// anonymous HTTP caller gets, with no second gate to keep in sync.
+//
+// The *zip.Ctx comes back with the caller because two ops need the request for
+// more than identity: issueCSRFToken pins Cache-Control on its response, and
+// embedStatus reads the SuperAdmin claim (X-User-IsAdmin) that lives in a header.
+func requestCaller(ctx context.Context, requireOwner bool) (caller, *zip.Ctx, bool) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return caller{}, nil, false
+	}
+	cr, ok := resolveCaller(c, requireOwner)
+	if !ok {
+		return caller{}, nil, false
+	}
+	return cr, c, true
 }
 
 // ── caller resolution (the tenancy boundary) ─────────────────────────────────
@@ -287,39 +393,60 @@ const (
 	keyTypePublishable = "publishable"
 )
 
-// keyRecord is one key as a caller may see it: what it is, enough of it to
+// apiKey is one API key as a caller may see it: what it is, enough of it to
 // recognize, and when it last changed. NEVER secret material — the secret is
 // returned once, by the POST that mints it, and is unreadable afterwards.
 //
 // A publishable key is the exception that proves the rule: `key` carries its FULL
 // value, because a publishable key is public by construction and useless to its
 // holder if they cannot read it back.
-type keyRecord struct {
-	Type      string `json:"type"`
-	Prefix    string `json:"prefix,omitempty"`
-	Key       string `json:"key,omitempty"`
+type apiKey struct {
+	// Type is the key class: secret (sk-) or publishable (pk-).
+	Type string `json:"type"`
+	// Prefix is the recognizable, non-secret head of the key — enough to tell two
+	// keys apart, never enough to use one.
+	Prefix string `json:"prefix,omitempty"`
+	// Key is the FULL value, and is present for a publishable key only: it is
+	// public by construction and useless to its holder if it cannot be read back.
+	Key string `json:"key,omitempty"`
+	// CreatedAt is when the key last changed, as IAM records it.
 	CreatedAt string `json:"createdAt,omitempty"`
 }
 
-// keyList is the GET /v1/keys body.
-type keyList struct {
-	Keys []keyRecord `json:"keys"`
+// apiKeyList is the caller's own API keys. Named for what they ARE rather than
+// the shorter `keyList`, which the fleet's flat schema namespace already spends on
+// git's SSH deploy keys — one name for two shapes would bind every generated SDK to
+// whichever it read last (openapi/weave.go refuses it).
+type apiKeyList struct {
+	// Keys is every key the caller holds, at most one per type.
+	Keys []apiKey `json:"keys"`
 }
 
-// keyType reads the requested type off the request — `?type=` or a {"type":…}
-// body — and defaults to secret, which is what every existing caller means.
-// An unrecognized value is refused rather than defaulted: a caller asking for a
-// browser-safe key must never be handed a session-equivalent secret by accident.
-func keyType(c *zip.Ctx) (string, bool) {
-	t := strings.TrimSpace(c.Query("type"))
-	if t == "" {
-		var body struct {
-			Type string `json:"type"`
-		}
-		_ = json.Unmarshal(c.Body(), &body)
-		t = strings.TrimSpace(body.Type)
-	}
-	switch t {
+// keyTypeIn names which key class an op acts on.
+type keyTypeIn struct {
+	// Type is the key class to act on: "secret" (sk-, session-equivalent, belongs
+	// on a server) or "publishable" (pk-, org-identifying, safe in a browser
+	// bundle). Omitted means secret, which is what every existing caller means.
+	Type string `json:"type"`
+}
+
+// mintedKey is the one-time reveal of a freshly minted key.
+type mintedKey struct {
+	// Type is the class of key that was minted.
+	Type string `json:"type"`
+	// Key is the credential, returned ONCE — a secret key is unreadable afterwards.
+	Key string `json:"key"`
+	// AccessKey is the same value under its predecessor name, carried so callers
+	// written against the older field keep working. One value, two names.
+	AccessKey string `json:"accessKey"`
+}
+
+// keyClass normalizes a requested key type: empty means secret, which is what
+// every existing caller means. An unrecognized value is refused rather than
+// defaulted — a caller asking for a browser-safe key must never be handed a
+// session-equivalent secret by accident.
+func keyClass(t string) (string, bool) {
+	switch strings.TrimSpace(t) {
 	case "", keyTypeSecret:
 		return keyTypeSecret, true
 	case keyTypePublishable:
@@ -328,27 +455,49 @@ func keyType(c *zip.Ctx) (string, bool) {
 	return "", false
 }
 
-// getKey answers GET /v1/keys — the caller's keys, of every type, read
-// AUTHORITATIVELY from IAM (not the session claim, which lags a fresh key).
-func getKey(s *cloud.Service[state], c *zip.Ctx) error {
-	cr, ok := resolveCaller(c, true)
+// keyType reads the requested type off the request — `?type=` or a {"type":…}
+// body — and normalizes it through keyClass. It survives for the DELETE routes,
+// which are the ones that still read the class out of a request BODY (see
+// routesAccount); the typed ops take it as a field instead.
+func keyType(c *zip.Ctx) (string, bool) {
+	t := strings.TrimSpace(c.Query("type"))
+	if t == "" {
+		var body struct {
+			Type string `json:"type"`
+		}
+		_ = json.Unmarshal(c.Body(), &body)
+		t = body.Type
+	}
+	return keyClass(t)
+}
+
+// GetKey returns the caller's own API keys — every type they hold, read
+// AUTHORITATIVELY from IAM rather than from the session claim, which lags a key
+// minted moments ago. No secret material comes back: a secret key is represented
+// by its prefix, and only a publishable key (public by construction) carries its
+// full value.
+//
+// A transient IAM read failure reports an empty set rather than a 5xx, so the
+// page shows the honest empty state and never a fabricated key.
+func (o ops) getKey(ctx context.Context, _ *noInput) (*apiKeyList, error) {
+	cr, c, ok := requestCaller(ctx, true)
 	if !ok {
-		return zip.ErrForbidden("sign in to manage API keys")
+		return nil, zip.ErrForbidden("sign in to manage API keys")
 	}
-	if !s.State.iam.configured() {
-		return notConfigured("API key management")
+	if !o.s.State.iam.configured() {
+		return nil, notConfigured("API key management")
 	}
-	rows, err := s.State.iam.userKeys(c.Context(), cr.owner, cr.username)
+	rows, err := o.s.State.iam.userKeys(c.Context(), cr.owner, cr.username)
 	if err != nil {
 		// Fail-soft on a transient IAM read: report an empty set rather than 5xx, so the
 		// page shows the honest empty state (never a fabricated key). The mint path
 		// still 502s loudly on a real failure — reads degrade, writes do not.
-		s.Log.Warn("get keys: iam read failed (reporting none)", "err", err)
-		return c.JSON(http.StatusOK, keyList{Keys: []keyRecord{}})
+		o.s.Log.Warn("get keys: iam read failed (reporting none)", "err", err)
+		return &apiKeyList{Keys: []apiKey{}}, nil
 	}
-	out := keyList{Keys: make([]keyRecord, 0, len(rows))}
+	out := apiKeyList{Keys: make([]apiKey, 0, len(rows))}
 	for _, r := range rows {
-		rec := keyRecord{Type: keyTypeSecret, CreatedAt: r.UpdatedTime}
+		rec := apiKey{Type: keyTypeSecret, CreatedAt: r.UpdatedTime}
 		if r.Scope == iamScopePublish {
 			// Publishable: hand back the whole value. It is the one a browser bundle
 			// carries, and there is no second chance to read it.
@@ -360,7 +509,7 @@ func getKey(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		out.Keys = append(out.Keys, rec)
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
 // prefixOf is the recognizable, non-secret head of a key — enough for a holder to
@@ -372,32 +521,33 @@ func prefixOf(key string) string {
 	return key
 }
 
-// mintKey answers POST /v1/keys — create (or rotate) the caller's key of the
-// requested type and return it ONCE. A real IAM failure surfaces as 502, never a
-// fabricated key.
+// MintKey creates — or rotates — the caller's API key of the requested type and
+// returns it ONCE. A real IAM failure surfaces as 502, never a fabricated key.
 //
 // Rotating is what creating means here: a user holds one key per type, so the
 // endpoint is idempotent by (caller, type) and the superseded credential stops
 // working. Two live secrets for one user would make "revoke my key" a lie.
-func mintKey(s *cloud.Service[state], c *zip.Ctx) error {
-	cr, ok := resolveCaller(c, true)
+//
+// Example: {"type": "publishable"}
+func (o ops) mintKey(ctx context.Context, in *keyTypeIn) (*mintedKey, error) {
+	cr, c, ok := requestCaller(ctx, true)
 	if !ok {
-		return zip.ErrForbidden("sign in to manage API keys")
+		return nil, zip.ErrForbidden("sign in to manage API keys")
 	}
-	if !s.State.iam.configured() {
-		return notConfigured("API key management")
+	if !o.s.State.iam.configured() {
+		return nil, notConfigured("API key management")
 	}
-	typ, ok := keyType(c)
+	typ, ok := keyClass(in.Type)
 	if !ok {
-		return zip.ErrBadRequest("type must be " + keyTypeSecret + " or " + keyTypePublishable)
+		return nil, zip.ErrBadRequest("type must be " + keyTypeSecret + " or " + keyTypePublishable)
 	}
-	key, err := s.State.iam.mintUserKey(c.Context(), cr.keyID(), typ)
+	key, err := o.s.State.iam.mintUserKey(c.Context(), cr.keyID(), typ)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "could not mint an API key: %v", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "could not mint an API key: %v", err)
 	}
 	// `key` is the canonical field and `accessKey` its predecessor, carried so the
 	// live console keeps working across the deploy; both are the same one value.
-	return c.JSON(http.StatusOK, map[string]string{"type": typ, "key": key, "accessKey": key})
+	return &mintedKey{Type: typ, Key: key, AccessKey: key}, nil
 }
 
 // revokeKey answers DELETE /v1/keys — revoke the caller's key of the requested
@@ -421,32 +571,47 @@ func revokeKey(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"ok": true, "type": typ})
 }
 
-// deprecatedFor wraps a handler served at a superseded path: it answers exactly as
+// deprecatedFor gates a route served at a superseded path: it answers exactly as
 // the canonical path does — the SAME handler, so there is one implementation — and
 // says so on the wire (RFC 8594 Deprecation + a Link naming the successor), which is
 // how a caller finds out without reading a changelog.
-func deprecatedFor(canonical string, next zip.Handler) zip.Handler {
-	return func(c *zip.Ctx) error {
-		c.SetHeader("Deprecation", "true")
-		c.SetHeader("Link", "<"+canonical+`>; rel="successor-version"`)
-		return next(c)
+//
+// It is a zip.Middleware so ONE definition serves both the typed ops (through
+// With, which carries it into the registration) and the raw handler the untyped
+// DELETE still uses.
+func deprecatedFor(canonical string) zip.Middleware {
+	return func(next zip.Handler) zip.Handler {
+		return func(c *zip.Ctx) error {
+			c.SetHeader("Deprecation", "true")
+			c.SetHeader("Link", "<"+canonical+`>; rel="successor-version"`)
+			return next(c)
+		}
 	}
 }
 
 // ── onboard (create the caller's org) ────────────────────────────────────────
 
 type onboardReq struct {
-	Name     string `json:"name"`
-	Personal bool   `json:"personal"`
+	// Name is the organization's display name. Ignored when personal is true, which
+	// derives the name from the caller's own username instead.
+	Name string `json:"name"`
+	// Personal asks for the caller's own workspace: the name is derived from their
+	// username and the slug auto-suffixes to stay unique. Meaningless — and refused
+	// — for a caller who already has an organization.
+	Personal bool `json:"personal"`
 }
 
 type onboardResp struct {
-	Org         string `json:"org"`
+	// Org is the created organization's slug, which is what X-Org-Id carries.
+	Org string `json:"org"`
+	// DisplayName is the organization's human name.
 	DisplayName string `json:"displayName"`
-	Additional  bool   `json:"additional"`
+	// Additional is true when the caller already had an organization and this one
+	// was created WITHOUT moving them into it — they reach it via the org switcher.
+	Additional bool `json:"additional"`
 }
 
-// onboard creates the caller's organization. Two flows, keyed on whether the caller
+// Onboard creates the caller's organization. Two flows, keyed on whether the caller
 // already has a home org (mirrors app/onboard/route.ts):
 //
 //   - FIRST-RUN (no owner): create + MOVE the user in as admin, so their next JWT
@@ -456,47 +621,46 @@ type onboardResp struct {
 //     current org). They reach the new org via the OrgSwitcher, which re-scopes
 //     X-Org-Id without touching IAM membership. A personal-org request from someone
 //     who already has an org is meaningless → 409.
-func onboard(s *cloud.Service[state], c *zip.Ctx) error {
-	cr, ok := resolveCaller(c, false) // first-run onboarding allows a zero-org user
+//
+// Example: {"name": "Acme"}
+func (o ops) onboard(ctx context.Context, in *onboardReq) (*onboardResp, error) {
+	cr, c, ok := requestCaller(ctx, false) // first-run onboarding allows a zero-org user
 	if !ok {
-		return zip.ErrForbidden("sign in to create an organization")
+		return nil, zip.ErrForbidden("sign in to create an organization")
 	}
+	s := o.s
 	if !s.State.iam.configured() {
-		return notConfigured("organization creation")
+		return nil, notConfigured("organization creation")
 	}
-	var body onboardReq
-	if len(c.Body()) > 0 {
-		if err := c.Bind(&body); err != nil {
-			return err
-		}
-	}
+	body := *in
+	rctx := c.Context()
 
 	additional := cr.owner != ""
 	if additional && body.Personal {
-		return zip.ErrConflict("you already have an organization; name the new one explicitly")
+		return nil, zip.ErrConflict("you already have an organization; name the new one explicitly")
 	}
 
 	baseSlug, displayName, herr := resolveOnboardName(s, body, cr)
 	if herr != nil {
-		return herr
+		return nil, herr
 	}
 
 	// Resolve a unique slug. Personal orgs auto-suffix to stay unique; an explicit
 	// name that's taken is an honest conflict the user resolves by renaming.
-	slug, herr := uniqueSlug(s, c, baseSlug, body.Personal)
+	slug, herr := uniqueSlug(s, rctx, baseSlug, body.Personal)
 	if herr != nil {
-		return herr
+		return nil, herr
 	}
 
 	// ADDITIONAL org (caller already has a home): create it WITHOUT moving them —
 	// they reach it via the OrgSwitcher (a move would strip their SuperAdmin / orphan
 	// their current org).
 	if additional {
-		org := buildOrg(s, c, slug, displayName, body.Personal, cr.owner)
-		if err := s.State.iam.createOrganization(c.Context(), org); err != nil {
-			return zip.Errorf(http.StatusBadGateway, "could not create the organization: %v", err)
+		org := buildOrg(s, rctx, slug, displayName, body.Personal, cr.owner)
+		if err := s.State.iam.createOrganization(rctx, org); err != nil {
+			return nil, zip.Errorf(http.StatusBadGateway, "could not create the organization: %v", err)
 		}
-		return c.JSON(http.StatusOK, onboardResp{Org: slug, DisplayName: displayName, Additional: true})
+		return &onboardResp{Org: slug, DisplayName: displayName, Additional: true}, nil
 	}
 
 	// FIRST-RUN: drive the ONE atomic IAM provision (org + admin move + hashed
@@ -506,22 +670,22 @@ func onboard(s *cloud.Service[state], c *zip.Ctx) error {
 	// service-token path is wired; fall back to the legacy pair only when it is not,
 	// so a partial deploy still onboards.
 	if s.State.iam.provisionReady() {
-		resp, err := onboardFirstRun(c.Context(), s.State.iam, cr.id, slug, displayName, body.Personal)
+		resp, err := onboardFirstRun(rctx, s.State.iam, cr.id, slug, displayName, body.Personal)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return c.JSON(http.StatusOK, resp)
+		return &resp, nil
 	}
 
 	// Legacy fallback (service token unset): create then move — the non-atomic pair.
-	org := buildOrg(s, c, slug, displayName, body.Personal, cr.owner)
-	if err := s.State.iam.createOrganization(c.Context(), org); err != nil {
-		return zip.Errorf(http.StatusBadGateway, "could not create the organization: %v", err)
+	org := buildOrg(s, rctx, slug, displayName, body.Personal, cr.owner)
+	if err := s.State.iam.createOrganization(rctx, org); err != nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "could not create the organization: %v", err)
 	}
-	if err := s.State.iam.moveUserToOrg(c.Context(), cr.id, slug); err != nil {
-		return zip.Errorf(http.StatusBadGateway, "org created but could not assign you to it: %v", err)
+	if err := s.State.iam.moveUserToOrg(rctx, cr.id, slug); err != nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "org created but could not assign you to it: %v", err)
 	}
-	return c.JSON(http.StatusOK, onboardResp{Org: slug, DisplayName: displayName, Additional: false})
+	return &onboardResp{Org: slug, DisplayName: displayName, Additional: false}, nil
 }
 
 // onboardFirstRun drives the ONE atomic IAM provision for a zero-org caller (create
@@ -562,8 +726,8 @@ func resolveOnboardName(s *cloud.Service[state], body onboardReq, cr caller) (ba
 
 // uniqueSlug returns a free slug at/after base. A named org that's taken is a 409;
 // a personal org auto-suffixes (base, base-2, …) up to a small bound.
-func uniqueSlug(s *cloud.Service[state], c *zip.Ctx, base string, personal bool) (string, error) {
-	existing, err := s.State.iam.getOrganization(c.Context(), base)
+func uniqueSlug(s *cloud.Service[state], ctx context.Context, base string, personal bool) (string, error) {
+	existing, err := s.State.iam.getOrganization(ctx, base)
 	if err != nil {
 		return "", zip.Errorf(http.StatusBadGateway, "could not check organization availability: %v", err)
 	}
@@ -573,7 +737,7 @@ func uniqueSlug(s *cloud.Service[state], c *zip.Ctx, base string, personal bool)
 	if !personal {
 		return "", zip.Errorf(http.StatusConflict, "“%s” is taken; choose a different name", base)
 	}
-	free, err := freeSlug(s, c, base)
+	free, err := freeSlug(s, ctx, base)
 	if err != nil {
 		return "", err
 	}
@@ -585,7 +749,7 @@ func uniqueSlug(s *cloud.Service[state], c *zip.Ctx, base string, personal bool)
 
 // freeSlug finds the first free slug at/after base (base, base-2, … base-20), or ""
 // if all are taken. Mirrors identity.ts's freeSlug bound of 20.
-func freeSlug(s *cloud.Service[state], c *zip.Ctx, base string) (string, error) {
+func freeSlug(s *cloud.Service[state], ctx context.Context, base string) (string, error) {
 	for i := 2; i <= 20; i++ {
 		trimmed := base
 		if len(trimmed) > maxOrgSlug-3 {
@@ -595,7 +759,7 @@ func freeSlug(s *cloud.Service[state], c *zip.Ctx, base string) (string, error) 
 		if len(candidate) < minOrgSlug || isReservedOrg(candidate) {
 			continue
 		}
-		existing, err := s.State.iam.getOrganization(c.Context(), candidate)
+		existing, err := s.State.iam.getOrganization(ctx, candidate)
 		if err != nil {
 			return "", zip.Errorf(http.StatusBadGateway, "could not check organization availability: %v", err)
 		}
@@ -610,12 +774,12 @@ func freeSlug(s *cloud.Service[state], c *zip.Ctx, base string) (string, error) 
 // password/locale settings from the caller's current org (best-effort; a nil source
 // just yields a minimal org IAM completes with its defaults) and clearing all
 // instance-specific material. Mirrors identity.ts's createOrganization body.
-func buildOrg(s *cloud.Service[state], c *zip.Ctx, slug, displayName string, personal bool, sourceOwner string) iamOrg {
+func buildOrg(s *cloud.Service[state], ctx context.Context, slug, displayName string, personal bool, sourceOwner string) iamOrg {
 	org := iamOrg{Owner: adminOrg, Name: slug, DisplayName: displayName, IsPersonal: personal}
 	if sourceOwner == "" {
 		return org
 	}
-	src, err := s.State.iam.getOrganization(c.Context(), sourceOwner)
+	src, err := s.State.iam.getOrganization(ctx, sourceOwner)
 	if err != nil || src == nil {
 		return org // clone is best-effort; IAM applies its org defaults otherwise
 	}
