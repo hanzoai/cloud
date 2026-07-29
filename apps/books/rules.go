@@ -44,21 +44,29 @@ func (s *store) matchRule(ctx context.Context, raw string) (account string, foun
 
 // ── handlers ──
 
-// rulesListHandler answers GET /v1/books/rules: the org's rules, priority-descending.
-func rulesListHandler(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to view rules")
-	}
-	st, err := s.State.storeFor(org, sandboxQuery(c))
+// rulesOut is the org's categorization rule book.
+type rulesOut struct {
+	// Rules is every rule the org has set, highest priority first — the order they
+	// are matched in.
+	Rules []Rule `json:"rules"`
+}
+
+// ListRules returns the org's auto-categorization rules, highest priority first. A rule
+// is a standing instruction — "anything whose merchant contains X books to category Y" —
+// and it overrides a vendor's default category, so this is the list that decides how a
+// future bill classifies itself.
+//
+// Example: {"sandbox": "false"}
+func (o booksOps) listRules(ctx context.Context, in *ledgerIn) (*rulesOut, error) {
+	st, err := o.ledger(ctx, in.Sandbox, "view rules")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "books open failed")
+		return nil, err
 	}
-	rules, err := st.listRules(c.Context())
+	rules, err := st.listRules(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rules read failed")
+		return nil, zip.Errorf(http.StatusInternalServerError, "rules read failed")
 	}
-	return booksJSON(c, map[string]any{"rules": rules})
+	return &rulesOut{Rules: rules}, nil
 }
 
 // ruleUpsertHandler answers POST /v1/books/rules: create or update a rule by its pattern.
