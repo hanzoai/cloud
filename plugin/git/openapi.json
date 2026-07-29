@@ -199,7 +199,8 @@
             "description": "ID is the key's identifier (\"gitkey_…\"), from the :id path segment.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "gitkey_4a1b"
           }
         ],
         "responses": {
@@ -275,7 +276,8 @@
             "description": "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           }
         ],
         "responses": {
@@ -306,7 +308,8 @@
             "description": "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           }
         ],
         "responses": {
@@ -337,7 +340,8 @@
             "description": "Name is the repo to update, from the :name path segment.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           }
         ],
         "requestBody": {
@@ -384,7 +388,8 @@
             "description": "Name is the repo to read, from the :name path segment.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           },
           {
             "name": "ref",
@@ -393,7 +398,8 @@
             "description": "Ref is a branch, tag or commit; empty means the repo's HEAD.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "main"
           },
           {
             "name": "path",
@@ -402,7 +408,8 @@
             "description": "Path is repo-relative; empty is the tree root. Traversal is stripped.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "go.mod"
           }
         ],
         "responses": {
@@ -443,7 +450,8 @@
             "description": "Name is the repo to read, from the :name path segment.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           },
           {
             "name": "ref",
@@ -452,7 +460,8 @@
             "description": "Ref is the branch, tag or commit to walk back from; empty means HEAD.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "main"
           },
           {
             "name": "path",
@@ -470,7 +479,8 @@
             "description": "Limit caps the page. Anything not positive means 50; the cap is 100.",
             "schema": {
               "type": "integer"
-            }
+            },
+            "example": 2
           }
         ],
         "responses": {
@@ -499,6 +509,60 @@
         }
       }
     },
+    "/v1/git/repos/{name}/files": {
+      "get": {
+        "operationId": "get_v1_git_repos_name_files",
+        "summary": "browseFiles returns every file a glob selects at one revision, WITH its bytes\nand the revision they came from.",
+        "description": "browseFiles returns every file a glob selects at one revision, WITH its bytes\nand the revision they came from. It is the read a delivery generator makes:\none call answers \"what is the inventory at this commit, and what does it say\",\nwhere listing and then fetching would be a request per file.\n\nReturning the resolved revision matters as much as the bytes. A generator that\nlists at `main` and then reads at `main` can straddle a push and assemble half\nits inventory from one commit and half from the next; resolving once makes the\nwhole read consistent by construction.\n\nA file past the read cap comes back Truncated with no content rather than\nbeing dropped. A caller building a desired set has to know the difference\nbetween \"this file is empty\" and \"this file was not read\" — silently omitting\nit is how a pruning reconcile deletes what the missing file declared.",
+        "tags": [
+          "git"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name is the repo to read, from the :name path segment.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "universe"
+          },
+          {
+            "name": "ref",
+            "in": "query",
+            "required": false,
+            "description": "Ref is a branch, tag or commit; empty means the repo's HEAD.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "main"
+          },
+          {
+            "name": "glob",
+            "in": "query",
+            "required": false,
+            "description": "Glob selects files, matched segment by segment so `*` never crosses a `/`.\n`**` matches zero or more whole segments.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "charts/app/values/*/*.yaml"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/filesJSON"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/git/repos/{name}/gc": {
       "post": {
         "operationId": "post_v1_git_repos_name_gc",
@@ -515,7 +579,8 @@
             "description": "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           }
         ],
         "requestBody": {
@@ -566,7 +631,8 @@
             "description": "Name is the local repo to mirror into, from the :name path segment. It is\nCREATED on first use.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           }
         ],
         "requestBody": {
@@ -613,7 +679,8 @@
             "description": "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           }
         ],
         "responses": {
@@ -673,7 +740,8 @@
             "description": "Name is the repo, from the :name path segment.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           },
           {
             "name": "id",
@@ -682,7 +750,8 @@
             "description": "ID is the row to remove, from the :id path segment.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "mir_2d90"
           }
         ],
         "responses": {
@@ -715,7 +784,8 @@
             "description": "Name is the repo to push into, from the :name path segment. It is CREATED\non first push if it does not exist.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           }
         ],
         "requestBody": {
@@ -775,7 +845,8 @@
             "description": "Name is the repo to read, from the :name path segment.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           },
           {
             "name": "ref",
@@ -784,7 +855,8 @@
             "description": "Ref is a branch, tag or commit; empty means the repo's HEAD.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "main"
           }
         ],
         "responses": {
@@ -822,7 +894,8 @@
             "description": "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           }
         ],
         "responses": {
@@ -865,7 +938,8 @@
             "description": "Name is the repo's org-unique handle, from the :name path segment. A\ntrailing \".git\" is stripped.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           }
         ],
         "responses": {
@@ -927,7 +1001,8 @@
             "description": "Name is the repo, from the :name path segment.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           },
           {
             "name": "id",
@@ -936,7 +1011,8 @@
             "description": "ID is the row to remove, from the :id path segment.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sub_7c2e"
           }
         ],
         "responses": {
@@ -969,7 +1045,8 @@
             "description": "Name is the repo to read, from the :name path segment.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           },
           {
             "name": "ref",
@@ -978,7 +1055,8 @@
             "description": "Ref is a branch, tag or commit; empty means the repo's HEAD.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "main"
           },
           {
             "name": "path",
@@ -987,7 +1065,8 @@
             "description": "Path is repo-relative; empty is the tree root. Traversal is stripped.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cmd"
           }
         ],
         "responses": {
@@ -1387,40 +1466,84 @@
         },
         "type": "object"
       },
+      "commitJSON": {
+        "properties": {
+          "authorEmail": {
+            "description": "AuthorEmail is the commit author's email.",
+            "type": "string"
+          },
+          "authorName": {
+            "description": "AuthorName is the commit author's name.",
+            "type": "string"
+          },
+          "date": {
+            "description": "Date is the author date, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "message": {
+            "description": "Message is the commit's SUBJECT — its first line only.",
+            "type": "string"
+          },
+          "sha": {
+            "description": "SHA is the full commit hash.",
+            "type": "string"
+          },
+          "shortSha": {
+            "description": "ShortSHA is the abbreviated hash a UI displays.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "commitsJSON": {
         "properties": {
           "commits": {
             "description": "Commits are newest first.",
             "items": {
-              "properties": {
-                "authorEmail": {
-                  "description": "AuthorEmail is the commit author's email.",
-                  "type": "string"
-                },
-                "authorName": {
-                  "description": "AuthorName is the commit author's name.",
-                  "type": "string"
-                },
-                "date": {
-                  "description": "Date is the author date, RFC 3339 UTC.",
-                  "type": "string"
-                },
-                "message": {
-                  "description": "Message is the commit's SUBJECT — its first line only.",
-                  "type": "string"
-                },
-                "sha": {
-                  "description": "SHA is the full commit hash.",
-                  "type": "string"
-                },
-                "shortSha": {
-                  "description": "ShortSHA is the abbreviated hash a UI displays.",
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/commitJSON"
             },
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "fileJSON": {
+        "properties": {
+          "content": {
+            "description": "Content is the file's bytes, empty when Truncated.",
+            "type": "string"
+          },
+          "encoding": {
+            "description": "Encoding is how Content is carried: \"utf8\" verbatim, or \"base64\".",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the file's repo-relative path.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Size is the file's byte length in the repo.",
+            "type": "integer"
+          },
+          "truncated": {
+            "description": "Truncated marks a file past the read cap; no content is sent. A caller\nassembling a desired set must treat this as INCOMPLETE, never as empty.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "filesJSON": {
+        "properties": {
+          "files": {
+            "description": "Files are the selected files, sorted by path. Directories are never\nreturned.",
+            "items": {
+              "$ref": "#/components/schemas/fileJSON"
+            },
+            "type": "array"
+          },
+          "rev": {
+            "description": "Rev is the full revision the ref resolved to — pin follow-up reads to it.",
+            "type": "string"
           }
         },
         "type": "object"
@@ -1447,26 +1570,29 @@
           "data": {
             "description": "Data holds the org's keys.",
             "items": {
-              "properties": {
-                "createdAt": {
-                  "type": "string"
-                },
-                "fingerprint": {
-                  "type": "string"
-                },
-                "id": {
-                  "type": "string"
-                },
-                "publicKey": {
-                  "type": "string"
-                },
-                "title": {
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/keyView"
             },
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "keyView": {
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "publicKey": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -1476,29 +1602,7 @@
           "data": {
             "description": "Data holds the repo's outbound mirror targets.",
             "items": {
-              "properties": {
-                "createdAt": {
-                  "description": "CreatedAt is RFC 3339 UTC.",
-                  "type": "string"
-                },
-                "host": {
-                  "description": "Host is the target's lowercased hostname, taken from URL and never the body.",
-                  "type": "string"
-                },
-                "id": {
-                  "description": "ID is the target's identifier (\"mir_…\"), the handle to remove it by.",
-                  "type": "string"
-                },
-                "repo": {
-                  "description": "Repo is the repo whose advanced refs are pushed downstream.",
-                  "type": "string"
-                },
-                "url": {
-                  "description": "URL is the canonical https remote, with any embedded credentials stripped.",
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/mirrorTargetView"
             },
             "type": "array"
           }
@@ -1522,6 +1626,31 @@
         },
         "type": "object"
       },
+      "mirrorTargetView": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is RFC 3339 UTC.",
+            "type": "string"
+          },
+          "host": {
+            "description": "Host is the target's lowercased hostname, taken from URL and never the body.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the target's identifier (\"mir_…\"), the handle to remove it by.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo is the repo whose advanced refs are pushed downstream.",
+            "type": "string"
+          },
+          "url": {
+            "description": "URL is the canonical https remote, with any embedded credentials stripped.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "noContent": {
         "properties": {},
         "type": "object"
@@ -1539,6 +1668,23 @@
         },
         "type": "object"
       },
+      "pushFile": {
+        "properties": {
+          "content": {
+            "description": "Content is the file's bytes, carried per Encoding.",
+            "type": "string"
+          },
+          "encoding": {
+            "description": "Encoding is \"base64\", or \"utf-8\" (the default, also \"utf8\" / \"text\").",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is repo-relative. Absolute or traversing paths are refused.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "pushReq": {
         "properties": {
           "branch": {
@@ -1548,21 +1694,7 @@
           "files": {
             "description": "Files are added to or overwritten on the branch tip — files already there\nand not listed SURVIVE. At least one, at most 5000, 32 MiB each.",
             "items": {
-              "properties": {
-                "content": {
-                  "description": "Content is the file's bytes, carried per Encoding.",
-                  "type": "string"
-                },
-                "encoding": {
-                  "description": "Encoding is \"base64\", or \"utf-8\" (the default, also \"utf8\" / \"text\").",
-                  "type": "string"
-                },
-                "path": {
-                  "description": "Path is repo-relative. Absolute or traversing paths are refused.",
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/pushFile"
             },
             "type": "array"
           },
@@ -1615,22 +1747,25 @@
         },
         "type": "object"
       },
+      "refJSON": {
+        "properties": {
+          "name": {
+            "description": "Name is the short ref name (\"main\", \"v1.2.0\"), not the full refs/… path.",
+            "type": "string"
+          },
+          "sha": {
+            "description": "SHA is the full commit hash the ref resolves to.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "refsJSON": {
         "properties": {
           "branches": {
             "description": "Branches are the repo's heads; empty on a repo with no commits.",
             "items": {
-              "properties": {
-                "name": {
-                  "description": "Name is the short ref name (\"main\", \"v1.2.0\"), not the full refs/… path.",
-                  "type": "string"
-                },
-                "sha": {
-                  "description": "SHA is the full commit hash the ref resolves to.",
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/refJSON"
             },
             "type": "array"
           },
@@ -1641,17 +1776,7 @@
           "tags": {
             "description": "Tags are the repo's tags; empty when there are none.",
             "items": {
-              "properties": {
-                "name": {
-                  "description": "Name is the short ref name (\"main\", \"v1.2.0\"), not the full refs/… path.",
-                  "type": "string"
-                },
-                "sha": {
-                  "description": "SHA is the full commit hash the ref resolves to.",
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/refJSON"
             },
             "type": "array"
           }
@@ -1663,68 +1788,7 @@
           "data": {
             "description": "Data holds the repos in scope, most recently updated first.",
             "items": {
-              "properties": {
-                "branches": {
-                  "description": "Branches are the repo's branch names. Read live, so the detail view carries\nthem and a list row does not.",
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
-                "cloneUrl": {
-                  "description": "CloneURL is the HTTPS smart-HTTP remote `git clone` takes.",
-                  "type": "string"
-                },
-                "createdAt": {
-                  "description": "CreatedAt is RFC 3339 UTC.",
-                  "type": "string"
-                },
-                "defaultBranch": {
-                  "description": "DefaultBranch is where HEAD points on a fresh repo (\"main\").",
-                  "type": "string"
-                },
-                "description": {
-                  "description": "Description is the caller-supplied blurb (max 4KiB).",
-                  "type": "string"
-                },
-                "head": {
-                  "description": "Head is the resolved HEAD commit, empty on an empty repo.",
-                  "type": "string"
-                },
-                "id": {
-                  "description": "ID is the repo's stable, prefixed identifier (\"repo_\" + 128 random bits).",
-                  "type": "string"
-                },
-                "name": {
-                  "description": "Name is the org-unique handle, and the last path segment of both URLs below.",
-                  "type": "string"
-                },
-                "org": {
-                  "description": "Org owns the repo — the gateway-minted X-Org-Id, and the isolation key.",
-                  "type": "string"
-                },
-                "project": {
-                  "description": "Project is the optional sub-scope the repo lives in; absent for the org's\ndefault scope.",
-                  "type": "string"
-                },
-                "public": {
-                  "description": "Public grants ANONYMOUS read (fetch) only; push and the whole control plane\nstay org-authed.",
-                  "type": "boolean"
-                },
-                "sizeBytes": {
-                  "description": "SizeBytes is the repo's measured on-disk size, re-measured on create, after\neach push, and after a gc. This is the number billing meters.",
-                  "type": "integer"
-                },
-                "sshUrl": {
-                  "description": "SSHURL is the scp-style SSH remote (git@host:org/repo.git).",
-                  "type": "string"
-                },
-                "updatedAt": {
-                  "description": "UpdatedAt is RFC 3339 UTC, empty until the first write.",
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/repoView"
             },
             "type": "array"
           }
@@ -1809,34 +1873,62 @@
           "data": {
             "description": "Data holds the repo's subscriptions.",
             "items": {
-              "properties": {
-                "channel": {
-                  "description": "Channel is the Slack channel id or name the notifier posts to.",
-                  "type": "string"
-                },
-                "createdAt": {
-                  "description": "CreatedAt is RFC 3339 UTC.",
-                  "type": "string"
-                },
-                "events": {
-                  "description": "Events is the kind filter; absent means every deliverable kind.",
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
-                "id": {
-                  "description": "ID is the subscription's identifier (\"sub_…\"), the handle to delete it by.",
-                  "type": "string"
-                },
-                "repo": {
-                  "description": "Repo is the repo whose lifecycle events are delivered.",
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/subscriptionView"
             },
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "subscriptionView": {
+        "properties": {
+          "channel": {
+            "description": "Channel is the Slack channel id or name the notifier posts to.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "CreatedAt is RFC 3339 UTC.",
+            "type": "string"
+          },
+          "events": {
+            "description": "Events is the kind filter; absent means every deliverable kind.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the subscription's identifier (\"sub_…\"), the handle to delete it by.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo is the repo whose lifecycle events are delivered.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "treeEntryJSON": {
+        "properties": {
+          "mode": {
+            "description": "Mode is the octal git file mode (\"100644\", \"040000\", \"120000\").",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the entry's own name, no directory part.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the entry's full repo-relative path.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Size is the file's byte length; 0 for a directory.",
+            "type": "integer"
+          },
+          "type": {
+            "description": "Type is \"tree\" for a directory, \"blob\" for a file.",
+            "type": "string"
           }
         },
         "type": "object"
@@ -1846,31 +1938,26 @@
           "entries": {
             "description": "Entries are the immediate children, directories before files.",
             "items": {
-              "properties": {
-                "mode": {
-                  "description": "Mode is the octal git file mode (\"100644\", \"040000\", \"120000\").",
-                  "type": "string"
-                },
-                "name": {
-                  "description": "Name is the entry's own name, no directory part.",
-                  "type": "string"
-                },
-                "path": {
-                  "description": "Path is the entry's full repo-relative path.",
-                  "type": "string"
-                },
-                "size": {
-                  "description": "Size is the file's byte length; 0 for a directory.",
-                  "type": "integer"
-                },
-                "type": {
-                  "description": "Type is \"tree\" for a directory, \"blob\" for a file.",
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/treeEntryJSON"
             },
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "usageRepo": {
+        "properties": {
+          "name": {
+            "description": "Name is the repo's org-unique handle.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project is the sub-scope the repo lives in; absent for the default scope.",
+            "type": "string"
+          },
+          "sizeBytes": {
+            "description": "SizeBytes is the repo's on-disk size at its last measurement.",
+            "type": "integer"
           }
         },
         "type": "object"
@@ -1884,21 +1971,7 @@
           "repos": {
             "description": "Repos is every repo the org owns, across every project sub-scope.",
             "items": {
-              "properties": {
-                "name": {
-                  "description": "Name is the repo's org-unique handle.",
-                  "type": "string"
-                },
-                "project": {
-                  "description": "Project is the sub-scope the repo lives in; absent for the default scope.",
-                  "type": "string"
-                },
-                "sizeBytes": {
-                  "description": "SizeBytes is the repo's on-disk size at its last measurement.",
-                  "type": "integer"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/usageRepo"
             },
             "type": "array"
           },
