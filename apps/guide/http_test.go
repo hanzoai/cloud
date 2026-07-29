@@ -4,8 +4,31 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"testing"
 )
+
+// TestStepViewCarriesJourneyStep pins the stepView projection: every JourneyStep
+// field must appear in stepView with the same json tag and type. stepView spells
+// the fields out instead of embedding — embedding made the published schema claim
+// a nested JourneyStep property the wire (which PROMOTES embedded fields) never
+// carries — and this is what keeps the spelled-out copy from silently missing a
+// field JourneyStep gains later.
+func TestStepViewCarriesJourneyStep(t *testing.T) {
+	js := reflect.TypeOf(JourneyStep{})
+	sv := reflect.TypeOf(stepView{})
+	for i := 0; i < js.NumField(); i++ {
+		f := js.Field(i)
+		g, ok := sv.FieldByName(f.Name)
+		if !ok {
+			t.Fatalf("stepView is missing JourneyStep field %s", f.Name)
+		}
+		if g.Type != f.Type || g.Tag.Get("json") != f.Tag.Get("json") {
+			t.Fatalf("stepView.%s is (%s, json:%q), want JourneyStep's (%s, json:%q)",
+				f.Name, g.Type, g.Tag.Get("json"), f.Type, f.Tag.Get("json"))
+		}
+	}
+}
 
 // TestHTTPGateRequiresPrincipal: every data route refuses a request with no
 // validated principal (403) — a forged X-Org-Id with no bearer never reaches org
