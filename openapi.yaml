@@ -468,6 +468,75 @@ components:
         type:
           type: string
       type: object
+    DocField:
+      properties:
+        default:
+          type: string
+        fetchFrom:
+          type: string
+        fieldname:
+          type: string
+        fieldtype:
+          type: string
+        hidden:
+          type: boolean
+        inListView:
+          type: boolean
+        label:
+          type: string
+        options:
+          type: string
+        readOnly:
+          type: boolean
+        reqd:
+          type: boolean
+        unique:
+          type: boolean
+      type: object
+    DocPerm:
+      properties:
+        cancel:
+          type: boolean
+        create:
+          type: boolean
+        delete:
+          type: boolean
+        read:
+          type: boolean
+        role:
+          type: string
+        submit:
+          type: boolean
+        write:
+          type: boolean
+      type: object
+    DocType:
+      properties:
+        autoname:
+          type: string
+        createdAt:
+          type: integer
+        fields:
+          items:
+            $ref: '#/components/schemas/DocField'
+          type: array
+        isSingle:
+          type: boolean
+        isSubmittable:
+          type: boolean
+        module:
+          type: string
+        name:
+          type: string
+        permissions:
+          items:
+            $ref: '#/components/schemas/DocPerm'
+          type: array
+        titleField:
+          type: string
+        updatedAt:
+          type: integer
+      type: object
     Drift:
       properties:
         disabled:
@@ -810,6 +879,19 @@ components:
         self:
           type: boolean
       type: object
+    Install:
+      properties:
+        created:
+          items:
+            type: string
+          type: array
+        existing:
+          items:
+            type: string
+          type: array
+        module:
+          type: string
+      type: object
     Integrity:
       properties:
         brokenAt:
@@ -943,6 +1025,28 @@ components:
         msg:
           type: string
         status:
+          type: string
+      type: object
+    ModuleInfo:
+      properties:
+        doctypes:
+          items:
+            type: string
+          type: array
+        module:
+          type: string
+      type: object
+    ModuleState:
+      properties:
+        doctypes:
+          items:
+            type: string
+          type: array
+        installed:
+          items:
+            type: string
+          type: array
+        module:
           type: string
       type: object
     MoneyOut:
@@ -1346,6 +1450,13 @@ components:
         msg:
           type: string
         status:
+          type: string
+      type: object
+    Role:
+      properties:
+        role:
+          type: string
+        user:
           type: string
       type: object
     SaaSCategory:
@@ -3191,6 +3302,38 @@ components:
             row are gone.
           type: boolean
       type: object
+    docRef:
+      properties:
+        doctype:
+          description: DocType is the document's DocType, from the path.
+          type: string
+        name:
+          description: |-
+            Name is the document's name — its key within the DocType — from the path.
+            A name containing a space arrives percent-encoded and is decoded before it
+            is matched against the stored one.
+          type: string
+      type: object
+    docTypeList:
+      properties:
+        data:
+          description: Data is every DocType defined in the caller's org.
+          items:
+            $ref: '#/components/schemas/DocType'
+          type: array
+      type: object
+    documentList:
+      properties:
+        data:
+          description: |-
+            Data is the matching documents, newest-updated first unless order_by said
+            otherwise, each projected to the requested fields plus the envelope keys.
+          items:
+            additionalProperties:
+              type: object
+            type: object
+          type: array
+      type: object
     engineAdvertisement:
       properties:
         apis:
@@ -3858,6 +4001,22 @@ components:
         url:
           description: URL is the canonical https remote, with any embedded credentials
             stripped.
+          type: string
+      type: object
+    moduleList:
+      properties:
+        data:
+          description: Data is every module compiled into this binary, with the DocTypes
+            it installs.
+          items:
+            $ref: '#/components/schemas/ModuleInfo'
+          type: array
+      type: object
+    moduleRef:
+      properties:
+        module:
+          description: Module is the lane's registered name ("cms", "erp"), from the
+            path.
           type: string
       type: object
     moneyBoard:
@@ -4662,6 +4821,14 @@ components:
         periods:
           type: integer
       type: object
+    roleList:
+      properties:
+        data:
+          description: Data is every (user, role) assignment in the caller's org.
+          items:
+            $ref: '#/components/schemas/Role'
+          type: array
+      type: object
     runReq:
       properties:
         env:
@@ -5022,6 +5189,15 @@ components:
         requests:
           type: integer
         subsystems:
+          type: integer
+      type: object
+    summaryView:
+      properties:
+        doctypes:
+          description: DocTypes is how many DocTypes the org has defined.
+          type: integer
+        documents:
+          description: Documents is how many documents exist across them.
           type: integer
       type: object
     syncOut:
@@ -13645,13 +13821,66 @@ paths:
       - fleet
   /v1/framework/{doctype}:
     get:
-      operationId: get_v1_framework_by_doctype
+      description: |-
+        listDocuments returns the caller org's documents of one DocType, filtered,
+        ordered and projected by the query. The DocType is resolved FIRST — through
+        the same permission gate the list itself uses — because the query is validated
+        against its schema: a filter, sort or field name the DocType does not declare
+        is refused rather than reaching the store.
+      operationId: get_v1_framework_doctype
       parameters:
-      - in: path
+      - description: DocType is the DocType to list, from the path.
+        example: Task
+        in: path
         name: doctype
         required: true
         schema:
           type: string
+      - description: |-
+          Filters is a JSON object of equality matches, e.g. {"priority":"High"}.
+          Every key must be a field the DocType declares (or the managed name /
+          docstatus); an undeclared one is refused rather than silently ignored.
+        example: '{"priority":"High"}'
+        in: query
+        name: filters
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Fields projects the response to a subset — a JSON array ["a","b"] or a
+          comma list "a,b". The envelope keys are always returned.
+        in: query
+        name: fields
+        required: false
+        schema:
+          type: string
+      - description: OrderBy is "<field> [asc|desc]". Empty means most-recently-updated
+          first.
+        example: estimate asc
+        in: query
+        name: order_by
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit caps the rows returned. Anything that is not a positive integer
+          leaves the engine's default in place.
+        example: "20"
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/documentList'
+          description: ok
+      summary: |-
+        listDocuments returns the caller org's documents of one DocType, filtered,
+        ordered and projected by the query.
       tags:
       - framework
     post:
@@ -13666,33 +13895,66 @@ paths:
       - framework
   /v1/framework/{doctype}/{name}:
     delete:
-      operationId: delete_v1_framework_by_doctype_by_name
+      description: |-
+        deleteDocument removes one document, after its on_trash hooks agree. A
+        SUBMITTED document cannot be deleted — cancel it first. Answers 204.
+      operationId: delete_v1_framework_doctype_name
       parameters:
-      - in: path
+      - description: DocType is the document's DocType, from the path.
+        example: Task
+        in: path
         name: doctype
         required: true
         schema:
           type: string
-      - in: path
+      - description: |-
+          Name is the document's name — its key within the DocType — from the path.
+          A name containing a space arrives percent-encoded and is decoded before it
+          is matched against the stored one.
+        example: TASK-00001
+        in: path
         name: name
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: deleteDocument removes one document, after its on_trash hooks agree.
       tags:
       - framework
     get:
-      operationId: get_v1_framework_by_doctype_by_name
+      description: getDocument returns one document by name, with Password fields
+        redacted.
+      operationId: get_v1_framework_doctype_name
       parameters:
-      - in: path
+      - description: DocType is the document's DocType, from the path.
+        example: Task
+        in: path
         name: doctype
         required: true
         schema:
           type: string
-      - in: path
+      - description: |-
+          Name is the document's name — its key within the DocType — from the path.
+          A name containing a space arrives percent-encoded and is decoded before it
+          is matched against the stored one.
+        example: TASK-00001
+        in: path
         name: name
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: object
+                type: object
+          description: ok
+      summary: getDocument returns one document by name, with Password fields redacted.
       tags:
       - framework
     put:
@@ -13712,131 +13974,413 @@ paths:
       - framework
   /v1/framework/{doctype}/{name}/cancel:
     post:
-      operationId: post_v1_framework_by_doctype_by_name_cancel
+      description: |-
+        cancelDocument moves a submitted document to cancelled (docstatus 1 → 2) after
+        its on_cancel hooks agree. Cancelling is terminal — a cancelled document
+        cannot be re-submitted — but it CAN then be deleted.
+      operationId: post_v1_framework_doctype_name_cancel
       parameters:
-      - in: path
+      - description: DocType is the document's DocType, from the path.
+        example: Task
+        in: path
         name: doctype
         required: true
         schema:
           type: string
-      - in: path
+      - description: |-
+          Name is the document's name — its key within the DocType — from the path.
+          A name containing a space arrives percent-encoded and is decoded before it
+          is matched against the stored one.
+        example: TASK-00001
+        in: path
         name: name
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              doctype: Task
+              name: TASK-00001
+            schema:
+              $ref: '#/components/schemas/docRef'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: object
+                type: object
+          description: ok
+      summary: |-
+        cancelDocument moves a submitted document to cancelled (docstatus 1 → 2) after
+        its on_cancel hooks agree.
       tags:
       - framework
   /v1/framework/{doctype}/{name}/submit:
     post:
-      operationId: post_v1_framework_by_doctype_by_name_submit
+      description: |-
+        submitDocument moves a draft to submitted (docstatus 0 → 1) after its
+        on_submit hooks agree. A submitted document is IMMUTABLE: further writes and
+        deletes are refused until it is cancelled. Only a submittable DocType has this
+        lifecycle; any other docstatus is an illegal transition.
+      operationId: post_v1_framework_doctype_name_submit
       parameters:
-      - in: path
+      - description: DocType is the document's DocType, from the path.
+        example: Task
+        in: path
         name: doctype
         required: true
         schema:
           type: string
-      - in: path
+      - description: |-
+          Name is the document's name — its key within the DocType — from the path.
+          A name containing a space arrives percent-encoded and is decoded before it
+          is matched against the stored one.
+        example: TASK-00001
+        in: path
         name: name
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              doctype: Task
+              name: TASK-00001
+            schema:
+              $ref: '#/components/schemas/docRef'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: object
+                type: object
+          description: ok
+      summary: |-
+        submitDocument moves a draft to submitted (docstatus 0 → 1) after its
+        on_submit hooks agree.
       tags:
       - framework
   /v1/framework/doctypes:
     get:
+      description: |-
+        listDocTypes returns every DocType defined in the caller's org. Another
+        tenant's definitions are never included: the org is part of the store key.
       operationId: get_v1_framework_doctypes
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/docTypeList'
+          description: ok
+      summary: listDocTypes returns every DocType defined in the caller's org.
       tags:
       - framework
     post:
+      description: |-
+        createDocType defines a DocType in the caller's org: the metadata that gives a
+        document surface its fields, its naming rule, whether it has a submit/cancel
+        lifecycle, and which role may do what to it. Manager-only — on a fresh org the
+        first caller to administer it is seeded as its System Manager, after which
+        only a System Manager (or a platform admin) may define. Answers 201.
       operationId: post_v1_framework_doctypes
+      requestBody:
+        content:
+          application/json:
+            example:
+              autoname: TASK-.#####
+              fields:
+              - fieldname: subject
+                fieldtype: Data
+                reqd: true
+              name: Task
+            schema:
+              $ref: '#/components/schemas/DocType'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocType'
+          description: created
+      summary: |-
+        createDocType defines a DocType in the caller's org: the metadata that gives a
+        document surface its fields, its naming rule, whether it has a submit/cancel
+        lifecycle, and which role may do what to it.
       tags:
       - framework
   /v1/framework/doctypes/{name}:
     delete:
-      operationId: delete_v1_framework_doctypes_by_name
+      description: |-
+        deleteDocType removes a DocType and every document stored under it. The
+        definition and its data go together — a document with no schema can be neither
+        validated nor read back — so there is no undo. Manager-only. Answers 204.
+      operationId: delete_v1_framework_doctypes_name
       parameters:
-      - in: path
+      - description: |-
+          Name is the DocType's name, from the path. A name containing a space
+          ("Sales Invoice") arrives percent-encoded and is decoded before it is
+          matched against the stored one.
+        example: Task
+        in: path
         name: name
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: deleteDocType removes a DocType and every document stored under it.
       tags:
       - framework
     get:
-      operationId: get_v1_framework_doctypes_by_name
+      description: |-
+        getDocType returns one DocType definition — its fields, naming rule,
+        permissions and lifecycle flags. Scoped to the caller's org, so another
+        tenant's DocType of the same name is simply not found.
+      operationId: get_v1_framework_doctypes_name
       parameters:
-      - in: path
+      - description: |-
+          Name is the DocType's name, from the path. A name containing a space
+          ("Sales Invoice") arrives percent-encoded and is decoded before it is
+          matched against the stored one.
+        example: Task
+        in: path
         name: name
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocType'
+          description: ok
+      summary: |-
+        getDocType returns one DocType definition — its fields, naming rule,
+        permissions and lifecycle flags.
       tags:
       - framework
     put:
-      operationId: put_v1_framework_doctypes_by_name
+      description: |-
+        replaceDocType replaces a DocType definition wholesale (PUT semantics): the
+        stored definition becomes the body. The name in the URL is authoritative over
+        the body's, and documents already stored under the DocType are left intact.
+        Manager-only.
+      operationId: put_v1_framework_doctypes_name
       parameters:
-      - in: path
+      - example: Task
+        in: path
         name: name
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              fields:
+              - fieldname: subject
+                fieldtype: Data
+              name: Task
+            schema:
+              $ref: '#/components/schemas/DocType'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocType'
+          description: ok
+      summary: |-
+        replaceDocType replaces a DocType definition wholesale (PUT semantics): the
+        stored definition becomes the body.
       tags:
       - framework
   /v1/framework/modules:
     get:
+      description: |-
+        listModules returns every app lane compiled into this deployment and the
+        DocTypes each one installs. It describes the BINARY, not the org: what a given
+        org has actually installed is the per-module state below.
       operationId: get_v1_framework_modules
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/moduleList'
+          description: ok
+      summary: |-
+        listModules returns every app lane compiled into this deployment and the
+        DocTypes each one installs.
       tags:
       - framework
   /v1/framework/modules/{module}:
     get:
-      operationId: get_v1_framework_modules_by_module
+      description: |-
+        getModule returns one app lane's install state for the caller's org: the
+        DocTypes the lane declares, and which of them already exist in the org. That
+        is the honest "set up" versus "installed" answer a console renders.
+      operationId: get_v1_framework_modules_module
       parameters:
-      - in: path
+      - description: Module is the lane's registered name ("cms", "erp"), from the
+          path.
+        example: cms
+        in: path
         name: module
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleState'
+          description: ok
+      summary: |-
+        getModule returns one app lane's install state for the caller's org: the
+        DocTypes the lane declares, and which of them already exist in the org.
       tags:
       - framework
   /v1/framework/modules/{module}/install:
     post:
-      operationId: post_v1_framework_modules_by_module_install
+      description: |-
+        installModule creates an app lane's DocTypes in the caller's org. Idempotent
+        and create-if-absent: a DocType the org already has is reported as existing
+        and never replaced, so re-installing cannot clobber a definition the org has
+        since edited. Manager-only.
+      operationId: post_v1_framework_modules_module_install
       parameters:
-      - in: path
+      - description: Module is the lane's registered name ("cms", "erp"), from the
+          path.
+        example: cms
+        in: path
         name: module
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              module: cms
+            schema:
+              $ref: '#/components/schemas/moduleRef'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Install'
+          description: ok
+      summary: installModule creates an app lane's DocTypes in the caller's org.
       tags:
       - framework
   /v1/framework/roles:
     get:
+      description: |-
+        listRoles returns every (user, role) assignment in the caller's org. Roles are
+        what DocType permissions are written against, so this is the grant table the
+        permission calculus resolves a member's rights from.
       operationId: get_v1_framework_roles
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/roleList'
+          description: ok
+      summary: listRoles returns every (user, role) assignment in the caller's org.
       tags:
       - framework
     post:
+      description: |-
+        assignRole grants one user one role in the caller's org — how a member gains
+        rights on a DocType, since permissions name roles and never users.
+        Manager-only. Answers 201.
       operationId: post_v1_framework_roles
+      requestBody:
+        content:
+          application/json:
+            example:
+              role: System Manager
+              user: u_alice
+            schema:
+              $ref: '#/components/schemas/Role'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+          description: created
+      summary: |-
+        assignRole grants one user one role in the caller's org — how a member gains
+        rights on a DocType, since permissions name roles and never users.
+        Manager-only.
       tags:
       - framework
   /v1/framework/roles/{user}/{role}:
     delete:
-      operationId: delete_v1_framework_roles_by_user_by_role
+      description: |-
+        revokeRole removes one (user, role) grant in the caller's org. Manager-only.
+        Answers 204; a grant that does not exist is not found.
+      operationId: delete_v1_framework_roles_user_role
       parameters:
-      - in: path
+      - description: User is the assignee whose grant is being revoked, from the path.
+        example: u_alice
+        in: path
         name: user
         required: true
         schema:
           type: string
-      - in: path
+      - description: |-
+          Role is the role to revoke, from the path. A role name containing a space
+          ("System Manager") arrives percent-encoded and is decoded before it is
+          matched against the stored assignment.
+        example: System Manager
+        in: path
         name: role
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: revokeRole removes one (user, role) grant in the caller's org.
       tags:
       - framework
   /v1/framework/summary:
     get:
+      description: |-
+        summary reports how much of the DocType surface the caller's org uses: how
+        many DocTypes it has defined, and how many documents exist across them.
       operationId: get_v1_framework_summary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/summaryView'
+          description: ok
+      summary: 'summary reports how much of the DocType surface the caller''s org
+        uses: how'
       tags:
       - framework
   /v1/functions:
