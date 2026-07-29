@@ -100,7 +100,7 @@ func WriteSpec(path string, app *zip.App) error {
 //
 // Enablement is cfg's default, NOT the forced single-service list Serve applies:
 // this is the fleet's document, and a STAGED subsystem (config.go's
-// stagedSubsystems) is linked but inert until a deployment names it. Describing
+// a deployment does not name) is linked but inert until it does. Describing
 // one here would publish routes api.hanzo.ai does not serve, and would make the
 // woven document disagree with the fully-mounted golden — which is the equality
 // the composition proof rests on.

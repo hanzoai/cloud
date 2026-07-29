@@ -20,18 +20,6 @@ type Config struct {
 	// Example: --enable=iam,base,kms,commerce,ai,gateway,o11y
 	Enable []string
 
-	// EnableStaged ADDITIVELY activates staged subsystems (stagedSubsystems) on top
-	// of the default set, orthogonally to the Enable allowlist. It exists so a
-	// deployment can run "every default subsystem PLUS iam" — the faithful prod +
-	// staged-fold shape — WITHOUT collapsing Enable into a hand-enumerated allowlist
-	// that silently drops a subsystem the day one is added. CLOUD_ENABLE_STAGED=iam
-	// with an empty CLOUD_ENABLE = all-non-staged (the production default) + iam.
-	// A staged name may equally be activated by naming it directly in Enable; this
-	// is the additive path that does not disturb the non-staged default. One lever
-	// per intent: Enable = "exactly this set", EnableStaged = "also turn these
-	// staged ones on".
-	EnableStaged []string
-
 	// Replicas is the app-tier replica count the operator injects (CLOUD_REPLICAS,
 	// mirroring the Deployment's spec.replicas). 0 = unset/unmanaged. It exists to
 	// enforce ONE contract: embedded IAM (clients/iam) keeps its identity store as a
@@ -496,17 +484,6 @@ func LoadConfig() *Config {
 		}
 	}
 
-	// Additive staged activation (orthogonal to the Enable allowlist): turns a
-	// staged subsystem (e.g. iam) on WITHOUT converting Enable into a strict
-	// allowlist. Only staged names are honored — a non-staged name here is ignored
-	// (it is already governed by the Enable default), so this can never widen the
-	// surface beyond the staged set.
-	for _, name := range strings.Split(getenv("CLOUD_ENABLE_STAGED", ""), ",") {
-		if s := strings.TrimSpace(name); s != "" && stagedSubsystems[s] {
-			cfg.EnableStaged = append(cfg.EnableStaged, s)
-		}
-	}
-
 	// White-label by brand (HIP-0111): when the operator does not pin
 	// CLOUD_IAM_ISSUER / --iam-issuer, derive the canonical OIDC issuer from the
 	// brand so a lux deployment validates against lux.id, zoo against zoo.id,
@@ -587,29 +564,10 @@ func registrableDomain(host string) string {
 	return parts[len(parts)-2] + "." + parts[len(parts)-1]
 }
 
-// stagedSubsystems require EXPLICIT enablement: they are NOT part of the
-// empty-Enable "mount everything" default and mount ONLY when named — in
-// CLOUD_ENABLE, or additively in EnableStaged. This is the HIP-0106
-// staged-rollout contract, enforced in code.
-//
-// Membership rule: a subsystem is staged while its Mount can ABORT STARTUP. An
-// error returned from Mount stops cloud from booting, so a deployment that never
-// asked for that subsystem must not carry the risk of it. clients/ingress returns
-// errors (nil app, empty DataDir, store open), so it is staged. A subsystem whose
-// Mount fails closed instead — logging and serving 503 while cloud stays up, as
-// clients/iam does — cannot take the process down and is not staged.
-var stagedSubsystems = map[string]bool{"ingress": true}
-
 // Enabled reports whether subsystem `name` is enabled in this config.
-// Empty Enable list = all subsystems enabled, EXCEPT staged subsystems
-// (stagedSubsystems). A staged subsystem mounts only when named explicitly — in
-// Enable, or (the additive, allowlist-preserving path) in EnableStaged.
+// An empty Enable list mounts everything; a non-empty one mounts exactly what it
+// names. There is no third case.
 func (c *Config) Enabled(name string) bool {
-	// Staged subsystems are opt-in via either lever, independent of the Enable
-	// default so "all + iam" needs no hand-enumerated allowlist.
-	if stagedSubsystems[name] {
-		return contains(c.EnableStaged, name) || contains(c.Enable, name)
-	}
 	if len(c.Enable) == 0 {
 		return true
 	}
