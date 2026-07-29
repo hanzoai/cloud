@@ -17,9 +17,17 @@ import (
 // `pricing openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Serve([]cloud.Plugin{{
-		Name:       "pricing",
-		Price:      cloud.Free,
-		Mount:      pricing.Mount,
+		Name:  "pricing",
+		Price: cloud.Free,
+		Mount: pricing.Mount,
+		// This surface answers FIVE subtrees, not the one the /v1/<name>
+		// convention assumes — the catalog read plane, the self-service
+		// enablement plane and the two admin planes over the same overlay store.
+		// Undeclared, four of them were attributed to another subsystem (or to
+		// none) by the tracing and price index cloud.Declare builds from this, and
+		// the subsystem could not install its own middleware on them. The list is
+		// the app's, so it cannot drift from the routes it registers.
+		Prefixes:   pricing.Prefixes,
 		OwnsHealth: true,
 	}}, []string{"pricing"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)

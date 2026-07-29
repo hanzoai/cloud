@@ -3200,6 +3200,56 @@ components:
             $ref: '#/components/schemas/itemInput'
           type: array
       type: object
+    adminCatalogOut:
+      properties:
+        models:
+          description: |-
+            Models is every model the catalog holds — disabled ones included — each
+            carrying its enablement state under "_overlay".
+          items:
+            additionalProperties:
+              type: object
+            type: object
+          type: array
+        providers:
+          additionalProperties:
+            type: object
+          description: |-
+            Providers is every provider the catalog holds, keyed by name, each
+            carrying its enablement state under "_overlay".
+          type: object
+        updated:
+          description: |-
+            Updated is when the catalog was last refreshed, as the pricing source
+            recorded it.
+          type: object
+      type: object
+    adminEnablementBoard:
+      properties:
+        items:
+          description: |-
+            Items is every item an operator has set a state on. An item nobody has
+            touched is absent: it is generally available by default.
+          items:
+            $ref: '#/components/schemas/adminEnablementItem'
+          type: array
+      type: object
+    adminEnablementItem:
+      properties:
+        betaOrgs:
+          items:
+            type: string
+          type: array
+        id:
+          type: string
+        kind:
+          type: string
+        state:
+          description: off|beta|ga
+          type: string
+        updatedAt:
+          type: integer
+      type: object
     adminMe:
       properties:
         displayName:
@@ -4832,6 +4882,35 @@ components:
         reachable:
           description: Reachable is whether the app answered the liveness probe.
           type: boolean
+      type: object
+    enablementBoard:
+      properties:
+        betas:
+          description: Betas are the subset of Items the caller's org may still opt
+            into.
+          items:
+            $ref: '#/components/schemas/userEnablementItem'
+          type: array
+        items:
+          description: Items is every managed item, each resolved for the caller's
+            org.
+          items:
+            $ref: '#/components/schemas/userEnablementItem'
+          type: array
+        org:
+          description: |-
+            Org is the org this view was resolved for; empty for a caller with no
+            validated principal, who sees only the generally-available items.
+          type: string
+      type: object
+    enablementOptRef:
+      properties:
+        id:
+          description: ID is the item within that namespace.
+          type: string
+        kind:
+          description: 'Kind is the item''s namespace: "model", "provider" or "feature".'
+          type: string
       type: object
     engineAdvertisement:
       properties:
@@ -6488,6 +6567,67 @@ components:
             or ?provider=.
           type: string
       type: object
+    pricingHealth:
+      properties:
+        service:
+          description: Service names the subsystem that answered.
+          type: string
+        status:
+          description: Status is "ok" whenever this subsystem is mounted.
+          type: string
+      type: object
+    pricingModelList:
+      properties:
+        models:
+          description: |-
+            Models are the catalog entries visible to the caller, each an opaque
+            object exactly as the pricing source emits it, with any admin override
+            merged on top. An admin additionally sees hidden entries, each annotated
+            under "_overlay".
+          items:
+            additionalProperties:
+              type: object
+            type: object
+          type: array
+        total:
+          description: |-
+            Total is how many models this answer carries — recounted over the visible
+            set, not the catalog's own total.
+          type: integer
+        updated:
+          description: |-
+            Updated is when the catalog was last refreshed, as the pricing source
+            recorded it.
+          type: object
+      type: object
+    pricingNoInput:
+      properties: {}
+      type: object
+    pricingProviderList:
+      properties:
+        providers:
+          additionalProperties:
+            type: object
+          description: |-
+            Providers maps a provider name to its opaque info object. A provider
+            hidden for the caller's org is absent entirely.
+          type: object
+        updated:
+          description: |-
+            Updated is when the catalog was last refreshed, as the pricing source
+            recorded it.
+          type: object
+      type: object
+    pricingSyncOut:
+      properties:
+        status:
+          description: Status is "ok" when the sync completed.
+          type: string
+        updated:
+          description: Updated is the RFC 3339 time the refreshed catalog was stamped
+            with.
+          type: string
+      type: object
     productRow:
       properties:
         cluster:
@@ -7163,6 +7303,30 @@ components:
         status:
           type: string
       type: object
+    setEnablementBody:
+      properties:
+        betaOrgs:
+          description: |-
+            BetaOrgs REPLACES the item's beta grant list when present. Omit it to
+            leave the existing grants alone.
+          items:
+            type: string
+          type: array
+        id:
+          description: |-
+            ID is the item within that namespace — a model id, a provider name, or a
+            feature's key.
+          type: string
+        kind:
+          description: 'Kind is the item''s namespace: "model", "provider" or "feature".'
+          type: string
+        state:
+          description: |-
+            State is the item's global enablement: "off" (hidden from everyone,
+            absolutely), "beta" (visible only to granted orgs) or "ga" (visible to
+            everyone). Required.
+          type: string
+      type: object
     setEnvReq:
       properties:
         env:
@@ -7788,6 +7952,25 @@ components:
         totalBytes:
           description: TotalBytes is the sum over Repos — the org's whole git footprint.
           type: integer
+      type: object
+    userEnablementItem:
+      properties:
+        canOptIn:
+          description: beta && not yet opted in
+          type: boolean
+        effective:
+          description: visible to the caller's org
+          type: boolean
+        id:
+          type: string
+        kind:
+          type: string
+        optedIn:
+          description: caller's org on the beta list
+          type: boolean
+        state:
+          description: off|beta|ga
+          type: string
       type: object
     usersOut:
       properties:
@@ -8926,7 +9109,22 @@ paths:
       - admin
   /v1/admin/catalog:
     get:
+      description: |-
+        GetAdminCatalog returns the full model and provider catalog annotated with
+        each entry's enablement state, for the operator console. Nothing is hidden:
+        this is the admin's view of what exists and what is currently off, in beta or
+        generally available. SuperAdmin only; every other caller is refused.
       operationId: get_v1_admin_catalog
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/adminCatalogOut'
+          description: ok
+      summary: |-
+        GetAdminCatalog returns the full model and provider catalog annotated with
+        each entry's enablement state, for the operator console.
       tags:
       - admin
   /v1/admin/catalog/models/{wildcard1}:
@@ -9280,11 +9478,55 @@ paths:
       - admin
   /v1/admin/enablement:
     get:
+      description: |-
+        ListEnablement returns every item an operator has set an enablement state on —
+        its global state (off, beta or ga) and the orgs granted its beta. An item
+        nobody has touched is absent, because an untouched item is generally
+        available; the console composes the candidate list from the live catalog.
+        SuperAdmin only; every other caller is refused.
       operationId: get_v1_admin_enablement
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/adminEnablementBoard'
+          description: ok
+      summary: |-
+        ListEnablement returns every item an operator has set an enablement state on —
+        its global state (off, beta or ga) and the orgs granted its beta.
       tags:
       - admin
     put:
+      description: |-
+        SetEnablement sets one item's global enablement state — off, beta or ga — and
+        optionally replaces the list of orgs granted its beta. It is generic over
+        kind, so the same call manages models, providers and product features through
+        the one registry. `off` is an absolute kill switch: a self-service opt-in can
+        never re-open it. SuperAdmin only; every other caller is refused.
       operationId: put_v1_admin_enablement
+      requestBody:
+        content:
+          application/json:
+            example:
+              betaOrgs:
+              - acme
+              id: labs
+              kind: feature
+              state: beta
+            schema:
+              $ref: '#/components/schemas/setEnablementBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/adminEnablementItem'
+          description: ok
+      summary: |-
+        SetEnablement sets one item's global enablement state — off, beta or ga — and
+        optionally replaces the list of orgs granted its beta.
       tags:
       - admin
   /v1/admin/finance:
@@ -16815,17 +17057,81 @@ paths:
       - embed-status
   /v1/enablement:
     get:
+      description: |-
+        GetEnablement returns what the caller's org can actually use: every managed
+        item with its global state, whether it is effective here, whether this org is
+        already opted into its beta, and whether it may still opt in. Read-only and
+        safe for any caller — one without a validated principal simply sees the
+        generally-available items and no opt-in affordance, never another org's state.
       operationId: get_v1_enablement
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/enablementBoard'
+          description: ok
+      summary: |-
+        GetEnablement returns what the caller's org can actually use: every managed
+        item with its global state, whether it is effective here, whether this org is
+        already opted into its beta, and whether it may still opt in.
       tags:
       - enablement
   /v1/enablement/optin:
     post:
+      description: |-
+        OptIntoBeta opts the caller's OWN org into a beta item. The org is the
+        caller's validated one, so this can never target another org, and the registry
+        refuses anything not in beta — so it can neither re-open an item an operator
+        turned off nor touch one that is already generally available. Requires a
+        signed-in caller with an org.
       operationId: post_v1_enablement_optin
+      requestBody:
+        content:
+          application/json:
+            example:
+              id: labs
+              kind: feature
+            schema:
+              $ref: '#/components/schemas/enablementOptRef'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/userEnablementItem'
+          description: ok
+      summary: OptIntoBeta opts the caller's OWN org into a beta item.
       tags:
       - enablement
   /v1/enablement/optout:
     post:
+      description: |-
+        OptOutOfBeta removes the caller's OWN org from a beta item's grant list, the
+        reverse of OptIntoBeta and idempotent. The org is the caller's validated one,
+        so this can never revoke another org's grant. Requires a signed-in caller with
+        an org.
       operationId: post_v1_enablement_optout
+      requestBody:
+        content:
+          application/json:
+            example:
+              id: labs
+              kind: feature
+            schema:
+              $ref: '#/components/schemas/enablementOptRef'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/userEnablementItem'
+          description: ok
+      summary: |-
+        OptOutOfBeta removes the caller's OWN org from a beta item's grant list, the
+        reverse of OptIntoBeta and idempotent.
       tags:
       - enablement
   /v1/entitlements:
@@ -24693,7 +24999,26 @@ paths:
       - prefs
   /v1/pricing:
     get:
+      description: |-
+        GetPricing returns the whole pricing catalog in one document: Zen and
+        third-party models, providers, model families, the free-model list, plan and
+        infrastructure pricing. Every model and provider it names is filtered to what
+        the caller's org may see — the same gate the leaf routes apply, so this can
+        never be an un-gated second source for what they hide.
       operationId: get_v1_pricing
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: object
+                type: object
+          description: ok
+      summary: |-
+        GetPricing returns the whole pricing catalog in one document: Zen and
+        third-party models, providers, model families, the free-model list, plan and
+        infrastructure pricing.
       tags:
       - pricing
   /v1/pricing-policy:
@@ -24743,12 +25068,40 @@ paths:
       - pricing
   /v1/pricing/featured:
     get:
+      description: |-
+        ListFeaturedModels returns the models the catalog highlights, filtered to what
+        the caller's org may see. It is the same catalog as ListModels narrowed to
+        entries the pricing source marks featured.
       operationId: get_v1_pricing_featured
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pricingModelList'
+          description: ok
+      summary: |-
+        ListFeaturedModels returns the models the catalog highlights, filtered to what
+        the caller's org may see.
       tags:
       - pricing
   /v1/pricing/free:
     get:
+      description: |-
+        ListFreeModels returns the models that cost nothing to call, filtered to what
+        the caller's org may see. It is the same catalog as ListModels narrowed to
+        entries the pricing source marks free.
       operationId: get_v1_pricing_free
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pricingModelList'
+          description: ok
+      summary: |-
+        ListFreeModels returns the models that cost nothing to call, filtered to what
+        the caller's org may see.
       tags:
       - pricing
   /v1/pricing/gpu:
@@ -24758,7 +25111,22 @@ paths:
       - pricing
   /v1/pricing/health:
     get:
+      description: |-
+        Health reports that the pricing subsystem is mounted and serving. It answers
+        from the process itself and consults neither the catalog bundle nor the
+        enablement store, so it stays "ok" while either is degraded.
       operationId: get_v1_pricing_health
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                service: pricing
+                status: ok
+              schema:
+                $ref: '#/components/schemas/pricingHealth'
+          description: ok
+      summary: Health reports that the pricing subsystem is mounted and serving.
       tags:
       - pricing
   /v1/pricing/iam:
@@ -24768,18 +25136,55 @@ paths:
       - pricing
   /v1/pricing/model/{name}:
     get:
-      operationId: get_v1_pricing_model_by_name
+      description: |-
+        GetModel returns one model's catalog entry — its pricing, context window and
+        capabilities as the pricing source records them. A model hidden for the
+        caller's org answers the same 404 an unknown name does, so a disabled model
+        gets no existence oracle.
+      operationId: get_v1_pricing_model_name
       parameters:
-      - in: path
+      - description: |-
+          Name is the model's name or its slugged id ("zen4",
+          "anthropic/claude-opus-4.6"), matched case-insensitively. It comes from
+          the path: the URL is the addressing authority.
+        example: zen4
+        in: path
         name: name
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: object
+                type: object
+          description: ok
+      summary: |-
+        GetModel returns one model's catalog entry — its pricing, context window and
+        capabilities as the pricing source records them.
       tags:
       - pricing
   /v1/pricing/models:
     get:
+      description: |-
+        ListModels returns the whole model catalog — Hanzo's own Zen models and every
+        third-party model — filtered to what the caller's org may see. A model an
+        admin has disabled is absent; one in beta appears only for an org granted it.
+        A SuperAdmin sees every model, each annotated with its enablement state.
       operationId: get_v1_pricing_models
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pricingModelList'
+          description: ok
+      summary: |-
+        ListModels returns the whole model catalog — Hanzo's own Zen models and every
+        third-party model — filtered to what the caller's org may see.
       tags:
       - pricing
   /v1/pricing/paas:
@@ -24794,7 +25199,22 @@ paths:
       - pricing
   /v1/pricing/providers:
     get:
+      description: |-
+        ListProviders returns the model providers the catalog knows, each with its
+        info object, filtered to what the caller's org may see. A provider an admin
+        has disabled is absent — and so are its models everywhere else on this
+        surface, because a provider's state cascades to what it serves.
       operationId: get_v1_pricing_providers
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pricingProviderList'
+          description: ok
+      summary: |-
+        ListProviders returns the model providers the catalog knows, each with its
+        info object, filtered to what the caller's org may see.
       tags:
       - pricing
   /v1/pricing/subscriptions:
@@ -24804,12 +25224,50 @@ paths:
       - pricing
   /v1/pricing/summary:
     get:
+      description: |-
+        GetPricingSummary returns the catalog's headline statistics — model counts by
+        family and the provider directory. The provider sub-object is filtered to what
+        the caller's org may see, so a disabled provider's name never leaks; the
+        aggregate counts are the catalog's own, over everything it holds.
       operationId: get_v1_pricing_summary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: object
+                type: object
+          description: ok
+      summary: |-
+        GetPricingSummary returns the catalog's headline statistics — model counts by
+        family and the provider directory.
       tags:
       - pricing
   /v1/pricing/sync:
     post:
+      description: |-
+        SyncPricing refreshes the third-party section of the catalog from its upstream
+        listings and returns the time the refreshed catalog was stamped with. The
+        fetch runs in Go and the markup transform in the pricing bundle. SuperAdmin
+        only; every other caller is refused.
       operationId: post_v1_pricing_sync
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/pricingNoInput'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pricingSyncOut'
+          description: ok
+      summary: |-
+        SyncPricing refreshes the third-party section of the catalog from its upstream
+        listings and returns the time the refreshed catalog was stamped with.
       tags:
       - pricing
   /v1/pricing/tools:

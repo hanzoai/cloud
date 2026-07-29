@@ -21,12 +21,11 @@
 package pricing
 
 import (
-	"encoding/json"
+	"context"
 	"net/http"
 	"sort"
 	"strings"
 
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -44,24 +43,33 @@ type adminEnablementItem struct {
 	UpdatedAt int64    `json:"updatedAt"`
 }
 
-// adminEnablementList answers GET /v1/admin/enablement — every MANAGED item and its
-// global state + beta grants. Untouched catalog items are absent (they are `ga` by
-// default); the console composes the candidate list from the live model catalog.
-func adminEnablementList(c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// adminEnablementBoard is the managed registry, ordered by kind then id.
+type adminEnablementBoard struct {
+	// Items is every item an operator has set a state on. An item nobody has
+	// touched is absent: it is generally available by default.
+	Items []adminEnablementItem `json:"items"`
+}
+
+// ListEnablement returns every item an operator has set an enablement state on —
+// its global state (off, beta or ga) and the orgs granted its beta. An item
+// nobody has touched is absent, because an untouched item is generally
+// available; the console composes the candidate list from the live catalog.
+// SuperAdmin only; every other caller is refused.
+func (o ops) adminEnablementList(ctx context.Context, _ *pricingNoInput) (*adminEnablementBoard, error) {
+	if !callerIsAdmin(ctx) {
+		return nil, zip.ErrForbidden("SuperAdmin required")
 	}
 	if cat == nil {
-		return c.JSON(http.StatusServiceUnavailable, map[string]any{"error": "enablement store not initialised"})
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "enablement store not initialised")
 	}
-	snap, err := cat.Snapshot(c.Context())
+	snap, err := cat.Snapshot(ctx)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "enablement read failed"})
+		return nil, zip.Errorf(http.StatusInternalServerError, "enablement read failed")
 	}
 	items := make([]adminEnablementItem, 0, len(snap))
-	for _, o := range snap {
+	for _, ov := range snap {
 		items = append(items, adminEnablementItem{
-			Kind: o.Kind, ID: o.ID, State: o.State(), BetaOrgs: o.BetaOrgs, UpdatedAt: o.UpdatedAt,
+			Kind: ov.Kind, ID: ov.ID, State: ov.State(), BetaOrgs: ov.BetaOrgs, UpdatedAt: ov.UpdatedAt,
 		})
 	}
 	sort.Slice(items, func(i, j int) bool {
@@ -70,43 +78,49 @@ func adminEnablementList(c *zip.Ctx) error {
 		}
 		return items[i].ID < items[j].ID
 	})
-	return c.JSON(http.StatusOK, map[string]any{"items": items})
+	return &adminEnablementBoard{Items: items}, nil
 }
 
 // setEnablementBody is the SuperAdmin PUT payload.
 type setEnablementBody struct {
-	Kind     string    `json:"kind"`
-	ID       string    `json:"id"`
-	State    string    `json:"state"`              // off|beta|ga (required)
-	BetaOrgs *[]string `json:"betaOrgs,omitempty"` // optional grant list (replaces)
+	// Kind is the item's namespace: "model", "provider" or "feature".
+	Kind string `json:"kind"`
+	// ID is the item within that namespace — a model id, a provider name, or a
+	// feature's key.
+	ID string `json:"id"`
+	// State is the item's global enablement: "off" (hidden from everyone,
+	// absolutely), "beta" (visible only to granted orgs) or "ga" (visible to
+	// everyone). Required.
+	State string `json:"state"`
+	// BetaOrgs REPLACES the item's beta grant list when present. Omit it to
+	// leave the existing grants alone.
+	BetaOrgs *[]string `json:"betaOrgs,omitempty"`
 }
 
-// adminEnablementSet answers PUT /v1/admin/enablement — set an item's global state
-// (and optionally its beta-org grant list). SuperAdmin only. Generic over kind,
-// so it manages models, providers, AND product/features through the one store.
-func adminEnablementSet(c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// SetEnablement sets one item's global enablement state — off, beta or ga — and
+// optionally replaces the list of orgs granted its beta. It is generic over
+// kind, so the same call manages models, providers and product features through
+// the one registry. `off` is an absolute kill switch: a self-service opt-in can
+// never re-open it. SuperAdmin only; every other caller is refused.
+//
+// Example: {"kind":"feature","id":"labs","state":"beta","betaOrgs":["acme"]}
+func (o ops) adminEnablementSet(ctx context.Context, in *setEnablementBody) (*adminEnablementItem, error) {
+	if !callerIsAdmin(ctx) {
+		return nil, zip.ErrForbidden("SuperAdmin required")
 	}
 	if cat == nil {
-		return c.JSON(http.StatusServiceUnavailable, map[string]any{"error": "enablement store not initialised"})
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "enablement store not initialised")
 	}
-	var body setEnablementBody
-	if raw := c.Body(); len(raw) > 0 {
-		if err := json.Unmarshal(raw, &body); err != nil {
-			return zip.ErrBadRequest("invalid JSON body: " + err.Error())
-		}
-	}
-	kind := strings.TrimSpace(body.Kind)
-	id := strings.TrimSpace(body.ID)
+	kind := strings.TrimSpace(in.Kind)
+	id := strings.TrimSpace(in.ID)
 	if !enablementKinds[kind] {
-		return zip.ErrBadRequest("kind must be model|provider|feature")
+		return nil, zip.ErrBadRequest("kind must be model|provider|feature")
 	}
 	if id == "" {
-		return zip.ErrBadRequest("id required")
+		return nil, zip.ErrBadRequest("id required")
 	}
 	var setEnabled, setBeta bool
-	switch strings.ToLower(strings.TrimSpace(body.State)) {
+	switch strings.ToLower(strings.TrimSpace(in.State)) {
 	case "ga", "on", "enabled":
 		setEnabled, setBeta = true, false
 	case "beta":
@@ -114,19 +128,19 @@ func adminEnablementSet(c *zip.Ctx) error {
 	case "off", "disabled":
 		setEnabled, setBeta = false, false
 	default:
-		return zip.ErrBadRequest("state must be off|beta|ga")
+		return nil, zip.ErrBadRequest("state must be off|beta|ga")
 	}
-	o, err := cat.mutate(c.Context(), kind, id, func(o *Overlay) error {
-		o.Enabled, o.Beta = setEnabled, setBeta
-		if body.BetaOrgs != nil {
-			o.BetaOrgs = normalizeOrgs(*body.BetaOrgs)
+	ov, err := cat.mutate(ctx, kind, id, func(ov *Overlay) error {
+		ov.Enabled, ov.Beta = setEnabled, setBeta
+		if in.BetaOrgs != nil {
+			ov.BetaOrgs = normalizeOrgs(*in.BetaOrgs)
 		}
 		return nil
 	})
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "enablement write failed"})
+		return nil, zip.Errorf(http.StatusInternalServerError, "enablement write failed")
 	}
-	return c.JSON(http.StatusOK, adminEnablementItem{Kind: o.Kind, ID: o.ID, State: o.State(), BetaOrgs: o.BetaOrgs, UpdatedAt: o.UpdatedAt})
+	return &adminEnablementItem{Kind: ov.Kind, ID: ov.ID, State: ov.State(), BetaOrgs: ov.BetaOrgs, UpdatedAt: ov.UpdatedAt}, nil
 }
 
 // userEnablementItem is one row of the caller's effective view.
@@ -139,35 +153,47 @@ type userEnablementItem struct {
 	CanOptIn  bool   `json:"canOptIn"`  // beta && not yet opted in
 }
 
-// enablementView answers GET /v1/enablement — the caller's EFFECTIVE enablement
-// across every managed item, plus the betas they may opt into. Read-only and safe
-// for any principal; an anonymous caller (no org) simply sees the public (ga) items
-// as effective and no opt-in affordance.
-func enablementView(c *zip.Ctx) error {
+// enablementBoard is the caller's own view of the registry. Field order matches
+// the sorted keys of the map it replaces, so the bytes on the wire are unchanged.
+type enablementBoard struct {
+	// Betas are the subset of Items the caller's org may still opt into.
+	Betas []userEnablementItem `json:"betas"`
+	// Items is every managed item, each resolved for the caller's org.
+	Items []userEnablementItem `json:"items"`
+	// Org is the org this view was resolved for; empty for a caller with no
+	// validated principal, who sees only the generally-available items.
+	Org string `json:"org"`
+}
+
+// GetEnablement returns what the caller's org can actually use: every managed
+// item with its global state, whether it is effective here, whether this org is
+// already opted into its beta, and whether it may still opt in. Read-only and
+// safe for any caller — one without a validated principal simply sees the
+// generally-available items and no opt-in affordance, never another org's state.
+func (o ops) enablementView(ctx context.Context, _ *pricingNoInput) (*enablementBoard, error) {
 	if cat == nil {
-		return c.JSON(http.StatusServiceUnavailable, map[string]any{"error": "enablement store not initialised"})
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "enablement store not initialised")
 	}
-	// Resolve the tenant through the SAME validated-principal gate the pricing
-	// catalog read plane uses (trustedOrg → principal.Org): an unvalidated
-	// caller (no gateway-minted principal) resolves to "" and simply sees the
-	// public (ga) items as effective with no opt-in affordance — never another
-	// org's beta state via a restored client X-Org-Id.
-	org := trustedOrg(c)
-	snap, err := cat.Snapshot(c.Context())
+	// The tenant comes from the VALIDATED principal cloud.Bridge parked, never
+	// from a field of In or a raw client header: an unvalidated caller (an
+	// off-gateway request carrying X-Org-Id with no credential) resolves to ""
+	// and sees the public view, not another org's beta state.
+	org := callerOrg(ctx)
+	snap, err := cat.Snapshot(ctx)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "enablement read failed"})
+		return nil, zip.Errorf(http.StatusInternalServerError, "enablement read failed")
 	}
 	items := make([]userEnablementItem, 0, len(snap))
 	betas := make([]userEnablementItem, 0)
-	for _, o := range snap {
-		optedIn := org != "" && o.optedIn(org)
+	for _, ov := range snap {
+		optedIn := org != "" && ov.optedIn(org)
 		item := userEnablementItem{
-			Kind:      o.Kind,
-			ID:        o.ID,
-			State:     o.State(),
-			Effective: o.visibleTo(org),
+			Kind:      ov.Kind,
+			ID:        ov.ID,
+			State:     ov.State(),
+			Effective: ov.visibleTo(org),
 			OptedIn:   optedIn,
-			CanOptIn:  o.State() == "beta" && !optedIn && org != "",
+			CanOptIn:  ov.State() == "beta" && !optedIn && org != "",
 		}
 		items = append(items, item)
 		if item.CanOptIn {
@@ -175,79 +201,84 @@ func enablementView(c *zip.Ctx) error {
 		}
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Kind+items[i].ID < items[j].Kind+items[j].ID })
-	return c.JSON(http.StatusOK, map[string]any{"org": org, "items": items, "betas": betas})
+	return &enablementBoard{Betas: betas, Items: items, Org: org}, nil
 }
 
-// optBody is the self-service opt-in/out payload.
-type optBody struct {
+// enablementOptRef names the item a self-service opt-in or opt-out acts on. The
+// ORG is never a field here: it is the caller's validated org, read off the
+// context, so a caller can only ever move their own.
+type enablementOptRef struct {
+	// Kind is the item's namespace: "model", "provider" or "feature".
 	Kind string `json:"kind"`
-	ID   string `json:"id"`
+	// ID is the item within that namespace.
+	ID string `json:"id"`
 }
 
-// enablementOptIn answers POST /v1/enablement/optin — opt the caller's OWN org into
-// a beta item. The subject is the VALIDATED caller org (principal.Org), and
-// the store refuses anything not in beta, so this can neither target another org nor
-// bypass an `off`. Requires an authenticated principal with an org.
-func enablementOptIn(c *zip.Ctx) error {
-	return enablementOpt(c, true)
+// OptIntoBeta opts the caller's OWN org into a beta item. The org is the
+// caller's validated one, so this can never target another org, and the registry
+// refuses anything not in beta — so it can neither re-open an item an operator
+// turned off nor touch one that is already generally available. Requires a
+// signed-in caller with an org.
+//
+// Example: {"kind":"feature","id":"labs"}
+func (o ops) enablementOptIn(ctx context.Context, in *enablementOptRef) (*userEnablementItem, error) {
+	return enablementOpt(ctx, in, true)
 }
 
-// enablementOptOut answers POST /v1/enablement/optout — the reverse.
-func enablementOptOut(c *zip.Ctx) error {
-	return enablementOpt(c, false)
+// OptOutOfBeta removes the caller's OWN org from a beta item's grant list, the
+// reverse of OptIntoBeta and idempotent. The org is the caller's validated one,
+// so this can never revoke another org's grant. Requires a signed-in caller with
+// an org.
+//
+// Example: {"kind":"feature","id":"labs"}
+func (o ops) enablementOptOut(ctx context.Context, in *enablementOptRef) (*userEnablementItem, error) {
+	return enablementOpt(ctx, in, false)
 }
 
-func enablementOpt(c *zip.Ctx, in bool) error {
+func enablementOpt(ctx context.Context, in *enablementOptRef, joining bool) (*userEnablementItem, error) {
 	if cat == nil {
-		return c.JSON(http.StatusServiceUnavailable, map[string]any{"error": "enablement store not initialised"})
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "enablement store not initialised")
 	}
-	// Resolve the subject through principal.Org — a VALIDATED principal only
-	// (X-User-Id present, gateway-minted). A raw c.Org() would trust a client
-	// X-Org-Id that SanitizeIdentity restores on the bearer-less direct-to-pod
-	// path (see clients/principal.Validated) — i.e. an off-gateway caller sending
-	// `X-Org-Id: victim` with no credential could opt an org it does not own into
-	// (or out of) a beta. Keying on the validated tenant closes that cross-tenant
-	// write: a caller can only ever opt in THEIR OWN validated org. (RED MEDIUM.)
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to manage beta features")
+	// The subject is the VALIDATED caller org (cloud.Bridge parks what
+	// principal.Org decided). A raw X-Org-Id would trust the header
+	// SanitizeIdentity restores on the bearer-less direct-to-pod path — i.e. an
+	// off-gateway caller sending `X-Org-Id: victim` with no credential could opt
+	// an org it does not own into (or out of) a beta. Keying on the validated
+	// tenant closes that cross-tenant write. (RED MEDIUM.)
+	org := callerOrg(ctx)
+	if org == "" {
+		return nil, zip.ErrUnauthorized("sign in to manage beta features")
 	}
-	var body optBody
-	if raw := c.Body(); len(raw) > 0 {
-		if err := json.Unmarshal(raw, &body); err != nil {
-			return zip.ErrBadRequest("invalid JSON body: " + err.Error())
-		}
-	}
-	kind := strings.TrimSpace(body.Kind)
-	id := strings.TrimSpace(body.ID)
+	kind := strings.TrimSpace(in.Kind)
+	id := strings.TrimSpace(in.ID)
 	if !enablementKinds[kind] {
-		return zip.ErrBadRequest("kind must be model|provider|feature")
+		return nil, zip.ErrBadRequest("kind must be model|provider|feature")
 	}
 	if id == "" {
-		return zip.ErrBadRequest("id required")
+		return nil, zip.ErrBadRequest("id required")
 	}
 
 	var (
-		o   Overlay
+		ov  Overlay
 		err error
 	)
-	if in {
-		o, err = cat.OptIn(c.Context(), kind, id, org)
+	if joining {
+		ov, err = cat.OptIn(ctx, kind, id, org)
 	} else {
-		o, err = cat.OptOut(c.Context(), kind, id, org)
+		ov, err = cat.OptOut(ctx, kind, id, org)
 	}
 	if err == errNotBeta {
-		return zip.ErrBadRequest("item is not in beta — nothing to opt into")
+		return nil, zip.ErrBadRequest("item is not in beta — nothing to opt into")
 	}
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "opt-in write failed"})
+		return nil, zip.Errorf(http.StatusInternalServerError, "opt-in write failed")
 	}
-	return c.JSON(http.StatusOK, userEnablementItem{
-		Kind:      o.Kind,
-		ID:        o.ID,
-		State:     o.State(),
-		Effective: o.visibleTo(org),
-		OptedIn:   o.optedIn(org),
-		CanOptIn:  o.State() == "beta" && !o.optedIn(org),
-	})
+	return &userEnablementItem{
+		Kind:      ov.Kind,
+		ID:        ov.ID,
+		State:     ov.State(),
+		Effective: ov.visibleTo(org),
+		OptedIn:   ov.optedIn(org),
+		CanOptIn:  ov.State() == "beta" && !ov.optedIn(org),
+	}, nil
 }
