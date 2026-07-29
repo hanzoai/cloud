@@ -28,9 +28,23 @@
     "/v1/admin/catalog": {
       "get": {
         "operationId": "get_v1_admin_catalog",
+        "summary": "GetAdminCatalog returns the full model and provider catalog annotated with\neach entry's enablement state, for the operator console.",
+        "description": "GetAdminCatalog returns the full model and provider catalog annotated with\neach entry's enablement state, for the operator console. Nothing is hidden:\nthis is the admin's view of what exists and what is currently off, in beta or\ngenerally available. SuperAdmin only; every other caller is refused.",
         "tags": [
           "admin"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/adminCatalogOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/admin/catalog/models/{wildcard1}": {
@@ -72,47 +86,180 @@
     "/v1/admin/enablement": {
       "get": {
         "operationId": "get_v1_admin_enablement",
+        "summary": "ListEnablement returns every item an operator has set an enablement state on —\nits global state (off, beta or ga) and the orgs granted its beta.",
+        "description": "ListEnablement returns every item an operator has set an enablement state on —\nits global state (off, beta or ga) and the orgs granted its beta. An item\nnobody has touched is absent, because an untouched item is generally\navailable; the console composes the candidate list from the live catalog.\nSuperAdmin only; every other caller is refused.",
         "tags": [
           "admin"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/adminEnablementBoard"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
         "operationId": "put_v1_admin_enablement",
+        "summary": "SetEnablement sets one item's global enablement state — off, beta or ga — and\noptionally replaces the list of orgs granted its beta.",
+        "description": "SetEnablement sets one item's global enablement state — off, beta or ga — and\noptionally replaces the list of orgs granted its beta. It is generic over\nkind, so the same call manages models, providers and product features through\nthe one registry. `off` is an absolute kill switch: a self-service opt-in can\nnever re-open it. SuperAdmin only; every other caller is refused.",
         "tags": [
           "admin"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "betaOrgs": [
+                  "acme"
+                ],
+                "id": "labs",
+                "kind": "feature",
+                "state": "beta"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/setEnablementBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/adminEnablementItem"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/enablement": {
       "get": {
         "operationId": "get_v1_enablement",
+        "summary": "GetEnablement returns what the caller's org can actually use: every managed\nitem with its global state, whether it is effective here, whether this org is\nalready opted into its beta, and whether it may still opt in.",
+        "description": "GetEnablement returns what the caller's org can actually use: every managed\nitem with its global state, whether it is effective here, whether this org is\nalready opted into its beta, and whether it may still opt in. Read-only and\nsafe for any caller — one without a validated principal simply sees the\ngenerally-available items and no opt-in affordance, never another org's state.",
         "tags": [
           "enablement"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/enablementBoard"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/enablement/optin": {
       "post": {
         "operationId": "post_v1_enablement_optin",
+        "summary": "OptIntoBeta opts the caller's OWN org into a beta item.",
+        "description": "OptIntoBeta opts the caller's OWN org into a beta item. The org is the\ncaller's validated one, so this can never target another org, and the registry\nrefuses anything not in beta — so it can neither re-open an item an operator\nturned off nor touch one that is already generally available. Requires a\nsigned-in caller with an org.",
         "tags": [
           "enablement"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "labs",
+                "kind": "feature"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/enablementOptRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/userEnablementItem"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/enablement/optout": {
       "post": {
         "operationId": "post_v1_enablement_optout",
+        "summary": "OptOutOfBeta removes the caller's OWN org from a beta item's grant list, the\nreverse of OptIntoBeta and idempotent.",
+        "description": "OptOutOfBeta removes the caller's OWN org from a beta item's grant list, the\nreverse of OptIntoBeta and idempotent. The org is the caller's validated one,\nso this can never revoke another org's grant. Requires a signed-in caller with\nan org.",
         "tags": [
           "enablement"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "labs",
+                "kind": "feature"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/enablementOptRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/userEnablementItem"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing": {
       "get": {
         "operationId": "get_v1_pricing",
+        "summary": "GetPricing returns the whole pricing catalog in one document: Zen and\nthird-party models, providers, model families, the free-model list, plan and\ninfrastructure pricing.",
+        "description": "GetPricing returns the whole pricing catalog in one document: Zen and\nthird-party models, providers, model families, the free-model list, plan and\ninfrastructure pricing. Every model and provider it names is filtered to what\nthe caller's org may see — the same gate the leaf routes apply, so this can\nnever be an un-gated second source for what they hide.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "object"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing-policy": {
@@ -190,17 +337,45 @@
     "/v1/pricing/featured": {
       "get": {
         "operationId": "get_v1_pricing_featured",
+        "summary": "ListFeaturedModels returns the models the catalog highlights, filtered to what\nthe caller's org may see.",
+        "description": "ListFeaturedModels returns the models the catalog highlights, filtered to what\nthe caller's org may see. It is the same catalog as ListModels narrowed to\nentries the pricing source marks featured.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pricingModelList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/free": {
       "get": {
         "operationId": "get_v1_pricing_free",
+        "summary": "ListFreeModels returns the models that cost nothing to call, filtered to what\nthe caller's org may see.",
+        "description": "ListFreeModels returns the models that cost nothing to call, filtered to what\nthe caller's org may see. It is the same catalog as ListModels narrowed to\nentries the pricing source marks free.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pricingModelList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/gpu": {
@@ -214,9 +389,27 @@
     "/v1/pricing/health": {
       "get": {
         "operationId": "get_v1_pricing_health",
+        "summary": "Health reports that the pricing subsystem is mounted and serving.",
+        "description": "Health reports that the pricing subsystem is mounted and serving. It answers\nfrom the process itself and consults neither the catalog bundle nor the\nenablement store, so it stays \"ok\" while either is degraded.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "service": "pricing",
+                  "status": "ok"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/pricingHealth"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/iam": {
@@ -229,7 +422,9 @@
     },
     "/v1/pricing/model/{name}": {
       "get": {
-        "operationId": "get_v1_pricing_model_by_name",
+        "operationId": "get_v1_pricing_model_name",
+        "summary": "GetModel returns one model's catalog entry — its pricing, context window and\ncapabilities as the pricing source records them.",
+        "description": "GetModel returns one model's catalog entry — its pricing, context window and\ncapabilities as the pricing source records them. A model hidden for the\ncaller's org answers the same 404 an unknown name does, so a disabled model\ngets no existence oracle.",
         "tags": [
           "pricing"
         ],
@@ -238,19 +433,50 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the model's name or its slugged id (\"zen4\",\n\"anthropic/claude-opus-4.6\"), matched case-insensitively. It comes from\nthe path: the URL is the addressing authority.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "zen4"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "object"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/models": {
       "get": {
         "operationId": "get_v1_pricing_models",
+        "summary": "ListModels returns the whole model catalog — Hanzo's own Zen models and every\nthird-party model — filtered to what the caller's org may see.",
+        "description": "ListModels returns the whole model catalog — Hanzo's own Zen models and every\nthird-party model — filtered to what the caller's org may see. A model an\nadmin has disabled is absent; one in beta appears only for an org granted it.\nA SuperAdmin sees every model, each annotated with its enablement state.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pricingModelList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/paas": {
@@ -272,9 +498,23 @@
     "/v1/pricing/providers": {
       "get": {
         "operationId": "get_v1_pricing_providers",
+        "summary": "ListProviders returns the model providers the catalog knows, each with its\ninfo object, filtered to what the caller's org may see.",
+        "description": "ListProviders returns the model providers the catalog knows, each with its\ninfo object, filtered to what the caller's org may see. A provider an admin\nhas disabled is absent — and so are its models everywhere else on this\nsurface, because a provider's state cascades to what it serves.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pricingProviderList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/subscriptions": {
@@ -288,17 +528,58 @@
     "/v1/pricing/summary": {
       "get": {
         "operationId": "get_v1_pricing_summary",
+        "summary": "GetPricingSummary returns the catalog's headline statistics — model counts by\nfamily and the provider directory.",
+        "description": "GetPricingSummary returns the catalog's headline statistics — model counts by\nfamily and the provider directory. The provider sub-object is filtered to what\nthe caller's org may see, so a disabled provider's name never leaks; the\naggregate counts are the catalog's own, over everything it holds.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "object"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/sync": {
       "post": {
         "operationId": "post_v1_pricing_sync",
+        "summary": "SyncPricing refreshes the third-party section of the catalog from its upstream\nlistings and returns the time the refreshed catalog was stamped with.",
+        "description": "SyncPricing refreshes the third-party section of the catalog from its upstream\nlistings and returns the time the refreshed catalog was stamped with. The\nfetch runs in Go and the markup transform in the pricing bundle. SuperAdmin\nonly; every other caller is refused.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pricingNoInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pricingSyncOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/tools": {
@@ -307,6 +588,228 @@
         "tags": [
           "pricing"
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "adminCatalogOut": {
+        "properties": {
+          "models": {
+            "description": "Models is every model the catalog holds — disabled ones included — each\ncarrying its enablement state under \"_overlay\".",
+            "items": {
+              "additionalProperties": {
+                "type": "object"
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "providers": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "description": "Providers is every provider the catalog holds, keyed by name, each\ncarrying its enablement state under \"_overlay\".",
+            "type": "object"
+          },
+          "updated": {
+            "description": "Updated is when the catalog was last refreshed, as the pricing source\nrecorded it.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "adminEnablementBoard": {
+        "properties": {
+          "items": {
+            "description": "Items is every item an operator has set a state on. An item nobody has\ntouched is absent: it is generally available by default.",
+            "items": {
+              "$ref": "#/components/schemas/adminEnablementItem"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "adminEnablementItem": {
+        "properties": {
+          "betaOrgs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "state": {
+            "description": "off|beta|ga",
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "enablementBoard": {
+        "properties": {
+          "betas": {
+            "description": "Betas are the subset of Items the caller's org may still opt into.",
+            "items": {
+              "$ref": "#/components/schemas/userEnablementItem"
+            },
+            "type": "array"
+          },
+          "items": {
+            "description": "Items is every managed item, each resolved for the caller's org.",
+            "items": {
+              "$ref": "#/components/schemas/userEnablementItem"
+            },
+            "type": "array"
+          },
+          "org": {
+            "description": "Org is the org this view was resolved for; empty for a caller with no\nvalidated principal, who sees only the generally-available items.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "enablementOptRef": {
+        "properties": {
+          "id": {
+            "description": "ID is the item within that namespace.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the item's namespace: \"model\", \"provider\" or \"feature\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pricingHealth": {
+        "properties": {
+          "service": {
+            "description": "Service names the subsystem that answered.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" whenever this subsystem is mounted.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pricingModelList": {
+        "properties": {
+          "models": {
+            "description": "Models are the catalog entries visible to the caller, each an opaque\nobject exactly as the pricing source emits it, with any admin override\nmerged on top. An admin additionally sees hidden entries, each annotated\nunder \"_overlay\".",
+            "items": {
+              "additionalProperties": {
+                "type": "object"
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is how many models this answer carries — recounted over the visible\nset, not the catalog's own total.",
+            "type": "integer"
+          },
+          "updated": {
+            "description": "Updated is when the catalog was last refreshed, as the pricing source\nrecorded it.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "pricingNoInput": {
+        "properties": {},
+        "type": "object"
+      },
+      "pricingProviderList": {
+        "properties": {
+          "providers": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "description": "Providers maps a provider name to its opaque info object. A provider\nhidden for the caller's org is absent entirely.",
+            "type": "object"
+          },
+          "updated": {
+            "description": "Updated is when the catalog was last refreshed, as the pricing source\nrecorded it.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "pricingSyncOut": {
+        "properties": {
+          "status": {
+            "description": "Status is \"ok\" when the sync completed.",
+            "type": "string"
+          },
+          "updated": {
+            "description": "Updated is the RFC 3339 time the refreshed catalog was stamped with.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "setEnablementBody": {
+        "properties": {
+          "betaOrgs": {
+            "description": "BetaOrgs REPLACES the item's beta grant list when present. Omit it to\nleave the existing grants alone.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "ID is the item within that namespace — a model id, a provider name, or a\nfeature's key.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the item's namespace: \"model\", \"provider\" or \"feature\".",
+            "type": "string"
+          },
+          "state": {
+            "description": "State is the item's global enablement: \"off\" (hidden from everyone,\nabsolutely), \"beta\" (visible only to granted orgs) or \"ga\" (visible to\neveryone). Required.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "userEnablementItem": {
+        "properties": {
+          "canOptIn": {
+            "description": "beta \u0026\u0026 not yet opted in",
+            "type": "boolean"
+          },
+          "effective": {
+            "description": "visible to the caller's org",
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "optedIn": {
+            "description": "caller's org on the beta list",
+            "type": "boolean"
+          },
+          "state": {
+            "description": "off|beta|ga",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }
