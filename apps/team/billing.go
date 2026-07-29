@@ -27,6 +27,7 @@ import (
 
 	"github.com/zap-proto/zip"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/team/wallet"
 	"github.com/hanzoai/cloud/types"
 )
@@ -35,18 +36,27 @@ import (
 // can name no org's data.
 var errNoOrg = errors.New("token carries no org")
 
-// billingService serves the wallet page + the plan/seats read.
+// billingService serves the wallet page + the plan/seats read. degraded is the
+// fail-closed posture Mount resolved (no HS256 secret): a typed op cannot be
+// wrapped by Mount's guard, so it asks for itself — see typed.go.
 type billingService struct {
 	accounts *accountStore
 	commerce types.CommerceClient
 	planEnt  func(context.Context, string) (map[string]any, error)
 	secret   string
+	degraded bool
 }
 
-func (b *billingService) register(r zip.Router, guard guardFn) {
-	r.Get("/billing/plan", guard(b.plan))
-	r.Get("/billing/ui", guard(b.ui))
-	r.Get("/billing/ui/*", guard(b.ui))
+func (b *billingService) register(app cloud.Router, guard guardFn) {
+	// The group is built HERE so cmd/zipdoc can resolve the typed op's prefix from
+	// this file — see bots.go for why.
+	g := app.Group(teamPrefix)
+	// TYPED: the plan read is a JSON value with a name. The two /ui routes below
+	// stay untyped — they serve the embedded page's BYTES (html/js/css) under a
+	// per-asset Content-Type, which is not a shape a typed Out can describe.
+	zip.Get(g, "/billing/plan", b.readPlan)
+	g.Get("/billing/ui", guard(b.ui))
+	g.Get("/billing/ui/*", guard(b.ui))
 }
 
 // planInfo is the GET /v1/team/billing/plan body. Plan/Active come from the
@@ -55,32 +65,51 @@ func (b *billingService) register(r zip.Router, guard guardFn) {
 // active human members; GuestLimit is the plan's team.guests cap when the plan
 // carries one.
 type planInfo struct {
-	Plan       string `json:"plan"`
-	Active     bool   `json:"active"`
-	Seats      int    `json:"seats"`
-	Guests     int    `json:"guests"`
-	GuestLimit int    `json:"guestLimit,omitempty"`
+	// Plan is the licensed plan id, empty when it cannot be resolved here — an
+	// honest dash on the page, never a fabricated tier.
+	Plan string `json:"plan"`
+	// Active is whether that plan's entitlement is live.
+	Active bool `json:"active"`
+	// Seats is the org's distinct active human members.
+	Seats int `json:"seats"`
+	// Guests is how many of those seats are guests.
+	Guests int `json:"guests"`
+	// GuestLimit is the plan's team.guests cap, when the plan carries one.
+	GuestLimit int `json:"guestLimit,omitempty"`
+	// UpgradeURL is where the page sends a caller who wants a bigger plan.
 	UpgradeURL string `json:"upgradeUrl"`
 }
 
-func (b *billingService) plan(c *zip.Ctx) error {
-	_, org, err := orgPrincipal(c, b.secret)
-	if err != nil {
-		return zip.ErrUnauthorized("sign in to view billing")
+// ReadPlan returns the plan and seat counts for the caller's OWN org, resolved
+// from the VERIFIED team session token — never a client header. Seats and guests
+// are the org's distinct active human members (a bot member is not a seat); the
+// plan comes from the licensing entitlement and is empty when that read is
+// unavailable, so the page shows an honest dash rather than a fabricated tier. A
+// caller with no verified session gets 401, and a real seat-read failure is a
+// 502 rather than a false "0 members".
+//
+// Response: {"plan": "pro", "active": true, "seats": 3, "guests": 1, "guestLimit": 3, "upgradeUrl": "https://billing.hanzo.ai"}
+func (b *billingService) readPlan(ctx context.Context, _ *none) (*planInfo, error) {
+	if b.degraded {
+		return nil, unavailable()
 	}
-	seats, guests, err := b.accounts.Seats(c.Context(), org)
+	_, org, err := sessionOf(ctx, b.secret)
+	if err != nil {
+		return nil, zip.ErrUnauthorized("sign in to view billing")
+	}
+	seats, guests, err := b.accounts.Seats(ctx, org)
 	if err != nil {
 		// A real seat-read failure must surface, not render as a false "0 members".
-		return zip.Errorf(http.StatusBadGateway, "seat count unavailable")
+		return nil, zip.Errorf(http.StatusBadGateway, "seat count unavailable")
 	}
 	out := planInfo{Seats: seats, Guests: guests, UpgradeURL: upgradeURL}
 	// Best-effort licensing read — the SAME seams entitle() gates login with.
 	// An infra absence (nil commerce, resolution error) leaves plan empty.
 	if b.commerce != nil {
-		if ent, err := b.commerce.CheckEntitlement(c.Context(), org, productTeam); err == nil && ent != nil {
+		if ent, err := b.commerce.CheckEntitlement(ctx, org, productTeam); err == nil && ent != nil {
 			out.Plan, out.Active = ent.Plan, ent.Active
 			if b.planEnt != nil && ent.Plan != "" {
-				if ents, err := b.planEnt(c.Context(), ent.Plan); err == nil {
+				if ents, err := b.planEnt(ctx, ent.Plan); err == nil {
 					if limit, ok := intEntitlement(ents[guestCapKey]); ok {
 						out.GuestLimit = limit
 					}
@@ -89,8 +118,8 @@ func (b *billingService) plan(c *zip.Ctx) error {
 		}
 	}
 	// Per-tenant plan/seat data must never be cached by an intermediary.
-	c.SetHeader("Cache-Control", "no-store")
-	return c.JSON(http.StatusOK, out)
+	noStore(ctx)
+	return &out, nil
 }
 
 // ui serves the embedded wallet page: the exact asset when it exists, else
