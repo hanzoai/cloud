@@ -2,7 +2,7 @@ package team
 
 // This file is the workspace data plane the SPA connects to after
 // selectWorkspace — the transactor. The RPC dispatch + query semantics are ported
-// VERBATIM from github.com/hanzoai/team-go/pkg/transactor/transactor.go; the
+// VERBATIM from github.com/hanzoai/team/pkg/transactor/transactor.go; the
 // TRANSPORT is rewritten from golang.org/x/net/websocket + core.RequestEvent to
 // zip's wsx (fasthttp/websocket) at app.Get("/v1/team/transactor/:token", ...).
 //

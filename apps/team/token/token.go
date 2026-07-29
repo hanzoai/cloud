@@ -15,7 +15,7 @@
 //
 // The secret is the shared `SERVER_SECRET` (synced from KMS in production).
 // One secret, one wire format — every team surface signs and verifies through
-// this package. Ported VERBATIM from github.com/hanzoai/team-go/pkg/token.
+// this package. Ported VERBATIM from github.com/hanzoai/team/pkg/token.
 package token
 
 import (
