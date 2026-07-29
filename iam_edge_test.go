@@ -205,3 +205,146 @@ func TestEdgeOwnPredicate(t *testing.T) {
 		}
 	}
 }
+
+// THE LEAK. get-users is an org-scoped read that is NOT org-KEYED, so the pin
+// above never reached it: a tenant's team page forwarded a BARE get-users under
+// cloud's ONE service credential and got back whatever org that credential
+// resolves to — measured live as 262 rows, all owner=hanzo, served to every
+// tenant. The pin must cover every scoped segment, not the three keyed ones.
+//
+// It is also the gate on IAM v1.33.31: once Scope honours-or-refuses, a bare read
+// still answers from the credential's org rather than the caller's, and a super
+// credential (the naive fix for the 403) makes IAM's lister drop its Owner filter
+// entirely — one leak traded for a worse one. Pinning here is what makes either
+// credential safe.
+func TestEdgePinsOrgOnEveryScopedRead(t *testing.T) {
+	for _, seg := range []string{"get-users", "get-roles", "get-user"} {
+		iam := newStubIAM()
+		app := edgeApp(t, iam.URL)
+
+		req := as(httptest.NewRequest(http.MethodGet, "/v1/iam/"+seg, nil), "maxpower", "maxpower/dave", false, true)
+		res, err := app.Fiber().Test(req)
+		if err != nil {
+			iam.Close()
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if got := iam.query.Get("owner"); got != "maxpower" {
+			t.Errorf("%s forwarded owner = %q, want the caller's own %q — an unpinned read answers from the CREDENTIAL's org, not the caller's", seg, got, "maxpower")
+		}
+		iam.Close()
+	}
+}
+
+// A super admin is still not pinned — the god view survives the pin.
+func TestEdgeSuperAdminUnpinnedOnScopedRead(t *testing.T) {
+	iam := newStubIAM()
+	defer iam.Close()
+	app := edgeApp(t, iam.URL)
+
+	req := as(httptest.NewRequest(http.MethodGet, "/v1/iam/get-users?owner=acme", nil), "admin", "admin/root", true, true)
+	res, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if got := iam.query.Get("owner"); got != "acme" {
+		t.Fatalf("super admin owner = %q, want the requested %q (over-pinned)", got, "acme")
+	}
+}
+
+// The same hole on the WRITE side: add-user/update-user/delete-user are scoped but
+// not KEYED, so the body check never ran on them. A tenant org-admin could name a
+// foreign owner in the body and have it forwarded verbatim under cloud's
+// credential — a cross-tenant WRITE the moment that credential can cross.
+func TestEdgeRefusesForeignOwnerInWriteBody(t *testing.T) {
+	for _, seg := range []string{"add-user", "update-user", "delete-user"} {
+		iam := newStubIAM()
+		app := edgeApp(t, iam.URL)
+
+		req := as(httptest.NewRequest(http.MethodPost, "/v1/iam/"+seg, strings.NewReader(`{"owner":"acme","name":"mole"}`)), "maxpower", "maxpower/dave", false, true)
+		req.Header.Set("Content-Type", "application/json")
+		res, err := app.Fiber().Test(req)
+		if err != nil {
+			iam.Close()
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != 403 {
+			t.Errorf("%s with a foreign owner in the body = %d, want 403", seg, res.StatusCode)
+		}
+		if iam.path != "" {
+			t.Errorf("%s reached IAM (%q) — refuse BEFORE forwarding", seg, iam.path)
+		}
+		iam.Close()
+	}
+}
+
+// ...and the caller's OWN org in the body is still forwarded.
+func TestEdgeAllowsOwnOrgWriteBody(t *testing.T) {
+	iam := newStubIAM()
+	defer iam.Close()
+	app := edgeApp(t, iam.URL)
+
+	req := as(httptest.NewRequest(http.MethodPost, "/v1/iam/add-user", strings.NewReader(`{"owner":"maxpower","name":"dave"}`)), "maxpower", "maxpower/dave", false, true)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("own-org add-user = %d, want 200", res.StatusCode)
+	}
+}
+
+// The pin must not COST the target. IAM resolves a single read's target with
+// ReadTarget, which falls back to `?id=<owner>/<name>` ONLY while `?owner=` is
+// empty — so setting owner alongside an id suppresses the id and the read dies as
+// "id (owner/name) or name is required". A pin that breaks every id-addressed read
+// is not a fix, so the owner rides IN the id: the owner half is pinned, the name
+// half is preserved.
+func TestEdgePinRidesInTheId(t *testing.T) {
+	iam := newStubIAM()
+	defer iam.Close()
+	app := edgeApp(t, iam.URL)
+
+	req := as(httptest.NewRequest(http.MethodGet, "/v1/iam/get-user?id=maxpower/dave", nil), "maxpower", "maxpower/dave", false, true)
+	res, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if got := iam.query.Get("id"); got != "maxpower/dave" {
+		t.Errorf("forwarded id = %q, want %q (owner half pinned, name half kept)", got, "maxpower/dave")
+	}
+	if got := iam.query.Get("owner"); got != "" {
+		t.Errorf("also forwarded owner=%q — a non-empty owner makes IAM ignore the id and 'require' one", got)
+	}
+}
+
+// A BARE `?id=dave` means different things on the two sides of this hop: cloud
+// reads the whole id as an OWNER (iamEdge.owner), IAM reads it as a NAME
+// (authz.ReadTarget returns ("", id) for an id with no slash). The divergence is
+// real, and the STRICTER reading is cloud's — a bare id that is not the caller's
+// own org is refused here and never reaches IAM, where it would have been scoped
+// to the forwarding CREDENTIAL's org instead of the caller's. Pinned as behaviour
+// so the divergence is not "reconciled" later by loosening this side.
+func TestEdgeRefusesBareId(t *testing.T) {
+	iam := newStubIAM()
+	defer iam.Close()
+	app := edgeApp(t, iam.URL)
+
+	req := as(httptest.NewRequest(http.MethodGet, "/v1/iam/get-user?id=dave", nil), "maxpower", "maxpower/dave", false, true)
+	res, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 403 {
+		t.Fatalf("bare id = %d, want 403", res.StatusCode)
+	}
+	if iam.path != "" {
+		t.Fatalf("bare id reached IAM (%q) — refuse BEFORE forwarding", iam.path)
+	}
+}
