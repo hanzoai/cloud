@@ -839,12 +839,16 @@ is mechanical; skip it and you will rediscover four failure modes the hard way.
    parameter, and a method value is the only bound form `cmd/zipdoc` can lift
    prose from — a closure returned by a helper is a call expression with nothing
    to read.
-2. **Spell the WHOLE path**, on `cloud.ZipApp(app)`, not a leaf path on a group.
-   zipdoc keys prose on the path LITERAL in the registration call, so
-   `zip.Post(g, "/targets", …)` files under `POST /targets` while the op's real
-   identity is `POST /v1/agents/targets`. `docFor` never matches and every doc
-   comment is dropped from the document AND the MCP tool — silently. zip gained
-   group registration in v1.18.0; zipdoc has not caught up.
+2. **Declare on the GROUP the subsystem already has** —
+   `g := app.Group("/v1/agents")`, then `zip.Post(g, "/targets", o.register)`.
+   The op's path is the prefix composed with the leaf, which is the identity every
+   projection keys on, and zipdoc (zip v1.18.3+) resolves the prefix the same way,
+   so the doc comments reach the document and the tool list. If it cannot resolve
+   the router — a group built somewhere it cannot see — it FAILS naming the call
+   rather than filing the prose under a path that does not exist. (Before v1.18.3
+   it filed group-declared ops under the bare leaf and the prose vanished from
+   both surfaces, silently. If you are on an older zip, bump; do not work around
+   it.)
 3. **Install `cloud.Bridge()` on the subsystem's group, before the leaves.** A
    typed op receives only a context, so the validated org has to be parked there.
    fiber runs middleware in registration order — one installed after its leaves
