@@ -18,8 +18,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -33,9 +31,14 @@ import (
 // it read last. This side moved because this side's schema had never been published; a
 // rename here costs no caller anything, and admin's would move a live SDK model.
 type VendorRow struct {
-	Canonical       string   `json:"canonical"`
-	Aliases         []string `json:"aliases,omitempty"`
-	DefaultCategory string   `json:"defaultCategory,omitempty"` // COA account number
+	// Canonical is the vendor's one true name, and the key an upsert writes by.
+	Canonical string `json:"canonical"`
+	// Aliases are the other spellings a receipt may print the vendor under; a scan
+	// matching any of them resolves to this vendor.
+	Aliases []string `json:"aliases,omitempty"`
+	// DefaultCategory is the COA expense account new bills from this vendor book to.
+	// An upsert normalizes a slug ("software") to its account number.
+	DefaultCategory string `json:"defaultCategory,omitempty"` // COA account number
 }
 
 // classifyMerchant resolves a raw merchant string to (vendor, category account, confidence).
@@ -143,32 +146,38 @@ func (o booksOps) listVendors(ctx context.Context, in *ledgerIn) (*vendorsOut, e
 	return &vendorsOut{Vendors: vendors}, nil
 }
 
-// vendorUpsertHandler answers POST /v1/books/vendors: create or update a vendor by its
-// canonical name. The default category is normalized to a real COA expense account.
-func vendorUpsertHandler(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to manage vendors")
-	}
-	var in VendorRow
-	if err := c.Bind(&in); err != nil {
-		return err
-	}
-	in.Canonical = strings.TrimSpace(in.Canonical)
-	if in.Canonical == "" {
-		return zip.ErrBadRequest("canonical name is required")
-	}
-	if strings.TrimSpace(in.DefaultCategory) != "" {
-		in.DefaultCategory = categoryAccount(in.DefaultCategory)
-	}
-	st, err := s.State.storeFor(org, sandboxQuery(c))
+// UpsertVendor creates or updates one vendor in the org's vendor book, keyed by its
+// canonical name — writing a canonical name that already exists REPLACES that row's
+// aliases and default category. A category given as a slug ("software") is normalized to
+// its real COA expense account, and anything unrecognized becomes 5900 Uncategorized
+// rather than a guessed real account. It answers the row exactly as stored, so the caller
+// sees the normalization. Recording a vendor is what makes future bills from it
+// self-classify instead of asking again.
+//
+// Example: {"canonical": "GitHub", "aliases": ["github.com"], "defaultCategory": "software"}
+func (o booksOps) upsertVendor(ctx context.Context, in *VendorRow) (*VendorRow, error) {
+	// Tenant first, the order this route has always refused in: an anonymous caller is
+	// 401 whatever it sends.
+	org, err := tenant(ctx, "manage vendors")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "books open failed")
+		return nil, err
 	}
-	if err := st.upsertVendor(c.Context(), in); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "vendor write failed")
+	row := *in
+	row.Canonical = strings.TrimSpace(row.Canonical)
+	if row.Canonical == "" {
+		return nil, zip.ErrBadRequest("canonical name is required")
 	}
-	return booksJSON(c, in)
+	if strings.TrimSpace(row.DefaultCategory) != "" {
+		row.DefaultCategory = categoryAccount(row.DefaultCategory)
+	}
+	st, err := o.s.State.storeFor(org, sandboxOf(query(ctx, "sandbox")))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "books open failed")
+	}
+	if err := st.upsertVendor(ctx, row); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "vendor write failed")
+	}
+	return &row, nil
 }
 
 // ── store methods ──
