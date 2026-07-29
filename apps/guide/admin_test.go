@@ -222,7 +222,7 @@ func TestAuthoringFallbackClonesFixture(t *testing.T) {
 	fixture := Blueprint{
 		Version:    "fix",
 		Sections:   []Section{{ID: "sec", Title: "Sec"}},
-		Steps:      []Step{{ID: "s1", Title: "S1"}},
+		Steps:      []JourneyStep{{ID: "s1", Title: "S1"}},
 		Strategies: []Strategy{{ID: "a", Category: "c", Action: "x"}},
 		Templates:  []Template{{ID: "t1", Title: "T1", Body: "b"}},
 		Principles: []Principle{{N: 1, Slug: "p1"}},
@@ -237,7 +237,7 @@ func TestAuthoringFallbackClonesFixture(t *testing.T) {
 	if _, err := patchIn(bp.Strategies, "a", func(s Strategy) string { return s.ID }, []byte(`{"enabled":false}`)); err != nil {
 		t.Fatalf("patch strategy: %v", err)
 	}
-	if _, err := patchIn(bp.Steps, "s1", func(s Step) string { return s.ID }, []byte(`{"title":"MUT"}`)); err != nil {
+	if _, err := patchIn(bp.Steps, "s1", func(s JourneyStep) string { return s.ID }, []byte(`{"title":"MUT"}`)); err != nil {
 		t.Fatalf("patch step: %v", err)
 	}
 	if _, err := patchIn(bp.Sections, "sec", func(s Section) string { return s.ID }, []byte(`{"title":"MUT"}`)); err != nil {

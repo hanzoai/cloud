@@ -155,7 +155,7 @@ func TestGrowthSignalsResolveAndDegrade(t *testing.T) {
 	}
 
 	// A step naming module:cms auto-completes for acme (seam present)…
-	cur := Curriculum{Steps: []Step{{ID: "sell", Title: "Sell", Signal: "module:cms"}}}
+	cur := Curriculum{Steps: []JourneyStep{{ID: "sell", Title: "Sell", Signal: "module:cms"}}}
 	states := map[string]State{}
 	marked := 0
 	if err := reconcile(ctx, "acme", cur, states, dets, func(string) error { marked++; return nil }); err != nil {

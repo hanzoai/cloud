@@ -115,6 +115,38 @@ func TestHTTPUnknownStep(t *testing.T) {
 	}
 }
 
+// TestTypedStepOpsFailClosed pins the ungated pair — the two step transitions that
+// are TYPED ops — to the same refusals the untyped gated pair makes. A typed op
+// receives only a context, so the org it acts on comes from cloud.Bridge rather
+// than the request; without a validated principal there is nothing parked and the
+// op must refuse rather than act on an empty tenant. The step id comes from the
+// URL, so an id the journey does not contain is 404, not a silent write.
+func TestTypedStepOpsFailClosed(t *testing.T) {
+	app := newApp(t)
+	for _, verb := range []string{"skip", "reset"} {
+		if r := req(t, app, http.MethodPost, "/v1/guide/steps/incorporate/"+verb, "", nil); r.Code != http.StatusForbidden {
+			t.Fatalf("%s without a principal want 403, got %d (%s)", verb, r.Code, r.Body)
+		}
+		if r := req(t, app, http.MethodPost, "/v1/guide/steps/ghost/"+verb, "acme", nil); r.Code != http.StatusNotFound {
+			t.Fatalf("%s of an unknown step want 404, got %d (%s)", verb, r.Code, r.Body)
+		}
+	}
+	// The URL is the addressing authority: a body naming another step cannot
+	// redirect the write, because zip binds the path over the body.
+	r := req(t, app, http.MethodPost, "/v1/guide/steps/slack/skip", "acme", map[string]any{"id": "incorporate"})
+	if r.Code != http.StatusOK {
+		t.Fatalf("skip want 200, got %d (%s)", r.Code, r.Body)
+	}
+	for _, s := range decode[overviewView](t, r.Body).Steps {
+		if s.ID == "incorporate" && s.State != StateTodo {
+			t.Fatalf("a body id must never redirect the write: incorporate is %q", s.State)
+		}
+		if s.ID == "slack" && s.State != StateSkipped {
+			t.Fatalf("the URL names the step to skip: slack is %q", s.State)
+		}
+	}
+}
+
 // TestHTTPCustomCurriculumReplaceAndRevert: a PUT replaces the curriculum cleanly;
 // DELETE reverts to the built-in default. A malformed PUT is rejected (422) and does
 // not corrupt the active curriculum.
