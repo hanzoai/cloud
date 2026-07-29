@@ -41,12 +41,20 @@ var typedOps = []string{
 	"POST /v1/integrations/:provider/verify",
 	"POST /v1/integrations/github/issues/backfill",
 	"POST /v1/integrations/github/repos/:repo/pages",
+	"POST /v1/integrations/github/repos/:repo/pages/builds",
+	"POST /v1/integrations/github/repos/import",
 	"POST /v1/integrations/telegram/connect",
 	"PUT /v1/integrations/github/repos/:repo/pages",
 }
 
 // rawRoutes is every route that stays a raw handler, with the reason it cannot be
 // a typed op. Registered here so the reason is checked, not just written down.
+//
+// Exactly two reasons remain, and both are properties of the WIRE, not of effort:
+// a 302 is not a JSON body (and zip.WithStatus takes 2xx only), and a signature
+// over the raw request bytes cannot be checked by an op handed the decoded In.
+// "202 Accepted" was a third until zip v1.18.2 gave WithStatus a vocabulary for
+// it; /repos/import and /pages/builds are typed ops now.
 var rawRoutes = map[string]string{
 	"GET /v1/integrations/:provider/callback":               "302 to the console",
 	"GET /v1/integrations/discord/link":                     "302",
@@ -63,9 +71,7 @@ var rawRoutes = map[string]string{
 	"GET /v1/integrations/telegram/link/callback":           "302",
 	"POST /v1/connector/github/webhook":                     "HMAC over the raw body",
 	"POST /v1/integrations/discord/interactions":            "Ed25519 over the raw body",
-	"POST /v1/integrations/github/repos/:repo/pages/builds": "202 Accepted",
-	"POST /v1/integrations/github/repos/import":             "202 Accepted",
-	"POST /v1/integrations/slack/commands":                  "HMAC over the raw body",
+	"POST /v1/integrations/slack/commands":                  "HMAC over the raw form body",
 	"POST /v1/integrations/slack/events":                    "HMAC over the raw body",
 	"POST /v1/integrations/teams/events":                    "Bot Framework JWT",
 	"POST /v1/integrations/telegram/webhook":                "secret token header",
@@ -151,7 +157,12 @@ func TestSpecCarriesProse(t *testing.T) {
 		"cf-scoped-api-token",                             // an Example: request body
 	} {
 		if !strings.Contains(string(spec), want) {
-			t.Errorf("openapi spec is missing %q — re-run `go generate ./clients/integrations`", want)
+			// The remediation names the directive's OWN package (ops.go), and
+			// -run zipdoc so no unrelated generator fires. It used to name
+			// ./clients/integrations, which does not exist — an error message
+			// that sends you nowhere is worse than none, and only a reader who
+			// tried it would ever find out.
+			t.Errorf("openapi spec is missing %q — re-run `go generate -run zipdoc ./apps/integrations/...`", want)
 		}
 	}
 }

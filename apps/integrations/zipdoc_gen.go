@@ -23,7 +23,7 @@ func init() {
 		Fields: map[string]string{
 			"githubPagesDisabledOut.disabled": "Disabled is always true — a failure is an HTTP error, never this shape.",
 			"githubPagesDisabledOut.repo":     "Repo is the repository whose site was deleted.",
-			"repoRef.repo":                    "Repo is the repository's short name within the org's installation, with no\nowner prefix (the owner is server-derived from the grant). A trailing \".git\"\nis stripped.",
+			"githubRepoRef.repo":              "Repo is the repository's short name within the org's installation, with no\nowner prefix (the owner is server-derived from the grant). A trailing \".git\"\nis stripped.",
 		},
 		Example:  json.RawMessage(`{"repo":"widgets"}`),
 		Response: json.RawMessage(`{"repo":"widgets","disabled":true}`),
@@ -133,7 +133,7 @@ func init() {
 			"githubPagesView.source":        "Source is the branch + path the site builds from. Absent under \"workflow\".",
 			"githubPagesView.status":        "Status is GitHub's build state: \"built\", \"building\" or \"errored\". Absent\nbefore the first build.",
 			"githubPagesView.url":           "URL is the live site (GitHub's html_url).",
-			"repoRef.repo":                  "Repo is the repository's short name within the org's installation, with no\nowner prefix (the owner is server-derived from the grant). A trailing \".git\"\nis stripped.",
+			"githubRepoRef.repo":            "Repo is the repository's short name within the org's installation, with no\nowner prefix (the owner is server-derived from the grant). A trailing \".git\"\nis stripped.",
 		},
 		Example:  json.RawMessage(`{"repo":"widgets"}`),
 		Response: json.RawMessage(`{"repo":"widgets","status":"built","url":"https://acme.github.io/widgets/","cname":"docs.acme.com","custom404":false,"buildType":"legacy","httpsEnforced":true,"source":{"branch":"main","path":"/docs"}}`),
@@ -288,6 +288,28 @@ func init() {
 		},
 		Example:  json.RawMessage(`{"repo":"widgets","branch":"main","path":"/docs"}`),
 		Response: json.RawMessage(`{"repo":"widgets","status":"building","url":"https://acme.github.io/widgets/","custom404":false,"buildType":"legacy","httpsEnforced":true,"source":{"branch":"main","path":"/docs"}}`),
+	})
+	zip.Describe("POST /v1/integrations/github/repos/:repo/pages/builds", zip.Doc{
+		Description: "GithubPagesBuild requests a Pages rebuild and returns the queued build's status.\nThe build is queued AT GITHUB, not completed here, so the answer is 202 Accepted\nand its status is the one GitHub reported at queue time. 404 when the repository\nhas no Pages site, or when the org's installation was not granted it.",
+		Fields: map[string]string{
+			"githubPagesBuildOut.repo":   "Repo is the repository the build was queued for.",
+			"githubPagesBuildOut.status": "Status is GitHub's build state at the moment it was queued (\"queued\").",
+			"githubPagesBuildOut.url":    "URL is GitHub's API URL for the build, for polling it there.",
+			"githubRepoRef.repo":         "Repo is the repository's short name within the org's installation, with no\nowner prefix (the owner is server-derived from the grant). A trailing \".git\"\nis stripped.",
+		},
+		Example:  json.RawMessage(`{"repo":"widgets"}`),
+		Response: json.RawMessage(`{"repo":"widgets","status":"queued","url":"https://api.github.com/repos/acme/widgets/pages/builds/1"}`),
+	})
+	zip.Describe("POST /v1/integrations/github/repos/import", zip.Doc{
+		Description: "GithubImport imports the selected (or all) granted repos into git.hanzo.ai. The\nselection is intersected with the installation's GRANTED set, so a client can\nnever import a repo the App was not granted (org isolation + a grant check). The\nimport runs in a bounded background worker (don't block the request), so the\nanswer is 202 Accepted; poll GET /v1/integrations/github/repos for the per-repo\nstatus to flip to imported.",
+		Fields: map[string]string{
+			"githubImportIn.all":     "All imports every repository the installation grants, instead of naming\nthem. Archived and disabled repositories are skipped either way — they\ncannot be fetched.",
+			"githubImportIn.repos":   "Repos names the repositories to import: short names within the org's\ninstallation, with no owner prefix (a trailing \".git\" is stripped).\nIgnored when all is true.",
+			"githubImportOut.queued": "Queued is how many repositories were handed to the background importer.",
+			"githubImportOut.repos":  "Repos names those repositories, in the installation's listing order.",
+		},
+		Example:  json.RawMessage(`{"repos":["widgets"]}`),
+		Response: json.RawMessage(`{"queued":1,"repos":["widgets"]}`),
 	})
 	zip.Describe("POST /v1/integrations/telegram/connect", zip.Doc{
 		Description: "telegramConnect mints a short, single-use deep-link code bound to the caller's\norg and returns the t.me link the console navigates to. Org-authed: a caller with\nno validated principal is 403 (same gate as the framework connect). The code is\nstored as an oauth_nonce (org,telegram); the webhook's /start handler claims it to\nbind chat→org. It is short (128-bit hex) so it fits Telegram's 64-char `start`\npayload limit.",
