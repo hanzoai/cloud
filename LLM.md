@@ -882,7 +882,30 @@ is mechanical; skip it and you will rediscover eight failure modes the hard way.
    `{agent,binding}` and drops the 14 machine fields it embeds;
    `clusterDetailView` (apps/visor/k8s.go) publishes `{nodes}` alone. Fix those
    three by inlining their fields — or fix `structSchema` to flatten an embedded
-   struct the way the decoder does, which fixes the class.
+   struct the way the decoder does, which fixes the class. The class keeps
+   recurring past any enumeration: guide's `stepView` embedded `JourneyStep`
+   (an EXPORTED type), so every step object in `GET /v1/guide` and the
+   skip/reset ops documented a nested `{JourneyStep: {…}}` the flat wire never
+   carried — found and fixed by inlining, with a reflect test
+   (`TestStepViewCarriesJourneyStep`) pinning the spelled-out copy against the
+   embedded source so a later JourneyStep field cannot silently drop out of the
+   view. The EXPORTED direction is findable in what shipped — a property named
+   exactly after the schema it $refs is the tell — and the check below reads
+   the published subsets, so it cannot disagree with them. It finds two more
+   today, both in `plugin/admin`: `MetricsData -> SaaSMetrics` (whose own
+   comment says "the SaaS snapshot, flat") and `ServiceView -> ServiceRow`.
+   The UNEXPORTED direction publishes nothing to grep for — those three above
+   were found by reading — so only the zip-side flatten retires the class:
+
+       python3 - <<'EOF'
+       import json,glob
+       for f in sorted(glob.glob('plugin/*/openapi.json')):
+           d=json.load(open(f))
+           for n,v in (d.get('components',{}).get('schemas',{}) or {}).items():
+               for p,s in ((v.get('properties') or {}) if isinstance(v,dict) else {}).items():
+                   if isinstance(s,dict) and s.get('$ref','').endswith('/'+p) and p[:1].isupper():
+                       print(f,n,'->',p)
+       EOF
 
 ### Statuses
 
