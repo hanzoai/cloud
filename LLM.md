@@ -877,7 +877,7 @@ an idempotent re-link and 201 on first registration. That is correct REST and
 NOT bend the route to fit the declaration, and do NOT invent a third mechanism —
 zip is getting multi-status `responses`, and these convert when it lands.
 
-### The four failure modes, all found the hard way
+### The six failure modes, all found the hard way
 
 1. **A gate comparing two DERIVED artifacts agrees with itself while both are
    wrong.** `openapi-composed` compared the subsets to the golden they weave
@@ -886,6 +886,11 @@ zip is getting multi-status `responses`, and these convert when it lands.
    from `openapi.yaml` and therefore from every generated SDK, so no Python, Go
    or TS caller could reach the ingress API at all, with every gate green. The
    cure is `make -f mk/fleet.mk openapi-check`, which REGENERATES and diffs.
+   It RECURS, and the gate is what finds it: `e83d7e90` moved websearch's scrape
+   to `/v1/scrape` without re-emitting `plugin/websearch/openapi.json`, so main
+   published two paths nobody serves (`/v1/websearch/scrape`,
+   `/v1/websearch/v1/scrape`) and omitted the one that is — caught only because an
+   unrelated ingress change ran the gate. Run it before you push, not after.
 2. **The stale-tree pin walk-back.** `bb10586e` reverted commerce v1.49.30→29 and
    zip v1.18.1→v1.17.6 in a single-parent commit: `go get`/`go mod tidy` run in a
    tree that predated the bump, committed wholesale. It is MECHANICAL, so it will
@@ -899,6 +904,26 @@ zip is getting multi-status `responses`, and these convert when it lands.
 4. **`git status --porcelain`, not `git diff`.** A NEW app produces a NEW
    UNTRACKED subset, invisible to a diff — the failure that matters most is the
    one a diff cannot see.
+5. **The schema namespace is FLAT, and typing is what makes you enter it.** A
+   typed op's Go type name IS its schema name across the WHOLE fleet, and
+   `openapi.Weave` refuses one name with two shapes ("every generated SDK would
+   bind whichever it read last"). An UNTYPED route contributes no schema at all,
+   so the collision does not exist until you type — and it surfaces at the weave,
+   not at the compiler. `apps/ingress` named its list envelope `serviceList`, which
+   is already `apps/admin`'s launch board, and the weave refused the whole package.
+   The fix is to qualify the VALUE with the product the namespace cannot carry
+   (`ingressServices`), not to rename admin's. Check before you name:
+   `grep -l '"<name>"' plugin/*/openapi.json`. Domain nouns can stay unqualified
+   while they are unique — the weave is the gate when they stop being.
+6. **A route going typed RENAMES its operationId**, `_by_id` → `_id`
+   (`delete_v1_ingress_routes_by_id` → `delete_v1_ingress_routes_id`): the untyped
+   projection derives the id from the route pattern, a typed op from zip's
+   `defaultOpID`. It is not the wire — no status, body or field name moves — but
+   it IS the generated SDK's method name, so an SDK regenerated after the migration
+   renames those methods. `apps/agents/targets.go` already shows both forms side by
+   side on one prefix (its typed `..._targets_id` next to its untyped
+   `..._targets_by_id_claim`). Take the rename; do NOT pin it back with
+   `WithOperationID`, which would make one app's ids a special case.
 
 ### Partitioning the remaining work
 
@@ -909,7 +934,7 @@ tree: they are disjoint, so agents do not collide in source.
 |---|---|---|
 | A | integrations 47, cloudflare 34, platform 32, projects 31, captable 31 | 175 |
 | B | git 28, agents 26, books 25, o11y 23, company 22 | 124 |
-| C | team 20, guide 20, crm 20, ingress 19, framework 19, account 19 | 117 |
+| C | team 20, guide 20, crm 20, ~~ingress 19~~ (done), framework 19, account 19 | 117 |
 | D | pricing 18, ml 18, automations 18, index 17, dataroom 17, compliance 17, affiliates 17 | 122 |
 | E | eval 16, social 13, esign 13, link 12, functions 12, commerce 12, billing 12 | 90 |
 | F | the ~70 remaining packages, 1–11 routes each | ~358 |
@@ -950,10 +975,15 @@ operations across 984 paths, of which 164 have a description.** The other ~1234
 are route only — no MCP tool, no CLI command, no SDK method, no schema, no
 prose.
 
-The typed 15 are `apps/admin` and its eight sub-packages, plus `apps/git`,
-`apps/integrations`, `apps/marketing`, `apps/plugin`, `apps/search`,
-`apps/visor`. `apps/admin/core/typed.go` states the rule for that surface:
-every `/v1/admin/*` route is a typed op.
+The typed packages are `apps/admin` and its eight sub-packages, plus `apps/agents`,
+`apps/company`, `apps/framework`, `apps/git`, `apps/ingress`, `apps/integrations`,
+`apps/marketing`, `apps/plugin`, `apps/search`, `apps/visor`.
+`apps/admin/core/typed.go` states the rule for that surface: every `/v1/admin/*`
+route is a typed op. Five carry NO untyped route at all — `admin`, `marketing`,
+`plugin`, `search` and now `ingress` (18 ops, converted whole in one pass).
+The list moves every few merges: RE-MEASURE per app rather than trusting it, and
+note the count is a heuristic that reads `r.Header.Get("X-...")` as a route, so
+read the hits before believing a non-zero remainder (ingress's last "1" is one).
 
 **What compensates today, and how it dies.** hanzoai/openapi carries an AUTHORED
 master, `hanzo.yaml`, which is the only source of request-body and query-parameter
