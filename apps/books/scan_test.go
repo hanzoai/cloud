@@ -172,7 +172,7 @@ func TestVendorRuleAutoClassifies(t *testing.T) {
 	}
 
 	// A vendor with a default category resolves canonical name + auto.
-	if err := st.upsertVendor(ctx, Vendor{Canonical: "Acme Coffee", Aliases: []string{"SQ *ACME"}, DefaultCategory: "meals"}); err != nil {
+	if err := st.upsertVendor(ctx, VendorRow{Canonical: "Acme Coffee", Aliases: []string{"SQ *ACME"}, DefaultCategory: "meals"}); err != nil {
 		t.Fatalf("upsertVendor: %v", err)
 	}
 	vendor, account, conf, err = st.classifyMerchant(ctx, "SQ *ACME #42")
