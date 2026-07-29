@@ -1,26 +1,135 @@
 package projects
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/sites"
+	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
+// TestOperatorOrgsFromEnv: the operator set is keyed by the SAME value the vouch
+// is looked up by — the VERBATIM validated IAM owner (principal.Org), trimmed and
+// nothing else. Only whitespace around a comma-separated entry is dropped.
+//
+// This used to fold each entry through the old sanitizeOrg (lowercase +
+// non-alnum→'-' + truncate-32) while domains.go looked the tenant up verbatim, so
+// the two halves of one decision disagreed: configuring "Acme" wrote the key
+// "acme", handing a DIFFERENT tenant — the one whose real IAM owner is "acme" —
+// platform-operator vouch, which SKIPS the DNS-01 ownership proof entirely; and
+// the genuine operator "Acme" silently lost its own. "team.a" → "team-a" is the
+// same class. Fold on one side of a comparison is never a normalization, it is a
+// collision, so both sides are now the same verbatim value.
 func TestOperatorOrgsFromEnv(t *testing.T) {
 	t.Setenv("CLOUD_PLATFORM_OPERATOR_ORGS", "")
 	got := operatorOrgsFromEnv("hanzo")
 	if !got["hanzo"] || len(got) != 1 {
 		t.Fatalf("default operator orgs = %v, want {hanzo}", got)
 	}
-	t.Setenv("CLOUD_PLATFORM_OPERATOR_ORGS", "hanzo, yadota ,Acme")
+	t.Setenv("CLOUD_PLATFORM_OPERATOR_ORGS", "hanzo, yadota ,Acme,team.a")
 	got = operatorOrgsFromEnv("ignored-when-env-set")
-	for _, o := range []string{"hanzo", "yadota", "acme"} {
+	for _, o := range []string{"hanzo", "yadota", "Acme", "team.a"} {
 		if !got[o] {
-			t.Errorf("operator org %q missing from %v", o, got)
+			t.Errorf("operator org %q missing from %v — entries are verbatim", o, got)
 		}
+	}
+	// The folded spellings are NOT operators: they name other tenants.
+	for _, o := range []string{"acme", "team-a"} {
+		if got[o] {
+			t.Errorf("folded spelling %q vouched from %v — a case/punctuation fold hands "+
+				"a different tenant the operator's DNS-proof bypass", o, got)
+		}
+	}
+	if len(got) != 4 {
+		t.Errorf("operator orgs = %v, want exactly 4 verbatim entries", got)
+	}
+	// The brand default is verbatim too — no fold on the fallback path either.
+	t.Setenv("CLOUD_PLATFORM_OPERATOR_ORGS", "")
+	if got = operatorOrgsFromEnv("Acme"); !got["Acme"] || got["acme"] || len(got) != 1 {
+		t.Fatalf("brand-default operator orgs = %v, want exactly {Acme}", got)
+	}
+}
+
+// TestOperatorVouchIsVerbatimEndToEnd is the cross-tenant privilege-bleed
+// regression, driven through the REAL route. `vouched` is what skips the DNS-01
+// ownership proof (BindHost, live immediately) and bypasses the "host we operate"
+// refusal — so a tenant that merely case-folds onto an operator's name must NOT
+// get it.
+//
+// CLOUD_PLATFORM_OPERATOR_ORGS="Acme" names ONE operator. Tenant "acme" is a
+// different IAM owner and must self-serve: its bind is a PENDING claim carrying a
+// DNS challenge, and a host we operate is refused outright. The operator "Acme"
+// keeps its vouch: bound live, no challenge.
+func TestOperatorVouchIsVerbatimEndToEnd(t *testing.T) {
+	t.Setenv("CLOUD_PLATFORM_OPERATOR_ORGS", "Acme")
+	ctx := context.Background()
+	log := luxlog.New("test")
+	store := newTestStore(t)
+	svc := &cloud.Service[state]{
+		Base: cloud.Base{Log: log},
+		State: state{
+			apex: "hanzo.app", store: store, cf: sites.NewPurger(log),
+			operatorOrgs: operatorOrgsFromEnv("ignored-when-env-set"),
+		},
+	}
+	app := zip.New(zip.Config{Logger: log})
+	routes(app, svc)
+
+	// Two DISTINCT tenants whose owners differ only in case, each with its own
+	// project. Slugs are lowercase because slugParam lowercases the path segment;
+	// the ORG is the axis under test, and it is never folded.
+	if err := store.CreateProject(ctx, mkProject("Acme", "operator-site", "Operator")); err != nil {
+		t.Fatalf("create operator project: %v", err)
+	}
+	if err := store.CreateProject(ctx, mkProject("acme", "tenant-site", "Tenant")); err != nil {
+		t.Fatalf("create tenant project: %v", err)
+	}
+	bind := func(org, slug, host string) (int, domainView) {
+		t.Helper()
+		body, _ := json.Marshal(setDomainsReq{Domains: []string{host}})
+		req := httptest.NewRequest(http.MethodPost, "/v1/projects/"+slug+"/domains", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Org-Id", org)
+		req.Header.Set("X-User-Id", "u-"+org)
+		resp, err := app.Fiber().Test(req)
+		if err != nil {
+			t.Fatalf("bind %q for %q: %v", host, org, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		var out struct {
+			Bound []domainView `json:"bound"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		if len(out.Bound) == 0 {
+			return resp.StatusCode, domainView{}
+		}
+		return resp.StatusCode, out.Bound[0]
+	}
+
+	// The lookalike tenant is NOT the operator: it self-serves through DNS-01.
+	code, v := bind("acme", "tenant-site", "lookalike.example")
+	if code != http.StatusOK {
+		t.Fatalf("lookalike bind = %d, want 200 (a pending claim)", code)
+	}
+	if v.Verified || v.Status != "pending" || len(v.Records) == 0 {
+		t.Fatalf("tenant %q was VOUCHED as platform operator: %+v — a case fold onto "+
+			"operator \"Acme\" skipped the DNS-01 ownership proof", "acme", v)
+	}
+	// …and it cannot claim a host WE operate at all; only a vouched org may.
+	if code, _ = bind("acme", "tenant-site", "api.hanzo.app"); code != http.StatusForbidden {
+		t.Fatalf("lookalike claim of our own host = %d, want 403", code)
+	}
+	// The real operator keeps its vouch: bound live, no challenge owed.
+	code, v = bind("Acme", "operator-site", "operator.example")
+	if code != http.StatusOK || !v.Verified || v.Status != "live" {
+		t.Fatalf("operator %q lost its vouch: code=%d %+v", "Acme", code, v)
 	}
 }
 
