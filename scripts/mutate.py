@@ -57,6 +57,8 @@ MT = "apps/meet/meet_test.go"
 PA = "./apps/analytics/"
 PS = "./apps/sites/"
 PM = "./apps/meet/"
+H = "cmd/cloud/main.go"
+PH = "./cmd/cloud/"
 
 # A mutant is (name, edits, test regex, package). edits is a LIST of (file, old,
 # new) so a mutation that needs a helper injected alongside it is the same kind of
@@ -278,6 +280,36 @@ MUTANTS = [
         (MT, '\tpath := keyFileWith(t, "")\n\tapp := mountWithKeyFile(t, teamSecret, path)',
             '\tpath := keyFileWith(t, keyBody(apiKey, apiSecret))\n\tapp := mountWithKeyFile(t, teamSecret, path)')],
      "TestUnconfiguredReasonNeverReachesTheCaller", PM),
+
+    # The 2026-07-29 outage, as four mutations. One child that could not open a
+    # SQLite file returned an error from zip.Load, the host escalated it to
+    # os.Exit(1), and api.hanzo.ai + cloud.hanzo.ai were 502/503 for 25 minutes.
+    # Each row breaks one of the four properties that fix rests on, and each names
+    # the failure it reintroduces — the last two matter most, because both are ways
+    # of "fixing" the outage that would trade it for a silent one.
+    ("host: fail HARD on any plugin that will not start (the 25-minute outage)", [
+        (H, '\tif a.Required {\n\t\treturn fmt.Errorf("%s is required here and would not start: %w", a.Name, err)\n\t}',
+            '\tif true {\n\t\treturn fmt.Errorf("%s is required here and would not start: %w", a.Name, err)\n\t}')],
+     "TestADeadSubsystemDoesNotTakeTheHostDown", PH),
+
+    # Without the second Load the prefix is never registered, so the request falls
+    # through to the console's "/" catch-all — how /v1/meet/health answered
+    # 200 text/html over a subsystem that was not there.
+    ("host: leave an absent subsystem's prefix unregistered", [
+        (H, '\tp.Lazy = true\n\tif err := app.Add(zip.Load(p, a.Prefixes...)); err != nil {\n\t\treturn fmt.Errorf("%s: mounting it absent failed too: %w", a.Name, err)\n\t}\n\treturn nil',
+            '\treturn nil')],
+     "TestADeadSubsystemDoesNotTakeTheHostDown|TestAnAbsentPrefixBeatsTheConsoleCatchAll", PH),
+
+    ("host: log the absence but do not report it (silent degradation)", [
+        (H, '\tabsent[a.Name] = err.Error()\n', '')],
+     "TestAbsenceIsObservable", PH),
+
+    # Failing liveness for an optional plugin recreates the outage one layer up:
+    # K8s restarts a pod that is serving every other subsystem correctly.
+    ("host: fail liveness when any subsystem is absent", [
+        (H, '\t\t\tout["absent"] = a\n\t\t}\n\t\treturn c.JSON(200, out)',
+            '\t\t\tout["absent"] = a\n\t\t\treturn c.JSON(503, out)\n\t\t}\n\t\treturn c.JSON(200, out)')],
+     "TestAbsenceIsObservable", PH),
 ]
 
 RUN_RE = re.compile(r"^=== RUN\s+(\S+)", re.M)
