@@ -101,3 +101,21 @@ func mirror(ctx context.Context, ev cloud.Visibility) error {
 	}
 	return nil
 }
+
+// exposePublish serves the visibility method on the internal plane.
+//
+// This replaces cloud.RegisterPublisher. The seam resolved in-process, and each
+// app is its own process now (cmd/cloud "mounts every subsystem as its own
+// process"), so projects' call reached a nil publisher and returned silently —
+// public projects stopped getting repos the day the fleet split, with nothing
+// to see. A socket call cannot fail that way: git either answers or the caller
+// gets an error naming the app it could not reach.
+func exposePublish() {
+	cloud.Expose("git.publish", func(ctx context.Context, _ cloud.Ident, req []byte) ([]byte, error) {
+		ev, err := cloud.ReadVisibility(req)
+		if err != nil {
+			return nil, cloud.Fault(400, err.Error())
+		}
+		return nil, publish(ctx, ev)
+	})
+}

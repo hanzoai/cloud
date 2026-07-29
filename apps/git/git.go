@@ -222,7 +222,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// (community.go). Next to fall to the internal plane; until then the seam
 	// stays registered — unregistered it is a silent no-op and public projects
 	// stop getting repos.
-	cloud.RegisterPublisher(publish)
+	// Visibility on the internal plane (community.go), NOT a Register* seam: the
+	// caller is projects, in its own process.
+	exposePublish()
 	// Publish the delivery inventory read on the internal plane, so apps/deploy
 	// renders from a tree read instead of cloning (files.go).
 	exposeFiles()
