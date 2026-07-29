@@ -388,13 +388,51 @@ func snapshotFor(s *cloud.Service[state], ctx context.Context, org string) (stor
 
 // ── views ─────────────────────────────────────────────────────────────────────
 
+// stepView is one step of the journey as the org-facing reads answer it: the
+// step's own fields with its per-org state folded in beside them.
+//
+// The JourneyStep fields are SPELLED OUT rather than embedded because the two
+// projections disagree about embedding: encoding/json PROMOTES an embedded
+// struct's fields to the top level, while zip's structSchema publishes the
+// embedded type as ONE NESTED property named after it — so the wire carried
+// {id, title, …, state} while the document (and every SDK and MCP tool read
+// from it) claimed {JourneyStep: {…}, state} for every step object. Same class
+// as agents' patchTargetIn and visor's botView (LLM.md, recipe rule 7).
+// TestStepViewCarriesJourneyStep pins the copy, so a field JourneyStep gains
+// later cannot silently drop out of this view.
 type stepView struct {
-	JourneyStep
-	State       State    `json:"state"`
-	Source      string   `json:"source,omitempty"`
-	Available   bool     `json:"available"`
-	Automatable bool     `json:"automatable"`
-	BlockedBy   []string `json:"blockedBy,omitempty"`
+	// ID is the step's id, as it appears in the journey (e.g. "gsuite").
+	ID string `json:"id"`
+	// Section is the phase (section id) this step groups under.
+	Section string `json:"section,omitempty"`
+	Title   string `json:"title"`
+	// Detail is the prose/juncture — what the Guide asks or explains here.
+	Detail string `json:"detail,omitempty"`
+	// Dependencies are step ids that must be done/skipped before this step is
+	// available. The wire key is `deps` (the blueprint contract).
+	Dependencies []string `json:"deps,omitempty"`
+	// Enabled is the admin on/off lever; absent reads as enabled.
+	Enabled *bool `json:"enabled,omitempty"`
+	// Signal names the machine detector that auto-marks this step done.
+	Signal string `json:"signal,omitempty"`
+	// Tool is the MCP tool the Business AI runs for "do it for me"; Args are its
+	// default arguments, Draft an optional AI prompt whose output fills the
+	// DraftInto arg (default "brief").
+	Tool      string         `json:"tool,omitempty"`
+	Args      map[string]any `json:"args,omitempty"`
+	Draft     string         `json:"draft,omitempty"`
+	DraftInto string         `json:"draftInto,omitempty"`
+
+	// State is the step's per-org lifecycle state: todo|in_progress|done|skipped.
+	State State `json:"state"`
+	// Source records what marked the state: manual, auto (detected) or agent.
+	Source string `json:"source,omitempty"`
+	// Available is true when every dependency is done or skipped.
+	Available bool `json:"available"`
+	// Automatable is true when the Business AI can run this step (it names a tool).
+	Automatable bool `json:"automatable"`
+	// BlockedBy lists the unfinished dependencies keeping the step unavailable.
+	BlockedBy []string `json:"blockedBy,omitempty"`
 }
 
 type progressView struct {
@@ -419,10 +457,11 @@ func buildOverview(cur Curriculum, custom bool, rows map[string]StateRow) overvi
 	steps := make([]stepView, 0, len(cur.Steps))
 	for _, s := range cur.Steps {
 		row := rows[s.ID]
-		st := stateOf(states, s.ID)
 		steps = append(steps, stepView{
-			JourneyStep: s,
-			State:       st,
+			ID: s.ID, Section: s.Section, Title: s.Title, Detail: s.Detail,
+			Dependencies: s.Dependencies, Enabled: s.Enabled, Signal: s.Signal,
+			Tool: s.Tool, Args: s.Args, Draft: s.Draft, DraftInto: s.DraftInto,
+			State:       stateOf(states, s.ID),
 			Source:      row.Source,
 			Available:   cur.Available(states, s.ID),
 			Automatable: strings.TrimSpace(s.Tool) != "",

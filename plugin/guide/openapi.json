@@ -1036,25 +1036,73 @@
       },
       "stepView": {
         "properties": {
-          "JourneyStep": {
-            "$ref": "#/components/schemas/JourneyStep"
+          "args": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "type": "object"
           },
           "automatable": {
+            "description": "Automatable is true when the Business AI can run this step (it names a tool).",
             "type": "boolean"
           },
           "available": {
+            "description": "Available is true when every dependency is done or skipped.",
             "type": "boolean"
           },
           "blockedBy": {
+            "description": "BlockedBy lists the unfinished dependencies keeping the step unavailable.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
+          "deps": {
+            "description": "Dependencies are step ids that must be done/skipped before this step is\navailable. The wire key is `deps` (the blueprint contract).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "detail": {
+            "description": "Detail is the prose/juncture — what the Guide asks or explains here.",
+            "type": "string"
+          },
+          "draft": {
+            "type": "string"
+          },
+          "draftInto": {
+            "type": "string"
+          },
+          "enabled": {
+            "description": "Enabled is the admin on/off lever; absent reads as enabled.",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "ID is the step's id, as it appears in the journey (e.g. \"gsuite\").",
+            "type": "string"
+          },
+          "section": {
+            "description": "Section is the phase (section id) this step groups under.",
+            "type": "string"
+          },
+          "signal": {
+            "description": "Signal names the machine detector that auto-marks this step done.",
+            "type": "string"
+          },
           "source": {
+            "description": "Source records what marked the state: manual, auto (detected) or agent.",
             "type": "string"
           },
           "state": {
+            "description": "State is the step's per-org lifecycle state: todo|in_progress|done|skipped.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "tool": {
+            "description": "Tool is the MCP tool the Business AI runs for \"do it for me\"; Args are its\ndefault arguments, Draft an optional AI prompt whose output fills the\nDraftInto arg (default \"brief\").",
             "type": "string"
           }
         },
