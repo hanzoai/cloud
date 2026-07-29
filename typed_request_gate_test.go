@@ -47,6 +47,15 @@ var allowedRequestUses = map[string]string{
 		"accepted an account there. authWrite fails closed off the HTTP path: no request, no attested " +
 		"caller, no mutation.",
 	"apps/search/search.go": "Query resolves the tenant from the validated principal at the top of the op.",
+	"apps/books/ask.go": "narrateAsk — the AI rephrase is BILLED, and the ledger that pays is " +
+		"principal.Ledger, a header fact (the caller's HOME org) that principal.OrgFrom does not carry " +
+		"and that must never be an In field a caller could point at another tenant's budget. The " +
+		"effective org is resolved and gated by the op before this runs. Off the HTTP path there is no " +
+		"request, the ledger is empty, and the meter no-ops rather than billing the wrong org.",
+	"apps/books/typed.go": "query — one URL query value read for a BODY-carrying op. zip documents query " +
+		"parameters only where there is no requestBody, so naming a URL-borne value as an In field would " +
+		"MOVE it off the URL it rides on today, and typing describes the wire rather than moving it. Off " +
+		"the HTTP path it answers empty — the same answer a request that omits the parameter gives.",
 	"apps/ingress/ingress.go": "admin — the SuperAdmin gate on the fleet EDGE's config. The edge is platform " +
 		"infrastructure (AC-6), so every /v1/ingress op requires SuperAdmin, which is X-User-IsAdmin — a claim " +
 		"principal.OrgFrom does not carry. Fails closed off the HTTP path: no request, no attested admin, no " +
