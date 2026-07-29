@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/finance"
 )
 
@@ -33,7 +34,30 @@ import (
 func coResidentUsage(ctx context.Context, org, product, groupBy string) ([]byte, bool, error) {
 	fin := finance.Current()
 	if fin == nil {
-		return nil, false, nil // split deploy → commerce S2S read
+		// No ledger here — every process but commerce. Ask the one that has it
+		// before falling back to the S2S read, which is 501 unless a commerce URL is
+		// configured. That 501 is what a customer's usage page showed once apps
+		// became their own binaries.
+		ctx, cancel := context.WithTimeout(ctx, usagePeerTimeout)
+		defer cancel()
+		reply, err := cloud.Dial("commerce").For(org).Call(ctx, "finance.usage",
+			cloud.PutBalanceReq(org, "usd"))
+		if err != nil {
+			return nil, false, nil // no peer either → the configured S2S read
+		}
+		wire, err := cloud.UsageRows(reply)
+		if err != nil {
+			return nil, false, err
+		}
+		rows := make([]finance.UsageRow, 0, len(wire))
+		for _, r := range wire {
+			rows = append(rows, finance.UsageRow{ID: r.ID, Model: r.Model, Cents: r.Cents, CreatedAt: r.CreatedAt})
+		}
+		env := usageEnvelope(org, rows)
+		if out, ok := enrichUsageLedger(env, product, groupBy); ok {
+			return out, true, nil
+		}
+		return env, true, nil
 	}
 	// The usage read is an OPTIONAL capability (the base FinanceClient is
 	// Balance+Deposit+RecordUsage); a finance impl without it falls back to the proxy.
@@ -82,3 +106,7 @@ func usageEnvelope(org string, rows []finance.UsageRow) []byte {
 	body, _ := json.Marshal(map[string]any{"user": org, "count": len(out), "usage": out})
 	return body
 }
+
+// usagePeerTimeout bounds the cross-process usage read. A usage page is
+// interactive: a slow ledger must surface rather than hold the request open.
+const usagePeerTimeout = 10 * time.Second
