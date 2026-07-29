@@ -41,20 +41,17 @@
 // Both share one state shape + the process-wide CSRF key (csrf.go), so a token minted at
 // /v1/csrf verifies on the /v1/billing|commerce writes.
 //
-// TYPED OPS. Nine of these are typed ops (zip.Get/Post with real In/Out types), so
-// each is ONE registry entry the REST route, the OpenAPI operation's schema and
-// prose, the MCP tool, the CLI command and every generated SDK method all derive
-// from. Nine routes are deliberately NOT, and the reason is the wire in both cases:
+// TYPED OPS. Every ADDRESSABLE route here is a typed op (zip.Get/Post/Delete with
+// real In/Out types) — eleven of them — so each is ONE registry entry the REST
+// route, the OpenAPI operation's schema and prose, the MCP tool, the CLI command
+// and every generated SDK method all derive from. Seven routes are deliberately
+// NOT, and they are the same seven:
 //
-//   - DELETE /v1/keys and DELETE /v1/iam/keys select the key class from `?type=`
-//     with a fallback to the JSON BODY, and a typed DELETE carries no body (zip's
-//     hasBody). Typing them would silently revoke the wrong credential for a caller
-//     that sends the class in the body, so they keep their raw handler until that
-//     fallback is retired on purpose.
 //   - The /v1/billing/* and /v1/commerce/* bridges are catch-alls: the path is a
 //     wildcard remainder, the body is forwarded verbatim to another service and the
 //     answer is that service's bytes and status. There is no In and no Out to name —
-//     they are opaque by construction, not by omission.
+//     they are opaque by construction, not by omission. What they may reach is
+//     nonetheless bounded, by an allowlist rather than by a type (billing.go).
 //
 // TENANCY. The caller is resolved from the VALIDATED identity headers ONLY
 // (principal.Validated / c.Org() / c.User()), the same trust boundary every mutating
@@ -219,13 +216,14 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) error {
 	// reachable off-gateway).
 	zip.Get(open, "/keys", o.getKey)
 	zip.Post(write, "/keys", o.mintKey)
-	// DELETE stays UNTYPED, deliberately. keyType() reads the key class from `?type=`
-	// and FALLS BACK TO THE JSON BODY, and a typed DELETE carries no body at all
-	// (zip's hasBody: GET/HEAD/DELETE) — so typing it would make a body-selected
-	// revoke silently revoke the caller's SECRET key instead of the publishable one
-	// it named. That is a wire change on a credential-revocation route, so the route
-	// keeps its raw handler until the body fallback is retired on purpose. See LLM.md.
-	app.Delete("/v1/keys", limit(csrf(cloud.Handle(s, revokeKey))))
+	// DELETE addresses what it deletes with its URL, so its typed input binds from
+	// `?type=` and the document declares that one parameter (zip's hasBody:
+	// GET/HEAD/DELETE carry none). The class is ALSO still read out of a JSON body
+	// when the query omits it — inside the handler, by revokeClass, because the
+	// input cannot carry a half the method does not have. That read is what keeps
+	// the wire whole: dropping it would silently revoke a body-selecting caller's
+	// SECRET key in place of the publishable one they named.
+	zip.Delete(write, "/keys", o.revokeKey)
 	// DEPRECATED alias of /v1/keys, kept because the go:embed console addresses it
 	// directly (src/lib/api/keys.ts, IS_EMBED build) against cloud's own origin,
 	// where it is not shadowed by the edge. The SAME handlers — an alias, never a
@@ -235,7 +233,7 @@ func routesAccount(s *cloud.Service[state], app cloud.Router) error {
 	// (TestIAMKeysBeatsWildcard).
 	zip.Get(alias, "/iam/keys", o.getKey)
 	zip.Post(aliasWrite, "/iam/keys", o.mintKey)
-	app.Delete("/v1/iam/keys", deprecated(limit(csrf(cloud.Handle(s, revokeKey)))))
+	zip.Delete(aliasWrite, "/iam/keys", o.revokeKey)
 	zip.Post(guard, "/iam/onboard", o.onboard)
 	// Console module embed-entitlement + reachability probe (embed.go).
 	zip.Get(open, "/embed-status", o.embedStatus)
@@ -455,13 +453,21 @@ func keyClass(t string) (string, bool) {
 	return "", false
 }
 
-// keyType reads the requested type off the request — `?type=` or a {"type":…}
-// body — and normalizes it through keyClass. It survives for the DELETE routes,
-// which are the ones that still read the class out of a request BODY (see
-// routesAccount); the typed ops take it as a field instead.
-func keyType(c *zip.Ctx) (string, bool) {
-	t := strings.TrimSpace(c.Query("type"))
-	if t == "" {
+// revokeClass resolves which key class a revoke acts on, in the ORDER this route
+// has always used: the DECLARED `?type=` (which the typed input carries, because a
+// DELETE addresses what it deletes with its URL), and only when the caller sent
+// none, the `{"type":…}` request BODY.
+//
+// The body half cannot live on the input — zip's hasBody says a DELETE carries no
+// body, so no generated client would ever send one and the document must not claim
+// otherwise — so it is read here, off the request. It is a COMPATIBILITY read for
+// callers written against the older shape, not a second way to call this route:
+// without it a body-selected revoke would resolve to the empty string, default to
+// secret, and destroy the caller's session-equivalent credential in place of the
+// publishable one they named.
+func revokeClass(in *keyTypeIn, c *zip.Ctx) (string, bool) {
+	t := in.Type
+	if strings.TrimSpace(t) == "" {
 		var body struct {
 			Type string `json:"type"`
 		}
@@ -550,25 +556,46 @@ func (o ops) mintKey(ctx context.Context, in *keyTypeIn) (*mintedKey, error) {
 	return &mintedKey{Type: typ, Key: key, AccessKey: key}, nil
 }
 
-// revokeKey answers DELETE /v1/keys — revoke the caller's key of the requested
-// type. Scoped by the same field mint takes, so revoking the key in a browser
-// bundle does not sign the holder out of their own API.
-func revokeKey(s *cloud.Service[state], c *zip.Ctx) error {
-	cr, ok := resolveCaller(c, true)
+// revokedKey is the answer to a revoke: which class stopped working.
+type revokedKey struct {
+	// OK is true when the key was revoked. A failure is an error status, never a
+	// false here.
+	OK bool `json:"ok"`
+	// Type is the key class that was revoked, resolved — so a caller that named
+	// nothing can see it revoked the secret key.
+	Type string `json:"type"`
+}
+
+// RevokeKey revokes the caller's own API key of the requested class. The class is
+// the same field mint takes — `?type=publishable`, defaulting to secret — so
+// revoking the key that ships in a browser bundle does not sign its holder out of
+// their own API: the other key keeps working.
+//
+// Revoking is how a key is replaced when it does not need replacing; minting the
+// same class again rotates it in one step. IAM drops the credential immediately,
+// but the gateway caches keys for a few minutes, so a request that beat the cache
+// expiry may still be served.
+//
+// For callers written against the older shape, the class is also accepted in a JSON
+// request body, read only when `?type=` is absent.
+//
+// Example: {"type": "publishable"}
+func (o ops) revokeKey(ctx context.Context, in *keyTypeIn) (*revokedKey, error) {
+	cr, c, ok := requestCaller(ctx, true)
 	if !ok {
-		return zip.ErrForbidden("sign in to manage API keys")
+		return nil, zip.ErrForbidden("sign in to manage API keys")
 	}
-	if !s.State.iam.configured() {
-		return notConfigured("API key management")
+	if !o.s.State.iam.configured() {
+		return nil, notConfigured("API key management")
 	}
-	typ, ok := keyType(c)
+	typ, ok := revokeClass(in, c)
 	if !ok {
-		return zip.ErrBadRequest("type must be " + keyTypeSecret + " or " + keyTypePublishable)
+		return nil, zip.ErrBadRequest("type must be " + keyTypeSecret + " or " + keyTypePublishable)
 	}
-	if err := s.State.iam.revokeUserKey(c.Context(), cr.keyID(), typ); err != nil {
-		return zip.Errorf(http.StatusBadGateway, "could not revoke the API key: %v", err)
+	if err := o.s.State.iam.revokeUserKey(c.Context(), cr.keyID(), typ); err != nil {
+		return nil, zip.Errorf(http.StatusBadGateway, "could not revoke the API key: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"ok": true, "type": typ})
+	return &revokedKey{OK: true, Type: typ}, nil
 }
 
 // deprecatedFor gates a route served at a superseded path: it answers exactly as
@@ -576,9 +603,10 @@ func revokeKey(s *cloud.Service[state], c *zip.Ctx) error {
 // says so on the wire (RFC 8594 Deprecation + a Link naming the successor), which is
 // how a caller finds out without reading a changelog.
 //
-// It is a zip.Middleware so ONE definition serves both the typed ops (through
-// With, which carries it into the registration) and the raw handler the untyped
-// DELETE still uses.
+// It is a zip.Middleware, which is what lets ONE definition serve every method of
+// the alias: `With` carries it into the typed registration, so the announcement is
+// a property of the GROUP the ops sit on rather than a wrapper somebody has to
+// remember around each handler.
 func deprecatedFor(canonical string) zip.Middleware {
 	return func(next zip.Handler) zip.Handler {
 		return func(c *zip.Ctx) error {
