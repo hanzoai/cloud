@@ -154,7 +154,12 @@ func TestOrgForKey_EachPrefixUsesItsOwnDoor(t *testing.T) {
 	if org, ok := OrgForKey(context.Background(), "pk-live-abc"); !ok || org != "pub-org" {
 		t.Fatalf("publishable key resolved to (%q,%v), want pub-org — this is the pk- ingest path", org, ok)
 	}
-	want := []string{"/v1/iam/users/get", "/v1/iam/resolve-key"}
+	// get-user?accessKey is the SECRET-key door: it resolves hk-/sk- to the owning
+	// user behind CapKeyResolve, and refuses a pk- by design. resolve-key is the
+	// publishable door, org-only. /v1/iam/users/get is neither — it is the typed
+	// (owner, name) read, which carries no accessKey and cannot answer this
+	// question at all.
+	want := []string{"/v1/iam/get-user", "/v1/iam/resolve-key"}
 	if len(paths) != 2 || paths[0] != want[0] || paths[1] != want[1] {
 		t.Fatalf("doors used = %v, want %v (one question each, never interchangeable)", paths, want)
 	}
