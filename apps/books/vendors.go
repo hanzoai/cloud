@@ -23,9 +23,16 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// Vendor is one row of the vendor book: a canonical name, its alias spellings, and the COA
-// expense account new bills from it default to.
-type Vendor struct {
+// VendorRow is one row of the vendor book: a canonical name, its alias spellings, and the
+// COA expense account new bills from it default to.
+//
+// It is …Row, like GLRow and BankTxnRow, because the OpenAPI schema namespace is FLAT
+// across the whole fleet and admin already publishes a `Vendor` that is a different
+// thing — a vendor COST LINE (vendor, service, amountCents, source). One name, two
+// shapes is refused at the weave, and rightly: every generated SDK would bind whichever
+// it read last. This side moved because this side's schema had never been published; a
+// rename here costs no caller anything, and admin's would move a live SDK model.
+type VendorRow struct {
 	Canonical       string   `json:"canonical"`
 	Aliases         []string `json:"aliases,omitempty"`
 	DefaultCategory string   `json:"defaultCategory,omitempty"` // COA account number
@@ -69,10 +76,10 @@ func (s *store) classifyMerchant(ctx context.Context, raw string) (vendor, accou
 // matchVendor finds the vendor whose canonical name or any alias matches the raw merchant,
 // case-insensitively, exact-then-substring. Exact wins over substring so a specific vendor is
 // not shadowed by a looser alias of another.
-func (s *store) matchVendor(ctx context.Context, raw string) (Vendor, bool, error) {
+func (s *store) matchVendor(ctx context.Context, raw string) (VendorRow, bool, error) {
 	vendors, err := s.listVendors(ctx)
 	if err != nil {
-		return Vendor{}, false, err
+		return VendorRow{}, false, err
 	}
 	low := strings.ToLower(raw)
 	// exact pass
@@ -97,7 +104,7 @@ func (s *store) matchVendor(ctx context.Context, raw string) (Vendor, bool, erro
 			}
 		}
 	}
-	return Vendor{}, false, nil
+	return VendorRow{}, false, nil
 }
 
 // matchToken reports whether needle (a vendor name/alias) is a non-empty substring of the
@@ -113,21 +120,27 @@ func matchToken(lowHaystack, needle string) bool {
 
 // ── handlers ──
 
-// vendorsListHandler answers GET /v1/books/vendors: the org's vendor book.
-func vendorsListHandler(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to view vendors")
-	}
-	st, err := s.State.storeFor(org, sandboxQuery(c))
+// vendorsOut is the org's vendor book.
+type vendorsOut struct {
+	// Vendors is every vendor the org has recorded, canonical name ascending.
+	Vendors []VendorRow `json:"vendors"`
+}
+
+// ListVendors returns the org's vendor book: each canonical vendor, the alias spellings a
+// receipt may print it under, and the expense account new bills from it default to. A
+// vendor here is what makes a scanned bill self-classify instead of asking again.
+//
+// Example: {"sandbox": "false"}
+func (o booksOps) listVendors(ctx context.Context, in *ledgerIn) (*vendorsOut, error) {
+	st, err := o.ledger(ctx, in.Sandbox, "view vendors")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "books open failed")
+		return nil, err
 	}
-	vendors, err := st.listVendors(c.Context())
+	vendors, err := st.listVendors(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "vendors read failed")
+		return nil, zip.Errorf(http.StatusInternalServerError, "vendors read failed")
 	}
-	return booksJSON(c, map[string]any{"vendors": vendors})
+	return &vendorsOut{Vendors: vendors}, nil
 }
 
 // vendorUpsertHandler answers POST /v1/books/vendors: create or update a vendor by its
@@ -137,7 +150,7 @@ func vendorUpsertHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrUnauthorized("sign in to manage vendors")
 	}
-	var in Vendor
+	var in VendorRow
 	if err := c.Bind(&in); err != nil {
 		return err
 	}
@@ -161,16 +174,16 @@ func vendorUpsertHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 // ── store methods ──
 
 // listVendors returns the org's vendor book (canonical-ascending).
-func (s *store) listVendors(ctx context.Context) ([]Vendor, error) {
+func (s *store) listVendors(ctx context.Context) ([]VendorRow, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT canonical, aliases, default_category FROM books_vendor ORDER BY canonical`)
 	if err != nil {
 		return nil, fmt.Errorf("books listVendors: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	out := []Vendor{}
+	out := []VendorRow{}
 	for rows.Next() {
-		var v Vendor
+		var v VendorRow
 		var aliases string
 		if err := rows.Scan(&v.Canonical, &aliases, &v.DefaultCategory); err != nil {
 			return nil, err
@@ -184,7 +197,7 @@ func (s *store) listVendors(ctx context.Context) ([]Vendor, error) {
 }
 
 // upsertVendor creates or updates a vendor keyed by canonical name.
-func (s *store) upsertVendor(ctx context.Context, v Vendor) error {
+func (s *store) upsertVendor(ctx context.Context, v VendorRow) error {
 	aliases, err := json.Marshal(v.Aliases)
 	if err != nil {
 		return fmt.Errorf("books upsertVendor marshal: %w", err)
