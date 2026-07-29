@@ -5,6 +5,8 @@ package cloud
 import (
 	"strings"
 	"testing"
+
+	"github.com/hanzoai/iam/pkg/model"
 )
 
 // TestUsernamePrefersPreferredUsername pins the claim precedence the money path
@@ -32,5 +34,40 @@ func TestUsernamePrefersPreferredUsername(t *testing.T) {
 	// Neither present: empty, never a guess.
 	if got := (&idClaims{}).username(); got != "" {
 		t.Fatalf("empty username() = %q; want \"\"", got)
+	}
+}
+
+// TestOrgAdminAdmitsOwner pins the role vocabulary this gate reads. IAM's coarse
+// membership set is exactly {owner, admin, member}, and `owner` is what it writes
+// for whoever CREATES an org — self-service provisioning calls
+// EnsureMembership(..., RoleOwner) precisely so a new org is not "born with nobody
+// on it". Matching only "admin" therefore locked every self-serve founder out of
+// their own org's admin surface, and an owner cannot escalate their way back in.
+//
+// The role is FOLDED (a closed vocabulary IAM controls); the org is compared
+// VERBATIM, because a fold there would let a member of "acme" claim "ACME".
+func TestOrgAdminAdmitsOwner(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		orgs []model.OrgRef
+		org  string
+		want bool
+	}{
+		{"owner of the org", []model.OrgRef{{Org: "acme", Role: "owner"}}, "acme", true},
+		{"admin of the org", []model.OrgRef{{Org: "acme", Role: "admin"}}, "acme", true},
+		{"role case is folded", []model.OrgRef{{Org: "acme", Role: "Owner"}}, "acme", true},
+		{"role is trimmed", []model.OrgRef{{Org: "acme", Role: " owner "}}, "acme", true},
+		{"plain member is not an admin", []model.OrgRef{{Org: "acme", Role: "member"}}, "acme", false},
+		{"unknown role admits nothing", []model.OrgRef{{Org: "acme", Role: "billing"}}, "acme", false},
+		{"owner ELSEWHERE does not admit here", []model.OrgRef{{Org: "other", Role: "owner"}}, "acme", false},
+		{"org compare stays VERBATIM", []model.OrgRef{{Org: "ACME", Role: "owner"}}, "acme", false},
+		{"empty set admits nothing", nil, "acme", false},
+		{"empty org admits nothing", []model.OrgRef{{Org: "acme", Role: "owner"}}, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isOrgAdmin(tc.orgs, tc.org); got != tc.want {
+				t.Fatalf("isOrgAdmin(%v, %q) = %v; want %v", tc.orgs, tc.org, got, tc.want)
+			}
+		})
 	}
 }
