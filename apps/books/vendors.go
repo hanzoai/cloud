@@ -170,7 +170,7 @@ func (o booksOps) upsertVendor(ctx context.Context, in *VendorRow) (*VendorRow, 
 	if strings.TrimSpace(row.DefaultCategory) != "" {
 		row.DefaultCategory = categoryAccount(row.DefaultCategory)
 	}
-	st, err := o.s.State.storeFor(org, sandboxOf(query(ctx, "sandbox")))
+	st, err := o.s.State.storeFor(org, sandboxFrom(ctx))
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "books open failed")
 	}

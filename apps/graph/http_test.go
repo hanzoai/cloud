@@ -67,6 +67,12 @@ func writeJSON(w http.ResponseWriter, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// unreachable is a base URL nothing can ever answer: port 0 is not a listenable
+// port, so the kernel refuses the connection locally and immediately. It makes a
+// down upstream a fact of the test rather than a name the host resolver has to
+// fail to resolve — no lookup, no wait, no dependence on the machine's DNS.
+const unreachable = "http://127.0.0.1:0"
+
 // mountApp mounts the graph surface against the fake upstream at base.
 func mountApp(t *testing.T, base string) *zip.App {
 	t.Helper()
@@ -157,12 +163,8 @@ func TestIndexerUnhealthyDegraded(t *testing.T) {
 }
 
 func TestIndexerUnreachableHonestEmpty(t *testing.T) {
-	t.Setenv("INDEXER_URL", "http://indexer.invalid.test")
-	t.Setenv("GRAPH_URL", "http://graph.invalid.test")
-	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "lux", Env: "mainnet"}); err != nil {
-		t.Fatalf("Mount: %v", err)
-	}
+	app := mountApp(t, unreachable)
+
 	// Unreachable indexer degrades to an honest-EMPTY list (200), not a console-error
 	// 502 — and never a fabricated row.
 	code, body := do(t, app, http.MethodGet, "/v1/indexers", "acme")

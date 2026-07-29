@@ -11,7 +11,7 @@ package storage
 // The guard is tested directly against a handler stub (guard takes any
 // zip.Handler): the S3 backend is never dialed, so success/failure of the wrapped
 // handler is deterministic and the billing contract is isolated from a live
-// SeaweedFS. tenant() requires a validated principal (X-User-Id), so requests
+// SeaweedFS. The guard admits only a validated principal (X-User-Id), so requests
 // carry it exactly as SanitizeIdentity would in prod.
 
 import (
@@ -27,8 +27,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/metering"
 	"github.com/hanzoai/cloud/apps/s3admin"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // billServer is a minimal commerce double: a fixed balance + records the
