@@ -107,21 +107,41 @@ func Shutdown() error {
 }
 
 func routes(app cloud.Router, s *cloud.Service[*state]) {
-	app.Get("/v1/books/accounts", cloud.Handle(s, accountsHandler))
-	app.Get("/v1/books/gl", cloud.Handle(s, glHandler))
-	app.Get("/v1/books/trial-balance", cloud.Handle(s, trialBalanceHandler))
-	app.Get("/v1/books/metrics", cloud.Handle(s, metricsHandler))
-	app.Get("/v1/books/pnl", cloud.Handle(s, pnlHandler))
-	app.Get("/v1/books/balance-sheet", cloud.Handle(s, balanceSheetHandler))
-	app.Get("/v1/books/export", cloud.Handle(s, exportHandler))
-	// The AI Ask brain: a plain-language question answered with REAL figures computed from
-	// the books (ask.go), and the clarifying-questions detector over unusual transactions
-	// (anomalies.go). Both are strictly read-only over the ledger.
-	app.Post("/v1/books/ask", cloud.Handle(s, askHandler))
-	app.Get("/v1/books/questions", cloud.Handle(s, questionsHandler))
+	g := app.Group("/v1/books")
+	// Bridge FIRST, then noStore: fiber runs middleware in registration order, so
+	// one installed after its leaves never runs. Bridge parks the VALIDATED org on
+	// the context, which is the only way a typed op — which receives a context and
+	// its decoded In and nothing else — can resolve its tenant; noStore carries the
+	// Cache-Control every books answer has always sent. Both are prefix-scoped, and
+	// nesting under Serve's own app-wide Bridge is harmless (the inner one is what
+	// the handler sees). See typed.go.
+	g.Use(cloud.Bridge(), noStore())
+
+	// TYPED ops, declared on the group: the prefix is part of each op's path and
+	// therefore of every projection — the document, the MCP tool, the CLI command,
+	// the SDK method — so this one registration is the whole contract.
+	o := booksOps{s: s}
+	zip.Get(g, "/accounts", o.listAccounts)
+	zip.Get(g, "/gl", o.listGL)
+	zip.Get(g, "/trial-balance", o.trialBalance)
+	zip.Get(g, "/pnl", o.profitAndLoss)
+	zip.Get(g, "/balance-sheet", o.balanceSheet)
+	zip.Get(g, "/export", o.exportPackage)
+	zip.Get(g, "/questions", o.listQuestions)
 	// The customer-triggered ingestion of the caller's OWN org: reads commerce's
 	// transactions and posts the accounting twin. Idempotent, so a repeat is safe.
-	app.Post("/v1/books/sync", cloud.Handle(s, syncHandler))
+	zip.Post(g, "/sync", o.sync)
+
+	// UNTYPED, and each for a stated reason — see LLM.md's typed migration. The
+	// metrics read returns MetricsResponse, which EMBEDS Metrics: zip v1.18.3's
+	// schema walk emits an embedded struct as a nested property (or drops it when
+	// its type is unexported) instead of flattening it, so typing this would
+	// publish a response schema that does not match the flat object on the wire —
+	// worse than none. The Ask brain's ?sandbox selector is query-only today, and
+	// a typed POST documents its input as a body, which would move it.
+	app.Get("/v1/books/metrics", cloud.Handle(s, metricsHandler))
+	app.Post("/v1/books/ask", cloud.Handle(s, askHandler))
+
 	// The shared BANK engine surface (bank_api.go): OFX/CSV import, connector sync,
 	// transaction + unreconciled reads, and the Plaid/Teller link plumbing stubs.
 	bankRoutes(app, s)
@@ -227,7 +247,7 @@ func (r *commerceReader) transactions(ctx context.Context, org string, sandbox b
 	return rows, nil
 }
 
-// sandboxQuery reads the ?sandbox=true toggle a read handler uses to select the ledger.
-func sandboxQuery(c *zip.Ctx) bool {
-	return strings.EqualFold(strings.TrimSpace(c.Query("sandbox")), "true")
-}
+// sandboxQuery reads the ?sandbox=true toggle a handler still untyped uses to select the
+// ledger. It is sandboxOf (typed.go) read off a request — one rule, two readers, so the
+// typed ops and the raw handlers beside them can never disagree about which books answer.
+func sandboxQuery(c *zip.Ctx) bool { return sandboxOf(c.Query("sandbox")) }

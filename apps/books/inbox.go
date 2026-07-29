@@ -126,22 +126,27 @@ func inboxUploadHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 	return booksJSON(c, item)
 }
 
-// inboxListHandler answers GET /v1/books/inbox: the open queue (unsorted + draft), newest
-// first, each with its extracted summary and confidence when scanned. Booked items drop out.
-func inboxListHandler(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to view the inbox")
-	}
-	st, err := s.State.storeFor(org, sandboxQuery(c))
+// inboxOut is the open document queue.
+type inboxOut struct {
+	// Items is every document still unsorted or in draft, newest first.
+	Items []InboxItem `json:"items"`
+}
+
+// ListInbox returns the org's open document queue — everything uploaded but not yet
+// booked, newest first, each with its extracted summary and the confidence the scanner
+// resolved its category at. A booked document drops out of the queue.
+//
+// Example: {"sandbox": "false"}
+func (o booksOps) listInbox(ctx context.Context, in *ledgerIn) (*inboxOut, error) {
+	st, err := o.ledger(ctx, in.Sandbox, "view the inbox")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "books open failed")
+		return nil, err
 	}
-	items, err := st.listInboxOpen(c.Context())
+	items, err := st.listInboxOpen(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "inbox read failed")
+		return nil, zip.Errorf(http.StatusInternalServerError, "inbox read failed")
 	}
-	return booksJSON(c, map[string]any{"items": items})
+	return &inboxOut{Items: items}, nil
 }
 
 // ── store methods ──
