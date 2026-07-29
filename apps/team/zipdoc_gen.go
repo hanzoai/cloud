@@ -9,6 +9,12 @@ import (
 )
 
 func init() {
+	zip.Describe("DELETE /v1/team/account/cookie", zip.Doc{
+		Description: "ClearCookie signs this browser out of team by expiring the HttpOnly\naccount-token cookie the OAuth callback set. It is the counterpart of the\ncookie PUT, it takes nothing — the cookie it clears is named by this service,\nnever by the caller — and it is unconditional: a caller with no cookie, an\nexpired one or a forged one all get the same acknowledgement, because clearing\nsomething that is not there is the same outcome as clearing something that is.\n\nIt clears ONLY the team session cookie. The IAM access-token cookie the same\ncallback set is a different credential with a different lifetime and is left\nalone, so this is a team sign-out, not a platform one.",
+		Fields: map[string]string{
+			"cookieAck.result": "Result is true when the cookie was written or cleared.",
+		},
+	})
 	zip.Describe("DELETE /v1/team/files/:workspace/:filename", zip.Doc{
 		Description: "DeleteBlob removes one blob from a workspace's file store. The caller must\nhold a verified session AND be a member of the workspace; anything else — an\nunknown workspace, another tenant's workspace, a workspace the caller is not\nin — answers the same 404, so a probe learns nothing about what exists.\n\nIt is IDEMPOTENT: deleting a present or an absent blob both answer 204, so a\ndelete never confirms a blob's existence and a foreign blob id (a physical key\nthe caller can never name into another tenant's box) is a harmless no-op. A\nstorage backend that is unavailable fails closed with 502 rather than lying\nabout success.",
 		Fields: map[string]string{
@@ -67,6 +73,20 @@ func init() {
 			"statsUser.userId":             "UserID is the account the session is authenticated as.",
 		},
 		Example: json.RawMessage(`{"token":"eyJhbGciOiJIUzI1NiJ9…"}`),
+	})
+	zip.Describe("POST /collaborator/rpc/:documentId", zip.Doc{
+		Description: "CollabRPC is the collaborative-markup snapshot plane the Team front's editor\nspeaks: createContent stores a document field's markup at a fresh, immutable\nblob ref and returns it, updateContent stores a new snapshot and answers\nnothing, and getContent reads back the exact snapshot a ref names.\n\ncreateContent ALSO seeds the live-editing update log from the front-supplied\nY.js update, so a dialog-authored description is visible in the collaborative\neditor — which replays that log — and not only in snapshot reads.\nupdateContent never touches that log: peers may be live-editing the document,\nand their edits are not this call's to overwrite.\n\nEvery call is scoped to the caller's VERIFIED session or workspace token: the\ndocumentId's workspace must be the token's workspace when the token names one,\nand the caller must be a member of it. An unknown workspace, another tenant's\nworkspace and a workspace the caller is not in all answer the same 404, so a\nprobe learns nothing about what exists.",
+		Fields: map[string]string{
+			"collabPayload.content":    "Content maps a document field to its ProseMirror markup JSON.",
+			"collabPayload.source":     "Source is the blob ref a getContent reads the snapshot from. Absent means\nthere is no snapshot to read, which answers empty content.",
+			"collabPayload.updates":    "Updates carries, per field, a base64 Y.js state update encoding the SAME\nmarkup — the front computes it (markupToYDoc → encodeStateAsUpdate) so a\ncreateContent seeds the live-editing lane's update log, not just the\nsnapshot blob. Without it a dialog-created description is invisible in the\ncollaborative editor, which replays the ydoc log, never the snapshot.",
+			"collabRequest.documentId": "DocumentID addresses the document field, as\n\"<workspaceUuid>|<objectClass>|<objectId>|<objectAttr>\" — the\ncollaborator-client encodeDocumentId shape, from the path.",
+			"collabRequest.method":     "Method is the verb: createContent, updateContent or getContent.",
+			"collabRequest.payload":    "Payload is the verb's argument.",
+			"collabResult.content":     "Content maps each document field to its value for the verb: the new blob\nref after a createContent, the stored markup after a getContent.",
+			"collabResult.error":       "Error carries a SEMANTIC refusal, which this RPC reports under 200 because\nthe client throws on result.error — auth and tenancy failures are HTTP\nstatuses instead.",
+		},
+		Example: json.RawMessage(`{"documentId":"6579…|tracker:class:Issue|issue-1|description","method":"getContent","payload":{"source":"issue-1-description-1730000000000"}}`),
 	})
 	zip.Describe("POST /v1/team/bots/sync", zip.Doc{
 		Description: "SyncBots re-projects the caller org's agents as workspace members into EVERY\nworkspace of the org, and removes the ones whose agent is gone. It is\nidempotent, and admin only: mutating a workspace's roster requires the\ngateway-minted admin flag, which a client can never forge. It answers how many\nroster entries the reconcile touched.",

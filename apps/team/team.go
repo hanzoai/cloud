@@ -162,7 +162,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	zip.Get(tg, "/transactor/api/v1/statistics", trans.statistics)
 
 	// The transactor data-plane WebSocket. The :token segment is a JWT (a single
-	// path segment — no slashes), decoded + VERIFIED before the upgrade.
+	// path segment — no slashes), decoded + VERIFIED before the upgrade. UNTYPED,
+	// and it cannot be otherwise: the response is a protocol upgrade, not a value.
 	tg.Get("/transactor/:token", guard(trans.serveWS))
 
 	bridge := &botsBridge{trans: trans, accounts: accounts, degraded: degraded}
@@ -184,7 +185,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// snapshot RPC (collab.go, POST /collaborator/rpc/:documentId) and the live
 	// hocuspocus Y.js WebSocket (collabws.go, GET /collaborator) — one service,
 	// one tenancy gate, one VFS seam.
-	collab := &collabService{vfs: deps.VFS, accounts: accounts, secret: cfg.serverSecret, hub: newCollabHub(deps.VFS)}
+	collab := &collabService{vfs: deps.VFS, accounts: accounts, secret: cfg.serverSecret, hub: newCollabHub(deps.VFS), degraded: degraded}
 	collab.register(app, guard)
 
 	mounted = &cloud.Service[state]{Base: cloud.NewBase(deps, "team"), State: state{accounts: accounts, trans: trans}}

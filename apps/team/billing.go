@@ -52,8 +52,9 @@ func (b *billingService) register(app cloud.Router, guard guardFn) {
 	// this file — see bots.go for why.
 	g := app.Group(teamPrefix)
 	// TYPED: the plan read is a JSON value with a name. The two /ui routes below
-	// stay untyped — they serve the embedded page's BYTES (html/js/css) under a
-	// per-asset Content-Type, which is not a shape a typed Out can describe.
+	// stay UNTYPED and cannot be otherwise — they serve the embedded page's BYTES
+	// (html/js/css) under a per-asset Content-Type, which is not a shape a typed
+	// Out can describe.
 	zip.Get(g, "/billing/plan", b.readPlan)
 	g.Get("/billing/ui", guard(b.ui))
 	g.Get("/billing/ui/*", guard(b.ui))
