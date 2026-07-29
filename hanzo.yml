@@ -108,16 +108,14 @@ test:
     run: |
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
-      make -f mk/fleet.mk openapi-apps
-      # --porcelain, not `git diff`: a NEW app produces a NEW subset, which is
-      # untracked and therefore invisible to a diff. Scoped to the files the
-      # per-app target owns.
-      stale=$(git status --porcelain -- 'plugin/*/openapi.json')
-      if [ -n "$stale" ]; then
-        echo "::error::an app's published subset is stale — its routes changed without 'make -C apps/<app> openapi'. Run 'make -f mk/fleet.mk openapi-apps' and commit."
-        echo "$stale"
-        exit 1
-      fi
+      # ONE gate definition, called here rather than restated: mk/fleet.mk's
+      # openapi-check regenerates every subset AND weaves the golden, then fails
+      # on any porcelain change. This step used to regenerate the subsets only,
+      # so openapi.yaml — the file the SDK repos actually pull — was never checked
+      # against source by anything: openapi-composed above compares it to the
+      # subsets, and both are derived. That is how plugin/ingress lost eight paths
+      # with every gate green.
+      make -f mk/fleet.mk openapi-check
   - name: go-unit
     run: |
       set -e

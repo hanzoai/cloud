@@ -53,7 +53,7 @@ APPS := $(shell sed -n 's/.*{Name: "\([^"]*\)".*/\1/p' manifest/apps.go)
 # them in parallel and build exactly the one you ask for.
 APP_BINS := $(addprefix bin/,$(APPS))
 
-.PHONY: help webui deploy-ui agentskills build cloud ship apps $(APP_BINS) plugin generate openapi run smoke test test-cgo test-codec vet tidy docker docker-push clean e2e
+.PHONY: help webui deploy-ui agentskills build cloud ship apps $(APP_BINS) plugin generate openapi run smoke test test-fast test-cgo test-codec vet tidy docker docker-push clean e2e
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -220,6 +220,22 @@ test: ## Run unit + integration tests (pure-Go, with the FTS5 tag the image ship
 	# The weave above proves the subsets compose; this proves they are still the
 	# routes. Only the second one catches a route added without regenerating.
 	$(MAKE) -f mk/fleet.mk openapi-check
+
+# The inner loop. Everything `test` runs EXCEPT the drift gate, which rebuilds one
+# binary per app and dominates the wall clock.
+#
+# It announces the skip on every run, for the same reason the gate names its kafka
+# exemption out loud: a skip nobody sees is how a gate becomes decorative. This is
+# the convenience, never the contract — CI runs the real gate (hanzo.yml,
+# app-contract), and nothing in the docs points here as the default.
+test-fast: ## Everything `test` runs except the spec drift gate. Inner loop only — CI runs `test`.
+	@echo ">> test-fast: NOT checking spec drift (openapi.yaml + plugin/*/openapi.json)."
+	@echo ">>            a route added without regenerating will pass here and fail CI."
+	@echo ">>            the real gate:  make -f mk/fleet.mk openapi-check"
+	@set -e; for d in $$(grep -rl '^//go:generate go run github.com/zap-proto/zip/cmd/zipdoc' --include='*.go' clients cmd . 2>/dev/null | xargs -n1 dirname | sort -u); do \
+	  (cd $$d && $(GO) run github.com/zap-proto/zip/cmd/zipdoc -check) || { echo "$$d/zipdoc_gen.go is stale — run: go generate -run zipdoc ./$$d/..."; exit 1; }; \
+	done
+	$(TEST_ENV) CGO_ENABLED=$(CGO_ENABLED) $(GO) test -tags "$(TEST_TAGS)" ./...
 
 # THE spec, in three steps, in the only order they work in:
 #
