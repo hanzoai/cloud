@@ -515,16 +515,24 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // TWO REGISTRARS, ONE ROUTER. zip.<Verb>(zapp, …) registers a TYPED op — a route
 // PLUS the registry entry OpenAPI / MCP / the CLI are projected from (ops.go) —
 // and takes the ABSOLUTE path, since the registry keys on it. app.<Verb>(…) stays
-// for exactly three families a typed op cannot express, and nothing else:
+// for exactly two families a typed op cannot express, and nothing else:
 //
 //   - the LINK legs and the OAuth callback, which answer 302 to a browser. A
-//     redirect is not a response shape; a typed op's Out is a JSON body.
+//     redirect is not a response shape; a typed op's Out is a JSON body, and
+//     zip.WithStatus takes 2xx only — an op cannot declare a 302 at all.
 //   - the inbound WEBHOOKS, whose auth is a signature over the RAW request bytes
 //     (Slack/GitHub HMAC, Discord Ed25519, Teams JWT, Telegram secret token). A
-//     typed op is handed the DECODED In and never the bytes that were signed.
-//   - the two 202 Accepted creators (/repos/import, /pages/builds). zip writes
-//     200, or 204 for a nil Out, and cloud.Created covers 201; 202 is not in the
-//     vocabulary, and downgrading it is a wire break for a client that checks it.
+//     typed op is handed the DECODED In and never the bytes that were signed —
+//     and Slack's /commands body is form-encoded, which a typed op would refuse
+//     as invalid JSON before the signature check ever ran.
+//
+// The 202 Accepted creators (/repos/import, /pages/builds) were a THIRD family
+// until zip v1.18.2: zip wrote 200, or 204 for a nil Out, and cloud.Created only
+// covered 201, so answering 202 meant staying raw — and staying raw meant no
+// schema, no prose, no MCP tool, no CLI command and no SDK method for either
+// route. zip.WithStatus(202) states the same fact in the one place every
+// projection reads, so both are typed ops now and the document says 202 because
+// the op does.
 //
 // The two are interleaved in the ORIGINAL order because fiber resolves by
 // registration order, and that order is load-bearing here (literals before the
@@ -554,8 +562,9 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// wildcards (registration-order matching) and are org-authed via the principal.
 	app.Post("/v1/connector/github/webhook", cloud.Terminal(cloud.Handle(s, githubWebhook)))
 	zip.Get(zapp, "/v1/integrations/github/repos", o.githubRepos)
-	// RAW (202): the import runs in a bounded background worker.
-	app.Post("/v1/integrations/github/repos/import", cloud.Handle(s, githubImport))
+	// 202: the import runs in a bounded background worker, so the op DECLARES the
+	// status it has always answered rather than setting it per request.
+	zip.Post(zapp, "/v1/integrations/github/repos/import", o.githubImport, zip.WithStatus(http.StatusAccepted))
 	// Seed the native tracker with the org's EXISTING GitHub issues (the webhook
 	// keeps them live thereafter). Org-authed via the principal; bounded + idempotent.
 	zip.Post(zapp, "/v1/integrations/github/issues/backfill", o.githubIssuesBackfill)
@@ -568,8 +577,8 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	zip.Post(zapp, "/v1/integrations/github/repos/:repo/pages", o.githubPagesEnable)
 	zip.Put(zapp, "/v1/integrations/github/repos/:repo/pages", o.githubPagesUpdate)
 	zip.Delete(zapp, "/v1/integrations/github/repos/:repo/pages", o.githubPagesDisable)
-	// RAW (202): the build is queued at GitHub, not completed here.
-	app.Post("/v1/integrations/github/repos/:repo/pages/builds", cloud.Handle(s, githubPagesBuild))
+	// 202: the build is queued at GitHub, not completed here.
+	zip.Post(zapp, "/v1/integrations/github/repos/:repo/pages/builds", o.githubPagesBuild, zip.WithStatus(http.StatusAccepted))
 	// ChatBridge adapters (bridge.go + discord/teams/telegram). Same discipline as
 	// the slack bridge: the literal paths register BEFORE the /:provider wildcards so
 	// they win under registration-order matching. All PUBLIC at the JWT layer — auth
