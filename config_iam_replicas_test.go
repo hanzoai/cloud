@@ -22,7 +22,7 @@ func TestValidateIAMSingleReplica(t *testing.T) {
 		{"iam enabled, replicas unset -> ok", []string{"iam"}, 0, false},
 		{"iam disabled, 5 replicas -> ok", []string{"kms", "o11y"}, 5, false},
 		// iam is NOT staged, so the empty-Enable "mount everything" default mounts it
-		// (see stagedSubsystems in config.go). An empty list is therefore iam-ENABLED
+		// An empty list mounts everything, so it is iam-ENABLED
 		// and the single-replica guard applies to it exactly as to an explicit list —
 		// which matters because the empty list is the production posture (CLOUD_ENABLE
 		// unset). Disabling iam takes a non-empty list that omits it, the case above.
