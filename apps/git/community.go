@@ -113,16 +113,23 @@ func mirror(ctx context.Context, org string, ev plane.Visibility) error {
 // to see. A socket call cannot fail that way: git either answers or the caller
 // gets an error naming the app it could not reach.
 func exposePublish() {
-	zip.Post[plane.Visibility, struct{}](cloud.Plane(), "/git/publish",
-		func(ctx context.Context, ev *plane.Visibility) (*struct{}, error) {
-			// The tenant comes from the CALLER, never the argument: a caller that
-			// could name the org would be publishing into another tenant's repos.
-			org := cloud.Who(ctx).Org
-			if org == "" {
-				return nil, zip.ErrForbidden("git publish: org required")
-			}
-			return nil, publish(ctx, org, *ev)
-		},
+	zip.Post[plane.Visibility, struct{}](cloud.Plane(), "/git/publish", planePublish,
 		zip.WithOperationID(plane.GitPublish),
 		zip.WithSummary("Reconcile a project's repo visibility"))
+}
+
+// planePublish reconciles a project's canonical repo to the project's published
+// visibility: it provisions the repo on first publish and thereafter flips only
+// the public bit, then keeps the GitHub replica's visibility in step.
+// Idempotent, so projects can fire it on every create, visibility change and
+// moderation event. The org is the CALLER's plane identity, never the argument —
+// a caller that could name the org would be publishing into another tenant's
+// repos — and an anonymous caller is refused. A named handler, not a closure, so
+// zipdoc can lift this prose into the registry.
+func planePublish(ctx context.Context, ev *plane.Visibility) (*struct{}, error) {
+	org := cloud.Who(ctx).Org
+	if org == "" {
+		return nil, zip.ErrForbidden("git publish: org required")
+	}
+	return nil, publish(ctx, org, *ev)
 }
