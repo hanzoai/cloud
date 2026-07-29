@@ -7892,6 +7892,27 @@ components:
             $ref: '#/components/schemas/Rule'
           type: array
       type: object
+    runIn:
+      properties:
+        action:
+          description: Action is the name of the connector action to invoke.
+          type: string
+        auth:
+          description: |-
+            Auth is the caller's resolved credential for the connector, handed to the
+            action verbatim. Its shape is whatever the connector's auth descriptor
+            declares (a token string, an object), so it is opaque here.
+          type: object
+        id:
+          description: ID is the connector to run, from the path.
+          type: string
+        props:
+          additionalProperties:
+            type: object
+          description: Props are the action's input properties, keyed by property
+            name.
+          type: object
+      type: object
     runPage:
       properties:
         data:
@@ -7922,6 +7943,19 @@ components:
           type: string
         shape:
           type: string
+      type: object
+    runResp:
+      properties:
+        error:
+          description: Error is the connector-level failure message when not ok.
+          type: string
+        ok:
+          description: Ok reports whether the action ran to completion.
+          type: boolean
+        output:
+          description: Output is the action's result when ok. Its shape is the action's
+            own.
+          type: object
       type: object
     runView:
       properties:
@@ -13155,13 +13189,42 @@ paths:
       - automations
   /v1/automations/connectors/{id}/run:
     post:
-      operationId: post_v1_automations_connectors_by_id_run
+      description: |-
+        Run executes one connector action in-process and answers the outcome. The
+        caller's resolved credential travels in `auth`, delivered to the action
+        verbatim — the runtime resolves no credential itself. An action that ran and
+        failed (or an action name the connector does not have) answers ok:false with
+        the failure message, not an HTTP error; an unknown connector is 404 and a
+        missing action 422.
+      operationId: post_v1_automations_connectors_id_run
       parameters:
-      - in: path
+      - description: ID is the connector to run, from the path.
+        example: notion
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              action: create_page
+              auth: secret-token
+              id: notion
+              props:
+                title: Hello
+            schema:
+              $ref: '#/components/schemas/runIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/runResp'
+          description: ok
+      summary: Run executes one connector action in-process and answers the outcome.
       tags:
       - automations
   /v1/automations/flows:
