@@ -15,8 +15,6 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -224,31 +222,24 @@ func (o booksOps) sync(ctx context.Context, _ *syncIn) (*syncTally, error) {
 	return &syncTally{Live: live, Sandbox: sandbox}, nil
 }
 
-// metricsHandler returns the org's deterministic SaaS-metrics snapshot over an optional
-// (?from, ?to] window — MRR/ARR/revenue/COGS/burn/margin/cash/deferred/runway — as the raw
-// int64-cent figures AND their formatted forms. It is the ONE grounded read the unified
-// /v1/ask advisor replays in-process (under the caller's own creds), so a figure it surfaces
-// is the ledger, not a model's guess. Read-only, no-store, scoped to the caller's own org.
+// Metrics returns the org's deterministic SaaS-metrics snapshot over an optional
+// (from, to] window — MRR, ARR, revenue, COGS, burn, gross margin, net income, cash,
+// deferred revenue, monthly burn and runway — as raw int64-cent figures AND the same
+// figures already formatted. Every number is the ledger, aggregated the one way the books
+// define it, never a guess; it is the grounded read the unified /v1/ask advisor replays.
 //
-// STILL UNTYPED, and the reason is MetricsResponse: it EMBEDS Metrics, and Go flattens an
-// embedded struct onto the wire while zip v1.18.3's schema walk does not — it emits the
-// embedded type as a nested property. Typing this op would publish a response schema no
-// answer of this route matches, and every generated SDK would model it wrong. The route is
-// correct; the generator has to learn embedding before the description can be true.
-func metricsHandler(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to view books")
-	}
-	st, err := s.State.storeFor(org, sandboxQuery(c))
+// Example: {"from": "2026-01-01T00:00:00Z", "to": "2026-06-30T23:59:59Z"}
+func (o booksOps) metrics(ctx context.Context, in *periodIn) (*MetricsResponse, error) {
+	st, err := o.ledger(ctx, in.Sandbox, "view books")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "books open failed")
+		return nil, err
 	}
-	m, err := computeMetrics(c.Context(), st, c.Query("from"), c.Query("to"))
+	m, err := computeMetrics(ctx, st, in.From, in.To)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "books metrics failed")
+		return nil, zip.Errorf(http.StatusInternalServerError, "books metrics failed")
 	}
-	return booksJSON(c, MetricsResponse{Metrics: m, Figures: metricsFigures(m)})
+	resp := metricsResponseOf(m)
+	return &resp, nil
 }
 
 // booksJSON writes a books payload for the handlers still untyped. The no-store header it
