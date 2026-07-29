@@ -126,6 +126,16 @@ components:
         unmatched:
           type: integer
       type: object
+    Backend:
+      properties:
+        url:
+          description: URL is the upstream server, http(s)://host[:port].
+          type: string
+        weight:
+          description: Weight is this member's share of the round-robin; must be >=
+            0.
+          type: integer
+      type: object
     BackfillIn:
       properties:
         org:
@@ -1306,6 +1316,28 @@ components:
         status:
           type: string
       type: object
+    Middleware:
+      properties:
+        config:
+          additionalProperties:
+            type: string
+          description: |-
+            Config is the transform's parameters: redirectScheme takes scheme (default
+            https) and permanent ("true" ⇒ 301, else 302); stripPrefix REQUIRES
+            prefixes (comma-separated, first match wins); addPrefix REQUIRES prefix;
+            headers is a header→value map set on the response.
+          type: object
+        id:
+          description: |-
+            ID identifies the transform within the org: [A-Za-z0-9-_.], at most 128
+            chars. A create that omits it gets a generated one. Routes reference it by
+            this id.
+          type: string
+        type:
+          description: 'Type is the transform: redirectScheme, stripPrefix, addPrefix
+            or headers.'
+          type: string
+      type: object
     ModuleInfo:
       properties:
         doctypes:
@@ -1836,6 +1868,46 @@ components:
         targetAmount:
           type: number
       type: object
+    Route:
+      properties:
+        host:
+          description: |-
+            Host is the exact hostname this route matches, lowercased with any trailing
+            dot stripped. It is a GLOBALLY unique claim — one route across the whole
+            edge may hold a host, so no tenant can hijack another's.
+          type: string
+        id:
+          description: |-
+            ID identifies the route within the org: [A-Za-z0-9-_.], at most 128 chars.
+            A create that omits it gets a generated one.
+          type: string
+        middlewares:
+          description: |-
+            Middlewares are the ids of the edge transforms to apply, in this order,
+            before the request reaches the service. At most 16.
+          items:
+            type: string
+          type: array
+        pathPrefix:
+          description: |-
+            PathPrefix narrows the match to requests under this path; it must start
+            with "/". Empty matches every path on the host.
+          type: string
+        priority:
+          description: |-
+            Priority orders routes that share a host: higher wins, and equal priorities
+            fall back to the longer PathPrefix.
+          type: integer
+        service:
+          description: |-
+            Service is the id of the backend pool this route dispatches to. A route
+            naming a service that does not exist is skipped at compile, not served.
+          type: string
+        tls:
+          description: TLS asks the edge to terminate TLS for Host with an ACME-managed
+            certificate.
+          type: boolean
+      type: object
     Rule:
       properties:
         category:
@@ -2061,6 +2133,25 @@ components:
           type: string
         value:
           type: integer
+      type: object
+    Service:
+      properties:
+        backends:
+          description: 'Backends are the upstream servers to balance across: 1..32
+            of them.'
+          items:
+            $ref: '#/components/schemas/Backend'
+          type: array
+        id:
+          description: |-
+            ID identifies the pool within the org: [A-Za-z0-9-_.], at most 128 chars.
+            A create that omits it gets a generated one. Routes reference it by this id.
+          type: string
+        passHostHeader:
+          description: |-
+            PassHostHeader forwards the client's original Host header upstream instead
+            of rewriting it to the backend's.
+          type: boolean
       type: object
     ServiceInput:
       properties:
@@ -2370,6 +2461,26 @@ components:
           type: string
         value:
           type: string
+      type: object
+    TLSConfig:
+      properties:
+        acmeEmail:
+          description: |-
+            ACMEEmail is the ACME account email. It binds an account for the lifetime
+            of an edge process, so it applies only when the edge (re)starts.
+          type: string
+        extraHosts:
+          description: |-
+            ExtraHosts get certificates without owning a route — at most 256. They feed
+            the ACME HostPolicy and hot-apply on the next reload.
+          items:
+            type: string
+          type: array
+        staging:
+          description: |-
+            Staging issues from Let's Encrypt's staging directory (untrusted certs, high
+            rate limits). Like ACMEEmail it applies only when the edge (re)starts.
+          type: boolean
       type: object
     Time:
       properties: {}
@@ -4443,6 +4554,100 @@ components:
           items:
             $ref: '#/components/schemas/InboxItem'
           type: array
+      type: object
+    ingressMiddlewares:
+      properties:
+        middlewares:
+          description: Middlewares is the org's middlewares, ordered by id.
+          items:
+            $ref: '#/components/schemas/Middleware'
+          type: array
+      type: object
+    ingressRoutes:
+      properties:
+        routes:
+          description: Routes is the org's routes, ordered by id.
+          items:
+            $ref: '#/components/schemas/Route'
+          type: array
+      type: object
+    ingressServices:
+      properties:
+        services:
+          description: Services is the org's services, ordered by id.
+          items:
+            $ref: '#/components/schemas/Service'
+          type: array
+      type: object
+    ingressStatus:
+      properties:
+        acmeCacheDir:
+          description: ACMECacheDir is where autocert persists accounts and certificates.
+          type: string
+        acmeStaging:
+          description: ACMEStaging is true when certificates are issued from Let's
+            Encrypt staging.
+          type: boolean
+        edgeEnabled:
+          description: EdgeEnabled is true when the edge listeners are actually bound.
+          type: boolean
+        httpAddr:
+          description: HTTPAddr is the address the ACME HTTP-01 + HTTP router listens
+            on.
+          type: string
+        httpsAddr:
+          description: HTTPSAddr is the address the SNI TLS terminator listens on.
+          type: string
+        liveHosts:
+          description: LiveHosts is how many hosts the compiled table routes.
+          type: integer
+        proxy:
+          description: Proxy names the reverse-proxy implementation behind every route.
+          type: string
+        role:
+          description: Role is "edge" when CLOUD_INGRESS_EDGE_ENABLED is set, else
+            "app".
+          type: string
+        tlsHosts:
+          description: |-
+            TLSHosts is how many hosts the ACME HostPolicy will issue a certificate
+            for. NOT a subset of LiveHosts: an extraHost owns no route, and a TLS route
+            naming a missing service is skipped while its host still wants a cert.
+          type: integer
+      type: object
+    ingressTLS:
+      properties:
+        acmeDirectory:
+          description: |-
+            ACMEDirectory is the ACME endpoint in use: the staging URL, or
+            "letsencrypt-production".
+          type: string
+        acmeEmail:
+          description: |-
+            ACMEEmail is the account email the PROCESS was started with
+            (CLOUD_INGRESS_ACME_EMAIL), not the stored config's.
+          type: string
+        config:
+          $ref: '#/components/schemas/TLSConfig'
+          description: Config is the caller org's stored ACME intent.
+        edgeEnabled:
+          description: EdgeEnabled is true when the edge listeners are actually bound.
+          type: boolean
+        managedHosts:
+          description: |-
+            ManagedHosts is every host the ACME HostPolicy will issue a certificate for
+            — the union across ALL orgs of TLS-marked routes and configured extraHosts,
+            because one process holds one certificate cache.
+          items:
+            type: string
+          type: array
+        note:
+          description: Note states which fields hot-apply and which need an edge restart.
+          type: string
+        role:
+          description: Role is "edge" when this instance binds the listeners, else
+            "app".
+          type: string
       type: object
     jobCancel:
       properties:
@@ -17772,136 +17977,469 @@ paths:
       - indexers
   /v1/ingress/middlewares:
     get:
+      description: |-
+        ListMiddlewares returns every edge transform the caller's org has configured,
+        ordered by id. A route names the ones it wants, in order.
       operationId: get_v1_ingress_middlewares
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ingressMiddlewares'
+          description: ok
+      summary: |-
+        ListMiddlewares returns every edge transform the caller's org has configured,
+        ordered by id.
       tags:
       - ingress
     post:
+      description: |-
+        PutMiddleware creates or replaces one edge transform and hot-applies it. POST
+        mints an id when the body omits one; PUT takes the id from the URL, which wins
+        over any id in the body. type must be one of redirectScheme, stripPrefix,
+        addPrefix or headers, and stripPrefix/addPrefix each require their config key.
       operationId: post_v1_ingress_middlewares
+      requestBody:
+        content:
+          application/json:
+            example:
+              config:
+                prefixes: /api
+              id: strip-api
+              type: stripPrefix
+            schema:
+              $ref: '#/components/schemas/Middleware'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Middleware'
+          description: ok
+      summary: PutMiddleware creates or replaces one edge transform and hot-applies
+        it.
       tags:
       - ingress
   /v1/ingress/middlewares/{id}:
     delete:
-      operationId: delete_v1_ingress_middlewares_by_id
+      description: |-
+        DeleteMiddleware removes one of the caller org's edge transforms and hot-applies
+        the change. Routes still naming it stop being served (they compile as skipped)
+        until they name a transform that exists. Answers 204; an id this org does not
+        hold is 404.
+      operationId: delete_v1_ingress_middlewares_id
       parameters:
-      - in: path
+      - description: ID is the object to act on, from the path.
+        example: strip-api
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: |-
+        DeleteMiddleware removes one of the caller org's edge transforms and hot-applies
+        the change.
       tags:
       - ingress
     get:
-      operationId: get_v1_ingress_middlewares_by_id
+      description: GetMiddleware returns one of the caller org's edge transforms by
+        id.
+      operationId: get_v1_ingress_middlewares_id
       parameters:
-      - in: path
+      - description: ID is the object to act on, from the path.
+        example: strip-api
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Middleware'
+          description: ok
+      summary: GetMiddleware returns one of the caller org's edge transforms by id.
       tags:
       - ingress
     put:
-      operationId: put_v1_ingress_middlewares_by_id
+      description: |-
+        PutMiddleware creates or replaces one edge transform and hot-applies it. POST
+        mints an id when the body omits one; PUT takes the id from the URL, which wins
+        over any id in the body. type must be one of redirectScheme, stripPrefix,
+        addPrefix or headers, and stripPrefix/addPrefix each require their config key.
+      operationId: put_v1_ingress_middlewares_id
       parameters:
-      - in: path
+      - description: |-
+          ID identifies the transform within the org: [A-Za-z0-9-_.], at most 128
+          chars. A create that omits it gets a generated one. Routes reference it by
+          this id.
+        example: strip-api
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              config:
+                prefixes: /api
+              id: strip-api
+              type: stripPrefix
+            schema:
+              $ref: '#/components/schemas/Middleware'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Middleware'
+          description: ok
+      summary: PutMiddleware creates or replaces one edge transform and hot-applies
+        it.
       tags:
       - ingress
   /v1/ingress/routes:
     get:
+      description: |-
+        ListRoutes returns every routing rule the caller's org has configured, ordered
+        by id. A route maps an exact Host (and optional path prefix) to a service.
       operationId: get_v1_ingress_routes
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ingressRoutes'
+          description: ok
+      summary: |-
+        ListRoutes returns every routing rule the caller's org has configured, ordered
+        by id.
       tags:
       - ingress
     post:
+      description: |-
+        PutRoute creates or replaces one routing rule and hot-applies the new table —
+        there is no config file and no restart. POST mints an id when the body omits
+        one; PUT takes the id from the URL, which wins over any id in the body. A
+        route's host is a GLOBALLY unique DNS claim: a host another org's route already
+        holds is refused 409, so no tenant can hijack another's hostname.
       operationId: post_v1_ingress_routes
+      requestBody:
+        content:
+          application/json:
+            example:
+              host: app.example.com
+              id: web
+              service: app-pool
+              tls: true
+            schema:
+              $ref: '#/components/schemas/Route'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Route'
+          description: ok
+      summary: |-
+        PutRoute creates or replaces one routing rule and hot-applies the new table —
+        there is no config file and no restart.
       tags:
       - ingress
   /v1/ingress/routes/{id}:
     delete:
-      operationId: delete_v1_ingress_routes_by_id
+      description: |-
+        DeleteRoute removes one of the caller org's routing rules and hot-applies the
+        shrunken table, freeing its host for another claim. Answers 204; an id this org
+        does not hold is 404.
+      operationId: delete_v1_ingress_routes_id
       parameters:
-      - in: path
+      - description: ID is the object to act on, from the path.
+        example: web
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: |-
+        DeleteRoute removes one of the caller org's routing rules and hot-applies the
+        shrunken table, freeing its host for another claim.
       tags:
       - ingress
     get:
-      operationId: get_v1_ingress_routes_by_id
+      description: GetRoute returns one of the caller org's routing rules by id.
+      operationId: get_v1_ingress_routes_id
       parameters:
-      - in: path
+      - description: ID is the object to act on, from the path.
+        example: a1b2c3d4e5f60718
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Route'
+          description: ok
+      summary: GetRoute returns one of the caller org's routing rules by id.
       tags:
       - ingress
     put:
-      operationId: put_v1_ingress_routes_by_id
+      description: |-
+        PutRoute creates or replaces one routing rule and hot-applies the new table —
+        there is no config file and no restart. POST mints an id when the body omits
+        one; PUT takes the id from the URL, which wins over any id in the body. A
+        route's host is a GLOBALLY unique DNS claim: a host another org's route already
+        holds is refused 409, so no tenant can hijack another's hostname.
+      operationId: put_v1_ingress_routes_id
       parameters:
-      - in: path
+      - description: |-
+          ID identifies the route within the org: [A-Za-z0-9-_.], at most 128 chars.
+          A create that omits it gets a generated one.
+        example: web
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              host: app.example.com
+              id: web
+              service: app-pool
+              tls: true
+            schema:
+              $ref: '#/components/schemas/Route'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Route'
+          description: ok
+      summary: |-
+        PutRoute creates or replaces one routing rule and hot-applies the new table —
+        there is no config file and no restart.
       tags:
       - ingress
   /v1/ingress/services:
     get:
+      description: |-
+        ListServices returns every backend pool the caller's org has configured,
+        ordered by id. A service is the weighted round-robin target a route dispatches
+        to.
       operationId: get_v1_ingress_services
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ingressServices'
+          description: ok
+      summary: |-
+        ListServices returns every backend pool the caller's org has configured,
+        ordered by id.
       tags:
       - ingress
     post:
+      description: |-
+        PutService creates or replaces one backend pool and hot-applies it. POST mints
+        an id when the body omits one; PUT takes the id from the URL, which wins over
+        any id in the body. A pool needs at least one backend and every backend URL
+        must be http(s)://host[:port].
       operationId: post_v1_ingress_services
+      requestBody:
+        content:
+          application/json:
+            example:
+              backends:
+              - url: http://10.0.0.7:8000
+                weight: 1
+              id: app-pool
+            schema:
+              $ref: '#/components/schemas/Service'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+          description: ok
+      summary: PutService creates or replaces one backend pool and hot-applies it.
       tags:
       - ingress
   /v1/ingress/services/{id}:
     delete:
-      operationId: delete_v1_ingress_services_by_id
+      description: |-
+        DeleteService removes one of the caller org's backend pools and hot-applies the
+        change. Routes still pointing at it stop being served (they compile as skipped)
+        until they name a pool that exists. Answers 204; an id this org does not hold
+        is 404.
+      operationId: delete_v1_ingress_services_id
       parameters:
-      - in: path
+      - description: ID is the object to act on, from the path.
+        example: app-pool
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: |-
+        DeleteService removes one of the caller org's backend pools and hot-applies the
+        change.
       tags:
       - ingress
     get:
-      operationId: get_v1_ingress_services_by_id
+      description: GetService returns one of the caller org's backend pools by id.
+      operationId: get_v1_ingress_services_id
       parameters:
-      - in: path
+      - description: ID is the object to act on, from the path.
+        example: app-pool
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+          description: ok
+      summary: GetService returns one of the caller org's backend pools by id.
       tags:
       - ingress
     put:
-      operationId: put_v1_ingress_services_by_id
+      description: |-
+        PutService creates or replaces one backend pool and hot-applies it. POST mints
+        an id when the body omits one; PUT takes the id from the URL, which wins over
+        any id in the body. A pool needs at least one backend and every backend URL
+        must be http(s)://host[:port].
+      operationId: put_v1_ingress_services_id
       parameters:
-      - in: path
+      - description: |-
+          ID identifies the pool within the org: [A-Za-z0-9-_.], at most 128 chars.
+          A create that omits it gets a generated one. Routes reference it by this id.
+        example: app-pool
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              backends:
+              - url: http://10.0.0.7:8000
+                weight: 1
+              id: app-pool
+            schema:
+              $ref: '#/components/schemas/Service'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+          description: ok
+      summary: PutService creates or replaces one backend pool and hot-applies it.
       tags:
       - ingress
   /v1/ingress/status:
     get:
+      description: |-
+        Status reports the ingress edge's live posture: the role this instance runs in
+        (app or edge), whether its listeners are bound and on which addresses, the ACME
+        posture (staging flag and certificate cache directory), how many hosts the
+        compiled route table currently serves, and how many the ACME HostPolicy will
+        issue a certificate for.
       operationId: get_v1_ingress_status
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ingressStatus'
+          description: ok
+      summary: 'Status reports the ingress edge''s live posture: the role this instance
+        runs in'
       tags:
       - ingress
   /v1/ingress/tls:
     get:
+      description: |-
+        GetTLS returns the caller org's ACME intent together with the edge-wide TLS
+        facts it lands in: which role this instance runs in, whether its listeners are
+        bound, every host the ACME HostPolicy will issue a certificate for (the union
+        across ALL orgs of TLS-marked routes and configured extraHosts, because one
+        process holds one certificate cache), and the ACME directory and account email
+        the process was started with.
       operationId: get_v1_ingress_tls
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ingressTLS'
+          description: ok
+      summary: GetTLS returns the caller org's ACME intent together with the edge-wide
+        TLS
       tags:
       - ingress
     put:
+      description: |-
+        PutTLS replaces the caller org's ACME intent and hot-applies what can be
+        hot-applied. extraHosts are normalized and validated, then feed the ACME
+        HostPolicy on the reload this op performs, alongside the per-route tls flags.
+        acmeEmail and staging bind an ACME account for the lifetime of an edge process,
+        so they only take effect when the edge (re)starts — the returned note says so.
       operationId: put_v1_ingress_tls
+      requestBody:
+        content:
+          application/json:
+            example:
+              extraHosts:
+              - www.example.com
+            schema:
+              $ref: '#/components/schemas/TLSConfig'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TLSConfig'
+          description: ok
+      summary: |-
+        PutTLS replaces the caller org's ACME intent and hot-applies what can be
+        hot-applied.
       tags:
       - ingress
   /v1/insights/e:
@@ -22126,6 +22664,11 @@ paths:
       operationId: get_v1_sbom_health
       tags:
       - sbom
+  /v1/scrape:
+    post:
+      operationId: post_v1_scrape
+      tags:
+      - scrape
   /v1/search:
     get:
       operationId: get_v1_search
@@ -24053,11 +24596,6 @@ paths:
           type: string
       tags:
       - webhooks
-  /v1/websearch/scrape:
-    post:
-      operationId: post_v1_websearch_scrape
-      tags:
-      - websearch
   /v1/websearch/search:
     delete:
       operationId: delete_v1_websearch_search
@@ -24085,11 +24623,6 @@ paths:
       - websearch
     trace:
       operationId: trace_v1_websearch_search
-      tags:
-      - websearch
-  /v1/websearch/v1/scrape:
-    post:
-      operationId: post_v1_websearch_v1_scrape
       tags:
       - websearch
   /v1/world/limits:
@@ -24242,6 +24775,7 @@ tags:
 - name: runner
 - name: s3
 - name: sbom
+- name: scrape
 - name: search
 - name: search-docs
 - name: security
