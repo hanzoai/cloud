@@ -167,7 +167,26 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/D1Query"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
       }
     },
     "/v1/cloudflare/kv/namespaces": {
@@ -525,7 +544,26 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PagesDeploy"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
       }
     },
     "/v1/cloudflare/pages/projects/{project}/domains": {
@@ -824,7 +862,26 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerScriptPut"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
       }
     },
     "/v1/cloudflare/workers/scripts/{script}/subdomain": {
@@ -1246,6 +1303,18 @@
   },
   "components": {
     "schemas": {
+      "D1Query": {
+        "type": "object",
+        "properties": {
+          "params": {
+            "type": "array",
+            "items": {}
+          },
+          "sql": {
+            "type": "string"
+          }
+        }
+      },
       "PagesBuildConfig": {
         "properties": {
           "build_command": {
@@ -1267,6 +1336,14 @@
           }
         },
         "type": "object"
+      },
+      "PagesDeploy": {
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string"
+          }
+        }
       },
       "PagesDeploymentConfig": {
         "properties": {
@@ -1360,6 +1437,27 @@
           }
         },
         "type": "object"
+      },
+      "WorkerScriptPut": {
+        "type": "object",
+        "properties": {
+          "bindings": {},
+          "compatibilityDate": {
+            "type": "string"
+          },
+          "compatibilityFlags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mainModule": {
+            "type": "string"
+          },
+          "script": {
+            "type": "string"
+          }
+        }
       },
       "bucketCreateIn": {
         "properties": {
