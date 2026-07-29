@@ -147,8 +147,8 @@ COPY --from=skills /catalog/ /src/clients/agentskills/catalog/
 # in ANY app fails here.
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
-    MODERNC="$(CGO_ENABLED=1 go list -tags "libsqlite3 sqlite_fts5" -deps ./cmd/... ./plugin/... 2>/dev/null | grep -c 'modernc.org/sqlite' || true)"; \
-    [ "$MODERNC" = "0" ] || { echo "SQLITE-GATE FAIL: a per-app binary links modernc.org/sqlite ($MODERNC pkgs) under CGO=1 — double-registers \"sqlite\" with hanzoai/sqlite(mattn) and panics at init. Find it: CGO_ENABLED=1 go list -tags 'libsqlite3 sqlite_fts5' -deps ./plugin/<app> | grep modernc"; exit 1; }
+    MODERNC="$(CGO_ENABLED=1 go list -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" -deps ./cmd/... ./plugin/... 2>/dev/null | grep -c 'modernc.org/sqlite' || true)"; \
+    [ "$MODERNC" = "0" ] || { echo "SQLITE-GATE FAIL: a per-app binary links modernc.org/sqlite ($MODERNC pkgs) under CGO=1 — double-registers \"sqlite\" with hanzoai/sqlite(mattn) and panics at init. Find it: CGO_ENABLED=1 go list -tags 'libsqlite3 sqlite_fts5 sqlite_math_functions' -deps ./plugin/<app> | grep modernc"; exit 1; }
 # RED gate — ENCRYPTION PROOF + the cek.go GOLDEN-VECTOR KAT, under the SAME CGO +
 # libsqlcipher build this image ships. TestEncryptionProof asserts real
 # ciphertext-at-rest (SQLITE_REQUIRE_CODEC=1 makes a plaintext link FAIL → NO
@@ -157,7 +157,7 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 # encrypted stores stay readable, or NO image.
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
-    SQLITE_REQUIRE_CODEC=1 CGO_ENABLED=1 go test -count=1 -tags "libsqlite3 sqlite_fts5" \
+    SQLITE_REQUIRE_CODEC=1 CGO_ENABLED=1 go test -count=1 -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" \
       -run 'TestEncryptionProof|TestUnwrapGoldenFixture|TestWrapUnwrapRoundTripPinsLayout' \
       github.com/hanzoai/sqlite
 # RED gate — cek FROZEN-FORMAT guard, run INSIDE the image under the pinned Alpine
@@ -167,7 +167,7 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     SQLITE_REQUIRE_CODEC=1 CGO_ENABLED=1 go test -count=1 -run TestFrozenFixtureOpens \
-      -tags "libsqlite3 sqlite_fts5" ./cek
+      -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" ./cek
 # Go drops comments at compile time, so this pass is the ONLY way a typed handler's
 # prose reaches the document: zipdoc lifts it into zipdoc_gen.go, which registers it
 # with zip.Describe at init. It must run BEFORE every build below, because the
@@ -211,7 +211,22 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 # fleet union the fused binary was. 112 lean links, sequential, none of them mega —
 # which is the whole point of this change.
 #
-# CGO_ENABLED=1 + libsqlite3 + sqlite_fts5, exactly as the fused binary was built:
+# CGO_ENABLED=1 + libsqlite3 + sqlite_fts5 + sqlite_math_functions, exactly as the
+# fused binary was built:
+#
+# sqlite_math_functions is not optional under cgo. hanzoai/base's search layer
+# generates SQL calling acos/cos/sin/radians/sqrt (the geoDistance token in
+# tools/search); SQLite only has those with SQLITE_ENABLE_MATH_FUNCTIONS, which
+# the cgo backend gets ONLY behind that tag. base v1.5.11 turned the mismatch
+# into a compile error on purpose (core/sqlite_math_required.go, //go:build cgo
+# && !sqlite_math_functions) rather than let a cgo build ship a smaller SQL
+# surface than the code above it writes against — the failure otherwise is a
+# customer's search returning "no such function: acos" from an endpoint that
+# works in production. Without the tag every plugin build dies with
+#   base@v1.5.11/core/sqlite_math_required.go:30:6:
+#   undefined: cgoBuildNeedsSQLiteMathFunctions
+# The CGO_ENABLED=0 builds below do not need it: the pure-Go backend always has
+# the functions.
 # every app that opens a store needs the SQLCipher codec (a plaintext link silently
 # no-ops PRAGMA key), so they are built uniformly — one contract for all, the
 # non-sqlite apps merely carrying a libc dep they do not use. The modernc gate above
@@ -224,7 +239,7 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     for p in $names; do \
       [ -d "./plugin/$p" ] || { echo "FATAL: manifest app '$p' has no plugin/$p — run 'make generate' and commit"; exit 1; }; \
       echo "building plugin $p"; \
-      CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5" -ldflags="-s -w" -o "/plugins/$p" "./plugin/$p"; \
+      CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5 sqlite_math_functions" -ldflags="-s -w" -o "/plugins/$p" "./plugin/$p"; \
     done
 # Prove a SHIPPED sqlite-backed plugin binds sqlite3_* to libsqlcipher, not a
 # plaintext libsqlite3. /plugins/base opens per-org stores under the SAME CGO=1 +
