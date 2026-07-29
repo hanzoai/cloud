@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -90,21 +91,21 @@ func (t treeSource) render(ctx context.Context) ([]*unstructured.Unstructured, s
 		glob = t.path + "/**"
 	}
 	// As delegates the requesting principal so git applies its own rules to the
-	// SAME caller; For names the tenant delivery acts for, which is what makes
-	// the BACKGROUND reconcile work — it has no request to delegate from. The
-	// explicit tenant wins, the old internal-call contract.
-	p := cloud.Dial("git")
+	// SAME caller, pointed at the tenant delivery acts for. With no request — the
+	// BACKGROUND reconcile — the tenant is stated on its own.
+	callCtx := cloud.For(ctx, t.org)
 	if t.who != nil {
-		p = p.As(t.who)
+		callCtx = cloud.As(t.who, t.org)
 	}
-	reply, err := p.For(t.org).Call(ctx, "git.files", cloud.PutFilesReq(t.repo, t.ref, glob))
+	out, err := cloud.Ask[plane.FilesIn, plane.Files](callCtx, "git", plane.GitFiles,
+		&plane.FilesIn{Repo: t.repo, Ref: t.ref, Glob: glob})
 	if err != nil {
 		return nil, "", fmt.Errorf("read %s/%s@%s: %w", t.org, t.repo, t.ref, err)
 	}
-	rev, files, err := cloud.Files(reply)
-	if err != nil {
-		return nil, "", fmt.Errorf("read %s/%s@%s: %w", t.org, t.repo, t.ref, err)
+	if out == nil {
+		return nil, "", fmt.Errorf("read %s/%s@%s: git answered nothing", t.org, t.repo, t.ref)
 	}
+	rev, files := out.Rev, out.Files
 	if rev == "" {
 		// No revision means no commit was resolved. Rendering an empty desired
 		// set from that and handing it to a pruning reconcile would sweep the

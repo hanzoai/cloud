@@ -97,7 +97,7 @@ func start(ctx context.Context, log luxlog.Logger) {
 		log.Warn("tasks engine never became ready — platform cron idle", "waited", engineWait)
 		return
 	}
-	view := eng.View(org())
+	view := eng.View(tasksengine.Org(org()))
 	if err := view.RegisterNamespace(tasksengine.Namespace{
 		NamespaceInfo: tasksengine.NamespaceInfo{Name: namespace},
 	}); err != nil {
@@ -106,7 +106,7 @@ func start(ctx context.Context, log luxlog.Logger) {
 	}
 
 	cli, err := tasksclient.Dial(tasksclient.Options{
-		HostPort:  fmt.Sprintf("127.0.0.1:%d", eng.ZAPPort()),
+		Address:   eng.Address(),
 		Namespace: namespace,
 	})
 	if err != nil {

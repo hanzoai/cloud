@@ -21,6 +21,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/plane"
 )
 
 // coResidentUsage builds the customer usage envelope from cloud's OWN finance ledger
@@ -40,18 +41,18 @@ func coResidentUsage(ctx context.Context, org, product, groupBy string) ([]byte,
 		// became their own binaries.
 		ctx, cancel := context.WithTimeout(ctx, usagePeerTimeout)
 		defer cancel()
-		reply, err := cloud.Dial("commerce").For(org).Call(ctx, "finance.usage",
-			cloud.PutBalanceReq(org, "usd"))
-		if err != nil {
+		reply, err := cloud.Ask[struct{}, plane.UsageRows](cloud.For(ctx, org), "commerce",
+			plane.FinanceUsage, &struct{}{})
+		if err != nil || reply == nil {
 			return nil, false, nil // no peer either → the configured S2S read
 		}
-		wire, err := cloud.UsageRows(reply)
-		if err != nil {
-			return nil, false, err
-		}
-		rows := make([]finance.UsageRow, 0, len(wire))
-		for _, r := range wire {
-			rows = append(rows, finance.UsageRow{ID: r.ID, Model: r.Model, Cents: r.Cents, CreatedAt: r.CreatedAt})
+		rows := make([]finance.UsageRow, 0, len(reply.Rows))
+		for _, r := range reply.Rows {
+			cents, cerr := r.Amount.Minor()
+			if cerr != nil {
+				return nil, false, cerr
+			}
+			rows = append(rows, finance.UsageRow{ID: r.ID, Model: r.Model, Cents: cents, CreatedAt: r.CreatedAt})
 		}
 		env := usageEnvelope(org, rows)
 		if out, ok := enrichUsageLedger(env, product, groupBy); ok {

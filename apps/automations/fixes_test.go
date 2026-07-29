@@ -29,10 +29,10 @@ func TestScheduledRunMeteredExactlyOnce(t *testing.T) {
 
 	app, rec := newAppWithAudit(t) // Mount sets the package `mounted` used by the bookkeeping activity
 
-	srv, port := embedEngine(ctx, t, "acme")
+	srv, addr := embedEngine(ctx, t, "acme")
 	defer func() { _ = srv.Stop(context.Background()) }()
 
-	cli, err := tasksclient.Dial(tasksclient.Options{HostPort: fmt.Sprintf("127.0.0.1:%d", port), Namespace: "acme", DialTimeout: 5 * time.Second, CallTimeout: 5 * time.Second})
+	cli, err := tasksclient.Dial(tasksclient.Options{Address: addr, Namespace: "acme", DialTimeout: 5 * time.Second, CallTimeout: 5 * time.Second})
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}

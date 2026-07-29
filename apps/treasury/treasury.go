@@ -59,6 +59,8 @@ import (
 	"github.com/hanzoai/cloud/apps/treasury/ledger"
 	"github.com/hanzoai/cloud/apps/treasury/ledger/sqlstore"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/plane"
+	"github.com/hanzoai/money"
 	"github.com/zap-proto/zip"
 )
 
@@ -130,20 +132,23 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		},
 	}
 	mounted = s
-	// The reserve, published on the internal plane (native ZAP over the unix
-	// socket, cloud/rpc.go). admin's money board reads it here — as the
-	// SuperAdmin who asked, re-checked on THIS side — instead of importing this
-	// package, which in admin's own binary could only ever return zero.
-	cloud.Expose("treasury.reserve", func(ctx context.Context, who cloud.Ident, _ []byte) ([]byte, error) {
-		if !who.Admin {
-			return nil, cloud.Fault(403, "SuperAdmin required")
-		}
-		cents, ok := ReserveCents(ctx)
-		if !ok {
-			return nil, cloud.Fault(503, "treasury store not open")
-		}
-		return cloud.PutI64(cents), nil
-	})
+	// The reserve, published on the internal plane as a typed op (plane.go).
+	// admin's money board reads it here — as the SuperAdmin who asked, re-checked
+	// on THIS side — instead of importing this package, which in admin's own
+	// binary could only ever return zero.
+	zip.Post[struct{}, plane.Reserved](cloud.Plane(), "/treasury/reserve",
+		func(ctx context.Context, _ *struct{}) (*plane.Reserved, error) {
+			if !cloud.Who(ctx).Admin {
+				return nil, zip.ErrForbidden("SuperAdmin required")
+			}
+			cents, ok := ReserveCents(ctx)
+			if !ok {
+				return nil, zip.Errorf(503, "treasury store not open")
+			}
+			return &plane.Reserved{Amount: plane.Amount(money.FromUSD(cents))}, nil
+		},
+		zip.WithOperationID(plane.TreasuryReserve),
+		zip.WithSummary("Reserve fund balance"))
 
 	// ONE scope-aware /v1/finance/* engine, three tenancy surfaces (HIP finance):
 	// per-org reads derive the tenant from the validated IAM identity and see ONLY
