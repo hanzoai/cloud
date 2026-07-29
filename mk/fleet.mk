@@ -67,6 +67,10 @@ openapi-apps: ## Regenerate EVERY app's own spec subset (one binary per app; slo
 # silently dropped the parameter examples, the derived required-ness and the $ref
 # sharing. Two independent failures, one cause — so the fix is not a better
 # comparison between derived things, it is regenerating the derived thing.
+#
+# It checks with `git status --porcelain`, not `git diff`: a NEW app produces a
+# NEW subset, which is untracked and therefore invisible to a diff — the failure
+# that matters most is exactly the one a diff would miss.
 openapi-check: ## Regenerate every subset + the fleet spec FROM SOURCE and fail on any diff. The drift gate.
 	@set -e; \
 	for d in $(APPDIRS); do \
@@ -82,15 +86,18 @@ openapi-check: ## Regenerate every subset + the fleet spec FROM SOURCE and fail 
 	    || { echo "!! $$a cannot project its own document"; exit 1; }; \
 	done
 	@$(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi-weave OUT=$(ROOT)/openapi.yaml >/dev/null
-	@git -C $(ROOT) diff --exit-code --stat -- openapi.yaml plugin/ >/dev/null 2>&1 || { \
+	@stale=$$(git -C $(ROOT) status --porcelain -- openapi.yaml plugin/); \
+	if [ -n "$$stale" ]; then \
+	  echo "$$stale"; \
 	  git -C $(ROOT) diff --stat -- openapi.yaml plugin/; \
 	  echo ""; \
 	  echo "STALE: regenerating the document from source produced something other than what is"; \
-	  echo "committed. The diff above is published surface — routes that exist and are"; \
+	  echo "committed. The list above is published surface — routes that exist and are"; \
 	  echo "undocumented, or documented and gone. The SDK repos pull this file, so a route"; \
 	  echo "missing here is a route no generated client can reach."; \
 	  echo ""; \
 	  echo "  fix:  make openapi   # then commit openapi.yaml and plugin/*/openapi.json"; \
 	  echo ""; \
-	  exit 1; }
+	  exit 1; \
+	fi
 	@echo ">> openapi.yaml regenerated from source and unchanged — $$(grep -c '^  /' $(ROOT)/openapi.yaml) paths"
