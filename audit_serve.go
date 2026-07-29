@@ -26,7 +26,9 @@ import (
 // SQLite chain at {DataDir}/audit.db plus a best-effort datastore OLAP mirror
 // when a datastore is configured. Returns (nil, nil) only when the trail is
 // explicitly disabled — the caller then wires a no-op middleware.
-func buildAuditRecorder(cfg *Config, logger luxlog.Logger) (*audit.Recorder, error) {
+// proc names the process whose chain this is (serve.go procName): "cloud" for the
+// host, the app's own name for a plugin child.
+func buildAuditRecorder(cfg *Config, logger luxlog.Logger, proc string) (*audit.Recorder, error) {
 	if getenvBool("CLOUD_AUDIT_DISABLED") {
 		if logger != nil {
 			logger.Warn("audit trail DISABLED by CLOUD_AUDIT_DISABLED — no tamper-evident record will be kept")
@@ -52,7 +54,23 @@ func buildAuditRecorder(cfg *Config, logger luxlog.Logger) (*audit.Recorder, err
 		mirror = m
 	}
 
-	dbPath := filepath.Join(cfg.DataDir, "audit.db")
+	// ONE CHAIN, ONE WRITER. audit_log.seq is a gapless chain position and each
+	// row's prev_hash seals the one before it, so the chain is only meaningful if a
+	// single process appends to it. Every process used to open {DataDir}/audit.db,
+	// which was harmless while cloud was one binary and became a total write outage
+	// the moment subsystems became plugin CHILD PROCESSES: each child recovers its
+	// own in-memory nextSeq from the shared file, then they all race for the same
+	// PRIMARY KEY. Observed on v1.801.313 as
+	// "audit: persist: UNIQUE constraint failed: audit_log.seq" at ~94/minute across
+	// tasks, integrations and visor — and because the audit gate fails CLOSED
+	// (correctly), every POST in the fleet was refused.
+	//
+	// Retrying would not fix it: two writers cannot share a hash chain, they can only
+	// fork it. So give each process its OWN chain, which is exactly what procName
+	// exists for ("per-process resources ... instead of contending for one global
+	// name"). The host keeps the canonical audit.db so its existing history and the
+	// /v1/admin/audit surface are untouched; children get audit-<app>.db.
+	dbPath := filepath.Join(cfg.DataDir, auditDBName(proc))
 	rec, err := audit.Open(dbPath, mirror)
 	if err != nil {
 		return nil, fmt.Errorf("open audit store: %w", err)
@@ -105,4 +123,15 @@ func auditCheckpointInterval() time.Duration {
 		}
 	}
 	return 5 * time.Minute
+}
+
+// auditDBName is the audit chain file for one process. The host ("cloud", or an
+// unnamed process) keeps the canonical audit.db so its existing history and the
+// /v1/admin/audit surface are untouched; every plugin child gets its own file.
+// Split out so the one-writer rule is testable without a filesystem.
+func auditDBName(proc string) string {
+	if proc == "" || proc == "cloud" {
+		return "audit.db"
+	}
+	return "audit-" + proc + ".db"
 }
