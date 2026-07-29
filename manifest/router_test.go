@@ -46,29 +46,26 @@ import (
 // this test as loudly as a new one, because a fix nobody records is a fix nobody
 // can see. Fixing one is one line here and one line in Apps.
 //
-// Four causes, all of them at the composition root:
+// Three causes, all of them at the composition root:
 //
-//   - AN ADDRESS ANOTHER APP OWNS (39). A prefix is a SUBTREE and it is
-//     exclusive: /v1/billing and /v1/commerce belong to account-bridge, whose
-//     wildcard was written to run LAST and catch what the specific routes did not
-//     (apps/account/account.go routesBridge, "order 122") — as a plugin prefix it
-//     catches them FIRST instead, so commerce's own money routes reach the bridge
-//     and are served only as far as its forwardable allowlist reaches. /v1/catalog
-//     is the catalog app's, /v1/plans is plan's, /v1/s3 is storage's, /v1/tracker
-//     is tracker's — and each of those serves different leaves than the app that
-//     publishes these, so the address answers 404.
-//   - AN UNDECLARED PREFIX SWALLOWED BY /v1 (14). commerce holds "/v1", so every
-//     path no app named deeper lands there: metrics's /v1/logs and /v1/traces,
-//     analytics's /v1/analytics, /v1/event and /v1/insights/e, and ai's own
-//     catch-all.
+//   - AN ADDRESS ANOTHER APP OWNS (15). A prefix is a SUBTREE and it is
+//     exclusive. The /v1/billing REMAINDER belongs to account-bridge — the
+//     session-scoped data bridge the console calls — so the billing leaves
+//     commerce publishes but the manifest does not name deeper (invoices,
+//     subscriptions, spend-alerts, payouts, payment-config, topup/token) reach
+//     the bridge and are served only as far as its forwardable allowlist
+//     reaches. /v1/billing/payment-methods is the billing app's; /v1/s3 is
+//     storage's. (The webhook + auto-recharge + catalog + plans + tenant
+//     families that used to sit here are routed now: commerce's row names each
+//     one deeper than the sibling that was swallowing it.)
 //   - NO APP AT ALL (11). git's /:org/:repo tree, team's /collaborator and iam's
 //     /.well-known/* are claimed by nobody, so they fall past every prefix to the
 //     console the host serves at "/" — an SDK call gets the HTML shell.
+//   - ONE NAME, TWO OWNERS (1). /v1/tracker, below.
 //
 // Regenerating it is mechanical: the failure below prints the current list, in
 // this format, ready to paste.
 var unreachable = []string{
-	"ai /v1/{wildcard1} -> commerce",
 	// The five analytics INGESTION doors that used to sit here were not a backlog
 	// item: they were a live outage. Every beacon the products emit landed on
 	// commerce's bare "/v1" and answered 405, so the warehouse stopped receiving
@@ -80,7 +77,6 @@ var unreachable = []string{
 	// tracker and got there first. Routing it to analytics would break the issue
 	// tracker, so the alias is retired at the caller instead — one name, one owner.
 	"analytics /v1/tracker -> tracker",
-	"commerce /v1/billing/auto-recharge/run-all -> account-bridge",
 	"commerce /v1/billing/invoices -> account-bridge",
 	"commerce /v1/billing/invoices/{id}/pdf -> account-bridge",
 	"commerce /v1/billing/payment-config -> account-bridge",
@@ -94,23 +90,6 @@ var unreachable = []string{
 	"commerce /v1/billing/subscriptions/{id}/cancel -> account-bridge",
 	"commerce /v1/billing/subscriptions/{id}/reactivate -> account-bridge",
 	"commerce /v1/billing/topup/token -> account-bridge",
-	"commerce /v1/billing/webhooks/{provider} -> account-bridge",
-	"commerce /v1/catalog/entries -> catalog",
-	"commerce /v1/catalog/entries/{wildcard1} -> catalog",
-	"commerce /v1/catalog/models -> catalog",
-	"commerce /v1/catalog/models/refresh -> catalog",
-	"commerce /v1/catalog/seed -> catalog",
-	"commerce /v1/commerce/admin/catalog -> account-bridge",
-	"commerce /v1/commerce/catalog -> account-bridge",
-	"commerce /v1/commerce/currencies -> account-bridge",
-	"commerce /v1/commerce/deposits -> account-bridge",
-	"commerce /v1/commerce/deposits/{id}/confirm -> account-bridge",
-	"commerce /v1/commerce/deposits/{id}/status -> account-bridge",
-	"commerce /v1/commerce/tenant -> account-bridge",
-	"commerce /v1/commerce/webhooks/{provider} -> account-bridge",
-	"commerce /v1/plans/entries -> plan",
-	"commerce /v1/plans/entries/{slug} -> plan",
-	"commerce /v1/plans/seed -> plan",
 	"git / -> nothing",
 	"git /{org}/{repo} -> nothing",
 	"git /{org}/{repo}/blob/{wildcard1} -> nothing",
@@ -120,13 +99,6 @@ var unreachable = []string{
 	"git /{org}/{repo}/info/refs -> nothing",
 	"git /{org}/{repo}/tree/{wildcard1} -> nothing",
 	"iam /.well-known/{wildcard1} -> nothing",
-	"metrics /v1/logs/health -> commerce",
-	"metrics /v1/logs/query -> commerce",
-	"metrics /v1/logs/write -> commerce",
-	"metrics /v1/traces/health -> commerce",
-	"metrics /v1/traces/query -> commerce",
-	"metrics /v1/traces/trace -> commerce",
-	"metrics /v1/traces/write -> commerce",
 	"provisioning /v1/s3 -> storage",
 	"provisioning /v1/s3/{name} -> storage",
 	"team /collaborator -> nothing",
@@ -277,4 +249,30 @@ func TestEveryServedPathReachesTheAppThatServesIt(t *testing.T) {
 	}
 	t.Logf("%d published paths across %d apps; %d reach their app, %d do not (all recorded)",
 		paths, len(Apps), paths-len(found), len(found))
+}
+
+// TestOpenAISurfaceLandsOnAI pins the requests every OpenAI-compatible SDK
+// actually sends. The oracle above sees ai's surface as ONE published path — the
+// /v1 catch-all — so a wrong owner of the /v1 remainder costs it a single entry;
+// here it is spelled out as the concrete user-facing endpoints, because each of
+// these misrouting is the whole product being down for every caller. No other
+// app names any of these paths deeper, so whichever row holds "/v1" answers all
+// of them: that row must be ai's.
+func TestOpenAISurfaceLandsOnAI(t *testing.T) {
+	fleet := router(t)
+	for _, p := range []string{
+		"/v1/chat/completions",
+		"/v1/completions",
+		"/v1/messages",
+		"/v1/models",
+		"/v1/embeddings",
+		"/v1/responses",
+		"/v1/audio/speech",
+		"/v1/audio/transcriptions",
+		"/v1/images/generations",
+	} {
+		if to := destination(t, fleet, p); to != "ai" {
+			t.Errorf("%s -> %s, want ai — the OpenAI-compatible surface is unreachable", p, to)
+		}
+	}
 }
