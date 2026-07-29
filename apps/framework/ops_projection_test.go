@@ -54,13 +54,19 @@ var typedOps = []string{
 // these two would publish a request schema naming the path segments and nothing
 // else: an SDK method that cannot send a document.
 //
-// It takes BOTH halves of one capability, and only the first is ever named. zip
+// It takes THREE halves of one capability, and only the first is ever named. zip
 // must be able to DECLARE an open object — today `map[string]any` projects
 // `additionalProperties: {"type":"object"}`, which asserts every field VALUE is a
-// JSON object and is refuted by every document these tests send. And bindURL must
+// JSON object and is refuted by every document these tests send. bindURL must
 // be able to BIND the URL onto one: it returns early unless the In is a struct, so
 // an open-object In carries no :doctype/:name while a struct In carries no
-// document. Half the fix converts nothing.
+// document. And the bound params must ride OUTSIDE the body namespace: off the
+// REST path op.invoke receives no path map (MCP tools/call and the call plane
+// pass nil), so URL params could only travel as body keys — and a create body's
+// `name` IS the requested document name (engine ops.go, stringField(in, "name")),
+// so folding :name into the body collides with a field the document owns.
+// A partial fix converts nothing. Re-verified against zip v1.18.6 (the pin, and
+// the newest published version): none of the three shipped.
 var rawRoutes = map[string]string{
 	"POST /v1/framework/:doctype":      "free-form document body: shape is metadata, not a Go type",
 	"PUT /v1/framework/:doctype/:name": "free-form document body: shape is metadata, not a Go type",

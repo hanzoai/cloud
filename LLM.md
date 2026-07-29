@@ -1064,7 +1064,7 @@ tree: they are disjoint, so agents do not collide in source.
 |---|---|---|
 | A | ~~integrations 47~~ (done: 22 typed, 19 refused), cloudflare 34, platform 32, projects 31, captable 31 | 128 |
 | B | agents 26, ~~git 24~~ (done: 24 typed, 24 refused — four wire families, apps/git/LLM.md), ~~books 11~~ (done: 20 typed, 5 refused — 3 raw-byte uploads, 2 unconditional-501 link stubs; each named at its registration and pinned by a wire test), ~~o11y 11~~ (done: 12 typed, 8 refused, all wire-bound — 2 verbatim-status VM proxies, 3 reverse proxies (query/query_range/sessions), 2 text/plain Alertmanager receipts, 1 sentry wildcard; apps/o11y/LLM.md names each — the 11 counted 3 comment lines quoting `app.All("/v1/o11y/*")`, real count was 8), ~~company 22~~ (2 left, both permanent) | 50 |
-| C | ~~team 20~~ (done: 9 typed, 10 refused), ~~guide 20~~ (done: 13 typed, 6 refused — 2 YAML-or-JSON document PUTs, 3 structured-409 gated transitions of which /do also streams SSE, 1 opaque merge-patch; each named at its registration, the 409/YAML wires pinned by tests), ~~crm 20~~ (done: 19 typed, 1 refused — the public intake POST; see "crm is 19 of 20" below), ~~ingress 19~~ (done), ~~framework 19~~ → 2, ~~account 19~~ (done: 11 typed, 7 refused) | 117 |
+| C | ~~team 20~~ (done: 9 typed, 10 refused), ~~guide 20~~ (done: 13 typed, 6 refused — 2 YAML-or-JSON document PUTs, 3 structured-409 gated transitions of which /do also streams SSE, 1 opaque merge-patch; each named at its registration, the 409/YAML wires pinned by tests), ~~crm 20~~ (done: 19 typed, 1 refused — the public intake POST; see "crm is 19 of 20" below), ~~ingress 19~~ (done), ~~framework 19~~ (done: 17 typed, 2 refused — the document writes; see "apps/framework (17 of 19)" below), ~~account 19~~ (done: 11 typed, 7 refused) | 117 |
 | D | pricing 18, ml 18, ~~automations 18~~ (done: 14 typed, 4 refused), index 17, dataroom 17, compliance 17, affiliates 17 | 104 |
 | E | eval 16, social 13, esign 13, link 12, functions 12, commerce 12, billing 12 | 90 |
 | F | the ~70 remaining packages, 1–11 routes each | ~358 |
@@ -1233,6 +1233,19 @@ so an open-object In carries no `:doctype`/`:name` while a struct In carries no
 document. Half the fix converts nothing, which is why the refusal is recorded in a
 TEST (`rawRoutes` in `ops_projection_test.go`) with both halves named, not in
 prose that only ever named one.
+
+Re-verified against zip v1.18.6, the current pin and the newest published
+version: neither half shipped. The re-check surfaced a THIRD half the first two
+hide. Off the REST path `op.invoke` receives no path map at all — `mcpCall` and
+the call plane both pass nil — so an op's URL params can reach it only as In
+fields decoded from the args body. On THIS wire the body key `name` is live
+data: a create body's `name` IS the requested document name
+(`stringField(in, "name")`, engine ops.go), so folding `:name` into an
+open-object body collides with a field the document owns. zip's open-object
+binding must carry URL params OUTSIDE the body namespace, or the MCP/CLI
+projections of these two ops ship ambiguous — a constraint the capability spec
+has to state, and one more reason a map-In workaround under today's zip would
+be worse than the route-only entries these two carry.
 
 `apps/account` (11 of 18) is the catch-all refusal in its purest form: its seven
 untyped routes are two routes' worth of shape — GET|POST `/v1/billing/*` and the
