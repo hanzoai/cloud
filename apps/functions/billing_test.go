@@ -244,20 +244,24 @@ func TestInvoke_FreeFeeUngated(t *testing.T) {
 	}
 }
 
-// Billing unconfigured (no commerce URL) → the gate is a no-op: invoke works and
-// nothing is billed.
-func TestInvoke_BillingUnconfiguredNoop(t *testing.T) {
+// No commerce URL no longer means "nothing bills". Once apps are their own
+// binaries the ledger has ONE writer and it lives with commerce, so a meter
+// without a local URL ASKS it — and a biller it cannot reach is UNKNOWN, never
+// allowed. Allowing here is what turned every priced act free the moment an app
+// was split out, silently, so the priced invoke is REFUSED and the sandbox never
+// runs. See TestResourceMeter_UnconfiguredIsNoop, which pins the same rule at
+// the gate itself.
+func TestInvoke_UnreachableBillerRefusesAndRunsNothing(t *testing.T) {
 	sb := &sandbox{}
 	s := newBilledService(t, "", sb.start(t)) // empty commerce URL ⇒ !Enabled()
 	seedFn(t, s, "acme", "resize")
 
 	resp := fireInvoke(t, s, "acme", "resize")
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d body=%s, want 200", resp.StatusCode, body)
+	if resp.StatusCode == http.StatusOK {
+		t.Fatal("a priced invoke ran with no reachable biller — that is free work")
 	}
-	if sb.ran() != 1 {
-		t.Fatalf("sandbox ran %d times, want 1", sb.ran())
+	if sb.ran() != 0 {
+		t.Fatalf("sandbox ran %d times with no biller reachable, want 0", sb.ran())
 	}
 }
 
