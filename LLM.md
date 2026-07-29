@@ -2230,11 +2230,18 @@ with literal byte offsets, and a capability the callee parsed and nothing verifi
 was invisible to all five projections — `kms.get`, `finance.authorize` and `iam.mailable`
 had no OpenAPI entry, no MCP tool, no CLI verb and no SDK. 1,300 lines, deleted.
 
-**The body is JSON over the ZAP transport, and that is a real trade.** The hand-rolled
-plane packed ZAP wire layout end to end; zip marshals JSON into a ZAP-framed request
-(HIP-0106: JSON is the boundary format). For sixteen control-plane ops — a gate check, a
-balance read, a secret fetch — being typed at both ends and visible to every projection
-is worth more than the encode. Do not reintroduce a second encoding to win it back.
+**The body is ZAP, end to end** (zip v1.18.6, `internal/zapenc`). The layout is derived
+from the In/Out type: fields take slots in declaration order, each aligned to its own
+width, and NO NAME TRAVELS — a field is its offset. So the bytes on the socket are the
+bytes in memory, exactly as the hand-written codecs did it, with the schema now held by
+the type instead of by matching offsets in two files. Refusals cross as ZAP too, status
+intact. JSON is the BOUNDARY encoding and stays on the REST routes a browser reaches and
+in the MCP envelope an agent reads; it never appears between our own processes.
+`TestPlaneWireCarriesNoFieldNames` pins it: the values cross, the field names do not.
+
+Because the layout IS the type, the compatibility rule is structural: **append fields at
+the end, and only at the end.** Reordering, inserting or retyping changes the wire for
+every peer.
 
 Still TCP, deliberately: the tasks GATED listener (`durable.go`), because consumers in
 other pods dial it and a unix socket does not leave the host. The engine's own loopback
