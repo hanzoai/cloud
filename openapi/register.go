@@ -132,6 +132,14 @@ func schemaOf(t reflect.Type, c *components) (*Schema, error) {
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
+	// A custom marshaler makes the type's Go shape NOT its wire shape, so the
+	// honest answer is unconstrained. It is checked BEFORE the kind switch because
+	// the rule is about the marshaler, not about being a struct: json.RawMessage is
+	// a []byte that emits raw JSON, and reading it as a slice published every
+	// declared raw-JSON field as a base64 STRING — the one shape it is never.
+	if t.Implements(jsonMarshaler) || reflect.PointerTo(t).Implements(jsonMarshaler) {
+		return &Schema{}, nil
+	}
 	switch t.Kind() {
 	case reflect.String:
 		return &Schema{Type: "string"}, nil
@@ -160,11 +168,6 @@ func schemaOf(t reflect.Type, c *components) (*Schema, error) {
 		}
 		return &Schema{Type: "object", AdditionalProperties: elem}, nil
 	case reflect.Struct:
-		// A custom marshaler makes the struct's fields NOT its wire shape;
-		// the honest answer is unconstrained, not the fields' schema.
-		if t.Implements(jsonMarshaler) || reflect.PointerTo(t).Implements(jsonMarshaler) {
-			return &Schema{}, nil
-		}
 		if name := t.Name(); name != "" {
 			if prev, taken := c.types[name]; taken {
 				if prev != t {

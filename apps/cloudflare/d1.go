@@ -83,6 +83,20 @@ func (o ops) d1DatabaseDelete(ctx context.Context, in *databaseRef) (*cfResult, 
 	return cl.relay(ctx, http.MethodDelete, d1Path(acct)+"/"+db, nil)
 }
 
+// D1Query is the shape this plane's query route takes, DECLARED for the document
+// (openapi.Register, cloudflare.go) rather than bound by the handler. The handler
+// forwards the caller's body to D1 verbatim, so there is no Go struct it could
+// bind that would also state the shape — binding one is exactly the field loss
+// the route refuses. It reads `sql` off the body to require it, and nothing else;
+// this states the two fields D1 itself takes, and the schema is an OPEN object, so
+// a field D1 accepts that is not named here still reaches D1 unchanged.
+type D1Query struct {
+	// SQL is the statement to run. Required.
+	SQL string `json:"sql"`
+	// Params are the statement's bound values, in the order its placeholders appear.
+	Params []any `json:"params,omitempty"`
+}
+
 // d1Query runs a SQL statement against a database. The body ({sql, params}) is
 // validated for a non-empty sql then forwarded VERBATIM (preserving params and any
 // batch fields), so the full CF query shape reaches D1 without field loss.

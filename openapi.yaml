@@ -701,6 +701,14 @@ components:
         status:
           type: string
       type: object
+    D1Query:
+      properties:
+        params:
+          items: {}
+          type: array
+        sql:
+          type: string
+      type: object
     DoCost:
       properties:
         accountBalanceCents:
@@ -1737,6 +1745,11 @@ components:
     PagesD1Binding:
       properties:
         id:
+          type: string
+      type: object
+    PagesDeploy:
+      properties:
+        branch:
           type: string
       type: object
     PagesDeploymentConfig:
@@ -3251,6 +3264,20 @@ components:
         msg:
           type: string
         status:
+          type: string
+      type: object
+    WorkerScriptPut:
+      properties:
+        bindings: {}
+        compatibilityDate:
+          type: string
+        compatibilityFlags:
+          items:
+            type: string
+          type: array
+        mainModule:
+          type: string
+        script:
           type: string
       type: object
     actionsView:
@@ -14020,6 +14047,17 @@ paths:
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/D1Query'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema: {}
+          description: Success
       tags:
       - cloudflare
   /v1/cloudflare/kv/namespaces:
@@ -14277,6 +14315,17 @@ paths:
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PagesDeploy'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema: {}
+          description: Success
       tags:
       - cloudflare
   /v1/cloudflare/pages/projects/{project}/domains:
@@ -14489,6 +14538,17 @@ paths:
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkerScriptPut'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema: {}
+          description: Success
       tags:
       - cloudflare
   /v1/cloudflare/workers/scripts/{script}/subdomain:
