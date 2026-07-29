@@ -108,6 +108,15 @@ var allowedRequestUses = map[string]string{
 		"admin-ness lives in a header (X-User-IsAdmin) that principal.OrgFrom does not carry. The tenant " +
 		"itself is read with principal.OrgFrom (callerOrg, right beside it), never through the request. " +
 		"False off the HTTP path: no request, no attested caller, no admin view.",
+	"apps/compliance/compliance.go": "the reviewer gates, emitAudit and noStore. A verification or " +
+		"accreditation DECISION is role-gated (SuperAdmin or org admin — X-User-IsAdmin / " +
+		"X-User-IsOrgAdmin) and ATTRIBUTED to the reviewer's user id (X-User-Id), none of which " +
+		"principal.OrgFrom carries; emitAudit is the same attribution for the tamper-evident trail " +
+		"(user id, email, admin-ness, method, path, source IP, request id); noStore pins " +
+		"Cache-Control: no-store on the PII-bearing responses, which only the request reaches. The " +
+		"tenant itself is read with principal.OrgFrom (tenant, right beside them), never through the " +
+		"request. All fail closed off the HTTP path: no request, no attested reviewer, no audit actor " +
+		"to invent, nothing cached.",
 }
 
 // TestRequestEscapeHatchIsPinned fails when a new cloud.Request call site
