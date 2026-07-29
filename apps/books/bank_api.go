@@ -24,14 +24,18 @@ func bankRoutes(app cloud.Router, s *cloud.Service[*state]) {
 	o := booksOps{s: s}
 	zip.Get(g, "/transactions", o.listBankTxns)
 	zip.Get(g, "/unreconciled", o.listUnreconciled)
+	// The connector pull. It takes nothing off the wire but the ?sandbox selector,
+	// which stays on the URL (query, typed.go) rather than moving into the body a
+	// typed POST's In is documented as.
+	zip.Post(g, "/sync", o.syncBank)
 
 	// UNTYPED, each for a stated reason. import takes RAW statement bytes (OFX/QFX/CSV)
-	// as its body, which is not a JSON input a typed op can name. sync's ?sandbox
-	// selector is query-only today and a typed POST documents its input as a body, which
-	// would move it. link-token and exchange always answer 501 — typing them would
-	// publish a success schema for a response neither has ever sent.
+	// as its body: zip's typed decoder unmarshals the body as JSON, so an OFX upload
+	// would answer 400 instead of importing — there is no JSON In that names a file.
+	// link-token and exchange always answer 501, and a typed op publishes a SUCCESS
+	// response (its Out schema, or the 204 a void op declares) that neither has ever
+	// sent — an invented contract every generated SDK would carry a return type for.
 	app.Post("/v1/books/bank/import", cloud.Handle(s, bankImportHandler))
-	app.Post("/v1/books/bank/sync", cloud.Handle(s, bankSyncHandler))
 	app.Post("/v1/books/bank/link-token", cloud.Handle(s, bankLinkTokenHandler))
 	app.Post("/v1/books/bank/exchange", cloud.Handle(s, bankExchangeHandler))
 }
@@ -123,24 +127,39 @@ func bankImportHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 	return booksJSON(c, tally)
 }
 
-// bankSyncHandler pulls every pull-based connector (Plaid/Teller) for the caller's org,
-// mapping + posting each transaction idempotently and advancing per-connector cursors.
-func bankSyncHandler(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to sync bank")
-	}
-	tally, err := s.State.syncBank(c.Context(), org, sandboxQuery(c))
+// SyncBank pulls every connected bank (Plaid/Teller) for the caller's org, maps each
+// fetched transaction to a posting and books it idempotently, then advances that
+// connector's cursor so the next sync resumes where this one stopped. One connector's
+// outage is skipped rather than failing the whole sync. It reports the batch: how many
+// transactions were seen, how many vouchers posted, how many inflows reconciled against
+// the processor clearing account, how many raised a question, how many were own-account
+// transfers, and how many were already-processed no-ops. It is READ-ONLY against the
+// bank — it ingests, it never sends money.
+func (o booksOps) syncBank(ctx context.Context, _ *syncIn) (*BankTally, error) {
+	org, err := tenant(ctx, "sync bank")
 	if err != nil {
-		s.State.log.Warn("books bank sync failed", "org", org, "err", err)
-		return zip.Errorf(http.StatusBadGateway, "bank sync failed")
+		return nil, err
 	}
-	return booksJSON(c, tally)
+	tally, err := o.s.State.syncBank(ctx, org, sandboxOf(query(ctx, "sandbox")))
+	if err != nil {
+		o.s.State.log.Warn("books bank sync failed", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusBadGateway, "bank sync failed")
+	}
+	return &tally, nil
 }
 
-// bankLinkTokenHandler / bankExchangeHandler are the Plaid/Teller link-flow endpoints. They
-// exist here so the route contract is stable; the connectors implement the token exchange
-// (storing the resulting access_token in KMS, never books.db).
+// bankLinkTokenHandler / bankExchangeHandler are the Plaid/Teller link-flow endpoints, and
+// both answer 501 unconditionally.
+//
+// The connectors BEHIND them are written: plaidConn.LinkToken mints the browser Link
+// session's link_token, plaidConn.Exchange trades Link's public_token for the durable
+// access_token and seals it into KMS, and tellerConn.exchange/linkConfig are the Teller
+// half. Nothing on the HTTP path calls any of them — only their tests do — so the link
+// flow is implemented end to end and unreachable, and no org can connect a bank through
+// the API. Wiring them is a WIRE change (a route that has only ever answered 501 would
+// start answering 200 with a body nothing has specified), which is why these two are the
+// books routes left untyped: a typed op must state what it answers on success, and the
+// honest answer today is that neither ever succeeds.
 func bankLinkTokenHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 	if _, ok := principal.Org(c); !ok {
 		return zip.ErrUnauthorized("sign in to link a bank")

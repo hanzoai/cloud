@@ -111,6 +111,50 @@ components:
         website:
           type: string
       type: object
+    AskRequest:
+      properties:
+        from:
+          description: |-
+            From is the RFC3339 start of the metric window. Empty means all time, treated as a
+            single reporting period (see monthsBetween).
+          type: string
+        question:
+          description: |-
+            Question is the plain-language question about the org's books, e.g. "what is my
+            MRR?". Longer than 2000 characters is truncated, never refused.
+          type: string
+        to:
+          description: To is the RFC3339 end of the metric window. Empty means up
+            to now.
+          type: string
+      type: object
+    AskResponse:
+      properties:
+        answer:
+          description: |-
+            Answer is one or two sentences answering the question, every number in it taken
+            from Figures.
+          type: string
+        figures:
+          description: Figures are the grounded numbers the answer states, each already
+            formatted.
+          items:
+            $ref: '#/components/schemas/Figure'
+          type: array
+        followups:
+          description: Followups are sharper questions to ask next, chosen from the
+            same intent.
+          items:
+            type: string
+          type: array
+        sources:
+          description: |-
+            Sources name the books reports the figures were computed from — "pnl",
+            "balance-sheet", "trial-balance".
+          items:
+            type: string
+          type: array
+      type: object
     Audience:
       properties:
         createdAt:
@@ -277,6 +321,27 @@ components:
         status:
           type: string
       type: object
+    BankTally:
+      properties:
+        ingested:
+          description: transactions seen
+          type: integer
+        posted:
+          description: vouchers newly posted (outflow + reconciled)
+          type: integer
+        questions:
+          description: unmatched inflows that raised a question
+          type: integer
+        reconciled:
+          description: inflows cleared against Square-clearing
+          type: integer
+        skipped:
+          description: already-processed idempotent no-ops
+          type: integer
+        transfers:
+          description: own-account moves recorded (no P&L)
+          type: integer
+      type: object
     BankTxnRow:
       properties:
         amountCents:
@@ -359,6 +424,36 @@ components:
           items:
             $ref: '#/components/schemas/SwitchView'
           type: array
+      type: object
+    BookRequest:
+      properties:
+        override:
+          description: |-
+            Override books this bill even when one of the SAME economic identity
+            (vendor, total, issue date) already posted — the explicit human confirmation that a
+            same-looking bill is a genuine second spend, not the same receipt re-scanned.
+          type: boolean
+        scanId:
+          description: |-
+            ScanID is the scanned document's file hash, as GET /v1/books/inbox and the scan
+            draft report it. It is the idempotency key: re-booking the same scan writes nothing.
+          type: string
+        voucher:
+          $ref: '#/components/schemas/Voucher'
+          description: |-
+            Voucher is the reviewed voucher to post. Its source is FORCED to (scan, scanId)
+            server-side, so it can never be booked under another source's key.
+      type: object
+    BookResponse:
+      properties:
+        posted:
+          description: |-
+            Posted is true when this call wrote the voucher, false when the same scan had
+            already booked and nothing was written.
+          type: boolean
+        scanId:
+          description: ScanID echoes the scan that was booked.
+          type: string
       type: object
     CalendarPost:
       properties:
@@ -965,6 +1060,20 @@ components:
         totalCents:
           type: integer
       type: object
+    Figure:
+      properties:
+        label:
+          description: Label names the metric, e.g. "MRR" or "Runway".
+          type: string
+        period:
+          description: Period is the window the figure covers, e.g. "2026-07" or "all-time".
+          type: string
+        value:
+          description: |-
+            Value is the figure already formatted through books' own money formatter, so a
+            consumer never re-derives it.
+          type: string
+      type: object
     Filing:
       properties:
         at:
@@ -1462,6 +1571,21 @@ components:
             are its default arguments; Draft is an optional AI prompt whose output fills the
             DraftInto arg (default "brief").
           type: string
+      type: object
+    Leg:
+      properties:
+        account:
+          description: Account is the chart-of-accounts number this side posts to,
+            e.g. "5300".
+          type: string
+        credit:
+          description: Credit is the leg's credit in exact cents. Set this or Debit,
+            not both.
+          type: integer
+        debit:
+          description: Debit is the leg's debit in exact cents. Set this or Credit,
+            not both.
+          type: integer
       type: object
     LineItem:
       properties:
@@ -2282,11 +2406,18 @@ components:
     Rule:
       properties:
         category:
-          description: COA account number
+          description: |-
+            Category is the COA expense account a matching bill books to. An upsert normalizes
+            a slug ("cloud") to its account number.
           type: string
         pattern:
+          description: |-
+            Pattern is the merchant substring the rule matches on, case-insensitively. It is
+            also the key an upsert writes by.
           type: string
         priority:
+          description: 'Priority breaks ties: when several patterns match, the highest
+            wins.'
           type: integer
       type: object
     SaaSCategory:
@@ -3117,13 +3248,20 @@ components:
     VendorRow:
       properties:
         aliases:
+          description: |-
+            Aliases are the other spellings a receipt may print the vendor under; a scan
+            matching any of them resolves to this vendor.
           items:
             type: string
           type: array
         canonical:
+          description: Canonical is the vendor's one true name, and the key an upsert
+            writes by.
           type: string
         defaultCategory:
-          description: COA account number
+          description: |-
+            DefaultCategory is the COA expense account new bills from this vendor book to.
+            An upsert normalizes a slug ("software") to its account number.
           type: string
       type: object
     VerifyOut:
@@ -3264,6 +3402,34 @@ components:
         msg:
           type: string
         status:
+          type: string
+      type: object
+    Voucher:
+      properties:
+        description:
+          description: Description is the human line for the event, e.g. the vendor
+            a bill came from.
+          type: string
+        legs:
+          description: |-
+            Legs are the sides of the posting. They must balance: Σdebit == Σcredit, give or
+            take the 2¢ round-off allowance.
+          items:
+            $ref: '#/components/schemas/Leg'
+          type: array
+        postingAt:
+          description: |-
+            PostingAt is the RFC3339 instant the event posts at — the time every statement
+            window filters on.
+          type: string
+        sourceId:
+          description: |-
+            SourceID is the source event's own id within that namespace. Together with
+            SourceKind it is the key that makes a repeat posting a no-op.
+          type: string
+        sourceKind:
+          description: SourceKind is the idempotency namespace naming what booked
+            this, e.g. "scan".
           type: string
       type: object
     WorkerScriptPut:
@@ -12842,7 +13008,34 @@ paths:
       - books
   /v1/books/ask:
     post:
+      description: |-
+        AskBooks answers a plain-language question about the caller's own books — "what is my
+        MRR?", "how long is my runway?" — with figures taken from their ledger, never a guessed
+        number. A deterministic keyword router picks the intent and reads the real metrics, and
+        those figures, followups and report sources are computed BEFORE any model call and are
+        never altered by one: the optional narration seam only rephrases the sentence, and it
+        degrades silently to the templated answer when no AI plane is wired. It is strictly
+        read-only — it restates the books, it never posts to them.
       operationId: post_v1_books_ask
+      requestBody:
+        content:
+          application/json:
+            example:
+              question: how long is my runway?
+            schema:
+              $ref: '#/components/schemas/AskRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AskResponse'
+          description: ok
+      summary: |-
+        AskBooks answers a plain-language question about the caller's own books — "what is my
+        MRR?", "how long is my runway?" — with figures taken from their ledger, never a guessed
+        number.
       tags:
       - books
   /v1/books/balance-sheet:
@@ -12894,7 +13087,33 @@ paths:
       - books
   /v1/books/bank/sync:
     post:
+      description: |-
+        SyncBank pulls every connected bank (Plaid/Teller) for the caller's org, maps each
+        fetched transaction to a posting and books it idempotently, then advances that
+        connector's cursor so the next sync resumes where this one stopped. One connector's
+        outage is skipped rather than failing the whole sync. It reports the batch: how many
+        transactions were seen, how many vouchers posted, how many inflows reconciled against
+        the processor clearing account, how many raised a question, how many were own-account
+        transfers, and how many were already-processed no-ops. It is READ-ONLY against the
+        bank — it ingests, it never sends money.
       operationId: post_v1_books_bank_sync
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/syncIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankTally'
+          description: ok
+      summary: |-
+        SyncBank pulls every connected bank (Plaid/Teller) for the caller's org, maps each
+        fetched transaction to a posting and books it idempotently, then advances that
+        connector's cursor so the next sync resumes where this one stopped.
       tags:
       - books
   /v1/books/bank/transactions:
@@ -13190,7 +13409,34 @@ paths:
       tags:
       - books
     post:
+      description: |-
+        UpsertRule creates or updates one auto-categorization rule, keyed by its pattern —
+        writing a pattern that already exists REPLACES that row's category and priority. The
+        category is normalized to a real COA expense account, and anything unrecognized becomes
+        5900 Uncategorized rather than a guessed real account. It answers the row exactly as
+        stored, so the caller sees the normalization. A rule overrides a vendor's default
+        category, so this is the standing instruction that decides how a future bill classifies.
       operationId: post_v1_books_rules
+      requestBody:
+        content:
+          application/json:
+            example:
+              category: cloud
+              pattern: aws
+              priority: 5
+            schema:
+              $ref: '#/components/schemas/Rule'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Rule'
+          description: ok
+      summary: |-
+        UpsertRule creates or updates one auto-categorization rule, keyed by its pattern —
+        writing a pattern that already exists REPLACES that row's category and priority.
       tags:
       - books
   /v1/books/scan:
@@ -13200,7 +13446,38 @@ paths:
       - books
   /v1/books/scan/book:
     post:
+      description: |-
+        BookScan posts a reviewed scanned bill to the ledger. It is the scanner's ONLY write:
+        the voucher goes through the same post() choke point every other source uses, so it is
+        checked to balance (Σdebit == Σcredit) and is idempotent by (scan, scanId) — re-booking
+        the same scan answers posted=false and writes nothing. A bill whose economic identity
+        (vendor, total, issue date) already posted under a DIFFERENT scan is refused 409 unless
+        override is set, which is what stops the same receipt re-scanned into a new file hash
+        from double-booking. An unbalanced voucher is refused 400.
       operationId: post_v1_books_scan_book
+      requestBody:
+        content:
+          application/json:
+            example:
+              scanId: a5f3c1
+              voucher:
+                description: GitHub
+                legs:
+                - account: "5300"
+                  debit: 1234
+                - account: "2001"
+                  credit: 1234
+            schema:
+              $ref: '#/components/schemas/BookRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookResponse'
+          description: ok
+      summary: BookScan posts a reviewed scanned bill to the ledger.
       tags:
       - books
   /v1/books/sync:
@@ -13366,7 +13643,37 @@ paths:
       tags:
       - books
     post:
+      description: |-
+        UpsertVendor creates or updates one vendor in the org's vendor book, keyed by its
+        canonical name — writing a canonical name that already exists REPLACES that row's
+        aliases and default category. A category given as a slug ("software") is normalized to
+        its real COA expense account, and anything unrecognized becomes 5900 Uncategorized
+        rather than a guessed real account. It answers the row exactly as stored, so the caller
+        sees the normalization. Recording a vendor is what makes future bills from it
+        self-classify instead of asking again.
       operationId: post_v1_books_vendors
+      requestBody:
+        content:
+          application/json:
+            example:
+              aliases:
+              - github.com
+              canonical: GitHub
+              defaultCategory: software
+            schema:
+              $ref: '#/components/schemas/VendorRow'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorRow'
+          description: ok
+      summary: |-
+        UpsertVendor creates or updates one vendor in the org's vendor book, keyed by its
+        canonical name — writing a canonical name that already exists REPLACES that row's
+        aliases and default category.
       tags:
       - books
   /v1/bot/{wildcard1}:
