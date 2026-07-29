@@ -52,8 +52,15 @@ var typedOps = []string{
 // write is the document's own field data — an open object the DocType defines at
 // run time. No Go struct both accepts it verbatim and describes it, so typing
 // these two would publish a request schema naming the path segments and nothing
-// else: an SDK method that cannot send a document. They convert when zip can
-// declare an open-object input (additionalProperties: true).
+// else: an SDK method that cannot send a document.
+//
+// It takes BOTH halves of one capability, and only the first is ever named. zip
+// must be able to DECLARE an open object — today `map[string]any` projects
+// `additionalProperties: {"type":"object"}`, which asserts every field VALUE is a
+// JSON object and is refuted by every document these tests send. And bindURL must
+// be able to BIND the URL onto one: it returns early unless the In is a struct, so
+// an open-object In carries no :doctype/:name while a struct In carries no
+// document. Half the fix converts nothing.
 var rawRoutes = map[string]string{
 	"POST /v1/framework/:doctype":      "free-form document body: shape is metadata, not a Go type",
 	"PUT /v1/framework/:doctype/:name": "free-form document body: shape is metadata, not a Go type",
