@@ -69,11 +69,16 @@ import (
 // this format, ready to paste.
 var unreachable = []string{
 	"ai /v1/{wildcard1} -> commerce",
-	"analytics /v1/analytics -> commerce",
-	"analytics /v1/analytics/batch -> commerce",
-	"analytics /v1/event -> commerce",
-	"analytics /v1/event/collect -> commerce",
-	"analytics /v1/insights/e -> commerce",
+	// The five analytics INGESTION doors that used to sit here were not a backlog
+	// item: they were a live outage. Every beacon the products emit landed on
+	// commerce's bare "/v1" and answered 405, so the warehouse stopped receiving
+	// events at 2026-07-29 04:15:29 — eighteen seconds after the ReplicaSet running
+	// the first image where manifest.Apps is the actual router. Routed now.
+	//
+	// /v1/tracker stays, and stays UNREACHABLE ON PURPOSE. apps/analytics wants it
+	// as the @hanzo/capture unload beacon; apps/tracker owns the name for the issue
+	// tracker and got there first. Routing it to analytics would break the issue
+	// tracker, so the alias is retired at the caller instead — one name, one owner.
 	"analytics /v1/tracker -> tracker",
 	"commerce /v1/billing/auto-recharge/run-all -> account-bridge",
 	"commerce /v1/billing/invoices -> account-bridge",
