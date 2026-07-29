@@ -55,6 +55,26 @@ comments at compile time.
 
 - typed: `GET /v1/o11y/{logs,metrics,status}` (scope.go), the eight
   `/v1/o11y/annotation-queues*` routes, and `POST /v1/o11y/ingestion`.
+- **`POST /v1/o11y/ingestion` is typed and reaches NO consumer**, because being
+  typed is necessary and not sufficient: the op has to be REGISTERED in the
+  process that writes the document. `mountEventIngest` returns early when
+  `embeddedDSN()` is empty and again when `newDatastoreSink` cannot ping, so
+  `zip.Post(g, o11yIngestLeaf, o.ingest)` never runs without a reachable Hanzo
+  Datastore — and `make -C apps/o11y openapi` runs `bin/o11y openapi` with
+  `GIT_SSH_ADDR` and nothing else (mk/plugin.mk). The generator says so itself:
+  `o11y event ingest: no Datastore DSN; write path unmounted`. So the LLM-obs
+  write path — the one route that ingests traces/observations/scores — is in
+  neither `plugin/o11y/openapi.json` nor the woven `openapi.yaml`, and therefore
+  has no SDK method, no MCP tool, no CLI command and no published schema. Its op,
+  its In/Out and its zipdoc prose all exist and project nowhere.
+  This is NOT the "spec varies per deployment" property working as intended: that
+  property is honest when the generating process resembles a deployment, and this
+  one resembles none — every real o11y deployment sets the DSN. Closing it is a
+  BEHAVIOUR decision, not a description one, and that is why it is still open:
+  `zip.Post` registers a fiber route and a registry entry inseparably
+  (`registerTyped` ends in `app.fiber.Add`), so making the op visible necessarily
+  makes the path stop falling through to the order-70 wildcard. Whoever takes it
+  owns that wire change; typing cannot.
 - **`cloud.Bridge()` is installed by `MountO11y` on the `/v1/o11y` group, first.**
   Not optional and not redundant with `cloud.Serve`: o11y runs as its OWN process
   (`plugin/o11y/main.go` builds a bare `zip.App`), and the host's context does not
