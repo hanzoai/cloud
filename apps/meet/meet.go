@@ -290,9 +290,16 @@ func mint(s *cloud.Service[state], c *zip.Ctx) error {
 	if room == "" {
 		return zip.ErrBadRequest("roomName required")
 	}
+	// Say what was actually checked. meet performs NO membership lookup — it has
+	// no members table, no store, and makes no call to IAM. Membership was decided
+	// upstream, at the IAM login that minted this session, and is already signed
+	// into the token as `workspace`. All that happens here is a refusal to WIDEN
+	// that: the room asked for must belong to the workspace the token already
+	// names. Claiming "not a member" describes a determination this code never
+	// makes, and reads as a second authorization system where there is none.
 	t, ok := st.admits(room, c.Header("Authorization"))
 	if !ok {
-		return zip.Errorf(http.StatusUnauthorized, "not a member of this room's workspace")
+		return zip.Errorf(http.StatusUnauthorized, "token workspace does not match this room")
 	}
 	// THE IDENTITY IS THE TOKEN'S, NOT THE BODY'S. LiveKit uses `sub` as the
 	// participant identity and EJECTS an existing participant on a duplicate — so
