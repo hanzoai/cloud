@@ -827,6 +827,103 @@ one before it.
   by the same run — one value in two places, not two sources of truth. It is
   named `hanzo`, not `cloud`, because the binary serves the WHOLE /v1 surface.
 
+## The typed migration: THE PLAYBOOK (start here before typing anything)
+
+Worked end to end on `apps/agents/targets.go` (5 ops). Follow it and a partition
+is mechanical; skip it and you will rediscover four failure modes the hard way.
+
+### The recipe
+
+1. **A receiver, not a closure.** `type xOps struct{ s *cloud.Service[state] }`
+   and every op a METHOD (`o.registerTarget`). A TypedHandler takes no service
+   parameter, and a method value is the only bound form `cmd/zipdoc` can lift
+   prose from — a closure returned by a helper is a call expression with nothing
+   to read.
+2. **Spell the WHOLE path**, on `cloud.ZipApp(app)`, not a leaf path on a group.
+   zipdoc keys prose on the path LITERAL in the registration call, so
+   `zip.Post(g, "/targets", …)` files under `POST /targets` while the op's real
+   identity is `POST /v1/agents/targets`. `docFor` never matches and every doc
+   comment is dropped from the document AND the MCP tool — silently. zip gained
+   group registration in v1.18.0; zipdoc has not caught up.
+3. **Install `cloud.Bridge()` on the subsystem's group, before the leaves.** A
+   typed op receives only a context, so the validated org has to be parked there.
+   fiber runs middleware in registration order — one installed after its leaves
+   never runs. Untyped handlers read identity off the request and hide this.
+4. **Identity is NEVER an In field.** `principal.OrgFrom(ctx)` for the tenant. An
+   In field is caller-supplied, so a tenant key read from one is a cross-tenant
+   read the caller asserted for itself. If you need more than the org (admin-ness
+   lives in a header), that is `cloud.Request(ctx)` — and it is PINNED, so add
+   your file to `allowedRequestUses` with a justification or the gate fails.
+5. **Preserve the wire, exactly.** Same JSON shapes, same statuses. `//go:generate
+   go run github.com/zap-proto/zip/cmd/zipdoc` in the package, then
+   `make -C apps/<app> openapi`.
+6. **Doc comments are product surface.** They ship to the OpenAPI `description`
+   AND the MCP tool description — a model picks a tool by reading them. An
+   `Example:` line becomes the request example. Write them true.
+
+### Statuses
+
+`zip.WithStatus(201)` declares an UNCONDITIONAL success status and keys the
+document's `responses`. Use it for every op that always answers 201/202.
+
+**The conditional class — the worked example.** `registerTarget` answers 200 on
+an idempotent re-link and 201 on first registration. That is correct REST and
+`WithStatus` cannot express it (one declaration, one status). Those routes stay
+**typed-but-shimmed**: keep `cloud.Created(ctx)` on the create branch only. Do
+NOT bend the route to fit the declaration, and do NOT invent a third mechanism —
+zip is getting multi-status `responses`, and these convert when it lands.
+
+### The four failure modes, all found the hard way
+
+1. **A gate comparing two DERIVED artifacts agrees with itself while both are
+   wrong.** `openapi-composed` compared the subsets to the golden they weave
+   into; nothing regenerated from the routes. `plugin/ingress` lost 8 paths
+   (`/v1/ingress/routes|services|middlewares|tls|status` + `:id` forms) — absent
+   from `openapi.yaml` and therefore from every generated SDK, so no Python, Go
+   or TS caller could reach the ingress API at all, with every gate green. The
+   cure is `make -f mk/fleet.mk openapi-check`, which REGENERATES and diffs.
+2. **The stale-tree pin walk-back.** `bb10586e` reverted commerce v1.49.30→29 and
+   zip v1.18.1→v1.17.6 in a single-parent commit: `go get`/`go mod tidy` run in a
+   tree that predated the bump, committed wholesale. It is MECHANICAL, so it will
+   recur — any agent on a stale tree reproduces it. Main then held documents one
+   zip version generated against a go.mod pinning another that could not produce
+   them, and nothing detected it. Rebase before you regenerate.
+3. **Verify what CI actually invokes before trusting a gate you add to a make
+   target.** cloud's CI never ran `make test` — no `.github/workflows`, and
+   `hanzo.yml` names steps directly. A gate added to `make test` protected
+   nobody. `hanzo.yml` calls `openapi-check` now.
+4. **`git status --porcelain`, not `git diff`.** A NEW app produces a NEW
+   UNTRACKED subset, invisible to a diff — the failure that matters most is the
+   one a diff cannot see.
+
+### Partitioning the remaining work
+
+986 untyped routes across 101 packages, 76 typed. Take a whole `apps/<app>/`
+tree: they are disjoint, so agents do not collide in source.
+
+| tranche | apps | untyped |
+|---|---|---|
+| A | integrations 47, cloudflare 34, platform 32, projects 31, captable 31 | 175 |
+| B | git 28, agents 26, books 25, o11y 23, company 22 | 124 |
+| C | team 20, guide 20, crm 20, ingress 19, framework 19, account 19 | 117 |
+| D | pricing 18, ml 18, automations 18, index 17, dataroom 17, compliance 17, affiliates 17 | 122 |
+| E | eval 16, social 13, esign 13, link 12, functions 12, commerce 12, billing 12 | 90 |
+| F | the ~70 remaining packages, 1–11 routes each | ~358 |
+
+Re-measure rather than trusting the table:
+
+    for d in apps/*/; do a=$(basename $d); \
+      u=$(grep -rn --include='*.go' -E '\.(Get|Post|Put|Patch|Delete|All)\("' $d | grep -v _test.go | grep -cv 'zip\.'); \
+      t=$(grep -rn --include='*.go' -E 'zip\.(Get|Post|Put|Patch|Delete)[[(]' $d | grep -vc _test.go); \
+      [ "$u" -gt 0 ] && printf '%s %s %s\n' "$a" "$u" "$t"; done | sort -k2 -rn
+
+**Collisions, and the resolution.** Source does not collide; two artifacts do —
+the regenerated `openapi.yaml` golden and `go.sum`. Both resolve the same way:
+**rebase onto main, then regenerate** (`make -f mk/fleet.mk openapi-check`). The
+generator is deterministic, so a regenerated golden is a function of the routes,
+never a merge to hand-resolve. Never hand-edit `openapi.yaml` or a
+`plugin/*/openapi.json`.
+
 ## The typed migration: one registry entry, or a route and nothing else
 
 Measured at `e88ea216`, and re-measurable — do not trust these numbers past the
