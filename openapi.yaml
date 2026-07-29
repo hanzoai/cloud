@@ -27819,6 +27819,27 @@ paths:
       operationId: get_v1_plugins
       tags:
       - tools
+  /v1/plugins/authored:
+    get:
+      operationId: get_v1_plugins_authored
+      tags:
+      - tools
+  /v1/plugins/authored/{id}:
+    delete:
+      operationId: delete_v1_plugins_authored_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      tags:
+      - tools
+  /v1/plugins/build:
+    post:
+      operationId: post_v1_plugins_build
+      tags:
+      - tools
   /v1/prefs/:
     get:
       operationId: get_v1_prefs
