@@ -89,9 +89,21 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	g.Post("/mcp", cloud.Handle(s, mcp))
 	g.Get("/activation", cloud.Handle(s, getActivation))
 	g.Put("/activation", cloud.Handle(s, putActivation))
-	g.Get("/servers", cloud.Handle(s, listServers))
-	g.Post("/servers", cloud.Handle(s, createServer))
-	g.Delete("/servers/:id", cloud.Handle(s, deleteServer))
+
+	// The separately-listed registries (see registries.go). Collection roots stay
+	// flat for the same reason /v1/tools does: Group(p).Get("") yields "p/".
+	// skills and mcp are Source views of this registry; plugins is the mounted
+	// subsystem inventory, which is a different thing entirely.
+	app.Get("/v1/skills", cloud.Handle(s, listBySource(SourceSkill)))
+	app.Get("/v1/mcp", cloud.Handle(s, listBySource(SourceMCP)))
+	app.Get("/v1/plugins", cloud.Handle(s, listPlugins))
+
+	// The external MCP server registry lives with /v1/mcp, not under /v1/tools:
+	// a server is a record an org creates, not a tool the registry enumerates.
+	mcpG := app.Group("/v1/mcp")
+	mcpG.Get("/servers", cloud.Handle(s, listServers))
+	mcpG.Post("/servers", cloud.Handle(s, createServer))
+	mcpG.Delete("/servers/:id", cloud.Handle(s, deleteServer))
 }
 
 // Shutdown closes the stores. Idempotent.

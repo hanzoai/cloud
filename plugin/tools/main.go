@@ -17,8 +17,13 @@ import (
 // `tools openapi`. Hand-owned — edit the spec below directly.
 func main() {
 	if err := cloud.Serve([]cloud.Plugin{{
-		Name:     "tools",
-		Price:    cloud.Metered,
+		Name:  "tools",
+		Price: cloud.Metered,
+		// The registry views (/v1/skills, /v1/mcp, /v1/plugins) are this
+		// subsystem's surface too, so they must be declared or a request to one
+		// resolves to no subsystem and its price is Undeclared. Kept in sync
+		// with manifest/apps.go, which states the same thing for the fused host.
+		Prefixes: []string{"/v1/mcp", "/v1/plugins", "/v1/skills", "/v1/tools"},
 		Mount:    tools.Mount,
 		Shutdown: tools.Shutdown,
 	}}, []string{"tools"}); err != nil {

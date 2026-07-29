@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Generated from the live router \u2014 every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
     "version": "v1"
   },
   "servers": [
@@ -16,6 +16,62 @@
     }
   ],
   "paths": {
+    "/v1/mcp": {
+      "get": {
+        "operationId": "get_v1_mcp",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/mcp/servers": {
+      "get": {
+        "operationId": "get_v1_mcp_servers",
+        "tags": [
+          "tools"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_mcp_servers",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/mcp/servers/{id}": {
+      "delete": {
+        "operationId": "delete_v1_mcp_servers_by_id",
+        "tags": [
+          "tools"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/plugins": {
+      "get": {
+        "operationId": "get_v1_plugins",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/skills": {
+      "get": {
+        "operationId": "get_v1_skills",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
     "/v1/tools": {
       "get": {
         "operationId": "get_v1_tools",
@@ -43,38 +99,6 @@
         "operationId": "post_v1_tools_mcp",
         "tags": [
           "tools"
-        ]
-      }
-    },
-    "/v1/tools/servers": {
-      "get": {
-        "operationId": "get_v1_tools_servers",
-        "tags": [
-          "tools"
-        ]
-      },
-      "post": {
-        "operationId": "post_v1_tools_servers",
-        "tags": [
-          "tools"
-        ]
-      }
-    },
-    "/v1/tools/servers/{id}": {
-      "delete": {
-        "operationId": "delete_v1_tools_servers_by_id",
-        "tags": [
-          "tools"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
         ]
       }
     }
