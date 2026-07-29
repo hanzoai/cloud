@@ -864,6 +864,25 @@ is mechanical; skip it and you will rediscover four failure modes the hard way.
 6. **Doc comments are product surface.** They ship to the OpenAPI `description`
    AND the MCP tool description — a model picks a tool by reading them. An
    `Example:` line becomes the request example. Write them true.
+   The `summary` is the first sentence, and zip finds it by looking for `". "` —
+   a first sentence ending at a LINE BREAK is not found, so the summary falls
+   back to the first line and can cut mid-sentence. Keep sentence one on one line.
+7. **Never EMBED a struct in an In or an Out — spell the fields at the top
+   level.** zip's `structSchema` walks `t.NumField()` and skips every field
+   `IsExported()` is false for, which an embedded UNEXPORTED type is (its field
+   name IS the type name). `encoding/json` still PROMOTES those fields, so the
+   wire carries them and the document does not — the one direction no test
+   catches, because the route works perfectly. Exporting the embedded type is not
+   the fix: zip then publishes it as a NESTED object property named after the
+   type, which the wire does not have either. Live in the committed golden today:
+   `patchTargetIn` (apps/agents/targets.go — the worked example) publishes `{id}`
+   ALONE, so `PATCH /v1/agents/targets/{id}` documents none of label, kind,
+   status, capacity, host, spec or metrics, in openapi.yaml, in any generated SDK,
+   or in the MCP tool's inputSchema; `botView` (apps/visor/bots.go) publishes
+   `{agent,binding}` and drops the 14 machine fields it embeds;
+   `clusterDetailView` (apps/visor/k8s.go) publishes `{nodes}` alone. Fix those
+   three by inlining their fields — or fix `structSchema` to flatten an embedded
+   struct the way the decoder does, which fixes the class.
 
 ### Statuses
 
