@@ -17,6 +17,15 @@
 // tenant. The callee reads it with zip.CallerOf(ctx).Org and refuses an empty
 // one.
 //
+// # The wire is ZAP; the tags are for the document
+//
+// These types cross as ZAP messages: a field IS its offset, and no name travels.
+// The `json` tags name fields in the OpenAPI schema this plane also projects —
+// they are the DOCUMENT's vocabulary, never the wire's. Because the layout is
+// the type, the compatibility rule is structural: APPEND FIELDS AT THE END, and
+// only at the end. Reordering, inserting or retyping one changes what every
+// existing peer reads.
+//
 // # Money is an exact decimal, never a count of cents
 //
 // [Money] carries the amount's exact decimal text beside its currency code,
