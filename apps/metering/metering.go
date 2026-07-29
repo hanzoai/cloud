@@ -230,11 +230,21 @@ type AuthInput struct {
 	Actor    string
 	Org      string
 	Currency string
-	// AmountCents, when > 0, gates on available >= AmountCents instead of the
-	// bare available > 0. Use it to authorize a known up-front charge (e.g. the
-	// first hour of a machine) so a 1-cent balance cannot green-light an
-	// arbitrarily expensive request. Zero preserves the legacy "any positive
-	// balance" gate.
+	// Amount, when non-zero, gates on available >= Amount instead of the bare
+	// available > 0. Use it to authorize a known up-front charge (e.g. the first
+	// hour of a machine) so a 1-cent balance cannot green-light an arbitrarily
+	// expensive request. Zero preserves the "any positive balance" gate.
+	//
+	// It is the exact, typed value — the same one Usage.Amount carries, at the
+	// ledger's own 18-decimal precision — so the gate and the debit that follows
+	// it weigh the SAME number. A cents-rounded gate admitted a charge the debit
+	// then wrote in full, which is how a sub-cent price gets authorized against a
+	// figure nobody spent.
+	Amount money.Amount
+
+	// AmountCents is the same charge in whole cents, for the HTTP path to
+	// commerce and for callers that have not got a typed value. Amount wins when
+	// both are set.
 	AmountCents int64
 
 	// Project and Service scope the per-scope spend cap + rate limit (issue #70).
@@ -352,8 +362,12 @@ func (c *Client) AuthorizeVerdict(ctx context.Context, in AuthInput) (Verdict, e
 		return Verdict{}, err // unknown -> deny (fail-closed).
 	}
 	funded := available > 0
-	if in.AmountCents > 0 {
-		funded = available >= in.AmountCents
+	if want := in.amount(); !want.IsZero() {
+		// Weigh both sides in the exact domain. Comparing a cents-rounded charge
+		// against a cents balance let a sub-cent price round to zero and fall back
+		// to the bare "any positive balance" gate — a charge authorized against a
+		// figure nobody was going to spend.
+		funded = money.FromCents(available).Cmp(want) >= 0
 	}
 	if !funded {
 		return Verdict{Allow: false, Reason: "insufficient_balance"}, nil
@@ -421,8 +435,10 @@ func (c *Client) scopeAuthorize(ctx context.Context, in AuthInput) (scopeVerdict
 	if s := strings.TrimSpace(in.Service); s != "" {
 		q.Set("service", s)
 	}
-	if in.AmountCents > 0 {
-		q.Set("amount", strconv.FormatInt(in.AmountCents, 10))
+	if want := in.amount(); !want.IsZero() {
+		// The cap surface still speaks whole cents. Send the charge rounded UP, so
+		// a sub-cent spend is never weighed against a cap as nothing.
+		q.Set("amount", strconv.FormatInt(want.CentsUp(), 10))
 	}
 	// pv=1 only when the project axis is bound to a validated claim; otherwise
 	// commerce degrades a project-scoped hard cap to soft (anti project-spoof).
@@ -587,6 +603,20 @@ type Usage struct {
 	Stream           bool   `json:"stream,omitempty"`
 	Status           string `json:"status,omitempty"`
 	ClientIP         string `json:"clientIp,omitempty"`
+}
+
+// amount returns the canonical typed charge this gate weighs. Amount wins;
+// otherwise the int64 wire field is reconstructed, so a caller that has not got
+// a typed value still gates. Zero means "any positive balance", the gate's
+// behaviour when no specific charge is named.
+func (in AuthInput) amount() money.Amount {
+	if !in.Amount.IsZero() {
+		return in.Amount
+	}
+	if in.AmountCents > 0 {
+		return money.FromCents(in.AmountCents)
+	}
+	return money.Zero()
 }
 
 // amountMoney returns the canonical typed debit. Amount wins; otherwise the

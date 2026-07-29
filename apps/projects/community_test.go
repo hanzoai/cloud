@@ -5,12 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -58,33 +61,44 @@ func adminPatchProject(t *testing.T, app *zip.App, org, slug string, in map[stri
 // visibility change was dropped in silence.
 type recorder struct {
 	mu     sync.Mutex
-	events []cloud.Visibility
+	events []published
+}
+
+// published is one event AND the tenant it arrived for. The org is no longer a
+// field of the event — it rides the caller — so capturing it here is what proves
+// it crossed at all.
+type published struct {
+	plane.Visibility
+	Org string
 }
 
 func record(t *testing.T) *recorder {
 	t.Helper()
-	t.Setenv("CLOUD_RUN_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
 	r := &recorder{}
-	cloud.Expose("git.publish", func(_ context.Context, _ cloud.Ident, req []byte) ([]byte, error) {
-		ev, err := cloud.ReadVisibility(req)
-		if err != nil {
-			return nil, err
+	app := zip.New(zip.Config{AppName: "git"})
+	zip.Post[plane.Visibility, struct{}](app, "/git/publish",
+		func(ctx context.Context, ev *plane.Visibility) (*struct{}, error) {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			r.events = append(r.events, published{Visibility: *ev, Org: cloud.Who(ctx).Org})
+			return nil, nil
+		}, zip.WithOperationID(plane.GitPublish))
+	go func() { _ = app.Listen(zip.SocketPath("git")) }()
+	t.Cleanup(func() { _ = app.Shutdown() })
+	for i := 0; i < 200; i++ {
+		if c, derr := net.Dial("unix", zip.SocketPath("git")); derr == nil {
+			_ = c.Close()
+			return r
 		}
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		r.events = append(r.events, ev)
-		return nil, nil
-	})
-	c, err := cloud.Listen("git", nil)
-	if err != nil {
-		t.Fatalf("git stand-in: %v", err)
+		time.Sleep(10 * time.Millisecond)
 	}
-	t.Cleanup(func() { _ = c.Close() })
+	t.Fatalf("git stand-in never began listening at %s", zip.SocketPath("git"))
 	return r
 }
 
 // last returns the most recent event for a slug, and whether there was one.
-func (r *recorder) last(slug string) (cloud.Visibility, bool) {
+func (r *recorder) last(slug string) (published, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := len(r.events) - 1; i >= 0; i-- {
@@ -92,7 +106,7 @@ func (r *recorder) last(slug string) (cloud.Visibility, bool) {
 			return r.events[i], true
 		}
 	}
-	return cloud.Visibility{}, false
+	return published{}, false
 }
 
 // TestPublishingReachesTheCanonicalRepo: creating a project emits its visibility,
@@ -191,7 +205,7 @@ func TestRetractionReachesTheCanonicalRepo(t *testing.T) {
 // create — the next update reconciles.
 func TestPublishSurvivesAnUnmountedGitPlane(t *testing.T) {
 	app := mountApp(t)
-	t.Setenv("CLOUD_RUN_DIR", t.TempDir()) // no git socket here
+	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir()) // no git socket here
 
 	if code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
 		map[string]any{"name": "Alone", "slug": "alone"}); code != http.StatusCreated {

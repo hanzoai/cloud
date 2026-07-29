@@ -2,10 +2,12 @@ package billing
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/finance"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/plane"
 	"github.com/zap-proto/zip"
 )
 
@@ -64,8 +66,8 @@ func availableCents(ctx context.Context, org, subject string) (cents int64, ok b
 	// For(org) names the tenant whose books to read; the callee takes the org from
 	// that capability and the payload cannot name one, so the subject is all that
 	// travels.
-	out, err := cloud.Dial("commerce").For(org).Call(ctx, "finance.balance",
-		cloud.PutBalanceReq(subject, "usd"))
+	out, err := cloud.Ask[plane.BalanceIn, plane.Balance](cloud.For(ctx, org), "commerce",
+		plane.FinanceBalance, &plane.BalanceIn{Subject: subject, Currency: "usd"})
 	if err != nil {
 		// No ledger in this process AND no peer serving one. That is the SPLIT
 		// DEPLOY, which already has an answer: the caller reads commerce over its
@@ -74,7 +76,11 @@ func availableCents(ctx context.Context, org, subject string) (cents int64, ok b
 		// working exactly as designed.
 		return 0, false, nil
 	}
-	cents, cerr := cloud.I64(out)
+	if out == nil {
+		// A void reply is not a zero balance. Nothing was read, so nothing is known.
+		return 0, true, fmt.Errorf("balance: commerce answered nothing")
+	}
+	cents, cerr := out.Amount.Minor()
 	if cerr != nil {
 		// The peer ANSWERED and the reply did not parse. That is a real failure, not
 		// an absent ledger, and it must surface: a corrupt reply rendered as zero is
