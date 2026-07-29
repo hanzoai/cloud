@@ -59,12 +59,14 @@ var allowedRequestUses = map[string]string{
 	"apps/visor/visor.go": "A tenant-scoped PROXY: client.go forwards the caller's own identity headers " +
 		"(and their bearer where no service credential is configured) upstream, so an op without the request " +
 		"drops the caller's identity on the far side of the hop.",
-	"apps/team/typed.go": "sessionOf / admin / noStore — team authenticates its billing and files planes " +
-		"with its OWN HS256 session token, which rides in Authorization or the HttpOnly account-token cookie; " +
-		"principal.OrgFrom carries neither, and bots/sync additionally needs admin-ness (X-User-IsAdmin). " +
-		"It is ONE file for the whole subsystem on purpose — the resolvers live here so the planes that use " +
-		"them do not each reach for the request. All three fail closed off the HTTP path: no request, no " +
-		"token, no identity.",
+	"apps/team/typed.go": "tokenOf / sessionOf / admin / noStore / cookie — team authenticates its billing, " +
+		"files and collaborator planes with its OWN HS256 session token, which rides in Authorization or the " +
+		"HttpOnly account-token cookie; principal.OrgFrom carries neither (nor the WORKSPACE claim the " +
+		"collaborator plane gates on), and bots/sync additionally needs admin-ness (X-User-IsAdmin). The " +
+		"cookie WRITER is the other end of that same identity — the account-token cookie is set on the " +
+		"RESPONSE, which only the request reaches. It is ONE file for the whole subsystem on purpose — the " +
+		"resolvers live here so the planes that use them do not each reach for the request. All of them fail " +
+		"closed off the HTTP path: no request, no token, no identity, and no browser to sign out.",
 	"apps/o11y/typed.go": "callerIsAdmin / callerValidated / callerProject — the o11y surface's ONE identity " +
 		"seam. The scoped reads switch on platform-sudo (X-User-IsAdmin: the infra-log god-view and the " +
 		"whole-product RED), the status probe gates on validated-ness alone (infra health is not " +

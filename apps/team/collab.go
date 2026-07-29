@@ -54,22 +54,44 @@ import (
 // blob backend. 10 MiB of ProseMirror JSON is far beyond any real document.
 const maxMarkupSize = 10 << 20
 
+// collabPrefix is THE path both collaborator planes hang under — app-level, NOT
+// under /v1/team, because the front derives both from COLLABORATOR_URL. One
+// constant, so the group the RPC is declared on cannot drift from the WebSocket
+// beside it, and because cmd/zipdoc resolves a typed op's prefix from the
+// CONSTANT VALUE of the Group argument.
+const collabPrefix = "/collaborator"
+
 // collabService serves the collaborator planes: the markup-snapshot RPC lane
 // (this file) and the live hocuspocus WS lane (collabws.go), sharing one
-// tenancy gate and one VFS seam.
+// tenancy gate and one VFS seam. degraded is the fail-closed posture Mount
+// resolved (no HS256 secret): a typed op cannot be wrapped by Mount's guard, so
+// it asks for itself — see typed.go.
 type collabService struct {
 	vfs      types.VFSClient
 	accounts *accountStore
 	secret   string
 	hub      *collabHub
+	degraded bool
 }
 
 func (s *collabService) register(app cloud.Router, guard guardFn) {
-	// App-level (NOT under /v1/team): the front derives both paths from
-	// COLLABORATOR_URL (wss://<host>/collaborator → the live Y.js WebSocket;
-	// http(s)://<host>/collaborator/rpc/:id → the snapshot RPC).
-	app.Post("/collaborator/rpc/:documentId", guard(s.rpc))
-	app.Get("/collaborator", guard(s.ws))
+	// The live Y.js WebSocket (wss://<host>/collaborator). UNTYPED, and it cannot
+	// be otherwise: the response is a protocol upgrade, not a value.
+	//
+	// Registered BEFORE the bridge below on purpose — fiber runs middleware in
+	// registration order, so a handler registered first never sees one installed
+	// after it, and the upgrade path stays exactly as it was.
+	app.Get(collabPrefix, guard(s.ws))
+	g := app.Group(collabPrefix)
+	// Bridge, because a typed op receives only a context: the RPC authenticates
+	// with team's OWN HS256 token, which rides in a header or the account cookie,
+	// and cloud.Request is the only way to reach either (typed.go). Serve installs
+	// the same middleware for the whole binary; this one is what makes the op
+	// resolve its caller under a BARE Mount too — the app's own tests, and any
+	// embedder that mounts without Serve. team's other Bridge is scoped to the
+	// /v1/team group and never covered this plane.
+	g.Use(cloud.Bridge())
+	zip.Post(g, "/rpc/:documentId", s.rpc)
 }
 
 // collabDoc is the decoded documentId (collaborator-client encodeDocumentId).
@@ -128,66 +150,114 @@ func (s *collabService) seedYLog(ctx context.Context, org string, doc collabDoc,
 	return s.hub.seedIfAbsent(ctx, org, doc.workspace, docName, fieldDoc, update)
 }
 
-type collabRequest struct {
-	Method  string `json:"method"`
-	Payload struct {
-		Content map[string]string `json:"content"`
-		Source  string            `json:"source"`
-		// Updates carries, per field, a base64 Y.js state update encoding the SAME
-		// markup — the front computes it (markupToYDoc → encodeStateAsUpdate) so a
-		// createContent seeds the live-editing lane's update log, not just the
-		// snapshot blob. Without it a dialog-created description is invisible in the
-		// collaborative editor, which replays the ydoc log, never the snapshot.
-		Updates map[string]string `json:"updates"`
-	} `json:"payload"`
+// collabPayload is the argument of one collaborator RPC — the union of what the
+// three verbs take, which is what the client sends: createContent and
+// updateContent carry `content` (and createContent may carry `updates`),
+// getContent carries `source`.
+type collabPayload struct {
+	// Content maps a document field to its ProseMirror markup JSON.
+	Content map[string]string `json:"content"`
+	// Source is the blob ref a getContent reads the snapshot from. Absent means
+	// there is no snapshot to read, which answers empty content.
+	Source string `json:"source"`
+	// Updates carries, per field, a base64 Y.js state update encoding the SAME
+	// markup — the front computes it (markupToYDoc → encodeStateAsUpdate) so a
+	// createContent seeds the live-editing lane's update log, not just the
+	// snapshot blob. Without it a dialog-created description is invisible in the
+	// collaborative editor, which replays the ydoc log, never the snapshot.
+	Updates map[string]string `json:"updates"`
 }
 
-// rpc dispatches one collaborator RPC. Semantic failures are 200 + {error}
-// (the client throws on result.error); auth/tenancy failures are HTTP codes.
-func (s *collabService) rpc(c *zip.Ctx) error {
-	t, _, err := sessionToken(c, s.secret)
+// collabRequest is one collaborator RPC: the document from the path, the verb,
+// and the verb's payload.
+type collabRequest struct {
+	// DocumentID addresses the document field, as
+	// "<workspaceUuid>|<objectClass>|<objectId>|<objectAttr>" — the
+	// collaborator-client encodeDocumentId shape, from the path.
+	DocumentID string `json:"documentId"`
+	// Method is the verb: createContent, updateContent or getContent.
+	Method string `json:"method"`
+	// Payload is the verb's argument.
+	Payload collabPayload `json:"payload"`
+}
+
+// collabResult is the RPC reply. Content is a POINTER because the three verbs
+// answer three different shapes and the difference is load-bearing to the
+// client: createContent and getContent always carry `content` — possibly an
+// EMPTY object, which is the honest answer for a getContent with no snapshot —
+// while updateContent carries nothing at all and must stay `{}`. A plain map
+// with omitempty would collapse the first case into the second.
+type collabResult struct {
+	// Content maps each document field to its value for the verb: the new blob
+	// ref after a createContent, the stored markup after a getContent.
+	Content *map[string]string `json:"content,omitempty"`
+	// Error carries a SEMANTIC refusal, which this RPC reports under 200 because
+	// the client throws on result.error — auth and tenancy failures are HTTP
+	// statuses instead.
+	Error string `json:"error,omitempty"`
+}
+
+// CollabRPC is the collaborative-markup snapshot plane the Team front's editor
+// speaks: createContent stores a document field's markup at a fresh, immutable
+// blob ref and returns it, updateContent stores a new snapshot and answers
+// nothing, and getContent reads back the exact snapshot a ref names.
+//
+// createContent ALSO seeds the live-editing update log from the front-supplied
+// Y.js update, so a dialog-authored description is visible in the collaborative
+// editor — which replays that log — and not only in snapshot reads.
+// updateContent never touches that log: peers may be live-editing the document,
+// and their edits are not this call's to overwrite.
+//
+// Every call is scoped to the caller's VERIFIED session or workspace token: the
+// documentId's workspace must be the token's workspace when the token names one,
+// and the caller must be a member of it. An unknown workspace, another tenant's
+// workspace and a workspace the caller is not in all answer the same 404, so a
+// probe learns nothing about what exists.
+//
+// Example: {"documentId": "6579…|tracker:class:Issue|issue-1|description", "method": "getContent", "payload": {"source": "issue-1-description-1730000000000"}}
+func (s *collabService) rpc(ctx context.Context, in *collabRequest) (*collabResult, error) {
+	if s.degraded {
+		return nil, unavailable()
+	}
+	t, err := tokenOf(ctx, s.secret)
 	if err != nil {
-		return zip.ErrUnauthorized("invalid session token")
+		return nil, zip.ErrUnauthorized("invalid session token")
 	}
 	org := t.Org()
 	if org == "" {
-		return zip.ErrUnauthorized("invalid session token")
+		return nil, zip.ErrUnauthorized("invalid session token")
 	}
-	doc, err := decodeCollabDoc(c.Param("documentId"))
+	doc, err := decodeCollabDoc(in.DocumentID)
 	if err != nil {
-		return zip.ErrBadRequest("malformed documentId")
+		return nil, zip.ErrBadRequest("malformed documentId")
 	}
 	// The workspace token names its workspace — the documentId must agree. A
 	// session token (no workspace claim) falls through to the membership check.
 	if t.Workspace != "" && t.Workspace != doc.workspace {
-		return zip.ErrNotFound("document not found")
+		return nil, zip.ErrNotFound("document not found")
 	}
 	if s.accounts == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "team: collaborator unavailable")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "team: collaborator unavailable")
 	}
-	w, err := s.accounts.WorkspaceByUUID(c.Context(), org, doc.workspace)
+	w, err := s.accounts.WorkspaceByUUID(ctx, org, doc.workspace)
 	if err != nil {
-		return zip.ErrNotFound("document not found")
+		return nil, zip.ErrNotFound("document not found")
 	}
-	if _, ok := s.accounts.Membership(c.Context(), w.ID, t.Account); !ok {
-		return zip.ErrNotFound("document not found")
+	if _, ok := s.accounts.Membership(ctx, w.ID, t.Account); !ok {
+		return nil, zip.ErrNotFound("document not found")
 	}
 
-	var req collabRequest
-	if err := c.Bind(&req); err != nil {
-		return zip.ErrBadRequest("invalid request body")
-	}
-	switch req.Method {
+	switch in.Method {
 	case "createContent", "updateContent":
 		refs := map[string]string{}
 		now := time.Now()
-		for field, markup := range req.Payload.Content {
+		for field, markup := range in.Payload.Content {
 			if len(markup) > maxMarkupSize {
-				return zip.Errorf(http.StatusRequestEntityTooLarge, "markup too large (max %d bytes)", maxMarkupSize)
+				return nil, zip.Errorf(http.StatusRequestEntityTooLarge, "markup too large (max %d bytes)", maxMarkupSize)
 			}
 			blobID := collabJSONID(doc.objectID, field, now)
-			if err := s.vfs.Put(c.Context(), blobKey(org, doc.workspace, blobID), []byte(markup)); err != nil {
-				return zip.Errorf(http.StatusBadGateway, "blob storage unavailable")
+			if err := s.vfs.Put(ctx, blobKey(org, doc.workspace, blobID), []byte(markup)); err != nil {
+				return nil, zip.Errorf(http.StatusBadGateway, "blob storage unavailable")
 			}
 			refs[field] = blobID
 			// createContent births a NEW object: seed the live-editing lane's update
@@ -196,29 +266,29 @@ func (s *collabService) rpc(c *zip.Ctx) error {
 			// snapshot reads. Scoped to createContent — updateContent must never
 			// clobber a doc that peers may be live-editing — and only when no log
 			// exists yet (belt-and-suspenders against a double create).
-			if req.Method == "createContent" {
-				if err := s.seedYLog(c.Context(), org, doc, field, req.Payload.Updates[field]); err != nil {
-					return zip.Errorf(http.StatusBadGateway, "blob storage unavailable")
+			if in.Method == "createContent" {
+				if err := s.seedYLog(ctx, org, doc, field, in.Payload.Updates[field]); err != nil {
+					return nil, zip.Errorf(http.StatusBadGateway, "blob storage unavailable")
 				}
 			}
 		}
-		if req.Method == "updateContent" {
-			return c.JSON(http.StatusOK, map[string]any{})
+		if in.Method == "updateContent" {
+			return &collabResult{}, nil
 		}
-		return c.JSON(http.StatusOK, map[string]any{"content": refs})
+		return &collabResult{Content: &refs}, nil
 	case "getContent":
 		content := map[string]string{}
-		if src := strings.TrimSpace(req.Payload.Source); src != "" {
-			data, err := s.vfs.Get(c.Context(), blobKey(org, doc.workspace, src))
+		if src := strings.TrimSpace(in.Payload.Source); src != "" {
+			data, err := s.vfs.Get(ctx, blobKey(org, doc.workspace, src))
 			if err != nil || data == nil {
 				// A miss is a real empty answer (the client renders empty markup); a
 				// broken backend must not fabricate content either — same shape.
-				return c.JSON(http.StatusOK, map[string]any{"content": content})
+				return &collabResult{Content: &content}, nil
 			}
 			content[doc.objectAttr] = string(data)
 		}
-		return c.JSON(http.StatusOK, map[string]any{"content": content})
+		return &collabResult{Content: &content}, nil
 	default:
-		return c.JSON(http.StatusOK, map[string]any{"error": "unknown method " + req.Method})
+		return &collabResult{Error: "unknown method " + in.Method}, nil
 	}
 }

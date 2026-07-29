@@ -234,16 +234,31 @@ func (g *api) register(app cloud.Router, guard guardFn) {
 	// The group is built HERE so cmd/zipdoc can resolve the typed op's prefix from
 	// this file — see bots.go for why.
 	r := app.Group(teamPrefix)
+	// UNTYPED, and it cannot be otherwise: this is a JSON-RPC envelope. The verb
+	// is a body field, the `result` is a different shape per verb, a refusal is
+	// HTTP 200 carrying {error: Status} — including for an unparseable body — and
+	// the entitlement arm answers 402 with a second key. A typed In turns that 200
+	// into a 400 and a typed Out can only say `any`, so typing it would move the
+	// wire and describe nothing.
 	r.Post("/account", guard(g.rpc))
 	// TYPED: /providers takes nothing and answers a fixed list, so it is the one
 	// account route that is a whole op rather than one verb of the RPC or a
 	// browser redirect. A typed op is not a zip.Handler and cannot be wrapped by
 	// guard, so it carries the degraded refusal itself (g.degraded, typed.go).
 	zip.Get(r, "/account/providers", g.listProviders)
+	// UNTYPED: both are browser REDIRECTS — 302 + Location + Set-Cookie, no body
+	// at all. A typed op answers a JSON value under a 2xx, which is a different
+	// response.
 	r.Get("/account/auth/:provider", guard(g.authStart))
 	r.Get("/account/auth/:provider/callback", guard(g.authCallback))
+	// UNTYPED: an unparseable body is IGNORED here — the token falls back to the
+	// Authorization bearer, and the request succeeds. zip decodes a typed In
+	// before the handler runs and answers 400, so typing this one would refuse a
+	// request it has always served.
 	r.Put("/account/cookie", guard(g.setCookie))
-	r.Delete("/account/cookie", guard(g.clearCookie))
+	// TYPED: a DELETE addresses what it deletes with its URL and reads no body,
+	// which is exactly what this one already did.
+	zip.Delete(r, "/account/cookie", g.clearCookie)
 }
 
 // ── REST: providers ───────────────────────────────────────────────────────────
@@ -539,9 +554,33 @@ func (g *api) setCookie(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"result": true})
 }
 
-func (g *api) clearCookie(c *zip.Ctx) error {
-	g.setSessionCookie(c, authCookie, "", -1)
-	return c.JSON(http.StatusOK, map[string]any{"result": true})
+// cookieAck is the account-cookie plane's acknowledgement — the {"result": true}
+// the SPA's Auth reads back from a cookie write or clear.
+type cookieAck struct {
+	// Result is true when the cookie was written or cleared.
+	Result bool `json:"result"`
+}
+
+// ClearCookie signs this browser out of team by expiring the HttpOnly
+// account-token cookie the OAuth callback set. It is the counterpart of the
+// cookie PUT, it takes nothing — the cookie it clears is named by this service,
+// never by the caller — and it is unconditional: a caller with no cookie, an
+// expired one or a forged one all get the same acknowledgement, because clearing
+// something that is not there is the same outcome as clearing something that is.
+//
+// It clears ONLY the team session cookie. The IAM access-token cookie the same
+// callback set is a different credential with a different lifetime and is left
+// alone, so this is a team sign-out, not a platform one.
+func (g *api) clearCookie(ctx context.Context, _ *none) (*cookieAck, error) {
+	if g.degraded {
+		return nil, unavailable()
+	}
+	if !g.cookie(ctx, authCookie, "", -1) {
+		// No request means no response to clear a cookie on, and no browser that
+		// could have been signed in — so there is nothing to honestly acknowledge.
+		return nil, zip.ErrBadRequest("no HTTP response to clear the cookie on")
+	}
+	return &cookieAck{Result: true}, nil
 }
 
 // ── JSON-RPC ──────────────────────────────────────────────────────────────────

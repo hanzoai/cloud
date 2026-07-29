@@ -14,11 +14,14 @@ package team
 // The second one is why cloud.Request is here: a team session token rides in a
 // header or a cookie, and principal.OrgFrom cannot carry either. Resolving it is
 // an identity gate, exactly the class the pin admits — and keeping it in THIS
-// file is why the pin has one team entry instead of one per plane.
+// file is why the pin has one team entry instead of one per plane. The cookie
+// WRITER is here for the same reason and no other: the account-token cookie is
+// the other end of that same identity, set on the response.
 //
 // EVERY resolver below fails closed off the HTTP path: the CLI projection's
-// LocalInvoke runs an op with no request at all, so `sessionOf` and `admin` find
-// nothing and the op refuses rather than inventing an identity.
+// LocalInvoke runs an op with no request at all, so `tokenOf`, `sessionOf`,
+// `admin` and `cookie` find nothing and the op refuses rather than inventing an
+// identity or claiming to have signed out a browser that was never there.
 
 import (
 	"context"
@@ -28,6 +31,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/apps/team/token"
 )
 
 // zipdoc lifts the doc comment off each typed op and its In/Out fields into
@@ -69,17 +73,49 @@ func admin(ctx context.Context) bool {
 	return ok && c.IsAdmin()
 }
 
-// sessionOf resolves (account, org) from the request's VERIFIED team session or
-// workspace token — the SAME orgPrincipal resolution the untyped billing and
-// files handlers use, reached from a typed op. Off the HTTP path there is no
-// request and therefore no token, which fails closed with the same error an
-// absent one gives.
-func sessionOf(ctx context.Context, secret string) (account, org string, err error) {
+// tokenOf resolves the request's VERIFIED team session or workspace token — the
+// SAME sessionToken decode the untyped handlers do, reached from a typed op. Off
+// the HTTP path there is no request and therefore no token, which fails closed
+// with the same error an absent one gives.
+//
+// It is the token, not the (account, org) pair, because the collaborator plane
+// gates on the WORKSPACE claim too: a workspace token names its workspace, and a
+// documentId for a different one is refused.
+func tokenOf(ctx context.Context, secret string) (*token.Token, error) {
 	c, ok := cloud.Request(ctx)
 	if !ok {
+		return nil, errNoOrg
+	}
+	t, _, err := sessionToken(c, secret)
+	return t, err
+}
+
+// sessionOf resolves (account, org) from that same verified token, refusing one
+// that carries no tenant claim — the orgPrincipal rule the untyped billing and
+// files handlers apply, stated once here for the typed ops.
+func sessionOf(ctx context.Context, secret string) (account, org string, err error) {
+	t, err := tokenOf(ctx, secret)
+	if err != nil {
+		return "", "", err
+	}
+	if org = t.Org(); org == "" {
 		return "", "", errNoOrg
 	}
-	return orgPrincipal(c, secret)
+	return t.Account, org, nil
+}
+
+// cookie writes one of team's own browser cookies from a TYPED op, and reports
+// whether it could. A cookie is a fact about the HTTP RESPONSE, so it needs the
+// request; off the HTTP path there is no response to set one on, and false is
+// the honest answer — a caller that claims to have signed a browser out when
+// there was no browser is lying, so the op refuses instead.
+func (g *api) cookie(ctx context.Context, name, value string, maxAge int) bool {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return false
+	}
+	g.setSessionCookie(c, name, value, maxAge)
+	return true
 }
 
 // noStore marks a response uncacheable by any intermediary — per-tenant data
