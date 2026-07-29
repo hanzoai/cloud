@@ -26,14 +26,28 @@ var Apps = []App{
 	{Name: "agentskills", Prefixes: []string{"/.well-known/agent-skills/:skill/SKILL.md", "/.well-known/agent-skills/index.json"}},
 	{Name: "flags", Prefixes: []string{"/v1/flags"}},
 	{Name: "kms", Prefixes: []string{"/v1/kms"}},
-	{Name: "metrics", Prefixes: []string{"/v1/metrics"}},
+	// /v1/logs and /v1/traces are metrics' own ingestion + query doors (see
+	// plugin/metrics/openapi.json); unnamed here they fell to whichever row held
+	// the bare "/v1" remainder, which serves none of them.
+	{Name: "metrics", Prefixes: []string{"/v1/logs", "/v1/metrics", "/v1/traces"}},
 	{Name: "ingress", Prefixes: []string{"/v1/ingress"}},
 	{Name: "account", Prefixes: []string{"/v1/commerce/topup/rails", "/v1/commerce/topup/wallet", "/v1/csrf", "/v1/embed-status", "/v1/iam/keys", "/v1/iam/onboard", "/v1/keys"}},
 	{Name: "iam", Prefixes: []string{"/login/oauth", "/v1/iam"}},
 	{Name: "base", Prefixes: []string{"/v1/base", "/v1/collections", "/v1/waitlist"}},
 	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/sentry"}, Eager: true},
 	{Name: "authz", Prefixes: []string{"/v1/authz/check", "/v1/authz/health", "/v1/authz/policies", "/v1/authz/readyz"}},
-	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1"}},
+	// Commerce owns its published FAMILIES, never bare "/v1". As "/v1" this row was
+	// the fleet's route of last resort: every path no app named deeper — the whole
+	// OpenAI-compatible surface among them — landed on commerce and answered its
+	// 404. The "/v1" remainder is ai's row now, at the tail. Each subtree here is
+	// DEEPER than the sibling that shares its stem, because a static prefix outranks
+	// a sibling wildcard regardless of mount order: catalog keeps its bare
+	// /v1/catalog, plan keeps the rest of /v1/plans/*, and account-bridge keeps the
+	// /v1/commerce/* and /v1/billing/* per-tenant data bridges the console calls.
+	// This is NOT commerce.Prefixes imported (that would re-fatten the host): the
+	// app states its fail-closed set once (apps/commerce/mount.go); this row states
+	// what the ROUTER may hand it, and router_test.go's oracle keeps the two honest.
+	{Name: "commerce", Prefixes: []string{"/_/commerce", "/v1/billing/auto-recharge", "/v1/billing/webhooks", "/v1/catalog/entries", "/v1/catalog/models", "/v1/catalog/seed", "/v1/commerce/admin/catalog", "/v1/commerce/catalog", "/v1/commerce/currencies", "/v1/commerce/deposits", "/v1/commerce/tenant", "/v1/commerce/webhooks", "/v1/plans/entries", "/v1/plans/seed", "/v1/store"}},
 	{Name: "licensing", Prefixes: []string{"/v1/licensing"}},
 	{Name: "plan", Prefixes: []string{"/v1/plans"}},
 	{Name: "pricing", Prefixes: []string{"/v1/admin/catalog", "/v1/admin/enablement", "/v1/enablement", "/v1/pricing", "/v1/pricing-policy"}},
@@ -139,7 +153,20 @@ var Apps = []App{
 	{Name: "agent", Prefixes: []string{"/v1/agent"}},
 	{Name: "ask", Prefixes: []string{"/v1/ask"}},
 	{Name: "translate", Prefixes: []string{"/v1/translate"}},
+	// ai owns the /v1 REMAINDER: the OpenAI-compatible surface
+	// (/v1/chat/completions, /v1/models, /v1/embeddings, /v1/responses,
+	// /v1/audio/*, /v1/messages, …) is served by ai's own /v1/* catch-all
+	// (hanzoai/ai mount), so whichever row holds "/v1" decides whether that
+	// surface exists at all. Every deeper prefix above still wins; ai takes only
+	// what nobody named.
+	{Name: "ai", Prefixes: []string{"/v1"}},
+	// zen serves only CO-RESIDENT: its mount is a Claim middleware on ai's
+	// router (apps/zen), routing zen-SKU requests and Next()ing the rest — a
+	// contract a per-process prefix cannot express, since a proxied request
+	// never falls through to the next candidate. Behind ai's identical "/v1"
+	// this row is deliberately shadowed on the light host; it exists because
+	// every plugin/<name> binary must have its manifest row (gen-app-cmds
+	// bijection).
 	{Name: "zen", Prefixes: []string{"/v1"}},
-	{Name: "ai", Prefixes: []string{"/v1/ai"}},
 	{Name: "plugins", Prefixes: []string{"/v1/admin/plugins"}},
 }
