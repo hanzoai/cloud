@@ -101,7 +101,7 @@ func runPreflight(args []string) error {
 	}
 
 	ctx := context.Background()
-	c := newKMSClient(*cloudURL, nil)
+	c := newKMSClient(*cloudURL, embedded, nil)
 
 	// 1. Reachability + readiness.
 	hs, err := c.health(ctx)

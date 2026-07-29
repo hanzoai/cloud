@@ -197,7 +197,7 @@ func (o booksOps) bookScan(ctx context.Context, in *BookRequest) (*BookResponse,
 	if len(in.Voucher.Legs) == 0 {
 		return nil, zip.ErrBadRequest("voucher has no legs")
 	}
-	sandbox := sandboxOf(query(ctx, "sandbox"))
+	sandbox := sandboxFrom(ctx)
 	st, err := o.s.State.storeFor(org, sandbox)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "books open failed")

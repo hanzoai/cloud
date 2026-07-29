@@ -254,16 +254,50 @@ func TestRunnerBuild_IAMForeignOrgRejected(t *testing.T) {
 	}
 }
 
-// Release self-publish is reserved to the machine token: an IAM admin setting
-// release:true ⇒ 403, even though they may enqueue ordinary builds.
+// Cutting a release is PLATFORM sudo: an org-admin setting release:true ⇒ 403,
+// even though they may enqueue ordinary builds into their own registry.
 func TestRunnerBuild_IAMReleaseRejected(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
-	code, _ := postRunnerAs(t, app, "e7d7-uuid", "hanzo", true, true, map[string]any{
+	code, _ := postRunnerAs(t, app, "e7d7-uuid", "hanzo", true, false, map[string]any{
 		"repo": "https://github.com/hanzoai/cloud", "release": true,
 		"image": "ghcr.io/hanzoai/cloud:v1"})
 	if code != http.StatusForbidden {
-		t.Fatalf("IAM release: want 403, got %d", code)
+		t.Fatalf("org-admin release: want 403, got %d", code)
+	}
+}
+
+// The other side of that gate: a platform SuperAdmin MAY cut a release, on the
+// IAM path alone, with no machine token configured. Release reads
+// principal.IsSuperAdmin — the same predicate every other privileged surface
+// reads (HIP-0519, "the one predicate set") — so an identity trusted with KMS and
+// every tenant's data is not refused a release by a second, parallel credential.
+//
+// The gate is what this pins. Both release seams answer 500, so the request can
+// only fail INSIDE the pipeline (502) — which it reaches solely by having been
+// authorized. Stubbing them also keeps the case hermetic: an unauthorized request
+// makes no outbound call, and an authorized one must not make a real one.
+func TestRunnerBuild_SuperAdminReleaseAuthorized(t *testing.T) {
+	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	defer swapAPIBase(srv.URL)()
+	defer swapRegistryBase(srv.URL)()
+
+	app := runnerApp(t)
+	code, body := postRunnerAs(t, app, "root-uuid", "admin", false, true, map[string]any{
+		"repo": "https://github.com/hanzoai/cloud", "release": true,
+		"image": "ghcr.io/hanzoai/cloud:v1"})
+	if code == http.StatusForbidden {
+		t.Fatalf("SuperAdmin release: refused by the gate, want authorized (%s)", body)
+	}
+	if code != http.StatusBadGateway {
+		t.Fatalf("SuperAdmin release: want the pipeline's 502 on a failing seam, got %d (%s)", code, body)
+	}
+	if releasing.Load() {
+		t.Error("a failed release left the in-flight guard set; releases would be wedged forever")
 	}
 }
 

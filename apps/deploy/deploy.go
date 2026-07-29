@@ -45,6 +45,7 @@ import (
 	"regexp"
 
 	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/cloud/apps/principal"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
@@ -185,15 +186,23 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // guard wraps a handler with the SuperAdmin gate (fail-closed: a non-SuperAdmin is
 // refused 403 before any cluster object is read or mutated), matching clients/paas.
 //
-// The gate itself is unchanged — c.IsAdmin() and nothing else, on the SanitizeIdentity
-// -minted header no client can forge. Only the SHAPE of the refusal is negotiated: a
-// browser NAVIGATION to a deploy URL is sent to the sign-in page (a 403 page with no
-// way to sign in is a dead end), while every API call keeps its 403. wantsDocument
-// decides, and it decides "no" unless the request positively identifies as a document
-// GET — so the API contract, and every client that depends on the 403, is untouched.
+// The gate is principal.IsSuperAdmin and nothing else, on the SanitizeIdentity
+// -minted header no client can forge. It does NOT take the platform's
+// cloud.Guard(cloud.Super), which additionally requires principal.Validated: this
+// console gates SuperAdmin on that ONE fact in lockstep with resolveScope
+// (scope.go), which the tenant-scoped routes that bypass this guard resolve
+// through — X-User-IsAdmin is minted only for a JWT-verified SuperAdmin and never
+// restored from client input, so it already implies a validated principal, and
+// adding the conjunct here alone would give the console two admin rules.
+//
+// The SHAPE of the refusal is this console's own: a browser NAVIGATION to a
+// deploy URL is sent to the sign-in page (a 403 page with no way to sign in is a
+// dead end), while every API call keeps its 403. wantsDocument decides, and it
+// decides "no" unless the request positively identifies as a document GET — so
+// the API contract, and every client that depends on the 403, is untouched.
 func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
-		if !c.IsAdmin() {
+		if !principal.IsSuperAdmin(c) {
 			return refuse(c) // the ONE fail-closed refusal (redirect a navigation, 403 an API call)
 		}
 		return h(c)

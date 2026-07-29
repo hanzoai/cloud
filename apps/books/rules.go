@@ -93,7 +93,7 @@ func (o booksOps) upsertRule(ctx context.Context, in *Rule) (*Rule, error) {
 		return nil, zip.ErrBadRequest("pattern is required")
 	}
 	row.Category = categoryAccount(row.Category)
-	st, err := o.s.State.storeFor(org, sandboxOf(query(ctx, "sandbox")))
+	st, err := o.s.State.storeFor(org, sandboxFrom(ctx))
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "books open failed")
 	}

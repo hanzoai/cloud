@@ -44,8 +44,8 @@
 //     org-prefixed naming + the guard. The correct hardening is per-request
 //     STS/session-policy or per-identity bucket-prefix restriction so the store
 //     independently enforces the org boundary (defense in depth). Until then,
-//     tenant() requiring a validated principal + the by-construction naming is
-//     the sole boundary — kept minimal and auditable for that reason.
+//     the guard's cloud.Member gate + the by-construction naming is the sole
+//     boundary — kept minimal and auditable for that reason.
 //   - Presign has no rate limit: minting is unthrottled (zip/middleware/ratelimit
 //     is unwired in serve.go, platform-wide). The 5-minute TTL bounds a minted
 //     capability's post-revocation lifetime; a per-route limiter is the platform
@@ -170,10 +170,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // response). A handler error is surfaced and NOT billed — mirrors the edge gate
 // ("do not bill failed work"). fee==0 or unconfigured billing makes both no-ops.
 func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
-	return func(ctx *zip.Ctx) error {
-		if !s.State.admin.Configured() {
-			return zip.Errorf(http.StatusServiceUnavailable, "object storage is not configured")
-		}
+	// The platform gate (cloud.Member — a validated principal, HIP-0519's one
+	// predicate set) wraps the org resolution and the meter, and is built once:
+	// only the readiness check precedes it, because a subsystem that cannot serve
+	// anyone says so before it says who it serves.
+	gated := cloud.Guard(cloud.Member, func(ctx *zip.Ctx) error {
 		org, ok := tenant(ctx)
 		if !ok {
 			return zip.ErrForbidden("X-Org-Id required")
@@ -190,6 +191,12 @@ func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 		}
 		s.State.bill.Meter(principal.Ledger(ctx), principal.Project(ctx), "op", fee, ctx.RequestID(), cloud.ClientIP(ctx))
 		return nil
+	})
+	return func(ctx *zip.Ctx) error {
+		if !s.State.admin.Configured() {
+			return zip.Errorf(http.StatusServiceUnavailable, "object storage is not configured")
+		}
+		return gated(ctx)
 	}
 }
 
@@ -209,37 +216,35 @@ func reqOrg(ctx *zip.Ctx) string {
 // SAME sanitized slug the control plane keys on, so buckets allocated there and
 // operated on here share one org tag.
 //
-// REQUIRES A VALIDATED PRINCIPAL (RED HIGH). SanitizeIdentity sets X-User-Id ONLY
-// when it validated a bearer/cookie; on the no-principal "Phase-1 data" path it
-// RESTORES the client's raw X-Org-Id but leaves X-User-Id empty. A pure data
-// plane that trusted X-Org-Id alone would let an in-cluster caller (a co-namespace
-// pod within the cloud-api NetworkPolicy) forge `X-Org-Id: victim` with NO bearer
-// and get cross-tenant object CRUD. So we gate on ctx.User() (X-User-Id) being
-// present: every legitimate caller reaches this through the console BFF /cloud
-// proxy, which mints a user-bound bearer (→ X-User-Id is set), so this refuses
-// ONLY the anonymous-forge path and breaks no real client. Object storage is a
-// data plane; it never serves an unauthenticated principal.
+// A VALIDATED PRINCIPAL IS ALREADY ESTABLISHED (RED HIGH): guard runs this behind
+// cloud.Guard(cloud.Member), so the forgeable data path is closed before the org
+// is read. SanitizeIdentity sets X-User-Id ONLY when it validated a bearer/cookie;
+// on the no-principal "Phase-1 data" path it RESTORES the client's raw X-Org-Id
+// but leaves X-User-Id empty. A pure data plane that trusted X-Org-Id alone would
+// let an in-cluster caller (a co-namespace pod within the cloud-api NetworkPolicy)
+// forge `X-Org-Id: victim` with NO bearer and get cross-tenant object CRUD. Every
+// legitimate caller reaches this through the console BFF /cloud proxy, which mints
+// a user-bound bearer, so the gate refuses ONLY the anonymous-forge path and
+// breaks no real client. Object storage is a data plane; it never serves an
+// unauthenticated principal.
 //
-// Empty org is allowed only for a validated admin, bucketed under the literal
-// "admin" org (a forged X-User-IsAdmin cannot exist without a validated principal
-// either — SanitizeIdentity sets it only for a JWT-verified SuperAdmin, HIP-0026
-// — and even then reaches only the admin bucket, never a real tenant's).
+// Empty org falls back to the literal "admin" bucket for a SuperAdmin, and only
+// for one: SanitizeIdentity mints X-User-IsAdmin solely for a JWT-verified
+// SuperAdmin (HIP-0026), and that fallback reaches the admin bucket, never a real
+// tenant's.
 //
 // NORMALIZATION — this uses provisioning.SanitizeOrg (case-folds to a DNS slug),
 // NOT KMS's exact-match, ON PURPOSE: the S3 bucket name is derived through
 // provisioning's SAME sanitized slug (BucketName), so a bucket provisioned via
 // POST /v1/s3 is findable here — exact-match would break that lockstep. A real
 // IAM owner claim is already a lowercase DNS label, so the fold is a no-op on
-// validated input (and, post the principal gate above, only a validated principal
-// reaches it). The divergence from KMS is intentional per-subsystem, not drift.
+// validated input (and, post the gate, only a validated principal reaches it).
+// The divergence from KMS is intentional per-subsystem, not drift.
 func tenant(ctx *zip.Ctx) (string, bool) {
-	if !principal.Validated(ctx) {
-		return "", false // no validated principal — refuse the forgeable data path
-	}
 	if org := provisioning.SanitizeOrg(ctx.Org()); org != "" {
 		return org, true
 	}
-	if ctx.IsAdmin() {
+	if principal.IsSuperAdmin(ctx) {
 		return "admin", true
 	}
 	return "", false
