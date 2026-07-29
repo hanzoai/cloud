@@ -118,9 +118,74 @@ func metricsFrom(period, cumulative sums, months int, from, to string) Metrics {
 // ONE money formatter (formatUSD), so a consumer surfaces books' numbers in books' format
 // and never re-derives either. It is the single grounded read the unified /v1/ask advisor
 // composes — every figure is the ledger, aggregated, never a guess.
+//
+// The snapshot fields are Metrics' own, SPELLED OUT rather than embedded, because zip's
+// schema walk publishes an embedded struct as a nested property while encoding/json
+// flattens it — an Out that embedded Metrics would document a response no answer of this
+// route matches. The copy cannot drift: metricsResponseOf carries every field, and
+// TestMetricsResponseCarriesEveryMetricsField goes red on a Metrics field this struct or
+// that constructor misses.
 type MetricsResponse struct {
-	Metrics
+	// From is the RFC3339 start of the reporting window, exclusive; absent for all time.
+	From string `json:"from,omitempty"`
+	// To is the RFC3339 end of the reporting window, inclusive; absent for up to now.
+	To string `json:"to,omitempty"`
+	// Period is the human window label, e.g. "2026-07" or "all-time".
+	Period string `json:"period"`
+	// Months is the window length in whole months used to normalize MRR and burn.
+	Months int `json:"months"`
+	// MRR is monthly recurring revenue in cents.
+	MRR int64 `json:"mrr"`
+	// ARR is annualized recurring revenue in cents (MRR × 12).
+	ARR int64 `json:"arr"`
+	// Revenue is recognized revenue in cents over the period.
+	Revenue int64 `json:"revenue"`
+	// COGS is cost of goods sold in cents over the period.
+	COGS int64 `json:"cogs"`
+	// Burn is total expense in cents over the period.
+	Burn int64 `json:"burn"`
+	// GrossProfit is Revenue − COGS, in cents.
+	GrossProfit int64 `json:"grossProfit"`
+	// GrossMarginBps is GrossProfit / Revenue in basis points (7000 = 70%).
+	GrossMarginBps int64 `json:"grossMarginBps"`
+	// NetIncome is Revenue − Burn, in cents.
+	NetIncome int64 `json:"netIncome"`
+	// Cash is the bank + processor-clearing balance in cents as of To.
+	Cash int64 `json:"cash"`
+	// DeferredRevenue is the customer-wallet liability in cents as of To.
+	DeferredRevenue int64 `json:"deferredRevenue"`
+	// MonthlyBurn is net cash burned per month in cents; 0 when not losing cash.
+	MonthlyBurn int64 `json:"monthlyBurn"`
+	// RunwayMonths is Cash / MonthlyBurn; -1 means infinite (the org is not burning).
+	RunwayMonths int64 `json:"runwayMonths"`
+	// Figures is the same snapshot rendered through books' one money formatter.
 	Figures []Figure `json:"figures"`
+}
+
+// metricsResponseOf projects one Metrics snapshot into the route's payload: every raw
+// field copied 1:1 plus its formatted figures. It is the ONE constructor, guarded by
+// TestMetricsResponseCarriesEveryMetricsField so a field added to Metrics cannot silently
+// drop off the wire.
+func metricsResponseOf(m Metrics) MetricsResponse {
+	return MetricsResponse{
+		From:            m.From,
+		To:              m.To,
+		Period:          m.Period,
+		Months:          m.Months,
+		MRR:             m.MRR,
+		ARR:             m.ARR,
+		Revenue:         m.Revenue,
+		COGS:            m.COGS,
+		Burn:            m.Burn,
+		GrossProfit:     m.GrossProfit,
+		GrossMarginBps:  m.GrossMarginBps,
+		NetIncome:       m.NetIncome,
+		Cash:            m.Cash,
+		DeferredRevenue: m.DeferredRevenue,
+		MonthlyBurn:     m.MonthlyBurn,
+		RunwayMonths:    m.RunwayMonths,
+		Figures:         metricsFigures(m),
+	}
 }
 
 // metricsFigures renders the COMPLETE metric snapshot as formatted figures, in the order a

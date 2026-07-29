@@ -79,6 +79,35 @@ func init() {
 		},
 		Example: json.RawMessage(`{"sandbox":"false"}`),
 	})
+	zip.Describe("GET /v1/books/metrics", zip.Doc{
+		Description: "Metrics returns the org's deterministic SaaS-metrics snapshot over an optional\n(from, to] window — MRR, ARR, revenue, COGS, burn, gross margin, net income, cash,\ndeferred revenue, monthly burn and runway — as raw int64-cent figures AND the same\nfigures already formatted. Every number is the ledger, aggregated the one way the books\ndefine it, never a guess; it is the grounded read the unified /v1/ask advisor replays.",
+		Fields: map[string]string{
+			"Figure.label":                    "Label names the metric, e.g. \"MRR\" or \"Runway\".",
+			"Figure.period":                   "Period is the window the figure covers, e.g. \"2026-07\" or \"all-time\".",
+			"Figure.value":                    "Value is the figure already formatted through books' own money formatter, so a\nconsumer never re-derives it.",
+			"MetricsResponse.arr":             "ARR is annualized recurring revenue in cents (MRR × 12).",
+			"MetricsResponse.burn":            "Burn is total expense in cents over the period.",
+			"MetricsResponse.cash":            "Cash is the bank + processor-clearing balance in cents as of To.",
+			"MetricsResponse.cogs":            "COGS is cost of goods sold in cents over the period.",
+			"MetricsResponse.deferredRevenue": "DeferredRevenue is the customer-wallet liability in cents as of To.",
+			"MetricsResponse.figures":         "Figures is the same snapshot rendered through books' one money formatter.",
+			"MetricsResponse.from":            "From is the RFC3339 start of the reporting window, exclusive; absent for all time.",
+			"MetricsResponse.grossMarginBps":  "GrossMarginBps is GrossProfit / Revenue in basis points (7000 = 70%).",
+			"MetricsResponse.grossProfit":     "GrossProfit is Revenue − COGS, in cents.",
+			"MetricsResponse.monthlyBurn":     "MonthlyBurn is net cash burned per month in cents; 0 when not losing cash.",
+			"MetricsResponse.months":          "Months is the window length in whole months used to normalize MRR and burn.",
+			"MetricsResponse.mrr":             "MRR is monthly recurring revenue in cents.",
+			"MetricsResponse.netIncome":       "NetIncome is Revenue − Burn, in cents.",
+			"MetricsResponse.period":          "Period is the human window label, e.g. \"2026-07\" or \"all-time\".",
+			"MetricsResponse.revenue":         "Revenue is recognized revenue in cents over the period.",
+			"MetricsResponse.runwayMonths":    "RunwayMonths is Cash / MonthlyBurn; -1 means infinite (the org is not burning).",
+			"MetricsResponse.to":              "To is the RFC3339 end of the reporting window, inclusive; absent for up to now.",
+			"periodIn.from":                   "From is the RFC3339 start of the window, exclusive. Empty means all time.",
+			"periodIn.sandbox":                "Sandbox reads the org's SANDBOX ledger when it is exactly \"true\".",
+			"periodIn.to":                     "To is the RFC3339 end of the window, inclusive. Empty means up to now.",
+		},
+		Example: json.RawMessage(`{"from":"2026-01-01T00:00:00Z","to":"2026-06-30T23:59:59Z"}`),
+	})
 	zip.Describe("GET /v1/books/pnl", zip.Doc{
 		Description: "ProfitAndLoss returns the org's accrual-basis Profit & Loss over an optional (from, to]\nwindow of RFC3339 posting times: recognized revenue, matched cost, and the net.",
 		Fields: map[string]string{
