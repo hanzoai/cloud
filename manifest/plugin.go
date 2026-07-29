@@ -39,6 +39,29 @@ type App struct {
 	// deferring the start means it silently does nothing and the symptom is an
 	// empty dashboard rather than an error.
 	Eager bool
+
+	// Required means the HOST must not serve without this app. A required app
+	// that will not start aborts the process; every other app degrades to being
+	// absent — its prefixes answer 503 and the rest of the fleet serves.
+	//
+	// It is deliberately a property of the app rather than of start order,
+	// because start order is where it lived by accident and that cost a 25-minute
+	// outage of the whole API: pubsub is Apps[0] and Eager, so when its child
+	// could not open a store, the single `return err` in the host's mount loop
+	// took down the API, IAM validation, billing and the team backend with it.
+	// Being first in a list is not a claim on everyone else's availability.
+	//
+	// The default is false, and NOTHING in Apps sets it — see
+	// manifest/required_test.go for the argument and for what would justify an
+	// entry. The host is a router: it opens no store, validates no token, and
+	// holds no state whose absence corrupts anything. Every child enforces its
+	// own auth in its own process, so one child's absence cannot silently weaken
+	// another's plane — the planes ARE processes. Against that, aborting buys
+	// exactly one thing (a pod that never goes Ready) and destroys the console,
+	// the health surface, the log stream an operator needs, and every healthy
+	// sibling. CrashLoopBackOff is the state in which a process cannot tell you
+	// why it is unhappy.
+	Required bool
 }
 
 // Plugin says where this app's binary is, without naming it twice:
