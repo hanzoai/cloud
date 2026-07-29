@@ -132,11 +132,6 @@ func IAMRPCAt(addr string) types.IAMClient {
 	return &rpcIAM{rpcEndpoint{subsystem: "iam", addr: addr}}
 }
 
-// KMSRPCAt returns a ZAP-RPC KMS client targeting addr.
-func KMSRPCAt(addr string) types.KMSClient {
-	return &rpcKMS{rpcEndpoint{subsystem: "kms", addr: addr}}
-}
-
 // BaseRPCAt returns a ZAP-RPC Base client targeting addr.
 func BaseRPCAt(addr string) types.BaseClient {
 	return &rpcBase{rpcEndpoint{subsystem: "base", addr: addr}}
