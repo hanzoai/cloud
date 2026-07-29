@@ -49,7 +49,7 @@ func exposeFleet(s *cloud.Service[fleetState]) {
 			// fact that decides WHICH namespaces are observed comes from the caller,
 			// so there is no field a caller could name a scope in.
 			p := capPrincipal(cloud.Who(ctx))
-			if !p.validated {
+			if !p.Validated {
 				return nil, zip.ErrForbidden("platform fleet: authentication required")
 			}
 			if !p.mayObserve() {

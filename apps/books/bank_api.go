@@ -25,7 +25,7 @@ func bankRoutes(app cloud.Router, s *cloud.Service[*state]) {
 	zip.Get(g, "/transactions", o.listBankTxns)
 	zip.Get(g, "/unreconciled", o.listUnreconciled)
 	// The connector pull. It takes nothing off the wire but the ?sandbox selector,
-	// which stays on the URL (query, typed.go) rather than moving into the body a
+	// which stays on the URL (sandboxFrom, typed.go) rather than moving into the body a
 	// typed POST's In is documented as.
 	zip.Post(g, "/sync", o.syncBank)
 
@@ -140,7 +140,7 @@ func (o booksOps) syncBank(ctx context.Context, _ *syncIn) (*BankTally, error) {
 	if err != nil {
 		return nil, err
 	}
-	tally, err := o.s.State.syncBank(ctx, org, sandboxOf(query(ctx, "sandbox")))
+	tally, err := o.s.State.syncBank(ctx, org, sandboxFrom(ctx))
 	if err != nil {
 		o.s.State.log.Warn("books bank sync failed", "org", org, "err", err)
 		return nil, zip.Errorf(http.StatusBadGateway, "bank sync failed")

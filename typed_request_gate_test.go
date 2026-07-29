@@ -15,13 +15,16 @@ import (
 //
 // So the count enforces itself. Each entry below is a call site and the reason
 // it needs the REQUEST rather than just the tenant — which is the test: if
-// principal.OrgFrom(ctx) would do, the answer is not this. Adding a fifth means
+// principal.OrgFrom(ctx) would do, the answer is not this. Adding one means
 // editing this map and writing the justification, which is a decision someone
 // makes on purpose rather than a drift nobody notices.
 //
-// The three identity gates are here because they need MORE of the validated
-// principal than the org: admin-ness lives in a header (X-User-IsAdmin) that
-// only the request carries. The proxy is here because forwarding is the point.
+// Three reasons earn an entry, and they are the whole list. Most are identity
+// gates: they need MORE of the validated principal than the org, and admin-ness
+// (X-User-IsAdmin), the user id and the payer live in headers only the request
+// carries. One is a proxy, where forwarding the caller's identity is the point.
+// One is a URL-borne value on a BODY-carrying route, which zip cannot name on an
+// In without also accepting it in the body — a wire that route has never had.
 var allowedRequestUses = map[string]string{
 	"apps/admin/core/typed.go": "Admit / AdmitScoped — the SuperAdmin and white-label tenant gates. " +
 		"Both read validated identity beyond the org (IsAdmin, the WL allowlist), which principal.OrgFrom does not carry.",
@@ -47,15 +50,6 @@ var allowedRequestUses = map[string]string{
 		"accepted an account there. authWrite fails closed off the HTTP path: no request, no attested " +
 		"caller, no mutation.",
 	"apps/search/search.go": "Query resolves the tenant from the validated principal at the top of the op.",
-	"apps/books/ask.go": "narrateAsk — the AI rephrase is BILLED, and the ledger that pays is " +
-		"principal.Ledger, a header fact (the caller's HOME org) that principal.OrgFrom does not carry " +
-		"and that must never be an In field a caller could point at another tenant's budget. The " +
-		"effective org is resolved and gated by the op before this runs. Off the HTTP path there is no " +
-		"request, the ledger is empty, and the meter no-ops rather than billing the wrong org.",
-	"apps/books/typed.go": "query — one URL query value read for a BODY-carrying op. zip documents query " +
-		"parameters only where there is no requestBody, so naming a URL-borne value as an In field would " +
-		"MOVE it off the URL it rides on today, and typing describes the wire rather than moving it. Off " +
-		"the HTTP path it answers empty — the same answer a request that omits the parameter gives.",
 	"apps/ingress/ingress.go": "admin — the SuperAdmin gate on the fleet EDGE's config. The edge is platform " +
 		"infrastructure (AC-6), so every /v1/ingress op requires SuperAdmin, which is X-User-IsAdmin — a claim " +
 		"principal.OrgFrom does not carry. Fails closed off the HTTP path: no request, no attested admin, no " +
@@ -96,6 +90,19 @@ var allowedRequestUses = map[string]string{
 		"billing org (principal.Ledger, which a SuperAdmin masquerade moves off the effective org); neither is " +
 		"what principal.OrgFrom carries. Both fail closed off the HTTP path: no request, no platform rights and " +
 		"no ledger to charge.",
+	"apps/books/typed.go": "sandboxFrom — the ledger selector for the books ops whose In is their " +
+		"request BODY. It is not identity: it picks between two of the CALLER'S OWN books, and every " +
+		"bodyless read beside them names it as an In field. A body-carrying op cannot — zip's binder " +
+		"fills an In field from the BODY as well as the URL and the document publishes it as a body " +
+		"property, so naming it would start accepting a selector these routes have never taken there. " +
+		"TestTheLedgerSelectorStaysOnTheURLForBodyWrites (apps/books/wire_test.go) is that measurement " +
+		"and goes red the day it moves. ONE function, which every body-carrying op asks, reading " +
+		"through the same sandboxQuery the untyped handlers beside them use; LIVE off the HTTP path.",
+	"apps/books/ask.go": "narrateAsk — the payer for the ONE grounded completion an Ask narrates with. " +
+		"The bill lands on principal.Ledger, the SELECTED billing org, which a SuperAdmin masquerade " +
+		"moves off the effective org — so principal.OrgFrom would charge the org being INSPECTED for a " +
+		"platform admin's reading of its books. Empty off the HTTP path, where the meter no-ops rather " +
+		"than billing the wrong ledger.",
 	"apps/pricing/ops.go": "callerIsAdmin — the catalog's SuperAdmin gate. Every read op here also " +
 		"branches on it (an admin sees disabled models, flagged, where a customer sees them hidden), and " +
 		"admin-ness lives in a header (X-User-IsAdmin) that principal.OrgFrom does not carry. The tenant " +
@@ -139,9 +146,11 @@ func TestRequestEscapeHatchIsPinned(t *testing.T) {
 			t.Errorf("NEW cloud.Request call site in %s.\n"+
 				"cloud.Request is the escape hatch that hands a typed op its raw request, and it is pinned so it "+
 				"cannot grow quietly. Before adding this one: if the op needs only its tenant, use "+
-				"principal.OrgFrom(ctx) and delete the call. If it genuinely needs the request — an identity gate "+
-				"reading more than the org, or a proxy that FORWARDS the caller's identity — add %q to "+
-				"allowedRequestUses with the reason, so the next reader knows why it is here.", file, file)
+				"principal.OrgFrom(ctx) and delete the call. If the op can NAME the value, declare it on its In "+
+				"and let zip bind it off the URL. If it genuinely needs the request — an identity gate reading "+
+				"more than the org, a proxy that FORWARDS the caller's identity, or a URL-borne value on a "+
+				"BODY-carrying route, which an In field cannot take without also accepting it in the body — add "+
+				"%q to allowedRequestUses with the reason, so the next reader knows why it is here.", file, file)
 		}
 	}
 	for file := range allowedRequestUses {
