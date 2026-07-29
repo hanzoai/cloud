@@ -27,6 +27,11 @@ name: CI/CD
 on:
   push:
     branches: [main]
+  # On-demand rebuild. Without this the ONLY way to get an image is to land a
+  # commit on main, so recovering from a bad build means pushing an empty commit
+  # and waiting — and POST .../workflows/cicd.yml/dispatches answers 500, which
+  # reads like a broken forge rather than a workflow that never opted in.
+  workflow_dispatch:
     # v* is what publishes the plugin binary (hanzo.yml `binaries:` → bucket:).
     # ci builds it on every push and publishes only on a tag, and the tag here is
     # release.go's receipt for an image that already built and smoked — so the
