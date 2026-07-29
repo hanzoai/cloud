@@ -244,6 +244,21 @@ func mountSentry(a cloud.Router) {
 // order-69 mount, hence BEFORE the hanzoai/o11y wildcard (order 70) — so Fiber's
 // in-order match gives the specific routes precedence over the runtime proxy.
 func MountO11y(a *zip.App, deps cloud.Deps) error {
+	// Bridge FIRST, on the subtree the typed ops live under. A typed op receives
+	// only a context, so the validated org reaches it by being parked there —
+	// never as an In field, which is caller-supplied and would be a cross-tenant
+	// read the caller asserted for itself. fiber runs middleware in registration
+	// order, so this must precede every leaf below.
+	//
+	// It has to be installed HERE, not only by cloud.Serve, because o11y runs as
+	// its OWN process (plugin/o11y/main.go builds a bare zip.App and mounts this).
+	// The host's app-wide Bridge parks the org on a context in the HOST; the
+	// request crosses to this process as headers, so without this install every
+	// typed op in the child would answer 403 for a caller the host had already
+	// validated. Nesting under Serve's own Bridge — the fused case — is harmless:
+	// the inner one is what the handler sees.
+	a.Group(o11yPrefix).Use(cloud.Bridge())
+
 	// READ/SERVE plane — specific routes before the wildcard.
 	if err := mountEventIngest(a, deps); err != nil { // POST /v1/o11y/ingestion
 		return err
