@@ -84,7 +84,7 @@ func TestMountRoutesThroughRouter(t *testing.T) {
 	// party's uptime. That scrape maps a failed fetch to success:false is asserted
 	// in TestScrapeReportsFetchFailure, and the fetch itself is covered in
 	// clients/crawl.
-	sreq := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/websearch/v1/scrape",
+	sreq := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/scrape",
 		strings.NewReader(`{"url":"https://ex"}`))
 	sreq.Header.Set("Authorization", "Bearer k")
 	sreq.Header.Set("Content-Type", "application/json")
@@ -111,7 +111,7 @@ func TestMountRoutesThroughRouter(t *testing.T) {
 func TestScrapeReportsFetchFailure(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "svc-key")
 
-	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/websearch/v1/scrape",
+	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/scrape",
 		strings.NewReader(`{"url":"http://127.0.0.1:1/"}`))
 	req.Header.Set("Authorization", "Bearer svc-key")
 	rec := httptest.NewRecorder()
@@ -287,7 +287,7 @@ func TestSearchUnsetKeyFailsClosed(t *testing.T) {
 // Scrape fails closed with no configured key.
 func TestScrapeUnsetKeyFailsClosed(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "")
-	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/websearch/v1/scrape",
+	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/scrape",
 		strings.NewReader(`{"url":"https://ex.com"}`))
 	req.Header.Set("Authorization", "Bearer anything")
 	rec := httptest.NewRecorder()
@@ -300,7 +300,7 @@ func TestScrapeUnsetKeyFailsClosed(t *testing.T) {
 // Scrape rejects a wrong Bearer key.
 func TestScrapeWrongKeyRejected(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "right")
-	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/websearch/v1/scrape",
+	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/scrape",
 		strings.NewReader(`{"url":"https://ex.com"}`))
 	req.Header.Set("Authorization", "Bearer wrong")
 	rec := httptest.NewRecorder()
