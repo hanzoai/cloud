@@ -22,19 +22,15 @@ import (
 
 // WorkerScriptPut is the upload request for a Workers module script. Script is the
 // ES-module source; MainModule names the entry file (default "worker.js").
-// CompatibilityDate/Flags and Bindings ride the multipart metadata part.
+// CompatibilityDate/Flags and Bindings ride the multipart metadata part. It is the
+// struct the handler binds AND what the document declares for the route
+// (openapi.Register, cloudflare.go), so the published contract follows the code.
 type WorkerScriptPut struct {
 	Script             string          `json:"script"`
 	MainModule         string          `json:"mainModule,omitempty"`
 	CompatibilityDate  string          `json:"compatibilityDate,omitempty"`
 	CompatibilityFlags []string        `json:"compatibilityFlags,omitempty"`
 	Bindings           json.RawMessage `json:"bindings,omitempty"`
-}
-
-// WorkerRouteCreate binds a Worker script to a URL pattern within a zone.
-type WorkerRouteCreate struct {
-	Pattern string `json:"pattern"`
-	Script  string `json:"script,omitempty"`
 }
 
 // ── scripts ─────────────────────────────────────────────────────────────────────

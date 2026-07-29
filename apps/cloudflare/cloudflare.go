@@ -54,6 +54,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/integrations"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -239,6 +240,33 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// UNTYPED: the query body is forwarded to D1 VERBATIM so params and batch fields
 	// survive; a typed In would drop every field it does not model. See d1Query.
 	g.Post("/d1/databases/:database/query", o.d1Query)
+}
+
+// The six routes above cannot be typed ops — each carries a wire fact the
+// declaration cannot express, and relay_wire_test.go names all six with the reason.
+// But "cannot be a typed op" is not "must be undocumented". Three of them still take
+// ordinary JSON, and openapi.Register is the seam for exactly that case: it declares
+// the body off the very struct the handler binds, so the published contract follows
+// the code, and it is pure DESCRIPTION — no route, status, field or byte moves.
+// Without it those three reach every generated SDK with no request shape at all,
+// indistinguishable from a route that takes no body.
+//
+// The other three have nothing to declare because they are not JSON on the wire: the
+// two KV value routes carry opaque bytes under the caller's own content type, and an
+// /ai/run body is whatever the chosen model takes.
+//
+// D1Query is the one declaration the handler does not bind, and says so on itself:
+// that route forwards the body VERBATIM, so no struct it binds could state the shape.
+// The response side is cfResult, whose custom marshaler makes it honestly
+// UNCONSTRAINED (openapi/register.go) — the payload is Cloudflare's, and this plane
+// deliberately does not model Cloudflare's shapes.
+//
+// init, not routes: Register panics on a duplicate declaration, and routes runs once
+// per Mount.
+func init() {
+	openapi.Register("/v1/cloudflare/pages/projects/:project/deployments", "POST", PagesDeploy{}, cfResult{})
+	openapi.Register("/v1/cloudflare/workers/scripts/:script", "PUT", WorkerScriptPut{}, cfResult{})
+	openapi.Register("/v1/cloudflare/d1/databases/:database/query", "POST", D1Query{}, cfResult{})
 }
 
 // ── client (the cfDo shape, reused verbatim from hanzodns) ──────────────────────

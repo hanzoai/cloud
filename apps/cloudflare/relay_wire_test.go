@@ -9,6 +9,7 @@ package cloudflare
 // of routes that are NOT typed ops is a closed, named list rather than a drift.
 
 import (
+	"encoding/json"
 	"net/http"
 	"sort"
 	"strings"
@@ -179,6 +180,102 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 			t.Errorf("untypedByDesign names %q, which this plane no longer serves", key)
 		}
 	}
+}
+
+// declaredBodies is the subset of untypedByDesign whose REQUEST is still ordinary
+// JSON, mapped to the fields the document must publish for it. Those three cannot be
+// typed ops, but they can still SAY what they take — openapi.Register declares the
+// body off the very struct the handler binds (cloudflare.go), which is what puts the
+// shape in openapi.yaml and therefore in every generated SDK. The other three carry
+// bytes that are not JSON at all and have nothing to declare.
+var declaredBodies = map[string][]string{
+	"POST /v1/cloudflare/pages/projects/{project}/deployments": {"branch"},
+	"PUT /v1/cloudflare/workers/scripts/{script}":              {"script", "mainModule", "compatibilityDate", "compatibilityFlags", "bindings"},
+	"POST /v1/cloudflare/d1/databases/{database}/query":        {"sql", "params"},
+}
+
+// TestUntypedJSONRoutesDeclareTheirBody fails when one of the three loses its
+// declaration — the failure mode being that a route quietly goes back to publishing
+// no request shape at all, which no consumer of the document can distinguish from a
+// route that takes no body.
+func TestUntypedJSONRoutesDeclareTheirBody(t *testing.T) {
+	rec := &capture{}
+	app := harness(t, map[string]string{"acme": "tok"}, rec, nil)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "cloudflare", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	for key, want := range declaredBodies {
+		method, path, _ := strings.Cut(key, " ")
+		op := doc.Paths[path][strings.ToLower(method)]
+		if op == nil {
+			t.Errorf("%s is not served", key)
+			continue
+		}
+		got := bodyProperties(t, doc, op.RequestBody)
+		for _, field := range want {
+			if _, ok := got[field]; !ok {
+				t.Errorf("%s publishes no request field %q — the declaration in cloudflare.go's init "+
+					"is what puts this route's body in openapi.yaml and every SDK generated from it; "+
+					"have %v", key, field, sortedNames(got))
+			}
+		}
+	}
+}
+
+// bodyProperties reads the property names off an operation's declared request body,
+// resolving the $ref a named struct is published under. It goes through JSON so it
+// reads the document exactly as a consumer does rather than the structs that built it
+// — which is the only reading that proves what an SDK generator will see.
+func bodyProperties(t *testing.T, doc *openapi.Document, body any) map[string]any {
+	t.Helper()
+	if body == nil {
+		return nil
+	}
+	var shape struct {
+		Content map[string]struct {
+			Schema struct {
+				Ref        string         `json:"$ref"`
+				Properties map[string]any `json:"properties"`
+			} `json:"schema"`
+		} `json:"content"`
+	}
+	decode(t, body, &shape)
+	s := shape.Content["application/json"].Schema
+	if s.Ref == "" {
+		return s.Properties
+	}
+	name := strings.TrimPrefix(s.Ref, "#/components/schemas/")
+	if doc.Components == nil || doc.Components.Schemas[name] == nil {
+		t.Errorf("request body $refs %q, which the document does not define", s.Ref)
+		return nil
+	}
+	var def struct {
+		Properties map[string]any `json:"properties"`
+	}
+	decode(t, doc.Components.Schemas[name], &def)
+	return def.Properties
+}
+
+// decode round-trips one document node through JSON into out.
+func decode(t *testing.T, node, out any) {
+	t.Helper()
+	raw, err := json.Marshal(node)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if err := json.Unmarshal(raw, out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+}
+
+func sortedNames(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Every typed op must carry lifted prose, because that prose IS the product
