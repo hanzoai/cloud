@@ -682,6 +682,18 @@ components:
         title:
           type: string
       type: object
+    GPU:
+      properties:
+        memory:
+          description: VRAM bytes, 0 = unknown
+          type: integer
+        model:
+          description: '"GB10", "8060S", "RTX 4090"'
+          type: string
+        vendor:
+          description: nvidia | amd | apple | intel | ...
+          type: string
+      type: object
     GrantIn:
       properties:
         amountCents:
@@ -891,6 +903,27 @@ components:
           type: integer
         status:
           type: string
+      type: object
+    Metrics:
+      properties:
+        at:
+          description: unix seconds, server-stamped
+          type: integer
+        gpuUtil:
+          description: 0..1 aggregate utilization
+          type: number
+        load1:
+          type: number
+        load5:
+          type: number
+        load15:
+          type: number
+        memFree:
+          description: bytes
+          type: integer
+        memUsed:
+          description: bytes
+          type: integer
       type: object
     MetricsData:
       properties:
@@ -1621,6 +1654,25 @@ components:
           type: boolean
         rows:
           type: integer
+      type: object
+    Spec:
+      properties:
+        arch:
+          description: amd64 | arm64 | ...
+          type: string
+        cpus:
+          description: logical cores
+          type: integer
+        gpus:
+          items:
+            $ref: '#/components/schemas/GPU'
+          type: array
+        memory:
+          description: total RAM, bytes
+          type: integer
+        os:
+          description: linux | darwin | windows
+          type: string
       type: object
     Status:
       properties:
@@ -4096,6 +4148,12 @@ components:
             there is nothing else to update yet.
           type: boolean
       type: object
+    patchTargetIn:
+      properties:
+        id:
+          description: ID is the target to update, from the path.
+          type: string
+      type: object
     poolCreate:
       properties:
         autoScale:
@@ -4845,6 +4903,69 @@ components:
       properties:
         started:
           type: boolean
+      type: object
+    targetDeleted:
+      properties:
+        deleted:
+          description: Deleted is true when the target was removed.
+          type: boolean
+        id:
+          description: ID is the target that was removed.
+          type: string
+      type: object
+    targetList:
+      properties:
+        targets:
+          description: Targets is every target registered to the caller's org.
+          items:
+            $ref: '#/components/schemas/targetView'
+          type: array
+      type: object
+    targetReq:
+      properties:
+        capacity:
+          type: string
+        host:
+          type: string
+        kind:
+          type: string
+        label:
+          type: string
+        metrics:
+          $ref: '#/components/schemas/Metrics'
+        spec:
+          $ref: '#/components/schemas/Spec'
+        status:
+          type: string
+      type: object
+    targetView:
+      properties:
+        capacity:
+          type: string
+        createdAt:
+          type: string
+        host:
+          type: string
+        id:
+          type: string
+        kind:
+          type: string
+        label:
+          type: string
+        metrics:
+          $ref: '#/components/schemas/Metrics'
+        metricsAt:
+          type: string
+        running:
+          type: integer
+        sessions:
+          type: integer
+        spec:
+          $ref: '#/components/schemas/Spec'
+        status:
+          type: string
+        updatedAt:
+          type: string
       type: object
     treeEntryJSON:
       properties:
@@ -8824,42 +8945,127 @@ paths:
       - agents
   /v1/agents/targets:
     get:
+      description: |-
+        ListTargets returns every machine registered to the caller's org, newest
+        first, each with its live session load.
       operationId: get_v1_agents_targets
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/targetList'
+          description: ok
+      summary: ListTargets returns every machine registered to the caller's org, newest
       tags:
       - agents
     post:
+      description: |-
+        RegisterTarget registers a machine as an agent target, or re-links one that is
+        already registered. Re-linking is idempotent and keyed on org+host+owner, so a
+        machine that reconnects refreshes its own row rather than piling up duplicates;
+        it answers 200, while a first registration answers 201.
       operationId: post_v1_agents_targets
+      requestBody:
+        content:
+          application/json:
+            example:
+              host: gpu-01
+              kind: gpu
+              label: workshop
+            schema:
+              $ref: '#/components/schemas/targetReq'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/targetView'
+          description: ok
+      summary: |-
+        RegisterTarget registers a machine as an agent target, or re-links one that is
+        already registered.
       tags:
       - agents
   /v1/agents/targets/{id}:
     delete:
-      operationId: delete_v1_agents_targets_by_id
+      description: |-
+        DeleteTarget deregisters one machine. Only its owner, or an org admin, may
+        remove it; an unknown id, a cross-org id and a machine owned by someone else
+        all answer the same not-found, so a probe learns nothing about what exists.
+      operationId: delete_v1_agents_targets_id
       parameters:
-      - in: path
+      - description: ID is the target to act on, from the path.
+        example: tgt_1
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/targetDeleted'
+          description: ok
+      summary: DeleteTarget deregisters one machine.
       tags:
       - agents
     get:
-      operationId: get_v1_agents_targets_by_id
+      description: GetTarget returns one registered machine, with its live session
+        load.
+      operationId: get_v1_agents_targets_id
       parameters:
-      - in: path
+      - description: ID is the target to act on, from the path.
+        example: tgt_1
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/targetView'
+          description: ok
+      summary: GetTarget returns one registered machine, with its live session load.
       tags:
       - agents
     patch:
-      operationId: patch_v1_agents_targets_by_id
+      description: |-
+        PatchTarget updates one machine in place. Every field is optional; a field the
+        request omits is left alone. A metrics patch IS a heartbeat — the server stamps
+        its own clock, so a client can neither forge nor backdate staleness.
+      operationId: patch_v1_agents_targets_id
       parameters:
-      - in: path
+      - description: ID is the target to update, from the path.
+        example: tgt_1
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              id: tgt_1
+              status: draining
+            schema:
+              $ref: '#/components/schemas/patchTargetIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/targetView'
+          description: ok
+      summary: PatchTarget updates one machine in place.
       tags:
       - agents
   /v1/agents/targets/{id}/claim:
