@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -15,12 +16,16 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// testEngine spins a throwaway in-process Tasks engine (temp store, ephemeral ZAP
-// port) so the surface's routing + gate can be exercised directly, independent of
+// testEngine spins a throwaway in-process Tasks engine (temp store, its own unix
+// socket) so the surface's routing + gate can be exercised directly, independent of
 // cloud.EmbeddedTasks (which durable.go/Serve wires in the real binary).
 func testEngine(t *testing.T) *tasks.Embedded {
 	t.Helper()
-	srv, err := tasks.Embed(t.Context(), tasks.EmbedConfig{ZAPPort: 0})
+	dir := t.TempDir()
+	srv, err := tasks.Embed(t.Context(), tasks.EmbedConfig{
+		Address: filepath.Join(dir, "tasks.sock"),
+		DataDir: dir,
+	})
 	if err != nil {
 		t.Fatalf("tasks.Embed: %v", err)
 	}

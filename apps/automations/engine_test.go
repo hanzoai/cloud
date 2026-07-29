@@ -57,11 +57,11 @@ func TestDurableFlowRunSucceeds(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	srv, port := embedEngine(ctx, t, "acme")
+	srv, addr := embedEngine(ctx, t, "acme")
 	defer func() { _ = srv.Stop(context.Background()) }()
 
 	cli, err := tasksclient.Dial(tasksclient.Options{
-		HostPort: fmt.Sprintf("127.0.0.1:%d", port), Namespace: "acme",
+		Address: addr, Namespace: "acme",
 		DialTimeout: 5 * time.Second, CallTimeout: 5 * time.Second,
 	})
 	if err != nil {

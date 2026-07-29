@@ -7,33 +7,28 @@ package cloud
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/zap-proto/zip"
+
 	tasksauth "github.com/hanzoai/tasks/pkg/auth"
 	tasksclient "github.com/hanzoai/tasks/pkg/sdk/client"
 	tasksengine "github.com/hanzoai/tasks/pkg/tasks"
 )
 
-// durableZAPPort is the loopback ZAP port the embedded tasks engine binds. Loopback +
-// single binary ⇒ the engine shares cloud's trust boundary: no external tasks Service,
-// no cross-service auth, no per-org token minting. Non-9999 to never collide with the
-// cluster tasks Service if one also runs.
-const durableZAPPort = 19999
-
 // durableGatedZAPPort is the CLUSTER-reachable, identity-gated ZAP port the embedded
 // engine exposes via Embedded.ServeGated (published on cloud's Service in universe).
-// Unlike durableZAPPort (loopback, ungated, ai-ingest only), every request here must
+// Unlike the loopback socket (ungated, ai-ingest only), every request here must
 // carry a valid IAM auth_token — the same trust anchor as HTTP SanitizeIdentity —
 // org-scoped to the token owner. 9999 mirrors the port the retired tasksd exposed, so
 // a consumer repoint changes only the host (tasks.hanzo.svc → cloud.hanzo.svc).
 const durableGatedZAPPort = 9999
 
-// gatedZAPPort is the cluster-reachable tasks listener. It defaults to the port
+// gatedAddr is the cluster-reachable tasks listener. It defaults to the port
 // the retired tasksd exposed, so existing consumers keep their address, and
 // CLOUD_TASKS_GATED_PORT moves it.
 //
@@ -42,13 +37,17 @@ const durableGatedZAPPort = 9999
 // second stack — or a second agent on a shared box — has no way to bring one up
 // while another holds the port. A fixed number is right for a deployment and wrong
 // for a workstation.
-func gatedZAPPort() int {
+// gatedAddr is where the CLUSTER-reachable, identity-gated listener binds. This
+// one is a TCP address and must stay one: consumers in other pods dial it, and a
+// unix socket does not leave the host. The engine's own loopback listener is a
+// socket (see wireDurableIngest) precisely because nothing off-host dials THAT.
+func gatedAddr() string {
 	if v := strings.TrimSpace(os.Getenv("CLOUD_TASKS_GATED_PORT")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
+			return ":" + strconv.Itoa(n)
 		}
 	}
-	return durableGatedZAPPort
+	return ":" + strconv.Itoa(durableGatedZAPPort)
 }
 
 // embeddedTasks keeps the in-process engine alive for the process (a package ref the GC
@@ -76,30 +75,23 @@ func wireDurableIngest(ctx context.Context, deps Deps, app string) {
 	// Embed's default os.MkdirTemp("") fallback fails — pin it to cloud's data root.
 	// PER PROCESS, both of them. Apps are their own binaries now, so a fixed port
 	// and a shared directory are two processes' worth of contention over one
-	// resource: seven of eight children lost the bind on durableZAPPort and ran with
+	// resource: seven of eight children lost the bind on one fixed port and ran with
 	// NO durable engine at all — marketing's drip queue among them, which is how a
 	// campaign resolved its audience and then mailed nobody. A shared store would be
 	// the same collision one layer down, since the engine's SQLite has one writer.
 	//
-	// The port is picked here rather than by the engine because its config treats 0
-	// as "use the default" rather than "pick a free one". Naming the app makes both
-	// resources say whose they are.
-	//
-	// This becomes a UNIX SOCKET the moment hanzoai/tasks can listen on one: a path
-	// per app needs no allocation and cannot collide, which is what the internal
-	// plane already does everywhere else.
+	// It is a UNIX SOCKET, not a port. A path per app needs no allocation and
+	// cannot collide, which is what the internal plane does everywhere else — and
+	// it is why the collision above cannot recur: two processes cannot want the
+	// same free port when neither wants a port at all.
 	dataDir := filepath.Join(firstNonEmptyStr(deps.DataDir, "/data"), "tasks", firstNonEmptyStr(app, "cloud"))
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		deps.Logger.Warn("durable ingest: data dir unavailable; ingest runs inline", "err", err)
 		return
 	}
-	port, err := freePort()
-	if err != nil {
-		deps.Logger.Warn("durable ingest: no free port; ingest runs inline", "err", err)
-		return
-	}
+	sock := zip.SocketPath("tasks-" + firstNonEmptyStr(app, "cloud"))
 	emb, err := tasksengine.Embed(ctx, tasksengine.EmbedConfig{
-		ZAPPort: port,
+		Address: sock,
 		DataDir: dataDir,
 		NodeID:  "cloud-tasks",
 		// RequireIdentity defaults false: the engine is loopback-only and shares cloud's
@@ -115,9 +107,9 @@ func wireDurableIngest(ctx context.Context, deps Deps, app string) {
 		return
 	}
 	embeddedTasks = emb
-	addr := fmt.Sprintf("127.0.0.1:%d", emb.ZAPPort())
+	addr := emb.Address()
 	ingestDialer = func(org string) (tasksclient.Client, error) {
-		return tasksclient.Dial(tasksclient.Options{HostPort: addr, Namespace: "default"})
+		return tasksclient.Dial(tasksclient.Options{Address: addr, Namespace: "default"})
 	}
 	deps.Logger.Info("durable ingest wired: in-process tasks engine", "app", app, "addr", addr, "dataDir", dataDir)
 
@@ -137,18 +129,18 @@ func wireDurableIngest(ctx context.Context, deps Deps, app string) {
 		return
 	}
 	if deps.IAMIssuer == "" {
-		deps.Logger.Warn("durable tasks: no IAM issuer; gated cluster ZAP listener NOT exposed", "port", gatedZAPPort())
+		deps.Logger.Warn("durable tasks: no IAM issuer; gated cluster ZAP listener NOT exposed", "addr", gatedAddr())
 		return
 	}
 	validator := tasksauth.NewValidator(tasksauth.JWTConfig{
 		Issuer:  deps.IAMIssuer,
 		JWKSURL: strings.TrimRight(deps.IAMIssuer, "/") + "/v1/iam/.well-known/jwks",
 	})
-	if err := emb.ServeGated(ctx, gatedZAPPort(), validator); err != nil {
-		deps.Logger.Error("durable tasks: gated cluster ZAP listener failed to start", "err", err, "port", gatedZAPPort())
+	if err := emb.ServeGated(ctx, gatedAddr(), validator); err != nil {
+		deps.Logger.Error("durable tasks: gated cluster ZAP listener failed to start", "err", err, "addr", gatedAddr())
 		return
 	}
-	deps.Logger.Info("durable tasks: gated cluster ZAP listener up", "port", gatedZAPPort(), "issuer", deps.IAMIssuer)
+	deps.Logger.Info("durable tasks: gated cluster ZAP listener up", "addr", gatedAddr(), "issuer", deps.IAMIssuer)
 }
 
 // firstNonEmptyStr returns the first non-empty string, else the last.

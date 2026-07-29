@@ -1239,39 +1239,37 @@ migration silently strips request shapes from every generated CLI and SDK.
   compiles inside `apps/admin` and returns the zero value, because treasury never
   mounts there. Every such read was silently blank AND cost the caller the whole
   dependency graph to be blank. The ONE replacement is the internal plane
-  (`dial.go` + `rpc.go`): native ZAP frames over the callee's unix socket, no
+  (`plane.go` + `plane/`): a TYPED OP over ZAP on the callee's unix socket, no
   HTTP, no network fallback, no second scheme.
 
-      out, err := cloud.Dial("commerce").As(c).Call(ctx, "finance.balance", payload)
+      bal, err := cloud.Ask[plane.BalanceIn, plane.Balance](
+          cloud.As(c, org), "commerce", plane.FinanceBalance, &in)
 
-  `As(h)` delegates the caller's principal (anything with `Header(string) string`;
-  a `*zip.Ctx` satisfies it — and `core.Admit(ctx)` RETURNS one, so an admin op
-  has it already). `For(org)` names the tenant when there is no request to
-  delegate from, which is the background-loop case. A missing socket is an
-  ERROR — "that app is not running here" — never a zero value, which is exactly
-  the lie the imports told. Serving side: `cloud.Expose("<app>.<verb>", fn)` from
-  the app's Mount, `cloud.Ident` for the delegated principal, `cloud.Fault(status,
-  msg)` for a refusal the caller sees verbatim (402 vs 403 vs 404 vs 503).
-- **One socket path, named once.** `cloud.PeerSocket(app)` →
-  `{CLOUD_RUN_DIR | CLOUD_DATA_DIR/run | /run/hanzo}/<app>.sock`, and it is the
-  SAME function `serve.go` binds and `Call` resolves, so a server and its callers
-  cannot disagree about where an app lives. A lazily-spawned plugin binds it on
-  boot, so `Dial` reaches a child the host started on demand. Directory 0700,
-  socket 0600: the filesystem is the reachable surface and the kernel enforces who
-  may connect, which is why a forwarded principal is sound here and would not be
-  over a network.
-- **The org rides the CAPABILITY, never the payload.** Every org-scoped method
-  takes its tenant from `who.Org` (the envelope's capability slot) and refuses an
-  empty one. Do not add an org field to a request payload — a caller that can name
-  its own org can name another tenant's books. Prefer making it UNREPRESENTABLE
-  over validating it away: `finance.balance` carries `(subject, currency)` and has
-  no org field at all, so there is no check to forget. `rpc_tenant_test.go` proves
-  this adversarially against the real transport, and the property is live —
-  an org-less call to a running deployment answers
-  `403: balance: no org on the capability`.
-- **Wire contracts live in `payloads.go`, imported by BOTH ends.** Hand-written ZAP
-  in wire layout, never JSON; scalars ride `PutI64`/`I64`, repeated records travel
-  as inner frames (see `PutFiles`/`Files`). Putting the request/reply structs in
+  `As(c, org)` delegates THIS request's principal, optionally re-pointed at another
+  tenant — the operator acting on someone else's books. `For(ctx, org)` states the
+  tenant when there is no request to delegate from, the background-loop case. A
+  missing socket is an ERROR naming the app — "that app is not running here" — never
+  a zero value, which is exactly the lie the imports told. Serving side:
+  `zip.Post[In,Out](cloud.Plane(), path, fn, zip.WithOperationID(plane.X))` from the
+  app's Mount, `cloud.Who(ctx)` for the principal, and an ordinary `zip` error for a
+  refusal the caller sees with its status intact (402 vs 403 vs 404 vs 503).
+- **One socket path, named once, and it is zip's.** `zip.SocketPath(app)` →
+  `{ZIP_RUNTIME_DIR}/<app>.sock`, the SAME function `ServePlane` binds and `Ask`
+  resolves, so a server and its callers cannot disagree about where an app lives.
+  Cloud points `ZIP_RUNTIME_DIR` at `{CLOUD_RUN_DIR | CLOUD_DATA_DIR/run |
+  /run/hanzo}` once, at `bindRuntimeDir`. Directory 0700, socket 0600: the
+  filesystem is the reachable surface and the kernel enforces who may connect,
+  which is why a forwarded principal is sound here and would not be over a network.
+- **The org rides the CALLER, never the argument.** Every org-scoped op takes its
+  tenant from `cloud.Who(ctx).Org` and refuses an empty one. Do not add an org field
+  to an input — a caller that can name its own org can name another tenant's books.
+  Prefer making it UNREPRESENTABLE over validating it away: `plane.BalanceIn` carries
+  `(subject, currency)` and has no org field at all, so there is no check to forget.
+  `plane_test.go` proves this adversarially against the real transport AND
+  structurally (`TestNoPlaneInputCanNameAnOrg` walks every input type by reflection),
+  and the property is live — an org-less call answers `403: … no org on the call`.
+- **Wire contracts live in `plane/`, imported by BOTH ends.** Typed In/Out plus the
+  op names; the encoding is zip's, not ours. Putting the request/reply structs in
   the OWNING app instead is what made `apps/billing` import `apps/commerce` to name
   two structs — 1246 packages for a DTO. One definition, neither end importing the
   other. Measured: `plugin/admin` 2261 → 1115 packages, `apps/billing` 1246 → 945,
@@ -2186,27 +2184,62 @@ for its principal partition, not for a version — it previously opened through
 **Still outside the envelope:** `tasks/<org>/<namespace>.db`. `hanzoai/tasks`'s
 `EmbedConfig` has no key field, so that is an upstream change.
 
-## Inter-app calls: ZAP over UDS
+## Inter-app calls: typed ops, ZAP over UDS
 
-`dial.go` is the ONE way one app calls another. Local resolves to the callee's unix
-socket at `{DataDir}/run/<app>.sock`, remote to TLS, and `Dial(app)` picks by whether the
-socket exists — so an app can move hosts and no call site changes.
+**One app calls another with a typed op — the same op the REST route, the OpenAPI
+document, the MCP tool list and the CLI are all projected from.** `plane.go` is the
+whole mechanism:
 
-The socket is also the authorization boundary: `credz` authenticates its peers with
-`SO_PEERCRED`, so a 0600 socket proves who is calling without a credential to mint,
-rotate or hand-shake, and nothing is reachable from the network.
+    cloud.Plane()                       the app internal ops are declared on
+    cloud.ServePlane(name, log)         binds zip.SocketPath(name)
+    cloud.Ask[In,Out](ctx, app, op, in) is the caller
+    cloud.For(ctx, org)                 states the tenant for a BACKGROUND call
+    cloud.As(c, org)                    delegates THIS request's principal
+    cloud.Who(ctx)                      reads the principal a handler acts for
 
-**DIRECTED: the wire is ZAP, on both legs.** The socket transport currently frames plain
-HTTP, on the reasoning that ZAP ops are already zip handlers so swapping only `net.Conn`
-keeps one protocol. That reasoning is why the change must be ZAP on BOTH local and remote
-— framing local calls as ZAP while remote stays HTTP would give one typed op two wire
-formats, which is the thing the original decision was avoiding. One protocol, one router,
-one set of typed ops; the transport underneath is a socket or a TLS conn.
+`zip.SocketPath(name)` resolves `{ZIP_RUNTIME_DIR}/<name>.sock` and BOTH halves use
+it, so a server and its callers cannot disagree about where an app lives. Cloud points
+`ZIP_RUNTIME_DIR` at its own data root (`bindRuntimeDir`) rather than keeping a second
+rule about where sockets go.
 
-Two callers are not there yet, both upstream: `hanzoai/tasks` speaks ZAP already but its
-SDK takes host:port only (`newZAPTransport(opts.HostPort, …)`, pinned by
-`TestDialRequiresHostPort`), and pubsub/NATS cannot use a unix socket for client
-connections at all, so `psembed` stays TCP until that is patched.
+**The plane is a SECOND app, and that is the point.** A typed op rides every transport
+its app listens on, and the host proxies edge traffic to its children over a private
+socket — so neither "is this HTTP?" nor "did this arrive on a socket?" separates an
+internal call from a public request. The separation is structural instead: internal ops
+are declared on the plane app, which listens on exactly one address and is never mounted
+on the edge router. There is no path from the internet to a plane op, the same way there
+is no path to a route that was never registered. It keeps every projection — the plane
+has its own OpenAPI, MCP and CLI — without publishing the gate and the secret reads into
+the public document.
+
+**Identity rides the caller, and zip carries all nine headers.** Org, project, user,
+name, email, owner, isAdmin, isOrgAdmin, request-id (zip v1.18.4 — it forwarded five,
+and the four it dropped were the ones a callee decides on: a billing subject prefers the
+minted name over the opaque id, and platform sudo is read off owner, never off
+isOrgAdmin). A background job with no request to forward states its tenant once with
+`cloud.For`; an inbound request always wins over what it stated, so a job can supply an
+identity and can never launder one.
+
+The socket is also the coarse boundary: it is 0600 and `SO_PEERCRED`-authenticated, so a
+peer is already one of our own processes. It is NOT a boundary between them — never read
+a caller's org as an authorization decision on its own.
+
+**What this replaced.** `rpc.go` + `dial.go` + `payloads.go` were a second, hand-written
+implementation of exactly this: an fnv-hashed method registry, hand-packed ZAP payloads
+with literal byte offsets, and a capability the callee parsed and nothing verified. It
+was invisible to all five projections — `kms.get`, `finance.authorize` and `iam.mailable`
+had no OpenAPI entry, no MCP tool, no CLI verb and no SDK. 1,300 lines, deleted.
+
+**The body is JSON over the ZAP transport, and that is a real trade.** The hand-rolled
+plane packed ZAP wire layout end to end; zip marshals JSON into a ZAP-framed request
+(HIP-0106: JSON is the boundary format). For sixteen control-plane ops — a gate check, a
+balance read, a secret fetch — being typed at both ends and visible to every projection
+is worth more than the encode. Do not reintroduce a second encoding to win it back.
+
+Still TCP, deliberately: the tasks GATED listener (`durable.go`), because consumers in
+other pods dial it and a unix socket does not leave the host. The engine's own loopback
+listener IS a socket (tasks v1.52.4 `EmbedConfig.Address`), which is what removed the
+free-port allocation that seven of eight children used to lose.
 
 ## After the split: a store has one owner, and everyone else asks
 
@@ -2223,12 +2256,8 @@ which looks exactly like a broken product and is not one.
 **THE LAW.** A store has one owner. Any other process ASKS it — it never opens it, and
 it never reports "not configured" for something that is one socket away.
 
-    rpc.Listen(app)                     serves {DataDir}/run/<app>.sock (zaprpc)
-    cloud.Dial(app).For(org).Call(...)  is the caller
-    PeerSocket(app)                     is the ONE definition of that path
-
-Do not also hand that path to `app.Listen`. Two servers on one socket, and the loser's
-callers get a framing they cannot parse — it surfaces as `promise 0 for 1`.
+See "Inter-app calls" above for the mechanism. The rule is the same whatever the
+transport: one owner, everyone else asks.
 
 **Five subsystems broke this way**, each silently, each fixed by publishing a method
 from the owner: the prepaid gate (which ALLOWED — every priced act became free), the
@@ -2243,16 +2272,18 @@ Three rules fell out of doing it, and they are worth reusing:
   peer is the legitimate split-deploy (or no-money-plane) shape, and erroring there
   502s a deployment that is working as designed. A corrupt reply rendered as zero is a
   funded account shown as broke.
-- **The billed or read ORG rides the CAPABILITY, never the payload.** A caller that
-  could name the org in a body could bill or read another tenant.
+- **The billed or read ORG rides the CALLER, never the argument.** A caller that could
+  name the org in a body could bill or read another tenant. `TestNoPlaneInputCanNameAnOrg`
+  pins it structurally: no input type on the plane may carry an Org or Owner field.
 - **Send DATA, not a rendered view.** usage and txns carry ROWS; the HTTP surface
   renders its own envelope. Sending the envelope would require the renderer to live
   with the ledger, which is an import cycle (billing already imports commerce) — the
   compiler tells you.
 
-**Wire contracts live in payloads.go and are ZAP, never JSON** — one file imported by
-both ends, so the halves cannot drift. Check it before adding a method: `finance.balance`
-already had a codec and a scalar reply already had `PutI64`/`I64` in rpc.go.
+**Wire contracts live in `plane/`** — one leaf package imported by both ends, holding
+every op's In/Out and the op names, so the halves cannot drift and neither drags the
+other's dependency graph. It imports nothing of cloud's. Money crosses as `plane.Money`
+(exact decimal text + currency code), never as an int.
 
 **Money is not an int.** `hanzoai/money` is the general exact value; `apps/money` is
 USD at 18 decimals so an off-chain amount and an on-chain uint256 are the same integer.

@@ -5,9 +5,9 @@ package cron
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -68,15 +68,12 @@ func (f *fakeKube) jobDone(context.Context, string) (bool, bool, error) {
 func newTestEngine(t *testing.T, k kube) (*tasksengine.Embedded, tasksengine.View) {
 	t.Helper()
 	setWiring(k, luxlog.NewNoOpLogger())
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	port := l.Addr().(*net.TCPAddr).Port
-	_ = l.Close()
+	// A socket in this test's own dir: no port to pick, and nothing for a parallel
+	// test to collide with.
+	dir := t.TempDir()
 	eng, err := tasksengine.Embed(context.Background(), tasksengine.EmbedConfig{
-		ZAPPort: port,
-		DataDir: t.TempDir(),
+		Address: filepath.Join(dir, "tasks.sock"),
+		DataDir: dir,
 		NodeID:  "cron-test",
 	})
 	if err != nil {
@@ -87,7 +84,7 @@ func newTestEngine(t *testing.T, k kube) (*tasksengine.Embedded, tasksengine.Vie
 	currentEngine = func() *tasksengine.Embedded { return eng }
 	t.Cleanup(func() { currentEngine = old })
 
-	view := eng.View(org())
+	view := eng.View(tasksengine.Org(org()))
 	if err := view.RegisterNamespace(tasksengine.Namespace{
 		NamespaceInfo: tasksengine.NamespaceInfo{Name: namespace},
 	}); err != nil {
@@ -95,7 +92,7 @@ func newTestEngine(t *testing.T, k kube) (*tasksengine.Embedded, tasksengine.Vie
 	}
 
 	cli, err := tasksclient.Dial(tasksclient.Options{
-		HostPort:  fmt.Sprintf("127.0.0.1:%d", eng.ZAPPort()),
+		Address:   eng.Address(),
 		Namespace: namespace,
 	})
 	if err != nil {

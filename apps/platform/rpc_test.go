@@ -10,7 +10,7 @@ package platform
 //
 // So the boundary is attacked here end to end, with nothing stubbed on the path
 // under test: a REAL HTTP request carrying the headers SanitizeIdentity mints, a
-// REAL *zip.Ctx, the real Dial(...).As(c) capability packing, a real unix socket,
+// REAL *zip.Ctx, the real As(c, org) identity forwarding, a real unix socket,
 // real ZAP envelopes, the real Expose handler, and the real observeFleet over a fake
 // cluster. The only fake is the cluster itself, which is the thing being observed —
 // not the thing being trusted.
@@ -25,14 +25,19 @@ package platform
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/k8s"
+	"github.com/hanzoai/cloud/plane"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -72,28 +77,38 @@ func twoTenantFleet() []runtime.Object {
 // plane answered, so every check below is a statement about the callee's decision.
 func planeProbe(t *testing.T, objs ...runtime.Object) *zip.App {
 	t.Helper()
-	t.Setenv("CLOUD_RUN_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	cloud.ResetPlane()
 
 	s := fakeService(objs...)
 	s.Base.Log = luxlog.New("test")
 	exposeFleet(s)
-	ln, err := cloud.Listen("platform", nil)
+	stop, err := cloud.ServePlane("platform", nil)
 	if err != nil {
-		t.Fatalf("Listen: %v", err)
+		t.Fatalf("ServePlane: %v", err)
 	}
-	t.Cleanup(func() { _ = ln.Close() })
+	t.Cleanup(func() { _ = stop() })
+	for i := 0; i < 200; i++ {
+		if c, derr := net.Dial("unix", zip.SocketPath("platform")); derr == nil {
+			_ = c.Close()
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Get("/probe", func(c *zip.Ctx) error {
-		out, err := cloud.Dial("platform").As(c).Call(context.Background(), "platform.fleet", nil)
+		// As(c, "") delegates THIS request's principal unchanged — the same
+		// authority the handler was reached with, and nothing more.
+		fleet, err := cloud.Ask[struct{}, plane.Fleet](cloud.As(c, ""), "platform",
+			plane.PlatformFleet, &struct{}{})
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"err": err.Error()})
 		}
-		rows, err := cloud.Apps(out)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"err": err.Error()})
+		if fleet == nil {
+			return c.JSON(http.StatusOK, []plane.App{})
 		}
-		return c.JSON(http.StatusOK, rows)
+		return c.JSON(http.StatusOK, fleet.Apps)
 	})
 	return app
 }
@@ -102,7 +117,7 @@ func planeProbe(t *testing.T, objs ...runtime.Object) *zip.App {
 // identity headers exactly as fleet_authz_test.go's fleetDoAs does — the headers
 // SanitizeIdentity mints from a signature-verified JWT and strips on ingress.
 // Returns the namespaces observed, or the refusal text.
-func observeAs(t *testing.T, app *zip.App, user, org string, orgAdmin, superAdmin bool) (rows []cloud.App, refusal string) {
+func observeAs(t *testing.T, app *zip.App, user, org string, orgAdmin, superAdmin bool) (rows []plane.App, refusal string) {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
 	if user != "" {
@@ -139,7 +154,7 @@ func observeAs(t *testing.T, app *zip.App, user, org string, orgAdmin, superAdmi
 // namespacesOf is what the caller actually learned: the set of namespaces whose CRs
 // came back. The boundary is about which namespaces were SCANNED, so this is the
 // value every assertion below is written against.
-func namespacesOf(rows []cloud.App) map[string]bool {
+func namespacesOf(rows []plane.App) map[string]bool {
 	out := map[string]bool{}
 	for _, r := range rows {
 		out[r.Namespace] = true
@@ -226,26 +241,26 @@ func TestFleetPlane_ForgedOrgCannotWidenTheScan(t *testing.T) {
 func TestFleetPlane_RoleGateIsFailClosed(t *testing.T) {
 	app := planeProbe(t, twoTenantFleet()...)
 
-	// No capability at all: the zero Ident packs to no claim, not an empty one.
+	// No identity at all: a call with nothing asserted is anonymous, not empty.
 	if rows, refusal := observeAs(t, app, "", "", false, false); refusal == "" {
 		t.Fatalf("an anonymous call was ANSWERED with %d rows; it must be refused", len(rows))
-	} else if !strings.Contains(refusal, "403") {
-		t.Fatalf("anonymous refusal should carry the method's 403, got: %s", refusal)
+	} else if !strings.Contains(refusal, "authentication required") {
+		t.Fatalf("anonymous refusal should name the reason, got: %s", refusal)
 	}
 
 	// Validated, holds an org, but administers nothing.
 	if rows, refusal := observeAs(t, app, "u-member", "acme", false, false); refusal == "" {
 		t.Fatalf("a plain member of acme was ANSWERED with %d rows; it must be refused", len(rows))
-	} else if !strings.Contains(refusal, "403") {
-		t.Fatalf("member refusal should carry the method's 403, got: %s", refusal)
+	} else if !strings.Contains(refusal, "admin required") {
+		t.Fatalf("member refusal should name the reason, got: %s", refusal)
 	}
 
 	// An org claim with NO validated user is the classic off-gateway forge: a raw
 	// X-Org-Id and no credential. It must not become a tenant key.
 	if rows, refusal := observeAs(t, app, "", "acme", true, false); refusal == "" {
 		t.Fatalf("an unvalidated X-Org-Id was ANSWERED with %d rows; it must be refused", len(rows))
-	} else if !strings.Contains(refusal, "403") {
-		t.Fatalf("unvalidated refusal should carry the method's 403, got: %s", refusal)
+	} else if !strings.Contains(refusal, "required") {
+		t.Fatalf("unvalidated refusal should name the reason, got: %s", refusal)
 	}
 }
 
@@ -254,26 +269,36 @@ func TestFleetPlane_RoleGateIsFailClosed(t *testing.T) {
 // the board must be TOLD — "no kubernetes client" is a different fact from "no
 // workloads deployed", and only one of them is an operator's cue to panic.
 func TestFleetPlane_UnreadyClusterIsAnErrorNotAnEmptyFleet(t *testing.T) {
-	t.Setenv("CLOUD_RUN_DIR", t.TempDir())
+	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	cloud.ResetPlane()
 	s := &cloud.Service[fleetState]{
 		Base:  cloud.Base{Log: luxlog.New("test")},
 		State: fleetState{dyn: nil, initErr: "no kubeconfig resolved", scan: &nsCache{}},
 	}
 	exposeFleet(s)
-	ln, err := cloud.Listen("platform", nil)
+	stop, err := cloud.ServePlane("platform", nil)
 	if err != nil {
-		t.Fatalf("Listen: %v", err)
+		t.Fatalf("ServePlane: %v", err)
 	}
-	t.Cleanup(func() { _ = ln.Close() })
+	t.Cleanup(func() { _ = stop() })
+	for i := 0; i < 200; i++ {
+		if c, derr := net.Dial("unix", zip.SocketPath("platform")); derr == nil {
+			_ = c.Close()
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
-	_, err = cloud.Dial("platform").
-		As(headers{"X-User-Id": "u-root", "X-Org-Id": "admin", "X-User-IsAdmin": "true"}).
-		Call(context.Background(), "platform.fleet", nil)
+	_, err = cloud.Ask[struct{}, plane.Fleet](adminCtx(), "platform", plane.PlatformFleet, &struct{}{})
 	if err == nil {
 		t.Fatal("an unobservable fleet ANSWERED; it must report 503, not an empty fleet")
 	}
-	if !strings.Contains(err.Error(), "503") || !strings.Contains(err.Error(), "no kubeconfig resolved") {
-		t.Fatalf("the refusal must carry 503 and the real reason, got: %v", err)
+	var he *zip.HTTPError
+	if !errors.As(err, &he) || he.Status != 503 {
+		t.Fatalf("the refusal must carry 503, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "no kubeconfig resolved") {
+		t.Fatalf("the refusal must carry the real reason, got: %v", err)
 	}
 }
 
@@ -282,10 +307,9 @@ func TestFleetPlane_UnreadyClusterIsAnErrorNotAnEmptyFleet(t *testing.T) {
 // alone — must be an error the board can show. The in-process seam this replaced
 // returned nil there, and nil became an empty registry with no error at all.
 func TestFleetPlane_NoSocketIsAnError(t *testing.T) {
-	t.Setenv("CLOUD_RUN_DIR", t.TempDir()) // nothing listening
-	_, err := cloud.Dial("platform").
-		As(headers{"X-User-Id": "u-root", "X-Org-Id": "admin", "X-User-IsAdmin": "true"}).
-		Call(context.Background(), "platform.fleet", nil)
+	t.Setenv("ZIP_RUNTIME_DIR", t.TempDir())
+	cloud.ResetPlane() // nothing listening
+	_, err := cloud.Ask[struct{}, plane.Fleet](adminCtx(), "platform", plane.PlatformFleet, &struct{}{})
 	if err == nil {
 		t.Fatal("dialing an absent platform SUCCEEDED; a missing peer must never read as an empty fleet")
 	}
@@ -300,47 +324,48 @@ func (h headers) Header(k string) string { return h[k] }
 
 // TestFleetApp_CarriesNoScope is the STRUCTURAL half of the guarantee, and the
 // stronger one. The tests above show the handler ignores who the caller claims to
-// be; this shows the caller cannot even ASK. platform.fleet has no request codec —
-// there is no PutFleetReq — so a future handler that forgets the rule has no field
-// to get it wrong on, and adding one would be a deliberate, visible act.
+// be; this shows the caller cannot even ASK. The fleet op's INPUT is the empty
+// struct — there is no field a scope could be named in — so a future handler that
+// forgets the rule has nothing to get it wrong on, and adding one would be a
+// deliberate, visible act a reviewer has to justify at this line.
 //
-// The reply codec is checked here too: it carries the observed NAMESPACE (the board
-// renders it) but that is an ANSWER, never an input.
+// The reply carries the observed NAMESPACE (the board renders it), but that is an
+// ANSWER, never an input.
 func TestFleetApp_CarriesNoScope(t *testing.T) {
-	rows, err := cloud.Apps(cloud.PutApps([]cloud.App{
-		{Org: "hanzoai", Name: "sql", Env: "main", Repo: "hanzoai/sql", Registry: "ghcr.io/hanzoai/sql",
-			Role: "sql", DeclaredTag: "v1.4.2", RunningTag: "v1.4.1", LatestTag: "v1.4.3",
-			Health: "yellow", Phase: "Running", Cluster: "hanzo-k8s", Namespace: "hanzo", DriftSeverity: "yellow"},
-	}))
+	in := reflect.TypeOf(struct{}{})
+	if n := in.NumField(); n != 0 {
+		t.Fatalf("the fleet op's input grew %d field(s); a scope must never be nameable by the caller", n)
+	}
+	// The reply's shape is checked by round-tripping it through the same encoder
+	// the plane uses, so a field that stops crossing shows up here.
+	want := plane.App{
+		Org: "hanzoai", Name: "sql", Env: "main", Repo: "hanzoai/sql", Registry: "ghcr.io/hanzoai/sql",
+		Role: "sql", DeclaredTag: "v1.4.2", RunningTag: "v1.4.1", LatestTag: "v1.4.3",
+		Health: "yellow", Phase: "Running", Cluster: "hanzo-k8s", Namespace: "hanzo", DriftSeverity: "yellow",
+	}
+	b, err := json.Marshal(plane.Fleet{Apps: []plane.App{want}})
 	if err != nil {
-		t.Fatalf("Fleet: %v", err)
+		t.Fatalf("encode: %v", err)
 	}
-	if len(rows) != 1 {
-		t.Fatalf("round trip returned %d rows, want 1", len(rows))
+	var got plane.Fleet
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("decode: %v", err)
 	}
-	got := rows[0]
-	if got.Name != "sql" || got.Namespace != "hanzo" || got.DriftSeverity != "yellow" ||
-		got.DeclaredTag != "v1.4.2" || got.RunningTag != "v1.4.1" || got.LatestTag != "v1.4.3" ||
-		got.Registry != "ghcr.io/hanzoai/sql" || got.Cluster != "hanzo-k8s" || got.Health != "yellow" ||
-		got.Phase != "Running" || got.Role != "sql" || got.Org != "hanzoai" || got.Env != "main" ||
-		got.Repo != "hanzoai/sql" {
-		t.Fatalf("round trip lost or scrambled a field: %+v", got)
+	if len(got.Apps) != 1 {
+		t.Fatalf("round trip returned %d rows, want 1", len(got.Apps))
 	}
-	// The method takes its request as bytes it never reads. If a request codec is ever
-	// added to platform.fleet, this line is where the reviewer has to justify it.
-	var _ func([]byte) ([]cloud.App, error) = cloud.Apps
-}
-
-// TestFleetPlane_ShortReplyIsAnError pins the Files rule for this codec: the header's
-// count is a promise and the frames are the delivery. A truncated payload must fail
-// rather than yield a shorter fleet — a board silently missing rows reports a running
-// workload as absent, and absent is what an operator acts on.
-func TestFleetPlane_ShortReplyIsAnError(t *testing.T) {
-	full := cloud.PutApps([]cloud.App{{Name: "a", Namespace: "hanzo"}, {Name: "b", Namespace: "hanzo"}})
-	if _, err := cloud.Apps(full[:len(full)-8]); err == nil {
-		t.Fatal("a truncated fleet payload decoded cleanly; it must be an error, never a shorter fleet")
+	if got.Apps[0] != want {
+		t.Fatalf("round trip lost or scrambled a field:\n got %+v\nwant %+v", got.Apps[0], want)
 	}
 }
 
 // keep the k8s import honest: the fixtures above build real GVR-backed objects.
 var _ = k8s.Apps
+
+// adminCtx states a validated SuperAdmin for a call made with no request behind
+// it — the same principal the header form asserted, said once and explicitly.
+func adminCtx() context.Context {
+	return zip.WithCaller(context.Background(), zip.Caller{
+		User: "u-root", Org: "admin", Owner: "admin", Admin: true,
+	})
+}
