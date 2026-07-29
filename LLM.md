@@ -1041,7 +1041,7 @@ tree: they are disjoint, so agents do not collide in source.
 |---|---|---|
 | A | ~~integrations 47~~ (done: 22 typed, 19 refused), cloudflare 34, platform 32, projects 31, captable 31 | 128 |
 | B | agents 26, ~~git 24~~ (done: 24 typed, 24 refused — four wire families, apps/git/LLM.md), books 11, o11y 11, ~~company 22~~ (2 left, both permanent) | 50 |
-| C | team 20, guide 20, crm 20, ~~ingress 19~~ (done), ~~framework 19~~ → 2, ~~account 19~~ (done: 11 typed, 7 refused) | 117 |
+| C | ~~team 20~~ (done: 9 typed, 10 refused), guide 20, crm 20, ~~ingress 19~~ (done), ~~framework 19~~ → 2, ~~account 19~~ (done: 11 typed, 7 refused) | 117 |
 | D | pricing 18, ml 18, automations 18, index 17, dataroom 17, compliance 17, affiliates 17 | 122 |
 | E | eval 16, social 13, esign 13, link 12, functions 12, commerce 12, billing 12 | 90 |
 | F | the ~70 remaining packages, 1–11 routes each | ~358 |
@@ -1085,11 +1085,20 @@ prose.
 The typed packages are `apps/admin` and its eight sub-packages, plus `apps/account`,
 `apps/agents`, `apps/company`, `apps/crm`, `apps/framework`, `apps/git`,
 `apps/guide`, `apps/ingress`, `apps/integrations`, `apps/marketing`, `apps/o11y`,
-`apps/plugin`, `apps/search`, `apps/visor`.
+`apps/plugin`, `apps/search`, `apps/team`, `apps/visor`.
 `crm` is 19 of 20: its one refusal, the public Startup Program intake POST, is
 named at its registration — the IP rate limit and the pre-parse 64 KiB body cap
 are wire, and a typed op's MCP/CLI projections would publish an unmetered,
 uncapped alias of a deliberately metered public endpoint.
+`team` is 9 of 19, and its partition is a GATE rather than prose:
+`untypedByDesign` (typed_wire_test.go) is the closed list of the 10 refusals —
+two WebSocket upgrades (transactor, collaborator), the account JSON-RPC
+envelope (refusals are HTTP 200 `{error: Status}`, INCLUDING for an unparseable
+body), the tolerant cookie PUT (a body it cannot parse falls back to the bearer
+where a typed In answers 400), two OAuth 302 redirects, the wallet page's
+bytes, and the multipart upload / raw-bytes download — and
+`TestEveryRouteIsTypedOrNamed` fails on any route that is neither typed nor
+named there, so the next team route is typed by default.
 `apps/admin/core/typed.go` states the rule for that surface: every `/v1/admin/*`
 route is a typed op. Five carry NO untyped route at all — `admin`, `marketing`,
 `plugin`, `search` and now `ingress` (18 ops, converted whole in one pass).
