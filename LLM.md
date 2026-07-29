@@ -971,6 +971,29 @@ zip is getting multi-status `responses`, and these convert when it lands.
    (`TestTypedStepOpsFailClosed` pins exactly that) — but the document asserts
    something false and a generated client gains an argument. Same shape of gap as
    multi-status (#78): the wire fact exists and the declaration cannot say it.
+   `apps/integrations` adds SIX more, so the class is now ten and growing with
+   every converted tranche — `POST /v1/connectors/{id}/refresh`,
+   `…/connectors/{provider}/device/{flow}/poll`,
+   `…/github/repos/{repo}/pages/builds`, `…/integrations/{provider}/disconnect`
+   and `…/{provider}/verify` each publish a required body whose only properties
+   ARE their path params, and `…/integrations/telegram/connect` publishes a
+   required body over `noArgs`, i.e. an object with no properties at all. Re-find
+   them with the check below, which reads the published subsets rather than the
+   source, so it cannot disagree with what shipped:
+
+       python3 - <<'EOF'
+       import json,glob
+       for f in glob.glob('plugin/*/openapi.json'):
+           d=json.load(open(f)); sc=d.get('components',{}).get('schemas',{})
+           for p,ops in d['paths'].items():
+               for m,op in ops.items():
+                   if m.upper() not in ('POST','PUT','PATCH') or 'requestBody' not in op: continue
+                   n=(op['requestBody'].get('content',{}).get('application/json',{})
+                      .get('schema',{}) or {}).get('$ref','').split('/')[-1]
+                   pr=set((sc.get(n,{}).get('properties') or {}).keys())
+                   pa={q['name'] for q in op.get('parameters',[]) if q.get('in')=='path'}
+                   if pr<=pa: print(f, m.upper(), p, n, sorted(pr), sorted(pa))
+       EOF
 
 ### Partitioning the remaining work
 
@@ -979,7 +1002,7 @@ tree: they are disjoint, so agents do not collide in source.
 
 | tranche | apps | untyped |
 |---|---|---|
-| A | integrations 47, cloudflare 34, platform 32, projects 31, captable 31 | 175 |
+| A | ~~integrations 47~~ (done: 22 typed, 19 refused), cloudflare 34, platform 32, projects 31, captable 31 | 128 |
 | B | git 28, agents 26, books 25, o11y 23, company 22 | 124 |
 | C | team 20, guide 20, crm 20, ~~ingress 19~~ (done), framework 19, account 19 | 117 |
 | D | pricing 18, ml 18, automations 18, index 17, dataroom 17, compliance 17, affiliates 17 | 122 |
@@ -1035,6 +1058,21 @@ each of the 8 refusals named in its own LLM.md — verbatim status/body proxies,
 The list moves every few merges: RE-MEASURE per app rather than trusting it, and
 note the count is a heuristic that reads `r.Header.Get("X-...")` as a route, so
 read the hits before believing a non-zero remainder (ingress's last "1" is one).
+`integrations` is the sharpest case of that heuristic lying: it measures 45
+untyped and serves **19**, because the other 26 hits are `hdr.Get("Retry-After")`
+and the `// app.Post(…)` MOUNT HANDOFF blocks each adapter file carries. It is
+COMPLETE at 22 typed / 19 refused, and the 19 fall into exactly three wire
+families named at its `routes()` — 8 legs that answer 302 (`zip.WithStatus`
+PANICS on a non-2xx, typed.go:104), 5 that answer text/html and set `__Host-`
+cookies (a typed dispatch ends in `c.JSON(out)`), and 6 inbound webhooks. The
+webhooks split on WHY, and the split is the reusable part: four are signed over
+the RAW received bytes (Slack/GitHub HMAC, Discord Ed25519) which the decoded In
+is not, while `teams/events` and `telegram/webhook` are header-authed and refuse
+for a different fact — they answer an EMPTY 200 to a body they cannot parse, and
+zip's `invoke` unmarshals BEFORE the handler (typed.go:227), so typing them would
+turn that 200 into a 400 and retry-storm the platform. Do not group Teams and
+Telegram under "raw-byte signature": that was the prose's own error before it was
+checked against the code, and it is why the taxonomy now cites line numbers.
 
 `apps/guide` (13 of 19) is the worked example of the SPLIT tranche, where a
 partition is not all-or-nothing. Six of its routes stay untyped and each names a
