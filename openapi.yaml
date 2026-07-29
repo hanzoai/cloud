@@ -1553,6 +1553,13 @@ components:
           description: nil when burn is 0 / unknown (never a fabricated infinity)
           type: number
       type: object
+    ProviderInfo:
+      properties:
+        displayName:
+          type: string
+        name:
+          type: string
+      type: object
     ProvidersCreditOut:
       properties:
         data:
@@ -3166,6 +3173,41 @@ components:
           items:
             $ref: '#/components/schemas/botView'
           type: array
+      type: object
+    botMember:
+      properties:
+        active:
+          type: boolean
+        id:
+          description: the agent id
+          type: string
+        name:
+          description: display name
+          type: string
+        personRef:
+          description: the projected Person _id
+          type: string
+        userId:
+          description: derived member account uuid (personUuid)
+          type: string
+      type: object
+    botRoster:
+      properties:
+        bots:
+          description: Bots is every agent of the caller's org, projected as a workspace
+            member.
+          items:
+            $ref: '#/components/schemas/botMember'
+          type: array
+      type: object
+    botSync:
+      properties:
+        projected:
+          description: Projected is how many roster entries the reconcile touched.
+          type: integer
+        synced:
+          description: Synced is true when the reconcile ran.
+          type: boolean
       type: object
     botView:
       properties:
@@ -5048,6 +5090,31 @@ components:
           description: ID is the target to update, from the path.
           type: string
       type: object
+    planInfo:
+      properties:
+        active:
+          description: Active is whether that plan's entitlement is live.
+          type: boolean
+        guestLimit:
+          description: GuestLimit is the plan's team.guests cap, when the plan carries
+            one.
+          type: integer
+        guests:
+          description: Guests is how many of those seats are guests.
+          type: integer
+        plan:
+          description: |-
+            Plan is the licensed plan id, empty when it cannot be resolved here — an
+            honest dash on the page, never a fabricated tier.
+          type: string
+        seats:
+          description: Seats is the org's distinct active human members.
+          type: integer
+        upgradeUrl:
+          description: UpgradeURL is where the page sends a caller who wants a bigger
+            plan.
+          type: string
+      type: object
     poolCreate:
       properties:
         autoScale:
@@ -5724,6 +5791,41 @@ components:
           type: array
         key:
           description: Key is the switch to write, taken from the path (e.g. "waitlist.chat").
+          type: string
+      type: object
+    statsOut:
+      properties:
+        admin:
+          description: Admin is the upstream service's server-panel flag, always false
+            here.
+          type: boolean
+        metrics:
+          additionalProperties:
+            type: object
+          description: |-
+            Metrics is the upstream service's metrics block, which this server does
+            not populate.
+          type: object
+        statistics:
+          $ref: '#/components/schemas/statsSessions'
+          description: Statistics carries the live sessions.
+      type: object
+    statsSessions:
+      properties:
+        activeSessions:
+          additionalProperties:
+            items:
+              $ref: '#/components/schemas/statsUser'
+            type: array
+          description: |-
+            ActiveSessions maps a workspace uuid to its connected sessions. It carries
+            only the token's OWN workspace, and is empty for a token that names none.
+          type: object
+      type: object
+    statsUser:
+      properties:
+        userId:
+          description: UserID is the account the session is authenticated as.
           type: string
       type: object
     storageAlert:
@@ -23009,12 +23111,59 @@ paths:
       - team
   /v1/team/account/providers:
     get:
+      description: |-
+        ListProviders returns the identity providers this deployment starts a login
+        with. It is always exactly one — hanzo.id. Which identities that door accepts
+        (Google, GitHub, passkey, password) is IAM's question, answered on IAM's own
+        page next to the identity check and the training-data consent that must
+        precede a first session; listing them here would be a second place holding
+        that answer, and the two drift the moment IAM gains or drops one.
       operationId: get_v1_team_account_providers
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+              - displayName: Hanzo
+                name: openid
+              schema:
+                items:
+                  $ref: '#/components/schemas/ProviderInfo'
+                type: array
+          description: ok
+      summary: |-
+        ListProviders returns the identity providers this deployment starts a login
+        with.
       tags:
       - team
   /v1/team/billing/plan:
     get:
+      description: |-
+        ReadPlan returns the plan and seat counts for the caller's OWN org, resolved
+        from the VERIFIED team session token — never a client header. Seats and guests
+        are the org's distinct active human members (a bot member is not a seat); the
+        plan comes from the licensing entitlement and is empty when that read is
+        unavailable, so the page shows an honest dash rather than a fabricated tier. A
+        caller with no verified session gets 401, and a real seat-read failure is a
+        502 rather than a false "0 members".
       operationId: get_v1_team_billing_plan
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                active: true
+                guestLimit: 3
+                guests: 1
+                plan: pro
+                seats: 3
+                upgradeUrl: https://billing.hanzo.ai
+              schema:
+                $ref: '#/components/schemas/planInfo'
+          description: ok
+      summary: |-
+        ReadPlan returns the plan and seat counts for the caller's OWN org, resolved
+        from the VERIFIED team session token — never a client header.
       tags:
       - team
   /v1/team/billing/ui:
@@ -23035,12 +23184,44 @@ paths:
       - team
   /v1/team/bots:
     get:
+      description: |-
+        ListBots returns the caller org's bot members — the org's agents projected as
+        the workspace Employees they become, each with the member account uuid and
+        Person reference the roster addresses it by. An agents subsystem that is not
+        mounted answers an empty list, never an error.
       operationId: get_v1_team_bots
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/botRoster'
+          description: ok
+      summary: |-
+        ListBots returns the caller org's bot members — the org's agents projected as
+        the workspace Employees they become, each with the member account uuid and
+        Person reference the roster addresses it by.
       tags:
       - team
   /v1/team/bots/sync:
     post:
+      description: |-
+        SyncBots re-projects the caller org's agents as workspace members into EVERY
+        workspace of the org, and removes the ones whose agent is gone. It is
+        idempotent, and admin only: mutating a workspace's roster requires the
+        gateway-minted admin flag, which a client can never forge. It answers how many
+        roster entries the reconcile touched.
       operationId: post_v1_team_bots_sync
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/botSync'
+          description: ok
+      summary: |-
+        SyncBots re-projects the caller org's agents as workspace members into EVERY
+        workspace of the org, and removes the ones whose agent is gone.
       tags:
       - team
   /v1/team/files/{workspace}:
@@ -23056,18 +23237,47 @@ paths:
       - team
   /v1/team/files/{workspace}/{filename}:
     delete:
-      operationId: delete_v1_team_files_by_workspace_by_filename
+      description: |-
+        DeleteBlob removes one blob from a workspace's file store. The caller must
+        hold a verified session AND be a member of the workspace; anything else — an
+        unknown workspace, another tenant's workspace, a workspace the caller is not
+        in — answers the same 404, so a probe learns nothing about what exists.
+
+        It is IDEMPOTENT: deleting a present or an absent blob both answer 204, so a
+        delete never confirms a blob's existence and a foreign blob id (a physical key
+        the caller can never name into another tenant's box) is a harmless no-op. A
+        storage backend that is unavailable fails closed with 502 rather than lying
+        about success.
+      operationId: delete_v1_team_files_workspace_filename
       parameters:
-      - in: path
+      - description: Workspace is the workspace uuid the blob belongs to, from the
+          path.
+        example: 6579…
+        in: path
         name: workspace
         required: true
         schema:
           type: string
-      - in: path
+      - description: |-
+          Filename is the last path segment, which the front sets to the blob id
+          when it sends no explicit `file`.
+        in: path
         name: filename
         required: true
         schema:
           type: string
+      - description: File is the blob id, and wins over the path segment when both
+          are present.
+        example: 0d4f…
+        in: query
+        name: file
+        required: false
+        schema:
+          type: string
+      responses:
+        "204":
+          description: no content
+      summary: DeleteBlob removes one blob from a workspace's file store.
       tags:
       - team
     get:
@@ -23098,12 +23308,64 @@ paths:
       - team
   /v1/team/transactor/api/v1/statistics:
     get:
+      description: |-
+        Statistics returns the transactor's live sessions for the workspace the
+        caller's token names — the endpoint the front's workspace switcher and server
+        panel poll on the transactor base. The token is verified exactly like the
+        WebSocket upgrade is, and activeSessions carries ONLY that token's own
+        workspace, never another tenant's sessions. An invalid or expired token is
+        401.
       operationId: get_v1_team_transactor_api_v1_statistics
+      parameters:
+      - description: Token is the workspace token minted by selectWorkspace.
+        example: eyJhbGciOiJIUzI1NiJ9…
+        in: query
+        name: token
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/statsOut'
+          description: ok
+      summary: |-
+        Statistics returns the transactor's live sessions for the workspace the
+        caller's token names — the endpoint the front's workspace switcher and server
+        panel poll on the transactor base.
       tags:
       - team
   /v1/team/transactor/statistics:
     get:
+      description: |-
+        Statistics returns the transactor's live sessions for the workspace the
+        caller's token names — the endpoint the front's workspace switcher and server
+        panel poll on the transactor base. The token is verified exactly like the
+        WebSocket upgrade is, and activeSessions carries ONLY that token's own
+        workspace, never another tenant's sessions. An invalid or expired token is
+        401.
       operationId: get_v1_team_transactor_statistics
+      parameters:
+      - description: Token is the workspace token minted by selectWorkspace.
+        example: eyJhbGciOiJIUzI1NiJ9…
+        in: query
+        name: token
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/statsOut'
+          description: ok
+      summary: |-
+        Statistics returns the transactor's live sessions for the workspace the
+        caller's token names — the endpoint the front's workspace switcher and server
+        panel poll on the transactor base.
       tags:
       - team
   /v1/templates:

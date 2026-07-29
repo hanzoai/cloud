@@ -38,6 +38,12 @@ var allowedRequestUses = map[string]string{
 	"apps/visor/visor.go": "A tenant-scoped PROXY: client.go forwards the caller's own identity headers " +
 		"(and their bearer where no service credential is configured) upstream, so an op without the request " +
 		"drops the caller's identity on the far side of the hop.",
+	"apps/team/typed.go": "sessionOf / admin / noStore — team authenticates its billing and files planes " +
+		"with its OWN HS256 session token, which rides in Authorization or the HttpOnly account-token cookie; " +
+		"principal.OrgFrom carries neither, and bots/sync additionally needs admin-ness (X-User-IsAdmin). " +
+		"It is ONE file for the whole subsystem on purpose — the resolvers live here so the planes that use " +
+		"them do not each reach for the request. All three fail closed off the HTTP path: no request, no " +
+		"token, no identity.",
 }
 
 // TestRequestEscapeHatchIsPinned fails when a new cloud.Request call site
