@@ -138,6 +138,15 @@ func (o ops) pagesDelete(ctx context.Context, in *projectRef) (*cfResult, error)
 	return cl.relay(ctx, http.MethodDelete, "/accounts/"+acct+"/pages/projects/"+proj, nil)
 }
 
+// PagesDeploy is the deploy request body: the branch to build. It is the whole
+// shape this route reads, so it is also what the document declares for it
+// (openapi.Register, cloudflare.go) — one struct, bound by the handler and
+// reflected by the spec, so the published contract cannot drift from the code.
+type PagesDeploy struct {
+	// Branch is the branch to build. Omit it to build the project's production branch.
+	Branch string `json:"branch"`
+}
+
 // pagesDeploy triggers a new Pages deployment. Requires org admin.
 //
 // NOT a typed op: a body this handler cannot parse is IGNORED — the deployment
@@ -155,9 +164,7 @@ func (o ops) pagesDeploy(c *zip.Ctx) error {
 	}
 	// A Git-connected project builds from a branch (or its production branch when
 	// none is given); an absent branch is an empty POST.
-	var in struct {
-		Branch string `json:"branch"`
-	}
+	var in PagesDeploy
 	_ = json.Unmarshal(c.Body(), &in)
 	var body any
 	if b := strings.TrimSpace(in.Branch); b != "" {
