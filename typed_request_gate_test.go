@@ -31,6 +31,14 @@ var allowedRequestUses = map[string]string{
 		"carries. ONE function, which every op in the package asks; it fails closed off the HTTP path. Two ops " +
 		"then reuse the request it hands back for a second, non-identity reason: the CSRF issuer pins " +
 		"Cache-Control on its response, and embed-status reads the SuperAdmin claim.",
+	"apps/automations/automations.go": "auditHTTP — the tamper-evident record for an enable/disable is an " +
+		"ATTRIBUTION, and every fact it carries beyond the org (the validated user id, the email, " +
+		"org-admin-ness, the method, the path, the source IP, the request id) rides on the request, " +
+		"which principal.OrgFrom does not. The tenant itself is resolved with principal.OrgFrom " +
+		"(tenantOf, right beside it), never through the request. ONE function, so the two typed ops " +
+		"and the untyped CHANGE_STATUS operation share one seam; off the HTTP path there is no " +
+		"request and no actor, and an unattributable audit record is worse than none, so it appends " +
+		"nothing.",
 	"apps/cloudflare/cloudflare.go": "authWrite / resolveAccount / the acting-org stamp. A mutation on the " +
 		"org's Cloudflare account requires ORG ADMIN (X-User-IsOrgAdmin), which principal.OrgFrom does not " +
 		"carry; every served response stamps X-Hanzo-Org with the org whose token was used, so a per-org " +
