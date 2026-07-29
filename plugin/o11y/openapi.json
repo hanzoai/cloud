@@ -19,6 +19,32 @@
     }
   ],
   "paths": {
+    "/v1/o11y/alerts/last": {
+      "get": {
+        "operationId": "get_v1_o11y_alerts_last",
+        "tags": [
+          "o11y"
+        ]
+      }
+    },
+    "/v1/o11y/alerts/{receiver}": {
+      "post": {
+        "operationId": "post_v1_o11y_alerts_by_receiver",
+        "tags": [
+          "o11y"
+        ],
+        "parameters": [
+          {
+            "name": "receiver",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/v1/o11y/annotation-queues": {
       "get": {
         "operationId": "get_v1_o11y_annotation-queues",

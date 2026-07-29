@@ -187,12 +187,20 @@ type Schema struct {
 // they are. Schema is an open map because JSON Schema is an open vocabulary: the
 // router asserts `{"type": "string"}` and nothing more, while a typed op's field
 // can be any shape zip derives from its Go type.
+//
+// Example is that field's value in the op's own example. A BODYLESS op — every
+// GET and, since zip v1.18.0, every DELETE — has no requestBody for the doc
+// comment's Example to live in, so zip splits it across the parameters that
+// carry it. Without a name for it here the round-trip through [Typed] dropped
+// it, and every GET and DELETE reached the published reference with no example
+// at all.
 type Parameter struct {
-	Name        string         `json:"name"`
-	In          string         `json:"in"`
-	Required    bool           `json:"required"`
-	Description string         `json:"description,omitempty"`
-	Schema      map[string]any `json:"schema,omitempty"`
+	Name        string          `json:"name"`
+	In          string          `json:"in"`
+	Required    bool            `json:"required"`
+	Description string          `json:"description,omitempty"`
+	Schema      map[string]any  `json:"schema,omitempty"`
+	Example     json.RawMessage `json:"example,omitempty"`
 }
 
 // Operation is one operation.

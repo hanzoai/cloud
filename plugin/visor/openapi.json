@@ -1356,45 +1356,7 @@
           "agentBindings": {
             "description": "AgentBindings is one row per bound machine, emitted verbatim as vm reports\nit so vm stays the single source of truth for the binding shape.",
             "items": {
-              "properties": {
-                "agentName": {
-                  "type": "string"
-                },
-                "botVersion": {
-                  "type": "string"
-                },
-                "createdTime": {
-                  "type": "string"
-                },
-                "machineId": {
-                  "type": "string"
-                },
-                "message": {
-                  "type": "string"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "org": {
-                  "type": "string"
-                },
-                "owner": {
-                  "type": "string"
-                },
-                "provider": {
-                  "type": "string"
-                },
-                "publicIp": {
-                  "type": "string"
-                },
-                "status": {
-                  "type": "string"
-                },
-                "updatedTime": {
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/agentBinding"
             },
             "type": "array"
           }
@@ -1406,53 +1368,7 @@
           "bots": {
             "description": "Bots is one row per kind=bot machine, each joined with its agent binding\nwhen it has one.",
             "items": {
-              "properties": {
-                "agent": {
-                  "type": "string"
-                },
-                "binding": {
-                  "properties": {
-                    "agentName": {
-                      "type": "string"
-                    },
-                    "botVersion": {
-                      "type": "string"
-                    },
-                    "createdTime": {
-                      "type": "string"
-                    },
-                    "machineId": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "org": {
-                      "type": "string"
-                    },
-                    "owner": {
-                      "type": "string"
-                    },
-                    "provider": {
-                      "type": "string"
-                    },
-                    "publicIp": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    },
-                    "updatedTime": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/botView"
             },
             "type": "array"
           }
@@ -1465,45 +1381,106 @@
             "type": "string"
           },
           "binding": {
-            "properties": {
-              "agentName": {
-                "type": "string"
-              },
-              "botVersion": {
-                "type": "string"
-              },
-              "createdTime": {
-                "type": "string"
-              },
-              "machineId": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              },
-              "org": {
-                "type": "string"
-              },
-              "owner": {
-                "type": "string"
-              },
-              "provider": {
-                "type": "string"
-              },
-              "publicIp": {
-                "type": "string"
-              },
-              "status": {
-                "type": "string"
-              },
-              "updatedTime": {
-                "type": "string"
-              }
+            "$ref": "#/components/schemas/agentBinding"
+          }
+        },
+        "type": "object"
+      },
+      "byoGPU": {
+        "properties": {
+          "arch": {
+            "description": "native target, e.g. \"gfx1151\"",
+            "type": "string"
+          },
+          "memoryTotal": {
+            "description": "VRAM (or unified pool), e.g. \"122880 MiB\"",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "unified": {
+            "description": "unified CPU/GPU memory pool (APU / SoC)",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "byoWorker": {
+        "properties": {
+          "arch": {
+            "description": "Arch/CPUs/Memory are the connecting host's static CPU spec, mirrored from the\nregistration: Arch is runtime.GOARCH (amd64 | arm64), Memory is total RAM in\nBYTES — the same fields a code-linked run-target carries, so the /v1/fleet\nboard renders a linked node's arch + cores + RAM like any other unit.",
+            "type": "string"
+          },
+          "capabilities": {
+            "description": "Capabilities the worker advertises (\"studio.render\", \"engine.serve\"); Engine\nis present when it runs a hanzo-engine model server. Both additive + omitempty.",
+            "items": {
+              "type": "string"
             },
-            "type": "object"
+            "type": "array"
+          },
+          "cpuModel": {
+            "type": "string"
+          },
+          "cpus": {
+            "type": "integer"
+          },
+          "cuda": {
+            "type": "string"
+          },
+          "driver": {
+            "type": "string"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/engineAdvertisement"
+          },
+          "firstSeen": {
+            "type": "string"
+          },
+          "gpus": {
+            "items": {
+              "$ref": "#/components/schemas/byoGPU"
+            },
+            "type": "array"
+          },
+          "hip": {
+            "type": "string"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "jobQueue": {
+            "type": "string"
+          },
+          "lastHeartbeat": {
+            "type": "string"
+          },
+          "location": {
+            "description": "\"on-prem\" (BYO has no cloud region)",
+            "type": "string"
+          },
+          "memory": {
+            "type": "integer"
+          },
+          "os": {
+            "type": "string"
+          },
+          "provider": {
+            "description": "always \"byo\"",
+            "type": "string"
+          },
+          "rocm": {
+            "type": "string"
+          },
+          "status": {
+            "description": "online | offline",
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -1542,51 +1519,7 @@
         "properties": {
           "nodes": {
             "items": {
-              "properties": {
-                "createdTime": {
-                  "type": "string"
-                },
-                "gpu": {
-                  "type": "string"
-                },
-                "id": {
-                  "type": "string"
-                },
-                "image": {
-                  "type": "string"
-                },
-                "mem": {
-                  "type": "string"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "os": {
-                  "type": "string"
-                },
-                "privateIp": {
-                  "type": "string"
-                },
-                "provider": {
-                  "type": "string"
-                },
-                "publicIp": {
-                  "type": "string"
-                },
-                "region": {
-                  "type": "string"
-                },
-                "status": {
-                  "type": "string"
-                },
-                "type": {
-                  "type": "string"
-                },
-                "vcpu": {
-                  "type": "integer"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/machineView"
             },
             "type": "array"
           }
@@ -1598,72 +1531,7 @@
           "clusters": {
             "description": "Clusters is the merged fleet — kind \"managed\" for Visor-provisioned, \"byo\"\nfor an attached kubeconfig.",
             "items": {
-              "properties": {
-                "amdGpu": {
-                  "type": "integer"
-                },
-                "createdAt": {
-                  "type": "string"
-                },
-                "doClusterId": {
-                  "type": "string"
-                },
-                "doksClusterId": {
-                  "type": "string"
-                },
-                "kind": {
-                  "description": "Fleet fields (additive): \"managed\" (Visor-provisioned) vs \"byo\" (attached\nkubeconfig), and the live GPU inventory a BYO cluster reports.",
-                  "type": "string"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "nodeCount": {
-                  "type": "integer"
-                },
-                "nodePools": {
-                  "items": {
-                    "properties": {
-                      "autoScale": {
-                        "type": "boolean"
-                      },
-                      "count": {
-                        "type": "integer"
-                      },
-                      "maxNodes": {
-                        "type": "integer"
-                      },
-                      "minNodes": {
-                        "type": "integer"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "poolId": {
-                        "type": "string"
-                      },
-                      "size": {
-                        "type": "string"
-                      }
-                    },
-                    "type": "object"
-                  },
-                  "type": "array"
-                },
-                "nodeSize": {
-                  "type": "string"
-                },
-                "nvidiaGpu": {
-                  "type": "integer"
-                },
-                "region": {
-                  "type": "string"
-                },
-                "status": {
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/clusterView"
             },
             "type": "array"
           }
@@ -1696,30 +1564,7 @@
           },
           "nodePools": {
             "items": {
-              "properties": {
-                "autoScale": {
-                  "type": "boolean"
-                },
-                "count": {
-                  "type": "integer"
-                },
-                "maxNodes": {
-                  "type": "integer"
-                },
-                "minNodes": {
-                  "type": "integer"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "poolId": {
-                  "type": "string"
-                },
-                "size": {
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/nodePoolView"
             },
             "type": "array"
           },
@@ -1769,87 +1614,122 @@
         },
         "type": "object"
       },
+      "engineAdvertisement": {
+        "properties": {
+          "apis": {
+            "description": "[\"openai\",\"anthropic\"]",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "models": {
+            "description": "ids from the node's GET /v1/models",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "description": "\"ready\" | \"unreachable\"",
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "fleetBoard": {
         "properties": {
           "units": {
             "description": "Units is the union across sources — agent run-targets, BYO workers, BYO\nclusters and Visor machines — each row naming the source it came from.",
             "items": {
-              "properties": {
-                "host": {
-                  "type": "string"
-                },
-                "kind": {
-                  "type": "string"
-                },
-                "label": {
-                  "type": "string"
-                },
-                "metrics": {
-                  "properties": {
-                    "at": {
-                      "type": "string"
-                    },
-                    "gpuUtil": {
-                      "type": "number"
-                    },
-                    "load1": {
-                      "type": "number"
-                    },
-                    "memFree": {
-                      "type": "integer"
-                    },
-                    "memUsed": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "queued": {
-                  "type": "integer"
-                },
-                "running": {
-                  "description": "Running is what the unit is actively executing: agent sessions for a run-target,\nin-flight renders for a BYO GPU. Queued is the gpu-jobs backlog on this GPU's\nlane (BYO units only; an agent unit does not queue). Both come from the org's\ngpu-jobs queue for BYO units, overlaid in listFleet.",
-                  "type": "integer"
-                },
-                "sessions": {
-                  "type": "integer"
-                },
-                "source": {
-                  "type": "string"
-                },
-                "spec": {
-                  "properties": {
-                    "arch": {
-                      "type": "string"
-                    },
-                    "cpus": {
-                      "type": "integer"
-                    },
-                    "gpuModel": {
-                      "type": "string"
-                    },
-                    "gpus": {
-                      "type": "integer"
-                    },
-                    "memory": {
-                      "type": "integer"
-                    },
-                    "os": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "status": {
-                  "type": "string"
-                },
-                "unit": {
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/fleetUnit"
             },
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "fleetMetrics": {
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "gpuUtil": {
+            "type": "number"
+          },
+          "load1": {
+            "type": "number"
+          },
+          "memFree": {
+            "type": "integer"
+          },
+          "memUsed": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "fleetSpec": {
+        "properties": {
+          "arch": {
+            "type": "string"
+          },
+          "cpus": {
+            "type": "integer"
+          },
+          "gpuModel": {
+            "type": "string"
+          },
+          "gpus": {
+            "type": "integer"
+          },
+          "memory": {
+            "type": "integer"
+          },
+          "os": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "fleetUnit": {
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/fleetMetrics"
+          },
+          "queued": {
+            "type": "integer"
+          },
+          "running": {
+            "description": "Running is what the unit is actively executing: agent sessions for a run-target,\nin-flight renders for a BYO GPU. Queued is the gpu-jobs backlog on this GPU's\nlane (BYO units only; an agent unit does not queue). Both come from the org's\ngpu-jobs queue for BYO units, overlaid in listFleet.",
+            "type": "integer"
+          },
+          "sessions": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/fleetSpec"
+          },
+          "status": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -1866,44 +1746,92 @@
         },
         "type": "object"
       },
+      "gpuJob": {
+        "properties": {
+          "attempt": {
+            "type": "integer"
+          },
+          "closeTime": {
+            "type": "string"
+          },
+          "failureCause": {
+            "type": "string"
+          },
+          "gpu": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "lastHeartbeat": {
+            "type": "string"
+          },
+          "leaseExpiry": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "startTime": {
+            "type": "string"
+          },
+          "status": {
+            "description": "queued|running|completed|failed|canceled",
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "worker": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "gpuList": {
         "properties": {
           "gpus": {
             "description": "GPUs is every accelerator the org has, from Visor GPU droplets and from BYO\nworkers alike.",
             "items": {
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "location": {
-                  "type": "string"
-                },
-                "machine": {
-                  "type": "string"
-                },
-                "memory": {
-                  "type": "string"
-                },
-                "model": {
-                  "type": "string"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "provider": {
-                  "description": "Provider distinguishes a BYO accelerator (\"byo\") from a Visor-provisioned\none (the machine's real provider). Memory is VRAM when known (BYO reports it\nfrom nvidia-smi; Visor's machine object carries none, so it stays empty and\nthe UI renders \"—\"). Both are additive + omitempty: existing rows are\nunaffected and the console normalizer ignores fields it does not read.",
-                  "type": "string"
-                },
-                "region": {
-                  "type": "string"
-                },
-                "status": {
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/gpuView"
             },
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "gpuView": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "machine": {
+            "type": "string"
+          },
+          "memory": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider distinguishes a BYO accelerator (\"byo\") from a Visor-provisioned\none (the machine's real provider). Memory is VRAM when known (BYO reports it\nfrom nvidia-smi; Visor's machine object carries none, so it stays empty and\nthe UI renders \"—\"). Both are additive + omitempty: existing rows are\nunaffected and the console normalizer ignores fields it does not read.",
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -1943,49 +1871,7 @@
           "jobs": {
             "description": "Jobs is the queue, most-recent-first. Every LIVE job is present; terminal\nhistory is capped, so a busy org's running work is never crowded out.",
             "items": {
-              "properties": {
-                "attempt": {
-                  "type": "integer"
-                },
-                "closeTime": {
-                  "type": "string"
-                },
-                "failureCause": {
-                  "type": "string"
-                },
-                "gpu": {
-                  "type": "string"
-                },
-                "id": {
-                  "type": "string"
-                },
-                "label": {
-                  "type": "string"
-                },
-                "lastHeartbeat": {
-                  "type": "string"
-                },
-                "leaseExpiry": {
-                  "type": "string"
-                },
-                "runId": {
-                  "type": "string"
-                },
-                "startTime": {
-                  "type": "string"
-                },
-                "status": {
-                  "description": "queued|running|completed|failed|canceled",
-                  "type": "string"
-                },
-                "type": {
-                  "type": "string"
-                },
-                "worker": {
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/gpuJob"
             },
             "type": "array"
           }
@@ -1997,51 +1883,7 @@
           "machines": {
             "description": "Machines is every machine the org has: Visor-provisioned and BYO together.",
             "items": {
-              "properties": {
-                "createdTime": {
-                  "type": "string"
-                },
-                "gpu": {
-                  "type": "string"
-                },
-                "id": {
-                  "type": "string"
-                },
-                "image": {
-                  "type": "string"
-                },
-                "mem": {
-                  "type": "string"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "os": {
-                  "type": "string"
-                },
-                "privateIp": {
-                  "type": "string"
-                },
-                "provider": {
-                  "type": "string"
-                },
-                "publicIp": {
-                  "type": "string"
-                },
-                "region": {
-                  "type": "string"
-                },
-                "status": {
-                  "type": "string"
-                },
-                "type": {
-                  "type": "string"
-                },
-                "vcpu": {
-                  "type": "integer"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/machineView"
             },
             "type": "array"
           }
@@ -2100,51 +1942,7 @@
           "nodes": {
             "description": "Nodes is one row per worker node, in the SAME machineView shape the machines\nsurface emits — a node IS a machine.",
             "items": {
-              "properties": {
-                "createdTime": {
-                  "type": "string"
-                },
-                "gpu": {
-                  "type": "string"
-                },
-                "id": {
-                  "type": "string"
-                },
-                "image": {
-                  "type": "string"
-                },
-                "mem": {
-                  "type": "string"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "os": {
-                  "type": "string"
-                },
-                "privateIp": {
-                  "type": "string"
-                },
-                "provider": {
-                  "type": "string"
-                },
-                "publicIp": {
-                  "type": "string"
-                },
-                "region": {
-                  "type": "string"
-                },
-                "status": {
-                  "type": "string"
-                },
-                "type": {
-                  "type": "string"
-                },
-                "vcpu": {
-                  "type": "integer"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/machineView"
             },
             "type": "array"
           }
@@ -2278,59 +2076,62 @@
           "samples": {
             "description": "Samples are the readings, OLDEST first — the order a chart plots.",
             "items": {
-              "properties": {
-                "at": {
-                  "type": "string"
-                },
-                "costCents": {
-                  "type": "integer"
-                },
-                "cpus": {
-                  "type": "integer"
-                },
-                "gpuModel": {
-                  "type": "string"
-                },
-                "gpuUtil": {
-                  "type": "number"
-                },
-                "gpus": {
-                  "type": "integer"
-                },
-                "host": {
-                  "type": "string"
-                },
-                "kind": {
-                  "type": "string"
-                },
-                "load1": {
-                  "type": "number"
-                },
-                "load15": {
-                  "type": "number"
-                },
-                "load5": {
-                  "type": "number"
-                },
-                "memFree": {
-                  "type": "integer"
-                },
-                "memUsed": {
-                  "type": "integer"
-                },
-                "memory": {
-                  "type": "integer"
-                },
-                "source": {
-                  "type": "string"
-                },
-                "unit": {
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/sampleView"
             },
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "sampleView": {
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "costCents": {
+            "type": "integer"
+          },
+          "cpus": {
+            "type": "integer"
+          },
+          "gpuModel": {
+            "type": "string"
+          },
+          "gpuUtil": {
+            "type": "number"
+          },
+          "gpus": {
+            "type": "integer"
+          },
+          "host": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "load1": {
+            "type": "number"
+          },
+          "load15": {
+            "type": "number"
+          },
+          "load5": {
+            "type": "number"
+          },
+          "memFree": {
+            "type": "integer"
+          },
+          "memUsed": {
+            "type": "integer"
+          },
+          "memory": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -2340,123 +2141,7 @@
           "workers": {
             "description": "Workers is one row per connected BYO machine, each carrying the host's own\nreport (GPUs, driver versions, capabilities) rather than a normalized view.",
             "items": {
-              "properties": {
-                "arch": {
-                  "description": "Arch/CPUs/Memory are the connecting host's static CPU spec, mirrored from the\nregistration: Arch is runtime.GOARCH (amd64 | arm64), Memory is total RAM in\nBYTES — the same fields a code-linked run-target carries, so the /v1/fleet\nboard renders a linked node's arch + cores + RAM like any other unit.",
-                  "type": "string"
-                },
-                "capabilities": {
-                  "description": "Capabilities the worker advertises (\"studio.render\", \"engine.serve\"); Engine\nis present when it runs a hanzo-engine model server. Both additive + omitempty.",
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
-                "cpuModel": {
-                  "type": "string"
-                },
-                "cpus": {
-                  "type": "integer"
-                },
-                "cuda": {
-                  "type": "string"
-                },
-                "driver": {
-                  "type": "string"
-                },
-                "engine": {
-                  "properties": {
-                    "apis": {
-                      "description": "[\"openai\",\"anthropic\"]",
-                      "items": {
-                        "type": "string"
-                      },
-                      "type": "array"
-                    },
-                    "models": {
-                      "description": "ids from the node's GET /v1/models",
-                      "items": {
-                        "type": "string"
-                      },
-                      "type": "array"
-                    },
-                    "status": {
-                      "description": "\"ready\" | \"unreachable\"",
-                      "type": "string"
-                    },
-                    "url": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "firstSeen": {
-                  "type": "string"
-                },
-                "gpus": {
-                  "items": {
-                    "properties": {
-                      "arch": {
-                        "description": "native target, e.g. \"gfx1151\"",
-                        "type": "string"
-                      },
-                      "memoryTotal": {
-                        "description": "VRAM (or unified pool), e.g. \"122880 MiB\"",
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "unified": {
-                        "description": "unified CPU/GPU memory pool (APU / SoC)",
-                        "type": "boolean"
-                      }
-                    },
-                    "type": "object"
-                  },
-                  "type": "array"
-                },
-                "hip": {
-                  "type": "string"
-                },
-                "hostname": {
-                  "type": "string"
-                },
-                "id": {
-                  "type": "string"
-                },
-                "jobQueue": {
-                  "type": "string"
-                },
-                "lastHeartbeat": {
-                  "type": "string"
-                },
-                "location": {
-                  "description": "\"on-prem\" (BYO has no cloud region)",
-                  "type": "string"
-                },
-                "memory": {
-                  "type": "integer"
-                },
-                "os": {
-                  "type": "string"
-                },
-                "provider": {
-                  "description": "always \"byo\"",
-                  "type": "string"
-                },
-                "rocm": {
-                  "type": "string"
-                },
-                "status": {
-                  "description": "online | offline",
-                  "type": "string"
-                },
-                "version": {
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/byoWorker"
             },
             "type": "array"
           }
