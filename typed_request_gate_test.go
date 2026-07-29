@@ -31,6 +31,13 @@ var allowedRequestUses = map[string]string{
 		"carries. ONE function, which every op in the package asks; it fails closed off the HTTP path. Two ops " +
 		"then reuse the request it hands back for a second, non-identity reason: the CSRF issuer pins " +
 		"Cache-Control on its response, and embed-status reads the SuperAdmin claim.",
+	"apps/cloudflare/cloudflare.go": "authWrite / resolveAccount / the acting-org stamp. A mutation on the " +
+		"org's Cloudflare account requires ORG ADMIN (X-User-IsOrgAdmin), which principal.OrgFrom does not " +
+		"carry; every served response stamps X-Hanzo-Org with the org whose token was used, so a per-org " +
+		"caller can prove no tenant comingling; and the ?account= override is read off the URL rather than " +
+		"modeled as an In field, because zip binds an In field from the BODY too and this route has never " +
+		"accepted an account there. authWrite fails closed off the HTTP path: no request, no attested " +
+		"caller, no mutation.",
 	"apps/search/search.go": "Query resolves the tenant from the validated principal at the top of the op.",
 	"apps/ingress/ingress.go": "admin — the SuperAdmin gate on the fleet EDGE's config. The edge is platform " +
 		"infrastructure (AC-6), so every /v1/ingress op requires SuperAdmin, which is X-User-IsAdmin — a claim " +

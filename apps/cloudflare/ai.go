@@ -79,8 +79,14 @@ type aiUsage struct {
 
 // aiRun runs a Workers AI model and relays the result, metering the BYO fee + emitting
 // a gen_ai span. See the file header for the usage/o11y/payer contract.
-func aiRun(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, org, err := authClient(s, c)
+//
+// NOT a typed op, for two independent reasons: the request body is whatever the
+// chosen model takes (a prompt, chat messages, a base64 audio clip) and is forwarded
+// verbatim, and the response is frequently NOT JSON — an image or audio model
+// answers bytes under Cloudflare's own content type, which a typed op cannot emit.
+func (o ops) aiRun(c *zip.Ctx) error {
+	s := o.s
+	cl, org, err := o.authClient(c.Context())
 	if err != nil {
 		return err
 	}
@@ -115,7 +121,7 @@ func aiRun(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 
 	// Only once the gate passes: resolve the account (may discover) and run.
-	acct, err := cl.resolveAccount(c.Context(), org, c)
+	acct, err := cl.resolveAccount(c.Context(), org)
 	if err != nil {
 		return err
 	}
