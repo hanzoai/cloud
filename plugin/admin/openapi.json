@@ -32,7 +32,8 @@
             "description": "Range is the lower time bound: 24h, 7d or 30d. Anything else reads as the\nboard's own default.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "7d"
           }
         ],
         "responses": {
@@ -79,7 +80,8 @@
             "description": "Range is the lower time bound: 24h, 7d or 30d. Anything else reads as the\nboard's own default.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "30d"
           }
         ],
         "responses": {
@@ -129,7 +131,8 @@
             "description": "Owner is the org whose rows to read. Defaults to the admin org, which owns the\nplatform's roles and applications.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "admin"
           },
           {
             "name": "p",
@@ -138,7 +141,8 @@
             "description": "Page is the 1-based page number. Forwarded only when set — IAM applies its own\ndefault otherwise.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "1"
           },
           {
             "name": "pageSize",
@@ -147,7 +151,8 @@
             "description": "PageSize is rows per page. Forwarded only when set.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "50"
           }
         ],
         "responses": {
@@ -192,7 +197,8 @@
             "description": "Org restricts the trail to one tenant.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "acme"
           },
           {
             "name": "sub",
@@ -210,7 +216,8 @@
             "description": "Action restricts it to one action name, e.g. \"admin.waitlist.grant\".",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "admin.waitlist.grant"
           },
           {
             "name": "resource",
@@ -246,7 +253,8 @@
             "description": "Since is the inclusive lower time bound, RFC3339. An unparseable value is\nignored rather than refused — one malformed filter must not hide the trail.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "2026-07-01T00:00:00Z"
           },
           {
             "name": "until",
@@ -264,7 +272,8 @@
             "description": "PageSize is rows per page, default 100.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "50"
           },
           {
             "name": "p",
@@ -453,7 +462,8 @@
             "description": "Kind narrows to one workload class (bot | machine | cluster | nodepool |\ncontainer | function | …). An OPEN spectrum matched as a plain string, lowercased\nto the warehouse's convention; empty means every kind.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "bot"
           },
           {
             "name": "org",
@@ -462,7 +472,8 @@
             "description": "Org narrows to one tenant. Empty means every tenant — this board is\ncross-tenant by nature.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "acme"
           },
           {
             "name": "range",
@@ -471,7 +482,8 @@
             "description": "Range is the lower time bound: 24h, 7d or 30d. Anything else reads as 30d.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "7d"
           }
         ],
         "responses": {
@@ -523,7 +535,10 @@
                 "reason": "design partner credit"
               },
               "schema": {
-                "$ref": "#/components/schemas/creditGrantIn"
+                "additionalProperties": {
+                  "type": "object"
+                },
+                "type": "object"
               }
             }
           },
@@ -1002,7 +1017,8 @@
             "description": "Result filters by outcome: \"success\" or \"error\". Empty returns both, which is\nthe point of this view — a refused grant is as interesting as a granted one.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "success"
           },
           {
             "name": "limit",
@@ -1011,7 +1027,8 @@
             "description": "Limit caps the rows returned. Default 200.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "50"
           }
         ],
         "responses": {
@@ -1113,7 +1130,8 @@
             "description": "Refresh, when present, forces a full re-scan instead of serving the cached\nsnapshot. Every MUTATION re-scans regardless — this is only for the reader.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "1"
           }
         ],
         "responses": {
@@ -1766,7 +1784,8 @@
             "description": "Range is the lower time bound: 24h, 7d or 30d. Anything else reads as the\nboard's own default.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "7d"
           }
         ],
         "responses": {
@@ -1916,7 +1935,8 @@
             "description": "Tier matches the derived infra grouping (cloud|data|edge|daemon|paas|app).",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "data"
           },
           {
             "name": "env",
@@ -1925,7 +1945,8 @@
             "description": "Env matches the lifecycle namespace (main|test|dev).",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "main"
           }
         ],
         "responses": {
@@ -2139,7 +2160,8 @@
             "description": "Owner is the org whose rows to read. Defaults to the admin org, which owns the\nplatform's roles and applications.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "admin"
           },
           {
             "name": "p",
@@ -2148,7 +2170,8 @@
             "description": "Page is the 1-based page number. Forwarded only when set — IAM applies its own\ndefault otherwise.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "1"
           },
           {
             "name": "pageSize",
@@ -2157,7 +2180,8 @@
             "description": "PageSize is rows per page. Forwarded only when set.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "50"
           }
         ],
         "responses": {
@@ -2356,7 +2380,8 @@
             "description": "Org is the tenant to act on. Required for a SuperAdmin — they must name their\ntarget; ignored for a white-label admin, who always acts on their own org.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "acme"
           },
           {
             "name": "id",
@@ -2459,7 +2484,8 @@
             "description": "ID is the cap to edit or remove, from the path. Unused by the list and create ops.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cap_1"
           },
           {
             "name": "org",
@@ -2468,7 +2494,8 @@
             "description": "Org is the tenant to act on. Required for a SuperAdmin — they must name their\ntarget; ignored for a white-label admin, who always acts on their own org.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "acme"
           }
         ],
         "responses": {
@@ -2687,7 +2714,8 @@
             "description": "Org reads ONE tenant's month-to-date total instead of the fleet sum. Honoured\nfor a SuperAdmin only — a white-label admin always reads their own org.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "acme"
           }
         ],
         "responses": {
@@ -2733,7 +2761,8 @@
             "description": "From is the inclusive start of the window. Unparseable or absent, together with\nTo, falls back to the last 30 days.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "2026-07-01T00:00:00Z"
           },
           {
             "name": "to",
@@ -2742,7 +2771,8 @@
             "description": "To is the exclusive end of the window.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "2026-07-27T00:00:00Z"
           }
         ],
         "responses": {
@@ -2789,7 +2819,8 @@
             "description": "Org narrows the directory to ONE tenant. Honoured for a SuperAdmin only — a\nwhite-label admin is pinned to their own org and this is ignored.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "acme"
           },
           {
             "name": "q",
@@ -2798,7 +2829,8 @@
             "description": "Query is a free-text filter, matched by IAM as a \"contains\" over the user name.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "ada"
           },
           {
             "name": "p",
@@ -2807,7 +2839,8 @@
             "description": "Page is the 1-based page number. Defaults to \"1\"; IAM returns zero rows AND a\nzero total when it is unset, so this layer never leaves it empty.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "1"
           },
           {
             "name": "pageSize",
@@ -2816,7 +2849,8 @@
             "description": "PageSize is rows per page. Defaults to \"200\", the shared admin page size.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "50"
           }
         ],
         "responses": {
@@ -2868,7 +2902,8 @@
             "description": "Waitlist is the waitlist slug to read (e.g. \"chat\"). The engine decides what an\nempty slug means.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "chat"
           },
           {
             "name": "page",
@@ -2877,7 +2912,8 @@
             "description": "Page is the 1-based page number.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "1"
           },
           {
             "name": "pageSize",
@@ -2886,7 +2922,8 @@
             "description": "PageSize is entries per page.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "50"
           }
         ],
         "responses": {
@@ -2967,34 +3004,37 @@
   },
   "components": {
     "schemas": {
+      "AccessChange": {
+        "properties": {
+          "affected": {
+            "description": "Affected lists the usernames that were updated.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "failed": {
+            "description": "Failed lists the usernames that were NOT updated. Non-empty means the org is in\na mixed state and the action should be retried.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "org": {
+            "description": "Org is the tenant acted on.",
+            "type": "string"
+          },
+          "suspended": {
+            "description": "Suspended is the state applied: true for suspend, false for reactivate.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "AccessOut": {
         "properties": {
           "data": {
-            "properties": {
-              "affected": {
-                "description": "Affected lists the usernames that were updated.",
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              "failed": {
-                "description": "Failed lists the usernames that were NOT updated. Non-empty means the org is in\na mixed state and the action should be retried.",
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              "org": {
-                "description": "Org is the tenant acted on.",
-                "type": "string"
-              },
-              "suspended": {
-                "description": "Suspended is the state applied: true for suspend, false for reactivate.",
-                "type": "boolean"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/AccessChange"
           },
           "msg": {
             "type": "string"
@@ -3017,26 +3057,105 @@
       "BackfillOut": {
         "properties": {
           "data": {
-            "properties": {
-              "entryId": {
-                "description": "EntryID is the finance ledger entry created, or \"\" when the balance was\nnon-positive and there was nothing to carry.",
-                "type": "string"
-              },
-              "migratedCents": {
-                "description": "MigratedCents is the balance carried across, read from commerce BEFORE the move.",
-                "type": "integer"
-              },
-              "org": {
-                "description": "Org is the tenant migrated.",
-                "type": "string"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/Backfilled"
           },
           "msg": {
             "type": "string"
           },
           "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Backfilled": {
+        "properties": {
+          "entryId": {
+            "description": "EntryID is the finance ledger entry created, or \"\" when the balance was\nnon-positive and there was nothing to carry.",
+            "type": "string"
+          },
+          "migratedCents": {
+            "description": "MigratedCents is the balance carried across, read from commerce BEFORE the move.",
+            "type": "integer"
+          },
+          "org": {
+            "description": "Org is the tenant migrated.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BoardView": {
+        "properties": {
+          "auditUrl": {
+            "type": "string"
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "manageUrl": {
+            "type": "string"
+          },
+          "switches": {
+            "items": {
+              "$ref": "#/components/schemas/SwitchView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "Cluster": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "idlePVCs": {
+            "type": "integer"
+          },
+          "monthlyCents": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nodePools": {
+            "type": "integer"
+          },
+          "nodes": {
+            "type": "integer"
+          },
+          "pods": {
+            "type": "integer"
+          },
+          "pools": {
+            "items": {
+              "$ref": "#/components/schemas/NodePool"
+            },
+            "type": "array"
+          },
+          "pvcs": {
+            "type": "integer"
+          },
+          "pvs": {
+            "type": "integer"
+          },
+          "region": {
+            "type": "string"
+          },
+          "scanError": {
+            "type": "string"
+          },
+          "scanned": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          },
+          "version": {
             "type": "string"
           }
         },
@@ -3059,98 +3178,81 @@
         },
         "type": "object"
       },
+      "Cost": {
+        "properties": {
+          "dropletsMonthly": {
+            "type": "integer"
+          },
+          "loadBalancersMonthly": {
+            "type": "integer"
+          },
+          "reclaimableMonthly": {
+            "type": "integer"
+          },
+          "totalMonthly": {
+            "type": "integer"
+          },
+          "volumesMonthly": {
+            "type": "integer"
+          },
+          "wastedMonthly": {
+            "description": "WastedMonthly is what the fleet pays every month for provisioned-but-empty space on\nthe volumes a kubelet actually measured.\n\nIt is NOT ReclaimableMonthly and must never be added to it. Reclaimable is money a\nbutton on this board collects, by deleting volumes proven to belong to no one.\nWasted is money locked inside volumes that are IN USE and holding live data:\nDigitalOcean can only ever grow a volume, so collecting it means copying a database\nonto a smaller one. See shrinkRecipe.\n\nIt is also a LOWER BOUND — unmeasured volumes contribute nothing.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "CustomerDetailData": {
+        "properties": {
+          "apiKeys": {
+            "type": "integer"
+          },
+          "balanceCents": {
+            "type": "integer"
+          },
+          "created": {
+            "type": "string"
+          },
+          "display": {
+            "type": "string"
+          },
+          "mrrCents": {
+            "type": "integer"
+          },
+          "org": {
+            "type": "string"
+          },
+          "ownerEmail": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "spendCents": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "transactions": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerTxn"
+            },
+            "type": "array"
+          },
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerUser"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "CustomerDetailOut": {
         "properties": {
           "data": {
-            "properties": {
-              "apiKeys": {
-                "type": "integer"
-              },
-              "balanceCents": {
-                "type": "integer"
-              },
-              "created": {
-                "type": "string"
-              },
-              "display": {
-                "type": "string"
-              },
-              "mrrCents": {
-                "type": "integer"
-              },
-              "org": {
-                "type": "string"
-              },
-              "ownerEmail": {
-                "type": "string"
-              },
-              "plan": {
-                "type": "string"
-              },
-              "spendCents": {
-                "type": "integer"
-              },
-              "status": {
-                "type": "string"
-              },
-              "transactions": {
-                "items": {
-                  "properties": {
-                    "cents": {
-                      "type": "integer"
-                    },
-                    "currency": {
-                      "type": "string"
-                    },
-                    "id": {
-                      "type": "string"
-                    },
-                    "notes": {
-                      "type": "string"
-                    },
-                    "time": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "description": "\"deposit\" (credit) | \"withdraw\" (usage)",
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "users": {
-                "items": {
-                  "properties": {
-                    "created": {
-                      "type": "string"
-                    },
-                    "email": {
-                      "type": "string"
-                    },
-                    "forbidden": {
-                      "type": "boolean"
-                    },
-                    "hasApiKey": {
-                      "type": "boolean"
-                    },
-                    "isAdmin": {
-                      "type": "boolean"
-                    },
-                    "lastSignin": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/CustomerDetailData"
           },
           "msg": {
             "type": "string"
@@ -3161,47 +3263,100 @@
         },
         "type": "object"
       },
+      "CustomerRow": {
+        "properties": {
+          "balanceCents": {
+            "type": "integer"
+          },
+          "created": {
+            "type": "string"
+          },
+          "display": {
+            "type": "string"
+          },
+          "lastActive": {
+            "type": "string"
+          },
+          "mrrCents": {
+            "type": "integer"
+          },
+          "org": {
+            "type": "string"
+          },
+          "ownerEmail": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "spendCents": {
+            "type": "integer"
+          },
+          "status": {
+            "description": "\"active\" | \"suspended\"",
+            "type": "string"
+          },
+          "users": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "CustomerTxn": {
+        "properties": {
+          "cents": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "time": {
+            "type": "string"
+          },
+          "type": {
+            "description": "\"deposit\" (credit) | \"withdraw\" (usage)",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CustomerUser": {
+        "properties": {
+          "created": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "forbidden": {
+            "type": "boolean"
+          },
+          "hasApiKey": {
+            "type": "boolean"
+          },
+          "isAdmin": {
+            "type": "boolean"
+          },
+          "lastSignin": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "CustomersOut": {
         "properties": {
           "data": {
             "items": {
-              "properties": {
-                "balanceCents": {
-                  "type": "integer"
-                },
-                "created": {
-                  "type": "string"
-                },
-                "display": {
-                  "type": "string"
-                },
-                "lastActive": {
-                  "type": "string"
-                },
-                "mrrCents": {
-                  "type": "integer"
-                },
-                "org": {
-                  "type": "string"
-                },
-                "ownerEmail": {
-                  "type": "string"
-                },
-                "plan": {
-                  "type": "string"
-                },
-                "spendCents": {
-                  "type": "integer"
-                },
-                "status": {
-                  "description": "\"active\" | \"suspended\"",
-                  "type": "string"
-                },
-                "users": {
-                  "type": "integer"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/CustomerRow"
             },
             "type": "array"
           },
@@ -3212,6 +3367,55 @@
             "type": "string"
           },
           "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DoCost": {
+        "properties": {
+          "accountBalanceCents": {
+            "type": "integer"
+          },
+          "avgDailyBurnCents": {
+            "type": "integer"
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "creditRemainingCents": {
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          },
+          "generatedAt": {
+            "type": "string"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/DoHistoryPoint"
+            },
+            "type": "array"
+          },
+          "monthToDateSpendCents": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "DoHistoryPoint": {
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "date": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "type": {
             "type": "string"
           }
         },
@@ -3234,163 +3438,127 @@
         },
         "type": "object"
       },
+      "FinanceCost": {
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "digitalocean": {
+            "$ref": "#/components/schemas/DoCost"
+          },
+          "error": {
+            "type": "string"
+          },
+          "period": {
+            "type": "string"
+          },
+          "totalCents": {
+            "type": "integer"
+          },
+          "vendors": {
+            "items": {
+              "$ref": "#/components/schemas/Vendor"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "FinanceData": {
+        "properties": {
+          "cost": {
+            "$ref": "#/components/schemas/FinanceCost"
+          },
+          "derived": {
+            "$ref": "#/components/schemas/FinanceDerived"
+          },
+          "generatedAt": {
+            "type": "string"
+          },
+          "revenue": {
+            "$ref": "#/components/schemas/FinanceRevenue"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceStatus"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "FinanceDerived": {
+        "properties": {
+          "grossMarginCents": {
+            "type": "integer"
+          },
+          "grossMarginPct": {
+            "type": "number"
+          },
+          "profitable": {
+            "type": "boolean"
+          },
+          "runwayDays": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
       "FinanceOut": {
         "properties": {
           "data": {
-            "properties": {
-              "cost": {
-                "properties": {
-                  "configured": {
-                    "type": "boolean"
-                  },
-                  "digitalocean": {
-                    "properties": {
-                      "accountBalanceCents": {
-                        "type": "integer"
-                      },
-                      "avgDailyBurnCents": {
-                        "type": "integer"
-                      },
-                      "configured": {
-                        "type": "boolean"
-                      },
-                      "creditRemainingCents": {
-                        "type": "integer"
-                      },
-                      "error": {
-                        "type": "string"
-                      },
-                      "generatedAt": {
-                        "type": "string"
-                      },
-                      "history": {
-                        "items": {
-                          "properties": {
-                            "amountCents": {
-                              "type": "integer"
-                            },
-                            "date": {
-                              "type": "string"
-                            },
-                            "description": {
-                              "type": "string"
-                            },
-                            "type": {
-                              "type": "string"
-                            }
-                          },
-                          "type": "object"
-                        },
-                        "type": "array"
-                      },
-                      "monthToDateSpendCents": {
-                        "type": "integer"
-                      }
-                    },
-                    "type": "object"
-                  },
-                  "error": {
-                    "type": "string"
-                  },
-                  "period": {
-                    "type": "string"
-                  },
-                  "totalCents": {
-                    "type": "integer"
-                  },
-                  "vendors": {
-                    "items": {
-                      "properties": {
-                        "amountCents": {
-                          "type": "integer"
-                        },
-                        "note": {
-                          "type": "string"
-                        },
-                        "service": {
-                          "type": "string"
-                        },
-                        "source": {
-                          "type": "string"
-                        },
-                        "vendor": {
-                          "type": "string"
-                        }
-                      },
-                      "type": "object"
-                    },
-                    "type": "array"
-                  }
-                },
-                "type": "object"
-              },
-              "derived": {
-                "properties": {
-                  "grossMarginCents": {
-                    "type": "integer"
-                  },
-                  "grossMarginPct": {
-                    "type": "number"
-                  },
-                  "profitable": {
-                    "type": "boolean"
-                  },
-                  "runwayDays": {
-                    "type": "number"
-                  }
-                },
-                "type": "object"
-              },
-              "generatedAt": {
-                "type": "string"
-              },
-              "revenue": {
-                "properties": {
-                  "configured": {
-                    "type": "boolean"
-                  },
-                  "creditsConsumedCents": {
-                    "type": "integer"
-                  },
-                  "mrrCents": {
-                    "type": "integer"
-                  },
-                  "totalRevenueCents": {
-                    "type": "integer"
-                  }
-                },
-                "type": "object"
-              },
-              "sources": {
-                "items": {
-                  "properties": {
-                    "at": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "rows": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/FinanceData"
           },
           "msg": {
             "type": "string"
           },
           "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "FinanceRevenue": {
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "creditsConsumedCents": {
+            "type": "integer"
+          },
+          "mrrCents": {
+            "type": "integer"
+          },
+          "totalRevenueCents": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Finding": {
+        "properties": {
+          "cluster": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "monthlyCents": {
+            "type": "integer"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          },
+          "title": {
             "type": "string"
           }
         },
@@ -3428,33 +3596,7 @@
       "GrantOut": {
         "properties": {
           "data": {
-            "properties": {
-              "balanceCents": {
-                "type": "integer"
-              },
-              "balanceExact": {
-                "type": "string"
-              },
-              "currency": {
-                "type": "string"
-              },
-              "grantedCents": {
-                "type": "integer"
-              },
-              "org": {
-                "type": "string"
-              },
-              "source": {
-                "type": "string"
-              },
-              "subject": {
-                "type": "string"
-              },
-              "transactionId": {
-                "type": "string"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/GrantResult"
           },
           "msg": {
             "type": "string"
@@ -3465,43 +3607,75 @@
         },
         "type": "object"
       },
+      "GrantResult": {
+        "properties": {
+          "balanceCents": {
+            "type": "integer"
+          },
+          "balanceExact": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "grantedCents": {
+            "type": "integer"
+          },
+          "org": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "transactionId": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GrantRow": {
+        "properties": {
+          "actor": {
+            "description": "staff email (or sub) who issued it",
+            "type": "string"
+          },
+          "amountCents": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "result": {
+            "description": "success | error",
+            "type": "string"
+          },
+          "source": {
+            "description": "\"trial\" | \"prepaid\"",
+            "type": "string"
+          },
+          "transactionId": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "GrantsOut": {
         "properties": {
           "data": {
             "items": {
-              "properties": {
-                "actor": {
-                  "description": "staff email (or sub) who issued it",
-                  "type": "string"
-                },
-                "amountCents": {
-                  "type": "integer"
-                },
-                "createdAt": {
-                  "type": "string"
-                },
-                "currency": {
-                  "type": "string"
-                },
-                "org": {
-                  "type": "string"
-                },
-                "reason": {
-                  "type": "string"
-                },
-                "result": {
-                  "description": "success | error",
-                  "type": "string"
-                },
-                "source": {
-                  "description": "\"trial\" | \"prepaid\"",
-                  "type": "string"
-                },
-                "transactionId": {
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/GrantRow"
             },
             "type": "array"
           },
@@ -3509,6 +3683,58 @@
             "type": "integer"
           },
           "msg": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Integrity": {
+        "properties": {
+          "brokenAt": {
+            "type": "integer"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "headHash": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "InvoiceRow": {
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "display": {
+            "type": "string"
+          },
+          "due": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "issued": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          },
+          "org": {
             "type": "string"
           },
           "status": {
@@ -3521,36 +3747,7 @@
         "properties": {
           "data": {
             "items": {
-              "properties": {
-                "amountCents": {
-                  "type": "integer"
-                },
-                "currency": {
-                  "type": "string"
-                },
-                "display": {
-                  "type": "string"
-                },
-                "due": {
-                  "type": "string"
-                },
-                "id": {
-                  "type": "string"
-                },
-                "issued": {
-                  "type": "string"
-                },
-                "number": {
-                  "type": "string"
-                },
-                "org": {
-                  "type": "string"
-                },
-                "status": {
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/InvoiceRow"
             },
             "type": "array"
           },
@@ -3566,222 +3763,69 @@
         },
         "type": "object"
       },
+      "LoadBalancer": {
+        "properties": {
+          "blockedReason": {
+            "type": "string"
+          },
+          "cluster": {
+            "type": "string"
+          },
+          "deletable": {
+            "type": "boolean"
+          },
+          "droplets": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "monthlyCents": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "service": {
+            "description": "Service is the `namespace/name` of the live type=LoadBalancer Service that claims\nthis load balancer, proven from the cluster scan. Non-empty means IN USE.",
+            "type": "string"
+          },
+          "sizeUnit": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MetricsData": {
+        "properties": {
+          "SaaSMetrics": {
+            "$ref": "#/components/schemas/SaaSMetrics"
+          },
+          "generatedAt": {
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceStatus"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "MetricsOut": {
         "properties": {
           "data": {
-            "properties": {
-              "SaaSMetrics": {
-                "properties": {
-                  "asOf": {
-                    "type": "string"
-                  },
-                  "currency": {
-                    "type": "string"
-                  },
-                  "customers": {
-                    "items": {
-                      "properties": {
-                        "category": {
-                          "type": "string"
-                        },
-                        "mrrCents": {
-                          "type": "integer"
-                        },
-                        "org": {
-                          "type": "string"
-                        },
-                        "plan": {
-                          "type": "string"
-                        },
-                        "seats": {
-                          "type": "integer"
-                        },
-                        "since": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "type": "string"
-                        },
-                        "usageCents": {
-                          "type": "integer"
-                        }
-                      },
-                      "type": "object"
-                    },
-                    "type": "array"
-                  },
-                  "gaps": {
-                    "items": {
-                      "type": "string"
-                    },
-                    "type": "array"
-                  },
-                  "orgs": {
-                    "type": "integer"
-                  },
-                  "revenue": {
-                    "properties": {
-                      "activeSubscriptions": {
-                        "type": "integer"
-                      },
-                      "arrCents": {
-                        "type": "integer"
-                      },
-                      "byCategory": {
-                        "items": {
-                          "properties": {
-                            "category": {
-                              "type": "string"
-                            },
-                            "mrrCents": {
-                              "type": "integer"
-                            },
-                            "subscriptions": {
-                              "type": "integer"
-                            }
-                          },
-                          "type": "object"
-                        },
-                        "type": "array"
-                      },
-                      "churnedMrrCents": {
-                        "type": "integer"
-                      },
-                      "mrrCents": {
-                        "type": "integer"
-                      },
-                      "netNewMrrCents": {
-                        "type": "integer"
-                      },
-                      "newMrrCents": {
-                        "type": "integer"
-                      },
-                      "payingCustomers": {
-                        "type": "integer"
-                      },
-                      "trials": {
-                        "type": "integer"
-                      }
-                    },
-                    "type": "object"
-                  },
-                  "subscriptions": {
-                    "properties": {
-                      "byPlan": {
-                        "items": {
-                          "properties": {
-                            "active": {
-                              "type": "integer"
-                            },
-                            "category": {
-                              "type": "string"
-                            },
-                            "mrrCents": {
-                              "type": "integer"
-                            },
-                            "name": {
-                              "type": "string"
-                            },
-                            "plan": {
-                              "type": "string"
-                            },
-                            "seats": {
-                              "type": "integer"
-                            },
-                            "trialing": {
-                              "type": "integer"
-                            }
-                          },
-                          "type": "object"
-                        },
-                        "type": "array"
-                      },
-                      "canceled": {
-                        "type": "integer"
-                      },
-                      "new": {
-                        "type": "integer"
-                      },
-                      "recent": {
-                        "items": {
-                          "properties": {
-                            "at": {
-                              "type": "string"
-                            },
-                            "category": {
-                              "type": "string"
-                            },
-                            "mrrDeltaCents": {
-                              "type": "integer"
-                            },
-                            "org": {
-                              "type": "string"
-                            },
-                            "plan": {
-                              "type": "string"
-                            },
-                            "type": {
-                              "type": "string"
-                            }
-                          },
-                          "type": "object"
-                        },
-                        "type": "array"
-                      },
-                      "trialsActive": {
-                        "type": "integer"
-                      }
-                    },
-                    "type": "object"
-                  },
-                  "usage": {
-                    "properties": {
-                      "instrumented": {
-                        "type": "boolean"
-                      },
-                      "requests": {
-                        "type": "integer"
-                      },
-                      "windowUsageCents": {
-                        "type": "integer"
-                      }
-                    },
-                    "type": "object"
-                  },
-                  "window": {
-                    "type": "string"
-                  }
-                },
-                "type": "object"
-              },
-              "generatedAt": {
-                "type": "string"
-              },
-              "sources": {
-                "items": {
-                  "properties": {
-                    "at": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "rows": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/MetricsData"
           },
           "msg": {
             "type": "string"
@@ -3795,179 +3839,7 @@
       "MoneyOut": {
         "properties": {
           "data": {
-            "properties": {
-              "byOrg": {
-                "items": {
-                  "properties": {
-                    "balanceCents": {
-                      "type": "integer"
-                    },
-                    "display": {
-                      "type": "string"
-                    },
-                    "grantedCents": {
-                      "type": "integer"
-                    },
-                    "grants": {
-                      "type": "integer"
-                    },
-                    "mrrCents": {
-                      "type": "integer"
-                    },
-                    "org": {
-                      "type": "string"
-                    },
-                    "plan": {
-                      "type": "string"
-                    },
-                    "spendCents": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "credits": {
-                "properties": {
-                  "consumedCents": {
-                    "type": "integer"
-                  },
-                  "grantedCents": {
-                    "type": "integer"
-                  },
-                  "grantedPrepaidCents": {
-                    "description": "real money added",
-                    "type": "integer"
-                  },
-                  "grantedTrialCents": {
-                    "description": "non-cash comps/promos",
-                    "type": "integer"
-                  },
-                  "grants": {
-                    "type": "integer"
-                  },
-                  "outstandingCents": {
-                    "type": "integer"
-                  }
-                },
-                "type": "object"
-              },
-              "generatedAt": {
-                "type": "string"
-              },
-              "infrastructure": {
-                "properties": {
-                  "doAvgDailyBurnCents": {
-                    "type": "integer"
-                  },
-                  "doCreditRemainingCents": {
-                    "type": "integer"
-                  },
-                  "doMonthToDateCents": {
-                    "type": "integer"
-                  },
-                  "period": {
-                    "type": "string"
-                  },
-                  "treasuryReserveCents": {
-                    "type": "integer"
-                  },
-                  "vendorCogsCents": {
-                    "type": "integer"
-                  },
-                  "vendors": {
-                    "items": {
-                      "properties": {
-                        "amountCents": {
-                          "type": "integer"
-                        },
-                        "note": {
-                          "type": "string"
-                        },
-                        "service": {
-                          "type": "string"
-                        },
-                        "source": {
-                          "type": "string"
-                        },
-                        "vendor": {
-                          "type": "string"
-                        }
-                      },
-                      "type": "object"
-                    },
-                    "type": "array"
-                  }
-                },
-                "type": "object"
-              },
-              "margin": {
-                "properties": {
-                  "grossCents": {
-                    "type": "integer"
-                  },
-                  "grossPct": {
-                    "type": "number"
-                  },
-                  "profitable": {
-                    "type": "boolean"
-                  },
-                  "runwayDays": {
-                    "type": "number"
-                  }
-                },
-                "type": "object"
-              },
-              "revenue": {
-                "properties": {
-                  "arpuCents": {
-                    "type": "integer"
-                  },
-                  "arrCents": {
-                    "type": "integer"
-                  },
-                  "customers": {
-                    "type": "integer"
-                  },
-                  "mrrCents": {
-                    "type": "integer"
-                  },
-                  "paying": {
-                    "type": "integer"
-                  },
-                  "realizedCents": {
-                    "description": "consumed spend, fleet-wide",
-                    "type": "integer"
-                  }
-                },
-                "type": "object"
-              },
-              "sources": {
-                "items": {
-                  "properties": {
-                    "at": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "rows": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/moneyBoard"
           },
           "msg": {
             "type": "string"
@@ -3992,6 +3864,110 @@
         },
         "type": "object"
       },
+      "Node": {
+        "properties": {
+          "blockedReason": {
+            "type": "string"
+          },
+          "cluster": {
+            "type": "string"
+          },
+          "clusterId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "localDiskGiB": {
+            "type": "integer"
+          },
+          "memoryMiB": {
+            "type": "integer"
+          },
+          "monthlyCents": {
+            "type": "integer"
+          },
+          "mutable": {
+            "description": "Mutable reports whether this droplet may be changed DIRECTLY — deleted or resized.\nOne predicate covers both because one fact decides both: a DOKS node belongs to a\nnode pool, and the pool is the only thing allowed to change it.",
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pods": {
+            "type": "integer"
+          },
+          "privateIp": {
+            "type": "string"
+          },
+          "publicIp": {
+            "type": "string"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "region": {
+            "type": "string"
+          },
+          "schedulable": {
+            "type": "boolean"
+          },
+          "sizeSlug": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "vcpus": {
+            "type": "integer"
+          },
+          "volumes": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "NodePool": {
+        "properties": {
+          "blockedReason": {
+            "type": "string"
+          },
+          "cluster": {
+            "type": "string"
+          },
+          "clusterId": {
+            "type": "string"
+          },
+          "clusterSchedulable": {
+            "type": "integer"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scalable": {
+            "type": "boolean"
+          },
+          "size": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "None": {
         "properties": {},
         "type": "object"
@@ -4005,35 +3981,38 @@
         },
         "type": "object"
       },
+      "ProviderCredit": {
+        "properties": {
+          "burn_cents": {
+            "type": "integer"
+          },
+          "grant_cents": {
+            "type": "integer"
+          },
+          "has_credit": {
+            "type": "boolean"
+          },
+          "is_paid_only": {
+            "type": "boolean"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "remaining_cents": {
+            "type": "integer"
+          },
+          "runway_days": {
+            "description": "nil when burn is 0 / unknown (never a fabricated infinity)",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
       "ProvidersCreditOut": {
         "properties": {
           "data": {
             "items": {
-              "properties": {
-                "burn_cents": {
-                  "type": "integer"
-                },
-                "grant_cents": {
-                  "type": "integer"
-                },
-                "has_credit": {
-                  "type": "boolean"
-                },
-                "is_paid_only": {
-                  "type": "boolean"
-                },
-                "provider": {
-                  "type": "string"
-                },
-                "remaining_cents": {
-                  "type": "integer"
-                },
-                "runway_days": {
-                  "description": "nil when burn is 0 / unknown (never a fabricated infinity)",
-                  "type": "number"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/ProviderCredit"
             },
             "type": "array"
           },
@@ -4049,467 +4028,7 @@
       "ReadOut": {
         "properties": {
           "data": {
-            "properties": {
-              "at": {
-                "type": "string"
-              },
-              "clusters": {
-                "items": {
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "idlePVCs": {
-                      "type": "integer"
-                    },
-                    "monthlyCents": {
-                      "type": "integer"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "nodePools": {
-                      "type": "integer"
-                    },
-                    "nodes": {
-                      "type": "integer"
-                    },
-                    "pods": {
-                      "type": "integer"
-                    },
-                    "pools": {
-                      "items": {
-                        "properties": {
-                          "blockedReason": {
-                            "type": "string"
-                          },
-                          "cluster": {
-                            "type": "string"
-                          },
-                          "clusterId": {
-                            "type": "string"
-                          },
-                          "clusterSchedulable": {
-                            "type": "integer"
-                          },
-                          "count": {
-                            "type": "integer"
-                          },
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "scalable": {
-                            "type": "boolean"
-                          },
-                          "size": {
-                            "type": "string"
-                          }
-                        },
-                        "type": "object"
-                      },
-                      "type": "array"
-                    },
-                    "pvcs": {
-                      "type": "integer"
-                    },
-                    "pvs": {
-                      "type": "integer"
-                    },
-                    "region": {
-                      "type": "string"
-                    },
-                    "scanError": {
-                      "type": "string"
-                    },
-                    "scanned": {
-                      "type": "boolean"
-                    },
-                    "status": {
-                      "type": "string"
-                    },
-                    "version": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "complete": {
-                "type": "boolean"
-              },
-              "cost": {
-                "properties": {
-                  "dropletsMonthly": {
-                    "type": "integer"
-                  },
-                  "loadBalancersMonthly": {
-                    "type": "integer"
-                  },
-                  "reclaimableMonthly": {
-                    "type": "integer"
-                  },
-                  "totalMonthly": {
-                    "type": "integer"
-                  },
-                  "volumesMonthly": {
-                    "type": "integer"
-                  },
-                  "wastedMonthly": {
-                    "description": "WastedMonthly is what the fleet pays every month for provisioned-but-empty space on\nthe volumes a kubelet actually measured.\n\nIt is NOT ReclaimableMonthly and must never be added to it. Reclaimable is money a\nbutton on this board collects, by deleting volumes proven to belong to no one.\nWasted is money locked inside volumes that are IN USE and holding live data:\nDigitalOcean can only ever grow a volume, so collecting it means copying a database\nonto a smaller one. See shrinkRecipe.\n\nIt is also a LOWER BOUND — unmeasured volumes contribute nothing.",
-                    "type": "integer"
-                  }
-                },
-                "type": "object"
-              },
-              "findings": {
-                "items": {
-                  "properties": {
-                    "cluster": {
-                      "type": "string"
-                    },
-                    "detail": {
-                      "type": "string"
-                    },
-                    "id": {
-                      "type": "string"
-                    },
-                    "kind": {
-                      "type": "string"
-                    },
-                    "monthlyCents": {
-                      "type": "integer"
-                    },
-                    "resource": {
-                      "type": "string"
-                    },
-                    "severity": {
-                      "type": "string"
-                    },
-                    "title": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "incompleteReason": {
-                "type": "string"
-              },
-              "loadBalancers": {
-                "items": {
-                  "properties": {
-                    "blockedReason": {
-                      "type": "string"
-                    },
-                    "cluster": {
-                      "type": "string"
-                    },
-                    "deletable": {
-                      "type": "boolean"
-                    },
-                    "droplets": {
-                      "type": "integer"
-                    },
-                    "id": {
-                      "type": "string"
-                    },
-                    "ip": {
-                      "type": "string"
-                    },
-                    "monthlyCents": {
-                      "type": "integer"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "region": {
-                      "type": "string"
-                    },
-                    "service": {
-                      "description": "Service is the `namespace/name` of the live type=LoadBalancer Service that claims\nthis load balancer, proven from the cluster scan. Non-empty means IN USE.",
-                      "type": "string"
-                    },
-                    "sizeUnit": {
-                      "type": "integer"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "nodes": {
-                "items": {
-                  "properties": {
-                    "blockedReason": {
-                      "type": "string"
-                    },
-                    "cluster": {
-                      "type": "string"
-                    },
-                    "clusterId": {
-                      "type": "string"
-                    },
-                    "createdAt": {
-                      "type": "string"
-                    },
-                    "id": {
-                      "type": "integer"
-                    },
-                    "localDiskGiB": {
-                      "type": "integer"
-                    },
-                    "memoryMiB": {
-                      "type": "integer"
-                    },
-                    "monthlyCents": {
-                      "type": "integer"
-                    },
-                    "mutable": {
-                      "description": "Mutable reports whether this droplet may be changed DIRECTLY — deleted or resized.\nOne predicate covers both because one fact decides both: a DOKS node belongs to a\nnode pool, and the pool is the only thing allowed to change it.",
-                      "type": "boolean"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "pods": {
-                      "type": "integer"
-                    },
-                    "privateIp": {
-                      "type": "string"
-                    },
-                    "publicIp": {
-                      "type": "string"
-                    },
-                    "ready": {
-                      "type": "boolean"
-                    },
-                    "region": {
-                      "type": "string"
-                    },
-                    "schedulable": {
-                      "type": "boolean"
-                    },
-                    "sizeSlug": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    },
-                    "tags": {
-                      "items": {
-                        "type": "string"
-                      },
-                      "type": "array"
-                    },
-                    "vcpus": {
-                      "type": "integer"
-                    },
-                    "volumes": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "sources": {
-                "items": {
-                  "properties": {
-                    "at": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "rows": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "totals": {
-                "properties": {
-                  "attachedGiB": {
-                    "type": "integer"
-                  },
-                  "attachedVolumes": {
-                    "type": "integer"
-                  },
-                  "clusters": {
-                    "type": "integer"
-                  },
-                  "detachedGiB": {
-                    "type": "integer"
-                  },
-                  "detachedVolumes": {
-                    "type": "integer"
-                  },
-                  "idlePVCs": {
-                    "type": "integer"
-                  },
-                  "loadBalancers": {
-                    "type": "integer"
-                  },
-                  "localDiskGiB": {
-                    "type": "integer"
-                  },
-                  "measuredGiB": {
-                    "type": "integer"
-                  },
-                  "measuredVolumes": {
-                    "description": "Fill. MeasuredVolumes/UnmeasuredVolumes are the honesty denominator: UsedGiB and\nWastedGiB describe the measured set ONLY, so a board showing waste must show how\nmuch of the fleet the figure was computed from. Unmeasured capacity contributes\nnothing to either — it is not assumed empty, and it is not assumed full.",
-                    "type": "integer"
-                  },
-                  "nodes": {
-                    "type": "integer"
-                  },
-                  "unmeasuredGiB": {
-                    "type": "integer"
-                  },
-                  "unmeasuredVolumes": {
-                    "type": "integer"
-                  },
-                  "unreferencedGiB": {
-                    "type": "integer"
-                  },
-                  "unreferencedVolumes": {
-                    "type": "integer"
-                  },
-                  "usedGiB": {
-                    "type": "integer"
-                  },
-                  "volumeGiB": {
-                    "type": "integer"
-                  },
-                  "volumes": {
-                    "type": "integer"
-                  },
-                  "wastedGiB": {
-                    "type": "integer"
-                  }
-                },
-                "type": "object"
-              },
-              "volumes": {
-                "items": {
-                  "properties": {
-                    "blockedReason": {
-                      "type": "string"
-                    },
-                    "cluster": {
-                      "description": "Cluster/ClusterID are the PROVEN owner — resolved through a PV that names this\nvolume, never through the tag.",
-                      "type": "string"
-                    },
-                    "clusterId": {
-                      "type": "string"
-                    },
-                    "controller": {
-                      "description": "Controller is the workload owning the pod that mounts this volume\n(\"StatefulSet/luxd\"), or \"\" when nothing mounts it. It names who has to act.",
-                      "type": "string"
-                    },
-                    "createdAt": {
-                      "type": "string"
-                    },
-                    "deletable": {
-                      "type": "boolean"
-                    },
-                    "dropletIds": {
-                      "items": {
-                        "type": "integer"
-                      },
-                      "type": "array"
-                    },
-                    "expandBlockedReason": {
-                      "type": "string"
-                    },
-                    "expandable": {
-                      "description": "Expandable/ExpandBlockedReason are the GROW verdict, kept separate from Deletable\nbecause the two ask opposite questions: a volume is deletable when nothing uses it,\nand expandable when something uses it in a way this board can grow completely.",
-                      "type": "boolean"
-                    },
-                    "hasUsage": {
-                      "description": "HasUsage reports whether a kubelet actually MEASURED this volume's filesystem.\n\nFalse means NOT MEASURED. It does NOT mean empty, and the three fields below are\nmeaningless — not zero — when it is false. A reading exists only while a running pod\nhas the volume mounted on a node that answered; a detached, idle or unreferenced\nvolume has none. Rendering an unmeasured volume as \"0 used / 100% wasted\" would\ninvent the single most expensive lie this board could tell, so every consumer must\nbranch on this flag and show unknown.",
-                      "type": "boolean"
-                    },
-                    "id": {
-                      "type": "string"
-                    },
-                    "idle": {
-                      "type": "boolean"
-                    },
-                    "monthlyCents": {
-                      "type": "integer"
-                    },
-                    "mountedBy": {
-                      "items": {
-                        "type": "string"
-                      },
-                      "type": "array"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "nodeName": {
-                      "type": "string"
-                    },
-                    "pv": {
-                      "type": "string"
-                    },
-                    "pvPhase": {
-                      "type": "string"
-                    },
-                    "pvcName": {
-                      "type": "string"
-                    },
-                    "pvcNamespace": {
-                      "type": "string"
-                    },
-                    "region": {
-                      "type": "string"
-                    },
-                    "sizeGiB": {
-                      "type": "integer"
-                    },
-                    "state": {
-                      "type": "string"
-                    },
-                    "tagCluster": {
-                      "description": "TagCluster is the `k8s:\u003cuuid\u003e` tag. ADVISORY ONLY: it outlives the cluster that\nset it. Shown so the operator can see tag-vs-truth disagree, never acted on.",
-                      "type": "string"
-                    },
-                    "usedBytes": {
-                      "description": "UsedBytes is the measured filesystem usage. BYTES, not GiB: the volumes this exists\nto catch hold a fraction of a GiB in 200, and rounding that to an integer GiB would\nprint the very 0 the flag above exists to prevent.",
-                      "type": "integer"
-                    },
-                    "wastedGiB": {
-                      "description": "WastedGiB is provisioned minus measured, in the unit DigitalOcean BILLS: whole GiB\nof the volume's own size, never the filesystem's capacity — a 200 GiB volume carries\na 196 GiB filesystem after format overhead, and the invoice says 200.",
-                      "type": "integer"
-                    },
-                    "wastedMonthlyCents": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/Snapshot"
           },
           "msg": {
             "type": "string"
@@ -4529,24 +4048,7 @@
             "type": "integer"
           },
           "integrity": {
-            "properties": {
-              "brokenAt": {
-                "type": "integer"
-              },
-              "count": {
-                "type": "integer"
-              },
-              "headHash": {
-                "type": "string"
-              },
-              "ok": {
-                "type": "boolean"
-              },
-              "reason": {
-                "type": "string"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/Integrity"
           },
           "msg": {
             "type": "string"
@@ -4557,102 +4059,288 @@
         },
         "type": "object"
       },
+      "RevenueCustomer": {
+        "properties": {
+          "balanceCents": {
+            "type": "integer"
+          },
+          "display": {
+            "type": "string"
+          },
+          "mrrCents": {
+            "type": "integer"
+          },
+          "org": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "spendCents": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "RevenueData": {
+        "properties": {
+          "arpuCents": {
+            "type": "integer"
+          },
+          "customers": {
+            "type": "integer"
+          },
+          "generatedAt": {
+            "type": "string"
+          },
+          "mrrCents": {
+            "type": "integer"
+          },
+          "payingCustomers": {
+            "type": "integer"
+          },
+          "perCustomer": {
+            "items": {
+              "$ref": "#/components/schemas/RevenueCustomer"
+            },
+            "type": "array"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceStatus"
+            },
+            "type": "array"
+          },
+          "spendTrend": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesPoint"
+            },
+            "type": "array"
+          },
+          "totalBalancesCents": {
+            "type": "integer"
+          },
+          "totalSpendCents": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "RevenueOut": {
         "properties": {
           "data": {
-            "properties": {
-              "arpuCents": {
-                "type": "integer"
-              },
-              "customers": {
-                "type": "integer"
-              },
-              "generatedAt": {
-                "type": "string"
-              },
-              "mrrCents": {
-                "type": "integer"
-              },
-              "payingCustomers": {
-                "type": "integer"
-              },
-              "perCustomer": {
-                "items": {
-                  "properties": {
-                    "balanceCents": {
-                      "type": "integer"
-                    },
-                    "display": {
-                      "type": "string"
-                    },
-                    "mrrCents": {
-                      "type": "integer"
-                    },
-                    "org": {
-                      "type": "string"
-                    },
-                    "plan": {
-                      "type": "string"
-                    },
-                    "spendCents": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "sources": {
-                "items": {
-                  "properties": {
-                    "at": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "rows": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "spendTrend": {
-                "items": {
-                  "properties": {
-                    "t": {
-                      "type": "string"
-                    },
-                    "value": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "totalBalancesCents": {
-                "type": "integer"
-              },
-              "totalSpendCents": {
-                "type": "integer"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/RevenueData"
           },
           "msg": {
             "type": "string"
           },
           "status": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SaaSCategory": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "mrrCents": {
+            "type": "integer"
+          },
+          "subscriptions": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SaaSCustomer": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "mrrCents": {
+            "type": "integer"
+          },
+          "org": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "seats": {
+            "type": "integer"
+          },
+          "since": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "usageCents": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SaaSEvent": {
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "mrrDeltaCents": {
+            "type": "integer"
+          },
+          "org": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SaaSMetrics": {
+        "properties": {
+          "asOf": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "customers": {
+            "items": {
+              "$ref": "#/components/schemas/SaaSCustomer"
+            },
+            "type": "array"
+          },
+          "gaps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "orgs": {
+            "type": "integer"
+          },
+          "revenue": {
+            "$ref": "#/components/schemas/SaaSRevenue"
+          },
+          "subscriptions": {
+            "$ref": "#/components/schemas/SaaSSubs"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/SaaSUsage"
+          },
+          "window": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SaaSPlan": {
+        "properties": {
+          "active": {
+            "type": "integer"
+          },
+          "category": {
+            "type": "string"
+          },
+          "mrrCents": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "seats": {
+            "type": "integer"
+          },
+          "trialing": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SaaSRevenue": {
+        "properties": {
+          "activeSubscriptions": {
+            "type": "integer"
+          },
+          "arrCents": {
+            "type": "integer"
+          },
+          "byCategory": {
+            "items": {
+              "$ref": "#/components/schemas/SaaSCategory"
+            },
+            "type": "array"
+          },
+          "churnedMrrCents": {
+            "type": "integer"
+          },
+          "mrrCents": {
+            "type": "integer"
+          },
+          "netNewMrrCents": {
+            "type": "integer"
+          },
+          "newMrrCents": {
+            "type": "integer"
+          },
+          "payingCustomers": {
+            "type": "integer"
+          },
+          "trials": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SaaSSubs": {
+        "properties": {
+          "byPlan": {
+            "items": {
+              "$ref": "#/components/schemas/SaaSPlan"
+            },
+            "type": "array"
+          },
+          "canceled": {
+            "type": "integer"
+          },
+          "new": {
+            "type": "integer"
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/SaaSEvent"
+            },
+            "type": "array"
+          },
+          "trialsActive": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SaaSUsage": {
+        "properties": {
+          "instrumented": {
+            "type": "boolean"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "windowUsageCents": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -4670,6 +4358,17 @@
           "pool": {
             "description": "Pool is the node pool, from the path. Its DO id or its name — both are unique\nwithin a cluster, and an operator reads the name off the board.",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SeriesPoint": {
+        "properties": {
+          "t": {
+            "type": "string"
+          },
+          "value": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -4697,40 +4396,159 @@
         },
         "type": "object"
       },
+      "ServiceRow": {
+        "properties": {
+          "createdAt": {
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "hosts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "service": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          },
+          "updatedBy": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ServiceView": {
+        "properties": {
+          "ServiceRow": {
+            "$ref": "#/components/schemas/ServiceRow"
+          },
+          "waitlistMode": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "Snapshot": {
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "clusters": {
+            "items": {
+              "$ref": "#/components/schemas/Cluster"
+            },
+            "type": "array"
+          },
+          "complete": {
+            "type": "boolean"
+          },
+          "cost": {
+            "$ref": "#/components/schemas/Cost"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "type": "array"
+          },
+          "incompleteReason": {
+            "type": "string"
+          },
+          "loadBalancers": {
+            "items": {
+              "$ref": "#/components/schemas/LoadBalancer"
+            },
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/Node"
+            },
+            "type": "array"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceStatus"
+            },
+            "type": "array"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/Totals"
+          },
+          "volumes": {
+            "items": {
+              "$ref": "#/components/schemas/Volume"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "SourceStatus": {
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "rows": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SubscriptionRow": {
+        "properties": {
+          "display": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "mrrCents": {
+            "type": "integer"
+          },
+          "org": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "renews": {
+            "type": "string"
+          },
+          "started": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "user": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "SubscriptionsOut": {
         "properties": {
           "data": {
             "items": {
-              "properties": {
-                "display": {
-                  "type": "string"
-                },
-                "id": {
-                  "type": "string"
-                },
-                "mrrCents": {
-                  "type": "integer"
-                },
-                "org": {
-                  "type": "string"
-                },
-                "plan": {
-                  "type": "string"
-                },
-                "renews": {
-                  "type": "string"
-                },
-                "started": {
-                  "type": "string"
-                },
-                "status": {
-                  "type": "string"
-                },
-                "user": {
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/SubscriptionRow"
             },
             "type": "array"
           },
@@ -4749,123 +4567,7 @@
       "SubsystemsOut": {
         "properties": {
           "data": {
-            "properties": {
-              "end": {
-                "type": "string"
-              },
-              "range": {
-                "type": "string"
-              },
-              "rows": {
-                "items": {
-                  "properties": {
-                    "enabled": {
-                      "type": "boolean"
-                    },
-                    "errorRate": {
-                      "description": "percent (0..100)",
-                      "type": "number"
-                    },
-                    "errors": {
-                      "type": "integer"
-                    },
-                    "lastErrorAt": {
-                      "type": "string"
-                    },
-                    "lastErrorMessage": {
-                      "type": "string"
-                    },
-                    "lastErrorRoute": {
-                      "type": "string"
-                    },
-                    "lastErrorStatus": {
-                      "type": "string"
-                    },
-                    "latencyP50Ms": {
-                      "type": "number"
-                    },
-                    "latencyP95Ms": {
-                      "type": "number"
-                    },
-                    "latencyP99Ms": {
-                      "type": "number"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "prefixes": {
-                      "items": {
-                        "type": "string"
-                      },
-                      "type": "array"
-                    },
-                    "requests": {
-                      "type": "integer"
-                    },
-                    "requestsPerMin": {
-                      "type": "number"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "sources": {
-                "items": {
-                  "properties": {
-                    "at": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "rows": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "start": {
-                "type": "string"
-              },
-              "totals": {
-                "properties": {
-                  "disabled": {
-                    "type": "integer"
-                  },
-                  "enabled": {
-                    "type": "integer"
-                  },
-                  "errorRate": {
-                    "description": "percent (0..100)",
-                    "type": "number"
-                  },
-                  "errors": {
-                    "type": "integer"
-                  },
-                  "reporting": {
-                    "description": "enabled AND served ≥1 traced request in the window",
-                    "type": "integer"
-                  },
-                  "requests": {
-                    "type": "integer"
-                  },
-                  "subsystems": {
-                    "type": "integer"
-                  }
-                },
-                "type": "object"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/subsystemBoard"
           },
           "msg": {
             "type": "string"
@@ -4876,32 +4578,106 @@
         },
         "type": "object"
       },
+      "SwitchView": {
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "env": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "readOnly": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Totals": {
+        "properties": {
+          "attachedGiB": {
+            "type": "integer"
+          },
+          "attachedVolumes": {
+            "type": "integer"
+          },
+          "clusters": {
+            "type": "integer"
+          },
+          "detachedGiB": {
+            "type": "integer"
+          },
+          "detachedVolumes": {
+            "type": "integer"
+          },
+          "idlePVCs": {
+            "type": "integer"
+          },
+          "loadBalancers": {
+            "type": "integer"
+          },
+          "localDiskGiB": {
+            "type": "integer"
+          },
+          "measuredGiB": {
+            "type": "integer"
+          },
+          "measuredVolumes": {
+            "description": "Fill. MeasuredVolumes/UnmeasuredVolumes are the honesty denominator: UsedGiB and\nWastedGiB describe the measured set ONLY, so a board showing waste must show how\nmuch of the fleet the figure was computed from. Unmeasured capacity contributes\nnothing to either — it is not assumed empty, and it is not assumed full.",
+            "type": "integer"
+          },
+          "nodes": {
+            "type": "integer"
+          },
+          "unmeasuredGiB": {
+            "type": "integer"
+          },
+          "unmeasuredVolumes": {
+            "type": "integer"
+          },
+          "unreferencedGiB": {
+            "type": "integer"
+          },
+          "unreferencedVolumes": {
+            "type": "integer"
+          },
+          "usedGiB": {
+            "type": "integer"
+          },
+          "volumeGiB": {
+            "type": "integer"
+          },
+          "volumes": {
+            "type": "integer"
+          },
+          "wastedGiB": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "UsageFundingOut": {
         "properties": {
           "data": {
             "items": {
-              "properties": {
-                "cost_cents": {
-                  "type": "integer"
-                },
-                "funding": {
-                  "description": "credit | paid | paid_only | byo",
-                  "type": "string"
-                },
-                "model": {
-                  "type": "string"
-                },
-                "provider": {
-                  "type": "string"
-                },
-                "requests": {
-                  "type": "integer"
-                },
-                "tokens": {
-                  "type": "integer"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/UsageFundingRow"
             },
             "type": "array"
           },
@@ -4914,33 +4690,159 @@
         },
         "type": "object"
       },
+      "UsageFundingRow": {
+        "properties": {
+          "cost_cents": {
+            "type": "integer"
+          },
+          "funding": {
+            "description": "credit | paid | paid_only | byo",
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Vendor": {
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "note": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "vendor": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "VerifyOut": {
         "properties": {
           "data": {
-            "properties": {
-              "brokenAt": {
-                "type": "integer"
-              },
-              "count": {
-                "type": "integer"
-              },
-              "headHash": {
-                "type": "string"
-              },
-              "ok": {
-                "type": "boolean"
-              },
-              "reason": {
-                "type": "string"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/Integrity"
           },
           "msg": {
             "type": "string"
           },
           "status": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Volume": {
+        "properties": {
+          "blockedReason": {
+            "type": "string"
+          },
+          "cluster": {
+            "description": "Cluster/ClusterID are the PROVEN owner — resolved through a PV that names this\nvolume, never through the tag.",
+            "type": "string"
+          },
+          "clusterId": {
+            "type": "string"
+          },
+          "controller": {
+            "description": "Controller is the workload owning the pod that mounts this volume\n(\"StatefulSet/luxd\"), or \"\" when nothing mounts it. It names who has to act.",
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "deletable": {
+            "type": "boolean"
+          },
+          "dropletIds": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "expandBlockedReason": {
+            "type": "string"
+          },
+          "expandable": {
+            "description": "Expandable/ExpandBlockedReason are the GROW verdict, kept separate from Deletable\nbecause the two ask opposite questions: a volume is deletable when nothing uses it,\nand expandable when something uses it in a way this board can grow completely.",
+            "type": "boolean"
+          },
+          "hasUsage": {
+            "description": "HasUsage reports whether a kubelet actually MEASURED this volume's filesystem.\n\nFalse means NOT MEASURED. It does NOT mean empty, and the three fields below are\nmeaningless — not zero — when it is false. A reading exists only while a running pod\nhas the volume mounted on a node that answered; a detached, idle or unreferenced\nvolume has none. Rendering an unmeasured volume as \"0 used / 100% wasted\" would\ninvent the single most expensive lie this board could tell, so every consumer must\nbranch on this flag and show unknown.",
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "idle": {
+            "type": "boolean"
+          },
+          "monthlyCents": {
+            "type": "integer"
+          },
+          "mountedBy": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nodeName": {
+            "type": "string"
+          },
+          "pv": {
+            "type": "string"
+          },
+          "pvPhase": {
+            "type": "string"
+          },
+          "pvcName": {
+            "type": "string"
+          },
+          "pvcNamespace": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "sizeGiB": {
+            "type": "integer"
+          },
+          "state": {
+            "type": "string"
+          },
+          "tagCluster": {
+            "description": "TagCluster is the `k8s:\u003cuuid\u003e` tag. ADVISORY ONLY: it outlives the cluster that\nset it. Shown so the operator can see tag-vs-truth disagree, never acted on.",
+            "type": "string"
+          },
+          "usedBytes": {
+            "description": "UsedBytes is the measured filesystem usage. BYTES, not GiB: the volumes this exists\nto catch hold a fraction of a GiB in 200, and rounding that to an integer GiB would\nprint the very 0 the flag above exists to prevent.",
+            "type": "integer"
+          },
+          "wastedGiB": {
+            "description": "WastedGiB is provisioned minus measured, in the unit DigitalOcean BILLS: whole GiB\nof the volume's own size, never the filesystem's capacity — a 200 GiB volume carries\na 196 GiB filesystem after format overhead, and the invoice says 200.",
+            "type": "integer"
+          },
+          "wastedMonthlyCents": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -4969,24 +4871,256 @@
       "VolumeSnapshotOut": {
         "properties": {
           "data": {
-            "properties": {
-              "ID": {
-                "type": "string"
-              },
-              "Name": {
-                "type": "string"
-              },
-              "SizeGiB": {
-                "type": "integer"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/digitalocean.Snapshot"
           },
           "msg": {
             "type": "string"
           },
           "status": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "adminMe": {
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "isSuperAdmin": {
+            "type": "boolean"
+          },
+          "isWhiteLabel": {
+            "description": "IsWhiteLabel marks the admitted NON-super tier: an admin of an enabled\nwhite-label tenant org. Mutually exclusive with IsSuperAdmin (the gate lets\nexactly one tier through). The operator SPA reads it to render the SUBTREE\ncockpit — the fleet god-view nav (finance/revenue/metrics/o11y/providers) is\nhidden — while a super sees the whole fleet.",
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "scopeOrgs": {
+            "description": "ScopeOrgs is the caller's visible tenant window: empty for a SuperAdmin (means\nALL orgs), or the WL tenant's own subtree (today the singleton {org}). The SPA\nthreads it through the faceting/drill-down layer so a WL tenant can never widen\na filter past their subtree.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "aiMetrics": {
+        "properties": {
+          "end": {
+            "type": "string"
+          },
+          "evalRuns": {
+            "description": "recent eval runs (progress)",
+            "items": {
+              "$ref": "#/components/schemas/aimRunStat"
+            },
+            "type": "array"
+          },
+          "evals": {
+            "$ref": "#/components/schemas/aimEvals"
+          },
+          "o11yAi": {
+            "$ref": "#/components/schemas/aimO11yAI"
+          },
+          "o11yAiModels": {
+            "description": "o11y_ai per-model (honest-empty today)",
+            "items": {
+              "$ref": "#/components/schemas/aimLfModelStat"
+            },
+            "type": "array"
+          },
+          "range": {
+            "type": "string"
+          },
+          "scoreNames": {
+            "description": "eval_scores per score-name",
+            "items": {
+              "$ref": "#/components/schemas/aimScoreStat"
+            },
+            "type": "array"
+          },
+          "scoreSeries": {
+            "description": "avg eval score over time (progress trend)",
+            "items": {
+              "$ref": "#/components/schemas/aimScorePoint"
+            },
+            "type": "array"
+          },
+          "start": {
+            "type": "string"
+          },
+          "topModels": {
+            "description": "cloud_usage per-model (populated today)",
+            "items": {
+              "$ref": "#/components/schemas/aimModelStat"
+            },
+            "type": "array"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/aimUsage"
+          }
+        },
+        "type": "object"
+      },
+      "aimEvals": {
+        "properties": {
+          "avgScore": {
+            "type": "number"
+          },
+          "datasets": {
+            "type": "integer"
+          },
+          "latencyMsAvg": {
+            "type": "number"
+          },
+          "models": {
+            "type": "integer"
+          },
+          "runs": {
+            "type": "integer"
+          },
+          "scoreNames": {
+            "type": "integer"
+          },
+          "scores": {
+            "type": "integer"
+          },
+          "traces": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "aimLfModelStat": {
+        "properties": {
+          "costUsd": {
+            "type": "number"
+          },
+          "generations": {
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "aimModelStat": {
+        "properties": {
+          "costCents": {
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "aimO11yAI": {
+        "properties": {
+          "costUsd": {
+            "type": "number"
+          },
+          "generations": {
+            "type": "integer"
+          },
+          "latencyMsAvg": {
+            "type": "number"
+          },
+          "latencyMsP95": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "aimRunStat": {
+        "properties": {
+          "avgValue": {
+            "type": "number"
+          },
+          "dataset": {
+            "type": "string"
+          },
+          "lastTs": {
+            "type": "string"
+          },
+          "runName": {
+            "type": "string"
+          },
+          "scores": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "aimScorePoint": {
+        "properties": {
+          "avgValue": {
+            "type": "number"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "ts": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "aimScoreStat": {
+        "properties": {
+          "avgValue": {
+            "type": "number"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "maxValue": {
+            "type": "number"
+          },
+          "minValue": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "aimUsage": {
+        "properties": {
+          "completionTokens": {
+            "type": "integer"
+          },
+          "costCents": {
+            "type": "integer"
+          },
+          "models": {
+            "type": "integer"
+          },
+          "promptTokens": {
+            "type": "integer"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -4994,192 +5128,7 @@
       "aimetricsOut": {
         "properties": {
           "data": {
-            "properties": {
-              "end": {
-                "type": "string"
-              },
-              "evalRuns": {
-                "description": "recent eval runs (progress)",
-                "items": {
-                  "properties": {
-                    "avgValue": {
-                      "type": "number"
-                    },
-                    "dataset": {
-                      "type": "string"
-                    },
-                    "lastTs": {
-                      "type": "string"
-                    },
-                    "runName": {
-                      "type": "string"
-                    },
-                    "scores": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "evals": {
-                "properties": {
-                  "avgScore": {
-                    "type": "number"
-                  },
-                  "datasets": {
-                    "type": "integer"
-                  },
-                  "latencyMsAvg": {
-                    "type": "number"
-                  },
-                  "models": {
-                    "type": "integer"
-                  },
-                  "runs": {
-                    "type": "integer"
-                  },
-                  "scoreNames": {
-                    "type": "integer"
-                  },
-                  "scores": {
-                    "type": "integer"
-                  },
-                  "traces": {
-                    "type": "integer"
-                  }
-                },
-                "type": "object"
-              },
-              "o11yAi": {
-                "properties": {
-                  "costUsd": {
-                    "type": "number"
-                  },
-                  "generations": {
-                    "type": "integer"
-                  },
-                  "latencyMsAvg": {
-                    "type": "number"
-                  },
-                  "latencyMsP95": {
-                    "type": "number"
-                  }
-                },
-                "type": "object"
-              },
-              "o11yAiModels": {
-                "description": "o11y_ai per-model (honest-empty today)",
-                "items": {
-                  "properties": {
-                    "costUsd": {
-                      "type": "number"
-                    },
-                    "generations": {
-                      "type": "integer"
-                    },
-                    "model": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "range": {
-                "type": "string"
-              },
-              "scoreNames": {
-                "description": "eval_scores per score-name",
-                "items": {
-                  "properties": {
-                    "avgValue": {
-                      "type": "number"
-                    },
-                    "count": {
-                      "type": "integer"
-                    },
-                    "maxValue": {
-                      "type": "number"
-                    },
-                    "minValue": {
-                      "type": "number"
-                    },
-                    "name": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "scoreSeries": {
-                "description": "avg eval score over time (progress trend)",
-                "items": {
-                  "properties": {
-                    "avgValue": {
-                      "type": "number"
-                    },
-                    "count": {
-                      "type": "integer"
-                    },
-                    "ts": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "start": {
-                "type": "string"
-              },
-              "topModels": {
-                "description": "cloud_usage per-model (populated today)",
-                "items": {
-                  "properties": {
-                    "costCents": {
-                      "type": "integer"
-                    },
-                    "model": {
-                      "type": "string"
-                    },
-                    "requests": {
-                      "type": "integer"
-                    },
-                    "tokens": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "usage": {
-                "properties": {
-                  "completionTokens": {
-                    "type": "integer"
-                  },
-                  "costCents": {
-                    "type": "integer"
-                  },
-                  "models": {
-                    "type": "integer"
-                  },
-                  "promptTokens": {
-                    "type": "integer"
-                  },
-                  "requests": {
-                    "type": "integer"
-                  },
-                  "tokens": {
-                    "type": "integer"
-                  }
-                },
-                "type": "object"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/aiMetrics"
           },
           "msg": {
             "type": "string"
@@ -5190,230 +5139,168 @@
         },
         "type": "object"
       },
+      "analyticsData": {
+        "properties": {
+          "activeCustomers": {
+            "description": "Active customers — from the usage ledger.",
+            "items": {
+              "$ref": "#/components/schemas/SeriesPoint"
+            },
+            "type": "array"
+          },
+          "arpuCents": {
+            "type": "integer"
+          },
+          "churn": {
+            "description": "Churn — logo churn (count) + rate.",
+            "items": {
+              "$ref": "#/components/schemas/SeriesPoint"
+            },
+            "type": "array"
+          },
+          "churnRatePct": {
+            "type": "number"
+          },
+          "computed": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "description": "Transparency: which metrics are backed by real data vs honest-empty.",
+            "type": "object"
+          },
+          "cumulativeCustomers": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesPoint"
+            },
+            "type": "array"
+          },
+          "dau": {
+            "type": "integer"
+          },
+          "generatedAt": {
+            "type": "string"
+          },
+          "growthRatePct": {
+            "type": "number"
+          },
+          "interval": {
+            "type": "string"
+          },
+          "ltvCents": {
+            "description": "null until churn is observed",
+            "type": "integer"
+          },
+          "mau": {
+            "type": "integer"
+          },
+          "mrrCents": {
+            "description": "Revenue analytics.",
+            "type": "integer"
+          },
+          "newCustomers": {
+            "type": "integer"
+          },
+          "nrrPct": {
+            "description": "null — needs MRR history",
+            "type": "number"
+          },
+          "range": {
+            "type": "string"
+          },
+          "retention": {
+            "$ref": "#/components/schemas/retentionGrid",
+            "description": "Retention triangle — signup cohort × active period."
+          },
+          "revenue": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesPoint"
+            },
+            "type": "array"
+          },
+          "signups": {
+            "description": "Growth — from IAM createdTime (always real).",
+            "items": {
+              "$ref": "#/components/schemas/SeriesPoint"
+            },
+            "type": "array"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceStatus"
+            },
+            "type": "array"
+          },
+          "topCustomers": {
+            "items": {
+              "$ref": "#/components/schemas/analyticsSlice"
+            },
+            "type": "array"
+          },
+          "totalCustomers": {
+            "type": "integer"
+          },
+          "usage": {
+            "description": "Usage analytics.",
+            "items": {
+              "$ref": "#/components/schemas/SeriesPoint"
+            },
+            "type": "array"
+          },
+          "wau": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "analyticsOut": {
         "properties": {
           "data": {
-            "properties": {
-              "activeCustomers": {
-                "description": "Active customers — from the usage ledger.",
-                "items": {
-                  "properties": {
-                    "t": {
-                      "type": "string"
-                    },
-                    "value": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "arpuCents": {
-                "type": "integer"
-              },
-              "churn": {
-                "description": "Churn — logo churn (count) + rate.",
-                "items": {
-                  "properties": {
-                    "t": {
-                      "type": "string"
-                    },
-                    "value": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "churnRatePct": {
-                "type": "number"
-              },
-              "computed": {
-                "additionalProperties": {
-                  "type": "boolean"
-                },
-                "description": "Transparency: which metrics are backed by real data vs honest-empty.",
-                "type": "object"
-              },
-              "cumulativeCustomers": {
-                "items": {
-                  "properties": {
-                    "t": {
-                      "type": "string"
-                    },
-                    "value": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "dau": {
-                "type": "integer"
-              },
-              "generatedAt": {
-                "type": "string"
-              },
-              "growthRatePct": {
-                "type": "number"
-              },
-              "interval": {
-                "type": "string"
-              },
-              "ltvCents": {
-                "description": "null until churn is observed",
-                "type": "integer"
-              },
-              "mau": {
-                "type": "integer"
-              },
-              "mrrCents": {
-                "description": "Revenue analytics.",
-                "type": "integer"
-              },
-              "newCustomers": {
-                "type": "integer"
-              },
-              "nrrPct": {
-                "description": "null — needs MRR history",
-                "type": "number"
-              },
-              "range": {
-                "type": "string"
-              },
-              "retention": {
-                "description": "Retention triangle — signup cohort × active period.",
-                "properties": {
-                  "cohorts": {
-                    "items": {
-                      "properties": {
-                        "cohort": {
-                          "type": "string"
-                        },
-                        "size": {
-                          "type": "integer"
-                        },
-                        "values": {
-                          "items": {
-                            "type": "number"
-                          },
-                          "type": "array"
-                        }
-                      },
-                      "type": "object"
-                    },
-                    "type": "array"
-                  },
-                  "interval": {
-                    "description": "\"month\"",
-                    "type": "string"
-                  },
-                  "periods": {
-                    "type": "integer"
-                  }
-                },
-                "type": "object"
-              },
-              "revenue": {
-                "items": {
-                  "properties": {
-                    "t": {
-                      "type": "string"
-                    },
-                    "value": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "signups": {
-                "description": "Growth — from IAM createdTime (always real).",
-                "items": {
-                  "properties": {
-                    "t": {
-                      "type": "string"
-                    },
-                    "value": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "sources": {
-                "items": {
-                  "properties": {
-                    "at": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "rows": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "topCustomers": {
-                "items": {
-                  "properties": {
-                    "hint": {
-                      "type": "string"
-                    },
-                    "label": {
-                      "type": "string"
-                    },
-                    "value": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "totalCustomers": {
-                "type": "integer"
-              },
-              "usage": {
-                "description": "Usage analytics.",
-                "items": {
-                  "properties": {
-                    "t": {
-                      "type": "string"
-                    },
-                    "value": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "wau": {
-                "type": "integer"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/analyticsData"
           },
           "msg": {
             "type": "string"
           },
           "status": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "analyticsSlice": {
+        "properties": {
+          "hint": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "baseInstance": {
+        "properties": {
+          "created": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "url": {
             "type": "string"
           }
         },
@@ -5423,30 +5310,7 @@
         "properties": {
           "data": {
             "items": {
-              "properties": {
-                "created": {
-                  "type": "string"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "org": {
-                  "type": "string"
-                },
-                "plan": {
-                  "type": "string"
-                },
-                "region": {
-                  "type": "string"
-                },
-                "status": {
-                  "type": "string"
-                },
-                "url": {
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/baseInstance"
             },
             "type": "array"
           },
@@ -5465,98 +5329,7 @@
       "blockStorageOut": {
         "properties": {
           "data": {
-            "properties": {
-              "alerts": {
-                "items": {
-                  "properties": {
-                    "level": {
-                      "type": "string"
-                    },
-                    "pct": {
-                      "type": "number"
-                    },
-                    "volume": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "datastore": {
-                "properties": {
-                  "mount": {
-                    "type": "string"
-                  },
-                  "name": {
-                    "type": "string"
-                  },
-                  "pct": {
-                    "type": "number"
-                  },
-                  "sizeGiB": {
-                    "type": "integer"
-                  },
-                  "usedGiB": {
-                    "type": "number"
-                  }
-                },
-                "type": "object"
-              },
-              "fleet": {
-                "properties": {
-                  "count": {
-                    "type": "integer"
-                  },
-                  "monthlyUsd": {
-                    "type": "integer"
-                  },
-                  "pct": {
-                    "type": "number"
-                  },
-                  "totalGiB": {
-                    "type": "integer"
-                  },
-                  "usedGiB": {
-                    "type": "number"
-                  }
-                },
-                "type": "object"
-              },
-              "volumes": {
-                "items": {
-                  "properties": {
-                    "attached": {
-                      "type": "boolean"
-                    },
-                    "id": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "pct": {
-                      "type": "number"
-                    },
-                    "region": {
-                      "type": "string"
-                    },
-                    "service": {
-                      "type": "string"
-                    },
-                    "sizeGiB": {
-                      "type": "integer"
-                    },
-                    "usedGiB": {
-                      "type": "number"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/storageSnapshot"
           },
           "msg": {
             "type": "string"
@@ -5580,37 +5353,40 @@
         },
         "type": "object"
       },
+      "computeLeaf": {
+        "properties": {
+          "active": {
+            "type": "integer"
+          },
+          "app": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "lastTs": {
+            "type": "string"
+          },
+          "machines": {
+            "type": "integer"
+          },
+          "org": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "spendCents": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "computeOut": {
         "properties": {
           "data": {
             "items": {
-              "properties": {
-                "active": {
-                  "type": "integer"
-                },
-                "app": {
-                  "type": "string"
-                },
-                "kind": {
-                  "type": "string"
-                },
-                "lastTs": {
-                  "type": "string"
-                },
-                "machines": {
-                  "type": "integer"
-                },
-                "org": {
-                  "type": "string"
-                },
-                "project": {
-                  "type": "string"
-                },
-                "spendCents": {
-                  "type": "integer"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/computeLeaf"
             },
             "type": "array"
           },
@@ -5626,65 +5402,44 @@
         },
         "type": "object"
       },
-      "creditGrantIn": {
-        "additionalProperties": {
-          "type": "object"
+      "datastoreVolume": {
+        "properties": {
+          "mount": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pct": {
+            "type": "number"
+          },
+          "sizeGiB": {
+            "type": "integer"
+          },
+          "usedGiB": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "digitalocean.Snapshot": {
+        "properties": {
+          "ID": {
+            "type": "string"
+          },
+          "Name": {
+            "type": "string"
+          },
+          "SizeGiB": {
+            "type": "integer"
+          }
         },
         "type": "object"
       },
       "flagsOut": {
         "properties": {
           "data": {
-            "properties": {
-              "auditUrl": {
-                "type": "string"
-              },
-              "configured": {
-                "type": "boolean"
-              },
-              "engine": {
-                "type": "string"
-              },
-              "manageUrl": {
-                "type": "string"
-              },
-              "switches": {
-                "items": {
-                  "properties": {
-                    "category": {
-                      "type": "string"
-                    },
-                    "description": {
-                      "type": "string"
-                    },
-                    "env": {
-                      "type": "string"
-                    },
-                    "key": {
-                      "type": "string"
-                    },
-                    "label": {
-                      "type": "string"
-                    },
-                    "readOnly": {
-                      "type": "boolean"
-                    },
-                    "source": {
-                      "type": "string"
-                    },
-                    "type": {
-                      "type": "string"
-                    },
-                    "value": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/BoardView"
           },
           "msg": {
             "type": "string"
@@ -5715,35 +5470,7 @@
       "meOut": {
         "properties": {
           "data": {
-            "properties": {
-              "displayName": {
-                "type": "string"
-              },
-              "email": {
-                "type": "string"
-              },
-              "isSuperAdmin": {
-                "type": "boolean"
-              },
-              "isWhiteLabel": {
-                "description": "IsWhiteLabel marks the admitted NON-super tier: an admin of an enabled\nwhite-label tenant org. Mutually exclusive with IsSuperAdmin (the gate lets\nexactly one tier through). The operator SPA reads it to render the SUBTREE\ncockpit — the fleet god-view nav (finance/revenue/metrics/o11y/providers) is\nhidden — while a super sees the whole fleet.",
-                "type": "boolean"
-              },
-              "name": {
-                "type": "string"
-              },
-              "owner": {
-                "type": "string"
-              },
-              "scopeOrgs": {
-                "description": "ScopeOrgs is the caller's visible tenant window: empty for a SuperAdmin (means\nALL orgs), or the WL tenant's own subtree (today the singleton {org}). The SPA\nthreads it through the faceting/drill-down layer so a WL tenant can never widen\na filter past their subtree.",
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/adminMe"
           },
           "msg": {
             "type": "string"
@@ -5754,190 +5481,434 @@
         },
         "type": "object"
       },
+      "moneyBoard": {
+        "properties": {
+          "byOrg": {
+            "items": {
+              "$ref": "#/components/schemas/moneyOrgRow"
+            },
+            "type": "array"
+          },
+          "credits": {
+            "$ref": "#/components/schemas/moneyCredits"
+          },
+          "generatedAt": {
+            "type": "string"
+          },
+          "infrastructure": {
+            "$ref": "#/components/schemas/moneyInfra"
+          },
+          "margin": {
+            "$ref": "#/components/schemas/moneyMargin"
+          },
+          "revenue": {
+            "$ref": "#/components/schemas/moneyRevenue"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceStatus"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "moneyCredits": {
+        "properties": {
+          "consumedCents": {
+            "type": "integer"
+          },
+          "grantedCents": {
+            "type": "integer"
+          },
+          "grantedPrepaidCents": {
+            "description": "real money added",
+            "type": "integer"
+          },
+          "grantedTrialCents": {
+            "description": "non-cash comps/promos",
+            "type": "integer"
+          },
+          "grants": {
+            "type": "integer"
+          },
+          "outstandingCents": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "moneyInfra": {
+        "properties": {
+          "doAvgDailyBurnCents": {
+            "type": "integer"
+          },
+          "doCreditRemainingCents": {
+            "type": "integer"
+          },
+          "doMonthToDateCents": {
+            "type": "integer"
+          },
+          "period": {
+            "type": "string"
+          },
+          "treasuryReserveCents": {
+            "type": "integer"
+          },
+          "vendorCogsCents": {
+            "type": "integer"
+          },
+          "vendors": {
+            "items": {
+              "$ref": "#/components/schemas/Vendor"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "moneyMargin": {
+        "properties": {
+          "grossCents": {
+            "type": "integer"
+          },
+          "grossPct": {
+            "type": "number"
+          },
+          "profitable": {
+            "type": "boolean"
+          },
+          "runwayDays": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "moneyOrgRow": {
+        "properties": {
+          "balanceCents": {
+            "type": "integer"
+          },
+          "display": {
+            "type": "string"
+          },
+          "grantedCents": {
+            "type": "integer"
+          },
+          "grants": {
+            "type": "integer"
+          },
+          "mrrCents": {
+            "type": "integer"
+          },
+          "org": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "spendCents": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "moneyRevenue": {
+        "properties": {
+          "arpuCents": {
+            "type": "integer"
+          },
+          "arrCents": {
+            "type": "integer"
+          },
+          "customers": {
+            "type": "integer"
+          },
+          "mrrCents": {
+            "type": "integer"
+          },
+          "paying": {
+            "type": "integer"
+          },
+          "realizedCents": {
+            "description": "consumed spend, fleet-wide",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "o11yGlobal": {
+        "properties": {
+          "end": {
+            "type": "string"
+          },
+          "llm": {
+            "$ref": "#/components/schemas/o11yLLM"
+          },
+          "logSeries": {
+            "items": {
+              "$ref": "#/components/schemas/o11yLogPoint"
+            },
+            "type": "array"
+          },
+          "range": {
+            "type": "string"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/o11ySeries"
+            },
+            "type": "array"
+          },
+          "start": {
+            "type": "string"
+          },
+          "topModels": {
+            "items": {
+              "$ref": "#/components/schemas/o11yModelStat"
+            },
+            "type": "array"
+          },
+          "topOrgs": {
+            "items": {
+              "$ref": "#/components/schemas/o11yOrgStat"
+            },
+            "type": "array"
+          },
+          "topServices": {
+            "items": {
+              "$ref": "#/components/schemas/o11ySvcStat"
+            },
+            "type": "array"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/o11yTotals"
+          }
+        },
+        "type": "object"
+      },
+      "o11yLLM": {
+        "properties": {
+          "costUsd": {
+            "type": "number"
+          },
+          "generations": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "o11yLogPoint": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "ts": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "o11yModelStat": {
+        "properties": {
+          "costCents": {
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "o11yOrgStat": {
+        "properties": {
+          "costCents": {
+            "type": "integer"
+          },
+          "org": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "o11yOut": {
         "properties": {
           "data": {
-            "properties": {
-              "end": {
-                "type": "string"
-              },
-              "llm": {
-                "properties": {
-                  "costUsd": {
-                    "type": "number"
-                  },
-                  "generations": {
-                    "type": "integer"
-                  }
-                },
-                "type": "object"
-              },
-              "logSeries": {
-                "items": {
-                  "properties": {
-                    "count": {
-                      "type": "integer"
-                    },
-                    "ts": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "range": {
-                "type": "string"
-              },
-              "series": {
-                "items": {
-                  "properties": {
-                    "costCents": {
-                      "type": "integer"
-                    },
-                    "errors": {
-                      "type": "integer"
-                    },
-                    "requests": {
-                      "type": "integer"
-                    },
-                    "tokens": {
-                      "type": "integer"
-                    },
-                    "ts": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "start": {
-                "type": "string"
-              },
-              "topModels": {
-                "items": {
-                  "properties": {
-                    "costCents": {
-                      "type": "integer"
-                    },
-                    "model": {
-                      "type": "string"
-                    },
-                    "requests": {
-                      "type": "integer"
-                    },
-                    "tokens": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "topOrgs": {
-                "items": {
-                  "properties": {
-                    "costCents": {
-                      "type": "integer"
-                    },
-                    "org": {
-                      "type": "string"
-                    },
-                    "requests": {
-                      "type": "integer"
-                    },
-                    "tokens": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "topServices": {
-                "items": {
-                  "properties": {
-                    "errorRate": {
-                      "description": "percent (0..100)",
-                      "type": "number"
-                    },
-                    "latencyP95Ms": {
-                      "type": "number"
-                    },
-                    "requests": {
-                      "type": "integer"
-                    },
-                    "service": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "totals": {
-                "properties": {
-                  "completionTokens": {
-                    "type": "integer"
-                  },
-                  "costCents": {
-                    "type": "integer"
-                  },
-                  "errors": {
-                    "type": "integer"
-                  },
-                  "latencyP50Ms": {
-                    "type": "number"
-                  },
-                  "latencyP95Ms": {
-                    "type": "number"
-                  },
-                  "latencyP99Ms": {
-                    "type": "number"
-                  },
-                  "logVolume": {
-                    "description": "Logs (distributed_logs_v2), fleet volume over the window.",
-                    "type": "integer"
-                  },
-                  "models": {
-                    "type": "integer"
-                  },
-                  "orgs": {
-                    "type": "integer"
-                  },
-                  "promptTokens": {
-                    "type": "integer"
-                  },
-                  "requests": {
-                    "description": "LLM usage (hanzo.cloud_usage), all orgs.",
-                    "type": "integer"
-                  },
-                  "services": {
-                    "type": "integer"
-                  },
-                  "tokens": {
-                    "type": "integer"
-                  },
-                  "traceCount": {
-                    "description": "Traces (o11y_index_v3), all services.",
-                    "type": "integer"
-                  },
-                  "traceErrorRate": {
-                    "description": "percent (0..100)",
-                    "type": "number"
-                  }
-                },
-                "type": "object"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/o11yGlobal"
           },
           "msg": {
             "type": "string"
           },
           "status": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "o11ySeries": {
+        "properties": {
+          "costCents": {
+            "type": "integer"
+          },
+          "errors": {
+            "type": "integer"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
+          },
+          "ts": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "o11ySvcStat": {
+        "properties": {
+          "errorRate": {
+            "description": "percent (0..100)",
+            "type": "number"
+          },
+          "latencyP95Ms": {
+            "type": "number"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "service": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "o11yTotals": {
+        "properties": {
+          "completionTokens": {
+            "type": "integer"
+          },
+          "costCents": {
+            "type": "integer"
+          },
+          "errors": {
+            "type": "integer"
+          },
+          "latencyP50Ms": {
+            "type": "number"
+          },
+          "latencyP95Ms": {
+            "type": "number"
+          },
+          "latencyP99Ms": {
+            "type": "number"
+          },
+          "logVolume": {
+            "description": "Logs (distributed_logs_v2), fleet volume over the window.",
+            "type": "integer"
+          },
+          "models": {
+            "type": "integer"
+          },
+          "orgs": {
+            "type": "integer"
+          },
+          "promptTokens": {
+            "type": "integer"
+          },
+          "requests": {
+            "description": "LLM usage (hanzo.cloud_usage), all orgs.",
+            "type": "integer"
+          },
+          "services": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
+          },
+          "traceCount": {
+            "description": "Traces (o11y_index_v3), all services.",
+            "type": "integer"
+          },
+          "traceErrorRate": {
+            "description": "percent (0..100)",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "operatorUser": {
+        "properties": {
+          "created": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "forbidden": {
+            "type": "boolean"
+          },
+          "isAdmin": {
+            "type": "boolean"
+          },
+          "isSuperAdmin": {
+            "type": "boolean"
+          },
+          "lastSignin": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "orgRow": {
+        "properties": {
+          "created": {
+            "type": "string"
+          },
+          "creditsCents": {
+            "type": "integer"
+          },
+          "display": {
+            "type": "string"
+          },
+          "org": {
+            "type": "string"
+          },
+          "products": {
+            "type": "integer"
+          },
+          "spendCents": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
+          },
+          "users": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -5946,33 +5917,7 @@
         "properties": {
           "data": {
             "items": {
-              "properties": {
-                "created": {
-                  "type": "string"
-                },
-                "creditsCents": {
-                  "type": "integer"
-                },
-                "display": {
-                  "type": "string"
-                },
-                "org": {
-                  "type": "string"
-                },
-                "products": {
-                  "type": "integer"
-                },
-                "spendCents": {
-                  "type": "integer"
-                },
-                "tokens": {
-                  "type": "integer"
-                },
-                "users": {
-                  "type": "integer"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/orgRow"
             },
             "type": "array"
           },
@@ -5988,62 +5933,48 @@
         },
         "type": "object"
       },
+      "overviewData": {
+        "properties": {
+          "activeProducts": {
+            "type": "integer"
+          },
+          "creditsCents": {
+            "type": "integer"
+          },
+          "drift": {
+            "type": "integer"
+          },
+          "lastSync": {
+            "type": "string"
+          },
+          "orgs": {
+            "type": "integer"
+          },
+          "products": {
+            "type": "integer"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceStatus"
+            },
+            "type": "array"
+          },
+          "spendCents30d": {
+            "type": "integer"
+          },
+          "tokens30d": {
+            "type": "integer"
+          },
+          "users": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "overviewOut": {
         "properties": {
           "data": {
-            "properties": {
-              "activeProducts": {
-                "type": "integer"
-              },
-              "creditsCents": {
-                "type": "integer"
-              },
-              "drift": {
-                "type": "integer"
-              },
-              "lastSync": {
-                "type": "string"
-              },
-              "orgs": {
-                "type": "integer"
-              },
-              "products": {
-                "type": "integer"
-              },
-              "sources": {
-                "items": {
-                  "properties": {
-                    "at": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "rows": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "spendCents30d": {
-                "type": "integer"
-              },
-              "tokens30d": {
-                "type": "integer"
-              },
-              "users": {
-                "type": "integer"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/overviewData"
           },
           "msg": {
             "type": "string"
@@ -6054,75 +5985,78 @@
         },
         "type": "object"
       },
+      "productRow": {
+        "properties": {
+          "cluster": {
+            "description": "hanzo-k8s",
+            "type": "string"
+          },
+          "declaredTag": {
+            "description": "spec.image.tag on the App CR (declared truth)",
+            "type": "string"
+          },
+          "drift": {
+            "description": "any drift flag present",
+            "type": "boolean"
+          },
+          "driftSeverity": {
+            "description": "ok|yellow|red (rolled-up)",
+            "type": "string"
+          },
+          "env": {
+            "description": "main|test|dev (lifecycle namespace)",
+            "type": "string"
+          },
+          "health": {
+            "description": "green|yellow|red|unknown",
+            "type": "string"
+          },
+          "kind": {
+            "description": "operator App CR spec.role (sql|kv|generic|ingress) or \"\"",
+            "type": "string"
+          },
+          "latestTag": {
+            "description": "newest released tag (GH release reader — empty until wired)",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "namespace": {
+            "description": "k8s namespace",
+            "type": "string"
+          },
+          "org": {
+            "description": "image namespace (hanzoai|luxfi|docker.io/…)",
+            "type": "string"
+          },
+          "phase": {
+            "description": "operator status.phase (Running/Creating/…)",
+            "type": "string"
+          },
+          "repo": {
+            "description": "owner/repo image coordinate",
+            "type": "string"
+          },
+          "runningTag": {
+            "description": "observed from the live Deployment",
+            "type": "string"
+          },
+          "tier": {
+            "description": "derived: cloud|data|edge|daemon|paas|app (grouping)",
+            "type": "string"
+          },
+          "updated": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "productsOut": {
         "properties": {
           "data": {
             "items": {
-              "properties": {
-                "cluster": {
-                  "description": "hanzo-k8s",
-                  "type": "string"
-                },
-                "declaredTag": {
-                  "description": "spec.image.tag on the App CR (declared truth)",
-                  "type": "string"
-                },
-                "drift": {
-                  "description": "any drift flag present",
-                  "type": "boolean"
-                },
-                "driftSeverity": {
-                  "description": "ok|yellow|red (rolled-up)",
-                  "type": "string"
-                },
-                "env": {
-                  "description": "main|test|dev (lifecycle namespace)",
-                  "type": "string"
-                },
-                "health": {
-                  "description": "green|yellow|red|unknown",
-                  "type": "string"
-                },
-                "kind": {
-                  "description": "operator App CR spec.role (sql|kv|generic|ingress) or \"\"",
-                  "type": "string"
-                },
-                "latestTag": {
-                  "description": "newest released tag (GH release reader — empty until wired)",
-                  "type": "string"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "namespace": {
-                  "description": "k8s namespace",
-                  "type": "string"
-                },
-                "org": {
-                  "description": "image namespace (hanzoai|luxfi|docker.io/…)",
-                  "type": "string"
-                },
-                "phase": {
-                  "description": "operator status.phase (Running/Creating/…)",
-                  "type": "string"
-                },
-                "repo": {
-                  "description": "owner/repo image coordinate",
-                  "type": "string"
-                },
-                "runningTag": {
-                  "description": "observed from the live Deployment",
-                  "type": "string"
-                },
-                "tier": {
-                  "description": "derived: cloud|data|edge|daemon|paas|app (grouping)",
-                  "type": "string"
-                },
-                "updated": {
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/productRow"
             },
             "type": "array"
           },
@@ -6183,6 +6117,53 @@
         },
         "type": "object"
       },
+      "retentionCohort": {
+        "properties": {
+          "cohort": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "values": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "retentionGrid": {
+        "properties": {
+          "cohorts": {
+            "items": {
+              "$ref": "#/components/schemas/retentionCohort"
+            },
+            "type": "array"
+          },
+          "interval": {
+            "description": "\"month\"",
+            "type": "string"
+          },
+          "periods": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "serviceList": {
+        "properties": {
+          "services": {
+            "description": "Services is every registered service with its live waitlist mode.",
+            "items": {
+              "$ref": "#/components/schemas/ServiceView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "serviceModeIn": {
         "properties": {
           "service": {
@@ -6196,50 +6177,19 @@
         },
         "type": "object"
       },
+      "serviceOne": {
+        "properties": {
+          "service": {
+            "$ref": "#/components/schemas/ServiceView",
+            "description": "Service is the row as it stands after the write, live mode included."
+          }
+        },
+        "type": "object"
+      },
       "serviceOut": {
         "properties": {
           "data": {
-            "properties": {
-              "service": {
-                "description": "Service is the row as it stands after the write, live mode included.",
-                "properties": {
-                  "ServiceRow": {
-                    "properties": {
-                      "createdAt": {
-                        "type": "integer"
-                      },
-                      "description": {
-                        "type": "string"
-                      },
-                      "displayName": {
-                        "type": "string"
-                      },
-                      "hosts": {
-                        "items": {
-                          "type": "string"
-                        },
-                        "type": "array"
-                      },
-                      "service": {
-                        "type": "string"
-                      },
-                      "updatedAt": {
-                        "type": "integer"
-                      },
-                      "updatedBy": {
-                        "type": "string"
-                      }
-                    },
-                    "type": "object"
-                  },
-                  "waitlistMode": {
-                    "type": "boolean"
-                  }
-                },
-                "type": "object"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/serviceOne"
           },
           "msg": {
             "type": "string"
@@ -6253,50 +6203,7 @@
       "servicesOut": {
         "properties": {
           "data": {
-            "properties": {
-              "services": {
-                "description": "Services is every registered service with its live waitlist mode.",
-                "items": {
-                  "properties": {
-                    "ServiceRow": {
-                      "properties": {
-                        "createdAt": {
-                          "type": "integer"
-                        },
-                        "description": {
-                          "type": "string"
-                        },
-                        "displayName": {
-                          "type": "string"
-                        },
-                        "hosts": {
-                          "items": {
-                            "type": "string"
-                          },
-                          "type": "array"
-                        },
-                        "service": {
-                          "type": "string"
-                        },
-                        "updatedAt": {
-                          "type": "integer"
-                        },
-                        "updatedBy": {
-                          "type": "string"
-                        }
-                      },
-                      "type": "object"
-                    },
-                    "waitlistMode": {
-                      "type": "boolean"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/serviceList"
           },
           "msg": {
             "type": "string"
@@ -6327,15 +6234,204 @@
         },
         "type": "object"
       },
+      "storageAlert": {
+        "properties": {
+          "level": {
+            "type": "string"
+          },
+          "pct": {
+            "type": "number"
+          },
+          "volume": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "storageFleet": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "monthlyUsd": {
+            "type": "integer"
+          },
+          "pct": {
+            "type": "number"
+          },
+          "totalGiB": {
+            "type": "integer"
+          },
+          "usedGiB": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "storageSnapshot": {
+        "properties": {
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/storageAlert"
+            },
+            "type": "array"
+          },
+          "datastore": {
+            "$ref": "#/components/schemas/datastoreVolume"
+          },
+          "fleet": {
+            "$ref": "#/components/schemas/storageFleet"
+          },
+          "volumes": {
+            "items": {
+              "$ref": "#/components/schemas/storageVolume"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "storageVolume": {
+        "properties": {
+          "attached": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pct": {
+            "type": "number"
+          },
+          "region": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          },
+          "sizeGiB": {
+            "type": "integer"
+          },
+          "usedGiB": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "subsystemBoard": {
+        "properties": {
+          "end": {
+            "type": "string"
+          },
+          "range": {
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/subsystemRow"
+            },
+            "type": "array"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceStatus"
+            },
+            "type": "array"
+          },
+          "start": {
+            "type": "string"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/subsystemTotals"
+          }
+        },
+        "type": "object"
+      },
+      "subsystemRow": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "errorRate": {
+            "description": "percent (0..100)",
+            "type": "number"
+          },
+          "errors": {
+            "type": "integer"
+          },
+          "lastErrorAt": {
+            "type": "string"
+          },
+          "lastErrorMessage": {
+            "type": "string"
+          },
+          "lastErrorRoute": {
+            "type": "string"
+          },
+          "lastErrorStatus": {
+            "type": "string"
+          },
+          "latencyP50Ms": {
+            "type": "number"
+          },
+          "latencyP95Ms": {
+            "type": "number"
+          },
+          "latencyP99Ms": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prefixes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "requestsPerMin": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "subsystemTotals": {
+        "properties": {
+          "disabled": {
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "integer"
+          },
+          "errorRate": {
+            "description": "percent (0..100)",
+            "type": "number"
+          },
+          "errors": {
+            "type": "integer"
+          },
+          "reporting": {
+            "description": "enabled AND served ≥1 traced request in the window",
+            "type": "integer"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "subsystems": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "syncOut": {
         "properties": {
           "data": {
-            "properties": {
-              "started": {
-                "type": "boolean"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/syncStarted"
           },
           "msg": {
             "type": "string"
@@ -6346,69 +6442,89 @@
         },
         "type": "object"
       },
+      "syncStarted": {
+        "properties": {
+          "started": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "usageByProduct": {
+        "properties": {
+          "product": {
+            "type": "string"
+          },
+          "spendCents": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "usageData": {
+        "properties": {
+          "byProduct": {
+            "items": {
+              "$ref": "#/components/schemas/usageByProduct"
+            },
+            "type": "array"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/usagePoint"
+            },
+            "type": "array"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/usageTotals"
+          }
+        },
+        "type": "object"
+      },
       "usageOut": {
         "properties": {
           "data": {
-            "properties": {
-              "byProduct": {
-                "items": {
-                  "properties": {
-                    "product": {
-                      "type": "string"
-                    },
-                    "spendCents": {
-                      "type": "integer"
-                    },
-                    "tokens": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "series": {
-                "items": {
-                  "properties": {
-                    "date": {
-                      "type": "string"
-                    },
-                    "requests": {
-                      "type": "integer"
-                    },
-                    "spendCents": {
-                      "type": "integer"
-                    },
-                    "tokens": {
-                      "type": "integer"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "totals": {
-                "properties": {
-                  "requests": {
-                    "type": "integer"
-                  },
-                  "spendCents": {
-                    "type": "integer"
-                  },
-                  "tokens": {
-                    "type": "integer"
-                  }
-                },
-                "type": "object"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/usageData"
           },
           "msg": {
             "type": "string"
           },
           "status": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "usagePoint": {
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "spendCents": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "usageTotals": {
+        "properties": {
+          "requests": {
+            "type": "integer"
+          },
+          "spendCents": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -6417,39 +6533,7 @@
         "properties": {
           "data": {
             "items": {
-              "properties": {
-                "created": {
-                  "type": "string"
-                },
-                "displayName": {
-                  "type": "string"
-                },
-                "email": {
-                  "type": "string"
-                },
-                "forbidden": {
-                  "type": "boolean"
-                },
-                "isAdmin": {
-                  "type": "boolean"
-                },
-                "isSuperAdmin": {
-                  "type": "boolean"
-                },
-                "lastSignin": {
-                  "type": "string"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "owner": {
-                  "type": "string"
-                },
-                "tag": {
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/operatorUser"
             },
             "type": "array"
           },

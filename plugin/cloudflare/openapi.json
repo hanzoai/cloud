@@ -503,6 +503,24 @@
           }
         ]
       }
+    },
+    "/v1/cloudflare/zones/{zone}/purge": {
+      "post": {
+        "operationId": "post_v1_cloudflare_zones_by_zone_purge",
+        "tags": [
+          "cloudflare"
+        ],
+        "parameters": [
+          {
+            "name": "zone",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
     }
   }
 }
