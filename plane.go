@@ -159,22 +159,6 @@ func Peer(app string) (*zip.Conn, error) {
 	return c, nil
 }
 
-// PeerPresent reports whether an app is serving its plane socket here.
-//
-// It is the discriminator between the two shapes a failed call can have, and
-// they need OPPOSITE handling: no socket at all means this deployment does not
-// run that app — the legitimate split-deploy or no-money-plane case, where a
-// caller falls back or stays inert — while a socket that exists and does not
-// answer is a real fault, which must surface rather than be papered over.
-//
-// Collapsing them is how a gate either 503s a deployment that never billed, or
-// hands out free work in one that does.
-func PeerPresent(app string) bool {
-	bindRuntimeDir()
-	fi, err := os.Stat(zip.SocketPath(app))
-	return err == nil && fi.Mode()&os.ModeSocket != 0
-}
-
 // Ask is the whole client half: dial the app, invoke the op, close.
 //
 // The org a call acts for rides the CALLER — forwarded from the gateway's
