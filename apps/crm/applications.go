@@ -157,8 +157,8 @@ func apply(s *cloud.Service[state], c *zip.Ctx) error {
 		ID: id, Org: org, Company: company, Website: clip(req.Website),
 		ContactName: name, Email: email, Role: clip(req.Role),
 		Stage: StageApplied, Tier1: tier1, Metadata: meta,
-		Screen: ScreenResult{Status: "pending"},
-		Events: []StageEvent{{To: StageApplied, At: now, By: "system", Note: "application received"}},
+		Screen:    ScreenResult{Status: "pending"},
+		Events:    []StageEvent{{To: StageApplied, At: now, By: "system", Note: "application received"}},
 		CreatedAt: now, UpdatedAt: now,
 	}
 	// Best-effort CRM projection so the lead also shows in the standard CRM tabs.
