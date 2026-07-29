@@ -27,19 +27,26 @@ name: CI/CD
 on:
   push:
     branches: [main]
-  # On-demand rebuild. Without this the ONLY way to get an image is to land a
-  # commit on main, so recovering from a bad build means pushing an empty commit
-  # and waiting — and POST .../workflows/cicd.yml/dispatches answers 500, which
-  # reads like a broken forge rather than a workflow that never opted in.
-  workflow_dispatch:
     # v* is what publishes the plugin binary (hanzo.yml `binaries:` → bucket:).
     # ci builds it on every push and publishes only on a tag, and the tag here is
     # release.go's receipt for an image that already built and smoked — so the
     # artifact a host installs unattended can only come from a proven commit,
     # and this still mints no tag of its own.
+    #
+    # This sat under `workflow_dispatch:` instead of `push:`, where it means
+    # nothing — and a SECOND `workflow_dispatch:` key below then overwrote that
+    # whole mapping, so the filter was dropped twice over. YAML takes the last
+    # duplicate key and says nothing, so the file parsed, the workflow ran, and
+    # `v*` tags simply never triggered a build. Effective `on:` was
+    #   {push: {branches: [main]}, workflow_dispatch: None, pull_request: None}
     tags: ["v*"]
   pull_request:
-  # The sync (sync-from-github.yml) dispatches this workflow by name after a
+  # On-demand rebuild. Without this the ONLY way to get an image is to land a
+  # commit on main, so recovering from a bad build means pushing an empty commit
+  # and waiting — and POST .../workflows/cicd.yml/dispatches answers 500, which
+  # reads like a broken forge rather than a workflow that never opted in.
+  #
+  # It is also how the sync (sync-from-github.yml) starts this workflow after a
   # fast-forward: a push made with the workflow token does not trigger workflows,
   # so without this trigger every synced commit would gate nothing. deploy.yml
   # declared no dispatch trigger, which is why that curl could only 404.
