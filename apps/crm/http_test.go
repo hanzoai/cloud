@@ -291,3 +291,56 @@ func TestRed_NoPrincipalForgedOrgRefused(t *testing.T) {
 		}
 	}
 }
+
+// TestIntakeRateLimitScope pins WHICH routes the public-intake rate limit
+// covers. crm.go registers that limiter with a second app.Group("/v1/crm", …),
+// so it is a prefix-scoped Use that applies to every /v1/crm route registered
+// AFTER it and to none registered before — "REGISTRATION ORDER IS WIRE HERE".
+//
+// That is a load-bearing wire fact with no other guard. Typing the intake, or
+// merely moving a zip registration across the limiter's line, would silently
+// un-meter a deliberately metered public endpoint (or throttle the CRM's own
+// CRUD to 20 requests a minute per IP, which no console could use). Nothing in
+// the type system says so, so it is asserted here.
+func TestIntakeRateLimitScope(t *testing.T) {
+	// limited reports whether the route starts answering 429 within a burst that
+	// exceeds intakeRateLimit. Each case gets a FRESH app: the limiter is per-app
+	// state keyed by client IP, which the test transport holds constant.
+	limited := func(method, path string, body any) bool {
+		app := mountApp(t)
+		for i := 0; i < intakeRateLimit+2; i++ {
+			if code, _ := do(t, app, method, path, "hanzo", body); code == http.StatusTooManyRequests {
+				return true
+			}
+		}
+		return false
+	}
+
+	intake := map[string]any{"company": "Acme", "contactName": "A Person", "email": "a@acme.example"}
+
+	// Metered: the public intake, and the staff application routes registered
+	// after it — the limiter is prefix-scoped, so they share it.
+	for _, m := range []struct {
+		method, path string
+		body         any
+	}{
+		{http.MethodPost, "/v1/crm/applications", intake},
+		{http.MethodGet, "/v1/crm/applications", nil},
+		{http.MethodGet, "/v1/crm/applications/appl_nope", nil},
+	} {
+		if !limited(m.method, m.path, m.body) {
+			t.Fatalf("%s %s: expected the intake rate limit to cover it, got no 429 in %d requests",
+				m.method, m.path, intakeRateLimit+2)
+		}
+	}
+
+	// Unmetered: every CRUD op is registered BEFORE the limiter, so a console
+	// listing companies is not throttled by a marketing form's budget.
+	for _, p := range []string{
+		"/v1/crm/companies", "/v1/crm/contacts", "/v1/crm/opportunities", "/v1/crm/summary",
+	} {
+		if limited(http.MethodGet, p, nil) {
+			t.Fatalf("GET %s: the intake rate limit must not cover the CRM CRUD surface", p)
+		}
+	}
+}
