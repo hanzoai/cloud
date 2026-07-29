@@ -26,6 +26,15 @@ type mcpRequest struct {
 
 // mcp is the single JSON-RPC endpoint. Org-gated at the top: no validated principal
 // → 403, so a client-forged X-Org-Id with no bearer can never reach a tool.
+//
+// UNTYPED, for the transport JSON-RPC is. An unparseable body is answered HTTP 200
+// carrying a -32700 error OBJECT — that is what the protocol says, and it is what a
+// JSON-RPC client parses — while zip's invoke unmarshals the body BEFORE the handler
+// runs, so typing this would turn that 200 into a 400 and every method's result and
+// error envelope into a shape one Out cannot hold. Same refusal, and the same reason,
+// as the header-authed webhooks in apps/integrations. The tools this endpoint
+// dispatches are not lost to the projections: tools.Register (Mount) publishes every
+// connector action on the unified tool plane.
 func mcp(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
