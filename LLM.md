@@ -1041,7 +1041,7 @@ tree: they are disjoint, so agents do not collide in source.
 |---|---|---|
 | A | ~~integrations 47~~ (done: 22 typed, 19 refused), cloudflare 34, platform 32, projects 31, captable 31 | 128 |
 | B | agents 26, git 24, books 11, o11y 11, ~~company 22~~ (2 left, both permanent) | 74 |
-| C | team 20, guide 20, crm 20, ~~ingress 19~~ (done), ~~framework 19~~ → 2, account 19 | 117 |
+| C | team 20, guide 20, crm 20, ~~ingress 19~~ (done), ~~framework 19~~ → 2, ~~account 19~~ (done: 11 typed, 7 refused) | 117 |
 | D | pricing 18, ml 18, automations 18, index 17, dataroom 17, compliance 17, affiliates 17 | 122 |
 | E | eval 16, social 13, esign 13, link 12, functions 12, commerce 12, billing 12 | 90 |
 | F | the ~70 remaining packages, 1–11 routes each | ~358 |
@@ -1082,10 +1082,10 @@ operations across 984 paths, of which 164 have a description.** The other ~1234
 are route only — no MCP tool, no CLI command, no SDK method, no schema, no
 prose.
 
-The typed packages are `apps/admin` and its eight sub-packages, plus `apps/agents`,
-`apps/company`, `apps/crm`, `apps/framework`, `apps/git`, `apps/guide`,
-`apps/ingress`, `apps/integrations`, `apps/marketing`, `apps/o11y`, `apps/plugin`,
-`apps/search`, `apps/visor`.
+The typed packages are `apps/admin` and its eight sub-packages, plus `apps/account`,
+`apps/agents`, `apps/company`, `apps/crm`, `apps/framework`, `apps/git`,
+`apps/guide`, `apps/ingress`, `apps/integrations`, `apps/marketing`, `apps/o11y`,
+`apps/plugin`, `apps/search`, `apps/visor`.
 `crm` is 19 of 20: its one refusal, the public Startup Program intake POST, is
 named at its registration — the IP rate limit and the pre-parse 64 KiB body cap
 are wire, and a typed op's MCP/CLI projections would publish an unmetered,
@@ -1178,6 +1178,17 @@ so an open-object In carries no `:doctype`/`:name` while a struct In carries no
 document. Half the fix converts nothing, which is why the refusal is recorded in a
 TEST (`rawRoutes` in `ops_projection_test.go`) with both halves named, not in
 prose that only ever named one.
+
+`apps/account` (11 of 18) is the catch-all refusal in its purest form: its seven
+untyped routes are two routes' worth of shape — GET|POST `/v1/billing/*` and the
+five-method `/v1/commerce/*` — each a verbatim forwarder whose path is a wildcard
+remainder no named In field can bind, whose body is forwarded as received (any
+content type; zip's `invoke` json.Unmarshals first, typed.go:227), and whose
+answer is the upstream's own bytes AND status (`c.Bytes(status, raw)`, including
+a PDF at `invoices/{}/pdf`), where a typed dispatch answers one declared status
+in JSON. Opaque by construction, not by omission; what they may reach is bounded
+by allowlists instead of types (`billingForwardable` in billing.go,
+`commerceStoreHeads` in commerce.go).
 
 **What compensates today, and how it dies.** hanzoai/openapi carries an AUTHORED
 master, `hanzo.yaml`, which is the only source of request-body and query-parameter
