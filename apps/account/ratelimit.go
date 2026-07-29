@@ -17,7 +17,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -103,13 +102,17 @@ func rateKey(c *zip.Ctx) string {
 	return "a:" + ip
 }
 
-// rateLimit wraps a handler, refusing 429 when the caller (validated principal, else
-// socket peer) exceeds rl.
-func rateLimit(s *cloud.Service[state], rl *rateLimiter, next zip.Handler) zip.Handler {
-	return func(c *zip.Ctx) error {
-		if !rl.allow(rateKey(c)) {
-			return zip.Errorf(429, "rate limit exceeded; retry shortly")
+// rateLimit gates a handler, refusing 429 when the caller (validated principal, else
+// socket peer) exceeds rl. It is a zip.Middleware so ONE definition serves both the
+// typed ops (through With, which carries it into the registration) and the raw
+// handlers the untyped routes still use.
+func rateLimit(rl *rateLimiter) zip.Middleware {
+	return func(next zip.Handler) zip.Handler {
+		return func(c *zip.Ctx) error {
+			if !rl.allow(rateKey(c)) {
+				return zip.Errorf(429, "rate limit exceeded; retry shortly")
+			}
+			return next(c)
 		}
-		return next(c)
 	}
 }
