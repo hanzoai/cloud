@@ -1168,7 +1168,13 @@ received bytes and reads two contract headers (X-Idempotency-Key,
 X-Causation-Depth); POST `/mcp` is JSON-RPC, which answers an unparseable body
 HTTP 200 with a -32700 error object where zip's pre-handler unmarshal would
 400. The MCP door's tools are not lost to the projections — `tools.Register`
-publishes every connector action on the unified tool plane.
+publishes every connector action on the unified tool plane. The surface's one
+sub-mount, `apps/connectorruntime` (POST `/connectors/{id}/run`), is typed too
+(1 of 1): it had the same two defects (no Bridge, no zipdoc directive) and no
+wire test at all — it now mounts its own group Bridge, so it stays
+self-contained when mounted without automations, and `http_run_test.go` pins
+the 403/404/422 gates and the infra-vs-piece split (an action that ran and
+failed is HTTP 200 `ok:false`, never a 5xx).
 
 `apps/guide` (13 of 19) is the worked example of the SPLIT tranche, where a
 partition is not all-or-nothing. Six of its routes stay untyped and each names a
