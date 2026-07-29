@@ -1942,3 +1942,26 @@ Alignment is NOT finished: ~46 `money.Amount` against ~308 `int64` cents.
 starts it first and eagerly; a child launched with a token WAITS for it and, failing
 that, holds no key rather than inventing a second one. A fallback here is how a fleet
 ends up running on two keys with nothing saying so.
+
+**credz is NOT the plane with extra steps, and must not be collapsed into it.** Both
+speak over a 0600 unix socket, but they prove different things and only one of them
+proves identity:
+
+    plane    answer() calls parseIdent(call.Cap) — it PARSES the capability.
+             Nothing verifies it. Any co-located app can call
+             Dial("commerce").For("another-tenant") and be believed.
+    credz    peerPID (SO_PEERCRED, same uid) AND a launch token that opens only
+             under the secret the launcher minted — so the app name is the one
+             the LAUNCHER stamped, never one the caller chose.
+
+That difference is load-bearing: it is how each child gets ITS scoped bundle and not
+a sibling's. So the socket is the boundary for "one of our own processes", and it is
+NOT a boundary between our own processes — which is fine for a bug-free fleet and is
+worth knowing before treating a plane capability as an authorization decision. Tenancy
+is enforced where a request principal is resolved, at the edge, from a validated
+token; a method that re-checks the capability's org against a ref (as kms does)
+catches an app asking for one tenant while acting for another, which is a BUG worth
+failing on rather than an attack being repelled.
+
+Making the plane verify would need a verifier every app holds, and only the broker
+holds the launch secret today. Do not bolt on a weaker check and call it one.
