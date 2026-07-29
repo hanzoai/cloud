@@ -1073,17 +1073,18 @@ migration silently strips request shapes from every generated CLI and SDK.
 
 ## Generated and frozen artifacts: what goes stale, and how you find out
 
-- **15 `zipdoc_gen.go` files are COMMITTED, and `mk/plugin.mk:45-46` still says
-  they are not.** They are tracked, not gitignored, one per typed package, 1:1
-  with the `//go:generate` directives. The comment is stale prose, not a bug —
-  but the reason they are committed IS live: the root build targets (`build`,
-  `host`, `ship`, `plugin`, `monolith`) do not regenerate them, so a binary built
-  from a fresh checkout by any of those paths would otherwise ship with no
-  descriptions at all. Only `make openapi` (Makefile:214), the per-app
-  `mk/plugin.mk build` chain, and the Dockerfile (line 178) run the pass.
+- **The `zipdoc_gen.go` files are COMMITTED, one per typed package**, 1:1 with
+  the `//go:generate` directives (27 at this writing — count them, do not trust
+  the number). They are tracked, not gitignored, and the reason is live: the
+  root build targets (`build`, `host`, `ship`, `plugin`, `monolith`) do not
+  regenerate them, so a binary built from a fresh checkout by any of those paths
+  would otherwise ship with no descriptions at all. Only `make openapi`, the
+  per-app `mk/plugin.mk build` chain, and the Dockerfile run the pass.
   **Untrack them only after every build path regenerates them** — not before.
-  zipdoc has a `-check` mode that writes nothing and errors on a stale file; no
-  gate in this repo uses it yet, which is the other half of the same gap.
+  The drift is already gated: `make test` runs `zipdoc -check` (writes nothing,
+  red on a stale file) PER PACKAGE — never `-check ./...`, because module-load
+  and package-load extract differently and a gate must not disagree with the
+  generator it polices. Do not add a second one.
 - **The wire freeze test must be updated in the same diff as `Wire()`.** It is a
   golden, not an invariant. A new subsystem lands RED until `frozen` names it.
   That is the design — the failure is the review prompt — but do not "fix" it by
