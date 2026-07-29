@@ -25,6 +25,12 @@ import (
 var allowedRequestUses = map[string]string{
 	"apps/admin/core/typed.go": "Admit / AdmitScoped — the SuperAdmin and white-label tenant gates. " +
 		"Both read validated identity beyond the org (IsAdmin, the WL allowlist), which principal.OrgFrom does not carry.",
+	"apps/account/account.go": "requestCaller — account IS the signed-in caller's own account, and resolving " +
+		"them needs more of the validated principal than the org: the user id (X-User-Id), the IAM username " +
+		"(X-User-Name) that IAM's user-key ops parse, and validated-ness itself, none of which principal.OrgFrom " +
+		"carries. ONE function, which every op in the package asks; it fails closed off the HTTP path. Two ops " +
+		"then reuse the request it hands back for a second, non-identity reason: the CSRF issuer pins " +
+		"Cache-Control on its response, and embed-status reads the SuperAdmin claim.",
 	"apps/search/search.go": "Query resolves the tenant from the validated principal at the top of the op.",
 	"apps/ingress/ingress.go": "admin — the SuperAdmin gate on the fleet EDGE's config. The edge is platform " +
 		"infrastructure (AC-6), so every /v1/ingress op requires SuperAdmin, which is X-User-IsAdmin — a claim " +
