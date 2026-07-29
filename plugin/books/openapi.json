@@ -56,9 +56,36 @@
     "/v1/books/ask": {
       "post": {
         "operationId": "post_v1_books_ask",
+        "summary": "AskBooks answers a plain-language question about the caller's own books — \"what is my\nMRR?\", \"how long is my runway?\" — with figures taken from their ledger, never a guessed\nnumber.",
+        "description": "AskBooks answers a plain-language question about the caller's own books — \"what is my\nMRR?\", \"how long is my runway?\" — with figures taken from their ledger, never a guessed\nnumber. A deterministic keyword router picks the intent and reads the real metrics, and\nthose figures, followups and report sources are computed BEFORE any model call and are\nnever altered by one: the optional narration seam only rephrases the sentence, and it\ndegrades silently to the templated answer when no AI plane is wired. It is strictly\nread-only — it restates the books, it never posts to them.",
         "tags": [
           "books"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "question": "how long is my runway?"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/AskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/balance-sheet": {
@@ -131,9 +158,33 @@
     "/v1/books/bank/sync": {
       "post": {
         "operationId": "post_v1_books_bank_sync",
+        "summary": "SyncBank pulls every connected bank (Plaid/Teller) for the caller's org, maps each\nfetched transaction to a posting and books it idempotently, then advances that\nconnector's cursor so the next sync resumes where this one stopped.",
+        "description": "SyncBank pulls every connected bank (Plaid/Teller) for the caller's org, maps each\nfetched transaction to a posting and books it idempotently, then advances that\nconnector's cursor so the next sync resumes where this one stopped. One connector's\noutage is skipped rather than failing the whole sync. It reports the batch: how many\ntransactions were seen, how many vouchers posted, how many inflows reconciled against\nthe processor clearing account, how many raised a question, how many were own-account\ntransfers, and how many were already-processed no-ops. It is READ-ONLY against the\nbank — it ingests, it never sends money.",
         "tags": [
           "books"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/syncIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankTally"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/bank/transactions": {
@@ -504,9 +555,38 @@
       },
       "post": {
         "operationId": "post_v1_books_rules",
+        "summary": "UpsertRule creates or updates one auto-categorization rule, keyed by its pattern —\nwriting a pattern that already exists REPLACES that row's category and priority.",
+        "description": "UpsertRule creates or updates one auto-categorization rule, keyed by its pattern —\nwriting a pattern that already exists REPLACES that row's category and priority. The\ncategory is normalized to a real COA expense account, and anything unrecognized becomes\n5900 Uncategorized rather than a guessed real account. It answers the row exactly as\nstored, so the caller sees the normalization. A rule overrides a vendor's default\ncategory, so this is the standing instruction that decides how a future bill classifies.",
         "tags": [
           "books"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "category": "cloud",
+                "pattern": "aws",
+                "priority": 5
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Rule"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rule"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/scan": {
@@ -520,9 +600,49 @@
     "/v1/books/scan/book": {
       "post": {
         "operationId": "post_v1_books_scan_book",
+        "summary": "BookScan posts a reviewed scanned bill to the ledger.",
+        "description": "BookScan posts a reviewed scanned bill to the ledger. It is the scanner's ONLY write:\nthe voucher goes through the same post() choke point every other source uses, so it is\nchecked to balance (Σdebit == Σcredit) and is idempotent by (scan, scanId) — re-booking\nthe same scan answers posted=false and writes nothing. A bill whose economic identity\n(vendor, total, issue date) already posted under a DIFFERENT scan is refused 409 unless\noverride is set, which is what stops the same receipt re-scanned into a new file hash\nfrom double-booking. An unbalanced voucher is refused 400.",
         "tags": [
           "books"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "scanId": "a5f3c1",
+                "voucher": {
+                  "description": "GitHub",
+                  "legs": [
+                    {
+                      "account": "5300",
+                      "debit": 1234
+                    },
+                    {
+                      "account": "2001",
+                      "credit": 1234
+                    }
+                  ]
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/BookRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/books/sync": {
@@ -725,9 +845,40 @@
       },
       "post": {
         "operationId": "post_v1_books_vendors",
+        "summary": "UpsertVendor creates or updates one vendor in the org's vendor book, keyed by its\ncanonical name — writing a canonical name that already exists REPLACES that row's\naliases and default category.",
+        "description": "UpsertVendor creates or updates one vendor in the org's vendor book, keyed by its\ncanonical name — writing a canonical name that already exists REPLACES that row's\naliases and default category. A category given as a slug (\"software\") is normalized to\nits real COA expense account, and anything unrecognized becomes 5900 Uncategorized\nrather than a guessed real account. It answers the row exactly as stored, so the caller\nsees the normalization. Recording a vendor is what makes future bills from it\nself-classify instead of asking again.",
         "tags": [
           "books"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "aliases": [
+                  "github.com"
+                ],
+                "canonical": "GitHub",
+                "defaultCategory": "software"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/VendorRow"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VendorRow"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     }
   },
@@ -746,6 +897,53 @@
           },
           "type": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AskRequest": {
+        "properties": {
+          "from": {
+            "description": "From is the RFC3339 start of the metric window. Empty means all time, treated as a\nsingle reporting period (see monthsBetween).",
+            "type": "string"
+          },
+          "question": {
+            "description": "Question is the plain-language question about the org's books, e.g. \"what is my\nMRR?\". Longer than 2000 characters is truncated, never refused.",
+            "type": "string"
+          },
+          "to": {
+            "description": "To is the RFC3339 end of the metric window. Empty means up to now.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AskResponse": {
+        "properties": {
+          "answer": {
+            "description": "Answer is one or two sentences answering the question, every number in it taken\nfrom Figures.",
+            "type": "string"
+          },
+          "figures": {
+            "description": "Figures are the grounded numbers the answer states, each already formatted.",
+            "items": {
+              "$ref": "#/components/schemas/Figure"
+            },
+            "type": "array"
+          },
+          "followups": {
+            "description": "Followups are sharper questions to ask next, chosen from the same intent.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sources": {
+            "description": "Sources name the books reports the figures were computed from — \"pnl\",\n\"balance-sheet\", \"trial-balance\".",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "type": "object"
@@ -827,6 +1025,35 @@
         },
         "type": "object"
       },
+      "BankTally": {
+        "properties": {
+          "ingested": {
+            "description": "transactions seen",
+            "type": "integer"
+          },
+          "posted": {
+            "description": "vouchers newly posted (outflow + reconciled)",
+            "type": "integer"
+          },
+          "questions": {
+            "description": "unmatched inflows that raised a question",
+            "type": "integer"
+          },
+          "reconciled": {
+            "description": "inflows cleared against Square-clearing",
+            "type": "integer"
+          },
+          "skipped": {
+            "description": "already-processed idempotent no-ops",
+            "type": "integer"
+          },
+          "transfers": {
+            "description": "own-account moves recorded (no P\u0026L)",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "BankTxnRow": {
         "properties": {
           "amountCents": {
@@ -862,6 +1089,36 @@
         },
         "type": "object"
       },
+      "BookRequest": {
+        "properties": {
+          "override": {
+            "description": "Override books this bill even when one of the SAME economic identity\n(vendor, total, issue date) already posted — the explicit human confirmation that a\nsame-looking bill is a genuine second spend, not the same receipt re-scanned.",
+            "type": "boolean"
+          },
+          "scanId": {
+            "description": "ScanID is the scanned document's file hash, as GET /v1/books/inbox and the scan\ndraft report it. It is the idempotency key: re-booking the same scan writes nothing.",
+            "type": "string"
+          },
+          "voucher": {
+            "$ref": "#/components/schemas/Voucher",
+            "description": "Voucher is the reviewed voucher to post. Its source is FORCED to (scan, scanId)\nserver-side, so it can never be booked under another source's key."
+          }
+        },
+        "type": "object"
+      },
+      "BookResponse": {
+        "properties": {
+          "posted": {
+            "description": "Posted is true when this call wrote the voucher, false when the same scan had\nalready booked and nothing was written.",
+            "type": "boolean"
+          },
+          "scanId": {
+            "description": "ScanID echoes the scan that was booked.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Extracted": {
         "properties": {
           "category": {
@@ -892,6 +1149,23 @@
           },
           "totalCents": {
             "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Figure": {
+        "properties": {
+          "label": {
+            "description": "Label names the metric, e.g. \"MRR\" or \"Runway\".",
+            "type": "string"
+          },
+          "period": {
+            "description": "Period is the window the figure covers, e.g. \"2026-07\" or \"all-time\".",
+            "type": "string"
+          },
+          "value": {
+            "description": "Value is the figure already formatted through books' own money formatter, so a\nconsumer never re-derives it.",
+            "type": "string"
           }
         },
         "type": "object"
@@ -986,6 +1260,23 @@
           },
           "vendor": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Leg": {
+        "properties": {
+          "account": {
+            "description": "Account is the chart-of-accounts number this side posts to, e.g. \"5300\".",
+            "type": "string"
+          },
+          "credit": {
+            "description": "Credit is the leg's credit in exact cents. Set this or Debit, not both.",
+            "type": "integer"
+          },
+          "debit": {
+            "description": "Debit is the leg's debit in exact cents. Set this or Credit, not both.",
+            "type": "integer"
           }
         },
         "type": "object"
@@ -1093,13 +1384,15 @@
       "Rule": {
         "properties": {
           "category": {
-            "description": "COA account number",
+            "description": "Category is the COA expense account a matching bill books to. An upsert normalizes\na slug (\"cloud\") to its account number.",
             "type": "string"
           },
           "pattern": {
+            "description": "Pattern is the merchant substring the rule matches on, case-insensitively. It is\nalso the key an upsert writes by.",
             "type": "string"
           },
           "priority": {
+            "description": "Priority breaks ties: when several patterns match, the highest wins.",
             "type": "integer"
           }
         },
@@ -1199,16 +1492,46 @@
       "VendorRow": {
         "properties": {
           "aliases": {
+            "description": "Aliases are the other spellings a receipt may print the vendor under; a scan\nmatching any of them resolves to this vendor.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "canonical": {
+            "description": "Canonical is the vendor's one true name, and the key an upsert writes by.",
             "type": "string"
           },
           "defaultCategory": {
-            "description": "COA account number",
+            "description": "DefaultCategory is the COA expense account new bills from this vendor book to.\nAn upsert normalizes a slug (\"software\") to its account number.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Voucher": {
+        "properties": {
+          "description": {
+            "description": "Description is the human line for the event, e.g. the vendor a bill came from.",
+            "type": "string"
+          },
+          "legs": {
+            "description": "Legs are the sides of the posting. They must balance: Σdebit == Σcredit, give or\ntake the 2¢ round-off allowance.",
+            "items": {
+              "$ref": "#/components/schemas/Leg"
+            },
+            "type": "array"
+          },
+          "postingAt": {
+            "description": "PostingAt is the RFC3339 instant the event posts at — the time every statement\nwindow filters on.",
+            "type": "string"
+          },
+          "sourceId": {
+            "description": "SourceID is the source event's own id within that namespace. Together with\nSourceKind it is the key that makes a repeat posting a no-op.",
+            "type": "string"
+          },
+          "sourceKind": {
+            "description": "SourceKind is the idempotency namespace naming what booked this, e.g. \"scan\".",
             "type": "string"
           }
         },

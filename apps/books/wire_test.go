@@ -20,6 +20,7 @@ package books
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -252,6 +253,85 @@ func TestSandboxSelectorIsTheLiteralTrue(t *testing.T) {
 		if _, _, out := hit(t, app, http.MethodGet, "/v1/books/vendors"+q, "acme", nil); bytes.Contains(out, []byte("OnlyInSandbox")) {
 			t.Errorf("%q must read the LIVE ledger — only the literal \"true\" selects sandbox; got %s", q, out)
 		}
+	}
+}
+
+// TestTheLedgerSelectorStaysOnTheURLForBodyWrites pins the half of the selector a
+// GET cannot: the WRITES take a JSON body, and a typed POST's In is documented as
+// that body — so a Sandbox field on one of them would MOVE the live/sandbox choice
+// off the URL it has always ridden on, and publish it as a body field. The ops read
+// it from the request instead (query, typed.go), so `sandbox` in the BODY selects
+// nothing. This goes red the moment someone names it on an In, which is exactly when
+// the wire would have moved.
+func TestTheLedgerSelectorStaysOnTheURLForBodyWrites(t *testing.T) {
+	app := mountBooks(t)
+	// A body that ASKS for the sandbox, on the URL that does not.
+	if code, _, out := hit(t, app, http.MethodPost, "/v1/books/vendors", "acme",
+		[]byte(`{"canonical":"BodySelectorVendor","sandbox":"true"}`)); code != http.StatusOK {
+		t.Fatalf("vendor upsert: status %d (%s)", code, out)
+	}
+	if _, _, out := hit(t, app, http.MethodGet, "/v1/books/vendors?sandbox=true", "acme", nil); bytes.Contains(out, []byte("BodySelectorVendor")) {
+		t.Errorf("a body `sandbox` must select nothing — the row landed in the SANDBOX ledger: %s", out)
+	}
+	if _, _, out := hit(t, app, http.MethodGet, "/v1/books/vendors", "acme", nil); !bytes.Contains(out, []byte("BodySelectorVendor")) {
+		t.Errorf("the row must land in the LIVE ledger the URL named, got %s", out)
+	}
+	// And the URL still selects, on the same body-carrying route.
+	if code, _, out := hit(t, app, http.MethodPost, "/v1/books/rules?sandbox=true", "acme",
+		[]byte(`{"pattern":"urlselector","category":"cloud"}`)); code != http.StatusOK {
+		t.Fatalf("rule upsert: status %d (%s)", code, out)
+	}
+	if _, _, out := hit(t, app, http.MethodGet, "/v1/books/rules?sandbox=true", "acme", nil); !bytes.Contains(out, []byte("urlselector")) {
+		t.Errorf("?sandbox=true on a POST must write the SANDBOX ledger, got %s", out)
+	}
+	if _, _, out := hit(t, app, http.MethodGet, "/v1/books/rules", "acme", nil); bytes.Contains(out, []byte("urlselector")) {
+		t.Errorf("the sandbox write must be invisible from the LIVE ledger, got %s", out)
+	}
+}
+
+// TestMetricsCannotBeTypedYet is the EVIDENCE for the one books route left untyped on
+// purpose. GET /v1/books/metrics answers MetricsResponse, which EMBEDS Metrics:
+// encoding/json flattens an embedded struct onto the wire, and zip's schema walk
+// publishes it as a NESTED property instead. Typing the route would therefore describe a
+// response no answer of it matches, and every generated SDK would model it wrong — worse
+// than no description at all.
+//
+// So the refusal is a measurement, not a claim, and this goes RED the day zip learns to
+// flatten — which is the day the route can be typed. Read the failure as the go-ahead.
+func TestMetricsCannotBeTypedYet(t *testing.T) {
+	app := zip.New(zip.Config{})
+	zip.Get(app, "/probe", func(context.Context, *struct{}) (*MetricsResponse, error) { return nil, nil })
+	spec, err := json.Marshal(app.OpenAPISpec())
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	var doc struct {
+		Components struct {
+			Schemas map[string]struct {
+				Properties map[string]json.RawMessage `json:"properties"`
+			} `json:"schemas"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(spec, &doc); err != nil {
+		t.Fatalf("spec decode: %v", err)
+	}
+	published := doc.Components.Schemas["MetricsResponse"].Properties
+	wire, err := json.Marshal(MetricsResponse{})
+	if err != nil {
+		t.Fatalf("wire: %v", err)
+	}
+	var onTheWire map[string]json.RawMessage
+	if err := json.Unmarshal(wire, &onTheWire); err != nil {
+		t.Fatalf("wire decode: %v", err)
+	}
+	if _, nested := published["Metrics"]; !nested {
+		t.Errorf("zip no longer nests the embedded struct — type GET /v1/books/metrics")
+	}
+	if _, flat := onTheWire["Metrics"]; flat {
+		t.Fatalf("MetricsResponse no longer flattens on the wire: %s", wire)
+	}
+	if _, flat := published["mrr"]; flat != false {
+		t.Errorf("the published schema matches the wire now — type GET /v1/books/metrics")
 	}
 }
 

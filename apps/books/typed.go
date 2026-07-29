@@ -75,6 +75,27 @@ func (o booksOps) ledger(ctx context.Context, sandbox, action string) (*store, e
 	return st, nil
 }
 
+// query reads one URL query value for a typed op whose In is its request BODY.
+//
+// A BODYLESS op (GET) names each query parameter as an In field and zip documents
+// it as the query parameter it is. A POST's In IS its request body in the document
+// (zip openapi.go: query parameters are declared only where there is no
+// requestBody), so naming a URL-borne value there would MOVE it off the URL it
+// rides on today — and typing describes the wire, it does not move it. So a
+// body-carrying op reads it from the request instead: the same *zip.Ctx the raw
+// handler beside it holds, reached through cloud.Request, which is exactly the
+// seam typed.go exists to provide.
+//
+// Empty off the HTTP path (an in-process CLI invoke has no request and therefore
+// no URL) — the same answer an HTTP request that omits the parameter gives, so
+// the two planes agree rather than one inventing a value.
+func query(ctx context.Context, name string) string {
+	if c, ok := cloud.Request(ctx); ok {
+		return c.Query(name)
+	}
+	return ""
+}
+
 // sandboxOf is the ledger selector, and the ONE rule both the typed ops and the
 // handlers still untyped read `sandbox` by: the literal "true", case-insensitive,
 // selects the org's SANDBOX book, anything else its live one.
