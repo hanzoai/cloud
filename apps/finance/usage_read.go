@@ -1,6 +1,10 @@
 package finance
 
-import "context"
+import (
+	"context"
+
+	"github.com/hanzoai/cloud/apps/money"
+)
 
 // UsageRow is one recorded usage debit — the READ twin of RecordUsage. The SAME
 // wallet→revenue posting a metered call wrote is read back here, so the usage a
@@ -42,6 +46,50 @@ func (f *ledgerFinance) ListUsage(ctx context.Context, org string, limit int) ([
 			ID:        e.ID,
 			Cents:     e.Amount.Cents(),
 			Model:     e.Memo,
+			CreatedAt: e.CreatedAt,
+		})
+	}
+	return rows, nil
+}
+
+// TxnRow is one ledger entry as the billing surface reads it: every kind, not only
+// the usage debits ListUsage keeps. Credits, grants and debits are all transactions
+// to a customer looking at their account, and the three finance pages
+// (credits/usage/ledger) are three projections of THIS one list.
+//
+// Amount stays the ledger's own money.Amount — 18-decimal exact, the same integer
+// an on-chain balance holds — because this is where that value lives. Flattening to
+// cents here would round away everything below a cent, which is most of what a
+// per-token AI price IS.
+type TxnRow struct {
+	ID        string
+	Kind      string
+	Ref       string
+	Memo      string
+	Amount    money.Amount
+	CreatedAt int64
+}
+
+// ListEntries returns org's ledger entries, most-recent-first, up to limit
+// (limit <= 0 lists all). Same read as ListUsage and the same tenant boundary — the
+// org's own file — but unfiltered: the caller decides which kinds its page shows.
+func (f *ledgerFinance) ListEntries(ctx context.Context, org string, limit int) ([]TxnRow, error) {
+	store, err := f.storeFor(org, false)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := store.Entries(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]TxnRow, 0, len(entries))
+	for _, e := range entries {
+		rows = append(rows, TxnRow{
+			ID:        e.ID,
+			Kind:      e.Kind,
+			Ref:       e.Ref,
+			Memo:      e.Memo,
+			Amount:    e.Amount,
 			CreatedAt: e.CreatedAt,
 		})
 	}
