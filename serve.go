@@ -292,22 +292,25 @@ func Serve(plugins []Plugin, enable []string) error {
 	app.Use(EdgeCORS(deps.GatewayPolicy))
 	app.Use(EdgeRateLimit(deps.GatewayPolicy))
 
-	// IDENTITY IS THE GATEWAY'S, AND IT IS VERIFIED EXACTLY ONCE.
+	// Identity trust boundary — cloud strips every client-supplied authority header
+	// and re-injects only what a VALIDATED IAM principal justifies.
 	//
-	// HIP-0519. The edge strips whatever a client sent, validates the IAM token
-	// against IAM's JWKS, and mints the HIP-0026 header set from the verified claims.
-	// Everything behind it — these co-located plugins, and every sibling reached
-	// over ZAP on a unix socket — reads that assertion and forwards it unchanged.
+	// HIP-0519 says identity is verified once, at the edge, and that is the shape
+	// to reach. It rests on ONE assumption: the gateway is the only ingress. That
+	// assumption does not hold here yet, and the estate's own red-team probe says
+	// so — with this middleware removed, a request carrying a forged X-Org-Id,
+	// X-User-Id and X-User-IsAdmin reads another org's secret VALUE from the
+	// in-cluster KMS listener:
 	//
-	// Cloud used to validate the same token a second time and re-mint the same
-	// headers from the same claims: a whole JWKS client, issuer set, audience
-	// allowlist and claim cache restating a decision made one hop earlier. Two
-	// implementations of one rule is one too many, and the second is the one that
-	// drifts.
+	//	PROBE (b) forged org + forged X-User-Id + IsAdmin → 200 {"value":"…"}
 	//
-	// So there is no identity middleware here. c.Org(), c.User(), c.IsAdmin() and
-	// the principal predicates read the gateway's headers — which is what they
-	// always read; the difference is that nothing re-derives them.
+	// So this stays until service listeners are unreachable except through the
+	// gateway. Removing it is a network-policy change first and a code change
+	// second, and doing the code half alone is a cross-tenant secret read.
+	// red_orgscope_isolation_test.go and TestAudit_AnonRequestNotAttributedToForgedOrg
+	// fail the moment it is dropped; they are the gate on that work, not obstacles
+	// to it.
+	app.Use(IdentityMiddleware(cfg))
 
 	// Typed-op bridge. A zip.Get[In, Out] handler receives a context.Context and
 	// its decoded In and nothing else, so the per-request values it still needs —
