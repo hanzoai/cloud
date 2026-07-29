@@ -46,7 +46,7 @@ func init() {
 			"analyticsView.recommendations": "Recommendations are the next-best GTM actions derived from that funnel.",
 		},
 	})
-	zip.Describe("GET /v1/guide/blueprint/", zip.Doc{
+	zip.Describe("GET /v1/guide/blueprint", zip.Doc{
 		Description: "GetBlueprint returns the FULL authored brand blueprint — every principle,\nsection, step, strategy and template WITH its enabled flag made explicit,\nincluding the disabled items the org-facing reads never see — plus the active\nversion number, the brand key it is stored under and the item counts. It is the\nSuperAdmin authoring view of the platform blueprint, so it is refused 403 for\nanyone else, including a per-org admin: the brand blueprint is shared platform\ncontent, not a per-customer surface.",
 		Fields: map[string]string{
 			"Blueprint.principles":    "the 64-principle spine (Zen of Hanzo archetypes)",
