@@ -1725,6 +1725,80 @@ components:
           description: Org is the tenant slug from the path.
           type: string
       type: object
+    PagesBuildConfig:
+      properties:
+        build_command:
+          type: string
+        destination_dir:
+          type: string
+        root_dir:
+          type: string
+      type: object
+    PagesD1Binding:
+      properties:
+        id:
+          type: string
+      type: object
+    PagesDeploymentConfig:
+      properties:
+        compatibility_date:
+          type: string
+        compatibility_flags:
+          items:
+            type: string
+          type: array
+        d1_databases:
+          additionalProperties:
+            $ref: '#/components/schemas/PagesD1Binding'
+          type: object
+        env_vars:
+          additionalProperties:
+            $ref: '#/components/schemas/PagesEnvVar'
+          type: object
+        kv_namespaces:
+          additionalProperties:
+            $ref: '#/components/schemas/PagesKVBinding'
+          type: object
+        r2_buckets:
+          additionalProperties:
+            $ref: '#/components/schemas/PagesR2Binding'
+          type: object
+      type: object
+    PagesDeploymentConfigs:
+      properties:
+        preview:
+          $ref: '#/components/schemas/PagesDeploymentConfig'
+        production:
+          $ref: '#/components/schemas/PagesDeploymentConfig'
+      type: object
+    PagesEnvVar:
+      properties:
+        type:
+          type: string
+        value:
+          type: string
+      type: object
+    PagesKVBinding:
+      properties:
+        namespace_id:
+          type: string
+      type: object
+    PagesProjectCreate:
+      properties:
+        build_config:
+          $ref: '#/components/schemas/PagesBuildConfig'
+        deployment_configs:
+          $ref: '#/components/schemas/PagesDeploymentConfigs'
+        name:
+          type: string
+        production_branch:
+          type: string
+      type: object
+    PagesR2Binding:
+      properties:
+        name:
+          type: string
+      type: object
     PnL:
       properties:
         expense:
@@ -4012,6 +4086,12 @@ components:
         binding:
           $ref: '#/components/schemas/agentBinding'
       type: object
+    bucketCreateIn:
+      properties:
+        name:
+          description: Name is the bucket name to create.
+          type: string
+      type: object
     byoGPU:
       properties:
         arch:
@@ -4097,6 +4177,9 @@ components:
             Org is the tenant to act on. Required for a SuperAdmin — they must name their
             target; ignored for a white-label admin, who always acts on their own org.
           type: string
+      type: object
+    cfResult:
+      properties: {}
       type: object
     chatRequest:
       properties:
@@ -4723,6 +4806,12 @@ components:
             the journey comes from the brand blueprint or the embedded fixture.
           type: boolean
       type: object
+    databaseCreateIn:
+      properties:
+        name:
+          description: Name is the database name to create.
+          type: string
+      type: object
     datastoreVolume:
       properties:
         mount:
@@ -4857,6 +4946,15 @@ components:
               type: object
             type: object
           type: array
+      type: object
+    domainAddIn:
+      properties:
+        name:
+          description: Name is the custom domain to attach, e.g. "www.acme.com".
+          type: string
+        project:
+          description: Project is the Pages project name, from the path.
+          type: string
       type: object
     embedStatusResp:
       properties:
@@ -6084,6 +6182,13 @@ components:
           description: consumed spend, fleet-wide
           type: integer
       type: object
+    namespaceCreateIn:
+      properties:
+        title:
+          description: Title is the namespace's display title. Cloudflare mints the
+            id.
+          type: string
+      type: object
     noArgs:
       properties: {}
       type: object
@@ -6798,6 +6903,21 @@ components:
           description: Name is the provider's display name ("Slack").
           type: string
       type: object
+    purgeIn:
+      properties:
+        files:
+          description: Files purges exactly the listed URLs — at most 30, Cloudflare's
+            per-request cap.
+          items:
+            type: string
+          type: array
+        purge_everything:
+          description: Everything drops the zone's entire edge cache.
+          type: boolean
+        zone:
+          description: Zone is the 32-hex Cloudflare zone id, from the path.
+          type: string
+      type: object
     pushFile:
       properties:
         content:
@@ -7107,6 +7227,20 @@ components:
       properties:
         roundId:
           description: RoundID is the cap table's id for the recorded round.
+          type: string
+      type: object
+    routeCreateIn:
+      properties:
+        pattern:
+          description: Pattern is the URL pattern to bind, e.g. "acme.com/api/*".
+          type: string
+        script:
+          description: |-
+            Script is the Worker script to dispatch to. Omit it to leave the pattern
+            bound to no script, which is how Cloudflare expresses "bypass the Worker here".
+          type: string
+        zone:
+          description: Zone is the 32-hex Cloudflare zone id, from the path.
           type: string
       type: object
     rulesOut:
@@ -7507,6 +7641,17 @@ components:
           type: string
         structure:
           description: 'Structure is the legal entity: c-corp, llc or dao-llc.'
+          type: string
+      type: object
+    subdomainSetIn:
+      properties:
+        enabled:
+          description: |-
+            Enabled publishes the script on <script>.<subdomain>.workers.dev when true,
+            and withdraws it when false.
+          type: boolean
+        script:
+          description: Script is the Worker script name, from the path.
           type: string
       type: object
     subscribeReq:
@@ -13773,22 +13918,84 @@ paths:
       - cloudflare
   /v1/cloudflare/d1/databases:
     get:
+      description: |-
+        D1DatabaseList lists the D1 databases on the org's Cloudflare account. Any org
+        member may read.
       operationId: get_v1_cloudflare_d1_databases
+      parameters:
+      - description: Page is the 1-based page of databases to return.
+        in: query
+        name: page
+        required: false
+        schema:
+          type: string
+      - description: PerPage is how many databases one page holds.
+        in: query
+        name: per_page
+        required: false
+        schema:
+          type: string
+      - description: Name filters to the database with this name.
+        in: query
+        name: name
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: D1DatabaseList lists the D1 databases on the org's Cloudflare account.
       tags:
       - cloudflare
     post:
+      description: |-
+        D1DatabaseCreate creates a D1 database on the org's Cloudflare account.
+        Requires org admin.
       operationId: post_v1_cloudflare_d1_databases
+      requestBody:
+        content:
+          application/json:
+            example:
+              name: orders
+            schema:
+              $ref: '#/components/schemas/databaseCreateIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: D1DatabaseCreate creates a D1 database on the org's Cloudflare account.
       tags:
       - cloudflare
   /v1/cloudflare/d1/databases/{database}:
     delete:
-      operationId: delete_v1_cloudflare_d1_databases_by_database
+      description: |-
+        D1DatabaseDelete deletes a D1 database and everything stored in it. Requires
+        org admin.
+      operationId: delete_v1_cloudflare_d1_databases_database
       parameters:
-      - in: path
+      - description: Database is the Cloudflare D1 database id or name.
+        example: orders
+        in: path
         name: database
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: D1DatabaseDelete deletes a D1 database and everything stored in it.
       tags:
       - cloudflare
   /v1/cloudflare/d1/databases/{database}/query:
@@ -13804,38 +14011,127 @@ paths:
       - cloudflare
   /v1/cloudflare/kv/namespaces:
     get:
+      description: |-
+        KVNamespaceList lists the Workers KV namespaces on the org's Cloudflare
+        account. Any org member may read.
       operationId: get_v1_cloudflare_kv_namespaces
+      parameters:
+      - description: Page is the 1-based page of namespaces to return.
+        in: query
+        name: page
+        required: false
+        schema:
+          type: string
+      - description: PerPage is how many namespaces one page holds.
+        in: query
+        name: per_page
+        required: false
+        schema:
+          type: string
+      - description: Order names the field to sort by, and Direction sorts asc or
+          desc.
+        in: query
+        name: order
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: direction
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: |-
+        KVNamespaceList lists the Workers KV namespaces on the org's Cloudflare
+        account.
       tags:
       - cloudflare
     post:
+      description: |-
+        KVNamespaceCreate creates a Workers KV namespace on the org's Cloudflare
+        account. Requires org admin. Cloudflare mints the namespace id the value routes
+        address.
       operationId: post_v1_cloudflare_kv_namespaces
+      requestBody:
+        content:
+          application/json:
+            example:
+              title: sessions
+            schema:
+              $ref: '#/components/schemas/namespaceCreateIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: |-
+        KVNamespaceCreate creates a Workers KV namespace on the org's Cloudflare
+        account.
       tags:
       - cloudflare
   /v1/cloudflare/kv/namespaces/{namespace}:
     delete:
-      operationId: delete_v1_cloudflare_kv_namespaces_by_namespace
+      description: |-
+        KVNamespaceDelete deletes a Workers KV namespace and every key in it. Requires
+        org admin.
+      operationId: delete_v1_cloudflare_kv_namespaces_namespace
       parameters:
-      - in: path
+      - description: Namespace is the Cloudflare KV namespace id.
+        example: 0123456789abcdef0123456789abcdef
+        in: path
         name: namespace
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: KVNamespaceDelete deletes a Workers KV namespace and every key in it.
       tags:
       - cloudflare
   /v1/cloudflare/kv/namespaces/{namespace}/values/{key}:
     delete:
-      operationId: delete_v1_cloudflare_kv_namespaces_by_namespace_values_by_key
+      description: KVValueDelete removes one key from a Workers KV namespace. Requires
+        org admin.
+      operationId: delete_v1_cloudflare_kv_namespaces_namespace_values_key
       parameters:
-      - in: path
+      - description: Namespace is the Cloudflare KV namespace id.
+        example: 0123456789abcdef0123456789abcdef
+        in: path
         name: namespace
         required: true
         schema:
           type: string
-      - in: path
+      - description: |-
+          Key is the key within that namespace. KV keys are broad (up to 512 bytes),
+          so this one is escaped rather than charset-restricted.
+        example: session/abc
+        in: path
         name: key
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: KVValueDelete removes one key from a Workers KV namespace.
       tags:
       - cloudflare
     get:
@@ -13870,32 +14166,93 @@ paths:
       - cloudflare
   /v1/cloudflare/pages/projects:
     get:
+      description: PagesList lists the org's Cloudflare Pages projects. Any org member
+        may read.
       operationId: get_v1_cloudflare_pages_projects
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: PagesList lists the org's Cloudflare Pages projects.
       tags:
       - cloudflare
     post:
+      description: |-
+        PagesCreate creates a Cloudflare Pages project on the org's account. Requires
+        org admin. Only the modeled fields reach Cloudflare, so an unmodeled key in the
+        request is dropped rather than forwarded.
       operationId: post_v1_cloudflare_pages_projects
+      requestBody:
+        content:
+          application/json:
+            example:
+              name: marketing-site
+              production_branch: main
+            schema:
+              $ref: '#/components/schemas/PagesProjectCreate'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: PagesCreate creates a Cloudflare Pages project on the org's account.
       tags:
       - cloudflare
   /v1/cloudflare/pages/projects/{project}:
     delete:
-      operationId: delete_v1_cloudflare_pages_projects_by_project
+      description: |-
+        PagesDelete deletes a Cloudflare Pages project, and with it every deployment it
+        has ever made. Requires org admin.
+      operationId: delete_v1_cloudflare_pages_projects_project
       parameters:
-      - in: path
+      - description: Project is the Pages project name.
+        example: marketing-site
+        in: path
         name: project
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: |-
+        PagesDelete deletes a Cloudflare Pages project, and with it every deployment it
+        has ever made.
       tags:
       - cloudflare
     get:
-      operationId: get_v1_cloudflare_pages_projects_by_project
+      description: |-
+        PagesGet reads one Cloudflare Pages project — its build config, deployment
+        configs and latest deployment. Any org member may read.
+      operationId: get_v1_cloudflare_pages_projects_project
       parameters:
-      - in: path
+      - description: Project is the Pages project name.
+        example: marketing-site
+        in: path
         name: project
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: |-
+        PagesGet reads one Cloudflare Pages project — its build config, deployment
+        configs and latest deployment.
       tags:
       - cloudflare
   /v1/cloudflare/pages/projects/{project}/deployments:
@@ -13911,65 +14268,204 @@ paths:
       - cloudflare
   /v1/cloudflare/pages/projects/{project}/domains:
     post:
-      operationId: post_v1_cloudflare_pages_projects_by_project_domains
+      description: |-
+        PagesDomainAdd attaches a custom domain to a Cloudflare Pages project. Requires
+        org admin. Cloudflare owns validation and certificate issuance from here on.
+      operationId: post_v1_cloudflare_pages_projects_project_domains
       parameters:
-      - in: path
+      - description: Project is the Pages project name, from the path.
+        example: marketing-site
+        in: path
         name: project
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              name: www.acme.com
+              project: marketing-site
+            schema:
+              $ref: '#/components/schemas/domainAddIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: PagesDomainAdd attaches a custom domain to a Cloudflare Pages project.
       tags:
       - cloudflare
   /v1/cloudflare/pages/projects/{project}/domains/{domain}:
     delete:
-      operationId: delete_v1_cloudflare_pages_projects_by_project_domains_by_domain
+      description: |-
+        PagesDomainDelete detaches a custom domain from a Cloudflare Pages project.
+        Requires org admin.
+      operationId: delete_v1_cloudflare_pages_projects_project_domains_domain
       parameters:
-      - in: path
+      - description: Project is the Pages project name.
+        example: marketing-site
+        in: path
         name: project
         required: true
         schema:
           type: string
-      - in: path
+      - description: Domain is the attached custom domain to detach.
+        example: www.acme.com
+        in: path
         name: domain
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: PagesDomainDelete detaches a custom domain from a Cloudflare Pages
+        project.
       tags:
       - cloudflare
   /v1/cloudflare/r2/buckets:
     get:
+      description: |-
+        R2BucketList lists the R2 buckets on the org's Cloudflare account. Any org
+        member may read.
       operationId: get_v1_cloudflare_r2_buckets
+      parameters:
+      - description: PerPage is how many buckets one page holds.
+        in: query
+        name: per_page
+        required: false
+        schema:
+          type: string
+      - description: Cursor continues from the position a previous page returned.
+        in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+      - description: NameContains filters to buckets whose name contains this substring.
+        in: query
+        name: name_contains
+        required: false
+        schema:
+          type: string
+      - description: Order names the field to sort by, and Direction sorts asc or
+          desc.
+        in: query
+        name: order
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: direction
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: R2BucketList lists the R2 buckets on the org's Cloudflare account.
       tags:
       - cloudflare
     post:
+      description: |-
+        R2BucketCreate creates an R2 bucket on the org's Cloudflare account. Requires
+        org admin.
       operationId: post_v1_cloudflare_r2_buckets
+      requestBody:
+        content:
+          application/json:
+            example:
+              name: assets
+            schema:
+              $ref: '#/components/schemas/bucketCreateIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: R2BucketCreate creates an R2 bucket on the org's Cloudflare account.
       tags:
       - cloudflare
   /v1/cloudflare/r2/buckets/{bucket}:
     delete:
-      operationId: delete_v1_cloudflare_r2_buckets_by_bucket
+      description: |-
+        R2BucketDelete deletes an R2 bucket. Requires org admin. Cloudflare refuses a
+        bucket that still holds objects, and that refusal is relayed.
+      operationId: delete_v1_cloudflare_r2_buckets_bucket
       parameters:
-      - in: path
+      - description: Bucket is the R2 bucket name.
+        example: assets
+        in: path
         name: bucket
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: R2BucketDelete deletes an R2 bucket.
       tags:
       - cloudflare
   /v1/cloudflare/workers/scripts:
     get:
+      description: |-
+        WorkersScriptList lists the Worker scripts on the org's Cloudflare account. Any
+        org member may read.
       operationId: get_v1_cloudflare_workers_scripts
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: WorkersScriptList lists the Worker scripts on the org's Cloudflare
+        account.
       tags:
       - cloudflare
   /v1/cloudflare/workers/scripts/{script}:
     delete:
-      operationId: delete_v1_cloudflare_workers_scripts_by_script
+      description: |-
+        WorkersScriptDelete removes a Worker script from the org's Cloudflare account.
+        Requires org admin. Routes bound to the script stop serving it.
+      operationId: delete_v1_cloudflare_workers_scripts_script
       parameters:
-      - in: path
+      - description: Script is the Worker script name.
+        example: edge-router
+        in: path
         name: script
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: |-
+        WorkersScriptDelete removes a Worker script from the org's Cloudflare account.
+        Requires org admin.
       tags:
       - cloudflare
     put:
@@ -13984,93 +14480,329 @@ paths:
       - cloudflare
   /v1/cloudflare/workers/scripts/{script}/subdomain:
     post:
-      operationId: post_v1_cloudflare_workers_scripts_by_script_subdomain
+      description: |-
+        WorkersScriptSubdomainSet publishes or withdraws one Worker script on the
+        account's workers.dev subdomain. Requires org admin.
+      operationId: post_v1_cloudflare_workers_scripts_script_subdomain
       parameters:
-      - in: path
+      - description: Script is the Worker script name, from the path.
+        example: edge-router
+        in: path
         name: script
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              enabled: true
+              script: edge-router
+            schema:
+              $ref: '#/components/schemas/subdomainSetIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: |-
+        WorkersScriptSubdomainSet publishes or withdraws one Worker script on the
+        account's workers.dev subdomain.
       tags:
       - cloudflare
   /v1/cloudflare/workers/subdomain:
     get:
+      description: |-
+        WorkersSubdomainGet reads the org account's workers.dev subdomain — the name
+        under which every subdomain-enabled script is served. Any org member may read.
       operationId: get_v1_cloudflare_workers_subdomain
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: |-
+        WorkersSubdomainGet reads the org account's workers.dev subdomain — the name
+        under which every subdomain-enabled script is served.
       tags:
       - cloudflare
   /v1/cloudflare/workers/zones/{zone}/routes:
     get:
-      operationId: get_v1_cloudflare_workers_zones_by_zone_routes
+      description: |-
+        WorkersRouteList lists the Worker routes bound within one zone — the URL
+        patterns that dispatch to a script. Any org member may read. Routes are
+        zone-scoped, so no account is resolved.
+      operationId: get_v1_cloudflare_workers_zones_zone_routes
       parameters:
-      - in: path
+      - description: Zone is the 32-hex Cloudflare zone id.
+        example: 0123456789abcdef0123456789abcdef
+        in: path
         name: zone
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: |-
+        WorkersRouteList lists the Worker routes bound within one zone — the URL
+        patterns that dispatch to a script.
       tags:
       - cloudflare
     post:
-      operationId: post_v1_cloudflare_workers_zones_by_zone_routes
+      description: |-
+        WorkersRouteCreate binds a URL pattern in a zone to a Worker script. Requires
+        org admin — a route is what puts a script in front of live traffic.
+      operationId: post_v1_cloudflare_workers_zones_zone_routes
       parameters:
-      - in: path
+      - description: Zone is the 32-hex Cloudflare zone id, from the path.
+        example: 0123456789abcdef0123456789abcdef
+        in: path
         name: zone
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              pattern: acme.com/api/*
+              script: edge-router
+              zone: 0123456789abcdef0123456789abcdef
+            schema:
+              $ref: '#/components/schemas/routeCreateIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: WorkersRouteCreate binds a URL pattern in a zone to a Worker script.
       tags:
       - cloudflare
   /v1/cloudflare/workers/zones/{zone}/routes/{route}:
     delete:
-      operationId: delete_v1_cloudflare_workers_zones_by_zone_routes_by_route
+      description: |-
+        WorkersRouteDelete unbinds a Worker route, so its pattern stops dispatching to a
+        script. Requires org admin.
+      operationId: delete_v1_cloudflare_workers_zones_zone_routes_route
       parameters:
-      - in: path
+      - description: Zone is the 32-hex Cloudflare zone id.
+        example: 0123456789abcdef0123456789abcdef
+        in: path
         name: zone
         required: true
         schema:
           type: string
-      - in: path
+      - description: Route is the 32-hex Cloudflare route id.
+        example: fedcba9876543210fedcba9876543210
+        in: path
         name: route
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: |-
+        WorkersRouteDelete unbinds a Worker route, so its pattern stops dispatching to a
+        script.
       tags:
       - cloudflare
   /v1/cloudflare/zones:
     get:
+      description: |-
+        ZonesList lists the Cloudflare zones the org's connected API token can see,
+        paged and filtered by the query parameters Cloudflare itself accepts. Zones are
+        token-scoped by Cloudflare, so no account is resolved. Any org member may read.
+
+        Zone and DNS-record MANAGEMENT is not here: it stays on the Hanzo DNS plane
+        (/v1/dns). This only surfaces the Cloudflare zone objects the asset plane needs
+        — a zone id is what addresses a Worker route or an analytics read.
       operationId: get_v1_cloudflare_zones
+      parameters:
+      - description: Page is the 1-based page of zones to return.
+        in: query
+        name: page
+        required: false
+        schema:
+          type: string
+      - description: PerPage is how many zones one page holds.
+        in: query
+        name: per_page
+        required: false
+        schema:
+          type: string
+      - description: Name filters to the zone with this domain name.
+        in: query
+        name: name
+        required: false
+        schema:
+          type: string
+      - description: Status filters by zone status (active, pending, initializing,
+          …).
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
+      - description: Order names the field to sort by, and Direction sorts asc or
+          desc.
+        in: query
+        name: order
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: direction
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: |-
+        ZonesList lists the Cloudflare zones the org's connected API token can see,
+        paged and filtered by the query parameters Cloudflare itself accepts.
       tags:
       - cloudflare
   /v1/cloudflare/zones/{zone}:
     get:
-      operationId: get_v1_cloudflare_zones_by_zone
+      description: |-
+        ZoneGet reads one Cloudflare zone the org's token can see. Any org member may
+        read. A zone id the token cannot see is Cloudflare's own not-found, relayed.
+      operationId: get_v1_cloudflare_zones_zone
       parameters:
-      - in: path
+      - description: Zone is the 32-hex Cloudflare zone id.
+        example: 0123456789abcdef0123456789abcdef
+        in: path
         name: zone
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: ZoneGet reads one Cloudflare zone the org's token can see.
       tags:
       - cloudflare
   /v1/cloudflare/zones/{zone}/analytics:
     get:
-      operationId: get_v1_cloudflare_zones_by_zone_analytics
+      description: |-
+        ZoneAnalytics reads a zone's Cloudflare traffic dashboard — requests, bandwidth,
+        threats and pageviews over the since/until window. Any org member may read.
+
+        A zone whose Cloudflare plan does not serve this endpoint yields Cloudflare's
+        OWN error, never a fabricated success.
+      operationId: get_v1_cloudflare_zones_zone_analytics
       parameters:
-      - in: path
+      - description: Zone is the 32-hex Cloudflare zone id.
+        example: 0123456789abcdef0123456789abcdef
+        in: path
         name: zone
         required: true
         schema:
           type: string
+      - description: |-
+          Since and Until bound the window, in the form Cloudflare accepts — an RFC 3339
+          time or a negative number of minutes from now ("-1440" is the last day).
+        example: "-1440"
+        in: query
+        name: since
+        required: false
+        schema:
+          type: string
+      - example: "0"
+        in: query
+        name: until
+        required: false
+        schema:
+          type: string
+      - description: Continuous asks Cloudflare for only fully-aggregated buckets.
+        in: query
+        name: continuous
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: |-
+        ZoneAnalytics reads a zone's Cloudflare traffic dashboard — requests, bandwidth,
+        threats and pageviews over the since/until window.
       tags:
       - cloudflare
   /v1/cloudflare/zones/{zone}/purge:
     post:
-      operationId: post_v1_cloudflare_zones_by_zone_purge
+      description: |-
+        ZonePurge drops a zone's Cloudflare edge cache — either the whole zone
+        (purge_everything) or exactly the listed file URLs. Requires org admin.
+
+        Purging is the one zone-scoped WRITE this plane owns. It is not DNS — no record
+        changes — so it does not belong on /v1/dns, and it is not a connection, so it does
+        not belong on the integrations plane. It is a cache operation on a zone, which is
+        what this asset plane is for. It takes the admin gate because dropping a zone's
+        cache sends every subsequent request to the origin: on a site fronting a small
+        origin that is a self-inflicted load spike, so it is a change, not a look.
+
+        Exactly one selector is required. Cloudflare treats a body with neither as a
+        no-op and answers 200, which reads as "purged" to a caller that never purged
+        anything — the failure we refuse to pass through.
+      operationId: post_v1_cloudflare_zones_zone_purge
       parameters:
-      - in: path
+      - description: Zone is the 32-hex Cloudflare zone id, from the path.
+        example: 0123456789abcdef0123456789abcdef
+        in: path
         name: zone
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              purge_everything: true
+              zone: 0123456789abcdef0123456789abcdef
+            schema:
+              $ref: '#/components/schemas/purgeIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cfResult'
+          description: ok
+      summary: |-
+        ZonePurge drops a zone's Cloudflare edge cache — either the whole zone
+        (purge_everything) or exactly the listed file URLs.
       tags:
       - cloudflare
   /v1/clusters:
