@@ -249,6 +249,12 @@ func init() {
 		},
 		Example: json.RawMessage(`{"name":"widgets","public":true}`),
 	})
+	zip.Describe("POST /git/files", zip.Doc{
+		Description: "planeFiles reads the glob-selected files of one of the caller's repos at one\nrevision, returning the resolved commit and each file's path and contents.\nThe org is the CALLER's plane identity, never the argument — an anonymous\ncaller is refused — and the whole reply is read at one resolved commit, so a\ncaller can never assemble half an inventory from each side of a push. A named\nhandler, not a closure, so zipdoc can lift this prose into the registry.",
+	})
+	zip.Describe("POST /git/publish", zip.Doc{
+		Description: "planePublish reconciles a project's canonical repo to the project's published\nvisibility: it provisions the repo on first publish and thereafter flips only\nthe public bit, then keeps the GitHub replica's visibility in step.\nIdempotent, so projects can fire it on every create, visibility change and\nmoderation event. The org is the CALLER's plane identity, never the argument —\na caller that could name the org would be publishing into another tenant's\nrepos — and an anonymous caller is refused. A named handler, not a closure, so\nzipdoc can lift this prose into the registry.",
+	})
 	zip.Describe("POST /v1/git/keys", zip.Doc{
 		Description: "registerKey registers an SSH public key so it can authenticate `git clone\ngit@<host>:<org>/<repo>.git` for the caller's org. The key line is parsed and\ncanonicalized before storage, its SHA256 fingerprint becomes the auth lookup\nhandle, and the full public key round-trips (it is public). Answers 201.\nFingerprints are globally unique, so a key already registered — to this org or\nany other — is a 409: one key belongs to exactly one org.",
 		Fields: map[string]string{
