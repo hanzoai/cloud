@@ -19,20 +19,71 @@
     "/v1/framework/doctypes": {
       "get": {
         "operationId": "get_v1_framework_doctypes",
+        "summary": "listDocTypes returns every DocType defined in the caller's org.",
+        "description": "listDocTypes returns every DocType defined in the caller's org. Another\ntenant's definitions are never included: the org is part of the store key.",
         "tags": [
           "framework"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/docTypeList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_framework_doctypes",
+        "summary": "createDocType defines a DocType in the caller's org: the metadata that gives a\ndocument surface its fields, its naming rule, whether it has a submit/cancel\nlifecycle, and which role may do what to it.",
+        "description": "createDocType defines a DocType in the caller's org: the metadata that gives a\ndocument surface its fields, its naming rule, whether it has a submit/cancel\nlifecycle, and which role may do what to it. Manager-only — on a fresh org the\nfirst caller to administer it is seeded as its System Manager, after which\nonly a System Manager (or a platform admin) may define. Answers 201.",
         "tags": [
           "framework"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "autoname": "TASK-.#####",
+                "fields": [
+                  {
+                    "fieldname": "subject",
+                    "fieldtype": "Data",
+                    "reqd": true
+                  }
+                ],
+                "name": "Task"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/DocType"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocType"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/framework/doctypes/{name}": {
       "delete": {
-        "operationId": "delete_v1_framework_doctypes_by_name",
+        "operationId": "delete_v1_framework_doctypes_name",
+        "summary": "deleteDocType removes a DocType and every document stored under it.",
+        "description": "deleteDocType removes a DocType and every document stored under it. The\ndefinition and its data go together — a document with no schema can be neither\nvalidated nor read back — so there is no undo. Manager-only. Answers 204.",
         "tags": [
           "framework"
         ],
@@ -41,14 +92,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the DocType's name, from the path. A name containing a space\n(\"Sales Invoice\") arrives percent-encoded and is decoded before it is\nmatched against the stored one.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "Task"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_framework_doctypes_by_name",
+        "operationId": "get_v1_framework_doctypes_name",
+        "summary": "getDocType returns one DocType definition — its fields, naming rule,\npermissions and lifecycle flags.",
+        "description": "getDocType returns one DocType definition — its fields, naming rule,\npermissions and lifecycle flags. Scoped to the caller's org, so another\ntenant's DocType of the same name is simply not found.",
         "tags": [
           "framework"
         ],
@@ -57,14 +117,30 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the DocType's name, from the path. A name containing a space\n(\"Sales Invoice\") arrives percent-encoded and is decoded before it is\nmatched against the stored one.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "Task"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocType"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
-        "operationId": "put_v1_framework_doctypes_by_name",
+        "operationId": "put_v1_framework_doctypes_name",
+        "summary": "replaceDocType replaces a DocType definition wholesale (PUT semantics): the\nstored definition becomes the body.",
+        "description": "replaceDocType replaces a DocType definition wholesale (PUT semantics): the\nstored definition becomes the body. The name in the URL is authoritative over\nthe body's, and documents already stored under the DocType are left intact.\nManager-only.",
         "tags": [
           "framework"
         ],
@@ -75,22 +151,70 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "Task"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "fields": [
+                  {
+                    "fieldname": "subject",
+                    "fieldtype": "Data"
+                  }
+                ],
+                "name": "Task"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/DocType"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocType"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/framework/modules": {
       "get": {
         "operationId": "get_v1_framework_modules",
+        "summary": "listModules returns every app lane compiled into this deployment and the\nDocTypes each one installs.",
+        "description": "listModules returns every app lane compiled into this deployment and the\nDocTypes each one installs. It describes the BINARY, not the org: what a given\norg has actually installed is the per-module state below.",
         "tags": [
           "framework"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/moduleList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/framework/modules/{module}": {
       "get": {
-        "operationId": "get_v1_framework_modules_by_module",
+        "operationId": "get_v1_framework_modules_module",
+        "summary": "getModule returns one app lane's install state for the caller's org: the\nDocTypes the lane declares, and which of them already exist in the org.",
+        "description": "getModule returns one app lane's install state for the caller's org: the\nDocTypes the lane declares, and which of them already exist in the org. That\nis the honest \"set up\" versus \"installed\" answer a console renders.",
         "tags": [
           "framework"
         ],
@@ -99,16 +223,32 @@
             "name": "module",
             "in": "path",
             "required": true,
+            "description": "Module is the lane's registered name (\"cms\", \"erp\"), from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cms"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModuleState"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/framework/modules/{module}/install": {
       "post": {
-        "operationId": "post_v1_framework_modules_by_module_install",
+        "operationId": "post_v1_framework_modules_module_install",
+        "summary": "installModule creates an app lane's DocTypes in the caller's org.",
+        "description": "installModule creates an app lane's DocTypes in the caller's org. Idempotent\nand create-if-absent: a DocType the org already has is reported as existing\nand never replaced, so re-installing cannot clobber a definition the org has\nsince edited. Manager-only.",
         "tags": [
           "framework"
         ],
@@ -117,30 +257,101 @@
             "name": "module",
             "in": "path",
             "required": true,
+            "description": "Module is the lane's registered name (\"cms\", \"erp\"), from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cms"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "module": "cms"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/moduleRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Install"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/framework/roles": {
       "get": {
         "operationId": "get_v1_framework_roles",
+        "summary": "listRoles returns every (user, role) assignment in the caller's org.",
+        "description": "listRoles returns every (user, role) assignment in the caller's org. Roles are\nwhat DocType permissions are written against, so this is the grant table the\npermission calculus resolves a member's rights from.",
         "tags": [
           "framework"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/roleList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_framework_roles",
+        "summary": "assignRole grants one user one role in the caller's org — how a member gains\nrights on a DocType, since permissions name roles and never users.\nManager-only.",
+        "description": "assignRole grants one user one role in the caller's org — how a member gains\nrights on a DocType, since permissions name roles and never users.\nManager-only. Answers 201.",
         "tags": [
           "framework"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "role": "System Manager",
+                "user": "u_alice"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Role"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Role"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/framework/roles/{user}/{role}": {
       "delete": {
-        "operationId": "delete_v1_framework_roles_by_user_by_role",
+        "operationId": "delete_v1_framework_roles_user_role",
+        "summary": "revokeRole removes one (user, role) grant in the caller's org.",
+        "description": "revokeRole removes one (user, role) grant in the caller's org. Manager-only.\nAnswers 204; a grant that does not exist is not found.",
         "tags": [
           "framework"
         ],
@@ -149,32 +360,57 @@
             "name": "user",
             "in": "path",
             "required": true,
+            "description": "User is the assignee whose grant is being revoked, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "u_alice"
           },
           {
             "name": "role",
             "in": "path",
             "required": true,
+            "description": "Role is the role to revoke, from the path. A role name containing a space\n(\"System Manager\") arrives percent-encoded and is decoded before it is\nmatched against the stored assignment.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "System Manager"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       }
     },
     "/v1/framework/summary": {
       "get": {
         "operationId": "get_v1_framework_summary",
+        "summary": "summary reports how much of the DocType surface the caller's org uses: how",
+        "description": "summary reports how much of the DocType surface the caller's org uses: how\nmany DocTypes it has defined, and how many documents exist across them.",
         "tags": [
           "framework"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/summaryView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/framework/{doctype}": {
       "get": {
-        "operationId": "get_v1_framework_by_doctype",
+        "operationId": "get_v1_framework_doctype",
+        "summary": "listDocuments returns the caller org's documents of one DocType, filtered,\nordered and projected by the query.",
+        "description": "listDocuments returns the caller org's documents of one DocType, filtered,\nordered and projected by the query. The DocType is resolved FIRST — through\nthe same permission gate the list itself uses — because the query is validated\nagainst its schema: a filter, sort or field name the DocType does not declare\nis refused rather than reaching the store.",
         "tags": [
           "framework"
         ],
@@ -183,11 +419,64 @@
             "name": "doctype",
             "in": "path",
             "required": true,
+            "description": "DocType is the DocType to list, from the path.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "Task"
+          },
+          {
+            "name": "filters",
+            "in": "query",
+            "required": false,
+            "description": "Filters is a JSON object of equality matches, e.g. {\"priority\":\"High\"}.\nEvery key must be a field the DocType declares (or the managed name /\ndocstatus); an undeclared one is refused rather than silently ignored.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "{\"priority\":\"High\"}"
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "required": false,
+            "description": "Fields projects the response to a subset — a JSON array [\"a\",\"b\"] or a\ncomma list \"a,b\". The envelope keys are always returned.",
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "order_by",
+            "in": "query",
+            "required": false,
+            "description": "OrderBy is \"\u003cfield\u003e [asc|desc]\". Empty means most-recently-updated first.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "estimate asc"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Limit caps the rows returned. Anything that is not a positive integer\nleaves the engine's default in place.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "20"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/documentList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_framework_by_doctype",
@@ -208,7 +497,9 @@
     },
     "/v1/framework/{doctype}/{name}": {
       "delete": {
-        "operationId": "delete_v1_framework_by_doctype_by_name",
+        "operationId": "delete_v1_framework_doctype_name",
+        "summary": "deleteDocument removes one document, after its on_trash hooks agree.",
+        "description": "deleteDocument removes one document, after its on_trash hooks agree. A\nSUBMITTED document cannot be deleted — cancel it first. Answers 204.",
         "tags": [
           "framework"
         ],
@@ -217,22 +508,33 @@
             "name": "doctype",
             "in": "path",
             "required": true,
+            "description": "DocType is the document's DocType, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "Task"
           },
           {
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the document's name — its key within the DocType — from the path.\nA name containing a space arrives percent-encoded and is decoded before it\nis matched against the stored one.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "TASK-00001"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_framework_by_doctype_by_name",
+        "operationId": "get_v1_framework_doctype_name",
+        "summary": "getDocument returns one document by name, with Password fields redacted.",
+        "description": "getDocument returns one document by name, with Password fields redacted.",
         "tags": [
           "framework"
         ],
@@ -241,19 +543,38 @@
             "name": "doctype",
             "in": "path",
             "required": true,
+            "description": "DocType is the document's DocType, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "Task"
           },
           {
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the document's name — its key within the DocType — from the path.\nA name containing a space arrives percent-encoded and is decoded before it\nis matched against the stored one.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "TASK-00001"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "object"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
         "operationId": "put_v1_framework_by_doctype_by_name",
@@ -282,7 +603,9 @@
     },
     "/v1/framework/{doctype}/{name}/cancel": {
       "post": {
-        "operationId": "post_v1_framework_by_doctype_by_name_cancel",
+        "operationId": "post_v1_framework_doctype_name_cancel",
+        "summary": "cancelDocument moves a submitted document to cancelled (docstatus 1 → 2) after\nits on_cancel hooks agree.",
+        "description": "cancelDocument moves a submitted document to cancelled (docstatus 1 → 2) after\nits on_cancel hooks agree. Cancelling is terminal — a cancelled document\ncannot be re-submitted — but it CAN then be deleted.",
         "tags": [
           "framework"
         ],
@@ -291,24 +614,59 @@
             "name": "doctype",
             "in": "path",
             "required": true,
+            "description": "DocType is the document's DocType, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "Task"
           },
           {
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the document's name — its key within the DocType — from the path.\nA name containing a space arrives percent-encoded and is decoded before it\nis matched against the stored one.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "TASK-00001"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "doctype": "Task",
+                "name": "TASK-00001"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/docRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "object"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/framework/{doctype}/{name}/submit": {
       "post": {
-        "operationId": "post_v1_framework_by_doctype_by_name_submit",
+        "operationId": "post_v1_framework_doctype_name_submit",
+        "summary": "submitDocument moves a draft to submitted (docstatus 0 → 1) after its\non_submit hooks agree.",
+        "description": "submitDocument moves a draft to submitted (docstatus 0 → 1) after its\non_submit hooks agree. A submitted document is IMMUTABLE: further writes and\ndeletes are refused until it is cancelled. Only a submittable DocType has this\nlifecycle; any other docstatus is an illegal transition.",
         "tags": [
           "framework"
         ],
@@ -317,19 +675,312 @@
             "name": "doctype",
             "in": "path",
             "required": true,
+            "description": "DocType is the document's DocType, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "Task"
           },
           {
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the document's name — its key within the DocType — from the path.\nA name containing a space arrives percent-encoded and is decoded before it\nis matched against the stored one.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "TASK-00001"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "doctype": "Task",
+                "name": "TASK-00001"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/docRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "object"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DocField": {
+        "properties": {
+          "default": {
+            "type": "string"
+          },
+          "fetchFrom": {
+            "type": "string"
+          },
+          "fieldname": {
+            "type": "string"
+          },
+          "fieldtype": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "inListView": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          },
+          "options": {
+            "type": "string"
+          },
+          "readOnly": {
+            "type": "boolean"
+          },
+          "reqd": {
+            "type": "boolean"
+          },
+          "unique": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "DocPerm": {
+        "properties": {
+          "cancel": {
+            "type": "boolean"
+          },
+          "create": {
+            "type": "boolean"
+          },
+          "delete": {
+            "type": "boolean"
+          },
+          "read": {
+            "type": "boolean"
+          },
+          "role": {
+            "type": "string"
+          },
+          "submit": {
+            "type": "boolean"
+          },
+          "write": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "DocType": {
+        "properties": {
+          "autoname": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/DocField"
+            },
+            "type": "array"
+          },
+          "isSingle": {
+            "type": "boolean"
+          },
+          "isSubmittable": {
+            "type": "boolean"
+          },
+          "module": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "$ref": "#/components/schemas/DocPerm"
+            },
+            "type": "array"
+          },
+          "titleField": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Install": {
+        "properties": {
+          "created": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "existing": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "module": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ModuleInfo": {
+        "properties": {
+          "doctypes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "module": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ModuleState": {
+        "properties": {
+          "doctypes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "installed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "module": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Role": {
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "user": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "docRef": {
+        "properties": {
+          "doctype": {
+            "description": "DocType is the document's DocType, from the path.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the document's name — its key within the DocType — from the path.\nA name containing a space arrives percent-encoded and is decoded before it\nis matched against the stored one.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "docTypeList": {
+        "properties": {
+          "data": {
+            "description": "Data is every DocType defined in the caller's org.",
+            "items": {
+              "$ref": "#/components/schemas/DocType"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "documentList": {
+        "properties": {
+          "data": {
+            "description": "Data is the matching documents, newest-updated first unless order_by said\notherwise, each projected to the requested fields plus the envelope keys.",
+            "items": {
+              "additionalProperties": {
+                "type": "object"
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "moduleList": {
+        "properties": {
+          "data": {
+            "description": "Data is every module compiled into this binary, with the DocTypes it installs.",
+            "items": {
+              "$ref": "#/components/schemas/ModuleInfo"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "moduleRef": {
+        "properties": {
+          "module": {
+            "description": "Module is the lane's registered name (\"cms\", \"erp\"), from the path.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "roleList": {
+        "properties": {
+          "data": {
+            "description": "Data is every (user, role) assignment in the caller's org.",
+            "items": {
+              "$ref": "#/components/schemas/Role"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "summaryView": {
+        "properties": {
+          "doctypes": {
+            "description": "DocTypes is how many DocTypes the org has defined.",
+            "type": "integer"
+          },
+          "documents": {
+            "description": "Documents is how many documents exist across them.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }
