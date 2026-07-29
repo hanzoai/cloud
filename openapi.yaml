@@ -4475,6 +4475,60 @@ components:
         status:
           type: string
       type: object
+    collabPayload:
+      properties:
+        content:
+          additionalProperties:
+            type: string
+          description: Content maps a document field to its ProseMirror markup JSON.
+          type: object
+        source:
+          description: |-
+            Source is the blob ref a getContent reads the snapshot from. Absent means
+            there is no snapshot to read, which answers empty content.
+          type: string
+        updates:
+          additionalProperties:
+            type: string
+          description: |-
+            Updates carries, per field, a base64 Y.js state update encoding the SAME
+            markup — the front computes it (markupToYDoc → encodeStateAsUpdate) so a
+            createContent seeds the live-editing lane's update log, not just the
+            snapshot blob. Without it a dialog-created description is invisible in the
+            collaborative editor, which replays the ydoc log, never the snapshot.
+          type: object
+      type: object
+    collabRequest:
+      properties:
+        documentId:
+          description: |-
+            DocumentID addresses the document field, as
+            "<workspaceUuid>|<objectClass>|<objectId>|<objectAttr>" — the
+            collaborator-client encodeDocumentId shape, from the path.
+          type: string
+        method:
+          description: 'Method is the verb: createContent, updateContent or getContent.'
+          type: string
+        payload:
+          $ref: '#/components/schemas/collabPayload'
+          description: Payload is the verb's argument.
+      type: object
+    collabResult:
+      properties:
+        content:
+          additionalProperties:
+            type: string
+          description: |-
+            Content maps each document field to its value for the verb: the new blob
+            ref after a createContent, the stored markup after a getContent.
+          type: object
+        error:
+          description: |-
+            Error carries a SEMANTIC refusal, which this RPC reports under 200 because
+            the client throws on result.error — auth and tenancy failures are HTTP
+            statuses instead.
+          type: string
+      type: object
     commitJSON:
       properties:
         authorEmail:
@@ -4806,6 +4860,12 @@ components:
         xLink:
           description: XLink is the person's X (Twitter) URL.
           type: string
+      type: object
+    cookieAck:
+      properties:
+        result:
+          description: Result is true when the cookie was written or cleared.
+          type: boolean
       type: object
     corpusView:
       properties:
@@ -8675,13 +8735,68 @@ paths:
       operationId: get_collaborator
   /collaborator/rpc/{documentId}:
     post:
-      operationId: post_collaborator_rpc_by_documentid
+      description: |-
+        CollabRPC is the collaborative-markup snapshot plane the Team front's editor
+        speaks: createContent stores a document field's markup at a fresh, immutable
+        blob ref and returns it, updateContent stores a new snapshot and answers
+        nothing, and getContent reads back the exact snapshot a ref names.
+
+        createContent ALSO seeds the live-editing update log from the front-supplied
+        Y.js update, so a dialog-authored description is visible in the collaborative
+        editor — which replays that log — and not only in snapshot reads.
+        updateContent never touches that log: peers may be live-editing the document,
+        and their edits are not this call's to overwrite.
+
+        Every call is scoped to the caller's VERIFIED session or workspace token: the
+        documentId's workspace must be the token's workspace when the token names one,
+        and the caller must be a member of it. An unknown workspace, another tenant's
+        workspace and a workspace the caller is not in all answer the same 404, so a
+        probe learns nothing about what exists.
+      operationId: post_collaborator_rpc_documentId
       parameters:
-      - in: path
+      - description: |-
+          DocumentID addresses the document field, as
+          "<workspaceUuid>|<objectClass>|<objectId>|<objectAttr>" — the
+          collaborator-client encodeDocumentId shape, from the path.
+        example: 6579…|tracker:class:Issue|issue-1|description
+        in: path
         name: documentId
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              documentId: 6579…|tracker:class:Issue|issue-1|description
+              method: getContent
+              payload:
+                source: issue-1-description-1730000000000
+            schema:
+              $ref: '#/components/schemas/collabRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/collabResult'
+          description: ok
+      summary: |-
+        CollabRPC is the collaborative-markup snapshot plane the Team front's editor
+        speaks: createContent stores a document field's markup at a fresh, immutable
+        blob ref and returns it, updateContent stores a new snapshot and answers
+        nothing, and getContent reads back the exact snapshot a ref names.
+
+        createContent ALSO seeds the live-editing update log from the front-supplied
+        Y.js update, so a dialog-authored description is visible in the collaborative
+        editor — which replays that log — and not only in snapshot reads.
+        updateContent never touches that log: peers may be live-editing the document,
+        and their edits are not this call's to overwrite.
+
+        Every call is scoped to the caller's VERIFIED session or workspace token: the
+        documentId's workspace must be the token's workspace when the token names one,
+        and the caller must be a member of it.
   /explore:
     get:
       operationId: get_explore
@@ -27844,7 +27959,28 @@ paths:
       - team
   /v1/team/account/cookie:
     delete:
+      description: |-
+        ClearCookie signs this browser out of team by expiring the HttpOnly
+        account-token cookie the OAuth callback set. It is the counterpart of the
+        cookie PUT, it takes nothing — the cookie it clears is named by this service,
+        never by the caller — and it is unconditional: a caller with no cookie, an
+        expired one or a forged one all get the same acknowledgement, because clearing
+        something that is not there is the same outcome as clearing something that is.
+
+        It clears ONLY the team session cookie. The IAM access-token cookie the same
+        callback set is a different credential with a different lifetime and is left
+        alone, so this is a team sign-out, not a platform one.
       operationId: delete_v1_team_account_cookie
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/cookieAck'
+          description: ok
+      summary: |-
+        ClearCookie signs this browser out of team by expiring the HttpOnly
+        account-token cookie the OAuth callback set.
       tags:
       - team
     put:
