@@ -16,15 +16,82 @@ import (
 )
 
 // bankRoutes registers the bank surface on the existing books app (called from routes()).
+// The group is built here, from a literal prefix, because that is what makes each typed
+// op's path — and therefore its identity in every projection — resolvable from this file.
+// It sits under the /v1/books group's Bridge + noStore, which match by prefix.
 func bankRoutes(app cloud.Router, s *cloud.Service[*state]) {
+	g := app.Group("/v1/books/bank")
+	o := booksOps{s: s}
+	zip.Get(g, "/transactions", o.listBankTxns)
+	zip.Get(g, "/unreconciled", o.listUnreconciled)
+
+	// UNTYPED, each for a stated reason. import takes RAW statement bytes (OFX/QFX/CSV)
+	// as its body, which is not a JSON input a typed op can name. sync's ?sandbox
+	// selector is query-only today and a typed POST documents its input as a body, which
+	// would move it. link-token and exchange always answer 501 — typing them would
+	// publish a success schema for a response neither has ever sent.
 	app.Post("/v1/books/bank/import", cloud.Handle(s, bankImportHandler))
 	app.Post("/v1/books/bank/sync", cloud.Handle(s, bankSyncHandler))
-	app.Get("/v1/books/bank/transactions", cloud.Handle(s, bankTxnsHandler))
-	app.Get("/v1/books/bank/unreconciled", cloud.Handle(s, bankUnreconciledHandler))
-	// Link plumbing the Plaid/Teller connectors implement — stubbed 501 until then so the
-	// route exists and the frontend contract is stable.
 	app.Post("/v1/books/bank/link-token", cloud.Handle(s, bankLinkTokenHandler))
 	app.Post("/v1/books/bank/exchange", cloud.Handle(s, bankExchangeHandler))
+}
+
+// bankTxnList is the org's normalized bank rows as the route answers them: a bare array.
+type bankTxnList []BankTxnRow
+
+// unreconciledOut pairs the unmatched inflows with the open questions they raised.
+type unreconciledOut struct {
+	// Questions is the open clarifying question per unmatched inflow.
+	Questions []BankQuestion `json:"questions"`
+	// Transactions is every bank row still unmatched against the ledger.
+	Transactions []BankTxnRow `json:"transactions"`
+}
+
+// bankLimitIn is a page of the org's bank rows.
+type bankLimitIn struct {
+	// Sandbox reads the org's SANDBOX ledger when it is exactly "true".
+	Sandbox string `json:"sandbox"`
+	// Limit caps how many rows come back; 500 when absent or not positive.
+	Limit int `json:"limit"`
+}
+
+// ListBankTransactions returns the org's normalized bank transactions, newest first —
+// every row the import and connector paths have ingested, with its amount in exact cents,
+// its direction, and whether it has been matched to a voucher yet.
+//
+// Example: {"limit": 100}
+func (o booksOps) listBankTxns(ctx context.Context, in *bankLimitIn) (*bankTxnList, error) {
+	st, err := o.ledger(ctx, in.Sandbox, "view bank transactions")
+	if err != nil {
+		return nil, err
+	}
+	rows, err := st.listBankTxns(ctx, limitOr(in.Limit, 500))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "bank transactions read failed")
+	}
+	out := bankTxnList(rows)
+	return &out, nil
+}
+
+// ListUnreconciled returns the org's unmatched bank inflows and their open clarifying
+// questions — the queue a human answers so an unexplained deposit is never guessed into
+// revenue.
+//
+// Example: {"sandbox": "false"}
+func (o booksOps) listUnreconciled(ctx context.Context, in *ledgerIn) (*unreconciledOut, error) {
+	st, err := o.ledger(ctx, in.Sandbox, "view unreconciled bank items")
+	if err != nil {
+		return nil, err
+	}
+	txns, err := st.listUnreconciled(ctx)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "bank unreconciled read failed")
+	}
+	questions, err := st.listQuestions(ctx)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "bank questions read failed")
+	}
+	return &unreconciledOut{Questions: questions, Transactions: txns}, nil
 }
 
 // bankImportHandler ingests an uploaded OFX/QFX/CSV file body: it parses it with the
@@ -69,46 +136,6 @@ func bankSyncHandler(s *cloud.Service[*state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusBadGateway, "bank sync failed")
 	}
 	return booksJSON(c, tally)
-}
-
-// bankTxnsHandler returns the org's normalized bank transactions (newest first, ?limit=).
-func bankTxnsHandler(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to view bank transactions")
-	}
-	st, err := s.State.storeFor(org, sandboxQuery(c))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "books open failed")
-	}
-	rows, err := st.listBankTxns(c.Context(), atoiDefault(c.Query("limit"), 500))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "bank transactions read failed")
-	}
-	return booksJSON(c, rows)
-}
-
-// bankUnreconciledHandler returns the org's unmatched inflows and their open clarifying
-// questions — the queue a human answers so an unexplained deposit is never guessed into
-// revenue.
-func bankUnreconciledHandler(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to view unreconciled bank items")
-	}
-	st, err := s.State.storeFor(org, sandboxQuery(c))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "books open failed")
-	}
-	txns, err := st.listUnreconciled(c.Context())
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "bank unreconciled read failed")
-	}
-	questions, err := st.listQuestions(c.Context())
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "bank questions read failed")
-	}
-	return booksJSON(c, map[string]any{"transactions": txns, "questions": questions})
 }
 
 // bankLinkTokenHandler / bankExchangeHandler are the Plaid/Teller link-flow endpoints. They

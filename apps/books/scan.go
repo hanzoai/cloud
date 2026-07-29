@@ -44,17 +44,27 @@ const scanSourceKind = "scan"
 const maxScanUpload = 8 << 20
 
 // scannerRoutes registers the scanner + inbox + vendors/rules + transactions surface on the
-// books app (called from routes()).
+// books app (called from routes()). The group is rebuilt here, from a literal prefix,
+// because that is what makes each typed op's path resolvable from this file; it is the same
+// /v1/books subtree routes() already installed Bridge + noStore on.
 func scannerRoutes(app cloud.Router, s *cloud.Service[*state]) {
+	g := app.Group("/v1/books")
+	o := booksOps{s: s}
+	zip.Get(g, "/inbox", o.listInbox)
+	zip.Get(g, "/vendors", o.listVendors)
+	zip.Get(g, "/rules", o.listRules)
+	zip.Get(g, "/transactions", o.listTransactions)
+
+	// UNTYPED, each for a stated reason. scan and the inbox upload take RAW document
+	// bytes (a PDF, an image, plain text) as their body, which is not a JSON input a
+	// typed op can name. scan/book, the vendor upsert and the rule upsert all read
+	// ?sandbox from the query, and a typed POST documents its whole input as a body —
+	// which would move a live/sandbox selector off the URL it lives on today.
 	app.Post("/v1/books/scan", cloud.Handle(s, scanHandler))
 	app.Post("/v1/books/scan/book", cloud.Handle(s, scanBookHandler))
 	app.Post("/v1/books/inbox", cloud.Handle(s, inboxUploadHandler))
-	app.Get("/v1/books/inbox", cloud.Handle(s, inboxListHandler))
-	app.Get("/v1/books/vendors", cloud.Handle(s, vendorsListHandler))
 	app.Post("/v1/books/vendors", cloud.Handle(s, vendorUpsertHandler))
-	app.Get("/v1/books/rules", cloud.Handle(s, rulesListHandler))
 	app.Post("/v1/books/rules", cloud.Handle(s, ruleUpsertHandler))
-	app.Get("/v1/books/transactions", cloud.Handle(s, transactionsHandler))
 }
 
 // LineItem is one line of a scanned document — a description and its amount in exact cents.

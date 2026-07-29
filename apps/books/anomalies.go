@@ -24,11 +24,10 @@ package books
 // and it is strictly READ-ONLY — it observes the ledger and never posts.
 
 import (
+	"context"
 	"net/http"
 	"sort"
 
-	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -57,21 +56,22 @@ type QuestionsResponse struct {
 	Questions []Question `json:"questions"`
 }
 
-// questionsHandler returns the caller's OWN org's clarifying questions from its recent GL.
-func questionsHandler(s *cloud.Service[*state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrUnauthorized("sign in to view books questions")
-	}
-	st, err := s.State.storeFor(org, sandboxQuery(c))
+// ListQuestions returns the clarifying questions the caller's own recent GL raises — the
+// unusual postings a founder should look at (outliers, reversals, round-offs, uncosted
+// revenue, an overdrawn wallet), sharpest first. An empty list means the books look clean;
+// the detector is deterministic over the ledger and invents nothing.
+//
+// Example: {"sandbox": "false"}
+func (o booksOps) listQuestions(ctx context.Context, in *ledgerIn) (*QuestionsResponse, error) {
+	st, err := o.ledger(ctx, in.Sandbox, "view books questions")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "books open failed")
+		return nil, err
 	}
-	rows, err := st.listGL(c.Context(), scanRows)
+	rows, err := st.listGL(ctx, scanRows)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "books gl read failed")
+		return nil, zip.Errorf(http.StatusInternalServerError, "books gl read failed")
 	}
-	return booksJSON(c, QuestionsResponse{Questions: detectQuestions(rows)})
+	return &QuestionsResponse{Questions: detectQuestions(rows)}, nil
 }
 
 // voucherView is the reconstructed multi-leg voucher for one source event, grouped from the
