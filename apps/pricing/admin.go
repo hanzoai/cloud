@@ -13,6 +13,7 @@
 package pricing
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -45,45 +46,63 @@ type patchBody struct {
 	Overrides *json.RawMessage `json:"overrides,omitempty"`
 }
 
-// adminCatalog returns the full catalog (every model + provider) annotated with
-// overlay state, for the admin UI. The catalog shape is tenant-independent, so
-// the admin always sees the canonical full list (isAdmin gate => nothing hidden).
-func adminCatalog(c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// adminCatalogOut is the whole catalog with every entry's enablement state.
+// Field order matches the sorted keys of the map it replaces, so the bytes on
+// the wire are unchanged.
+type adminCatalogOut struct {
+	// Models is every model the catalog holds — disabled ones included — each
+	// carrying its enablement state under "_overlay".
+	Models []Model `json:"models"`
+	// Providers is every provider the catalog holds, keyed by name, each
+	// carrying its enablement state under "_overlay".
+	Providers map[string]any `json:"providers"`
+	// Updated is when the catalog was last refreshed, as the pricing source
+	// recorded it.
+	Updated any `json:"updated"`
+}
+
+// GetAdminCatalog returns the full model and provider catalog annotated with
+// each entry's enablement state, for the operator console. Nothing is hidden:
+// this is the admin's view of what exists and what is currently off, in beta or
+// generally available. SuperAdmin only; every other caller is refused.
+func (o ops) adminCatalog(ctx context.Context, _ *pricingNoInput) (*adminCatalogOut, error) {
+	if !callerIsAdmin(ctx) {
+		return nil, zip.ErrForbidden("SuperAdmin required")
 	}
 	if cat == nil {
-		return c.JSON(http.StatusServiceUnavailable, map[string]any{"error": "catalog overlay not initialised"})
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "catalog overlay not initialised")
 	}
 
-	mstatus, mbody, err := rawDispatch(c, "models", nil)
+	mstatus, mbody, err := rawDispatch(ctx, "models", nil)
 	if err != nil || mstatus != http.StatusOK {
-		return c.JSON(http.StatusBadGateway, map[string]any{"error": "catalog unavailable"})
+		return nil, zip.Errorf(http.StatusBadGateway, "catalog unavailable")
 	}
 	var mp struct {
 		Updated any     `json:"updated"`
 		Models  []Model `json:"models"`
 	}
 	if err := json.Unmarshal(mbody, &mp); err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "catalog decode failed"})
+		return nil, zip.Errorf(http.StatusInternalServerError, "catalog decode failed")
 	}
 
 	var pwrap struct {
 		Providers map[string]any `json:"providers"`
 	}
-	if pstatus, pbody, perr := rawDispatch(c, "providers", nil); perr == nil && pstatus == http.StatusOK {
+	if pstatus, pbody, perr := rawDispatch(ctx, "providers", nil); perr == nil && pstatus == http.StatusOK {
 		_ = json.Unmarshal(pbody, &pwrap)
 	}
 
-	snap, err := cat.Snapshot(c.Context())
+	snap, err := cat.Snapshot(ctx)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "overlay read failed"})
+		return nil, zip.Errorf(http.StatusInternalServerError, "overlay read failed")
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"updated":   mp.Updated,
-		"models":    VisibleCatalog(mp.Models, snap, "", true),
-		"providers": VisibleProviders(pwrap.Providers, snap, "", true),
-	})
+	// The catalog shape is tenant-independent and the gate above already proved
+	// the caller is an admin, so the org is empty and isAdmin true: nothing hidden.
+	return &adminCatalogOut{
+		Models:    VisibleCatalog(mp.Models, snap, "", true),
+		Providers: VisibleProviders(pwrap.Providers, snap, "", true),
+		Updated:   mp.Updated,
+	}, nil
 }
 
 // adminPatchModel upserts the overlay for one model id. The id is a greedy

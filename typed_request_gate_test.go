@@ -70,6 +70,11 @@ var allowedRequestUses = map[string]string{
 		"billing org (principal.Ledger, which a SuperAdmin masquerade moves off the effective org); neither is " +
 		"what principal.OrgFrom carries. Both fail closed off the HTTP path: no request, no platform rights and " +
 		"no ledger to charge.",
+	"apps/pricing/ops.go": "callerIsAdmin — the catalog's SuperAdmin gate. Every read op here also " +
+		"branches on it (an admin sees disabled models, flagged, where a customer sees them hidden), and " +
+		"admin-ness lives in a header (X-User-IsAdmin) that principal.OrgFrom does not carry. The tenant " +
+		"itself is read with principal.OrgFrom (callerOrg, right beside it), never through the request. " +
+		"False off the HTTP path: no request, no attested caller, no admin view.",
 }
 
 // TestRequestEscapeHatchIsPinned fails when a new cloud.Request call site
