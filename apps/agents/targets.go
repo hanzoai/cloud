@@ -626,25 +626,16 @@ func mountTargets(s *cloud.Service[state], app cloud.Router) {
 	// Router since v1.18.0, so the prefix is part of each op's path and every
 	// projection — the document, the MCP tool, the CLI command, the call plane —
 	// follows from this one registration.
-	//
-	// FULL paths on the App, not leaf paths on g: cmd/zipdoc reads the path
-	// LITERAL out of this call to key the prose it lifts, so an op declared as
-	// ("/targets") on a group is filed under "POST /targets" while its real
-	// identity is "POST /v1/agents/targets" — docFor never matches and every doc
-	// comment is silently dropped from the document AND the MCP tool. zip gained
-	// group registration in v1.18.0; zipdoc has not caught up. Until it does, a
-	// typed op spells its whole path (the apps/git shape). The group above still
-	// carries the Bridge, which is prefix-matched and applies either way.
+	// Declared on the GROUP, so each op's path is the group's prefix composed with
+	// its leaf — the same composition the router does, and the identity every
+	// projection keys on. cmd/zipdoc resolves the prefix the same way as of zip
+	// v1.18.3, so the doc comments below reach the document and the MCP tool list.
 	o := targetOps{s: s}
-	zapp := cloud.ZipApp(app)
-	if zapp == nil {
-		return
-	}
-	zip.Post(zapp, "/v1/agents/targets", o.registerTarget)
-	zip.Get(zapp, "/v1/agents/targets", o.listTargets)
-	zip.Get(zapp, "/v1/agents/targets/:id", o.getTarget)
-	zip.Patch(zapp, "/v1/agents/targets/:id", o.patchTarget)
-	zip.Delete(zapp, "/v1/agents/targets/:id", o.deleteTarget)
+	zip.Post(g, "/targets", o.registerTarget)
+	zip.Get(g, "/targets", o.listTargets)
+	zip.Get(g, "/targets/:id", o.getTarget)
+	zip.Patch(g, "/targets/:id", o.patchTarget)
+	zip.Delete(g, "/targets/:id", o.deleteTarget)
 	// The #48 route-work machine surface (claim-key, claim long-poll, report)
 	// lives on the same target routes; register after the CRUD so the
 	// extra-segment paths are unambiguous.
