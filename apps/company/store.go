@@ -117,12 +117,18 @@ func (s *Store) Put(ctx context.Context, f *Formation) error {
 	return nil
 }
 
-// Summary is one row of the register: the projection Put already writes, with no
-// JSON decode. Hanzo forms the entity and carries the formation KYC/AML obligation,
-// so the platform needs to read its own book — how many entities it formed, which
-// are stalled, and where. Get answers a question about ONE org and cannot answer
-// any of those.
-type Summary struct {
+// Registration is one row of the register: the projection Put already writes, with
+// no JSON decode. Hanzo forms the entity and carries the formation KYC/AML
+// obligation, so the platform needs to read its own book — how many entities it
+// formed, which are stalled, and where. Get answers a question about ONE org and
+// cannot answer any of those.
+//
+// It is NOT called Summary. Schema names are flat across the fleet document, and
+// apps/marketing already publishes a Summary that means campaign counters — one
+// name, two shapes, which every generated SDK would bind to whichever it read
+// last. openapi.Weave refuses that composition, and it refused this one the
+// moment the register became a typed op.
+type Registration struct {
 	Org       string    `json:"org"`
 	Stage     Stage     `json:"stage"`
 	Structure Structure `json:"structure"`
@@ -152,7 +158,7 @@ const defaultRegisterLimit = 200
 //
 // Only the projection columns are read. Put maintains them precisely so a listing
 // never decodes a document it is not going to show.
-func (s *Store) List(ctx context.Context, f Filter) ([]Summary, error) {
+func (s *Store) List(ctx context.Context, f Filter) ([]Registration, error) {
 	limit := f.Limit
 	if limit <= 0 {
 		limit = defaultRegisterLimit
@@ -177,9 +183,9 @@ func (s *Store) List(ctx context.Context, f Filter) ([]Summary, error) {
 	}
 	defer rows.Close()
 
-	out := []Summary{}
+	out := []Registration{}
 	for rows.Next() {
-		var r Summary
+		var r Registration
 		if err := rows.Scan(&r.Org, &r.Stage, &r.Structure, &r.Name, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan formation: %w", err)
 		}

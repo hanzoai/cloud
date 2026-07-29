@@ -669,6 +669,20 @@ components:
         value:
           type: string
       type: object
+    Filing:
+      properties:
+        at:
+          type: integer
+        note:
+          type: string
+        provider:
+          type: string
+        ref:
+          type: string
+        status:
+          description: manual | submitted | filed | rejected
+          type: string
+      type: object
     FinanceCost:
       properties:
         configured:
@@ -751,6 +765,74 @@ components:
         title:
           type: string
       type: object
+    Formation:
+      properties:
+        alreadyIncorporated:
+          description: SKIP path.
+          type: boolean
+        capTableImported:
+          type: boolean
+        createdAt:
+          type: integer
+        documentIds:
+          description: dataroom doc ids of generated formation docs
+          items:
+            type: string
+          type: array
+        esignRef:
+          type: string
+        filing:
+          $ref: '#/components/schemas/Filing'
+        founders:
+          items:
+            $ref: '#/components/schemas/Founder'
+          type: array
+        genesis:
+          $ref: '#/components/schemas/Genesis'
+        imported:
+          type: boolean
+        importedDocs:
+          description: dataroom doc ids ingested from Drive
+          items:
+            type: string
+          type: array
+        jurisdiction:
+          type: string
+        name:
+          type: string
+        org:
+          type: string
+        paid:
+          type: boolean
+        paymentRef:
+          type: string
+        signed:
+          type: boolean
+        stage:
+          type: string
+        structure:
+          type: string
+        updatedAt:
+          type: integer
+      type: object
+    Founder:
+      properties:
+        decidedBy:
+          description: 'who settled a terminal KYC status: the provider name, or a
+            reviewer''s user id'
+          type: string
+        email:
+          type: string
+        equityBps:
+          type: integer
+        kycRef:
+          description: idv session reference
+          type: string
+        kycStatus:
+          type: string
+        name:
+          type: string
+      type: object
     GPU:
       properties:
         memory:
@@ -761,6 +843,26 @@ components:
           type: string
         vendor:
           description: nvidia | amd | apple | intel | ...
+          type: string
+      type: object
+    Genesis:
+      properties:
+        at:
+          type: integer
+        block:
+          type: integer
+        chainId:
+          type: integer
+        note:
+          type: string
+        root:
+          description: 0x… keccak root of the founding allocation
+          type: string
+        status:
+          description: pending | anchored
+          type: string
+        txHash:
+          description: L1 transaction hash (empty until anchored)
           type: string
       type: object
     GrantIn:
@@ -1362,6 +1464,21 @@ components:
         seats:
           type: integer
       type: object
+    Registration:
+      properties:
+        createdAt:
+          type: integer
+        name:
+          type: string
+        org:
+          type: string
+        stage:
+          type: string
+        structure:
+          type: string
+        updatedAt:
+          type: integer
+      type: object
     ReloadIn:
       properties:
         name:
@@ -1458,6 +1575,22 @@ components:
           type: string
         user:
           type: string
+      type: object
+    RoundInput:
+      properties:
+        name:
+          type: string
+        preMoneyValuation:
+          type: number
+        pricePerShare:
+          type: number
+        roundType:
+          description: PRICED | SAFE | CONVERTIBLE_NOTE
+          type: string
+        shareClassId:
+          type: string
+        targetAmount:
+          type: number
       type: object
     SaaSCategory:
       properties:
@@ -1715,6 +1848,13 @@ components:
           $ref: '#/components/schemas/ServiceRow'
         waitlistMode:
           type: boolean
+      type: object
+    Signer:
+      properties:
+        email:
+          type: string
+        name:
+          type: string
       type: object
     Snapshot:
       properties:
@@ -2247,6 +2387,14 @@ components:
             type: string
           type: array
       type: object
+    advanceIn:
+      properties:
+        to:
+          description: |-
+            To is the target stage: structure, founders, payment, documents, esign,
+            genesis, import or company.
+          type: string
+      type: object
     agentBinding:
       properties:
         agentName:
@@ -2612,6 +2760,23 @@ components:
         msg:
           type: string
         status:
+          type: string
+      type: object
+    beginIn:
+      properties:
+        alreadyIncorporated:
+          description: |-
+            AlreadyIncorporated declares an org that already has an entity, which takes
+            the import path (POST /v1/company/skip) instead of the formation path.
+          type: boolean
+        jurisdiction:
+          description: 'Jurisdiction is the state of formation: DE or WY.'
+          type: string
+        name:
+          description: Name is the proposed company name.
+          type: string
+        structure:
+          description: 'Structure is the legal entity to form: c-corp, llc or dao-llc.'
           type: string
       type: object
     bindAgentReq:
@@ -3229,6 +3394,16 @@ components:
         usedGiB:
           type: number
       type: object
+    decisionIn:
+      properties:
+        email:
+          description: Email identifies the founder on the formation.
+          type: string
+        status:
+          description: 'Status is the decision: reviewer_confirmed or failed. Nothing
+            else is accepted.'
+          type: string
+      type: object
     devicePollIn:
       properties:
         flow:
@@ -3352,6 +3527,27 @@ components:
         url:
           type: string
       type: object
+    esignCompleteIn:
+      properties:
+        signed:
+          description: |-
+            Signed, when present, overrides what the provider reports — the manual path
+            for a provider whose webhook is not wired. Omit it to take the provider's answer.
+          type: boolean
+      type: object
+    esignOut:
+      properties:
+        esignRef:
+          description: EsignRef is the provider's reference for the signature request.
+          type: string
+        formation:
+          $ref: '#/components/schemas/Formation'
+          description: Formation is the org's incorporation record with the reference
+            recorded on it.
+        provider:
+          description: Provider is the wired e-signature provider's name.
+          type: string
+      type: object
     fileJSON:
       properties:
         content:
@@ -3462,6 +3658,29 @@ components:
           type: string
         unit:
           type: string
+      type: object
+    formationView:
+      properties:
+        formation:
+          $ref: '#/components/schemas/Formation'
+          description: Formation is the org's one incorporation record.
+        nextStages:
+          description: |-
+            NextStages are the stages reachable from the formation's current stage,
+            whether or not their guards are satisfied yet.
+          items:
+            type: string
+          type: array
+      type: object
+    foundersIn:
+      properties:
+        founders:
+          description: |-
+            Founders is every founding stakeholder. Each needs a name and an email, and
+            equityBps between 0 and 10000 (1% == 100 bps).
+          items:
+            $ref: '#/components/schemas/Founder'
+          type: array
       type: object
     gcOut:
       properties:
@@ -3815,6 +4034,45 @@ components:
         tag:
           type: string
       type: object
+    importCapTableIn:
+      properties:
+        range:
+          description: Range is an optional A1 range within the sheet; empty reads
+            the default range.
+          type: string
+        spreadsheetId:
+          description: SpreadsheetID is a Google Sheets id. Required.
+          type: string
+      type: object
+    importCapTableOut:
+      properties:
+        formation:
+          $ref: '#/components/schemas/Formation'
+          description: Formation is the org's incorporation record, now marked cap-table-imported.
+        rows:
+          description: Rows is how many rows were read from the sheet, header included.
+          type: integer
+        stakeholdersImported:
+          description: StakeholdersImported is how many stakeholders the cap table
+            accepted.
+          type: integer
+      type: object
+    importDocumentsIn:
+      properties:
+        folderId:
+          description: FolderID is a Google Drive folder id. Required.
+          type: string
+      type: object
+    importDocumentsOut:
+      properties:
+        formation:
+          $ref: '#/components/schemas/Formation'
+          description: Formation is the org's incorporation record with the imported
+            document ids.
+        ingested:
+          description: Ingested is how many files this call put in the data room.
+          type: integer
+      type: object
     jobCancel:
       properties:
         id:
@@ -3878,6 +4136,49 @@ components:
           description: Title is the key's label — the caller's, or the comment on
             the key line.
           type: string
+      type: object
+    kycRefreshOut:
+      properties:
+        formation:
+          $ref: '#/components/schemas/Formation'
+          description: Formation is the org's incorporation record with each founder's
+            reconciled status.
+        provider:
+          description: Provider is the identity-verification provider that was consulted.
+          type: string
+      type: object
+    kycSession:
+      properties:
+        email:
+          description: Email is the founder the session belongs to.
+          type: string
+        ref:
+          description: Ref is the provider's reference for the session.
+          type: string
+        status:
+          description: Status is the session's status at start, which is always pending.
+          type: string
+        verifyUrl:
+          description: VerifyURL is the hosted flow the founder visits; empty for
+            the manual provider.
+          type: string
+      type: object
+    kycStartOut:
+      properties:
+        formation:
+          $ref: '#/components/schemas/Formation'
+          description: |-
+            Formation is the org's incorporation record, with each founder's session
+            reference and status recorded on it.
+        provider:
+          description: Provider is the wired identity-verification provider's name.
+          type: string
+        sessions:
+          description: Sessions is one entry per founder, in the order the founders
+            are recorded.
+          items:
+            $ref: '#/components/schemas/kycSession'
+          type: array
       type: object
     listOut:
       properties:
@@ -4126,6 +4427,9 @@ components:
       properties: {}
       type: object
     noContent:
+      properties: {}
+      type: object
+    noInput:
       properties: {}
       type: object
     nodeList:
@@ -4711,6 +5015,17 @@ components:
             $ref: '#/components/schemas/refJSON'
           type: array
       type: object
+    registerCounts:
+      properties:
+        byStage:
+          additionalProperties:
+            type: integer
+          description: ByStage counts formations per stage, keyed by the stage name.
+          type: object
+        total:
+          description: Total is every formation in the register.
+          type: integer
+      type: object
     registerKeyReq:
       properties:
         publicKey:
@@ -4723,6 +5038,23 @@ components:
             Title labels the key in the console. Max 256 chars; when omitted the
             comment on the key line is used.
           type: string
+      type: object
+    registerPage:
+      properties:
+        count:
+          description: Count is how many rows this page holds.
+          type: integer
+        formations:
+          description: Formations are the rows, newest activity first.
+          items:
+            $ref: '#/components/schemas/Registration'
+          type: array
+        limit:
+          description: Limit is the page size that was applied.
+          type: integer
+        offset:
+          description: Offset is the offset that was applied.
+          type: integer
       type: object
     repoList:
       properties:
@@ -4821,6 +5153,18 @@ components:
         periods:
           type: integer
       type: object
+    reviewQueue:
+      properties:
+        count:
+          description: Count is how many founders are waiting.
+          type: integer
+        queue:
+          description: Queue is one entry per unsettled founder, oldest formation
+            first.
+          items:
+            $ref: '#/components/schemas/waiting'
+          type: array
+      type: object
     roleList:
       properties:
         data:
@@ -4828,6 +5172,12 @@ components:
           items:
             $ref: '#/components/schemas/Role'
           type: array
+      type: object
+    roundOut:
+      properties:
+        roundId:
+          description: RoundID is the cap table's id for the recorded round.
+          type: string
       type: object
     runReq:
       properties:
@@ -4863,6 +5213,29 @@ components:
         status:
           type: string
         url:
+          type: string
+      type: object
+    safeIn:
+      properties:
+        documentIds:
+          description: DocumentIDs are data room document ids to raise a signature
+            request over. Required.
+          items:
+            type: string
+          type: array
+        signers:
+          description: Signers are the recipients, each a name and an email. Required.
+          items:
+            $ref: '#/components/schemas/Signer'
+          type: array
+      type: object
+    safeOut:
+      properties:
+        esignRef:
+          description: EsignRef is the provider's reference for the signature request.
+          type: string
+        provider:
+          description: Provider is the wired e-signature provider's name.
           type: string
       type: object
     sampleAccepted:
@@ -5069,6 +5442,18 @@ components:
           type: integer
         usedGiB:
           type: number
+      type: object
+    structureIn:
+      properties:
+        jurisdiction:
+          description: 'Jurisdiction is the state of formation: DE or WY.'
+          type: string
+        name:
+          description: Name is the proposed company name.
+          type: string
+        structure:
+          description: 'Structure is the legal entity: c-corp, llc or dao-llc.'
+          type: string
       type: object
     subscribeReq:
       properties:
@@ -5421,6 +5806,32 @@ components:
           items:
             type: string
           type: array
+      type: object
+    waiting:
+      properties:
+        email:
+          description: Email is the founder's email — the key a decision is posted
+            against.
+          type: string
+        founder:
+          description: Founder is the founder's name.
+          type: string
+        kycRef:
+          description: KYCRef is the identity-verification session reference, when
+            one was opened.
+          type: string
+        kycStatus:
+          description: KYCStatus is the founder's unsettled status.
+          type: string
+        name:
+          description: Name is the proposed company name.
+          type: string
+        org:
+          description: Org is the tenant whose formation the founder belongs to.
+          type: string
+        since:
+          description: Since is when the formation was last touched, as a unix second.
+          type: integer
       type: object
     waitlistBoostRequest:
       properties:
@@ -11390,36 +11801,189 @@ paths:
       - commerce
   /v1/company:
     get:
+      description: |-
+        Get returns the caller org's formation and the stages reachable from it, or 404
+        when the org has not begun one.
       operationId: get_v1_company
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/formationView'
+          description: ok
+      summary: Get returns the caller org's formation and the stages reachable from
+        it, or 404
       tags:
       - company
     post:
+      description: |-
+        Begin starts the org's one formation and returns it with the stages reachable
+        from it. It is idempotent: an org that already has a formation gets that one
+        back with 200, while a first call creates it and answers 201.
       operationId: post_v1_company
+      requestBody:
+        content:
+          application/json:
+            example:
+              jurisdiction: DE
+              name: Acme Inc.
+              structure: c-corp
+            schema:
+              $ref: '#/components/schemas/beginIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/formationView'
+          description: ok
+      summary: |-
+        Begin starts the org's one formation and returns it with the stages reachable
+        from it.
       tags:
       - company
   /v1/company/advance:
     post:
+      description: |-
+        Advance runs the ONE guarded transition of the formation machine. It is the
+        only door between stages: the actions populate data, this decides ordering.
+
+        An edge the machine does not define answers 409; an edge whose guard is not yet
+        satisfied answers 422 naming what is missing. Reaching the terminal `company`
+        stage also records the incorporation on the canonical cap table, and that must
+        succeed before the transition is persisted.
       operationId: post_v1_company_advance
+      requestBody:
+        content:
+          application/json:
+            example:
+              to: founders
+            schema:
+              $ref: '#/components/schemas/advanceIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/formationView'
+          description: ok
+      summary: Advance runs the ONE guarded transition of the formation machine.
       tags:
       - company
   /v1/company/documents:
     post:
+      description: |-
+        GenerateDocuments renders the formation documents for the chosen structure and
+        jurisdiction, ingests each into the org's data room, and submits the state
+        filing through the filing seam.
+
+        With no filing partner wired the filing is recorded honestly as "manual" — no
+        filing id is fabricated. Available only at the documents stage.
       operationId: post_v1_company_documents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/noInput'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/formationView'
+          description: ok
+      summary: |-
+        GenerateDocuments renders the formation documents for the chosen structure and
+        jurisdiction, ingests each into the org's data room, and submits the state
+        filing through the filing seam.
+
+        With no filing partner wired the filing is recorded honestly as "manual" — no
+        filing id is fabricated.
       tags:
       - company
   /v1/company/esign:
     post:
+      description: |-
+        RequestEsign sends the generated formation documents for signature by every
+        founder and records the provider's reference on the formation. Available only
+        at the esign stage.
       operationId: post_v1_company_esign
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/noInput'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/esignOut'
+          description: ok
+      summary: |-
+        RequestEsign sends the generated formation documents for signature by every
+        founder and records the provider's reference on the formation.
       tags:
       - company
   /v1/company/esign/complete:
     post:
+      description: |-
+        CompleteEsign records whether the formation documents have been signed. It
+        consults the e-signature provider, which a real provider's webhook drives; the
+        signal is idempotent.
+
+        An explicit `signed` in the request overrides the provider's answer, which is
+        the manual path for the stub provider that never self-completes.
       operationId: post_v1_company_esign_complete
+      requestBody:
+        content:
+          application/json:
+            example:
+              signed: true
+            schema:
+              $ref: '#/components/schemas/esignCompleteIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/formationView'
+          description: ok
+      summary: CompleteEsign records whether the formation documents have been signed.
       tags:
       - company
   /v1/company/founders:
     post:
+      description: |-
+        SetFounders replaces the formation's founders. Each founder needs a name, an
+        email and an equity share in basis points; every founder is (re)set to pending
+        KYC, so a previously settled decision does not survive a change of the list.
       operationId: post_v1_company_founders
+      requestBody:
+        content:
+          application/json:
+            example:
+              founders:
+              - email: ada@acme.com
+                equityBps: 10000
+                name: Ada
+            schema:
+              $ref: '#/components/schemas/foundersIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/formationView'
+          description: ok
+      summary: SetFounders replaces the formation's founders.
       tags:
       - company
   /v1/company/fundraise/deck:
@@ -11429,42 +11993,253 @@ paths:
       - company
   /v1/company/fundraise/round:
     post:
+      description: |-
+        RecordRound records a fundraising round on the org's canonical cap table.
+        Available only after incorporation (stage company); roundType defaults to
+        PRICED.
       operationId: post_v1_company_fundraise_round
+      requestBody:
+        content:
+          application/json:
+            example:
+              name: Seed
+              roundType: PRICED
+              targetAmount: 2000000
+            schema:
+              $ref: '#/components/schemas/RoundInput'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/roundOut'
+          description: created
+      summary: RecordRound records a fundraising round on the org's canonical cap
+        table.
       tags:
       - company
   /v1/company/fundraise/safe:
     post:
+      description: |-
+        RequestSafe raises an e-signature request over documents already in the org's
+        data room — a SAFE, a convertible note, or any other fundraising paper.
+        Available only after incorporation (stage company).
       operationId: post_v1_company_fundraise_safe
+      requestBody:
+        content:
+          application/json:
+            example:
+              documentIds:
+              - doc_safe
+              signers:
+              - email: ada@acme.com
+                name: Ada
+            schema:
+              $ref: '#/components/schemas/safeIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/safeOut'
+          description: created
+      summary: RequestSafe raises an e-signature request over documents already in
+        the org's
       tags:
       - company
   /v1/company/genesis:
     post:
+      description: |-
+        RecordGenesis seeds the canonical cap table with the founding allocation
+        (stakeholders, a common share class, issued shares) and anchors the
+        deterministic equity-genesis root on-chain.
+
+        It is idempotent: once a root is recorded the cap table is NOT re-seeded, which
+        would double-issue founder share certificates. The root is persisted even when
+        the on-chain submit fails, because the root is the tamper-evident witness and
+        must not be recomputed on retry. Available only at the genesis stage.
       operationId: post_v1_company_genesis
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/noInput'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/formationView'
+          description: ok
+      summary: |-
+        RecordGenesis seeds the canonical cap table with the founding allocation
+        (stakeholders, a common share class, issued shares) and anchors the
+        deterministic equity-genesis root on-chain.
+
+        It is idempotent: once a root is recorded the cap table is NOT re-seeded, which
+        would double-issue founder share certificates.
       tags:
       - company
   /v1/company/import/captable:
     post:
+      description: |-
+        ImportCapTable reads an existing company's cap table from a Google Sheet and
+        adds its stakeholders to the canonical cap table.
+
+        The first row is a header and columns are matched by name (case-insensitive):
+        name and email are required, type/relationship/institution optional. A sheet
+        without name and email columns, or with no usable data rows, is refused with
+        400. Available only at the import stage.
       operationId: post_v1_company_import_captable
+      requestBody:
+        content:
+          application/json:
+            example:
+              range: Cap Table!A1:E100
+              spreadsheetId: 1AbCdEfGhIjKlMnOpQrStUvWxYz
+            schema:
+              $ref: '#/components/schemas/importCapTableIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/importCapTableOut'
+          description: ok
+      summary: |-
+        ImportCapTable reads an existing company's cap table from a Google Sheet and
+        adds its stakeholders to the canonical cap table.
+
+        The first row is a header and columns are matched by name (case-insensitive):
+        name and email are required, type/relationship/institution optional.
       tags:
       - company
   /v1/company/import/documents:
     post:
+      description: |-
+        ImportDocuments ingests an existing company's corporate documents from a Google
+        Drive folder into the org's data room. The import is shallow — sub-folders are
+        skipped, not walked — and available only at the import stage.
       operationId: post_v1_company_import_documents
+      requestBody:
+        content:
+          application/json:
+            example:
+              folderId: 1AbCdEfGhIjKlMnOpQrStUvWxYz
+            schema:
+              $ref: '#/components/schemas/importDocumentsIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/importDocumentsOut'
+          description: ok
+      summary: |-
+        ImportDocuments ingests an existing company's corporate documents from a Google
+        Drive folder into the org's data room.
       tags:
       - company
   /v1/company/kyc:
     post:
+      description: |-
+        StartKYC opens an identity-verification session for every founder with the
+        wired provider and records each session's reference on the formation.
+
+        A start is never a decision: any terminal status the provider reports at
+        inquiry time is clamped back to pending, so the payment gate can never open
+        here. A terminal status arrives only from POST /v1/company/kyc/refresh (the
+        provider) or POST /v1/company/kyc/decision (a Hanzo platform reviewer).
       operationId: post_v1_company_kyc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/noInput'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kycStartOut'
+          description: ok
+      summary: |-
+        StartKYC opens an identity-verification session for every founder with the
+        wired provider and records each session's reference on the formation.
+
+        A start is never a decision: any terminal status the provider reports at
+        inquiry time is clamped back to pending, so the payment gate can never open
+        here.
       tags:
       - company
   /v1/company/kyc/decision:
     post:
+      description: |-
+        DecideKYC records a privileged reviewer's MANUAL decision on a founder's KYC —
+        the human-in-the-loop path, and the ONLY route to a pass when no real provider
+        is wired. It produces a DISTINCT reviewer_confirmed, never a provider
+        "verified".
+
+        Because Hanzo forms the entity and carries the formation KYC/AML obligation,
+        the reviewer is a HANZO platform reviewer (SuperAdmin), and the decision is
+        ATTRIBUTED to them.
       operationId: post_v1_company_kyc_decision
+      requestBody:
+        content:
+          application/json:
+            example:
+              email: ada@acme.com
+              status: reviewer_confirmed
+            schema:
+              $ref: '#/components/schemas/decisionIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/formationView'
+          description: ok
+      summary: |-
+        DecideKYC records a privileged reviewer's MANUAL decision on a founder's KYC —
+        the human-in-the-loop path, and the ONLY route to a pass when no real provider
+        is wired.
       tags:
       - company
   /v1/company/kyc/refresh:
     post:
+      description: |-
+        RefreshKYC reconciles each pending founder's KYC with the WIRED provider — the
+        PULL path to a provider-reported terminal status. For the manual provider the
+        check stays pending; for a real provider it reflects the settled decision,
+        ATTRIBUTED to the provider.
+
+        It NEVER trusts a client-asserted status — the status comes from the provider
+        seam — so a client cannot force a pass here, and an already-passing founder
+        (e.g. a reviewer confirmation) is left untouched.
       operationId: post_v1_company_kyc_refresh
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/noInput'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kycRefreshOut'
+          description: ok
+      summary: |-
+        RefreshKYC reconciles each pending founder's KYC with the WIRED provider — the
+        PULL path to a provider-reported terminal status.
       tags:
       - company
   /v1/company/payment:
@@ -11474,27 +12249,159 @@ paths:
       - company
   /v1/company/register:
     get:
+      description: |-
+        ListRegister returns the platform's whole formation register, newest activity
+        first — every org's formation, not the caller's. It is a Hanzo platform
+        operation: a caller who is not a platform reviewer gets 403.
+
+        Filter by stage and structure, page with limit and offset. An unknown stage is
+        refused with 400 rather than returning a silently empty page.
       operationId: get_v1_company_register
+      parameters:
+      - description: Stage keeps only formations at that stage. Empty means any.
+        example: founders
+        in: query
+        name: stage
+        required: false
+        schema:
+          type: string
+      - description: Structure keeps only formations of that entity kind. Empty means
+          any.
+        in: query
+        name: structure
+        required: false
+        schema:
+          type: string
+      - description: Limit bounds the page; 0 or less means the default of 200.
+        example: 50
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      - description: Offset skips that many rows.
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registerPage'
+          description: ok
+      summary: |-
+        ListRegister returns the platform's whole formation register, newest activity
+        first — every org's formation, not the caller's.
       tags:
       - company
   /v1/company/register/summary:
     get:
+      description: |-
+        SummarizeRegister counts the platform's formations by stage — the register's
+        shape in one read, so a queue that is growing is visible as a number rather
+        than inferred by paging the list. A Hanzo platform operation: a caller who is
+        not a platform reviewer gets 403.
       operationId: get_v1_company_register_summary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registerCounts'
+          description: ok
+      summary: |-
+        SummarizeRegister counts the platform's formations by stage — the register's
+        shape in one read, so a queue that is growing is visible as a number rather
+        than inferred by paging the list.
       tags:
       - company
   /v1/company/review:
     get:
+      description: |-
+        ReviewQueue reports the founders whose KYC is not yet settled, oldest formation
+        first, so the queue drains in the order founders have been waiting. A Hanzo
+        platform operation: a caller who is not a platform reviewer gets 403.
+
+        It only says who is waiting; the decision itself is POST
+        /v1/company/kyc/decision.
       operationId: get_v1_company_review
+      parameters:
+      - description: Limit bounds how many formations are scanned; 0 or less means
+          the default of 200.
+        example: 50
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/reviewQueue'
+          description: ok
+      summary: |-
+        ReviewQueue reports the founders whose KYC is not yet settled, oldest formation
+        first, so the queue drains in the order founders have been waiting.
       tags:
       - company
   /v1/company/skip:
     post:
+      description: |-
+        Skip marks the org as already incorporated and moves it onto the import path,
+        so an existing company brings its documents and cap table in instead of forming
+        a new entity. Available only at the structure stage.
       operationId: post_v1_company_skip
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/noInput'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/formationView'
+          description: ok
+      summary: |-
+        Skip marks the org as already incorporated and moves it onto the import path,
+        so an existing company brings its documents and cap table in instead of forming
+        a new entity.
       tags:
       - company
   /v1/company/structure:
     put:
+      description: |-
+        SetStructure records the entity kind, the state of formation and the proposed
+        name. Available only at the structure stage; an unknown structure or
+        jurisdiction, or an empty name, is refused with 400.
       operationId: put_v1_company_structure
+      requestBody:
+        content:
+          application/json:
+            example:
+              jurisdiction: DE
+              name: Acme Inc.
+              structure: c-corp
+            schema:
+              $ref: '#/components/schemas/structureIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/formationView'
+          description: ok
+      summary: |-
+        SetStructure records the entity kind, the state of formation and the proposed
+        name.
       tags:
       - company
   /v1/compliance/accreditation:
