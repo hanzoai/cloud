@@ -896,7 +896,7 @@ an idempotent re-link and 201 on first registration. That is correct REST and
 NOT bend the route to fit the declaration, and do NOT invent a third mechanism —
 zip is getting multi-status `responses`, and these convert when it lands.
 
-### The eight failure modes, all found the hard way
+### The nine failure modes, all found the hard way
 
 1. **A gate comparing two DERIVED artifacts agrees with itself while both are
    wrong.** `openapi-composed` compared the subsets to the golden they weave
@@ -1015,6 +1015,23 @@ zip is getting multi-status `responses`, and these convert when it lands.
    one case in one function — an unconstrained element is an OPEN schema (`true`),
    not an object.
 
+9. **An EMPTY leaf on a group names the group's path plus a slash.**
+   `joinPath(prefix, "")` normalises the leaf to `"/"`, so `zip.Get(b, "", fn)`
+   on `b := g.Group("/blueprint")` declares `/v1/guide/blueprint/` — and op.Path
+   IS the identity every projection reads, so the document, the operationId
+   (`get_v1_guide_blueprint_`), the MCP tool of that name and the URL a generated
+   SDK calls all carried a trailing slash for a path this API has never served.
+   The router is non-strict, so nothing broke on the wire and nothing went red;
+   it was visible only in the published artifacts, next to fifteen sibling paths
+   without one. `apps/guide` had already reasoned its way past the same trap one
+   group up ("declaring it on g would name /v1/guide/, which this API never
+   served") and walked into it one group down — which is the tell that this is
+   mechanical, not a lapse. **Declare a group's ROOT on the PARENT with a
+   non-empty leaf** (`zip.Get(g, "/blueprint", fn)`), and hang only the
+   sub-paths off the group. Register the untyped siblings at the same address in
+   the same move, or the document splits one resource across two keys.
+   Grep for it: `grep -rn 'zip\.[A-Za-z]*([a-z]*, "",' --include='*.go' apps/`.
+
 ### Partitioning the remaining work
 
 986 untyped routes across 101 packages, 76 typed. Take a whole `apps/<app>/`
@@ -1099,7 +1116,9 @@ partition is not all-or-nothing. Six of its routes stay untyped and each names a
 wire fact the declaration cannot yet carry: PUT `/curriculum` and PUT
 `/blueprint` take a YAML-**or**-JSON document (`sigs.k8s.io/yaml`) that a typed
 In would 400; PATCH `/blueprint/{collection}/{id}` takes an opaque JSON
-merge-patch whose keys are the item's own; POST `/steps/{id}/start|done` answer a
+merge-patch whose keys are the item's own AND whose explicit `null` DELETES a
+key — which a pointer field cannot tell from absent, so a typed In changes the
+merge, not just the schema; POST `/steps/{id}/start|done` answer a
 blocked step with a structured 409 (`{error, step, blockedBy}`) that the error
 envelope cannot express (#78); and POST `/steps/{id}/do` also STREAMS SSE, where
 an op answers exactly one JSON value. The un-gated siblings `skip` and `reset` DO

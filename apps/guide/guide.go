@@ -224,12 +224,22 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// authored LIVE on admin.hanzo.ai. Gated on IsSuperAdmin (owner=="admin") — a normal
 	// org member/admin gets 403; the brand blueprint is SHARED platform content, not a
 	// per-customer surface. See admin.go.
-	b := g.Group("/blueprint")
-	zip.Get(b, "", o.getBlueprint)
+	//
+	// The plane's ROOT is declared on g with a /blueprint leaf, for the same reason
+	// overview is declared on v1: an EMPTY leaf composes to the group's prefix plus
+	// "/", so declaring the root on a /blueprint group names /v1/guide/blueprint/ —
+	// a path this API has never served, and one that reaches every projection
+	// (operationId get_v1_guide_blueprint_, the MCP tool of that name, the path a
+	// generated SDK calls). Only the sub-paths hang off the group, where the leaf is
+	// non-empty and the composition is exact.
+	zip.Get(g, "/blueprint", o.getBlueprint)
 	// PUT and PATCH stay UNTYPED, for the same reason as PUT /curriculum: the PUT
 	// body is a YAML-or-JSON blueprint document, and the PATCH body is an opaque
-	// JSON merge-patch whose keys are the item's own — neither is a declarable In.
-	b.Put("", superAdmin(s, putBlueprint))
+	// JSON merge-patch whose keys are the item's own (and whose explicit nulls DELETE
+	// a key, which a pointer field cannot distinguish from absent) — neither is a
+	// declarable In.
+	g.Put("/blueprint", superAdmin(s, putBlueprint))
+	b := g.Group("/blueprint")
 	zip.Get(b, "/versions", o.listBlueprintVersions)
 	b.Patch("/:collection/:id", superAdmin(s, patchBlueprintItem))
 }

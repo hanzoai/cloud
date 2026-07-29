@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -282,5 +283,41 @@ func TestPutOverwritesCorruptStoredRow(t *testing.T) {
 	ov := decode[overviewView](t, req(t, app, http.MethodGet, "/v1/guide", "acme", nil).Body)
 	if ov.Version != "recovered" {
 		t.Fatalf("the recovery PUT must be active, got version %q", ov.Version)
+	}
+}
+
+// TestBlueprintPathIsSlashless pins the blueprint plane's PUBLISHED address. The
+// plane's root was declared with an EMPTY leaf on a /blueprint group, which
+// composes to the prefix plus "/" — so the document, the operationId, the MCP
+// tool of that name and every generated SDK named /v1/guide/blueprint/, a path
+// this API has never served. The routes are registered on the slashless form
+// now; the router is non-strict, so BOTH spellings still answer, which is what
+// makes the correction wire-preserving.
+func TestBlueprintPathIsSlashless(t *testing.T) {
+	app := newApp(t)
+	valid := map[string]any{"version": "x", "steps": []map[string]any{{"id": "a", "title": "A"}}}
+	for _, p := range []string{"/v1/guide/blueprint", "/v1/guide/blueprint/"} {
+		if r := reqH(t, app, http.MethodGet, p, superHdr, nil); r.Code != http.StatusOK {
+			t.Fatalf("GET %s: want 200, got %d (%s)", p, r.Code, r.Body)
+		}
+		if r := reqH(t, app, http.MethodPut, p, superHdr, valid); r.Code != http.StatusOK {
+			t.Fatalf("PUT %s: want 200, got %d (%s)", p, r.Code, r.Body)
+		}
+	}
+	// The op registry is what every projection reads. The MCP tool list carries the
+	// op name verbatim, so a trailing slash shows up there as a trailing underscore.
+	var names []string
+	for _, tool := range app.MCPTools() {
+		if n, _ := tool["name"].(string); strings.HasPrefix(n, "get_v1_guide_blueprint") {
+			names = append(names, n)
+		}
+	}
+	if len(names) != 2 { // the root + versions
+		t.Fatalf("want the blueprint root and versions tools, got %v", names)
+	}
+	for _, n := range names {
+		if strings.HasSuffix(n, "_") {
+			t.Fatalf("tool %q names a trailing-slash path this API never served", n)
+		}
 	}
 }
