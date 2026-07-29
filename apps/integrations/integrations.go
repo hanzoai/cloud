@@ -515,16 +515,31 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // TWO REGISTRARS, ONE ROUTER. zip.<Verb>(zapp, …) registers a TYPED op — a route
 // PLUS the registry entry OpenAPI / MCP / the CLI are projected from (ops.go) —
 // and takes the ABSOLUTE path, since the registry keys on it. app.<Verb>(…) stays
-// for exactly two families a typed op cannot express, and nothing else:
+// for exactly three families a typed op cannot express, and nothing else. Each
+// names a WIRE fact, checked against zip v1.18.3, not a preference:
 //
-//   - the LINK legs and the OAuth callback, which answer 302 to a browser. A
-//     redirect is not a response shape; a typed op's Out is a JSON body, and
-//     zip.WithStatus takes 2xx only — an op cannot declare a 302 at all.
-//   - the inbound WEBHOOKS, whose auth is a signature over the RAW request bytes
-//     (Slack/GitHub HMAC, Discord Ed25519, Teams JWT, Telegram secret token). A
-//     typed op is handed the DECODED In and never the bytes that were signed —
-//     and Slack's /commands body is form-encoded, which a typed op would refuse
-//     as invalid JSON before the signature check ever ran.
+//   - 8 REDIRECT legs (the link entries + the generic OAuth callback), which answer
+//     302 to a browser. zip.WithStatus PANICS on a non-2xx (typed.go:104), so an op
+//     cannot declare a 302 at all, and a typed dispatch ends in c.JSON(out).
+//   - 5 HTML pages: the three link callbacks and telegram/link's sign-in widget
+//     answer text/html (bridgeLinkedHTML / telegramWidgetHTML). Same c.JSON(out)
+//     terminus — an op's Out is a JSON body, so a page cannot be one. The link legs
+//     also SET __Host- cookies, and a typed op holds no response to set them on.
+//   - 6 inbound WEBHOOKS, for two distinct reasons:
+//     RAW BYTES (slack/events, slack/commands, connector/github/webhook,
+//     discord/interactions) — auth is a signature over the exact received bytes
+//     (Slack/GitHub HMAC-SHA256, Discord Ed25519), and a typed op is handed the
+//     DECODED In, never what was signed. slack/commands is additionally
+//     form-encoded, which zip's invoke would 400 as invalid JSON before the
+//     signature check ran; slack/events answers the url_verification challenge as
+//     text/plain.
+//     200-ON-UNPARSEABLE (teams/events, telegram/webhook) — these two are NOT
+//     raw-byte-signed (Teams verifies a Bot Framework JWT header, Telegram a shared
+//     secret header), but both answer an EMPTY 200 to a body they cannot parse so
+//     the platform does not retry-storm. zip's invoke unmarshals BEFORE the handler
+//     (typed.go:227), turning that 200 into a 400 — and for telegram it also inverts
+//     the auth order, leaking a parse result to an unauthenticated caller that today
+//     gets 401 first.
 //
 // The 202 Accepted creators (/repos/import, /pages/builds) were a THIRD family
 // until zip v1.18.2: zip wrote 200, or 204 for a nil Out, and cloud.Created only
@@ -533,6 +548,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // route. zip.WithStatus(202) states the same fact in the one place every
 // projection reads, so both are typed ops now and the document says 202 because
 // the op does.
+//
+// The partition is COMPLETE at 22 typed / 19 raw: every route with a JSON
+// request/response shape is a typed op, and each of the 19 above is refused by one
+// of the three wire facts, not by an unfinished pass. Re-check before converting.
 //
 // The two are interleaved in the ORIGINAL order because fiber resolves by
 // registration order, and that order is load-bearing here (literals before the
