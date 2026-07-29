@@ -357,12 +357,28 @@ func isMachinePrincipal(claims *idClaims) bool {
 // IAM controls, not a tenant-chosen identifier. An empty set — a legacy token, an
 // opaque hk-/sk- key, a machine principal — admits nothing, so this can only ever
 // restate a membership IAM already signed.
+// "owner" counts, and leaving it out reproduced the very failure described above
+// one role-name deeper. IAM's coarse membership vocabulary is exactly three values
+// — owner, admin, member (iam internal/store/membership.go) — and `owner` is the
+// one it assigns to whoever CREATES an org: self-service provisioning writes
+// EnsureMembership(..., RoleOwner) so "a self-service org is born with nobody on
+// it" cannot happen (iam internal/oidc/provision.go). Matching only "admin"
+// therefore refused every self-serve org founder from their own org's admin
+// surface — the strictly worse version of the bug this function was written to
+// fix, because an owner cannot escalate themselves out of it.
+//
+// IAM's own money path already treats the two as one (billingAccountFor admits
+// {RoleOwner, RoleAdmin}); this is the authz half of that same fact.
 func isOrgAdmin(orgs []model.OrgRef, org string) bool {
 	if org == "" {
 		return false
 	}
 	for _, o := range orgs {
-		if o.Org == org && strings.EqualFold(strings.TrimSpace(o.Role), "admin") {
+		if o.Org != org {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(o.Role)) {
+		case "owner", "admin":
 			return true
 		}
 	}
