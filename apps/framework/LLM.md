@@ -68,9 +68,16 @@ In type, and the body of a document write IS the document's own field data — a
 open object the DocType defines at run time. No Go struct both accepts that
 verbatim and describes it, so typing them would publish a request schema naming
 the two path segments and nothing else: an SDK method that cannot send a
-document. They convert when zip can declare an open-object input
-(`additionalProperties: true`); a schema that lies is worse than the route-only
-entry they carry today.
+document. They convert when zip carries all THREE halves of one capability:
+DECLARE an open-object input (`additionalProperties: true` — today
+`map[string]any` projects `additionalProperties: {"type":"object"}`, a false
+schema), BIND the URL onto one (`bindURL` returns early unless the In is a
+struct), and carry URL params OUTSIDE the body namespace — off the REST path
+`op.invoke` gets no path map (MCP and the call plane pass nil), and a create
+body's `name` IS the requested document name (`stringField(in, "name")`, engine
+ops.go), so folding `:name` into the body collides with a field the document
+owns. Re-verified against zip v1.18.6: none shipped. A schema that lies is
+worse than the route-only entry they carry today.
 
 **Identity across the typed seam.** A typed op receives only a `context.Context`,
 so the engine `Caller` is assembled from two carriers parked ahead of the leaves
