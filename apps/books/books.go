@@ -128,6 +128,12 @@ func routes(app cloud.Router, s *cloud.Service[*state]) {
 	zip.Get(g, "/balance-sheet", o.balanceSheet)
 	zip.Get(g, "/export", o.exportPackage)
 	zip.Get(g, "/questions", o.listQuestions)
+	// The metrics read went typed the day its Out stopped embedding Metrics:
+	// MetricsResponse now spells the snapshot fields out flat (metrics.go), because
+	// zip's schema walk publishes an embedded struct as a NESTED property while
+	// encoding/json flattens it — the copy is pinned complete by
+	// TestMetricsResponseCarriesEveryMetricsField, so it cannot silently drift.
+	zip.Get(g, "/metrics", o.metrics)
 	// The customer-triggered ingestion of the caller's OWN org: reads commerce's
 	// transactions and posts the accounting twin. Idempotent, so a repeat is safe.
 	zip.Post(g, "/sync", o.sync)
@@ -135,19 +141,6 @@ func routes(app cloud.Router, s *cloud.Service[*state]) {
 	// figures. Its body IS its In; the ?sandbox selector stays on the URL (query,
 	// typed.go), so typing described the route without moving it.
 	zip.Post(g, "/ask", o.ask)
-
-	// UNTYPED, for a stated reason — see LLM.md's typed migration. The metrics read
-	// returns MetricsResponse, which EMBEDS Metrics: zip v1.18.3's schema walk emits
-	// an embedded struct as a NESTED property (openapi.go structSchema walks
-	// NumField and names each by its json tag, so the embedded field publishes as
-	// "Metrics": {…}) instead of flattening it the way encoding/json does. Typing it
-	// would publish a response schema no answer of this route matches, and every
-	// generated SDK would model it wrong — worse than none. Spelling the 15 Metrics
-	// fields out a second time on a flat Out would describe it correctly ONCE and
-	// then silently drop the next field added to Metrics off the wire, which is a
-	// worse bug than the one it fixes. The route is right; the generator has to
-	// learn embedding before the description can be true.
-	app.Get("/v1/books/metrics", cloud.Handle(s, metricsHandler))
 
 	// The shared BANK engine surface (bank_api.go): OFX/CSV import, connector sync,
 	// transaction + unreconciled reads, and the Plaid/Teller link plumbing stubs.
