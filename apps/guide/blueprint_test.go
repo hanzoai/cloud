@@ -39,7 +39,7 @@ func TestEnableDisablePrecedence(t *testing.T) {
 			{ID: "s-on", Title: "On"},
 			{ID: "s-off", Title: "Off", Enabled: &off}, // disabled section
 		},
-		Steps: []Step{
+		Steps: []JourneyStep{
 			{ID: "a", Section: "s-on", Title: "A"},
 			{ID: "b", Section: "s-on", Title: "B", Dependencies: []string{"a"}, Enabled: &off}, // disabled step
 			{ID: "c", Section: "s-on", Title: "C", Dependencies: []string{"b"}},                // dep on disabled b
@@ -92,11 +92,11 @@ func TestEnableDisablePrecedence(t *testing.T) {
 // org override > brand blueprint (DB) > embedded fixture.
 func TestResolutionTiers(t *testing.T) {
 	ctx := context.Background()
-	fixture := Blueprint{Version: "fixture-v", Steps: []Step{{ID: "f1", Title: "F1"}}}
+	fixture := Blueprint{Version: "fixture-v", Steps: []JourneyStep{{ID: "f1", Title: "F1"}}}
 
 	// A store seeded with a DISTINCT brand blueprint under the base key.
 	bpStore := testBlueprintStore(t)
-	brandDoc, _ := json.Marshal(Blueprint{Version: "brand-v", Steps: []Step{{ID: "b1", Title: "B1"}}})
+	brandDoc, _ := json.Marshal(Blueprint{Version: "brand-v", Steps: []JourneyStep{{ID: "b1", Title: "B1"}}})
 	if _, err := bpStore.SeedOrUpgrade(ctx, "", brandDoc, seedVersion, 1); err != nil {
 		t.Fatalf("seed brand: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestResolutionTiers(t *testing.T) {
 	}
 
 	// An org override wins (tier 1).
-	orgDoc, _ := json.Marshal(Blueprint{Version: "org-v", Steps: []Step{{ID: "o1", Title: "O1"}}})
+	orgDoc, _ := json.Marshal(Blueprint{Version: "org-v", Steps: []JourneyStep{{ID: "o1", Title: "O1"}}})
 	if err := orgStore.SetCurriculum(ctx, orgDoc, 2); err != nil {
 		t.Fatalf("set override: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestResolutionTiers(t *testing.T) {
 
 	// A disabled brand blueprint is SKIPPED — resolution falls through to the fixture.
 	off := false
-	disabledDoc, _ := json.Marshal(Blueprint{Version: "disabled-v", Enabled: &off, Steps: []Step{{ID: "x", Title: "X"}}})
+	disabledDoc, _ := json.Marshal(Blueprint{Version: "disabled-v", Enabled: &off, Steps: []JourneyStep{{ID: "x", Title: "X"}}})
 	dstore := testBlueprintStore(t)
 	if _, err := dstore.SeedOrUpgrade(ctx, "", disabledDoc, seedVersion, 1); err != nil {
 		t.Fatalf("seed disabled: %v", err)
@@ -154,7 +154,7 @@ func TestSeedIdempotentNoClobber(t *testing.T) {
 	}
 
 	// A SuperAdmin edits the base blueprint → version 2.
-	editDoc, _ := json.Marshal(Blueprint{Version: "admin-edit", Steps: []Step{{ID: "x", Title: "X"}}})
+	editDoc, _ := json.Marshal(Blueprint{Version: "admin-edit", Steps: []JourneyStep{{ID: "x", Title: "X"}}})
 	if v, err := store.SaveVersion(ctx, "", editDoc, 3); err != nil || v != 2 {
 		t.Fatalf("admin edit want version 2, got v=%d err=%v", v, err)
 	}
@@ -184,8 +184,8 @@ func TestSeedIdempotentNoClobber(t *testing.T) {
 func TestSeedVersionAwareUpgrade(t *testing.T) {
 	ctx := context.Background()
 	store := testBlueprintStore(t)
-	oldDoc, _ := json.Marshal(Blueprint{Version: "seed-v1", Steps: []Step{{ID: "a", Title: "A"}}})
-	newDoc, _ := json.Marshal(Blueprint{Version: "seed-v2", Steps: []Step{{ID: "a", Title: "A"}, {ID: "b", Title: "B"}}})
+	oldDoc, _ := json.Marshal(Blueprint{Version: "seed-v1", Steps: []JourneyStep{{ID: "a", Title: "A"}}})
+	newDoc, _ := json.Marshal(Blueprint{Version: "seed-v2", Steps: []JourneyStep{{ID: "a", Title: "A"}, {ID: "b", Title: "B"}}})
 
 	// Seed generation 1.
 	if act, err := store.SeedOrUpgrade(ctx, "", oldDoc, 1, 100); err != nil || act != SeedInserted {
@@ -227,17 +227,17 @@ func TestSeedVersionAwareUpgrade(t *testing.T) {
 func TestSeedNeverClobbersAdminEdit(t *testing.T) {
 	ctx := context.Background()
 	store := testBlueprintStore(t)
-	seedDoc, _ := json.Marshal(Blueprint{Version: "seed-v1", Steps: []Step{{ID: "a", Title: "A"}}})
+	seedDoc, _ := json.Marshal(Blueprint{Version: "seed-v1", Steps: []JourneyStep{{ID: "a", Title: "A"}}})
 	if act, err := store.SeedOrUpgrade(ctx, "", seedDoc, 1, 100); err != nil || act != SeedInserted {
 		t.Fatalf("seed want SeedInserted, got %q err=%v", act, err)
 	}
 	// An admin edits it → version 2, stamped source="admin".
-	adminDoc, _ := json.Marshal(Blueprint{Version: "admin-edit", Steps: []Step{{ID: "x", Title: "X"}}})
+	adminDoc, _ := json.Marshal(Blueprint{Version: "admin-edit", Steps: []JourneyStep{{ID: "x", Title: "X"}}})
 	if v, err := store.SaveVersion(ctx, "", adminDoc, 101); err != nil || v != 2 {
 		t.Fatalf("admin edit want version 2, got v=%d err=%v", v, err)
 	}
 	// A newer seed generation MUST NOT clobber the admin edit — even a far-future one.
-	newSeed, _ := json.Marshal(Blueprint{Version: "seed-v2", Steps: []Step{{ID: "a", Title: "A"}, {ID: "b", Title: "B"}}})
+	newSeed, _ := json.Marshal(Blueprint{Version: "seed-v2", Steps: []JourneyStep{{ID: "a", Title: "A"}, {ID: "b", Title: "B"}}})
 	if act, err := store.SeedOrUpgrade(ctx, "", newSeed, 2, 102); err != nil || act != SeedNone {
 		t.Fatalf("v2 seed over an admin edit MUST be SeedNone (never clobber), got %q err=%v", act, err)
 	}
@@ -265,8 +265,8 @@ func TestMigrateBackfillsLegacyAdminEdit(t *testing.T) {
 	// Emulate the pre-migration shape: a seed at v1 + an admin edit at v2, both with source
 	// left at the column default 'seed' (as an old DB would have after the column was added
 	// but before any provenance was written).
-	seedDoc, _ := json.Marshal(Blueprint{Version: "legacy-seed", Steps: []Step{{ID: "a", Title: "A"}}})
-	adminDoc, _ := json.Marshal(Blueprint{Version: "legacy-admin", Steps: []Step{{ID: "x", Title: "X"}}})
+	seedDoc, _ := json.Marshal(Blueprint{Version: "legacy-seed", Steps: []JourneyStep{{ID: "a", Title: "A"}}})
+	adminDoc, _ := json.Marshal(Blueprint{Version: "legacy-admin", Steps: []JourneyStep{{ID: "x", Title: "X"}}})
 	if _, err := store.db.ExecContext(ctx, `INSERT INTO guide_blueprint (brand,version,doc,updated_at,source,seed_version) VALUES ('',1,?,1,'seed',0)`, string(seedDoc)); err != nil {
 		t.Fatalf("insert legacy seed: %v", err)
 	}
@@ -278,7 +278,7 @@ func TestMigrateBackfillsLegacyAdminEdit(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 	// A newer seed generation must now leave the legacy admin edit untouched.
-	newSeed, _ := json.Marshal(Blueprint{Version: "seed-v9", Steps: []Step{{ID: "a", Title: "A"}}})
+	newSeed, _ := json.Marshal(Blueprint{Version: "seed-v9", Steps: []JourneyStep{{ID: "a", Title: "A"}}})
 	if act, err := store.SeedOrUpgrade(ctx, "", newSeed, 9, 3); err != nil || act != SeedNone {
 		t.Fatalf("legacy admin edit must be protected after backfill, got %q err=%v", act, err)
 	}
