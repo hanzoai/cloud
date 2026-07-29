@@ -126,6 +126,88 @@ func TestHTTPRoundTripAndIsolation(t *testing.T) {
 	}
 }
 
+// TestTypedWire pins the parts of the wire only the TYPED registration can move:
+// the 204-with-no-body a delete answers (a typed op says that by returning a nil
+// Out), and the query parameters a list filters on (a typed op binds those off
+// its In rather than reading c.Query). A regression here is invisible to the
+// round-trip test above and would ship in every generated SDK.
+func TestTypedWire(t *testing.T) {
+	app := mountApp(t)
+
+	mk := func(path string, body any) string {
+		t.Helper()
+		code, b := do(t, app, http.MethodPost, path, "o", body)
+		if code != http.StatusCreated {
+			t.Fatalf("seed POST %s want 201, got %d (%s)", path, code, b)
+		}
+		var rec struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(b, &rec); err != nil || rec.ID == "" {
+			t.Fatalf("seed POST %s id: %v (%s)", path, err, b)
+		}
+		return rec.ID
+	}
+
+	c1 := mk("/v1/crm/companies", map[string]any{"name": "One"})
+	c2 := mk("/v1/crm/companies", map[string]any{"name": "Two"})
+	p1 := mk("/v1/crm/contacts", map[string]any{"email": "a@one.example", "companyId": c1})
+	mk("/v1/crm/contacts", map[string]any{"email": "b@two.example", "companyId": c2})
+	mk("/v1/crm/opportunities", map[string]any{"name": "Deal A", "stage": "NEW"})
+	mk("/v1/crm/opportunities", map[string]any{"name": "Deal B", "stage": "PROPOSAL"})
+
+	count := func(path string) int {
+		t.Helper()
+		code, b := do(t, app, http.MethodGet, path, "o", nil)
+		if code != http.StatusOK {
+			t.Fatalf("GET %s want 200, got %d (%s)", path, code, b)
+		}
+		var listed struct {
+			Data []json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(b, &listed); err != nil {
+			t.Fatalf("GET %s json: %v (%s)", path, err, b)
+		}
+		return len(listed.Data)
+	}
+
+	// ?limit= caps the page; ?companyId= and ?stage= filter it.
+	if n := count("/v1/crm/companies?limit=1"); n != 1 {
+		t.Fatalf("companies?limit=1 want 1 row, got %d", n)
+	}
+	if n := count("/v1/crm/contacts?companyId=" + c1); n != 1 {
+		t.Fatalf("contacts?companyId= want 1 row, got %d", n)
+	}
+	if n := count("/v1/crm/opportunities?stage=proposal"); n != 1 {
+		t.Fatalf("opportunities?stage=proposal want 1 row (case-folded), got %d", n)
+	}
+	if n := count("/v1/crm/opportunities"); n != 2 {
+		t.Fatalf("unfiltered opportunities want 2 rows, got %d", n)
+	}
+
+	// A PUT round-trips 200 with the stored record; a delete answers 204 and NO body.
+	code, body := do(t, app, http.MethodPut, "/v1/crm/contacts/"+p1, "o",
+		map[string]any{"email": "a@one.example", "jobTitle": "CTO"})
+	if code != http.StatusOK {
+		t.Fatalf("PUT contact want 200, got %d (%s)", code, body)
+	}
+	var updated Contact
+	if err := json.Unmarshal(body, &updated); err != nil || updated.JobTitle != "CTO" {
+		t.Fatalf("PUT contact round-trip: %v (%s)", err, body)
+	}
+	if code, body = do(t, app, http.MethodDelete, "/v1/crm/contacts/"+p1, "o", nil); code != http.StatusNoContent || len(body) != 0 {
+		t.Fatalf("DELETE contact want 204 with empty body, got %d (%q)", code, body)
+	}
+	// The delete is real, and a second one is a 404.
+	if code, _ = do(t, app, http.MethodDelete, "/v1/crm/contacts/"+p1, "o", nil); code != http.StatusNotFound {
+		t.Fatalf("re-DELETE contact want 404, got %d", code)
+	}
+	// An unknown application stage filter is refused before the store is touched.
+	if code, _ = do(t, app, http.MethodGet, "/v1/crm/applications?stage=bogus", "o", nil); code != http.StatusBadRequest {
+		t.Fatalf("applications?stage=bogus want 400, got %d", code)
+	}
+}
+
 // TestHTTPValidation covers the boundary rejections the FE relies on.
 func TestHTTPValidation(t *testing.T) {
 	app := mountApp(t)
