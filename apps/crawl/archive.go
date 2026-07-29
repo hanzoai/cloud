@@ -80,7 +80,19 @@ func Read(ctx context.Context, s Scope, url string) (*Page, error) {
 	}
 	p, err := Fetch(ctx, url)
 	if err != nil {
-		return nil, err
+		// A static fetch can be refused where a browser is not: a bot check, a
+		// consent interstitial, markup served as something extract will not read.
+		// So a failure is a reason to escalate, not to give up — but only the
+		// browser's answer can be returned, since there is no Page to fall back on.
+		if rendered, rerr := browse(ctx, url); rerr == nil {
+			p = rendered
+		} else {
+			return nil, err
+		}
+	} else {
+		// Rendered only when the static read came back too thin to be the page,
+		// and kept only if it is actually richer. See escalate.
+		p = escalate(ctx, p, url)
 	}
 	if a != nil {
 		// Deliberately ignored: a page we fetched is a page we can return. Failing
