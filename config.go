@@ -358,7 +358,6 @@ type Config struct {
 	// inter-subsystem listener port the unified binary exposes. The
 	// transport is hanzoai/zap, never JSON.
 	IAMZAPAddr      string
-	KMSZAPAddr      string
 	BaseZAPAddr     string
 	CommerceZAPAddr string
 	AIZAPAddr       string
@@ -459,7 +458,6 @@ func LoadConfig() *Config {
 		AIAuthClientID:     getenv("IAM_CLIENT_ID", ""),
 		AIAuthClientSecret: getenv("IAM_CLIENT_SECRET", ""),
 		IAMZAPAddr:         getenv("CLOUD_IAM_ZAP_ADDR", ""),
-		KMSZAPAddr:         getenv("CLOUD_KMS_ZAP_ADDR", ""),
 		BaseZAPAddr:        getenv("CLOUD_BASE_ZAP_ADDR", ""),
 		CommerceZAPAddr:    getenv("CLOUD_COMMERCE_ZAP_ADDR", ""),
 		AIZAPAddr:          getenv("CLOUD_AI_ZAP_ADDR", ""),
