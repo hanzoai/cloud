@@ -36,6 +36,18 @@ const (
 // cap is 402 spend_cap_exceeded, and anything else is unknown — which the
 // fail-closed caller turns into 503 rather than free work.
 func (rm *ResourceMeter) gatePeer(ctx context.Context, org, project string, projectValidated bool, costCents int64) error {
+	if !PeerPresent(peerCommerce) {
+		// No local ledger AND no commerce serving one: this deployment has no money
+		// plane at all, which is a legitimate shape and the behaviour "billing not
+		// configured" always had. Refusing here would 503 every priced act in a
+		// deployment that never intended to bill.
+		//
+		// It is NOT the free-work hole: where commerce DOES run, its socket exists,
+		// so this branch is not reached and an unreachable biller still fails closed
+		// below. The distinction is "nobody bills here" versus "the biller is one
+		// socket away", and the socket is what answers it.
+		return nil
+	}
 	in := plane.AuthorizeIn{
 		Subject:          org,
 		Amount:           plane.Amount(money.FromUSD(costCents)),
@@ -74,6 +86,9 @@ func (rm *ResourceMeter) gatePeer(ctx context.Context, org, project string, proj
 // logged for reconciliation rather than swallowed — an unbilled create is a number
 // somebody has to find later, so it says so now.
 func (rm *ResourceMeter) meterPeer(org, kind string, u metering.Usage) {
+	if !PeerPresent(peerCommerce) {
+		return // nothing bills in this deployment; there is no debit to lose
+	}
 	in := plane.RecordIn{
 		Subject: org,
 		Amount:  plane.Amount(money.FromUSD(u.AmountCents)),
