@@ -8,8 +8,15 @@ package openapi_test
 // fleet document, and requires it to equal openapi.yaml byte for byte. There is
 // no fully-mounted binary left to read: "compose the apps" and "the spec" are one
 // statement. `make openapi` writes the golden through this same weave (-weave);
-// CI verifies it here with no flag, so a route that moves without a regenerate
-// turns this red before a stale spec reaches an SDK.
+// with no flag the same weave is the check.
+//
+// What it proves is COMPOSITION and only composition: that the subsets compose
+// without two apps claiming one address or one schema name, and that the golden
+// is what they compose to. Both sides are derived, so it cannot prove either is
+// still the routes — `make -f mk/fleet.mk openapi-check` regenerates them from
+// source for that, and manifest/router_test.go asks the router whether the fleet
+// delivers what they describe. Three questions, three gates, each answered where
+// its answer lives.
 //
 // It links no subsystem and mounts nothing but the openapi endpoint itself, so
 // it costs a second and runs on every push.
@@ -21,8 +28,6 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud/manifest"
@@ -46,14 +51,14 @@ const (
 // parts reads every app's subset, in manifest.Apps mount order — which is the
 // fleet's routing order, so a conflict is reported as the router would meet it.
 //
-// A part may only ADD to the fleet document under the prefixes the composition
-// root routes to that app. Everything the fleet already serves is kept as-is —
-// a LINKED app registers on the fleet's own router, so its routes are the
-// fleet's whatever the manifest says. What the rule catches is the other case:
-// an app mounted as a PLUGIN is reachable only through the prefixes zip.Load was
-// handed, so a route the child serves outside them is unreachable through the
-// fleet, and publishing it would advertise a 404 to every generated SDK.
-func parts(t *testing.T, golden *openapi.Document) []openapi.Part {
+// It reads them and nothing else. WHERE a path is routed is not a question a
+// document can answer, and the version of this function that tried is why the
+// fleet published 58 unreachable paths: it skipped any path already present in
+// openapi.yaml — the artifact this test protects — so the golden exempted every
+// defect it already contained, and what survived that was reported with t.Logf.
+// A gate that reads its own output cannot fail. The question moved to the only
+// thing that can answer it, the router: manifest/router_test.go.
+func parts(t *testing.T) []openapi.Part {
 	t.Helper()
 	out := make([]openapi.Part, 0, len(manifest.Apps))
 	for _, a := range manifest.Apps {
@@ -66,52 +71,9 @@ func parts(t *testing.T, golden *openapi.Document) []openapi.Part {
 		if err := json.Unmarshal(raw, &doc); err != nil {
 			t.Fatalf("%s: %v", path, err)
 		}
-		for _, p := range sortedPaths(&doc) {
-			if golden.Paths[p] != nil || under(prefixesOf(a), []string{p}) {
-				continue
-			}
-			// Reported, not refused: "the child serves it and the host routes it
-			// nowhere" is a defect at the composition root — one prefix missing
-			// from a Wire entry — and the honest fleet document is the one without
-			// it. Refusing here would only replace an unreachable route with a red
-			// build in a place that cannot fix it.
-			t.Logf("UNROUTED: %s serves %s, which the fleet routes nowhere — name the prefix in its manifest.Apps entry", a.Name, p)
-			delete(doc.Paths, p)
-		}
 		out = append(out, openapi.Part{App: a.Name, Doc: &doc})
 	}
 	return out
-}
-
-// prefixesOf is an app's declared prefixes as the DOCUMENT spells them. The
-// manifest carries fiber patterns (/v1/orgs/:org/entitlements) because that is
-// what the router matches on; a document path is the OpenAPI template of the
-// same route (/v1/orgs/{org}/entitlements). Comparing the two forms directly
-// silently finds nothing, which reads as "this app owns no routes".
-func prefixesOf(a manifest.App) []string {
-	out := make([]string, 0, len(a.Prefixes))
-	for _, p := range a.Prefixes {
-		segs := strings.Split(p, "/")
-		for i, s := range segs {
-			if strings.HasPrefix(s, ":") {
-				segs[i] = "{" + strings.TrimSuffix(strings.TrimPrefix(s, ":"), "?") + "}"
-			}
-		}
-		out = append(out, strings.Join(segs, "/"))
-	}
-	return out
-}
-
-// under reports whether any of paths is inside any of prefixes.
-func under(prefixes, paths []string) bool {
-	for _, p := range prefixes {
-		for _, path := range paths {
-			if path == p || strings.HasPrefix(path, p+"/") {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // core is the one operation no app owns: the endpoint that serves the document.
@@ -133,11 +95,7 @@ func TestFleetIsTheWeaveOfItsApps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read %s: %v — run `make openapi`", goldenPath, err)
 	}
-	var golden openapi.Document
-	if err := yaml.Unmarshal(want, &golden); err != nil {
-		t.Fatalf("parse %s: %v", goldenPath, err)
-	}
-	woven, err := openapi.Weave(append(parts(t, &golden), core(t)))
+	woven, err := openapi.Weave(append(parts(t), core(t)))
 	if err != nil {
 		t.Fatalf("weave: %v", err)
 	}
@@ -174,15 +132,6 @@ func TestFleetIsTheWeaveOfItsApps(t *testing.T) {
 	}
 	t.Logf("woven %d paths / %d schemas / %d tags from %d apps — byte-identical to %s",
 		len(woven.Paths), schemaCount(woven), len(woven.Tags), len(manifest.Apps), goldenPath)
-}
-
-func sortedPaths(d *openapi.Document) []string {
-	out := make([]string, 0, len(d.Paths))
-	for p := range d.Paths {
-		out = append(out, p)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // Two apps may not claim one address. This is the check the manifest's
