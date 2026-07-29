@@ -39,6 +39,7 @@
 package billing
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -47,6 +48,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/money"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
@@ -499,6 +501,12 @@ func financeGet(s *cloud.Service[state], c *zip.Ctx, path, org string, extra url
 // credits/usage/ledger projections share). Tolerates the wrapped {transactions:[…]}
 // shape and a bare array.
 func financeTxns(s *cloud.Service[state], c *zip.Ctx, org string) ([]commerceTxn, error) {
+	// The ledger's own entries, from the process that holds them. Credits, usage and
+	// the ledger page are three projections of this one list, and all three answered
+	// 501 from a process without the ledger — which is every process but commerce.
+	if rows, ok := peerTxns(c.Context(), org); ok {
+		return rows, nil
+	}
 	body, status, err := s.State.commerce.get(c.Context(), "/v1/billing/transactions", org, financeSubject(subjectFor(c, org), url.Values{"limit": {"2000"}}))
 	if err != nil {
 		s.Log.Warn("commerce transactions read failed", "org", org, "err", err)
@@ -621,3 +629,45 @@ func abs64(v int64) int64 {
 	}
 	return v
 }
+
+// peerTxns reads the ledger over the internal plane. ok=false means no peer served
+// it, and the caller falls back to the configured commerce URL — the split deploy,
+// which is a real shape and not a failure.
+//
+// The amount arrives as its exact 18-decimal integer and is flattened to cents HERE,
+// at the boundary where commerceTxn is already a cents-shaped view. The wire keeps
+// the precision so the day that view stops being cents-shaped, nothing upstream has
+// to be re-plumbed to find it.
+func peerTxns(ctx context.Context, org string) ([]commerceTxn, bool) {
+	ctx, cancel := context.WithTimeout(ctx, txnsPeerTimeout)
+	defer cancel()
+	reply, err := cloud.Dial("commerce").For(org).Call(ctx, "finance.txns",
+		cloud.PutBalanceReq(org, "usd"))
+	if err != nil {
+		return nil, false
+	}
+	wire, err := cloud.Txns(reply)
+	if err != nil {
+		return nil, false
+	}
+	out := make([]commerceTxn, 0, len(wire))
+	for _, t := range wire {
+		amt, perr := money.ParseInt(t.Atto)
+		if perr != nil {
+			return nil, false // a total we cannot read exactly is not a total we report
+		}
+		out = append(out, commerceTxn{
+			ID:        t.ID,
+			Type:      t.Kind,
+			Amount:    amt.Cents(),
+			Currency:  "usd",
+			Tags:      t.Ref,
+			Notes:     t.Memo,
+			CreatedAt: time.Unix(t.CreatedAt, 0).UTC().Format(time.RFC3339),
+		})
+	}
+	return out, true
+}
+
+// txnsPeerTimeout bounds the ledger read behind an interactive billing page.
+const txnsPeerTimeout = 10 * time.Second
