@@ -79,6 +79,34 @@ func TestHTTPOverviewDefault(t *testing.T) {
 	}
 }
 
+// TestDocumentPutsAcceptYAML pins the WIRE FACT the two untyped document PUTs
+// rest on: their body is a raw YAML-or-JSON document (Parse, sigs.k8s.io/yaml),
+// so a YAML body answers 200 and becomes active. A typed In is decoded as JSON
+// before the handler sees it, so typing either route flips this test to a 4xx —
+// the exact silent wire change the registration-site refusals forbid.
+func TestDocumentPutsAcceptYAML(t *testing.T) {
+	app := newApp(t)
+	org := map[string]string{"X-Org-Id": "acme", "X-User-Id": "u-acme"}
+
+	yaml := []byte("version: yaml-1\nsteps:\n- id: s1\n  title: First\n- id: s2\n  title: Second\n  deps: [s1]\n")
+	if r := reqRaw(t, app, http.MethodPut, "/v1/guide/curriculum", org, yaml); r.Code != http.StatusOK {
+		t.Fatalf("YAML curriculum PUT want 200, got %d (%s)", r.Code, r.Body)
+	}
+	v := decode[overviewView](t, req(t, app, http.MethodGet, "/v1/guide", "acme", nil).Body)
+	if !v.Custom || v.Version != "yaml-1" || len(v.Steps) != 2 {
+		t.Fatalf("YAML curriculum not active: custom=%v version=%q steps=%d", v.Custom, v.Version, len(v.Steps))
+	}
+
+	bp := []byte("version: yaml-bp\nsteps:\n- id: one\n  title: One\n")
+	r := reqRaw(t, app, http.MethodPut, "/v1/guide/blueprint", superHdr, bp)
+	if r.Code != http.StatusOK {
+		t.Fatalf("YAML blueprint PUT want 200, got %d (%s)", r.Code, r.Body)
+	}
+	if put := decode[blueprintView](t, r.Body); put.Blueprint.Version != "yaml-bp" {
+		t.Fatalf("YAML blueprint not saved, got version %q", put.Blueprint.Version)
+	}
+}
+
 // TestHTTPTransitionsAndGating: marking a blocked step is 409; the dependency chain
 // unlocks as upstream steps complete; skip and reset are ungated.
 func TestHTTPTransitionsAndGating(t *testing.T) {
