@@ -65,6 +65,11 @@ var allowedRequestUses = map[string]string{
 		"by project (X-Project-Id). None of the three rides on principal.OrgFrom. Concentrated in one file so " +
 		"the escape hatch is one pin with one justification rather than the same call in three handlers; all " +
 		"three fail closed off the HTTP path.",
+	"apps/guide/guide.go": "superAdminOK / ledgerOf — the brand-blueprint SuperAdmin gate and the payer ONE " +
+		"grounded AI completion is billed to. Admin-ness lives in X-User-IsAdmin, and the payer is the SELECTED " +
+		"billing org (principal.Ledger, which a SuperAdmin masquerade moves off the effective org); neither is " +
+		"what principal.OrgFrom carries. Both fail closed off the HTTP path: no request, no platform rights and " +
+		"no ledger to charge.",
 }
 
 // TestRequestEscapeHatchIsPinned fails when a new cloud.Request call site
