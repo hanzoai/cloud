@@ -14949,6 +14949,140 @@ paths:
       operationId: get_v1_indexers
       tags:
       - indexers
+  /v1/ingress/middlewares:
+    get:
+      operationId: get_v1_ingress_middlewares
+      tags:
+      - ingress
+    post:
+      operationId: post_v1_ingress_middlewares
+      tags:
+      - ingress
+  /v1/ingress/middlewares/{id}:
+    delete:
+      operationId: delete_v1_ingress_middlewares_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      tags:
+      - ingress
+    get:
+      operationId: get_v1_ingress_middlewares_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      tags:
+      - ingress
+    put:
+      operationId: put_v1_ingress_middlewares_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      tags:
+      - ingress
+  /v1/ingress/routes:
+    get:
+      operationId: get_v1_ingress_routes
+      tags:
+      - ingress
+    post:
+      operationId: post_v1_ingress_routes
+      tags:
+      - ingress
+  /v1/ingress/routes/{id}:
+    delete:
+      operationId: delete_v1_ingress_routes_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      tags:
+      - ingress
+    get:
+      operationId: get_v1_ingress_routes_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      tags:
+      - ingress
+    put:
+      operationId: put_v1_ingress_routes_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      tags:
+      - ingress
+  /v1/ingress/services:
+    get:
+      operationId: get_v1_ingress_services
+      tags:
+      - ingress
+    post:
+      operationId: post_v1_ingress_services
+      tags:
+      - ingress
+  /v1/ingress/services/{id}:
+    delete:
+      operationId: delete_v1_ingress_services_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      tags:
+      - ingress
+    get:
+      operationId: get_v1_ingress_services_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      tags:
+      - ingress
+    put:
+      operationId: put_v1_ingress_services_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      tags:
+      - ingress
+  /v1/ingress/status:
+    get:
+      operationId: get_v1_ingress_status
+      tags:
+      - ingress
+  /v1/ingress/tls:
+    get:
+      operationId: get_v1_ingress_tls
+      tags:
+      - ingress
+    put:
+      operationId: put_v1_ingress_tls
+      tags:
+      - ingress
   /v1/insights/e:
     post:
       operationId: post_v1_insights_e
@@ -21026,6 +21160,7 @@ tags:
 - name: iam
 - name: index
 - name: indexers
+- name: ingress
 - name: insights
 - name: integrations
 - name: k8s
