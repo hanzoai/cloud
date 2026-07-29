@@ -830,7 +830,7 @@ one before it.
 ## The typed migration: THE PLAYBOOK (start here before typing anything)
 
 Worked end to end on `apps/agents/targets.go` (5 ops). Follow it and a partition
-is mechanical; skip it and you will rediscover four failure modes the hard way.
+is mechanical; skip it and you will rediscover seven failure modes the hard way.
 
 ### The recipe
 
@@ -896,7 +896,7 @@ an idempotent re-link and 201 on first registration. That is correct REST and
 NOT bend the route to fit the declaration, and do NOT invent a third mechanism —
 zip is getting multi-status `responses`, and these convert when it lands.
 
-### The six failure modes, all found the hard way
+### The seven failure modes, all found the hard way
 
 1. **A gate comparing two DERIVED artifacts agrees with itself while both are
    wrong.** `openapi-composed` compared the subsets to the golden they weave
@@ -931,9 +931,26 @@ zip is getting multi-status `responses`, and these convert when it lands.
    not at the compiler. `apps/ingress` named its list envelope `serviceList`, which
    is already `apps/admin`'s launch board, and the weave refused the whole package.
    The fix is to qualify the VALUE with the product the namespace cannot carry
-   (`ingressServices`), not to rename admin's. Check before you name:
-   `grep -l '"<name>"' plugin/*/openapi.json`. Domain nouns can stay unqualified
-   while they are unique — the weave is the gate when they stop being.
+   (`ingressServices`), not to rename admin's. It recurred immediately: guide's
+   `Step` (a journey step) collided with marketing's `Step` (a step of a drip
+   sequence), and guide — whose schema was not yet published — is the one that
+   yielded, to `JourneyStep`. Check before you name, comparing SHAPES and not just
+   names, because two apps may share a name when they agree:
+
+       python3 - <<'EOF'
+       import json,glob,os,collections
+       s=collections.defaultdict(dict)
+       for f in glob.glob('plugin/*/openapi.json'):
+           d=json.load(open(f))
+           for n,v in (d.get('components',{}) or {}).get('schemas',{}).items():
+               s[n][os.path.basename(os.path.dirname(f))]=json.dumps(v,sort_keys=True)
+       for n,a in sorted(s.items()):
+           if len(a)>1 and len(set(a.values()))>1: print(n, sorted(a))
+       EOF
+
+   Domain nouns can stay unqualified while they are unique — the weave is the gate
+   when they stop being. Generic ones are the standing hazard: `agents` publishes
+   `Spec`/`Metrics`/`GPU`, `plugins` publishes `Status`/`Result`/`Host`/`Time`.
 6. **A route going typed RENAMES its operationId**, `_by_id` → `_id`
    (`delete_v1_ingress_routes_by_id` → `delete_v1_ingress_routes_id`): the untyped
    projection derives the id from the route pattern, a typed op from zip's
@@ -943,6 +960,17 @@ zip is getting multi-status `responses`, and these convert when it lands.
    side on one prefix (its typed `..._targets_id` next to its untyped
    `..._targets_by_id_claim`). Take the rename; do NOT pin it back with
    `WithOperationID`, which would make one app's ids a special case.
+
+7. **zip cannot declare a bodyless POST.** `hasBody("POST")` is unconditional, so
+   a typed POST whose entire input is the URL still publishes
+   `requestBody: {required: true}` over its In: guide's `/steps/{id}/skip|reset`
+   now say they require `{"id": …}` for a body they have never read, and
+   `apps/admin` already ships two of the same (`/v1/admin/customers/{org}/suspend`,
+   `…/reactivate`). The WIRE is unharmed — `bindURL` binds the path LAST, so the
+   URL still names the target and a body id cannot redirect the write
+   (`TestTypedStepOpsFailClosed` pins exactly that) — but the document asserts
+   something false and a generated client gains an argument. Same shape of gap as
+   multi-status (#78): the wire fact exists and the declaration cannot say it.
 
 ### Partitioning the remaining work
 
@@ -995,8 +1023,9 @@ are route only — no MCP tool, no CLI command, no SDK method, no schema, no
 prose.
 
 The typed packages are `apps/admin` and its eight sub-packages, plus `apps/agents`,
-`apps/company`, `apps/framework`, `apps/git`, `apps/ingress`, `apps/integrations`,
-`apps/marketing`, `apps/o11y`, `apps/plugin`, `apps/search`, `apps/visor`.
+`apps/company`, `apps/framework`, `apps/git`, `apps/guide`, `apps/ingress`,
+`apps/integrations`, `apps/marketing`, `apps/o11y`, `apps/plugin`, `apps/search`,
+`apps/visor`.
 `apps/admin/core/typed.go` states the rule for that surface: every `/v1/admin/*`
 route is a typed op. Five carry NO untyped route at all — `admin`, `marketing`,
 `plugin`, `search` and now `ingress` (18 ops, converted whole in one pass).
@@ -1006,6 +1035,18 @@ each of the 8 refusals named in its own LLM.md — verbatim status/body proxies,
 The list moves every few merges: RE-MEASURE per app rather than trusting it, and
 note the count is a heuristic that reads `r.Header.Get("X-...")` as a route, so
 read the hits before believing a non-zero remainder (ingress's last "1" is one).
+
+`apps/guide` (13 of 19) is the worked example of the SPLIT tranche, where a
+partition is not all-or-nothing. Six of its routes stay untyped and each names a
+wire fact the declaration cannot yet carry: PUT `/curriculum` and PUT
+`/blueprint` take a YAML-**or**-JSON document (`sigs.k8s.io/yaml`) that a typed
+In would 400; PATCH `/blueprint/{collection}/{id}` takes an opaque JSON
+merge-patch whose keys are the item's own; POST `/steps/{id}/start|done` answer a
+blocked step with a structured 409 (`{error, step, blockedBy}`) that the error
+envelope cannot express (#78); and POST `/steps/{id}/do` also STREAMS SSE, where
+an op answers exactly one JSON value. The un-gated siblings `skip` and `reset` DO
+convert — the 409 branch is unreachable for them — which is the discriminator
+worth copying: split on the wire fact, not on the file.
 
 **What compensates today, and how it dies.** hanzoai/openapi carries an AUTHORED
 master, `hanzo.yaml`, which is the only source of request-body and query-parameter

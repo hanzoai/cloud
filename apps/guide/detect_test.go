@@ -7,7 +7,7 @@ import (
 )
 
 // signalCurriculum: two signalled steps + one plain step, for reconcile tests.
-var signalCurriculum = Curriculum{Version: "t", Steps: []Step{
+var signalCurriculum = Curriculum{Version: "t", Steps: []JourneyStep{
 	{ID: "a", Title: "A", Signal: "present"},
 	{ID: "b", Title: "B", Signal: "absent"},
 	{ID: "c", Title: "C"}, // no signal — never auto-detected
@@ -18,8 +18,8 @@ var signalCurriculum = Curriculum{Version: "t", Steps: []Step{
 func TestReconcileMarksPresentSignals(t *testing.T) {
 	ctx := context.Background()
 	dets := map[string]Detector{
-		"present": func(context.Context, string, Step) (bool, error) { return true, nil },
-		"absent":  func(context.Context, string, Step) (bool, error) { return false, nil },
+		"present": func(context.Context, string, JourneyStep) (bool, error) { return true, nil },
+		"absent":  func(context.Context, string, JourneyStep) (bool, error) { return false, nil },
 	}
 	states := map[string]State{}
 	var marked []string
@@ -42,7 +42,7 @@ func TestReconcileMarksPresentSignals(t *testing.T) {
 // if its detector reports present.
 func TestReconcileNeverDowngradesTerminal(t *testing.T) {
 	ctx := context.Background()
-	dets := map[string]Detector{"present": func(context.Context, string, Step) (bool, error) { return true, nil }}
+	dets := map[string]Detector{"present": func(context.Context, string, JourneyStep) (bool, error) { return true, nil }}
 	states := map[string]State{"a": StateSkipped}
 	var marked []string
 	if err := reconcile(ctx, "acme", signalCurriculum, states, dets, func(id string) error { marked = append(marked, id); return nil }); err != nil {
@@ -62,8 +62,8 @@ func TestReconcileNeverDowngradesTerminal(t *testing.T) {
 func TestReconcileSwallowsDetectorErrors(t *testing.T) {
 	ctx := context.Background()
 	dets := map[string]Detector{
-		"present": func(context.Context, string, Step) (bool, error) { return false, errors.New("warehouse down") },
-		"absent":  func(context.Context, string, Step) (bool, error) { return false, nil },
+		"present": func(context.Context, string, JourneyStep) (bool, error) { return false, errors.New("warehouse down") },
+		"absent":  func(context.Context, string, JourneyStep) (bool, error) { return false, nil },
 	}
 	states := map[string]State{}
 	err := reconcile(ctx, "acme", signalCurriculum, states, dets, func(string) error { return nil })
@@ -79,7 +79,7 @@ func TestReconcileSwallowsDetectorErrors(t *testing.T) {
 // detector is simply skipped (a curriculum may reference a not-yet-shipped signal).
 func TestReconcileUnknownSignalSkipped(t *testing.T) {
 	ctx := context.Background()
-	c := Curriculum{Steps: []Step{{ID: "a", Title: "A", Signal: "future"}}}
+	c := Curriculum{Steps: []JourneyStep{{ID: "a", Title: "A", Signal: "future"}}}
 	states := map[string]State{}
 	if err := reconcile(ctx, "acme", c, states, map[string]Detector{}, func(string) error { return nil }); err != nil {
 		t.Fatalf("reconcile: %v", err)
@@ -96,7 +96,7 @@ func TestActedDetector(t *testing.T) {
 	st := testStore(t)
 	dets := newDetectors(func(context.Context, string) (*Store, error) { return st, nil }, Signals{})
 	acted := dets["acted"]
-	step := Step{ID: "positioning", Title: "P", Tool: "content_generate"}
+	step := JourneyStep{ID: "positioning", Title: "P", Tool: "content_generate"}
 
 	// Before any action: not present.
 	if ok, err := acted(ctx, "acme", step); err != nil || ok {
@@ -117,7 +117,7 @@ func TestActedDetector(t *testing.T) {
 		t.Fatalf("acted after success want (true,nil), got (%v,%v)", ok, err)
 	}
 	// A step with no tool can never be "acted".
-	if ok, _ := acted(ctx, "acme", Step{ID: "x", Title: "X"}); ok {
+	if ok, _ := acted(ctx, "acme", JourneyStep{ID: "x", Title: "X"}); ok {
 		t.Fatal("a tool-less step must not satisfy the acted signal")
 	}
 }
@@ -129,7 +129,7 @@ func TestActedEndToEndThroughReconcile(t *testing.T) {
 	ctx := context.Background()
 	st := testStore(t)
 	dets := newDetectors(func(context.Context, string) (*Store, error) { return st, nil }, Signals{})
-	c := Curriculum{Steps: []Step{{ID: "positioning", Title: "P", Signal: "acted", Tool: "content_generate"}}}
+	c := Curriculum{Steps: []JourneyStep{{ID: "positioning", Title: "P", Signal: "acted", Tool: "content_generate"}}}
 
 	states := map[string]State{}
 	_ = reconcile(ctx, "acme", c, states, dets, func(id string) error { return st.SetState(ctx, id, StateDone, "auto", "", 1) })
