@@ -21,7 +21,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	synccommon "github.com/hanzoai/deploy/gitops-engine/pkg/sync/common"
+	synccommon "github.com/hanzoai/cd/gitops-engine/pkg/sync/common"
 )
 
 // Engine config — all optional; defaults target the live universe manifest repo
