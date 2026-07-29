@@ -54,6 +54,13 @@ var allowedRequestUses = map[string]string{
 		"It is ONE file for the whole subsystem on purpose — the resolvers live here so the planes that use " +
 		"them do not each reach for the request. All three fail closed off the HTTP path: no request, no " +
 		"token, no identity.",
+	"apps/o11y/typed.go": "callerIsAdmin / callerValidated / callerProject — the o11y surface's ONE identity " +
+		"seam. The scoped reads switch on platform-sudo (X-User-IsAdmin: the infra-log god-view and the " +
+		"whole-product RED), the status probe gates on validated-ness alone (infra health is not " +
+		"tenant-partitioned, so an org-less but validated caller is served), and the annotation queues narrow " +
+		"by project (X-Project-Id). None of the three rides on principal.OrgFrom. Concentrated in one file so " +
+		"the escape hatch is one pin with one justification rather than the same call in three handlers; all " +
+		"three fail closed off the HTTP path.",
 }
 
 // TestRequestEscapeHatchIsPinned fails when a new cloud.Request call site
