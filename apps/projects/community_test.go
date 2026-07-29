@@ -47,9 +47,15 @@ func adminPatchProject(t *testing.T, app *zip.App, org, slug string, in map[stri
 // to reach git leaves a private or moderated project's source world-readable,
 // which cannot be taken back. So the retraction cases are the ones with teeth.
 
-// recorder captures what crossed the seam. Registration is process-global, so it
-// restores the previous publisher on cleanup and guards the slice — subtests and
-// any detached caller share it.
+// recorder is a stand-in for the git app: it serves git.publish on git's own
+// socket and records what crossed. Registration is process-global, so it also
+// restores the run dir per test.
+//
+// It exercises the REAL path — frames over a unix socket — because the failure
+// this guards against is precisely a call that resolves to nothing. The seam it
+// replaced did exactly that: projects and git are separate processes, so an
+// in-process publisher was never registered in projects' binary and every
+// visibility change was dropped in silence.
 type recorder struct {
 	mu     sync.Mutex
 	events []cloud.Visibility
@@ -57,14 +63,23 @@ type recorder struct {
 
 func record(t *testing.T) *recorder {
 	t.Helper()
+	t.Setenv("CLOUD_RUN_DIR", t.TempDir())
 	r := &recorder{}
-	cloud.RegisterPublisher(func(_ context.Context, ev cloud.Visibility) error {
+	cloud.Expose("git.publish", func(_ context.Context, _ cloud.Ident, req []byte) ([]byte, error) {
+		ev, err := cloud.ReadVisibility(req)
+		if err != nil {
+			return nil, err
+		}
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		r.events = append(r.events, ev)
-		return nil
+		return nil, nil
 	})
-	t.Cleanup(func() { cloud.RegisterPublisher(nil) })
+	c, err := cloud.Listen("git", nil)
+	if err != nil {
+		t.Fatalf("git stand-in: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
 	return r
 }
 
@@ -176,7 +191,7 @@ func TestRetractionReachesTheCanonicalRepo(t *testing.T) {
 // create — the next update reconciles.
 func TestPublishSurvivesAnUnmountedGitPlane(t *testing.T) {
 	app := mountApp(t)
-	cloud.RegisterPublisher(nil)
+	t.Setenv("CLOUD_RUN_DIR", t.TempDir()) // no git socket here
 
 	if code, body := do(t, app, http.MethodPost, "/v1/projects", "acme",
 		map[string]any{"name": "Alone", "slug": "alone"}); code != http.StatusCreated {

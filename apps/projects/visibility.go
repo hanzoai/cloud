@@ -94,14 +94,12 @@ func (p Project) listed() bool {
 // git plane that is down (or simply not co-resident in this binary) must not
 // fail a publish. The next update reconciles it.
 func share(s *cloud.Service[state], ctx context.Context, p Project) {
-	if !cloud.PublisherRegistered() {
-		return
-	}
-	if err := cloud.Publish(ctx, cloud.Visibility{
+	ev := cloud.Visibility{
 		Org: p.Org, Slug: p.Slug, Name: p.Name, Description: p.Description,
 		Listed: p.listed(),
-	}); err != nil {
-		s.Log.Warn("community publish", "org", p.Org, "slug", p.Slug,
-			"listed", p.listed(), "err", err)
+	}
+	if _, err := cloud.Dial("git").For(p.Org).Call(ctx, "git.publish", cloud.PutVisibility(ev)); err != nil {
+		s.Log.Warn("publish visibility", "org", p.Org, "slug", p.Slug,
+			"listed", ev.Listed, "err", err)
 	}
 }
