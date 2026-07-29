@@ -20496,7 +20496,7 @@ paths:
         recommendations derived from it.
       tags:
       - guide
-  /v1/guide/blueprint/:
+  /v1/guide/blueprint:
     get:
       description: |-
         GetBlueprint returns the FULL authored brand blueprint — every principle,
@@ -20506,7 +20506,7 @@ paths:
         SuperAdmin authoring view of the platform blueprint, so it is refused 403 for
         anyone else, including a per-org admin: the brand blueprint is shared platform
         content, not a per-customer surface.
-      operationId: get_v1_guide_blueprint_
+      operationId: get_v1_guide_blueprint
       responses:
         "200":
           content:
