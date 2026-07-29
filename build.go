@@ -351,14 +351,14 @@ func pickKMSClient(cfg *Config, log luxlog.Logger) KMSClient {
 		}
 		return c
 	}
-	if cfg.KMSZAPAddr != "" {
-		log.Info("deps.KMS → ZAP RPC", "addr", cfg.KMSZAPAddr)
-		return clients.KMSRPCAt(cfg.KMSZAPAddr)
-	}
 	// The store is not in this process, which is the normal case: exactly one holds
-	// it. Ask that one over the internal plane rather than reporting no KMS at all —
-	// DisabledKMS here is why an app in its own binary silently had no secrets, and
-	// a stored mail provider read back as "not configured".
+	// it. Ask that one over the internal plane.
+	//
+	// There is no second way to reach it. CLOUD_KMS_ZAP_ADDR used to select
+	// clients.KMSRPCAt, a stub whose every method returned "not yet wired
+	// (zapc-gen pending)" — so configuring it produced a KMS client that failed
+	// every call, which is worse than none because it looks configured. The plane
+	// is the transport, and it is the only one.
 	log.Info("deps.KMS → the kms app over the internal plane")
 	return KMSPeer{}
 }
