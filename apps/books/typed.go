@@ -75,25 +75,31 @@ func (o booksOps) ledger(ctx context.Context, sandbox, action string) (*store, e
 	return st, nil
 }
 
-// query reads one URL query value for a typed op whose In is its request BODY.
+// sandboxFrom is the ledger selector for an op whose In is its request BODY. It is
+// the ONE fact those ops take off the request, so it is the whole of what
+// cloud.Request is reached for in this package.
 //
-// A BODYLESS op (GET) names each query parameter as an In field and zip documents
-// it as the query parameter it is. A POST's In IS its request body in the document
-// (zip openapi.go: query parameters are declared only where there is no
-// requestBody), so naming a URL-borne value there would MOVE it off the URL it
-// rides on today — and typing describes the wire, it does not move it. So a
-// body-carrying op reads it from the request instead: the same *zip.Ctx the raw
-// handler beside it holds, reached through cloud.Request, which is exactly the
-// seam typed.go exists to provide.
+// A BODYLESS op (GET) names the selector as an In field and zip documents it as the
+// query parameter it is. A body-carrying op cannot: a POST's In IS its request body
+// in the document (zip openapi.go declares query parameters only where there is no
+// requestBody) and zip's binder fills an In field from the BODY as well as the URL,
+// so naming it would publish the choice as a body property AND start accepting it
+// there — a wire these routes have never had.
+// TestTheLedgerSelectorStaysOnTheURLForBodyWrites (wire_test.go) is that
+// measurement, and it goes red the day the selector is named on an In.
 //
-// Empty off the HTTP path (an in-process CLI invoke has no request and therefore
-// no URL) — the same answer an HTTP request that omits the parameter gives, so
-// the two planes agree rather than one inventing a value.
-func query(ctx context.Context, name string) string {
+// So those ops read it where it rides, through the same sandboxQuery the untyped
+// handlers beside them use: one rule, one reader, so the two planes can never
+// disagree about which books an op lands in.
+//
+// LIVE off the HTTP path (an in-process CLI invoke has no request and therefore no
+// URL) — the answer an HTTP request that omits the parameter gives, so the two
+// planes agree rather than one inventing a ledger.
+func sandboxFrom(ctx context.Context) bool {
 	if c, ok := cloud.Request(ctx); ok {
-		return c.Query(name)
+		return sandboxQuery(c)
 	}
-	return ""
+	return false
 }
 
 // sandboxOf is the ledger selector, and the ONE rule both the typed ops and the

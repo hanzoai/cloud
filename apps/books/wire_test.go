@@ -262,7 +262,7 @@ func TestSandboxSelectorIsTheLiteralTrue(t *testing.T) {
 // GET cannot: the WRITES take a JSON body, and a typed POST's In is documented as
 // that body — so a Sandbox field on one of them would MOVE the live/sandbox choice
 // off the URL it has always ridden on, and publish it as a body field. The ops read
-// it from the request instead (query, typed.go), so `sandbox` in the BODY selects
+// it from the request instead (sandboxFrom, typed.go), so `sandbox` in the BODY selects
 // nothing. This goes red the moment someone names it on an In, which is exactly when
 // the wire would have moved.
 func TestTheLedgerSelectorStaysOnTheURLForBodyWrites(t *testing.T) {
