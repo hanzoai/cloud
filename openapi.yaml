@@ -7215,6 +7215,19 @@ components:
             $ref: '#/components/schemas/waiting'
           type: array
       type: object
+    revokedKey:
+      properties:
+        ok:
+          description: |-
+            OK is true when the key was revoked. A failure is an error status, never a
+            false here.
+          type: boolean
+        type:
+          description: |-
+            Type is the key class that was revoked, resolved — so a caller that named
+            nothing can see it revoked the secret key.
+          type: string
+      type: object
     roleList:
       properties:
         data:
@@ -20962,7 +20975,39 @@ paths:
       - iam
   /v1/iam/keys:
     delete:
+      description: |-
+        RevokeKey revokes the caller's own API key of the requested class. The class is
+        the same field mint takes — `?type=publishable`, defaulting to secret — so
+        revoking the key that ships in a browser bundle does not sign its holder out of
+        their own API: the other key keeps working.
+
+        Revoking is how a key is replaced when it does not need replacing; minting the
+        same class again rotates it in one step. IAM drops the credential immediately,
+        but the gateway caches keys for a few minutes, so a request that beat the cache
+        expiry may still be served.
+
+        For callers written against the older shape, the class is also accepted in a JSON
+        request body, read only when `?type=` is absent.
       operationId: delete_v1_iam_keys
+      parameters:
+      - description: |-
+          Type is the key class to act on: "secret" (sk-, session-equivalent, belongs
+          on a server) or "publishable" (pk-, org-identifying, safe in a browser
+          bundle). Omitted means secret, which is what every existing caller means.
+        example: publishable
+        in: query
+        name: type
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/revokedKey'
+          description: ok
+      summary: RevokeKey revokes the caller's own API key of the requested class.
       tags:
       - iam
     get:
@@ -22573,7 +22618,39 @@ paths:
       - kb
   /v1/keys:
     delete:
+      description: |-
+        RevokeKey revokes the caller's own API key of the requested class. The class is
+        the same field mint takes — `?type=publishable`, defaulting to secret — so
+        revoking the key that ships in a browser bundle does not sign its holder out of
+        their own API: the other key keeps working.
+
+        Revoking is how a key is replaced when it does not need replacing; minting the
+        same class again rotates it in one step. IAM drops the credential immediately,
+        but the gateway caches keys for a few minutes, so a request that beat the cache
+        expiry may still be served.
+
+        For callers written against the older shape, the class is also accepted in a JSON
+        request body, read only when `?type=` is absent.
       operationId: delete_v1_keys
+      parameters:
+      - description: |-
+          Type is the key class to act on: "secret" (sk-, session-equivalent, belongs
+          on a server) or "publishable" (pk-, org-identifying, safe in a browser
+          bundle). Omitted means secret, which is what every existing caller means.
+        example: publishable
+        in: query
+        name: type
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/revokedKey'
+          description: ok
+      summary: RevokeKey revokes the caller's own API key of the requested class.
       tags:
       - keys
     get:

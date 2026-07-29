@@ -54,19 +54,31 @@ func csrfToken(t *testing.T, app *zip.App, user, org string) string {
 
 // TestCSRF_AmbientWriteWithoutTokenIsRefused: a cookie-authenticated (ambient) write
 // with no X-CSRF-Token is 403, and IAM is never touched.
+//
+// EVERY key write, not one of them. The gate is a property of the GROUP each op is
+// registered on, so it is carried — or dropped — by the registration rather than by
+// anything visible at the handler, and a revoke that lost it destroys a credential
+// on a cross-site forgery.
 func TestCSRF_AmbientWriteWithoutTokenIsRefused(t *testing.T) {
 	f := newFakeIAM()
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
-	code, _ := req(t, app, http.MethodPost, "/v1/iam/keys", map[string]string{
-		"X-User-Id": "alice", "X-Org-Id": "acme",
-		"Cookie": "iam_access_token=opaque-sid", // ambient credential
-	}, "")
-	if code != http.StatusForbidden {
-		t.Fatalf("ambient write w/o CSRF token: want 403, got %d", code)
+	for _, w := range []struct{ method, path string }{
+		{http.MethodPost, "/v1/keys"},
+		{http.MethodDelete, "/v1/keys"},
+		{http.MethodPost, "/v1/iam/keys"},   // …and through the deprecated alias
+		{http.MethodDelete, "/v1/iam/keys"}, // …which is gated by its own group
+	} {
+		code, _ := req(t, app, w.method, w.path, map[string]string{
+			"X-User-Id": "alice", "X-Org-Id": "acme",
+			"Cookie": "iam_access_token=opaque-sid", // ambient credential
+		}, "")
+		if code != http.StatusForbidden {
+			t.Fatalf("%s %s ambient w/o CSRF token: want 403, got %d", w.method, w.path, code)
+		}
 	}
-	if len(f.mintedFor) != 0 {
-		t.Fatalf("IAM mint reached without a CSRF token: %v", f.mintedFor)
+	if len(f.mintedFor) != 0 || len(f.revokedFor) != 0 {
+		t.Fatalf("IAM reached without a CSRF token: minted=%v revoked=%v", f.mintedFor, f.revokedFor)
 	}
 }
 

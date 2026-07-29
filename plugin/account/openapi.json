@@ -145,9 +145,35 @@
     "/v1/iam/keys": {
       "delete": {
         "operationId": "delete_v1_iam_keys",
+        "summary": "RevokeKey revokes the caller's own API key of the requested class.",
+        "description": "RevokeKey revokes the caller's own API key of the requested class. The class is\nthe same field mint takes — `?type=publishable`, defaulting to secret — so\nrevoking the key that ships in a browser bundle does not sign its holder out of\ntheir own API: the other key keeps working.\n\nRevoking is how a key is replaced when it does not need replacing; minting the\nsame class again rotates it in one step. IAM drops the credential immediately,\nbut the gateway caches keys for a few minutes, so a request that beat the cache\nexpiry may still be served.\n\nFor callers written against the older shape, the class is also accepted in a JSON\nrequest body, read only when `?type=` is absent.",
         "tags": [
           "iam"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "Type is the key class to act on: \"secret\" (sk-, session-equivalent, belongs\non a server) or \"publishable\" (pk-, org-identifying, safe in a browser\nbundle). Omitted means secret, which is what every existing caller means.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "publishable"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/revokedKey"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "get": {
         "operationId": "get_v1_iam_keys",
@@ -241,9 +267,35 @@
     "/v1/keys": {
       "delete": {
         "operationId": "delete_v1_keys",
+        "summary": "RevokeKey revokes the caller's own API key of the requested class.",
+        "description": "RevokeKey revokes the caller's own API key of the requested class. The class is\nthe same field mint takes — `?type=publishable`, defaulting to secret — so\nrevoking the key that ships in a browser bundle does not sign its holder out of\ntheir own API: the other key keeps working.\n\nRevoking is how a key is replaced when it does not need replacing; minting the\nsame class again rotates it in one step. IAM drops the credential immediately,\nbut the gateway caches keys for a few minutes, so a request that beat the cache\nexpiry may still be served.\n\nFor callers written against the older shape, the class is also accepted in a JSON\nrequest body, read only when `?type=` is absent.",
         "tags": [
           "keys"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "Type is the key class to act on: \"secret\" (sk-, session-equivalent, belongs\non a server) or \"publishable\" (pk-, org-identifying, safe in a browser\nbundle). Omitted means secret, which is what every existing caller means.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "publishable"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/revokedKey"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "get": {
         "operationId": "get_v1_keys",
@@ -473,6 +525,19 @@
           },
           "treasury": {
             "description": "Treasury is the address on this chain to send funds to.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "revokedKey": {
+        "properties": {
+          "ok": {
+            "description": "OK is true when the key was revoked. A failure is an error status, never a\nfalse here.",
+            "type": "boolean"
+          },
+          "type": {
+            "description": "Type is the key class that was revoked, resolved — so a caller that named\nnothing can see it revoked the secret key.",
             "type": "string"
           }
         },
