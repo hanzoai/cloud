@@ -9,7 +9,10 @@ package pricing
 // this surface shares: the receiver zipdoc lifts prose through, the two identity
 // readers, and the input every op that takes nothing off the wire uses.
 //
-// WHAT STAYS RAW, and why it is a property of the wire rather than of effort:
+// WHAT STAYS RAW, and why it is a property of the wire rather than of effort.
+// The partition is PINNED by typed_wire_test.go (untypedByDesign +
+// TestEveryRouteIsTypedOrNamed): a route that is neither a typed op nor on that
+// closed list fails the suite, so the next route here is typed by default.
 //
 //   - the fourteen /v1/pricing/{compute,cloud,subscriptions,…} routes and
 //     /v1/pricing-policy are a VERBATIM proxy of the @hanzo/pricing bundle: the
