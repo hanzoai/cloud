@@ -830,7 +830,7 @@ one before it.
 ## The typed migration: THE PLAYBOOK (start here before typing anything)
 
 Worked end to end on `apps/agents/targets.go` (5 ops). Follow it and a partition
-is mechanical; skip it and you will rediscover seven failure modes the hard way.
+is mechanical; skip it and you will rediscover eight failure modes the hard way.
 
 ### The recipe
 
@@ -896,7 +896,7 @@ an idempotent re-link and 201 on first registration. That is correct REST and
 NOT bend the route to fit the declaration, and do NOT invent a third mechanism —
 zip is getting multi-status `responses`, and these convert when it lands.
 
-### The seven failure modes, all found the hard way
+### The eight failure modes, all found the hard way
 
 1. **A gate comparing two DERIVED artifacts agrees with itself while both are
    wrong.** `openapi-composed` compared the subsets to the golden they weave
@@ -995,6 +995,21 @@ zip is getting multi-status `responses`, and these convert when it lands.
                    if pr<=pa: print(f, m.upper(), p, n, sorted(pr), sorted(pa))
        EOF
 
+8. **An `any`-valued map publishes a schema that is not thin but FALSE.** zip's
+   `schemaOf` has no `reflect.Interface` case, so `map[string]any` falls to the
+   default and projects `additionalProperties: {"type": "object"}` — an assertion
+   that every VALUE is a JSON object. `apps/framework`'s own tests refute it on
+   the way past: a document reads back `{"subject": "Ship framework",
+   "docstatus": 0}`, a string and a number. `openapi.yaml` carries the claim in 15
+   places. This is a WORSE failure than #78 and the bodyless POST above, and the
+   difference is the one that matters: those UNDER-describe a true wire, this one
+   describes a false one, so an SDK regenerated from the golden types a document
+   `Dict[str, Dict]` — a shape that cannot hold one. hanzoai/openapi's authored
+   master gets it right (`framework_Document`: `additionalProperties: true`), so
+   the two documents genspec joins disagree about the same value today. The fix is
+   one case in one function — an unconstrained element is an OPEN schema (`true`),
+   not an object.
+
 ### Partitioning the remaining work
 
 986 untyped routes across 101 packages, 76 typed. Take a whole `apps/<app>/`
@@ -1004,7 +1019,7 @@ tree: they are disjoint, so agents do not collide in source.
 |---|---|---|
 | A | ~~integrations 47~~ (done: 22 typed, 19 refused), cloudflare 34, platform 32, projects 31, captable 31 | 128 |
 | B | git 28, agents 26, books 25, o11y 23, company 22 | 124 |
-| C | team 20, guide 20, crm 20, ~~ingress 19~~ (done), framework 19, account 19 | 117 |
+| C | team 20, guide 20, crm 20, ~~ingress 19~~ (done), ~~framework 19~~ → 2, account 19 | 117 |
 | D | pricing 18, ml 18, automations 18, index 17, dataroom 17, compliance 17, affiliates 17 | 122 |
 | E | eval 16, social 13, esign 13, link 12, functions 12, commerce 12, billing 12 | 90 |
 | F | the ~70 remaining packages, 1–11 routes each | ~358 |
@@ -1085,6 +1100,18 @@ envelope cannot express (#78); and POST `/steps/{id}/do` also STREAMS SSE, where
 an op answers exactly one JSON value. The un-gated siblings `skip` and `reset` DO
 convert — the 409 branch is unreachable for them — which is the discriminator
 worth copying: split on the wire fact, not on the file.
+
+`apps/framework` (17 of 19) is the other split, worth reading for the opposite
+reason: its two refusals are ONE missing capability rather than two wire facts.
+The body of a document write IS the document's own field data — an open object the
+DocType defines at run time — and typing those two takes BOTH halves of that
+capability, where only the first is ever named. zip must be able to DECLARE an
+open object (#8 above), AND `bindURL` must be able to BIND the URL onto one. It
+cannot: it returns early unless the In is a struct (`v.Kind() != reflect.Struct`),
+so an open-object In carries no `:doctype`/`:name` while a struct In carries no
+document. Half the fix converts nothing, which is why the refusal is recorded in a
+TEST (`rawRoutes` in `ops_projection_test.go`) with both halves named, not in
+prose that only ever named one.
 
 **What compensates today, and how it dies.** hanzoai/openapi carries an AUTHORED
 master, `hanzo.yaml`, which is the only source of request-body and query-parameter
