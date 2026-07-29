@@ -245,11 +245,19 @@ func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
 	req.Image = strings.TrimSpace(req.Image)
 
 	// Release self-publishes ghcr.io/hanzoai/cloud (compute version → build → smoke
-	// → tag → notify) — a fabric operation reserved to the MACHINE token. An
-	// interactive login, even an admin, never cuts a cloud release.
+	// → tag → notify). It is a PLATFORM operation, so it takes the platform-sudo
+	// predicate — principal.IsSuperAdmin, the same one every other privileged
+	// surface reads — or the machine token CI runs under. An org admin can build;
+	// only a SuperAdmin or the fabric itself can cut a release.
+	//
+	// It previously demanded the machine token ALONE, which put a second auth
+	// system beside IAM: a SuperAdmin identity, which by definition may do
+	// anything, was refused a release while being trusted with KMS and every
+	// tenant's data. IAM decides permission; a token is a transport, not an
+	// authority.
 	if req.Release {
-		if !viaToken {
-			return zip.ErrForbidden("release builds require the platform build token")
+		if !viaToken && !principal.IsSuperAdmin(c) {
+			return zip.ErrForbidden("release builds require a SuperAdmin identity or the platform build token")
 		}
 		return startRelease(s, c, req)
 	}
