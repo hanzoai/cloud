@@ -342,7 +342,7 @@ func Serve(plugins []Plugin, enable []string) error {
 	// audit/). A write failure fails the request CLOSED (AU-5). Constructed here
 	// so the Recorder lives for the process and the /v1/admin/audit query + verify
 	// endpoints (clients/admin) read the SAME store via deps.Audit.
-	auditRec, err := buildAuditRecorder(cfg, deps.Logger)
+	auditRec, err := buildAuditRecorder(cfg, deps.Logger, procName(plugins))
 	if err != nil {
 		return fmt.Errorf("audit: %w", err)
 	}
