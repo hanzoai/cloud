@@ -26,6 +26,11 @@ var allowedRequestUses = map[string]string{
 	"apps/admin/core/typed.go": "Admit / AdmitScoped — the SuperAdmin and white-label tenant gates. " +
 		"Both read validated identity beyond the org (IsAdmin, the WL allowlist), which principal.OrgFrom does not carry.",
 	"apps/search/search.go": "Query resolves the tenant from the validated principal at the top of the op.",
+	"apps/agents/targets.go": "targetOwns / targetCaller — a machine belongs to the principal that " +
+		"registered it, and only that owner or an org admin may patch, delete or manage its route-work " +
+		"plane. Ownership needs X-User-Id and org-admin-ness (X-User-IsOrgAdmin), neither of which " +
+		"principal.OrgFrom carries. Both fail closed off the HTTP path: no request, no attested caller, " +
+		"no management rights.",
 	"apps/visor/visor.go": "A tenant-scoped PROXY: client.go forwards the caller's own identity headers " +
 		"(and their bearer where no service credential is configured) upstream, so an op without the request " +
 		"drops the caller's identity on the far side of the hop.",
