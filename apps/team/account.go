@@ -97,6 +97,10 @@ type api struct {
 	// planEnt resolves a plan id to its entitlement block (plan.Entitlements) —
 	// the source of the team.guests cap.
 	planEnt func(context.Context, string) (map[string]any, error)
+	// degraded is the fail-closed posture Mount resolved (no HS256 secret). The
+	// untyped routes get it through Mount's guard wrapper; a typed op is not a
+	// zip.Handler and cannot be wrapped, so it reads this instead (typed.go).
+	degraded bool
 }
 
 // ── types (ported from team-go/pkg/account/types.go) ──────────────────────────
@@ -226,9 +230,16 @@ func statusAmbiguous(url string) Status {
 
 // ── route registration ────────────────────────────────────────────────────────
 
-func (g *api) register(r zip.Router, guard guardFn) {
+func (g *api) register(app cloud.Router, guard guardFn) {
+	// The group is built HERE so cmd/zipdoc can resolve the typed op's prefix from
+	// this file — see bots.go for why.
+	r := app.Group(teamPrefix)
 	r.Post("/account", guard(g.rpc))
-	r.Get("/account/providers", guard(g.providers))
+	// TYPED: /providers takes nothing and answers a fixed list, so it is the one
+	// account route that is a whole op rather than one verb of the RPC or a
+	// browser redirect. A typed op is not a zip.Handler and cannot be wrapped by
+	// guard, so it carries the degraded refusal itself (g.degraded, typed.go).
+	zip.Get(r, "/account/providers", g.listProviders)
 	r.Get("/account/auth/:provider", guard(g.authStart))
 	r.Get("/account/auth/:provider/callback", guard(g.authCallback))
 	r.Put("/account/cookie", guard(g.setCookie))
@@ -237,15 +248,25 @@ func (g *api) register(r zip.Router, guard guardFn) {
 
 // ── REST: providers ───────────────────────────────────────────────────────────
 
-func (g *api) providers(c *zip.Ctx) error {
-	// ONE door: hanzo.id. Which identities that door accepts — Google, GitHub,
-	// passkey, password — is IAM's question, answered on IAM's own page, next to
-	// the identity check and the training-data consent that must precede a first
-	// session. Listing providers here would be a second place holding that answer,
-	// and the two drift the moment IAM gains or drops one.
-	return c.JSON(http.StatusOK, []ProviderInfo{
-		{Name: g.cfg.provider, DisplayName: "Hanzo"},
-	})
+// providerList is the GET /providers body: a bare JSON array of the identity
+// providers the SPA may start a login with. Named (not a plain []ProviderInfo)
+// so the document can describe the response at all — zip declares a response
+// schema only for an Out type that HAS a name.
+type providerList []ProviderInfo
+
+// ListProviders returns the identity providers this deployment starts a login
+// with. It is always exactly one — hanzo.id. Which identities that door accepts
+// (Google, GitHub, passkey, password) is IAM's question, answered on IAM's own
+// page next to the identity check and the training-data consent that must
+// precede a first session; listing them here would be a second place holding
+// that answer, and the two drift the moment IAM gains or drops one.
+//
+// Response: [{"name": "openid", "displayName": "Hanzo"}]
+func (g *api) listProviders(ctx context.Context, _ *none) (*providerList, error) {
+	if g.degraded {
+		return nil, unavailable()
+	}
+	return &providerList{{Name: g.cfg.provider, DisplayName: "Hanzo"}}, nil
 }
 
 // ── REST: IAM OAuth bridge (external hop, net/http) ────────────────────────────
