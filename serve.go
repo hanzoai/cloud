@@ -294,8 +294,8 @@ func Serve(plugins []Plugin, enable []string) error {
 
 	// IDENTITY IS THE GATEWAY'S, AND IT IS VERIFIED EXACTLY ONCE.
 	//
-	// The edge strips whatever a client sent, validates the IAM token against
-	// IAM's JWKS, and mints the HIP-0026 header set from the verified claims.
+	// HIP-0519. The edge strips whatever a client sent, validates the IAM token
+	// against IAM's JWKS, and mints the HIP-0026 header set from the verified claims.
 	// Everything behind it — these co-located plugins, and every sibling reached
 	// over ZAP on a unix socket — reads that assertion and forwards it unchanged.
 	//
@@ -326,7 +326,7 @@ func Serve(plugins []Plugin, enable []string) error {
 	// UI's SuperAdmin gate sees the same owner+isAdmin every /v1/admin/* route already
 	// authorizes on (a PKCE session is not a casibase session — without this the UI
 	// bounced to login despite valid admin API access). No principal → casibase path
-	// unchanged. Runs AFTER IdentityMiddleware, BEFORE MountAll's casibase mount.
+	// unchanged. Runs BEFORE MountAll's casibase mount.
 	app.Use(AccountFromPrincipal())
 
 	// Shard router (horizontal writer scale). Runs IMMEDIATELY after SanitizeIdentity
@@ -367,7 +367,7 @@ func Serve(plugins []Plugin, enable []string) error {
 	app.Use(ScopeRateLimit(deps.Metering, deps.GatewayPolicy))
 
 	// Starter credit — the funding path the two gates below are sequenced behind.
-	// Runs AFTER IdentityMiddleware (it needs the VALIDATED principal to resolve a
+	// It needs the gateway-asserted principal to resolve a
 	// wallet; an unvalidated caller is skipped) and BEFORE both gates, so a brand-new
 	// account is funded before anything on this same request asks whether it can pay.
 	// Mounted here rather than at the org-creating handler because that handler is not
@@ -387,7 +387,7 @@ func Serve(plugins []Plugin, enable []string) error {
 	app.Use(BillingGate(deps.Metering, DefaultPrice))
 
 	// Spend gate — the ONE "may this principal spend?" enforcement point. Runs AFTER
-	// IdentityMiddleware (so it keys on the VALIDATED principal + owner claim, never a
+	// the gateway (so it keys on the asserted principal + owner header, never a
 	// client X-Org-Id) and beside BillingGate, BEFORE MountAll so it precedes every
 	// subsystem /v1/<name>/* wildcard.
 	//
