@@ -721,3 +721,99 @@ func UsageRows(payload []byte) ([]UsageRow, error) {
 	}
 	return out, nil
 }
+
+// ---- finance.txns: () -> ledger entries ----
+//
+// Every entry, not only the usage debits: a credit, a welcome grant and a metered
+// debit are all transactions to a customer reading their account, and the three
+// finance pages (credits / usage / ledger) are three projections of THIS one list.
+//
+// The amount travels as its 18-DECIMAL INTEGER string — money.AttoString, the same
+// storage/on-chain form the ledger holds — and parses back with money.ParseInt. That
+// pair is exact by construction: no decimal point to misplace, no scale to agree on,
+// and nothing below a cent rounded away, which for a per-token price is most of the
+// value.
+
+const (
+	tcCountOff = 0
+	tcHdrFixed = 4
+)
+
+const (
+	txIDOff      = 0
+	txKindOff    = 8
+	txRefOff     = 16
+	txMemoOff    = 24
+	txAttoOff    = 32
+	txCreatedOff = 40
+	txFixed      = 48
+)
+
+// Txn is one ledger entry on the wire. Atto is the amount's exact integer form.
+type Txn struct {
+	ID        string
+	Kind      string
+	Ref       string
+	Memo      string
+	Atto      string
+	CreatedAt int64
+}
+
+// PutTxns packs a finance.txns reply: a count header, then one frame each.
+func PutTxns(rows []Txn) []byte {
+	var out bytes.Buffer
+	h := zap.NewBuilder(tcHdrFixed + 16)
+	hb := h.StartObject(tcHdrFixed)
+	hb.SetUint32(tcCountOff, uint32(len(rows)))
+	hb.FinishAsRoot()
+	_ = writeFrame(&out, h.Finish())
+	for _, t := range rows {
+		b := zap.NewBuilder(len(t.ID) + len(t.Kind) + len(t.Ref) + len(t.Memo) + len(t.Atto) + txFixed + 64)
+		tb := b.StartObject(txFixed)
+		tb.SetText(txIDOff, t.ID)
+		tb.SetText(txKindOff, t.Kind)
+		tb.SetText(txRefOff, t.Ref)
+		tb.SetText(txMemoOff, t.Memo)
+		tb.SetText(txAttoOff, t.Atto)
+		tb.SetInt64(txCreatedOff, t.CreatedAt)
+		tb.FinishAsRoot()
+		_ = writeFrame(&out, b.Finish())
+	}
+	return out.Bytes()
+}
+
+// Txns unpacks one. A short payload is an error, never a shorter list: a statement
+// missing entries is a customer being shown a balance they cannot reconcile.
+func Txns(payload []byte) ([]Txn, error) {
+	r := bytes.NewReader(payload)
+	hb, err := readFrame(r)
+	if err != nil {
+		return nil, fmt.Errorf("txns: header: %w", err)
+	}
+	hm, err := zap.Parse(hb)
+	if err != nil {
+		return nil, fmt.Errorf("txns: header: %w", err)
+	}
+	n := int(hm.Root().Uint32(tcCountOff))
+	out := make([]Txn, 0, n)
+	for i := 0; i < n; i++ {
+		fb, err := readFrame(r)
+		if err != nil {
+			return nil, fmt.Errorf("txns: %d of %d: %w", i+1, n, err)
+		}
+		fm, err := zap.Parse(fb)
+		if err != nil {
+			return nil, fmt.Errorf("txns: %d of %d: %w", i+1, n, err)
+		}
+		tr := fm.Root()
+		out = append(out, Txn{
+			ID:        tr.Text(txIDOff),
+			Kind:      tr.Text(txKindOff),
+			Ref:       tr.Text(txRefOff),
+			Memo:      tr.Text(txMemoOff),
+			Atto:      tr.Text(txAttoOff),
+			CreatedAt: tr.Int64(txCreatedOff),
+		})
+	}
+	return out, nil
+}

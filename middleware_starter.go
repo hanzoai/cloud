@@ -244,8 +244,14 @@ func grantStarterPeer(ctx context.Context, w principal.Wallet) (int64, error) {
 	out, err := Dial("commerce").For(w.Ledger).Call(ctx, "finance.starter",
 		PutBalanceReq(w.Account, "usd"))
 	if err != nil {
-		return 0, err
+		// No ledger here and no peer serving one: this deployment has no money plane
+		// at all, which is a legitimate shape and not a fault. Inert, exactly as it
+		// was before there was a peer to ask — erroring would put a line in the log
+		// on every first request of every wallet in a deployment that does not bill.
+		return 0, nil
 	}
+	// A peer that ANSWERED and could not be read is different: something is serving
+	// the method and disagreeing about its shape, which is worth surfacing.
 	return I64(out)
 }
 

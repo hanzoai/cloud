@@ -153,3 +153,42 @@ func exposeUsage() {
 		return cloud.PutUsageRows(out), nil
 	})
 }
+
+// The ledger's entries. Three customer-facing pages read this one list, and all
+// three answered 501 from a process that does not hold the ledger.
+const txnsMethod = "finance.txns"
+
+func exposeTxns() {
+	cloud.Expose(txnsMethod, func(ctx context.Context, who cloud.Ident, req []byte) ([]byte, error) {
+		if _, _, err := cloud.BalanceReq(req); err != nil {
+			return nil, err
+		}
+		org := who.Org
+		if org == "" {
+			return nil, fmt.Errorf("txns: no org on the capability")
+		}
+		fin := financeclient.Current()
+		if fin == nil {
+			return nil, fmt.Errorf("txns: no ledger in the process that owns it")
+		}
+		lister, ok := fin.(interface {
+			ListEntries(context.Context, string, int) ([]financeclient.TxnRow, error)
+		})
+		if !ok {
+			return nil, fmt.Errorf("txns: this ledger does not list entries")
+		}
+		rows, err := lister.ListEntries(ctx, org, usageReadLimit)
+		if err != nil {
+			return nil, fmt.Errorf("txns: %w", err)
+		}
+		out := make([]cloud.Txn, 0, len(rows))
+		for _, r := range rows {
+			out = append(out, cloud.Txn{
+				ID: r.ID, Kind: r.Kind, Ref: r.Ref, Memo: r.Memo,
+				Atto:      r.Amount.AttoString(),
+				CreatedAt: r.CreatedAt,
+			})
+		}
+		return cloud.PutTxns(out), nil
+	})
+}
