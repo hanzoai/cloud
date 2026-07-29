@@ -16,21 +16,31 @@ import (
 
 // operatorOrgsFromEnv builds the set of orgs that may bind a custom domain
 // WITHOUT proving ownership (besides a SuperAdmin): CLOUD_PLATFORM_OPERATOR_ORGS
-// (comma-separated) when set, else the deployment's own brand org (sanitized).
-// The brand org is the platform operator and manages customer DNS on their
-// behalf, so its bind IS the vouch. Every other org self-serves through the DNS
-// challenge below.
+// (comma-separated) when set, else the deployment's own brand org. The brand org
+// is the platform operator and manages customer DNS on their behalf, so its bind
+// IS the vouch. Every other org self-serves through the DNS challenge below.
+//
+// Each entry is the VERBATIM validated IAM owner, trimmed and nothing else —
+// the SAME value setDomains looks the caller up by (org → principal.Org, which
+// returns the owner verbatim; see projects.go org()). Both halves of one
+// comparison must be the same value: this set was folded through the old
+// sanitizeOrg (lowercase + non-alnum→'-' + truncate-32) while the lookup stayed
+// verbatim, so configuring "Acme" wrote the key "acme" and handed a DIFFERENT
+// tenant — whoever's real IAM owner is "acme" — the operator's DNS-proof bypass,
+// while the genuine "Acme" silently lost its own ("team.a" → "team-a" likewise).
+// A fold applied to one side of a comparison is not a normalization, it is a
+// collision, and here the collision IS a cross-tenant privilege grant.
 func operatorOrgsFromEnv(brand string) map[string]bool {
 	out := map[string]bool{}
 	if raw := strings.TrimSpace(os.Getenv("CLOUD_PLATFORM_OPERATOR_ORGS")); raw != "" {
 		for _, o := range strings.Split(raw, ",") {
-			if o := sanitizeOrg(o); o != "" {
+			if o := strings.TrimSpace(o); o != "" {
 				out[o] = true
 			}
 		}
 		return out
 	}
-	if b := sanitizeOrg(brand); b != "" {
+	if b := strings.TrimSpace(brand); b != "" {
 		out[b] = true
 	}
 	return out
