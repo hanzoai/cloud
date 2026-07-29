@@ -573,3 +573,65 @@ func UsageOf(payload []byte) (Usage, error) {
 		ClientIP:  r.Text(uClientIPOff),
 	}, nil
 }
+
+// ---- git.publish: Visibility -> () ----
+//
+// A project's visibility, on its way to the canonical repo. projects decides it
+// and git applies it; they are separate processes, so this crosses the plane.
+// It used to cross a Register* seam, which resolves in-process and therefore
+// never fired at all once each app became its own binary — public projects
+// silently stopped getting repos.
+
+// Visibility is one project's visibility as the world should see it.
+//
+//   - Org/Slug identify the project, and Org is also its AUTHORSHIP: the account
+//     that pays for it. There is no separate author field because there is no
+//     second copy of that fact.
+//   - Listed is the RESOLVED answer to "may a stranger see this" — public AND
+//     not moderated. git never re-derives it from parts, so the rule lives in
+//     exactly one place (projects.Project.listed).
+//   - Name/Description seed the repo the first time it is created and are never
+//     re-imposed, so an author who edits their own repo description keeps it.
+type Visibility struct {
+	Org         string
+	Slug        string
+	Name        string
+	Description string
+	Listed      bool
+}
+
+const (
+	vOrgOff    = 0
+	vSlugOff   = 8
+	vNameOff   = 16
+	vDescOff   = 24
+	vListedOff = 32
+	vFixed     = 33
+)
+
+// PutVisibility packs one project's resolved visibility.
+func PutVisibility(v Visibility) []byte {
+	b := zap.NewBuilder(len(v.Org) + len(v.Slug) + len(v.Name) + len(v.Description) + vFixed + 64)
+	ob := b.StartObject(vFixed)
+	ob.SetText(vOrgOff, v.Org)
+	ob.SetText(vSlugOff, v.Slug)
+	ob.SetText(vNameOff, v.Name)
+	ob.SetText(vDescOff, v.Description)
+	ob.SetBool(vListedOff, v.Listed)
+	ob.FinishAsRoot()
+	return b.Finish()
+}
+
+// ReadVisibility unpacks one.
+func ReadVisibility(payload []byte) (Visibility, error) {
+	m, err := zap.Parse(payload)
+	if err != nil {
+		return Visibility{}, fmt.Errorf("visibility: %w", err)
+	}
+	r := m.Root()
+	return Visibility{
+		Org: r.Text(vOrgOff), Slug: r.Text(vSlugOff),
+		Name: r.Text(vNameOff), Description: r.Text(vDescOff),
+		Listed: r.Bool(vListedOff),
+	}, nil
+}
