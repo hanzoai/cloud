@@ -1083,9 +1083,13 @@ are route only — no MCP tool, no CLI command, no SDK method, no schema, no
 prose.
 
 The typed packages are `apps/admin` and its eight sub-packages, plus `apps/agents`,
-`apps/company`, `apps/framework`, `apps/git`, `apps/guide`, `apps/ingress`,
-`apps/integrations`, `apps/marketing`, `apps/o11y`, `apps/plugin`, `apps/search`,
-`apps/visor`.
+`apps/company`, `apps/crm`, `apps/framework`, `apps/git`, `apps/guide`,
+`apps/ingress`, `apps/integrations`, `apps/marketing`, `apps/o11y`, `apps/plugin`,
+`apps/search`, `apps/visor`.
+`crm` is 19 of 20: its one refusal, the public Startup Program intake POST, is
+named at its registration — the IP rate limit and the pre-parse 64 KiB body cap
+are wire, and a typed op's MCP/CLI projections would publish an unmetered,
+uncapped alias of a deliberately metered public endpoint.
 `apps/admin/core/typed.go` states the rule for that surface: every `/v1/admin/*`
 route is a typed op. Five carry NO untyped route at all — `admin`, `marketing`,
 `plugin`, `search` and now `ingress` (18 ops, converted whole in one pass).
