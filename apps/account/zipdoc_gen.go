@@ -9,6 +9,24 @@ import (
 )
 
 func init() {
+	zip.Describe("DELETE /v1/iam/keys", zip.Doc{
+		Description: "RevokeKey revokes the caller's own API key of the requested class. The class is\nthe same field mint takes — `?type=publishable`, defaulting to secret — so\nrevoking the key that ships in a browser bundle does not sign its holder out of\ntheir own API: the other key keeps working.\n\nRevoking is how a key is replaced when it does not need replacing; minting the\nsame class again rotates it in one step. IAM drops the credential immediately,\nbut the gateway caches keys for a few minutes, so a request that beat the cache\nexpiry may still be served.\n\nFor callers written against the older shape, the class is also accepted in a JSON\nrequest body, read only when `?type=` is absent.",
+		Fields: map[string]string{
+			"keyTypeIn.type":  "Type is the key class to act on: \"secret\" (sk-, session-equivalent, belongs\non a server) or \"publishable\" (pk-, org-identifying, safe in a browser\nbundle). Omitted means secret, which is what every existing caller means.",
+			"revokedKey.ok":   "OK is true when the key was revoked. A failure is an error status, never a\nfalse here.",
+			"revokedKey.type": "Type is the key class that was revoked, resolved — so a caller that named\nnothing can see it revoked the secret key.",
+		},
+		Example: json.RawMessage(`{"type":"publishable"}`),
+	})
+	zip.Describe("DELETE /v1/keys", zip.Doc{
+		Description: "RevokeKey revokes the caller's own API key of the requested class. The class is\nthe same field mint takes — `?type=publishable`, defaulting to secret — so\nrevoking the key that ships in a browser bundle does not sign its holder out of\ntheir own API: the other key keeps working.\n\nRevoking is how a key is replaced when it does not need replacing; minting the\nsame class again rotates it in one step. IAM drops the credential immediately,\nbut the gateway caches keys for a few minutes, so a request that beat the cache\nexpiry may still be served.\n\nFor callers written against the older shape, the class is also accepted in a JSON\nrequest body, read only when `?type=` is absent.",
+		Fields: map[string]string{
+			"keyTypeIn.type":  "Type is the key class to act on: \"secret\" (sk-, session-equivalent, belongs\non a server) or \"publishable\" (pk-, org-identifying, safe in a browser\nbundle). Omitted means secret, which is what every existing caller means.",
+			"revokedKey.ok":   "OK is true when the key was revoked. A failure is an error status, never a\nfalse here.",
+			"revokedKey.type": "Type is the key class that was revoked, resolved — so a caller that named\nnothing can see it revoked the secret key.",
+		},
+		Example: json.RawMessage(`{"type":"publishable"}`),
+	})
 	zip.Describe("GET /v1/commerce/topup/rails", zip.Doc{
 		Description: "TopupRails lists the accepted (chain, token, treasury) triples, so a browser can\nrender \"send USDC here\" without the addresses being baked into its bundle.\n\nThis exists because the console previously gated its top-up UI on\nNEXT_PUBLIC_HANZO_HUSD_ADDRESS/_TREASURY — build-time constants. Enabling a rail\ntherefore meant rebuilding and redeploying the frontend, and with them unset the\nUI reported \"not available yet\" no matter what the server could actually accept.\nServing the set at runtime keeps ONE source of truth (the server's config) and\nlets a rail be switched on without shipping a bundle.\n\nEverything here is public on-chain data; no secret is exposed, and the set is\nempty on a deployment that accepts no crypto rail.",
 		Fields: map[string]string{
