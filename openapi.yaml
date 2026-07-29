@@ -3355,6 +3355,49 @@ components:
           description: Updated is how many existing native issues this pass refreshed.
           type: integer
       type: object
+    githubImportIn:
+      properties:
+        all:
+          description: |-
+            All imports every repository the installation grants, instead of naming
+            them. Archived and disabled repositories are skipped either way — they
+            cannot be fetched.
+          type: boolean
+        repos:
+          description: |-
+            Repos names the repositories to import: short names within the org's
+            installation, with no owner prefix (a trailing ".git" is stripped).
+            Ignored when all is true.
+          items:
+            type: string
+          type: array
+      type: object
+    githubImportOut:
+      properties:
+        queued:
+          description: Queued is how many repositories were handed to the background
+            importer.
+          type: integer
+        repos:
+          description: Repos names those repositories, in the installation's listing
+            order.
+          items:
+            type: string
+          type: array
+      type: object
+    githubPagesBuildOut:
+      properties:
+        repo:
+          description: Repo is the repository the build was queued for.
+          type: string
+        status:
+          description: Status is GitHub's build state at the moment it was queued
+            ("queued").
+          type: string
+        url:
+          description: URL is GitHub's API URL for the build, for polling it there.
+          type: string
+      type: object
     githubPagesDisabledOut:
       properties:
         disabled:
@@ -3462,6 +3505,15 @@ components:
           type: string
         url:
           description: URL is the live site (GitHub's html_url).
+          type: string
+      type: object
+    githubRepoRef:
+      properties:
+        repo:
+          description: |-
+            Repo is the repository's short name within the org's installation, with no
+            owner prefix (the owner is server-derived from the grant). A trailing ".git"
+            is stripped.
           type: string
       type: object
     githubRepoView:
@@ -15774,18 +15826,79 @@ paths:
       - integrations
   /v1/integrations/github/repos/{repo}/pages/builds:
     post:
-      operationId: post_v1_integrations_github_repos_by_repo_pages_builds
+      description: |-
+        GithubPagesBuild requests a Pages rebuild and returns the queued build's status.
+        The build is queued AT GITHUB, not completed here, so the answer is 202 Accepted
+        and its status is the one GitHub reported at queue time. 404 when the repository
+        has no Pages site, or when the org's installation was not granted it.
+      operationId: post_v1_integrations_github_repos_repo_pages_builds
       parameters:
-      - in: path
+      - description: |-
+          Repo is the repository's short name within the org's installation, with no
+          owner prefix (the owner is server-derived from the grant). A trailing ".git"
+          is stripped.
+        example: widgets
+        in: path
         name: repo
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              repo: widgets
+            schema:
+              $ref: '#/components/schemas/githubRepoRef'
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              example:
+                repo: widgets
+                status: queued
+                url: https://api.github.com/repos/acme/widgets/pages/builds/1
+              schema:
+                $ref: '#/components/schemas/githubPagesBuildOut'
+          description: accepted
+      summary: |-
+        GithubPagesBuild requests a Pages rebuild and returns the queued build's status.
+        The build is queued AT GITHUB, not completed here, so the answer is 202 Accepted
+        and its status is the one GitHub reported at queue time.
       tags:
       - integrations
   /v1/integrations/github/repos/import:
     post:
+      description: |-
+        GithubImport imports the selected (or all) granted repos into git.hanzo.ai. The
+        selection is intersected with the installation's GRANTED set, so a client can
+        never import a repo the App was not granted (org isolation + a grant check). The
+        import runs in a bounded background worker (don't block the request), so the
+        answer is 202 Accepted; poll GET /v1/integrations/github/repos for the per-repo
+        status to flip to imported.
       operationId: post_v1_integrations_github_repos_import
+      requestBody:
+        content:
+          application/json:
+            example:
+              repos:
+              - widgets
+            schema:
+              $ref: '#/components/schemas/githubImportIn'
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              example:
+                queued: 1
+                repos:
+                - widgets
+              schema:
+                $ref: '#/components/schemas/githubImportOut'
+          description: accepted
+      summary: GithubImport imports the selected (or all) granted repos into git.hanzo.ai.
       tags:
       - integrations
   /v1/integrations/slack/commands:
