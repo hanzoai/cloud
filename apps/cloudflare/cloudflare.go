@@ -137,64 +137,108 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		routes)
 }
 
+// ops binds the service to every op on this plane. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and each op is a method value (o.zonesList), which is also
+// the only bound form cmd/zipdoc can lift prose from. The handful of routes that
+// cannot be typed (see routes) are methods on the same receiver, so there is ONE
+// way a handler here reaches the service.
+type ops struct{ s *cloud.Service[state] }
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by `make openapi`.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // routes registers the first-class /v1/cloudflare surface. Every route runs through
 // authClient (validated-org gate + fail-closed per-org token) FIRST — reads require
 // a validated org, mutations additionally require org admin (authWrite) — so no
 // route is a softer target than another.
+//
+// Ops are declared on the GROUP, so each op's path is the group's prefix composed
+// with its leaf — the same composition the router does, and the identity every
+// projection (document, MCP tool, CLI command, SDK method) keys on.
+//
+// SIX routes are deliberately NOT typed ops, because a typed op decodes its input
+// from JSON and writes its output as JSON, and these six carry bytes that are
+// neither. Each is named where it is registered; the reason is on the handler.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/cloudflare")
+	o := ops{s: s}
+
+	// Bridge FIRST: a typed op receives only a context, so the validated org
+	// reaches it by being parked there — never as an In field, which is
+	// caller-supplied and would be a cross-tenant read the caller asserted for
+	// itself. fiber runs middleware in registration order, so this must precede
+	// the leaves below; it is prefix-scoped, and nesting under Serve's own Bridge
+	// is harmless (the inner one is what the handler sees).
+	g.Use(cloud.Bridge())
 
 	// Zones + Analytics (read) — enumerate the org's zones and read a zone's traffic
 	// analytics; the zone ids feed Workers routes and analytics. Zone/record
 	// MANAGEMENT stays with the Hanzo DNS plane (/v1/dns); this only surfaces CF zones.
-	g.Get("/zones", cloud.Handle(s, zonesList))
-	g.Get("/zones/:zone", cloud.Handle(s, zoneGet))
-	g.Get("/zones/:zone/analytics", cloud.Handle(s, zoneAnalytics))
-	g.Post("/zones/:zone/purge", cloud.Handle(s, zonePurge))
+	zip.Get(g, "/zones", o.zonesList)
+	zip.Get(g, "/zones/:zone", o.zoneGet)
+	zip.Get(g, "/zones/:zone/analytics", o.zoneAnalytics)
+	zip.Post(g, "/zones/:zone/purge", o.zonePurge)
 
 	// Pages — account-scoped.
-	g.Get("/pages/projects", cloud.Handle(s, pagesList))
-	g.Post("/pages/projects", cloud.Handle(s, pagesCreate))
-	g.Get("/pages/projects/:project", cloud.Handle(s, pagesGet))
-	g.Delete("/pages/projects/:project", cloud.Handle(s, pagesDelete))
-	g.Post("/pages/projects/:project/deployments", cloud.Handle(s, pagesDeploy))
-	g.Post("/pages/projects/:project/domains", cloud.Handle(s, pagesDomainAdd))
-	g.Delete("/pages/projects/:project/domains/:domain", cloud.Handle(s, pagesDomainDelete))
+	zip.Get(g, "/pages/projects", o.pagesList)
+	zip.Post(g, "/pages/projects", o.pagesCreate)
+	zip.Get(g, "/pages/projects/:project", o.pagesGet)
+	zip.Delete(g, "/pages/projects/:project", o.pagesDelete)
+	// UNTYPED: a malformed deploy body is IGNORED here (the deploy falls back to the
+	// project's production branch); a typed In answers 400 instead, which is a
+	// different contract. See pagesDeploy.
+	g.Post("/pages/projects/:project/deployments", o.pagesDeploy)
+	zip.Post(g, "/pages/projects/:project/domains", o.pagesDomainAdd)
+	zip.Delete(g, "/pages/projects/:project/domains/:domain", o.pagesDomainDelete)
 
 	// Workers — scripts + workers.dev subdomain are account-scoped; routes are
 	// zone-scoped.
-	g.Get("/workers/scripts", cloud.Handle(s, workersScriptList))
-	g.Put("/workers/scripts/:script", cloud.Handle(s, workersScriptPut))
-	g.Delete("/workers/scripts/:script", cloud.Handle(s, workersScriptDelete))
-	g.Post("/workers/scripts/:script/subdomain", cloud.Handle(s, workersScriptSubdomainSet))
-	g.Get("/workers/subdomain", cloud.Handle(s, workersSubdomainGet))
-	g.Get("/workers/zones/:zone/routes", cloud.Handle(s, workersRouteList))
-	g.Post("/workers/zones/:zone/routes", cloud.Handle(s, workersRouteCreate))
-	g.Delete("/workers/zones/:zone/routes/:route", cloud.Handle(s, workersRouteDelete))
+	zip.Get(g, "/workers/scripts", o.workersScriptList)
+	// UNTYPED: the path param `script` (the script NAME) and the body field `script`
+	// (the module SOURCE) share a name, and zip's URL binder gives the path the last
+	// word — a typed In would overwrite the source with the name. See workersScriptPut.
+	g.Put("/workers/scripts/:script", o.workersScriptPut)
+	zip.Delete(g, "/workers/scripts/:script", o.workersScriptDelete)
+	zip.Post(g, "/workers/scripts/:script/subdomain", o.workersScriptSubdomainSet)
+	zip.Get(g, "/workers/subdomain", o.workersSubdomainGet)
+	zip.Get(g, "/workers/zones/:zone/routes", o.workersRouteList)
+	zip.Post(g, "/workers/zones/:zone/routes", o.workersRouteCreate)
+	zip.Delete(g, "/workers/zones/:zone/routes/:route", o.workersRouteDelete)
 
 	// Workers AI (inference) — run a CF-hosted model with the org's own token. The
 	// model rides a wildcard: CF model ids look like @cf/meta/llama-3-8b-instruct.
 	// Metered through the unified AI spine + emitted to the one gen_ai span plane.
-	g.Post("/ai/run/*", cloud.Handle(s, aiRun))
+	// UNTYPED: the request body is forwarded to the model verbatim and the response
+	// may be image or audio bytes under Cloudflare's own content type. See aiRun.
+	g.Post("/ai/run/*", o.aiRun)
 
 	// R2 — account-scoped buckets.
-	g.Get("/r2/buckets", cloud.Handle(s, r2BucketList))
-	g.Post("/r2/buckets", cloud.Handle(s, r2BucketCreate))
-	g.Delete("/r2/buckets/:bucket", cloud.Handle(s, r2BucketDelete))
+	zip.Get(g, "/r2/buckets", o.r2BucketList)
+	zip.Post(g, "/r2/buckets", o.r2BucketCreate)
+	zip.Delete(g, "/r2/buckets/:bucket", o.r2BucketDelete)
 
 	// KV — namespaces and a namespace's key values.
-	g.Get("/kv/namespaces", cloud.Handle(s, kvNamespaceList))
-	g.Post("/kv/namespaces", cloud.Handle(s, kvNamespaceCreate))
-	g.Delete("/kv/namespaces/:namespace", cloud.Handle(s, kvNamespaceDelete))
-	g.Get("/kv/namespaces/:namespace/values/:key", cloud.Handle(s, kvValueGet))
-	g.Put("/kv/namespaces/:namespace/values/:key", cloud.Handle(s, kvValuePut))
-	g.Delete("/kv/namespaces/:namespace/values/:key", cloud.Handle(s, kvValueDelete))
+	zip.Get(g, "/kv/namespaces", o.kvNamespaceList)
+	zip.Post(g, "/kv/namespaces", o.kvNamespaceCreate)
+	zip.Delete(g, "/kv/namespaces/:namespace", o.kvNamespaceDelete)
+	// UNTYPED (both): a KV value is opaque bytes under the caller's own content type
+	// — the GET relays it raw, the PUT forwards the request body raw. See kvValueGet
+	// and kvValuePut.
+	g.Get("/kv/namespaces/:namespace/values/:key", o.kvValueGet)
+	g.Put("/kv/namespaces/:namespace/values/:key", o.kvValuePut)
+	zip.Delete(g, "/kv/namespaces/:namespace/values/:key", o.kvValueDelete)
 
 	// D1 — databases and a query against one.
-	g.Get("/d1/databases", cloud.Handle(s, d1DatabaseList))
-	g.Post("/d1/databases", cloud.Handle(s, d1DatabaseCreate))
-	g.Delete("/d1/databases/:database", cloud.Handle(s, d1DatabaseDelete))
-	g.Post("/d1/databases/:database/query", cloud.Handle(s, d1Query))
+	zip.Get(g, "/d1/databases", o.d1DatabaseList)
+	zip.Post(g, "/d1/databases", o.d1DatabaseCreate)
+	zip.Delete(g, "/d1/databases/:database", o.d1DatabaseDelete)
+	// UNTYPED: the query body is forwarded to D1 VERBATIM so params and batch fields
+	// survive; a typed In would drop every field it does not model. See d1Query.
+	g.Post("/d1/databases/:database/query", o.d1Query)
 }
 
 // ── client (the cfDo shape, reused verbatim from hanzodns) ──────────────────────
@@ -328,10 +372,40 @@ func (cl *client) exec(ctx context.Context, method, path, contentType string, bo
 	return nil
 }
 
-// pass runs a Cloudflare call and relays its result to the caller VERBATIM (as raw
-// JSON), so the upstream shape reaches the platform without field loss — the ONE
-// response path for every wired handler. An empty result (e.g. a 204 delete) becomes
-// {"success":true}.
+// emptyResult is what a call whose envelope carried no `result` answers — a CF
+// delete that reports only success. ONE literal, read by both response paths
+// (cfResult below and writeResult), so they cannot drift.
+const emptyResult = `{"success":true}`
+
+// cfResult is Cloudflare's own response payload, relayed to the caller VERBATIM so
+// the upstream shape reaches the platform without field loss. It is opaque BY
+// CONSTRUCTION: this plane proxies Cloudflare and deliberately does not model
+// Cloudflare's response shapes, so its properties are Cloudflare's, not ours — see
+// the Cloudflare API v4 reference for the endpoint behind each op. An envelope that
+// carried no result relays {"success":true}.
+type cfResult struct{ raw json.RawMessage }
+
+// MarshalJSON emits the upstream payload as-is, which is what makes cfResult a
+// relay rather than a model.
+func (r cfResult) MarshalJSON() ([]byte, error) {
+	if len(r.raw) == 0 {
+		return []byte(emptyResult), nil
+	}
+	return r.raw, nil
+}
+
+// relay is the ONE response path for a typed op: run the Cloudflare call and hand
+// back its result for verbatim relay, mapping a failure to a recognizable status.
+func (cl *client) relay(ctx context.Context, method, path string, body any) (*cfResult, error) {
+	var out json.RawMessage
+	if err := cl.cfDo(ctx, method, path, body, &out); err != nil {
+		return nil, cfErr(err)
+	}
+	return &cfResult{raw: out}, nil
+}
+
+// pass is relay for a route that cannot be a typed op (d1Query): it writes the
+// upstream result to the response itself, byte for byte.
 func (cl *client) pass(c *zip.Ctx, method, path string, body any) error {
 	var out json.RawMessage
 	if err := cl.cfDo(c.Context(), method, path, body, &out); err != nil {
@@ -363,20 +437,27 @@ const actingOrgHeader = "X-Hanzo-Org"
 // Cloudflare client bound to THAT org's KMS-sealed token (503 if the org has not
 // connected Cloudflare or KMS is down). On success it stamps actingOrgHeader with the
 // served org. The token detail is logged token-free and never surfaced to the client.
-func authClient(s *cloud.Service[state], c *zip.Ctx) (*client, string, error) {
-	org, ok := principal.Org(c)
+//
+// The org comes from the context — principal.OrgFrom, which IS principal.Org's
+// answer, parked there by cloud.Bridge — never from an In field: an In field is
+// caller-supplied, so a tenant key read from one is a cross-tenant read the caller
+// asserted for itself.
+func (o ops) authClient(ctx context.Context) (*client, string, error) {
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
 		return nil, "", zip.ErrForbidden("a validated principal is required")
 	}
-	tok, err := tokenFor(c.Context(), org, providerCloudflare, secretAPIToken)
+	tok, err := tokenFor(ctx, org, providerCloudflare, secretAPIToken)
 	if err != nil || len(bytes.TrimSpace(tok)) == 0 {
 		// err is custody-authored and token-free (not-connected / invalid-org /
 		// KMS-down). Log the reason, tell the client only that CF is unavailable.
-		s.Log.Warn("cloudflare token unavailable", "org", org, "err", err)
+		o.s.Log.Warn("cloudflare token unavailable", "org", org, "err", err)
 		return nil, org, zip.Errorf(http.StatusServiceUnavailable, "cloudflare is not connected for this org")
 	}
 	// Stamp the org actually served so a per-org caller can prove no tenant comingling.
-	c.SetHeader(actingOrgHeader, org)
+	if c, ok := cloud.Request(ctx); ok {
+		c.SetHeader(actingOrgHeader, org)
+	}
 	return &client{token: string(bytes.TrimSpace(tok)), base: cfAPIBase()}, org, nil
 }
 
@@ -387,33 +468,38 @@ func authClient(s *cloud.Service[state], c *zip.Ctx) (*client, string, error) {
 // a Pages project DELETE is production destruction) must match connecting it. The admin
 // check is FIRST, so a non-admin is refused before any KMS token read. Reads stay
 // validated-org-only via authClient — org members may look, only org admins may change.
-func authWrite(s *cloud.Service[state], c *zip.Ctx) (*client, string, error) {
-	if !principal.IsOrgAdmin(c) {
+//
+// Org-admin-ness lives in a header (X-User-IsOrgAdmin) that principal.OrgFrom does
+// not carry, so this one predicate needs the REQUEST. It fails closed off the HTTP
+// path — no request, no attested caller, no mutation.
+func (o ops) authWrite(ctx context.Context) (*client, string, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok || !principal.IsOrgAdmin(c) {
 		return nil, "", zip.ErrForbidden("this action requires org admin")
 	}
-	return authClient(s, c)
+	return o.authClient(ctx)
 }
 
 // acctClient resolves BOTH the caller-org client and its account id — the
 // account-scoped READ preamble every Pages/Workers/Workers-AI/R2/KV/D1 handler shares,
 // so the auth+account dance is written once. Zone-scoped handlers (workers routes,
 // zones, analytics) need no account and use authClient directly.
-func acctClient(s *cloud.Service[state], c *zip.Ctx) (*client, string, error) {
-	cl, org, err := authClient(s, c)
+func (o ops) acctClient(ctx context.Context) (*client, string, error) {
+	cl, org, err := o.authClient(ctx)
 	if err != nil {
 		return nil, "", err
 	}
-	acct, err := cl.resolveAccount(c.Context(), org, c)
+	acct, err := cl.resolveAccount(ctx, org)
 	return cl, acct, err
 }
 
 // acctWrite is acctClient for a mutation: org-admin FIRST (authWrite), then account.
-func acctWrite(s *cloud.Service[state], c *zip.Ctx) (*client, string, error) {
-	cl, org, err := authWrite(s, c)
+func (o ops) acctWrite(ctx context.Context) (*client, string, error) {
+	cl, org, err := o.authWrite(ctx)
 	if err != nil {
 		return nil, "", err
 	}
-	acct, err := cl.resolveAccount(c.Context(), org, c)
+	acct, err := cl.resolveAccount(ctx, org)
 	return cl, acct, err
 }
 
@@ -424,12 +510,19 @@ func acctWrite(s *cloud.Service[state], c *zip.Ctx) (*client, string, error) {
 // multi-account token; (3) only if none is stored, discover it live from the token's
 // own /accounts. Every candidate is validated 32-hex so it can never inject path
 // structure. Fails closed (400) when nothing yields a usable account.
-func (cl *client) resolveAccount(ctx context.Context, org string, c *zip.Ctx) (string, error) {
-	if a := strings.TrimSpace(c.Query("account")); a != "" {
-		if !idRE.MatchString(a) {
-			return "", zip.ErrBadRequest("account must be a 32-character hex id")
+//
+// The ?account= override is read off the REQUEST rather than modeled as an In
+// field, because zip binds an In field from the body as well as the URL: modeling
+// it would let a POST body name the account, which is not what this route accepts
+// today.
+func (cl *client) resolveAccount(ctx context.Context, org string) (string, error) {
+	if c, ok := cloud.Request(ctx); ok {
+		if a := strings.TrimSpace(c.Query("account")); a != "" {
+			if !idRE.MatchString(a) {
+				return "", zip.ErrBadRequest("account must be a 32-character hex id")
+			}
+			return url.PathEscape(a), nil
 		}
-		return url.PathEscape(a), nil
 	}
 	if conn, ok := connectionFor(org, providerCloudflare); ok {
 		if id := strings.TrimSpace(conn.ExternalID); idRE.MatchString(id) {
@@ -450,15 +543,21 @@ func (cl *client) resolveAccount(ctx context.Context, org string, c *zip.Ctx) (s
 	return "", zip.ErrBadRequest("no cloudflare account is resolvable for this token; pass ?account=<id>")
 }
 
-// pathSeg reads a route param, rejects anything not matching re (so it can never
-// smuggle path structure into the upstream Cloudflare URL), and returns the
-// url.PathEscape'd value ready to concatenate into a CF path.
-func pathSeg(c *zip.Ctx, name string, re *regexp.Regexp) (string, error) {
-	v := strings.TrimSpace(c.Param(name))
+// seg validates one caller-supplied path value against re (so it can never smuggle
+// path structure into the upstream Cloudflare URL) and returns it url.PathEscape'd,
+// ready to concatenate into a CF path. It is the ONE gate for every name/id segment
+// this plane forwards, whether the value arrived on a typed In or off the request.
+func seg(name, v string, re *regexp.Regexp) (string, error) {
+	v = strings.TrimSpace(v)
 	if !re.MatchString(v) {
 		return "", zip.ErrBadRequest(name + " is invalid")
 	}
 	return url.PathEscape(v), nil
+}
+
+// pathSeg is seg over a route param, for the routes that are not typed ops.
+func pathSeg(c *zip.Ctx, name string, re *regexp.Regexp) (string, error) {
+	return seg(name, c.Param(name), re)
 }
 
 // cfErr maps a Cloudflare call failure to a client-facing HTTP error, propagating a
@@ -499,16 +598,16 @@ func (cl *client) getRaw(ctx context.Context, path string) ([]byte, string, erro
 	return data, ct, nil
 }
 
-// query builds a "?..."-encoded upstream query string from an ALLOWLISTED set of
-// inbound query keys, so a read handler can forward pagination/window params
-// (page, per_page, since, until, …) without opening arbitrary passthrough. Values
-// are url.Values-escaped and the upstream HOST + PATH are fixed by the caller, so a
+// forward builds a "?..."-encoded upstream query string from an ALLOWLISTED set of
+// caller values, so a read op can forward pagination/window params (page, per_page,
+// since, until, …) without opening arbitrary passthrough. Values are
+// url.Values-escaped and the upstream HOST + PATH are fixed by the caller, so a
 // hostile value stays a query value — it can inject neither path structure nor a
-// different host (no SSRF). Overlong values (>256 bytes) are dropped.
-func query(c *zip.Ctx, keys ...string) string {
+// different host (no SSRF). Empty and overlong (>256 bytes) values are dropped.
+func forward(vals map[string]string) string {
 	q := url.Values{}
-	for _, k := range keys {
-		if v := strings.TrimSpace(c.Query(k)); v != "" && len(v) <= 256 {
+	for k, v := range vals {
+		if v = strings.TrimSpace(v); v != "" && len(v) <= 256 {
 			q.Set(k, v)
 		}
 	}
@@ -516,4 +615,14 @@ func query(c *zip.Ctx, keys ...string) string {
 		return ""
 	}
 	return "?" + q.Encode()
+}
+
+// query is forward over inbound request query keys, for the routes that are not
+// typed ops.
+func query(c *zip.Ctx, keys ...string) string {
+	vals := make(map[string]string, len(keys))
+	for _, k := range keys {
+		vals[k] = c.Query(k)
+	}
+	return forward(vals)
 }
