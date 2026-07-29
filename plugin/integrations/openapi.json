@@ -123,7 +123,8 @@
             "description": "ID is the connector id, provider + \":\" + label (\"openai:default\") — the\nauth-profile-id shape. Another user's id is simply no row, so 404.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "openai:work"
           }
         ],
         "responses": {
@@ -159,7 +160,8 @@
             "description": "ID is the connector id, provider + \":\" + label (\"openai:default\") — the\nauth-profile-id shape. Another user's id is simply no row, so 404.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "openai:work"
           }
         ],
         "requestBody": {
@@ -220,7 +222,8 @@
             "description": "ID is the connector id, provider + \":\" + label (\"openai:default\") — the\nauth-profile-id shape. Another user's id is simply no row, so 404.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "openai:work"
           }
         ],
         "responses": {
@@ -259,7 +262,8 @@
             "description": "Provider is the user-scoped provider's registry id, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "openai"
           }
         ],
         "requestBody": {
@@ -322,7 +326,8 @@
             "description": "Provider is the user-scoped provider's registry id, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "openai"
           }
         ],
         "requestBody": {
@@ -376,7 +381,8 @@
             "description": "Provider is the user-scoped provider's registry id, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "openai"
           },
           {
             "name": "flow",
@@ -385,7 +391,8 @@
             "description": "Flow is the id deviceStartOut returned. Expired or another user's flow is\nindistinguishable from an unknown one: 404.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "g_7f2c"
           }
         ],
         "requestBody": {
@@ -607,7 +614,8 @@
             "description": "Repo is the repository's short name within the org's installation, with no\nowner prefix (the owner is server-derived from the grant). A trailing \".git\"\nis stripped.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           }
         ],
         "responses": {
@@ -642,7 +650,8 @@
             "description": "Repo is the repository's short name within the org's installation, with no\nowner prefix (the owner is server-derived from the grant). A trailing \".git\"\nis stripped.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           }
         ],
         "responses": {
@@ -686,7 +695,8 @@
             "description": "Repo is the repository, from the :repo path segment.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           }
         ],
         "requestBody": {
@@ -744,7 +754,8 @@
             "description": "Repo is the repository, from the :repo path segment.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "widgets"
           }
         ],
         "requestBody": {
@@ -953,7 +964,8 @@
             "description": "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/connectors)\nproviders, which this surface never resolves.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "slack"
           }
         ],
         "responses": {
@@ -1012,7 +1024,8 @@
             "description": "Provider is the connector's registry id, from the :provider path segment.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cloudflare"
           }
         ],
         "requestBody": {
@@ -1067,7 +1080,8 @@
             "description": "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/connectors)\nproviders, which this surface never resolves.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "slack"
           }
         ],
         "requestBody": {
@@ -1116,7 +1130,8 @@
             "description": "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/connectors)\nproviders, which this surface never resolves.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "cloudflare"
           }
         ],
         "requestBody": {
@@ -1163,6 +1178,46 @@
           "authorizeUrl": {
             "description": "AuthorizeURL is the provider consent (or bot deep-link) URL.",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "connView": {
+        "properties": {
+          "account": {
+            "description": "Account is the provider's label for the connected account.",
+            "type": "string"
+          },
+          "connectedAt": {
+            "description": "ConnectedAt is when the connector was last (re)established, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "ExpiresAt is when the access token expires, RFC 3339 UTC; empty for a\nnon-expiring credential. Reading the token auto-rotates inside the window.",
+            "type": "string"
+          },
+          "externalId": {
+            "description": "ExternalID is the provider's own id for that account.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is provider + \":\" + label — what every other connector route addresses.",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label is the caller's name for this connection (\"default\", \"work\").",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the user-scoped provider's registry id.",
+            "type": "string"
+          },
+          "scopes": {
+            "description": "Scopes are the permissions the credential carries. Never null; [] when none.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "type": "object"
@@ -1216,44 +1271,71 @@
         },
         "type": "object"
       },
+      "connectionView": {
+        "properties": {
+          "account": {
+            "description": "Account is the human label of the connected third-party account (the Slack\nteam name, the GitHub org login). Provider-supplied and sanitized on ingest.",
+            "type": "string"
+          },
+          "connectedAt": {
+            "description": "ConnectedAt is when the connection was last (re)established, RFC 3339 UTC.",
+            "type": "string"
+          },
+          "externalId": {
+            "description": "ExternalID is the provider's own id for the account (Slack team.id, GitHub\ninstallation_id) — the value inbound webhooks are mapped back to this org by.",
+            "type": "string"
+          },
+          "scopes": {
+            "description": "Scopes are the permissions the provider granted. Never null; [] when none.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "connectorProviderView": {
+        "properties": {
+          "category": {
+            "description": "Category groups the card.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description is the one-line pitch the console card shows.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the provider's registry id and the :provider path segment.",
+            "type": "string"
+          },
+          "methods": {
+            "description": "Methods are the intake paths this provider supports, derived from its\ncapabilities: \"device\", \"oauth\" (adopt an externally obtained bundle) and\n\"token\" (a customer-held credential). At least one, always.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is the provider's display name.",
+            "type": "string"
+          },
+          "scopes": {
+            "description": "Scopes are the permissions a connection will ask for. Never null.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "connectorProvidersOut": {
         "properties": {
           "providers": {
             "description": "Providers is every USER-scoped provider, sorted by id. Never null.",
             "items": {
-              "properties": {
-                "category": {
-                  "description": "Category groups the card.",
-                  "type": "string"
-                },
-                "description": {
-                  "description": "Description is the one-line pitch the console card shows.",
-                  "type": "string"
-                },
-                "id": {
-                  "description": "ID is the provider's registry id and the :provider path segment.",
-                  "type": "string"
-                },
-                "methods": {
-                  "description": "Methods are the intake paths this provider supports, derived from its\ncapabilities: \"device\", \"oauth\" (adopt an externally obtained bundle) and\n\"token\" (a customer-held credential). At least one, always.",
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
-                "name": {
-                  "description": "Name is the provider's display name.",
-                  "type": "string"
-                },
-                "scopes": {
-                  "description": "Scopes are the permissions a connection will ask for. Never null.",
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/connectorProviderView"
             },
             "type": "array"
           }
@@ -1295,44 +1377,7 @@
           "connectors": {
             "description": "Connectors is the caller's own set. Never null; [] when they have none.",
             "items": {
-              "properties": {
-                "account": {
-                  "description": "Account is the provider's label for the connected account.",
-                  "type": "string"
-                },
-                "connectedAt": {
-                  "description": "ConnectedAt is when the connector was last (re)established, RFC 3339 UTC.",
-                  "type": "string"
-                },
-                "expiresAt": {
-                  "description": "ExpiresAt is when the access token expires, RFC 3339 UTC; empty for a\nnon-expiring credential. Reading the token auto-rotates inside the window.",
-                  "type": "string"
-                },
-                "externalId": {
-                  "description": "ExternalID is the provider's own id for that account.",
-                  "type": "string"
-                },
-                "id": {
-                  "description": "ID is provider + \":\" + label — what every other connector route addresses.",
-                  "type": "string"
-                },
-                "label": {
-                  "description": "Label is the caller's name for this connection (\"default\", \"work\").",
-                  "type": "string"
-                },
-                "provider": {
-                  "description": "Provider is the user-scoped provider's registry id.",
-                  "type": "string"
-                },
-                "scopes": {
-                  "description": "Scopes are the permissions the credential carries. Never null; [] when none.",
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/connView"
             },
             "type": "array"
           }
@@ -1350,22 +1395,8 @@
             "type": "string"
           },
           "oauth": {
-            "description": "OAuth is a bundle the CLI already obtained through its own local PKCE flow.\nPresent ⇒ the Adopt path; absent ⇒ the Token path.",
-            "properties": {
-              "access": {
-                "description": "Access is the access token.",
-                "type": "string"
-              },
-              "account": {
-                "description": "Account is the account label the flow reported; sanitized on ingest.",
-                "type": "string"
-              },
-              "refresh": {
-                "description": "Refresh is the refresh token. It is sealed and NEVER handed back out.",
-                "type": "string"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/oauthBundleIn",
+            "description": "OAuth is a bundle the CLI already obtained through its own local PKCE flow.\nPresent ⇒ the Adopt path; absent ⇒ the Token path."
           },
           "provider": {
             "description": "Provider is the user-scoped provider's registry id, from the path.",
@@ -1385,45 +1416,8 @@
             "type": "boolean"
           },
           "connector": {
-            "description": "Connector is the connector as it now stands.",
-            "properties": {
-              "account": {
-                "description": "Account is the provider's label for the connected account.",
-                "type": "string"
-              },
-              "connectedAt": {
-                "description": "ConnectedAt is when the connector was last (re)established, RFC 3339 UTC.",
-                "type": "string"
-              },
-              "expiresAt": {
-                "description": "ExpiresAt is when the access token expires, RFC 3339 UTC; empty for a\nnon-expiring credential. Reading the token auto-rotates inside the window.",
-                "type": "string"
-              },
-              "externalId": {
-                "description": "ExternalID is the provider's own id for that account.",
-                "type": "string"
-              },
-              "id": {
-                "description": "ID is provider + \":\" + label — what every other connector route addresses.",
-                "type": "string"
-              },
-              "label": {
-                "description": "Label is the caller's name for this connection (\"default\", \"work\").",
-                "type": "string"
-              },
-              "provider": {
-                "description": "Provider is the user-scoped provider's registry id.",
-                "type": "string"
-              },
-              "scopes": {
-                "description": "Scopes are the permissions the credential carries. Never null; [] when none.",
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/connView",
+            "description": "Connector is the connector as it now stands."
           }
         },
         "type": "object"
@@ -1444,45 +1438,8 @@
       "devicePollOut": {
         "properties": {
           "connector": {
-            "description": "Connector is the connected connector. Present only on \"connected\".",
-            "properties": {
-              "account": {
-                "description": "Account is the provider's label for the connected account.",
-                "type": "string"
-              },
-              "connectedAt": {
-                "description": "ConnectedAt is when the connector was last (re)established, RFC 3339 UTC.",
-                "type": "string"
-              },
-              "expiresAt": {
-                "description": "ExpiresAt is when the access token expires, RFC 3339 UTC; empty for a\nnon-expiring credential. Reading the token auto-rotates inside the window.",
-                "type": "string"
-              },
-              "externalId": {
-                "description": "ExternalID is the provider's own id for that account.",
-                "type": "string"
-              },
-              "id": {
-                "description": "ID is provider + \":\" + label — what every other connector route addresses.",
-                "type": "string"
-              },
-              "label": {
-                "description": "Label is the caller's name for this connection (\"default\", \"work\").",
-                "type": "string"
-              },
-              "provider": {
-                "description": "Provider is the user-scoped provider's registry id.",
-                "type": "string"
-              },
-              "scopes": {
-                "description": "Scopes are the permissions the credential carries. Never null; [] when none.",
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/connView",
+            "description": "Connector is the connected connector. Present only on \"connected\"."
           },
           "interval": {
             "description": "Interval is the seconds to wait before the next poll. Present only while\npending, and it may rise when the provider asks the client to slow down.",
@@ -1614,6 +1571,19 @@
         },
         "type": "object"
       },
+      "githubPagesSource": {
+        "properties": {
+          "branch": {
+            "description": "Branch is the branch the site builds from.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path is the directory within that branch: \"/\" or \"/docs\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "githubPagesUpdateReq": {
         "properties": {
           "branch": {
@@ -1679,18 +1649,8 @@
             "type": "string"
           },
           "source": {
-            "description": "Source is the branch + path the site builds from. Absent under \"workflow\".",
-            "properties": {
-              "branch": {
-                "description": "Branch is the branch the site builds from.",
-                "type": "string"
-              },
-              "path": {
-                "description": "Path is the directory within that branch: \"/\" or \"/docs\".",
-                "type": "string"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/githubPagesSource",
+            "description": "Source is the branch + path the site builds from. Absent under \"workflow\"."
           },
           "status": {
             "description": "Status is GitHub's build state: \"built\", \"building\" or \"errored\". Absent\nbefore the first build.",
@@ -1703,46 +1663,49 @@
         },
         "type": "object"
       },
+      "githubRepoView": {
+        "properties": {
+          "defaultBranch": {
+            "description": "DefaultBranch is the repo's default branch at GitHub.",
+            "type": "string"
+          },
+          "fullName": {
+            "description": "FullName is GitHub's owner/name.",
+            "type": "string"
+          },
+          "htmlUrl": {
+            "description": "HTMLURL is the repo's page at GitHub.",
+            "type": "string"
+          },
+          "imported": {
+            "description": "Imported is whether this repo has been mirrored into git.hanzo.ai.",
+            "type": "boolean"
+          },
+          "lastSyncedAt": {
+            "description": "LastSyncedAt is the last successful mirror, RFC 3339 UTC. Absent if never.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the repository's short name within the installation.",
+            "type": "string"
+          },
+          "private": {
+            "description": "Private is GitHub's visibility bit for the repo.",
+            "type": "boolean"
+          },
+          "syncStatus": {
+            "description": "SyncStatus is \"synced\", \"conflict\", or \"\" when the repo is not imported.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "githubReposOut": {
         "properties": {
           "repos": {
             "description": "Repos is every repo the installation grants. Never null; [] when none.",
             "items": {
-              "properties": {
-                "defaultBranch": {
-                  "description": "DefaultBranch is the repo's default branch at GitHub.",
-                  "type": "string"
-                },
-                "fullName": {
-                  "description": "FullName is GitHub's owner/name.",
-                  "type": "string"
-                },
-                "htmlUrl": {
-                  "description": "HTMLURL is the repo's page at GitHub.",
-                  "type": "string"
-                },
-                "imported": {
-                  "description": "Imported is whether this repo has been mirrored into git.hanzo.ai.",
-                  "type": "boolean"
-                },
-                "lastSyncedAt": {
-                  "description": "LastSyncedAt is the last successful mirror, RFC 3339 UTC. Absent if never.",
-                  "type": "string"
-                },
-                "name": {
-                  "description": "Name is the repository's short name within the installation.",
-                  "type": "string"
-                },
-                "private": {
-                  "description": "Private is GitHub's visibility bit for the repo.",
-                  "type": "boolean"
-                },
-                "syncStatus": {
-                  "description": "SyncStatus is \"synced\", \"conflict\", or \"\" when the repo is not imported.",
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/githubRepoView"
             },
             "type": "array"
           }
@@ -1754,58 +1717,7 @@
           "providers": {
             "description": "Providers is the whole catalog. Never null; [] when nothing is registered.",
             "items": {
-              "properties": {
-                "available": {
-                  "description": "Available is whether THIS DEPLOYMENT has the provider's app credentials, so\nconnect can succeed. False renders the card without a working Connect button.",
-                  "type": "boolean"
-                },
-                "category": {
-                  "description": "Category groups the card (\"Communication\", \"Developer\", \"Marketing\").",
-                  "type": "string"
-                },
-                "connected": {
-                  "description": "Connected is whether this org has a live connection to the provider.",
-                  "type": "boolean"
-                },
-                "connection": {
-                  "description": "Connection is the connected account's non-secret detail. Absent when the org\nhas no connection; tokens NEVER appear here (they live only in KMS).",
-                  "properties": {
-                    "account": {
-                      "description": "Account is the human label of the connected third-party account (the Slack\nteam name, the GitHub org login). Provider-supplied and sanitized on ingest.",
-                      "type": "string"
-                    },
-                    "connectedAt": {
-                      "description": "ConnectedAt is when the connection was last (re)established, RFC 3339 UTC.",
-                      "type": "string"
-                    },
-                    "externalId": {
-                      "description": "ExternalID is the provider's own id for the account (Slack team.id, GitHub\ninstallation_id) — the value inbound webhooks are mapped back to this org by.",
-                      "type": "string"
-                    },
-                    "scopes": {
-                      "description": "Scopes are the permissions the provider granted. Never null; [] when none.",
-                      "items": {
-                        "type": "string"
-                      },
-                      "type": "array"
-                    }
-                  },
-                  "type": "object"
-                },
-                "description": {
-                  "description": "Description is the one-line pitch the console card shows.",
-                  "type": "string"
-                },
-                "id": {
-                  "description": "ID is the provider's registry id and the :provider path segment (\"slack\").",
-                  "type": "string"
-                },
-                "name": {
-                  "description": "Name is the provider's display name (\"Slack\").",
-                  "type": "string"
-                }
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/providerView"
             },
             "type": "array"
           }
@@ -1814,6 +1726,23 @@
       },
       "noArgs": {
         "properties": {},
+        "type": "object"
+      },
+      "oauthBundleIn": {
+        "properties": {
+          "access": {
+            "description": "Access is the access token.",
+            "type": "string"
+          },
+          "account": {
+            "description": "Account is the account label the flow reported; sanitized on ingest.",
+            "type": "string"
+          },
+          "refresh": {
+            "description": "Refresh is the refresh token. It is sealed and NEVER handed back out.",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "providerRef": {
@@ -1840,29 +1769,8 @@
             "type": "boolean"
           },
           "connection": {
-            "description": "Connection is the connected account's non-secret detail. Absent when the org\nhas no connection; tokens NEVER appear here (they live only in KMS).",
-            "properties": {
-              "account": {
-                "description": "Account is the human label of the connected third-party account (the Slack\nteam name, the GitHub org login). Provider-supplied and sanitized on ingest.",
-                "type": "string"
-              },
-              "connectedAt": {
-                "description": "ConnectedAt is when the connection was last (re)established, RFC 3339 UTC.",
-                "type": "string"
-              },
-              "externalId": {
-                "description": "ExternalID is the provider's own id for the account (Slack team.id, GitHub\ninstallation_id) — the value inbound webhooks are mapped back to this org by.",
-                "type": "string"
-              },
-              "scopes": {
-                "description": "Scopes are the permissions the provider granted. Never null; [] when none.",
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/connectionView",
+            "description": "Connection is the connected account's non-secret detail. Absent when the org\nhas no connection; tokens NEVER appear here (they live only in KMS)."
           },
           "description": {
             "description": "Description is the one-line pitch the console card shows.",
@@ -1882,45 +1790,8 @@
       "refreshOut": {
         "properties": {
           "connector": {
-            "description": "Connector is the connector with its new expiry.",
-            "properties": {
-              "account": {
-                "description": "Account is the provider's label for the connected account.",
-                "type": "string"
-              },
-              "connectedAt": {
-                "description": "ConnectedAt is when the connector was last (re)established, RFC 3339 UTC.",
-                "type": "string"
-              },
-              "expiresAt": {
-                "description": "ExpiresAt is when the access token expires, RFC 3339 UTC; empty for a\nnon-expiring credential. Reading the token auto-rotates inside the window.",
-                "type": "string"
-              },
-              "externalId": {
-                "description": "ExternalID is the provider's own id for that account.",
-                "type": "string"
-              },
-              "id": {
-                "description": "ID is provider + \":\" + label — what every other connector route addresses.",
-                "type": "string"
-              },
-              "label": {
-                "description": "Label is the caller's name for this connection (\"default\", \"work\").",
-                "type": "string"
-              },
-              "provider": {
-                "description": "Provider is the user-scoped provider's registry id.",
-                "type": "string"
-              },
-              "scopes": {
-                "description": "Scopes are the permissions the credential carries. Never null; [] when none.",
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              }
-            },
-            "type": "object"
+            "$ref": "#/components/schemas/connView",
+            "description": "Connector is the connector with its new expiry."
           },
           "refreshed": {
             "description": "Refreshed is always true — a failed rotation is an HTTP error.",
