@@ -29,7 +29,7 @@ func fakeService(objs ...runtime.Object) *cloud.Service[state] {
 		hpaGVR:             "HorizontalPodAutoscalerList",
 		pdbGVR:             "PodDisruptionBudgetList",
 		configMapsGVR:      "ConfigMapList",
-		appProjectGVR:      "AppProjectList",
+		k8s.CDAppProjects:  "AppProjectList",
 		middlewaresGVR:     "MiddlewareList",
 		ingressRoutesGVR:   "IngressRouteList",
 		k8s.CDApplications: "ApplicationList",
@@ -105,7 +105,7 @@ func appProjectCR(name string, sourceRepos ...string) *unstructured.Unstructured
 		repos = append(repos, r)
 	}
 	return &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "argoproj.io/v1alpha1", "kind": "AppProject",
+		"apiVersion": k8s.CDAppProjects.GroupVersion().String(), "kind": "AppProject",
 		"metadata": map[string]any{"name": name, "namespace": "argocd"},
 		"spec": map[string]any{
 			"sourceRepos":  repos,
