@@ -4,7 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-jose/go-jose/v4/jwt"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/hanzoai/authz"
 )
 
 // The cache exists to stop re-verifying a token that is already authenticated —
@@ -13,8 +14,8 @@ import (
 // second route to being trusted, which is exactly what it must never be.
 
 func claimsExpiring(in time.Duration) *idClaims {
-	c := &idClaims{Owner: "acme"}
-	c.Expiry = jwt.NewNumericDate(time.Now().Add(in))
+	c := &idClaims{Claims: authz.Claims{Owner: "acme"}}
+	c.ExpiresAt = jwt.NewNumericDate(time.Now().Add(in))
 	return c
 }
 
@@ -60,7 +61,7 @@ func TestIdentityCache_RefusesAlreadyExpired(t *testing.T) {
 // token anyway; caching one would be the cache disagreeing with the boundary.
 func TestIdentityCache_RefusesClaimsWithoutExpiry(t *testing.T) {
 	c := newIdentityCache()
-	c.put("no-exp", &idClaims{Owner: "acme"})
+	c.put("no-exp", &idClaims{Claims: authz.Claims{Owner: "acme"}})
 	if got := c.get("no-exp", time.Now()); got != nil {
 		t.Fatalf("claims with no exp cached: got %v, want nil", got)
 	}

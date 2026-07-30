@@ -21,6 +21,7 @@
 // SuperAdmin-gated and every mutation is written to the hash-chained audit
 // trail BEFORE it is reported as done. A deployment with no audit store refuses
 // to mutate at all, the same way a credit grant does.
+//
 //go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 package plugin
 
@@ -34,8 +35,8 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/apps/admin/core"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/ha"
 	"github.com/zap-proto/zip"

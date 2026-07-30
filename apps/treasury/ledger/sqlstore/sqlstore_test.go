@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/apps/money"
 	"github.com/hanzoai/cloud/apps/treasury/ledger"
+	"github.com/hanzoai/cloud/cek"
 )
 
 func open(t *testing.T) *Store {
@@ -84,7 +84,7 @@ func TestMigrateCentsToUnits(t *testing.T) {
 	ctx := context.Background()
 
 	// Hand-build the pre-migration schema and seed it as the old code would have.
-	db, err := cek.Open(cek.Global, t.TempDir() + "/legacy.db")
+	db, err := cek.Open(cek.Global, t.TempDir()+"/legacy.db")
 	if err != nil {
 		t.Fatalf("open raw: %v", err)
 	}

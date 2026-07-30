@@ -11,14 +11,14 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	gojose "github.com/go-jose/go-jose/v4"
-	"github.com/go-jose/go-jose/v4/jwt"
-	model "github.com/hanzoai/iam/pkg/model"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/hanzoai/authz"
 	"github.com/zap-proto/zip"
 )
 
@@ -27,10 +27,11 @@ const testIssuer = "https://test.iam"
 // jwksServer serves a single-key JWKS (kid=test-key) for pub.
 func jwksServer(t *testing.T, pub *rsa.PublicKey) *httptest.Server {
 	t.Helper()
-	set := gojose.JSONWebKeySet{Keys: []gojose.JSONWebKey{{
-		Key: pub, KeyID: "test-key", Algorithm: "RS256", Use: "sig",
-	}}}
-	body, err := json.Marshal(set)
+	body, err := json.Marshal(map[string]any{"keys": []map[string]any{{
+		"kty": "RSA", "kid": "test-key", "use": "sig", "alg": "RS256",
+		"n": base64.RawURLEncoding.EncodeToString(pub.N.Bytes()),
+		"e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(pub.E)).Bytes()),
+	}}})
 	if err != nil {
 		t.Fatalf("marshal jwks: %v", err)
 	}
@@ -44,16 +45,13 @@ func jwksServer(t *testing.T, pub *rsa.PublicKey) *httptest.Server {
 // signWith signs claims with key, stamping kid=test-key.
 func signWith(t *testing.T, key *rsa.PrivateKey, c idClaims) string {
 	t.Helper()
-	signer, err := gojose.NewSigner(
-		gojose.SigningKey{Algorithm: gojose.RS256, Key: key},
-		(&gojose.SignerOptions{}).WithType("JWT").WithHeader("kid", "test-key"),
-	)
+	// golang-jwt, the library IAM SIGNS with and hanzoai/authz verifies with. Minting
+	// with a different one certifies a reader nobody runs.
+	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, c.Claims)
+	tok.Header["kid"] = "test-key"
+	raw, err := tok.SignedString(key)
 	if err != nil {
-		t.Fatalf("new signer: %v", err)
-	}
-	raw, err := jwt.Signed(signer).Claims(c).Serialize()
-	if err != nil {
-		t.Fatalf("serialize: %v", err)
+		t.Fatalf("sign: %v", err)
 	}
 	return raw
 }
@@ -74,25 +72,25 @@ func signWith(t *testing.T, key *rsa.PrivateKey, c idClaims) string {
 // middleware_identity_homeorg_test.go) override Orgs explicitly, as does any test
 // modelling a pre-claim legacy token by clearing it.
 func tokenClaims(aud, owner, email string, isAdmin bool, exp time.Time) idClaims {
-	return idClaims{
-		Claims: jwt.Claims{
-			Issuer:   testIssuer,
-			Subject:  "u-" + owner,
-			Audience: jwt.Audience{aud},
-			Expiry:   jwt.NewNumericDate(exp),
-			IssuedAt: jwt.NewNumericDate(time.Now()),
-		},
+	c := idClaims{Claims: authz.Claims{
 		Owner:   owner,
 		Email:   email,
 		IsAdmin: isAdmin,
-		Orgs:    []model.OrgRef{{Org: owner, Role: "member"}},
-	}
+		Orgs:    []authz.Membership{{Org: owner, Role: authz.Member}},
+	}}
+	c.Issuer = testIssuer
+	c.Subject = "u-" + owner
+	c.Audience = jwt.ClaimStrings{aud}
+	c.ExpiresAt = jwt.NewNumericDate(exp)
+	c.IssuedAt = jwt.NewNumericDate(time.Now())
+	return c
 }
 
 // captured records the identity a downstream handler observes.
 type captured struct {
 	org, user string
 	admin     bool
+	orgAdmin  bool
 }
 
 // newIdentityApp wires SanitizeIdentity (adminOrg="admin") in front of a probe
@@ -106,6 +104,7 @@ func newIdentityApp(t *testing.T, v *identityValidator) (*zip.App, *captured) {
 		got.org = c.Org()
 		got.user = c.User()
 		got.admin = c.IsAdmin()
+		got.orgAdmin = c.IsOrgAdmin()
 		return c.JSON(http.StatusOK, map[string]string{"ok": "1"})
 	})
 	return app, got
@@ -599,10 +598,10 @@ func TestIdentityValidator(t *testing.T) {
 		}
 	})
 	t.Run("missing expiry rejected", func(t *testing.T) {
-		// go-jose only enforces exp when present; a token with NO exp would never
+		// exp is REQUIRED (jwt.WithExpirationRequired); a token with no exp would never
 		// expire. We reject it explicitly.
 		c := tokenClaims("hanzo-console", "admin", "", true, future)
-		c.Expiry = nil
+		c.ExpiresAt = nil
 		if _, err := v.validate(signWith(t, key, c)); err == nil {
 			t.Fatal("token without exp must be rejected")
 		}
@@ -720,7 +719,7 @@ func TestSanitizeIdentity_OrgAdminFromMembershipRole(t *testing.T) {
 	})
 
 	// The production shape: no isAdmin claim, adminness only in orgs[].role.
-	prod := func(sel string, orgs []model.OrgRef) func(*http.Request) {
+	prod := func(sel string, orgs []authz.Membership) func(*http.Request) {
 		c := tokenClaims("hanzo-console", "hanzo", "z@hanzo.ai", false, future)
 		c.Orgs = orgs
 		f := bearer(signWith(t, key, c))
@@ -731,7 +730,7 @@ func TestSanitizeIdentity_OrgAdminFromMembershipRole(t *testing.T) {
 			}
 		}
 	}
-	memberOf := []model.OrgRef{{Org: "hanzo", Role: "admin"}, {Org: "zoo", Role: "member"}}
+	memberOf := []authz.Membership{{Org: "hanzo", Role: "admin"}, {Org: "zoo", Role: "member"}}
 
 	cases := []struct {
 		name                             string
@@ -765,7 +764,7 @@ func TestSanitizeIdentity_OrgAdminFromMembershipRole(t *testing.T) {
 		{
 			// A plain member anywhere gets nothing — unchanged.
 			name:         "membership role member mints nothing",
-			mutate:       prod("", []model.OrgRef{{Org: "hanzo", Role: "member"}}),
+			mutate:       prod("", []authz.Membership{{Org: "hanzo", Role: "member"}}),
 			wantOrgAdmin: "",
 			wantOrg:      "hanzo",
 		},
@@ -774,7 +773,7 @@ func TestSanitizeIdentity_OrgAdminFromMembershipRole(t *testing.T) {
 			// has no path in — only the claim decides.
 			name: "client-sent org-admin header still never survives",
 			mutate: func(r *http.Request) {
-				prod("", []model.OrgRef{{Org: "hanzo", Role: "member"}})(r)
+				prod("", []authz.Membership{{Org: "hanzo", Role: "member"}})(r)
 				r.Header.Set("X-User-IsOrgAdmin", "true")
 			},
 			wantOrgAdmin: "",
@@ -800,6 +799,58 @@ func TestSanitizeIdentity_OrgAdminFromMembershipRole(t *testing.T) {
 			}
 			if gotOrg != tc.wantOrg {
 				t.Errorf("org = %q, want %q", gotOrg, tc.wantOrg)
+			}
+		})
+	}
+}
+
+// isHuman is what stops a MACHINE from being minted the org-admin bit, and nothing
+// pinned it: the SuperAdmin arm is separately blocked because a machine resolves no
+// home org at all, so removing the human test left every SuperAdmin probe green while
+// the ORG-admin bit opened up.
+//
+// A generic machine — no membership set, no owner-bound audience — carrying IAM's
+// org-role bit must be minted NEITHER admin header. The KMS-sync machine, which its
+// audience does identify and which therefore DOES resolve an org, must be refused too.
+func TestMachineIsNeverMintedTheOrgAdminBit(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jwks := jwksServer(t, &key.PublicKey)
+	v := newIdentityValidator(testIssuer, jwks.URL, 0)
+	future := time.Now().Add(time.Hour)
+
+	for _, tc := range []struct {
+		name  string
+		shape func(*idClaims)
+	}{
+		{"a generic machine: no membership set", func(c *idClaims) { c.Orgs = nil }},
+		{"the KMS-sync machine, named by its own audience", func(c *idClaims) {
+			c.Orgs = nil
+			c.Audience = jwt.ClaimStrings{kmsMachineAudience("acme")}
+		}},
+		{"a KMS-sync machine that also carries a membership set", func(c *idClaims) {
+			c.Audience = jwt.ClaimStrings{kmsMachineAudience("acme")}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			claims := tokenClaims("hanzo-console", "acme", "", true, future) // isAdmin=true
+			tc.shape(&claims)
+
+			app, seen := newIdentityApp(t, v)
+			probe(t, app, func(r *http.Request) {
+				r.Header.Set("Authorization", "Bearer "+signWith(t, key, claims))
+				// Forged on top of the real token, so the strip is exercised too.
+				r.Header.Set("X-User-IsOrgAdmin", "true")
+				r.Header.Set("X-User-IsAdmin", "true")
+			})
+
+			if seen.admin {
+				t.Error("a machine was seen as a PLATFORM admin")
+			}
+			if seen.orgAdmin {
+				t.Error("a machine was minted the ORG-admin bit")
 			}
 		})
 	}
