@@ -164,7 +164,7 @@ var subScopeHeaders = []string{"X-Project-Id", "X-App-Id", "X-Billing-Account-Id
 // client input), and — since F1 — the DATA plane fails closed too: it gates on a
 // validated principal (clients/principal.Validated) and the anonymous request
 // carries no X-User-Id, so the restored X-Org-Id is refused, not served. Never
-// fails OPEN. The availability cost is bounded to COLD caches: the jwksCache is
+// fails OPEN. The availability cost is bounded to COLD caches: the edge key cache is
 // stale-on-error (a warm cache keeps validating through a transient JWKS outage),
 // so only a from-cold JWKS failure degrades to anonymous-403.
 func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
