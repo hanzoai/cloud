@@ -8163,6 +8163,32 @@ components:
     pricingNoInput:
       properties: {}
       type: object
+    pricingPlanList:
+      properties:
+        plans:
+          description: |-
+            Plans are the plans in this section, each an opaque object exactly as the
+            pricing source emits it — typically id, name, description, price and a
+            feature list.
+          items:
+            additionalProperties:
+              type: object
+            type: object
+          type: array
+      type: object
+    pricingPresetList:
+      properties:
+        presets:
+          description: |-
+            Presets are the named compute sizes, each an opaque object exactly as the
+            pricing source emits it — typically id, name, provider slug, vCPU, memory,
+            disk and price.
+          items:
+            additionalProperties:
+              type: object
+            type: object
+          type: array
+      type: object
     pricingProviderList:
       properties:
         providers:
@@ -8178,6 +8204,19 @@ components:
             recorded it.
           type: object
       type: object
+    pricingRegionList:
+      properties:
+        regions:
+          description: |-
+            Regions are the regions cloud instances can be placed in, each an opaque
+            object exactly as the pricing source emits it — typically id, name and
+            location.
+          items:
+            additionalProperties:
+              type: object
+            type: object
+          type: array
+      type: object
     pricingSyncOut:
       properties:
         status:
@@ -8187,6 +8226,31 @@ components:
           description: Updated is the RFC 3339 time the refreshed catalog was stamped
             with.
           type: string
+      type: object
+    pricingTierList:
+      properties:
+        tiers:
+          description: |-
+            Tiers are the rentable GPU configurations, each an opaque object exactly
+            as the pricing source emits it — typically id, name, accelerator count and
+            model, VRAM, vCPU, memory and hourly price.
+          items:
+            additionalProperties:
+              type: object
+            type: object
+          type: array
+      type: object
+    pricingToolList:
+      properties:
+        tools:
+          description: |-
+            Tools are the metered tools, each an opaque object exactly as the pricing
+            source emits it — typically name, billing unit and price.
+          items:
+            additionalProperties:
+              type: object
+            type: object
+          type: array
       type: object
     productRow:
       properties:
@@ -28603,47 +28667,184 @@ paths:
       - pricing
   /v1/pricing-policy:
     get:
+      description: |-
+        GetPricingPolicyAlias returns the pricing policy document at its top-level
+        address. It is the same document GET /v1/pricing/policy returns, byte for
+        byte, at the shorter address the marketing surface links to.
       operationId: get_v1_pricing-policy
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: object
+                type: object
+          description: ok
+      summary: |-
+        GetPricingPolicyAlias returns the pricing policy document at its top-level
+        address.
       tags:
       - pricing-policy
   /v1/pricing/base:
     get:
+      description: |-
+        ListBasePlans returns the Hanzo Base plans — the managed-instance tiers,
+        each with its monthly and annual price, storage and request allowances and
+        feature list.
       operationId: get_v1_pricing_base
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pricingPlanList'
+          description: ok
+      summary: ListBasePlans returns the Hanzo Base plans — the managed-instance tiers,
       tags:
       - pricing
   /v1/pricing/blockchain:
     get:
+      description: |-
+        ListBlockchainPlans returns the blockchain access plans — the RPC and node
+        tiers, each with its monthly price, compute-unit allowance and feature list.
       operationId: get_v1_pricing_blockchain
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pricingPlanList'
+          description: ok
+      summary: ListBlockchainPlans returns the blockchain access plans — the RPC and
+        node
       tags:
       - pricing
   /v1/pricing/cloud:
     get:
+      description: |-
+        GetCloudPricing returns the public cloud section of the catalog in one
+        document: its instance plans, its regions and its block-storage prices. The
+        section's internal half — the provider costs Hanzo pays and the plan-to-
+        provider routing table — is stripped before it is served, so this is what a
+        customer may see and nothing more.
       operationId: get_v1_pricing_cloud
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: object
+                type: object
+          description: ok
+      summary: |-
+        GetCloudPricing returns the public cloud section of the catalog in one
+        document: its instance plans, its regions and its block-storage prices.
       tags:
       - pricing
   /v1/pricing/cloud/plans:
     get:
+      description: |-
+        GetCloudPlans returns just the cloud instance plans — each with its vCPU,
+        memory, disk, CPU type, VM allowance, feature list and monthly and hourly
+        price. It is the plans of the cloud section on their own.
       operationId: get_v1_pricing_cloud_plans
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pricingPlanList'
+          description: ok
+      summary: |-
+        GetCloudPlans returns just the cloud instance plans — each with its vCPU,
+        memory, disk, CPU type, VM allowance, feature list and monthly and hourly
+        price.
       tags:
       - pricing
   /v1/pricing/cloud/regions:
     get:
+      description: |-
+        GetCloudRegions returns the regions a cloud instance can be placed in, each
+        with its id, display name and physical location. It is the regions of the
+        cloud section on their own.
       operationId: get_v1_pricing_cloud_regions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pricingRegionList'
+          description: ok
+      summary: |-
+        GetCloudRegions returns the regions a cloud instance can be placed in, each
+        with its id, display name and physical location.
       tags:
       - pricing
   /v1/pricing/cloud/storage:
     get:
+      description: |-
+        GetCloudStoragePricing returns the block-storage prices of the cloud
+        section: the per-GB monthly rate and the volume size bounds a caller may ask
+        for.
       operationId: get_v1_pricing_cloud_storage
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: object
+                type: object
+          description: ok
+      summary: GetCloudStoragePricing returns the block-storage prices of the cloud
       tags:
       - pricing
   /v1/pricing/compute:
     get:
+      description: |-
+        GetComputePricing returns the compute section of the catalog: the cloud
+        provider and region the prices are quoted for, the monthly markup applied to
+        them, the full instance-size tier list and the named presets. It is the
+        whole section as the pricing source records it, un-gated — no model or
+        provider identity appears in it.
       operationId: get_v1_pricing_compute
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: object
+                type: object
+          description: ok
+      summary: |-
+        GetComputePricing returns the compute section of the catalog: the cloud
+        provider and region the prices are quoted for, the monthly markup applied to
+        them, the full instance-size tier list and the named presets.
       tags:
       - pricing
   /v1/pricing/compute/presets:
     get:
+      description: |-
+        GetComputePresets returns just the named compute sizes — the short,
+        human-labelled list ("Starter", "Pro") a size picker renders, each carrying
+        its provider slug, vCPU, memory, disk and price. It is the presets of the
+        compute section on their own, for a caller that does not need the full tier
+        table.
       operationId: get_v1_pricing_compute_presets
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pricingPresetList'
+          description: ok
+      summary: |-
+        GetComputePresets returns just the named compute sizes — the short,
+        human-labelled list ("Starter", "Pro") a size picker renders, each carrying
+        its provider slug, vCPU, memory, disk and price.
       tags:
       - pricing
   /v1/pricing/featured:
@@ -28686,7 +28887,18 @@ paths:
       - pricing
   /v1/pricing/gpu:
     get:
+      description: |-
+        ListGPUTiers returns the rentable GPU configurations, each with its
+        accelerator count and model, VRAM, vCPU, host memory and hourly price.
       operationId: get_v1_pricing_gpu
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pricingTierList'
+          description: ok
+      summary: ListGPUTiers returns the rentable GPU configurations, each with its
       tags:
       - pricing
   /v1/pricing/health:
@@ -28711,7 +28923,19 @@ paths:
       - pricing
   /v1/pricing/iam:
     get:
+      description: |-
+        ListIAMPlans returns the identity plans — the Hanzo IAM tiers, each with its
+        monthly and annual price, monthly-active-user allowance and feature list.
       operationId: get_v1_pricing_iam
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pricingPlanList'
+          description: ok
+      summary: ListIAMPlans returns the identity plans — the Hanzo IAM tiers, each
+        with its
       tags:
       - pricing
   /v1/pricing/model/{name}:
@@ -28769,12 +28993,39 @@ paths:
       - pricing
   /v1/pricing/paas:
     get:
+      description: |-
+        ListPaaSPlans returns the application-hosting plans — the deploy-and-host
+        tiers, each with its monthly and annual price, app and memory allowances and
+        feature list.
       operationId: get_v1_pricing_paas
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pricingPlanList'
+          description: ok
+      summary: ListPaaSPlans returns the application-hosting plans — the deploy-and-host
       tags:
       - pricing
   /v1/pricing/policy:
     get:
+      description: |-
+        GetPricingPolicy returns the pricing policy document: the revenue-sharing
+        terms (the idle-resale share and the open-source share, each with its
+        percentage and who is eligible) and the commitments Hanzo makes about how it
+        bills — no hidden fees, no egress charges, no surprise bills.
       operationId: get_v1_pricing_policy
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: object
+                type: object
+          description: ok
+      summary: 'GetPricingPolicy returns the pricing policy document: the revenue-sharing'
       tags:
       - pricing
   /v1/pricing/providers:
@@ -28799,7 +29050,19 @@ paths:
       - pricing
   /v1/pricing/subscriptions:
     get:
+      description: |-
+        ListSubscriptionPlans returns the API subscription plans — the account-level
+        tiers a customer subscribes to, each with its monthly and annual price,
+        included credit, rate limits and feature list.
       operationId: get_v1_pricing_subscriptions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pricingPlanList'
+          description: ok
+      summary: ListSubscriptionPlans returns the API subscription plans — the account-level
       tags:
       - pricing
   /v1/pricing/summary:
@@ -28852,7 +29115,20 @@ paths:
       - pricing
   /v1/pricing/tools:
     get:
+      description: |-
+        ListToolPrices returns the per-use tool prices — web search, code
+        interpreter, file storage, image generation, speech-to-text and
+        text-to-speech — each with the unit it is billed by and its price in that
+        unit.
       operationId: get_v1_pricing_tools
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pricingToolList'
+          description: ok
+      summary: ListToolPrices returns the per-use tool prices — web search, code
       tags:
       - pricing
   /v1/projects:

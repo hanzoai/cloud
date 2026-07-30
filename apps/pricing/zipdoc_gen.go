@@ -39,6 +39,48 @@ func init() {
 	zip.Describe("GET /v1/pricing", zip.Doc{
 		Description: "GetPricing returns the whole pricing catalog in one document: Zen and\nthird-party models, providers, model families, the free-model list, plan and\ninfrastructure pricing. Every model and provider it names is filtered to what\nthe caller's org may see — the same gate the leaf routes apply, so this can\nnever be an un-gated second source for what they hide.",
 	})
+	zip.Describe("GET /v1/pricing-policy", zip.Doc{
+		Description: "GetPricingPolicyAlias returns the pricing policy document at its top-level\naddress. It is the same document GET /v1/pricing/policy returns, byte for\nbyte, at the shorter address the marketing surface links to.",
+	})
+	zip.Describe("GET /v1/pricing/base", zip.Doc{
+		Description: "ListBasePlans returns the Hanzo Base plans — the managed-instance tiers,\neach with its monthly and annual price, storage and request allowances and\nfeature list.",
+		Fields: map[string]string{
+			"pricingPlanList.plans": "Plans are the plans in this section, each an opaque object exactly as the\npricing source emits it — typically id, name, description, price and a\nfeature list.",
+		},
+	})
+	zip.Describe("GET /v1/pricing/blockchain", zip.Doc{
+		Description: "ListBlockchainPlans returns the blockchain access plans — the RPC and node\ntiers, each with its monthly price, compute-unit allowance and feature list.",
+		Fields: map[string]string{
+			"pricingPlanList.plans": "Plans are the plans in this section, each an opaque object exactly as the\npricing source emits it — typically id, name, description, price and a\nfeature list.",
+		},
+	})
+	zip.Describe("GET /v1/pricing/cloud", zip.Doc{
+		Description: "GetCloudPricing returns the public cloud section of the catalog in one\ndocument: its instance plans, its regions and its block-storage prices. The\nsection's internal half — the provider costs Hanzo pays and the plan-to-\nprovider routing table — is stripped before it is served, so this is what a\ncustomer may see and nothing more.",
+	})
+	zip.Describe("GET /v1/pricing/cloud/plans", zip.Doc{
+		Description: "GetCloudPlans returns just the cloud instance plans — each with its vCPU,\nmemory, disk, CPU type, VM allowance, feature list and monthly and hourly\nprice. It is the plans of the cloud section on their own.",
+		Fields: map[string]string{
+			"pricingPlanList.plans": "Plans are the plans in this section, each an opaque object exactly as the\npricing source emits it — typically id, name, description, price and a\nfeature list.",
+		},
+	})
+	zip.Describe("GET /v1/pricing/cloud/regions", zip.Doc{
+		Description: "GetCloudRegions returns the regions a cloud instance can be placed in, each\nwith its id, display name and physical location. It is the regions of the\ncloud section on their own.",
+		Fields: map[string]string{
+			"pricingRegionList.regions": "Regions are the regions cloud instances can be placed in, each an opaque\nobject exactly as the pricing source emits it — typically id, name and\nlocation.",
+		},
+	})
+	zip.Describe("GET /v1/pricing/cloud/storage", zip.Doc{
+		Description: "GetCloudStoragePricing returns the block-storage prices of the cloud\nsection: the per-GB monthly rate and the volume size bounds a caller may ask\nfor.",
+	})
+	zip.Describe("GET /v1/pricing/compute", zip.Doc{
+		Description: "GetComputePricing returns the compute section of the catalog: the cloud\nprovider and region the prices are quoted for, the monthly markup applied to\nthem, the full instance-size tier list and the named presets. It is the\nwhole section as the pricing source records it, un-gated — no model or\nprovider identity appears in it.",
+	})
+	zip.Describe("GET /v1/pricing/compute/presets", zip.Doc{
+		Description: "GetComputePresets returns just the named compute sizes — the short,\nhuman-labelled list (\"Starter\", \"Pro\") a size picker renders, each carrying\nits provider slug, vCPU, memory, disk and price. It is the presets of the\ncompute section on their own, for a caller that does not need the full tier\ntable.",
+		Fields: map[string]string{
+			"pricingPresetList.presets": "Presets are the named compute sizes, each an opaque object exactly as the\npricing source emits it — typically id, name, provider slug, vCPU, memory,\ndisk and price.",
+		},
+	})
 	zip.Describe("GET /v1/pricing/featured", zip.Doc{
 		Description: "ListFeaturedModels returns the models the catalog highlights, filtered to what\nthe caller's org may see. It is the same catalog as ListModels narrowed to\nentries the pricing source marks featured.",
 		Fields: map[string]string{
@@ -55,6 +97,12 @@ func init() {
 			"pricingModelList.updated": "Updated is when the catalog was last refreshed, as the pricing source\nrecorded it.",
 		},
 	})
+	zip.Describe("GET /v1/pricing/gpu", zip.Doc{
+		Description: "ListGPUTiers returns the rentable GPU configurations, each with its\naccelerator count and model, VRAM, vCPU, host memory and hourly price.",
+		Fields: map[string]string{
+			"pricingTierList.tiers": "Tiers are the rentable GPU configurations, each an opaque object exactly\nas the pricing source emits it — typically id, name, accelerator count and\nmodel, VRAM, vCPU, memory and hourly price.",
+		},
+	})
 	zip.Describe("GET /v1/pricing/health", zip.Doc{
 		Description: "Health reports that the pricing subsystem is mounted and serving. It answers\nfrom the process itself and consults neither the catalog bundle nor the\nenablement store, so it stays \"ok\" while either is degraded.",
 		Fields: map[string]string{
@@ -62,6 +110,12 @@ func init() {
 			"pricingHealth.status":  "Status is \"ok\" whenever this subsystem is mounted.",
 		},
 		Response: json.RawMessage(`{"service":"pricing","status":"ok"}`),
+	})
+	zip.Describe("GET /v1/pricing/iam", zip.Doc{
+		Description: "ListIAMPlans returns the identity plans — the Hanzo IAM tiers, each with its\nmonthly and annual price, monthly-active-user allowance and feature list.",
+		Fields: map[string]string{
+			"pricingPlanList.plans": "Plans are the plans in this section, each an opaque object exactly as the\npricing source emits it — typically id, name, description, price and a\nfeature list.",
+		},
 	})
 	zip.Describe("GET /v1/pricing/model/:name", zip.Doc{
 		Description: "GetModel returns one model's catalog entry — its pricing, context window and\ncapabilities as the pricing source records them. A model hidden for the\ncaller's org answers the same 404 an unknown name does, so a disabled model\ngets no existence oracle.",
@@ -78,6 +132,15 @@ func init() {
 			"pricingModelList.updated": "Updated is when the catalog was last refreshed, as the pricing source\nrecorded it.",
 		},
 	})
+	zip.Describe("GET /v1/pricing/paas", zip.Doc{
+		Description: "ListPaaSPlans returns the application-hosting plans — the deploy-and-host\ntiers, each with its monthly and annual price, app and memory allowances and\nfeature list.",
+		Fields: map[string]string{
+			"pricingPlanList.plans": "Plans are the plans in this section, each an opaque object exactly as the\npricing source emits it — typically id, name, description, price and a\nfeature list.",
+		},
+	})
+	zip.Describe("GET /v1/pricing/policy", zip.Doc{
+		Description: "GetPricingPolicy returns the pricing policy document: the revenue-sharing\nterms (the idle-resale share and the open-source share, each with its\npercentage and who is eligible) and the commitments Hanzo makes about how it\nbills — no hidden fees, no egress charges, no surprise bills.",
+	})
 	zip.Describe("GET /v1/pricing/providers", zip.Doc{
 		Description: "ListProviders returns the model providers the catalog knows, each with its\ninfo object, filtered to what the caller's org may see. A provider an admin\nhas disabled is absent — and so are its models everywhere else on this\nsurface, because a provider's state cascades to what it serves.",
 		Fields: map[string]string{
@@ -85,8 +148,20 @@ func init() {
 			"pricingProviderList.updated":   "Updated is when the catalog was last refreshed, as the pricing source\nrecorded it.",
 		},
 	})
+	zip.Describe("GET /v1/pricing/subscriptions", zip.Doc{
+		Description: "ListSubscriptionPlans returns the API subscription plans — the account-level\ntiers a customer subscribes to, each with its monthly and annual price,\nincluded credit, rate limits and feature list.",
+		Fields: map[string]string{
+			"pricingPlanList.plans": "Plans are the plans in this section, each an opaque object exactly as the\npricing source emits it — typically id, name, description, price and a\nfeature list.",
+		},
+	})
 	zip.Describe("GET /v1/pricing/summary", zip.Doc{
 		Description: "GetPricingSummary returns the catalog's headline statistics — model counts by\nfamily and the provider directory. The provider sub-object is filtered to what\nthe caller's org may see, so a disabled provider's name never leaks; the\naggregate counts are the catalog's own, over everything it holds.",
+	})
+	zip.Describe("GET /v1/pricing/tools", zip.Doc{
+		Description: "ListToolPrices returns the per-use tool prices — web search, code\ninterpreter, file storage, image generation, speech-to-text and\ntext-to-speech — each with the unit it is billed by and its price in that\nunit.",
+		Fields: map[string]string{
+			"pricingToolList.tools": "Tools are the metered tools, each an opaque object exactly as the pricing\nsource emits it — typically name, billing unit and price.",
+		},
 	})
 	zip.Describe("POST /v1/enablement/optin", zip.Doc{
 		Description: "OptIntoBeta opts the caller's OWN org into a beta item. The org is the\ncaller's validated one, so this can never target another org, and the registry\nrefuses anything not in beta — so it can neither re-open an item an operator\nturned off nor touch one that is already generally available. Requires a\nsigned-in caller with an org.",
