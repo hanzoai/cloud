@@ -423,9 +423,15 @@ func TestCreateOrgGate(t *testing.T) {
 func TestForgedOrgWithoutPrincipalRefused(t *testing.T) {
 	s, mp := newTestService(t, "sql")
 	app := zip.New(zip.Config{DisableStartupMessage: true})
+	// The whole surface for one kind, mounted the way the binary mounts it: Bridge
+	// first (it parks the request the typed ops resolve their tenant from), then
+	// the untyped create beside its typed reads and delete. Both halves gate on
+	// the same tenant(), and this asserts it for both at once.
+	app.Use(cloud.Bridge())
 	app.Post("/v1/sql", create(s, "sql"))
-	app.Delete("/v1/sql/:name", drop(s, "sql"))
-	app.Get("/v1/sql", list(s, "sql"))
+	o := ops{s}
+	zip.Delete(app, "/v1/sql/:name", o.dropSQL)
+	zip.Get(app, "/v1/sql", o.listSQL)
 
 	for _, tc := range []struct{ method, path, body string }{
 		{"POST", "/v1/sql", `{"name":"orders"}`},
@@ -474,7 +480,7 @@ func TestCreateKMSDegradePersistsNoPlaintext(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 201", resp.StatusCode, body)
 	}
-	var cr createResp
+	var cr provisionResult
 	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
 		t.Fatalf("decode: %v", err)
 	}

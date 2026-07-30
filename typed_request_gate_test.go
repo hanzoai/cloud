@@ -49,6 +49,15 @@ var allowedRequestUses = map[string]string{
 		"modeled as an In field, because zip binds an In field from the BODY too and this route has never " +
 		"accepted an account there. authWrite fails closed off the HTTP path: no request, no attested " +
 		"caller, no mutation.",
+	"apps/provisioning/typed.go": "tenantOf — the provisioning control plane ALLOCATES and DESTROYS real " +
+		"backend resources, and its tenant is not the org principal.OrgFrom carries. Two facts differ, both " +
+		"live: the org is folded through sanitizeOrg (cloud.SanitizeOrg — the slug every physical name, S3 " +
+		"bucket and tenant-<org> namespace is keyed on, so a read that skipped the fold would look in a " +
+		"different bucket than the create wrote), and an ORG-LESS SuperAdmin is bucketed under the literal " +
+		"\"admin\" org, which OrgFrom cannot express — it refuses an empty org outright, so reading the tenant " +
+		"through it alone would turn that live admin bucket into a 403. ONE function, which all 21 typed ops " +
+		"ask, delegating to the same tenant() the untyped create beside them uses; fails closed off the HTTP " +
+		"path, where there is no principal and therefore no tenant to key on.",
 	"apps/search/search.go": "Query resolves the tenant from the validated principal at the top of the op.",
 	"apps/ingress/ingress.go": "admin — the SuperAdmin gate on the fleet EDGE's config. The edge is platform " +
 		"infrastructure (AC-6), so every /v1/ingress op requires SuperAdmin, which is X-User-IsAdmin — a claim " +
