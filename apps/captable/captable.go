@@ -104,20 +104,21 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // routes wires the /v1/captable/* route table → bundle route names, in TWO
 // planes over one dispatch.
 //
-// The BODYLESS routes are TYPED ops (typed.go), so they carry In/Out types and
-// reach the document, the MCP tool list, the CLI and the generated SDKs: the
-// eleven collection reads, the round detail read, and the five deletes. A bodyless
-// route's whole input is one path segment, so its In cannot accept less than the
-// route always did, and its refusals relay the bundle's own bytes through
-// bundleErr.
+// TWENTY routes are TYPED ops, so they carry In/Out types and reach the document,
+// the MCP tool list, the CLI and the generated SDKs: the eleven collection reads,
+// the round detail read and the five deletes (typed.go, whose whole input is one
+// path segment), plus the three writes whose bodies are made only of fields the
+// bundle reads as strings (writes.go). Every one relays the bundle's own refusal
+// bytes through bundleErr.
 //
-// The BODY-CARRYING writes stay untyped relays, and the reason is the REQUEST, not
-// the response. The bundle validates with COERCING helpers (goja/src/validate.ts):
-// `num` accepts a number OR a numeric string, `optString` accepts any scalar and
-// stringifies it, and stakeholders.add accepts an object OR an array. zip decodes a
-// typed In with encoding/json, which refuses those shapes with a 400 the route has
-// never sent — so typing one would make it accept LESS. Each line below says which
-// of its fields does that.
+// ELEVEN body-carrying writes stay untyped relays, and the reason is the REQUEST,
+// not the response. The bundle validates with COERCING helpers
+// (goja/src/validate.ts): `num` accepts a number OR a numeric string, and
+// stakeholders.add accepts an object OR an array. A Go float64 field refuses the
+// numeric string those routes accept today — so typing one would make it accept
+// LESS — and it cannot carry the refused token onward either, so the bundle's
+// {success,message,errors} would become zip's envelope. Each line below says
+// which of its fields does that.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/captable")
 	// Bridge FIRST: a typed op receives only a context, so the validated org
@@ -161,20 +162,26 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Delete(g, "/options/:id", o.deleteOption)
 	zip.Delete(g, "/safes/:id", o.deleteSafe)
 	zip.Delete(g, "/convertibles/:id", o.deleteConvertible)
+	// The three body-carrying ops (writes.go). Their bodies are made only of
+	// fields the bundle reads as STRINGS, and the scalar carrier hands each token
+	// to the bundle unchanged — so the bundle stays the only validator and the
+	// wire is the wire it always was.
+	zip.Put(g, "/company", o.updateCompany)
+	zip.Patch(g, "/stakeholders/:id", o.updateStakeholder)
+	zip.Post(g, "/rounds/:id/close", o.closeRound)
 
 	// ---- the untyped relays, and which field keeps each one untyped ----
+	//
+	// Every one of these carries a COERCED NUMBER — `num`/`intNum`/`optNum` take a
+	// number or a numeric string — except stakeholders.add, whose whole body is a
+	// union. A Go float64 field refuses the numeric string this route accepts, and
+	// cannot carry the refused token onward to keep the bundle's own 400 envelope
+	// either, so typing one would change both what the route accepts and how it
+	// says no. See writes.go for the full argument.
 
-	// company.update: `incorporationType/Country/State` go through optString, which
-	// stringifies ANY scalar — a typed string field would 400 on the number this
-	// route stores as "5".
-	g.Put("/company", route(s, "company.update", nil, true))
 	// stakeholders.add: the body is a single object OR an array (the tRPC
 	// contract). A Go struct decodes one or the other, never both.
 	g.Post("/stakeholders", route(s, "stakeholders.add", nil, true))
-	// stakeholders.update: a PARTIAL update keyed on `key !== undefined`, and it
-	// writes the RAW value — so both "omitted" and "explicit null" have meanings a
-	// re-marshalled Go struct cannot tell apart.
-	g.Patch("/stakeholders/:id", routeID(s, "stakeholders.update", true))
 	// shareClasses.create: `initialSharesAuthorized`, `votesPerShare`, `parValue`,
 	// `pricePerShare`, `seniority` and both multiples go through num/intNum, which
 	// accept a numeric STRING.
@@ -202,10 +209,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// rounds.create: `targetAmount`, `pricePerShare` and `preMoneyValuation` are
 	// coerced numbers.
 	g.Post("/rounds", route(s, "rounds.create", nil, true))
-	// rounds.close: `closeDate` goes through optDateString, which stringifies any
-	// scalar — and OMITTED means today, which a typed string cannot distinguish
-	// from the empty string it also accepts.
-	g.Post("/rounds/:id/close", routeID(s, "rounds.close", true))
 	// rounds.investments.add: `amount` is a coerced number and `date`/`comments`
 	// go through optDateString/optString.
 	g.Post("/rounds/:id/investments", routeID(s, "rounds.investments.add", true))

@@ -274,4 +274,42 @@ func init() {
 			"captableTotals.stakeholders":       "Stakeholders is how many stakeholders the company has.",
 		},
 	})
+	zip.Describe("PATCH /v1/captable/stakeholders/:id", zip.Doc{
+		Description: "UpdateStakeholder changes one of the caller org's stakeholders. It is a\nPARTIAL update: only the fields the request names are written, and a field\nsent as null clears that column. A request that names no updatable field is\nrefused, and an id this org does not hold is not found.\n\nThe values are stored as sent. Unlike adding a stakeholder, this route does\nnot check the email's shape or the type and relationship vocabularies, so it\ncan record a value that adding one would have rejected.",
+		Fields: map[string]string{
+			"captableStakeholderPatch.city":                "City is the stakeholder's city.",
+			"captableStakeholderPatch.currentRelationship": "CurrentRelationship is how the stakeholder relates to the company, e.g.\nFOUNDER, INVESTOR or EMPLOYEE. This route stores it as sent — unlike\nadding a stakeholder, it is not checked against the vocabulary.",
+			"captableStakeholderPatch.email":               "Email is the stakeholder's email. This route stores it as sent — unlike\nadding a stakeholder, it is not checked for shape or uniqueness.",
+			"captableStakeholderPatch.id":                  "ID is the stakeholder to update. It is the path segment: the URL is the\naddressing authority, and the org it is resolved in comes from the\ncaller's principal, so an id from another tenant is simply not found.",
+			"captableStakeholderPatch.institutionName":     "InstitutionName names the institution, when the stakeholder is one.",
+			"captableStakeholderPatch.name":                "Name is the stakeholder's full name.",
+			"captableStakeholderPatch.stakeholderType":     "StakeholderType is INDIVIDUAL or INSTITUTION. This route stores it as\nsent — unlike adding a stakeholder, it is not checked against the\nvocabulary.",
+			"captableStakeholderPatch.state":               "State is the stakeholder's state or province.",
+			"captableStakeholderPatch.streetAddress":       "StreetAddress is the stakeholder's street address.",
+			"captableStakeholderPatch.taxId":               "TaxID is the stakeholder's tax identifier.",
+			"captableStakeholderPatch.zipcode":             "Zipcode is the stakeholder's postal code.",
+			"captableUpdated.message":                      "Message is the human sentence the cap table wrote, e.g. \"Company updated\".",
+			"captableUpdated.success":                      "Success is true when the update was applied.",
+		},
+	})
+	zip.Describe("POST /v1/captable/rounds/:id/close", zip.Doc{
+		Description: "CloseRound closes one of the caller org's fundraising rounds, recording the\nclose date and moving its status to CLOSED. Only an OPEN round can be closed:\na round that is already closed — like an id this org does not hold — is not\nfound. Closing a round does not change what was invested in it.",
+		Fields: map[string]string{
+			"captableRoundCloseRequest.closeDate": "CloseDate is the date to record the round as closed on. Optional: omitted,\nnull or empty records TODAY. Any JSON scalar is accepted and stored as its\ntext, and the text is stored unparsed, so a caller that wants an ISO date\nsends one.",
+			"captableRoundCloseRequest.id":        "ID is the round to close. It is the path segment: the URL is the\naddressing authority, and the org it is resolved in comes from the\ncaller's principal, so an id from another tenant is simply not found.",
+			"captableUpdated.message":             "Message is the human sentence the cap table wrote, e.g. \"Company updated\".",
+			"captableUpdated.success":             "Success is true when the update was applied.",
+		},
+	})
+	zip.Describe("PUT /v1/captable/company", zip.Doc{
+		Description: "UpdateCompany sets the caller org's company name and incorporation details.\nThe name is required; the three incorporation fields are optional and each is\nstored as empty when omitted, so a call that sends only a name CLEARS them.\nThe company row itself is seeded when the tenant's store first opens, so this\nnever creates one.",
+		Fields: map[string]string{
+			"captableCompanyUpdate.incorporationCountry": "IncorporationCountry is the ISO country the entity is incorporated in.\nOptional; omitted, null or empty clears it. Any JSON scalar is accepted\nand stored as its text.",
+			"captableCompanyUpdate.incorporationState":   "IncorporationState is the state or province of incorporation. Optional;\nomitted, null or empty clears it. Any JSON scalar is accepted and stored\nas its text.",
+			"captableCompanyUpdate.incorporationType":    "IncorporationType is the entity kind, e.g. LLC or C_CORP. Optional;\nomitted, null or empty clears it. Any JSON scalar is accepted and stored\nas its text.",
+			"captableCompanyUpdate.name":                 "Name is the company's legal name. Required, and it must be a non-empty\nstring — anything else is refused with the cap table's own validation\nerror.",
+			"captableUpdated.message":                    "Message is the human sentence the cap table wrote, e.g. \"Company updated\".",
+			"captableUpdated.success":                    "Success is true when the update was applied.",
+		},
+	})
 }

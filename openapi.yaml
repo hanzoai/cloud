@@ -5107,6 +5107,33 @@ components:
           description: UpdatedAt is when the company row last changed, in unix milliseconds.
           type: integer
       type: object
+    captableCompanyUpdate:
+      properties:
+        incorporationCountry:
+          description: |-
+            IncorporationCountry is the ISO country the entity is incorporated in.
+            Optional; omitted, null or empty clears it. Any JSON scalar is accepted
+            and stored as its text.
+          type: string
+        incorporationState:
+          description: |-
+            IncorporationState is the state or province of incorporation. Optional;
+            omitted, null or empty clears it. Any JSON scalar is accepted and stored
+            as its text.
+          type: string
+        incorporationType:
+          description: |-
+            IncorporationType is the entity kind, e.g. LLC or C_CORP. Optional;
+            omitted, null or empty clears it. Any JSON scalar is accepted and stored
+            as its text.
+          type: string
+        name:
+          description: |-
+            Name is the company's legal name. Required, and it must be a non-empty
+            string — anything else is refused with the cap table's own validation
+            error.
+          type: string
+      type: object
     captableConvertibles:
       properties:
         notes:
@@ -5372,6 +5399,22 @@ components:
           description: TargetAmount is how much the round set out to raise.
           type: number
       type: object
+    captableRoundCloseRequest:
+      properties:
+        closeDate:
+          description: |-
+            CloseDate is the date to record the round as closed on. Optional: omitted,
+            null or empty records TODAY. Any JSON scalar is accepted and stored as its
+            text, and the text is stored unparsed, so a caller that wants an ISO date
+            sends one.
+          type: string
+        id:
+          description: |-
+            ID is the round to close. It is the path segment: the URL is the
+            addressing authority, and the org it is resolved in comes from the
+            caller's principal, so an id from another tenant is simply not found.
+          type: string
+      type: object
     captableRoundDetail:
       properties:
         investments:
@@ -5632,6 +5675,54 @@ components:
           description: Zipcode is the stakeholder's postal code, if recorded.
           type: string
       type: object
+    captableStakeholderPatch:
+      properties:
+        city:
+          description: City is the stakeholder's city.
+          type: string
+        currentRelationship:
+          description: |-
+            CurrentRelationship is how the stakeholder relates to the company, e.g.
+            FOUNDER, INVESTOR or EMPLOYEE. This route stores it as sent — unlike
+            adding a stakeholder, it is not checked against the vocabulary.
+          type: string
+        email:
+          description: |-
+            Email is the stakeholder's email. This route stores it as sent — unlike
+            adding a stakeholder, it is not checked for shape or uniqueness.
+          type: string
+        id:
+          description: |-
+            ID is the stakeholder to update. It is the path segment: the URL is the
+            addressing authority, and the org it is resolved in comes from the
+            caller's principal, so an id from another tenant is simply not found.
+          type: string
+        institutionName:
+          description: InstitutionName names the institution, when the stakeholder
+            is one.
+          type: string
+        name:
+          description: Name is the stakeholder's full name.
+          type: string
+        stakeholderType:
+          description: |-
+            StakeholderType is INDIVIDUAL or INSTITUTION. This route stores it as
+            sent — unlike adding a stakeholder, it is not checked against the
+            vocabulary.
+          type: string
+        state:
+          description: State is the stakeholder's state or province.
+          type: string
+        streetAddress:
+          description: StreetAddress is the stakeholder's street address.
+          type: string
+        taxId:
+          description: TaxID is the stakeholder's tax identifier.
+          type: string
+        zipcode:
+          description: Zipcode is the stakeholder's postal code.
+          type: string
+      type: object
     captableSummary:
       properties:
         byShareClass:
@@ -5689,6 +5780,16 @@ components:
         stakeholders:
           description: Stakeholders is how many stakeholders the company has.
           type: integer
+      type: object
+    captableUpdated:
+      properties:
+        message:
+          description: Message is the human sentence the cap table wrote, e.g. "Company
+            updated".
+          type: string
+        success:
+          description: Success is true when the update was applied.
+          type: boolean
       type: object
     cfResult:
       properties: {}
@@ -16244,7 +16345,28 @@ paths:
       tags:
       - captable
     put:
+      description: |-
+        UpdateCompany sets the caller org's company name and incorporation details.
+        The name is required; the three incorporation fields are optional and each is
+        stored as empty when omitted, so a call that sends only a name CLEARS them.
+        The company row itself is seeded when the tenant's store first opens, so this
+        never creates one.
       operationId: put_v1_captable_company
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/captableCompanyUpdate'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/captableUpdated'
+          description: ok
+      summary: UpdateCompany sets the caller org's company name and incorporation
+        details.
       tags:
       - captable
   /v1/captable/convertibles:
@@ -16433,13 +16555,38 @@ paths:
       - captable
   /v1/captable/rounds/{id}/close:
     post:
-      operationId: post_v1_captable_rounds_by_id_close
+      description: |-
+        CloseRound closes one of the caller org's fundraising rounds, recording the
+        close date and moving its status to CLOSED. Only an OPEN round can be closed:
+        a round that is already closed — like an id this org does not hold — is not
+        found. Closing a round does not change what was invested in it.
+      operationId: post_v1_captable_rounds_id_close
       parameters:
-      - in: path
+      - description: |-
+          ID is the round to close. It is the path segment: the URL is the
+          addressing authority, and the org it is resolved in comes from the
+          caller's principal, so an id from another tenant is simply not found.
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/captableRoundCloseRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/captableUpdated'
+          description: ok
+      summary: |-
+        CloseRound closes one of the caller org's fundraising rounds, recording the
+        close date and moving its status to CLOSED.
       tags:
       - captable
   /v1/captable/rounds/{id}/investments:
@@ -16636,13 +16783,40 @@ paths:
       tags:
       - captable
     patch:
-      operationId: patch_v1_captable_stakeholders_by_id
+      description: |-
+        UpdateStakeholder changes one of the caller org's stakeholders. It is a
+        PARTIAL update: only the fields the request names are written, and a field
+        sent as null clears that column. A request that names no updatable field is
+        refused, and an id this org does not hold is not found.
+
+        The values are stored as sent. Unlike adding a stakeholder, this route does
+        not check the email's shape or the type and relationship vocabularies, so it
+        can record a value that adding one would have rejected.
+      operationId: patch_v1_captable_stakeholders_id
       parameters:
-      - in: path
+      - description: |-
+          ID is the stakeholder to update. It is the path segment: the URL is the
+          addressing authority, and the org it is resolved in comes from the
+          caller's principal, so an id from another tenant is simply not found.
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/captableStakeholderPatch'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/captableUpdated'
+          description: ok
+      summary: UpdateStakeholder changes one of the caller org's stakeholders.
       tags:
       - captable
   /v1/captable/summary:
