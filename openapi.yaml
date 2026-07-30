@@ -47631,7 +47631,15 @@ paths:
       - world
   /v1/world/stream:
     get:
+      description: 'Holds the connection open as text/event-stream and pushes a `news`
+        event — the same {items:[…]} body GET /v1/world/news answers — each time the
+        caller''s (org, project) feed refreshes, with a `: ping` heartbeat comment
+        every 25s. Delivery is best-effort: a slow consumer is dropped on buffer overrun
+        and reconnects, re-fetching GET /v1/world/news, which stays the source of
+        truth. Requires a validated principal; 403 without one.'
       operationId: get_v1_world_stream
+      summary: Live news refreshes for the caller's org and project, as Server-Sent
+        Events.
       tags:
       - world
   /v1/x402/settlements/{id}:
