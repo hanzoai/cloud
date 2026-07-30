@@ -147,10 +147,11 @@ func TestTypedReadsAreOrgScoped(t *testing.T) {
 }
 
 // TestEveryRouteIsTypedOrNamed closes the migration: /v1/captable has 31 routes,
-// 17 typed — every route with NO request body — and 14 body-carrying relays that
-// each name the coerced field keeping them untyped at their registration in
-// routes(). A new route here is typed by default, or it takes a deliberate edit to
-// this count with the reason written beside it.
+// 20 typed — every route with NO request body, plus the three whose bodies are
+// made only of fields the bundle reads as strings (writes.go) — and 11
+// body-carrying relays that each name the coerced NUMBER keeping them untyped at
+// their registration in routes(). A new route here is typed by default, or it
+// takes a deliberate edit to this count with the reason written beside it.
 func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	app := mountApp(t)
 	var total, typed int
@@ -177,8 +178,8 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	if total != 31 {
 		t.Fatalf("/v1/captable has %d routes, expected 31 — type the new one or record why it cannot be", total)
 	}
-	if typed != 17 {
-		t.Fatalf("/v1/captable has %d typed ops, expected 17", typed)
+	if typed != 20 {
+		t.Fatalf("/v1/captable has %d typed ops, expected 20", typed)
 	}
 }
 
