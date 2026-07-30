@@ -2070,6 +2070,81 @@ components:
             Empty until anchored.
           type: string
       type: object
+    GitOpsApp:
+      properties:
+        automated:
+          type: boolean
+        health:
+          description: Healthy|Degraded|Progressing|…
+          type: string
+        history:
+          items:
+            $ref: '#/components/schemas/GitOpsDeploy'
+          type: array
+        name:
+          type: string
+        namespace:
+          type: string
+        operation:
+          $ref: '#/components/schemas/GitOpsOperation'
+        path:
+          type: string
+        project:
+          type: string
+        reconciledAt:
+          type: string
+        repoURL:
+          type: string
+        resources:
+          type: integer
+        revision:
+          description: the commit last applied
+          type: string
+        selfHeal:
+          type: boolean
+        sync:
+          description: Synced|OutOfSync|Unknown
+          type: string
+        targetRevision:
+          type: string
+      type: object
+    GitOpsDeploy:
+      properties:
+        automated:
+          type: boolean
+        deployedAt:
+          type: string
+        id:
+          type: integer
+        revision:
+          type: string
+        startedAt:
+          type: string
+      type: object
+    GitOpsOperation:
+      properties:
+        finishedAt:
+          type: string
+        message:
+          type: string
+        phase:
+          type: string
+        revision:
+          type: string
+        startedAt:
+          type: string
+      type: object
+    GitOpsPlane:
+      properties:
+        applications:
+          items:
+            $ref: '#/components/schemas/GitOpsApp'
+          type: array
+        installed:
+          type: boolean
+        reason:
+          type: string
+      type: object
     GrantIn:
       properties:
         amountCents:
@@ -6007,6 +6082,319 @@ components:
             $ref: '#/components/schemas/Application'
           type: array
       type: object
+    argoApp:
+      properties:
+        apiVersion:
+          type: string
+        kind:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/argoMeta'
+        spec:
+          $ref: '#/components/schemas/argoSpec'
+        status:
+          $ref: '#/components/schemas/argoStatus'
+      type: object
+    argoAppList:
+      properties:
+        apiVersion:
+          type: string
+        items:
+          items:
+            $ref: '#/components/schemas/argoApp'
+          type: array
+        kind:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/argoListMeta'
+      type: object
+    argoCluster:
+      properties:
+        connectionState:
+          $ref: '#/components/schemas/argoConnectionState'
+        info:
+          $ref: '#/components/schemas/argoClusterInfo'
+        name:
+          type: string
+        server:
+          type: string
+      type: object
+    argoClusterInfo:
+      properties:
+        applicationsCount:
+          type: integer
+        connectionState:
+          $ref: '#/components/schemas/argoConnectionState'
+        serverVersion:
+          type: string
+      type: object
+    argoClusterList:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/argoCluster'
+          type: array
+        metadata:
+          $ref: '#/components/schemas/argoListMeta'
+      type: object
+    argoConnectionState:
+      properties:
+        attemptedAt:
+          type: string
+        message:
+          type: string
+        status:
+          type: string
+      type: object
+    argoDestination:
+      properties:
+        name:
+          description: ArgoCD allows a destination by cluster name; omitted for the
+            in-cluster projection.
+          type: string
+        namespace:
+          type: string
+        server:
+          type: string
+      type: object
+    argoGroupKind:
+      properties:
+        group:
+          type: string
+        kind:
+          type: string
+      type: object
+    argoHealth:
+      properties:
+        message:
+          type: string
+        status:
+          type: string
+      type: object
+    argoInfoItem:
+      properties:
+        name:
+          type: string
+        value:
+          type: string
+      type: object
+    argoListMeta:
+      properties:
+        resourceVersion:
+          type: string
+      type: object
+    argoMeta:
+      properties:
+        creationTimestamp:
+          type: string
+        labels:
+          additionalProperties:
+            type: string
+          type: object
+        name:
+          type: string
+        namespace:
+          type: string
+        uid:
+          type: string
+      type: object
+    argoNode:
+      properties:
+        createdAt:
+          type: string
+        group:
+          type: string
+        health:
+          $ref: '#/components/schemas/argoHealth'
+        images:
+          items:
+            type: string
+          type: array
+        info:
+          items:
+            $ref: '#/components/schemas/argoInfoItem'
+          type: array
+        kind:
+          type: string
+        name:
+          type: string
+        namespace:
+          type: string
+        parentRefs:
+          items:
+            $ref: '#/components/schemas/argoResourceRef'
+          type: array
+        resourceVersion:
+          type: string
+        uid:
+          type: string
+        version:
+          type: string
+      type: object
+    argoProject:
+      properties:
+        apiVersion:
+          type: string
+        kind:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/argoMeta'
+        spec:
+          $ref: '#/components/schemas/argoProjectSpec'
+        status:
+          $ref: '#/components/schemas/argoProjectStat'
+      type: object
+    argoProjectList:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/argoProject'
+          type: array
+        metadata:
+          $ref: '#/components/schemas/argoListMeta'
+      type: object
+    argoProjectSpec:
+      properties:
+        clusterResourceWhitelist:
+          items:
+            $ref: '#/components/schemas/argoGroupKind'
+          type: array
+        description:
+          type: string
+        destinations:
+          items:
+            $ref: '#/components/schemas/argoDestination'
+          type: array
+        sourceRepos:
+          items:
+            type: string
+          type: array
+      type: object
+    argoProjectStat:
+      properties: {}
+      type: object
+    argoResourceRef:
+      properties:
+        group:
+          type: string
+        kind:
+          type: string
+        name:
+          type: string
+        namespace:
+          type: string
+        uid:
+          type: string
+        version:
+          type: string
+      type: object
+    argoResourceStatus:
+      properties:
+        group:
+          type: string
+        health:
+          $ref: '#/components/schemas/argoHealth'
+        kind:
+          type: string
+        name:
+          type: string
+        namespace:
+          type: string
+        status:
+          type: string
+        version:
+          type: string
+      type: object
+    argoRevisionMetadata:
+      properties:
+        author:
+          type: string
+        date:
+          type: string
+        message:
+          type: string
+        signatureInfo:
+          type: string
+        tags:
+          items:
+            type: string
+          type: array
+      type: object
+    argoSource:
+      properties:
+        path:
+          type: string
+        repoURL:
+          type: string
+        targetRevision:
+          type: string
+      type: object
+    argoSpec:
+      properties:
+        destination:
+          $ref: '#/components/schemas/argoDestination'
+        project:
+          type: string
+        source:
+          $ref: '#/components/schemas/argoSource'
+      type: object
+    argoStatus:
+      properties:
+        health:
+          $ref: '#/components/schemas/argoHealth'
+        reconciledAt:
+          type: string
+        resources:
+          items:
+            $ref: '#/components/schemas/argoResourceStatus'
+          type: array
+        summary:
+          $ref: '#/components/schemas/argoSummary'
+        sync:
+          $ref: '#/components/schemas/argoSyncStatus'
+      type: object
+    argoSummary:
+      properties:
+        images:
+          items:
+            type: string
+          type: array
+      type: object
+    argoSyncStatus:
+      properties:
+        revision:
+          type: string
+        status:
+          type: string
+      type: object
+    argoSyncWindows:
+      properties:
+        activeWindows:
+          items:
+            type: object
+          type: array
+        assignedWindows:
+          items:
+            type: object
+          type: array
+        canSync:
+          type: boolean
+      type: object
+    argoTree:
+      properties:
+        hosts:
+          items:
+            type: object
+          type: array
+        nodes:
+          items:
+            $ref: '#/components/schemas/argoNode'
+          type: array
+        orphanedNodes:
+          items:
+            $ref: '#/components/schemas/argoNode'
+          type: array
+      type: object
     askRequest:
       properties:
         followUps:
@@ -7891,6 +8279,97 @@ components:
             $ref: '#/components/schemas/connView'
           type: array
       type: object
+    consoleSettings:
+      properties:
+        appsInAnyNamespaceEnabled:
+          description: |-
+            AppsInAnyNamespaceEnabled is false: applications are projected from operator
+            App CRs in the platform namespaces, never declared in an arbitrary one.
+          type: boolean
+        dexConfig:
+          description: |-
+            DexConfig carries no connectors. This console does not run Dex; its sign-in is
+            GET /v1/deploy/login, which is an IAM authorization-code round trip.
+          properties:
+            connectors:
+              items:
+                $ref: '#/components/schemas/deployEmpty'
+              type: array
+          type: object
+        execEnabled:
+          description: 'ExecEnabled is false: this plane serves no container terminal.'
+          type: boolean
+        googleAnalytics:
+          description: |-
+            GoogleAnalytics carries no tracking id and anonymizes users — this console
+            reports no analytics.
+          properties:
+            anonymizeUsers:
+              type: boolean
+            trackingID:
+              type: string
+          type: object
+        help:
+          description: Help carries no chat link and no binary download URLs.
+          properties:
+            binaryUrls:
+              additionalProperties:
+                type: string
+              type: object
+            chatText:
+              type: string
+            chatUrl:
+              type: string
+          type: object
+        hydratorEnabled:
+          description: 'HydratorEnabled is false: there is no manifest hydrator on
+            this plane.'
+          type: boolean
+        kustomizeVersions:
+          description: |-
+            KustomizeVersions is always empty: an App CR is an image pin, not a kustomize
+            build.
+          items:
+            type: string
+          type: array
+        oidcConfig:
+          $ref: '#/components/schemas/deployEmpty'
+          description: |-
+            OidcConfig is always null. The SPA's own OIDC flow is deliberately not
+            configured — identity is owned by Hanzo IAM at the edge and minted for this
+            host by GET /v1/deploy/login.
+        plugins:
+          description: 'Plugins is always empty: this plane loads no argocd config-management
+            plugins.'
+          items:
+            $ref: '#/components/schemas/deployEmpty'
+          type: array
+        statusBadgeEnabled:
+          description: 'StatusBadgeEnabled is false: no badge endpoint is served.'
+          type: boolean
+        statusBadgeRootUrl:
+          description: StatusBadgeRootUrl is always empty, for the same reason.
+          type: string
+        syncWithReplaceAllowed:
+          description: |-
+            SyncWithReplaceAllowed is false: a sync here asks the operator to reconcile an
+            App CR, and never replaces an object.
+          type: boolean
+        uiBannerContent:
+          description: 'UiBannerContent is always empty: this console shows no banner.'
+          type: string
+        uiCssURL:
+          description: 'UiCssURL is always empty: no stylesheet is injected.'
+          type: string
+        url:
+          description: Url is the console's public origin, https://cd.hanzo.ai.
+          type: string
+        userLoginsDisabled:
+          description: |-
+            UserLoginsDisabled is true: the SPA must not render its own username/password
+            form. Signing in goes through IAM, at GET /v1/deploy/login.
+          type: boolean
+      type: object
     contactList:
       properties:
         data:
@@ -8291,6 +8770,9 @@ components:
       properties:
         documentId:
           type: string
+      type: object
+    deployEmpty:
+      properties: {}
       type: object
     deployment:
       properties:
@@ -12250,6 +12732,41 @@ components:
             $ref: '#/components/schemas/sessionView'
           type: array
       type: object
+    sessionUser:
+      properties:
+        groups:
+          description: |-
+            Groups is the caller's group list, always empty here: this console
+            authorizes on the platform SuperAdmin fact alone, not on argocd RBAC groups.
+            Absent for an anonymous caller.
+          items:
+            type: string
+          type: array
+        iss:
+          description: |-
+            Iss is the token issuer as the SPA expects to see it — the literal "argocd",
+            so the UI never triggers an SSO redirect of its own. Absent for an anonymous
+            caller.
+          type: string
+        loggedIn:
+          description: LoggedIn reports whether this browser holds a session this
+            console accepts.
+          type: boolean
+        loginUrl:
+          description: LoginURL is where an anonymous caller signs in. Absent once
+            signed in.
+          type: string
+        logoutUrl:
+          description: LogoutURL is where a signed-in caller ends the session. Absent
+            when anonymous.
+          type: string
+        username:
+          description: |-
+            Username is the validated principal's user ID — the opaque gateway id, which
+            is what argocd's UI renders as the signed-in user here — or "admin" when the
+            principal carries none. Absent when anonymous.
+          type: string
+      type: object
     sessionView:
       properties:
         account:
@@ -13414,6 +13931,30 @@ components:
           items:
             type: string
           type: array
+      type: object
+    versionMessage:
+      properties:
+        BuildDate:
+          description: |-
+            BuildDate is the time THIS RESPONSE was generated, in RFC 3339 — not a build
+            timestamp. There is no argocd build here to report one for.
+          type: string
+        Compiler:
+          description: |-
+            Compiler is the constant "gc" the SPA expects; it is not read from this
+            process.
+          type: string
+        GoVersion:
+          description: GoVersion is always empty.
+          type: string
+        Platform:
+          description: |-
+            Platform is the constant "linux/amd64" the SPA expects; it is not this
+            process's own GOOS/GOARCH.
+          type: string
+        Version:
+          description: Version names the projection, "hanzo-cd (projection)".
+          type: string
       type: object
     versionPage:
       properties:
@@ -24571,45 +25112,148 @@ paths:
       - deploy
   /v1/deploy/applications:
     get:
+      description: |-
+        ListDeployApplications returns the fleet as an argocd ApplicationList: one
+        projected Application per operator App CR, carrying the image tag the CR
+        DECLARES, the tag actually RUNNING in the cluster's Deployment, the reconciled
+        health, and the sync verdict those two produce (declared == running ⇒ Synced,
+        both known and different ⇒ OutOfSync, either unknown ⇒ Unknown).
+
+        It is TENANT-SCOPED: a platform SuperAdmin reads every platform namespace, a
+        validated org member reads only its own org's tenant namespace and only the App
+        CRs labelled with its org, and anyone else is refused. A cross-tenant CR is
+        never projected into an answer.
       operationId: get_v1_deploy_applications
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/argoAppList'
+          description: ok
+      summary: 'ListDeployApplications returns the fleet as an argocd ApplicationList:
+        one projected Application per operator App CR, carrying the image tag the
+        CR DECLARES, the tag actually RUNNING in the cluster''s Deployment, the reconciled
+        health, and the sync verdict those two produce (declared == running ⇒ Synced,
+        both known and different ⇒ OutOfSync, either unknown ⇒ Unknown).'
       tags:
       - deploy
   /v1/deploy/applications/{name}:
     get:
-      operationId: get_v1_deploy_applications_by_name
+      description: |-
+        GetDeployApplication returns ONE projected argocd Application by name, with
+        status.resources filled in from its reconciled resource tree — which is what
+        makes it the detail view rather than a row of the list.
+
+        It is TENANT-SCOPED, and a name that belongs to another org is reported NOT
+        FOUND rather than refused: a 403 would confirm the application exists, so the
+        route would become a cross-tenant existence oracle. A name that is not a
+        DNS-1123 label is a 400 before any cluster read.
+      operationId: get_v1_deploy_applications_name
       parameters:
-      - in: path
+      - description: |-
+          Name is the application to read, from the path. It must be a DNS-1123 label
+          (lowercase alphanumerics and hyphens, starting and ending alphanumeric) —
+          every operator App CR's metadata.name satisfies that, and anything else is a
+          400 rather than a lookup.
+        in: path
         name: name
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/argoApp'
+          description: ok
+      summary: GetDeployApplication returns ONE projected argocd Application by name,
+        with status.resources filled in from its reconciled resource tree — which
+        is what makes it the detail view rather than a row of the list.
       tags:
       - deploy
   /v1/deploy/applications/{name}/resource-tree:
     get:
-      operationId: get_v1_deploy_applications_by_name_resource-tree
+      description: |-
+        GetDeployResourceTree returns one application's argocd ApplicationTree: the
+        objects the operator reconciled from its App CR, reached by ownerRef — the
+        Deployment and, under it, the ReplicaSet and Pods, plus the Service, Ingress,
+        HorizontalPodAutoscaler, PodDisruptionBudget and ConfigMaps it owns — each node
+        carrying its parent edges and its health.
+
+        Secrets are DELIBERATELY not walked, so no materialized environment can ever
+        appear in the tree. Tenant-scoped exactly like the application read: another
+        org's name is not found, a malformed name is a 400.
+      operationId: get_v1_deploy_applications_name_resource-tree
       parameters:
-      - in: path
+      - description: |-
+          Name is the application to read, from the path. It must be a DNS-1123 label
+          (lowercase alphanumerics and hyphens, starting and ending alphanumeric) —
+          every operator App CR's metadata.name satisfies that, and anything else is a
+          400 rather than a lookup.
+        in: path
         name: name
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/argoTree'
+          description: ok
+      summary: 'GetDeployResourceTree returns one application''s argocd ApplicationTree:
+        the objects the operator reconciled from its App CR, reached by ownerRef —
+        the Deployment and, under it, the ReplicaSet and Pods, plus the Service, Ingress,
+        HorizontalPodAutoscaler, PodDisruptionBudget and ConfigMaps it owns — each
+        node carrying its parent edges and its health.'
       tags:
       - deploy
   /v1/deploy/applications/{name}/revisions/{revision}/metadata:
     get:
-      operationId: get_v1_deploy_applications_by_name_revisions_by_revision_metadata
+      description: |-
+        GetDeployRevisionMetadata returns the argocd RevisionMetadata for one revision
+        of one application — what the detail view shows beside a revision.
+
+        An App CR is IMAGE-pinned rather than commit-pinned: the deploy names an image
+        tag, and the git source this projection reports is the display-only manifest
+        repo, not the application's own source. Nothing in this process can read a
+        commit's author or message for an arbitrary revision. So rather than 404 (which
+        the SPA turns into an error toast) or invent a git author, it answers the
+        HONEST minimum: date is when the App CR was created, message is the revision
+        asked for — with the empty revision and "HEAD" resolving to the image tag the
+        CR declares — and author is empty. An over-long revision is truncated before it
+        is echoed back.
+
+        Tenant-scoped exactly like the application read.
+      operationId: get_v1_deploy_applications_name_revisions_revision_metadata
       parameters:
-      - in: path
+      - description: Name is the application to read, from the path. It must be a
+          DNS-1123 label.
+        in: path
         name: name
         required: true
         schema:
           type: string
-      - in: path
+      - description: |-
+          Revision is the revision to describe, from the path. The empty revision and
+          "HEAD" both mean "whatever this application currently declares".
+        in: path
         name: revision
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/argoRevisionMetadata'
+          description: ok
+      summary: GetDeployRevisionMetadata returns the argocd RevisionMetadata for one
+        revision of one application — what the detail view shows beside a revision.
       tags:
       - deploy
   /v1/deploy/applications/{name}/rollback:
@@ -24636,13 +25280,37 @@ paths:
       - deploy
   /v1/deploy/applications/{name}/syncwindows:
     get:
-      operationId: get_v1_deploy_applications_by_name_syncwindows
+      description: |-
+        GetDeploySyncWindows returns one application's argocd
+        ApplicationSyncWindowState — the answer to "is anything blocking a sync of this
+        application right now?".
+
+        This platform runs NO sync windows, so the answer is always the permissive
+        empty one: canSync true, with no active and no assigned windows. The
+        application is still resolved first, so a name that is not the caller's is not
+        found rather than handed the static body — the endpoint discloses nothing about
+        another tenant's fleet.
+      operationId: get_v1_deploy_applications_name_syncwindows
       parameters:
-      - in: path
+      - description: |-
+          Name is the application to read, from the path. It must be a DNS-1123 label
+          (lowercase alphanumerics and hyphens, starting and ending alphanumeric) —
+          every operator App CR's metadata.name satisfies that, and anything else is a
+          400 rather than a lookup.
+        in: path
         name: name
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/argoSyncWindows'
+          description: ok
+      summary: GetDeploySyncWindows returns one application's argocd ApplicationSyncWindowState
+        — the answer to "is anything blocking a sync of this application right now?".
       tags:
       - deploy
   /v1/deploy/callback:
@@ -24652,12 +25320,65 @@ paths:
       - deploy
   /v1/deploy/clusters:
     get:
+      description: |-
+        ListDeployClusters returns the argocd ClusterList of the destinations the
+        caller's applications reconcile into: one entry per distinct destination
+        server, carrying the count of applications reconciling into it. The in-cluster
+        destination is always present, so an empty fleet still answers one cluster, and
+        no cluster credential can appear — the projected type physically has no config
+        field.
+
+        It is TENANT-SCOPED and reads the SAME App CRs the applications list reads: a
+        platform SuperAdmin counts the whole fleet, a validated org member counts only
+        its own org's applications, anyone else is refused.
       operationId: get_v1_deploy_clusters
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/argoClusterList'
+          description: ok
+      summary: 'ListDeployClusters returns the argocd ClusterList of the destinations
+        the caller''s applications reconcile into: one entry per distinct destination
+        server, carrying the count of applications reconciling into it.'
       tags:
       - deploy
   /v1/deploy/gitops:
     get:
+      description: |-
+        GetDeployGitOps lists every Hanzo CD Application in the cluster: the git source
+        each one polls, the commit it last APPLIED, how its last sync operation ended,
+        and its recent deploy history — newest deploy first, ordered by namespace then
+        name.
+
+        This is the layer ABOVE the application board, and the two disagree in exactly
+        the case an operator most needs to see: main carries a new image pin, CD has
+        not applied that commit yet, so every App CR still declares the old tag and the
+        application board is legitimately "Synced" while the deploy has not landed.
+        Only the applied revision here can show that.
+
+        installed is false — with a reason and an empty list — when the CD CRD is not
+        served in this cluster. That is a FACT about the cluster rather than a failure
+        of the request, so the caller can say "no CD plane here" instead of rendering
+        an error it cannot act on; a genuine transport or RBAC failure still errors.
+
+        Read-only, and platform SuperAdmin only: the CD plane is fleet infrastructure
+        with no tenant dimension. This view observes CD and never drives it — the sync
+        policy is automated with self-heal, and the actionable verb an operator has is
+        the per-application reconcile at POST /v1/deploy/applications/{name}/sync.
       operationId: get_v1_deploy_gitops
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GitOpsPlane'
+          description: ok
+      summary: 'GetDeployGitOps lists every Hanzo CD Application in the cluster: the
+        git source each one polls, the commit it last APPLIED, how its last sync operation
+        ended, and its recent deploy history — newest deploy first, ordered by namespace
+        then name.'
       tags:
       - deploy
   /v1/deploy/health:
@@ -24677,7 +25398,28 @@ paths:
       - deploy
   /v1/deploy/projects:
     get:
+      description: |-
+        ListDeployProjects returns the argocd AppProjectList this console groups and
+        filters applications by. Projects are owned by Hanzo IAM rather than by argocd,
+        so they are REFLECTED read-only from the IAM project store and nothing is
+        persisted here: a validated org member gets its own organization's projects and
+        a platform SuperAdmin gets every organization's.
+
+        A SuperAdmin whose IAM store is not reachable falls back to the real
+        argoproj.io AppProject CRs when that CRD is served, and otherwise to one
+        permissive synthesized project per distinct project name the App CRs declare.
+        A project named "default" is always present, because that is what an App CR
+        carrying no project label projects to.
       operationId: get_v1_deploy_projects
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/argoProjectList'
+          description: ok
+      summary: ListDeployProjects returns the argocd AppProjectList this console groups
+        and filters applications by.
       tags:
       - deploy
   /v1/deploy/reconcile:
@@ -24687,12 +25429,56 @@ paths:
       - deploy
   /v1/deploy/session/userinfo:
     get:
+      description: |-
+        GetDeploySession answers "is this browser signed in, and if not where does it
+        sign in?" — the dashboard SPA's bootstrap question, and the only route on this
+        plane that answers for an anonymous caller.
+
+        The anonymous answer carries loggedIn:false and a URL and NOTHING else: no
+        username, no org, no groups, no issuer, no hint about who the caller might be or
+        what exists in the cluster. Answering it costs nothing (the caller already knows
+        whether it holds a cookie) and withholding it costs the whole sign-in journey.
+
+        The predicate is the platform SuperAdmin fact — the SAME one every other route
+        here gates on, minted from a validated principal whose org is the reserved admin
+        org — so a validated-but-not-SuperAdmin caller is reported as NOT signed in,
+        which is the truth as this console defines it: they cannot use it.
       operationId: get_v1_deploy_session_userinfo
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/sessionUser'
+          description: ok
+      summary: GetDeploySession answers "is this browser signed in, and if not where
+        does it sign in?" — the dashboard SPA's bootstrap question, and the only route
+        on this plane that answers for an anonymous caller.
       tags:
       - deploy
   /v1/deploy/settings:
     get:
+      description: |-
+        GetDeploySettings returns the argocd AuthSettings object the dashboard SPA
+        awaits before its first render.
+
+        Every value is a CONSTANT of this projection rather than configuration read
+        from anywhere: the SPA's own login form is reported disabled and its OIDC
+        config null because Hanzo IAM owns identity at the edge and this console's
+        sign-in is GET /v1/deploy/login, and every argocd feature the projection does
+        not implement — status badges, Dex connectors, config-management plugins,
+        kustomize versions, the exec terminal, apps-in-any-namespace, the hydrator,
+        sync-with-replace — is reported off. Platform SuperAdmin only.
       operationId: get_v1_deploy_settings
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/consoleSettings'
+          description: ok
+      summary: GetDeploySettings returns the argocd AuthSettings object the dashboard
+        SPA awaits before its first render.
       tags:
       - deploy
   /v1/deploy/stream/applications:
@@ -24713,7 +25499,23 @@ paths:
       - deploy
   /v1/deploy/version:
     get:
+      description: |-
+        GetDeployVersion returns the argocd VersionMessage the dashboard SPA reads at
+        bootstrap. There is no argocd binary behind this plane — it is a projection
+        over operator App CRs — so the fields say so rather than describing a build:
+        Version names the projection, BuildDate is the moment this response was
+        generated, and Compiler/Platform/GoVersion are the constants the SPA tolerates
+        rather than facts about this process. Platform SuperAdmin only.
       operationId: get_v1_deploy_version
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/versionMessage'
+          description: ok
+      summary: GetDeployVersion returns the argocd VersionMessage the dashboard SPA
+        reads at bootstrap.
       tags:
       - deploy
   /v1/destinations:
