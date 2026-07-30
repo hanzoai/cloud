@@ -623,6 +623,21 @@ func (in AuthInput) amount() money.Amount {
 // int64 wire fields are reconstructed (micros preferred, then cents) so a
 // legacy Usage without a typed Amount still debits. The result is zero when no
 // amount is set, which Record treats as "skip".
+// Money is the debit this Usage carries, as the one exact value — resolving the
+// precedence the type documents: the typed Amount when set, else micro-USD, else
+// whole cents.
+//
+// It is EXPORTED because "is there anything to bill here?" is the same question
+// wherever it is asked, and asking it any other way gets a different answer. The
+// resource meter asked it as `AmountCents <= 0 && AmountMicros <= 0` and so
+// dropped, silently and before Record ever saw it, every usage priced only as a
+// typed Amount — which is exactly the shape a per-token 18-dp caller sends. Money
+// billed nobody and appeared nowhere: not an error, not a log, no row.
+//
+// One question, one answer, one place. A caller that needs the value and a caller
+// that only needs to know whether there IS one both read this.
+func (u Usage) Money() money.Amount { return u.amountMoney() }
+
 func (u Usage) amountMoney() money.Amount {
 	if !u.Amount.IsZero() {
 		return u.Amount
