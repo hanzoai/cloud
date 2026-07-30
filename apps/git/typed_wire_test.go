@@ -185,3 +185,64 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 		}
 	}
 }
+
+// cliNameCollisions is the CLOSED list of CLI command names that MORE THAN ONE of
+// git's typed ops derives — the fourth projection's version of the partition
+// above, and a live defect rather than a design choice.
+//
+// A typed op is one value with four projections, and three of them key on the
+// op's own identity: the OpenAPI path, the MCP tool name, the SDK method. The CLI
+// keys on a name zip SPELLS from the route (commandName, zip/cli.go), and that
+// spelling keeps the segments before the first path parameter and after the last
+// one while dropping everything between — so `mirrors` and `subscriptions`, the
+// words that say WHICH thing a DELETE removes, never reach the name. All three
+// DELETEs below land on `repos-delete`, which means two of git's 24 typed ops
+// have no command a caller can reach: the runner has one name and three routes.
+//
+// Neither the wire nor the document is involved — every one of these is served,
+// published and described under its own operationId. It is a projection defect
+// only TYPING can surface, because an untyped route has no command to collide.
+//
+// The fix belongs in commandName (carry the interior static segments), NOT in
+// zip.WithOperationID here, which would make git's operation ids a special case
+// of a general bug (root LLM.md, failure mode 6). Until it lands this pins the
+// damage in BOTH directions: a new collision fails, and a collision that is
+// GONE fails too, so the zip fix retires this list instead of outliving it.
+var cliNameCollisions = map[string][]string{
+	"repos-delete": {
+		"DELETE /v1/git/repos/:name",
+		"DELETE /v1/git/repos/:name/mirrors/:id",
+		"DELETE /v1/git/repos/:name/subscriptions/:id",
+	},
+}
+
+// TestCLINamesCollideExactlyWhereKnown holds the CLI projection to the list above.
+func TestCLINamesCollideExactlyWhereKnown(t *testing.T) {
+	byName := map[string][]string{}
+	for _, c := range mountApp(t).Commands() {
+		byName[c.Name] = append(byName[c.Name], c.Method+" "+c.Path)
+	}
+	for name, routes := range byName {
+		if len(routes) < 2 {
+			continue
+		}
+		sort.Strings(routes)
+		want, known := cliNameCollisions[name]
+		if !known {
+			t.Errorf("NEW CLI name collision: %d typed ops derive the command %q (%s).\n"+
+				"All but one are unreachable from the CLI. Either the route spelling changed or a "+
+				"route was added under an existing parameter; do not paper over it with "+
+				"zip.WithOperationID.", len(routes), name, strings.Join(routes, ", "))
+			continue
+		}
+		if strings.Join(routes, ", ") != strings.Join(want, ", ") {
+			t.Errorf("CLI name %q now collides over %v, the list says %v", name, routes, want)
+		}
+	}
+	for name := range cliNameCollisions {
+		if len(byName[name]) < 2 {
+			t.Errorf("cliNameCollisions still names %q, which no longer collides — the zip fix "+
+				"landed: delete the entry (and the class note in apps/git/LLM.md)", name)
+		}
+	}
+}
