@@ -291,19 +291,6 @@
             "example": "flow_1"
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "id": "flow_1"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/flowRef"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
@@ -338,19 +325,6 @@
             "example": "flow_1"
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "id": "flow_1"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/flowRef"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
@@ -403,19 +377,6 @@
             "example": "flow_1"
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "id": "flow_1"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/flowRef"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "201": {
             "content": {
@@ -795,12 +756,7 @@
           "id": {
             "type": "string"
           },
-          "metadata": {
-            "items": {
-              "type": "integer"
-            },
-            "type": "array"
-          },
+          "metadata": {},
           "projectId": {
             "description": "projectId == org (server-derived)",
             "type": "string"
@@ -1026,15 +982,6 @@
         },
         "type": "object"
       },
-      "flowRef": {
-        "properties": {
-          "id": {
-            "description": "ID is the flow to act on, from the path.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "patchFlowIn": {
         "properties": {
           "externalId": {
@@ -1050,11 +997,7 @@
             "type": "string"
           },
           "metadata": {
-            "description": "Metadata replaces the caller's opaque JSON.",
-            "items": {
-              "type": "integer"
-            },
-            "type": "array"
+            "description": "Metadata replaces the caller's opaque JSON."
           },
           "publishedVersionId": {
             "description": "PublishedVersionID pins the version runs execute. It must name a version OF\nTHIS FLOW; empty clears the pin, so runs take the latest version again.",
@@ -1082,11 +1025,7 @@
             "type": "string"
           },
           "metadata": {
-            "description": "Metadata is the caller's opaque JSON, stored and returned verbatim.",
-            "items": {
-              "type": "integer"
-            },
-            "type": "array"
+            "description": "Metadata is the caller's opaque JSON, stored and returned verbatim."
           },
           "projectId": {
             "description": "Org is the owning org, which this surface names projectId. Server-derived from\nthe validated principal — never read from a request.",

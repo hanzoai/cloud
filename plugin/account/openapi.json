@@ -31,7 +31,7 @@
     "/v1/commerce/topup/rails": {
       "get": {
         "operationId": "get_v1_commerce_topup_rails",
-        "summary": "TopupRails lists the accepted (chain, token, treasury) triples, so a browser can\nrender \"send USDC here\" without the addresses being baked into its bundle.\n\nThis exists because the console previously gated its top-up UI on\nNEXT_PUBLIC_HANZO_HUSD_ADDRESS/_TREASURY — build-time constants.",
+        "summary": "TopupRails lists the accepted (chain, token, treasury) triples, so a browser can render \"send USDC here\" without the addresses being baked into its bundle.",
         "description": "TopupRails lists the accepted (chain, token, treasury) triples, so a browser can\nrender \"send USDC here\" without the addresses being baked into its bundle.\n\nThis exists because the console previously gated its top-up UI on\nNEXT_PUBLIC_HANZO_HUSD_ADDRESS/_TREASURY — build-time constants. Enabling a rail\ntherefore meant rebuilding and redeploying the frontend, and with them unset the\nUI reported \"not available yet\" no matter what the server could actually accept.\nServing the set at runtime keeps ONE source of truth (the server's config) and\nlets a rail be switched on without shipping a bundle.\n\nEverything here is public on-chain data; no secret is exposed, and the set is\nempty on a deployment that accepts no crypto rail.",
         "tags": [
           "commerce"
@@ -53,7 +53,7 @@
     "/v1/commerce/topup/wallet": {
       "post": {
         "operationId": "post_v1_commerce_topup_wallet",
-        "summary": "WalletTopup credits the caller's org for a stablecoin transfer they already sent\nto the treasury.",
+        "summary": "WalletTopup credits the caller's org for a stablecoin transfer they already sent to the treasury.",
         "description": "WalletTopup credits the caller's org for a stablecoin transfer they already sent\nto the treasury. It reads the receipt from that rail's chain, confirms a mined,\nsuccessful ERC-20 Transfer to the rail's treasury, derives USD cents from the\non-chain value using the token's own decimals, records the credit, and returns\nthe amount plus the new balance.\n\nThe credited amount is the ON-CHAIN value, never a number the caller sends, and\nthe credit lands on the caller's own validated org — there is no way to name a\nthird-party subject. Nothing is credited that the chain did not confirm: a\nmissing, failed or non-matching transaction is refused, and a deployment with no\npayment rail enabled says so rather than inventing a credit.",
         "tags": [
           "commerce"
@@ -89,7 +89,7 @@
     "/v1/csrf": {
       "get": {
         "operationId": "get_v1_csrf",
-        "summary": "IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on\nevery money write (mint/revoke a key, top up, onboard, and the billing/commerce\nwrite verbs).",
+        "summary": "IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on every money write (mint/revoke a key, top up, onboard, and the billing/commerce write verbs).",
         "description": "IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on\nevery money write (mint/revoke a key, top up, onboard, and the billing/commerce\nwrite verbs). The token is bound to the caller's validated identity and expires,\nso one minted for one identity cannot authorize a write as another.\n\nIt is answered no-store, so it is never cached by a shared proxy. This is the\nsame-origin endpoint the embedded console reads — the Same-Origin Policy is what\nstops a cross-site page from reading the response and forging a write.",
         "tags": [
           "csrf"
@@ -111,7 +111,7 @@
     "/v1/embed-status": {
       "get": {
         "operationId": "get_v1_embed-status",
-        "summary": "EmbedStatus reports whether one of this brand's shared embedded apps (cms, erp,\nhelp) may be framed by the caller and is actually running, so a console module\ncan choose between the embed and the provision panel.\n\nIt answers two questions the browser cannot answer for itself.",
+        "summary": "EmbedStatus reports whether one of this brand's shared embedded apps (cms, erp, help) may be framed by the caller and is actually running, so a console module can choose between the embed and the provision panel.",
         "description": "EmbedStatus reports whether one of this brand's shared embedded apps (cms, erp,\nhelp) may be framed by the caller and is actually running, so a console module\ncan choose between the embed and the provision panel.\n\nIt answers two questions the browser cannot answer for itself. ENTITLEMENT is\nserver-authoritative: each app is a single shared per-BRAND instance, so only a\nmember of the owning brand org — or a SuperAdmin — is given the embed URL; every\nother caller gets phase \"not-entitled\" and no URL. REACHABILITY is a probe of\nthat origin, which a cross-origin page cannot read for itself.\n\nThe probed host is always \u003capp\u003e.\u003cthis deployment's own brand domain\u003e: no part of\nit comes from the request, so this can never be steered into probing an\narbitrary origin.",
         "tags": [
           "embed-status"
@@ -177,7 +177,7 @@
       },
       "get": {
         "operationId": "get_v1_iam_keys",
-        "summary": "GetKey returns the caller's own API keys — every type they hold, read\nAUTHORITATIVELY from IAM rather than from the session claim, which lags a key\nminted moments ago.",
+        "summary": "GetKey returns the caller's own API keys — every type they hold, read AUTHORITATIVELY from IAM rather than from the session claim, which lags a key minted moments ago.",
         "description": "GetKey returns the caller's own API keys — every type they hold, read\nAUTHORITATIVELY from IAM rather than from the session claim, which lags a key\nminted moments ago. No secret material comes back: a secret key is represented\nby its prefix, and only a publishable key (public by construction) carries its\nfull value.\n\nA transient IAM read failure reports an empty set rather than a 5xx, so the\npage shows the honest empty state and never a fabricated key.",
         "tags": [
           "iam"
@@ -197,7 +197,7 @@
       },
       "post": {
         "operationId": "post_v1_iam_keys",
-        "summary": "MintKey creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE.",
+        "summary": "MintKey creates — or rotates — the caller's API key of the requested type and returns it ONCE.",
         "description": "MintKey creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE. A real IAM failure surfaces as 502, never a fabricated key.\n\nRotating is what creating means here: a user holds one key per type, so the\nendpoint is idempotent by (caller, type) and the superseded credential stops\nworking. Two live secrets for one user would make \"revoke my key\" a lie.",
         "tags": [
           "iam"
@@ -299,7 +299,7 @@
       },
       "get": {
         "operationId": "get_v1_keys",
-        "summary": "GetKey returns the caller's own API keys — every type they hold, read\nAUTHORITATIVELY from IAM rather than from the session claim, which lags a key\nminted moments ago.",
+        "summary": "GetKey returns the caller's own API keys — every type they hold, read AUTHORITATIVELY from IAM rather than from the session claim, which lags a key minted moments ago.",
         "description": "GetKey returns the caller's own API keys — every type they hold, read\nAUTHORITATIVELY from IAM rather than from the session claim, which lags a key\nminted moments ago. No secret material comes back: a secret key is represented\nby its prefix, and only a publishable key (public by construction) carries its\nfull value.\n\nA transient IAM read failure reports an empty set rather than a 5xx, so the\npage shows the honest empty state and never a fabricated key.",
         "tags": [
           "keys"
@@ -319,7 +319,7 @@
       },
       "post": {
         "operationId": "post_v1_keys",
-        "summary": "MintKey creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE.",
+        "summary": "MintKey creates — or rotates — the caller's API key of the requested type and returns it ONCE.",
         "description": "MintKey creates — or rotates — the caller's API key of the requested type and\nreturns it ONCE. A real IAM failure surfaces as 502, never a fabricated key.\n\nRotating is what creating means here: a user holds one key per type, so the\nendpoint is idempotent by (caller, type) and the superseded credential stops\nworking. Two live secrets for one user would make \"revoke my key\" a lie.",
         "tags": [
           "keys"
