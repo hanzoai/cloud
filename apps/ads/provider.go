@@ -4,7 +4,7 @@ package ads
 // connector plane. An ad campaign runs on a provider (Meta/Google/…) using the
 // ORG'S OWN connector token — resolved at call time from KMS through the
 // integrations.TokenFor custody seam, never held in this process, never in a
-// manifest. This closes the gap the ads store left open: a stored Campaign is now
+// manifest. This closes the gap the ads store left open: a stored AdCampaign is now
 // LAUNCHABLE against the real provider, and it is what the /v1/campaign paid
 // channel fans out to (apps/wire_seams.go adapts LaunchPaid/PaidSpend/PausePaid
 // onto campaign.Channel).

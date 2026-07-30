@@ -113,7 +113,7 @@ func (s *store) Close() error { return s.db.Close() }
 
 // ── accounts ─────────────────────────────────────────────────────────────────
 
-func (s *store) createAccount(ctx context.Context, a *Account) error {
+func (s *store) createAccount(ctx context.Context, a *WalletAccount) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO accounts (id, org, name, created_at) VALUES (?,?,?,?)`,
 		a.ID, a.Org, a.Name, a.CreatedAt)
@@ -124,8 +124,8 @@ func (s *store) createAccount(ctx context.Context, a *Account) error {
 }
 
 // getAccount fetches an org's account by id. found=false for another org's id.
-func (s *store) getAccount(ctx context.Context, org, id string) (*Account, bool, error) {
-	var a Account
+func (s *store) getAccount(ctx context.Context, org, id string) (*WalletAccount, bool, error) {
+	var a WalletAccount
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, org, name, created_at FROM accounts WHERE id=? AND org=?`, id, org).
 		Scan(&a.ID, &a.Org, &a.Name, &a.CreatedAt)
@@ -138,16 +138,16 @@ func (s *store) getAccount(ctx context.Context, org, id string) (*Account, bool,
 	return &a, true, nil
 }
 
-func (s *store) listAccounts(ctx context.Context, org string) ([]Account, error) {
+func (s *store) listAccounts(ctx context.Context, org string) ([]WalletAccount, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, org, name, created_at FROM accounts WHERE org=? ORDER BY created_at DESC, id DESC`, org)
 	if err != nil {
 		return nil, fmt.Errorf("list accounts: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	out := []Account{}
+	out := []WalletAccount{}
 	for rows.Next() {
-		var a Account
+		var a WalletAccount
 		if err := rows.Scan(&a.ID, &a.Org, &a.Name, &a.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan account: %w", err)
 		}

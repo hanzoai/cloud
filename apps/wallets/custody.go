@@ -86,8 +86,8 @@ var allTiers = map[Tier]bool{
 // validTier reports whether t is one of the 9 mirrored tiers.
 func validTier(t Tier) bool { return allTiers[t] }
 
-// Account is a named grouping of wallets owned by exactly one org.
-type Account struct {
+// WalletAccount is a named grouping of wallets owned by exactly one org.
+type WalletAccount struct {
 	ID        string `json:"id"`
 	Org       string `json:"org"`
 	Name      string `json:"name"`
