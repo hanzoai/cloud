@@ -138,7 +138,7 @@ func TestStreamIsStillReachable(t *testing.T) {
 var untypedByDesign = map[string]string{
 	"GET /v1/world/stream": "Server-Sent Events. A typed op returns ONE value that zip marshals and " +
 		"writes as the whole response; this route holds the connection open writing frame after frame " +
-		"through c.SendStreamWriter (stream.go) until the client goes away, bounded only by a 25s " +
+		"through c.SendStreamWriter (stream.go:151) until the client goes away, bounded only by a 25s " +
 		"heartbeat. There is no Out that can express a stream.",
 }
 
@@ -199,6 +199,33 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	if got, want := len(typed)+len(untypedByDesign), len(served); got != want {
 		t.Errorf("typed(%d) + named(%d) = %d, served = %d — the ledgers must partition the surface",
 			len(typed), len(untypedByDesign), got, want)
+	}
+}
+
+// TestEveryRefusalCarriesProseInTheDocument holds the REFUSED half of the surface to
+// the same prose bar as the typed half. A pin in untypedByDesign explains a refusal to
+// a maintainer reading this test — it puts nothing in the document, so without a
+// declaration the operation publishes an operationId and NOTHING else, and every SDK
+// generated off the document offers a call it cannot explain. openapi.Describe
+// (stream.go's init) is that declaration; this gate is what keeps the next pinned
+// refusal from shipping bare.
+func TestEveryRefusalCarriesProseInTheDocument(t *testing.T) {
+	app := mountWorldOnly(t)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "world", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	for key := range untypedByDesign {
+		method, path, _ := strings.Cut(key, " ")
+		op := doc.Paths[path][strings.ToLower(method)]
+		if op == nil {
+			t.Errorf("%s is pinned but not in the document", key)
+			continue
+		}
+		if strings.TrimSpace(op.Summary) == "" && strings.TrimSpace(op.Description) == "" {
+			t.Errorf("%s has neither summary nor description — a refusal owes the document its "+
+				"prose. Declare it with openapi.Describe next to the wire fact that keeps it untyped.", key)
+		}
 	}
 }
 
