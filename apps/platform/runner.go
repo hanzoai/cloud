@@ -245,19 +245,30 @@ func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
 	req.Image = strings.TrimSpace(req.Image)
 
 	// Release self-publishes ghcr.io/hanzoai/cloud (compute version → build → smoke
-	// → tag → notify). It is a PLATFORM operation, so it takes the platform-sudo
-	// predicate — principal.IsSuperAdmin, the same one every other privileged
-	// surface reads — or the machine token CI runs under. An org admin can build;
-	// only a SuperAdmin or the fabric itself can cut a release.
+	// → tag → notify). It is the most privileged operation this surface has, so
+	// IAM DECIDES IT AND NOTHING ELSE DOES: principal.IsSuperAdmin, the same
+	// predicate every other privileged surface reads.
 	//
-	// It previously demanded the machine token ALONE, which put a second auth
-	// system beside IAM: a SuperAdmin identity, which by definition may do
-	// anything, was refused a release while being trusted with KMS and every
-	// tenant's data. IAM decides permission; a token is a transport, not an
-	// authority.
+	// The shared build-callback token no longer authorizes it. That token is a
+	// second auth system standing beside IAM — a bearer secret with no identity
+	// behind it, no expiry, no membership, and nothing to revoke but a rotation
+	// that restarts every holder. It can still ENQUEUE an ordinary build (above),
+	// which is what git-push-to-deploy needs and what it was built for; it can no
+	// longer cut the release that publishes the image the fleet runs.
+	//
+	// This is a NARROWING, and it is the reason CI cannot self-release today. A
+	// robot SHOULD be able to: the way is an IAM identity, not a shared secret —
+	// an application principal holding authz.CapRelease, which is IAM stating that
+	// THIS named app may release, revocable by name and attributable in the audit
+	// log. Provisioning that app is the follow-on; until it exists a release is a
+	// SuperAdmin's to cut, and a SuperAdmin is a human PROVISIONED in the reserved
+	// org (never a brand-org user promoted into it).
 	if req.Release {
-		if !viaToken && !principal.IsSuperAdmin(c) {
-			return zip.ErrForbidden("release builds require a SuperAdmin identity or the platform build token")
+		if viaToken && !principal.IsSuperAdmin(c) {
+			return zip.ErrForbidden("the platform build token may enqueue a build but may not cut a release; IAM is the only authority for it")
+		}
+		if !principal.IsSuperAdmin(c) {
+			return zip.ErrForbidden("cutting a release requires a SuperAdmin identity; IAM is the only authority for it")
 		}
 		return startRelease(s, c, req)
 	}
