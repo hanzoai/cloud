@@ -350,3 +350,34 @@ func TestRunnerBuild_Launches(t *testing.T) {
 		t.Fatalf("unexpected resp: %+v", resp)
 	}
 }
+
+// THE SHARED TOKEN MAY ENQUEUE A BUILD; IT MAY NOT CUT A RELEASE.
+//
+// PLATFORM_BUILD_CALLBACK_TOKEN is a bearer secret with no identity behind it: no
+// membership, no expiry, nothing to revoke but a rotation that restarts every
+// holder, and nothing in an audit log but "the token". It is a second auth system
+// standing beside IAM.
+//
+// It stays for the ordinary build path, because git-push-to-deploy runs on it and
+// removing a credential before its replacement exists breaks that. It is refused
+// for the RELEASE — the operation that publishes the image the whole fleet runs —
+// because that decision belongs to IAM and to nothing else.
+func TestRunnerRelease_SharedTokenCannotRelease(t *testing.T) {
+	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "s3kr3t-fabric-token")
+	app := runnerApp(t)
+
+	// The same credential, on the same endpoint, twice — only the `release` flag
+	// differs, so the flag is provably what the gate turns on.
+	enqueue, body := postRunner(t, app, "s3kr3t-fabric-token", map[string]any{
+		"repo": "https://github.com/hanzoai/cloud", "image": "ghcr.io/hanzoai/cloud:v1"})
+	if enqueue == http.StatusForbidden {
+		t.Fatalf("the fabric token lost the ordinary build path it exists for: %d (%s)", enqueue, body)
+	}
+
+	release, body := postRunner(t, app, "s3kr3t-fabric-token", map[string]any{
+		"repo": "https://github.com/hanzoai/cloud", "release": true,
+		"image": "ghcr.io/hanzoai/cloud:v1"})
+	if release != http.StatusForbidden {
+		t.Fatalf("a shared secret cut a release: %d (%s) — IAM is the only authority for it", release, body)
+	}
+}
