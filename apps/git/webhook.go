@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -45,6 +46,53 @@ const (
 	// bytes we act on).
 	gitMaxWebhookBody = 8 << 20 // 8 MiB
 )
+
+// "Cannot be a typed op" is not "must be undocumented". Every route in git's
+// untypedByDesign list (typed_wire_test.go) published an operationId, tags and
+// NOTHING ELSE, which no consumer of the document can tell apart from a route
+// that takes no body — so every generated SDK offered a forge webhook with
+// nowhere to put the delivery, and three ZAP procedures with nowhere to put the
+// repo name. openapi.Register states the request each one really reads, keyed by
+// the router's own pattern, without touching the route: pure DESCRIPTION, no
+// status, field or byte moves, and the reasons those routes stay raw are
+// untouched by it.
+//
+// What is declared, and what is deliberately not:
+//
+//   - the webhook reads a forge push envelope and answers 204 on every success
+//     path (c.NoContent throughout), so its request is pushEvent and it has no
+//     response body to state.
+//   - the two pack POSTs read an application/x-git-*-request pack stream:
+//     openapi.Binary, the same declaration a receipt upload gets. Their root-host
+//     twins are separate router patterns and are declared separately.
+//   - createRepo/getRepo/deleteRepo bind zapProcReq; listRepos and usage read NO
+//     body at all (zap.go), so declaring one for them would be a fresh falsehood
+//     in place of the silence.
+//   - no RESPONSE is declared for the ZAP five. Their envelope is real
+//     ({status, msg, data}) but its data is repoView / []repoView / usageView,
+//     names zip's typed fold ALREADY publishes as components off the /v1 ops —
+//     so reflecting them here a second time would put two derivations behind one
+//     schema name, which is the collision openapi.Weave exists to refuse. One
+//     name, one shape, one generator: the envelope waits until the two seams
+//     agree on who owns a shared view type.
+//   - the pack responses and the twelve HTML pages have no declaration to make:
+//     openapi.Binary is request-only by design, and a text/html response is the
+//     second half it deliberately does not invent.
+//
+// init, not routes(): Register panics on a duplicate declaration and routes()
+// runs once per Mount.
+func init() {
+	openapi.Register("/v1/git/webhook", "POST", pushEvent{}, nil)
+
+	openapi.Register("/v1/git/zap/createRepo", "POST", zapProcReq{}, nil)
+	openapi.Register("/v1/git/zap/getRepo", "POST", zapProcReq{}, nil)
+	openapi.Register("/v1/git/zap/deleteRepo", "POST", zapProcReq{}, nil)
+
+	openapi.Register("/v1/git/:org/:repo/git-upload-pack", "POST", openapi.Binary{}, nil)
+	openapi.Register("/v1/git/:org/:repo/git-receive-pack", "POST", openapi.Binary{}, nil)
+	openapi.Register("/:org/:repo/git-upload-pack", "POST", openapi.Binary{}, nil)
+	openapi.Register("/:org/:repo/git-receive-pack", "POST", openapi.Binary{}, nil)
+}
 
 // pushEvent is the subset of the forge's push payload we act on. Owner and pusher
 // each accept both spellings the payload has carried across versions (login vs
