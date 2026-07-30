@@ -980,6 +980,24 @@ zip is getting multi-status `responses`, and these convert when it lands.
    published two paths nobody serves (`/v1/websearch/scrape`,
    `/v1/websearch/v1/scrape`) and omitted the one that is — caught only because an
    unrelated ingress change ran the gate. Run it before you push, not after.
+   **Two more instances are live on main right now**, both found the same way (an
+   unrelated o11y change ran the gate), and one is the ingress shape exactly:
+   `plugin/authz/openapi.json` publishes `GET|POST|DELETE /v1/authz/policies`,
+   but the pinned `hanzoai/authz v1.10.15`'s `serve.Mount` registers only
+   `/v1/authz/{health,readyz,check}` — three operations no binary serves, in
+   `openapi.yaml`, in every generated SDK, in the MCP tool list, and with
+   `manifest/apps.go:38` still routing that prefix to a plugin that 404s it. The
+   other is `plugin/tools/openapi.json`, whose committed copy tags `/v1/mcp*`,
+   `/v1/plugins*` and `/v1/skills*` as `tools` and escapes the info block's em dash,
+   where the current generator derives four tags and writes it literal — a golden
+   emitted by an older generator, i.e. failure mode 2 one artifact over. NOT fixed
+   here, because regenerating another package's subset inside an unrelated change is
+   how a concurrent agent's work gets clobbered; whoever owns authz/tools next runs
+   `make openapi` and commits both. Verify the authz half yourself, it is one
+   command:
+
+       grep -rE '\.(Get|Post|Put|Delete)\("' \
+         "$(go env GOMODCACHE)/github.com/hanzoai/authz@v1.10.15/serve/"
 2. **The stale-tree pin walk-back.** `bb10586e` reverted commerce v1.49.30→29 and
    zip v1.18.1→v1.17.6 in a single-parent commit: `go get`/`go mod tidy` run in a
    tree that predated the bump, committed wholesale. It is MECHANICAL, so it will
@@ -1161,7 +1179,8 @@ the two this file used to carry were each half-right and disagreed by 83 routes:
 
     for d in apps/*/; do a=$(basename $d); \
       u=$(grep -rn --include='*.go' -E '\.(Get|Post|Put|Patch|Delete|All)\("(/|")' $d \
-          | grep -v _test.go | grep -v 'zip\.' | grep -vcE ':[0-9]+:[[:space:]]*//'); \
+          | grep -v _test.go | grep -vE '(^|[^.[:alnum:]])zip\.(Get|Post|Put|Patch|Delete)\(' \
+          | grep -vcE ':[0-9]+:[[:space:]]*//'); \
       t=$(grep -rn --include='*.go' -E 'zip\.(Get|Post|Put|Patch|Delete)[[(]' $d | grep -vc _test.go); \
       [ "$u" -gt 0 ] && printf '%s %s %s\n' "$a" "$u" "$t"; done | sort -k2 -rn
 
@@ -1184,8 +1203,33 @@ file until now, in opposite directions:
   `apps/destinations`. So the anchor is a path — `("/` **or** `("" ` — and the
   `//` filter is not optional either: 11 of the empty-leaf hits are comment lines
   quoting the form.
+- **`grep -v 'zip\.'` is a LINE filter standing in for a syntactic one**, and it
+  is the third mistake — the one that makes the table skip packages entirely. The
+  discriminator wanted is the RECEIVER of the call (`zip.Get(` = typed, package-
+  qualified generic; `<router>.Get(` = untyped, method on a router), but dropping
+  every line that merely CONTAINS `zip.` also drops untyped registrations whose
+  handler argument names the package on the same line — an inline
+  `func(c *zip.Ctx) error`, or `zip.AdaptNetHTTP(`. Anchor it on the call:
 
-Corrected, `apps/` holds **666** untyped route registrations. The number to trust
+      grep -vE '(^|[^.[:alnum:]])zip\.(Get|Post|Put|Patch|Delete)\('
+
+  Measured across `apps/` at this merge: **660 by the documented command, 675
+  anchored — 15 hidden routes in 9 packages** (base +2, plan +3, product +4,
+  commerce/dataroom/esign/o11y/bot/websearch +1 each). Two of those read **ZERO**
+  and are not zero: `apps/plan` serves 3 (`/health`, `/resolve/:id`,
+  `/entitlements/:id`, plan.go:77-109) and `apps/product` serves 4
+  (`/v1/search-docs/{indexes,stats}`, `/v1/vector/{collections,stats}`,
+  product.go:80-141) — every registration an inline `func(c *zip.Ctx) error`, so
+  the filter eats all of them and the partition table has never dispatched either
+  package. This is the SAME failure the two bullets above describe, in the
+  direction that costs more: a phantom sends an agent at nothing, a hidden route
+  means nobody is ever sent. o11y's own 7-vs-8 was the tell (`a.All("/v1/sentry/*",
+  zip.AdaptNetHTTP(…`, o11y.go:231) — one route short of the 8 its conversion
+  recorded, which is how this was found.
+
+Corrected, `apps/` holds **675** untyped route registrations (660 under the
+un-anchored filter above; re-run both, a difference between them IS the list of
+hidden routes). The number to trust
 it against is `integrations`, whose 19 the corrected measure reproduces exactly
 and independently — the count its own conversion recorded as refusals.
 
@@ -1210,10 +1254,14 @@ branch point and the merge; that is the rate.)
     # untyped: a METHOD call on a router/group value. Same path anchor as the
     # per-app measure above — verb PLUS path, or it counts hdr.Get("…") too.
     grep -rEn '\.(Get|Post|Put|Patch|Delete|All)\("(/|")' --include='*.go' . \
-      | grep -v _test | grep -v 'zip\.' | grep -vE ':[0-9]+:[[:space:]]*//' # ~900, ~95 pkgs
+      | grep -v _test | grep -vE '(^|[^.[:alnum:]])zip\.(Get|Post|Put|Patch|Delete)\(' \
+      | grep -vE ':[0-9]+:[[:space:]]*//'                             # ~900, ~95 pkgs
 
 The discriminator is `zip.X(` (package-qualified generic) versus `<receiver>.X(`
-(method on `*zip.App`/Router) — NOT the presence of square brackets. The
+(method on `*zip.App`/Router) — NOT the presence of square brackets, and NOT the
+presence of `zip.` anywhere on the line, which also eats an untyped route whose
+handler is an inline `func(c *zip.Ctx) error` (15 of them, see the third bullet
+under "Partitioning the remaining work"). The
 published document is the honest denominator: `openapi.yaml` carries **1398
 operations across 984 paths, of which 164 have a description.** The other ~1234
 are route only — no MCP tool, no CLI command, no SDK method, no schema, no
