@@ -9020,6 +9020,32 @@ components:
         status:
           type: string
       type: object
+    planEntitlements:
+      properties:
+        entitlements:
+          description: |-
+            Entitlements is the canonical namespaced entitlement block derived from the
+            plan's limits and addons, where -1 means unlimited.
+        id:
+          description: ID is the plan id or slug that was resolved, as it was requested.
+          type: string
+        license_features:
+          description: |-
+            LicenseFeatures is the flat, sorted feature list a signed license carries,
+            derived from the entitlements.
+          items:
+            type: string
+          type: array
+      type: object
+    planHealth:
+      properties:
+        service:
+          description: Service names the subsystem that answered.
+          type: string
+        status:
+          description: Status is "ok" whenever this subsystem is mounted.
+          type: string
+      type: object
     planInfo:
       properties:
         active:
@@ -9044,6 +9070,106 @@ components:
           description: UpgradeURL is where the page sends a caller who wants a bigger
             plan.
           type: string
+      type: object
+    planList:
+      properties:
+        plans:
+          description: |-
+            Plans are the plans in this section, each an opaque object exactly as the
+            @hanzo/plans catalog emits it — typically id, name, description,
+            priceMonthly, category, a feature list, a limits block and a price_ref.
+          items: {}
+          type: array
+      type: object
+    planRegionList:
+      properties:
+        regions:
+          description: |-
+            Regions are the regions cloud capacity is offered in, each an opaque object
+            exactly as the catalog emits it — typically id, name, location and flag.
+          items: {}
+          type: array
+      type: object
+    planResolution:
+      properties:
+        entitlements:
+          description: |-
+            Entitlements is the canonical namespaced entitlement block derived from the
+            plan's limits and addons — keys like "ai.tokens_per_min" and
+            "world.api_rate_limit", where -1 means unlimited.
+        id:
+          description: ID is the plan's catalog id.
+          type: string
+        license_features:
+          description: |-
+            LicenseFeatures is the flat, sorted feature list a signed license carries,
+            derived from the entitlements — "ai.premium", "licensing.product:team".
+          items:
+            type: string
+          type: array
+        price_ref:
+          description: |-
+            PriceRef is the plan's billing reference — currency, the recurring monthly
+            and annual amounts, whether it prices per seat, its Stripe lookup key and
+            its metered components.
+        tenant_id:
+          description: |-
+            TenantID is the catalog the record came from: "hanzo" for the canonical
+            catalog, a reseller org for that reseller's override.
+          type: string
+      type: object
+    planSchemas:
+      properties:
+        entitlements:
+          description: |-
+            Entitlements is entitlements.schema.json — the JSON Schema every
+            entitlement key is declared in, including its type, unit and enum.
+        plan:
+          description: |-
+            Plan is plan.schema.json — the JSON Schema a catalog plan record conforms
+            to.
+      type: object
+    planTierList:
+      properties:
+        tiers:
+          description: |-
+            Tiers are the rentable GPU configurations, each an opaque object exactly as
+            the catalog emits it — typically id, name, GPU count and model, VRAM, vCPUs,
+            host memory and hourly price.
+          items: {}
+          type: array
+      type: object
+    planToolList:
+      properties:
+        tools:
+          description: |-
+            Tools are the metered tools, each an opaque object exactly as the catalog
+            emits it — typically name, billing unit and price.
+          items: {}
+          type: array
+      type: object
+    planVocab:
+      properties:
+        engine_features:
+          description: |-
+            EngineFeatures are the inference-engine capabilities a license can grant:
+            inference, embeddings, rerank, training, vision, audio, tools.
+          items:
+            type: string
+          type: array
+        keys:
+          additionalProperties: {}
+          description: |-
+            Keys maps every entitlement key to its descriptor — key, namespace, JSON
+            type(s), nullability, unit, enum and title, as the schema declares them.
+          type: object
+        namespaces:
+          description: |-
+            Namespaces are the entitlement key namespaces: the prefix before the dot in
+            "ai.tokens_per_min".
+          items:
+            type: string
+          type: array
       type: object
     pluginDeleted:
       properties:
@@ -29717,33 +29843,107 @@ paths:
       - pipelines
   /v1/plans:
     get:
+      description: |-
+        ListCloudPlans returns the Hanzo cloud plan catalog: every cloud tier with its
+        price, included capacity, limits and feature list, scoped to the caller's
+        catalog. A reseller org sees its own overrides in place of the canonical
+        records it has replaced, and the canonical record for every tier it has not.
       operationId: get_v1_plans
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planList'
+          description: ok
+      summary: 'ListCloudPlans returns the Hanzo cloud plan catalog: every cloud tier
+        with its price, included capacity, limits and feature list, scoped to the
+        caller''s catalog.'
       tags:
       - plans
   /v1/plans/blockchain:
     get:
+      description: |-
+        ListBlockchainPlans returns the blockchain RPC plan catalog: the tiers metered
+        in monthly compute units, with their prices, limits and overage terms. It is
+        the canonical catalog for every caller — these plans carry no reseller
+        overrides.
       operationId: get_v1_plans_blockchain
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planList'
+          description: ok
+      summary: 'ListBlockchainPlans returns the blockchain RPC plan catalog: the tiers
+        metered in monthly compute units, with their prices, limits and overage terms.'
       tags:
       - plans
   /v1/plans/cloud:
     get:
+      description: |-
+        ListCloudCapacityPlans returns the cloud plan catalog. It is the same section
+        ListCloudPlans answers and a separate operation because it is a separate
+        address, and an address is what every projection keys on.
       operationId: get_v1_plans_cloud
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planList'
+          description: ok
+      summary: ListCloudCapacityPlans returns the cloud plan catalog.
       tags:
       - plans
   /v1/plans/dns:
     get:
+      description: |-
+        ListDNSPlans returns the DNS plan catalog: the tiers priced on zones, records
+        per zone and queries per day. It is the canonical catalog for every caller —
+        these plans carry no reseller overrides.
       operationId: get_v1_plans_dns
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planList'
+          description: ok
+      summary: 'ListDNSPlans returns the DNS plan catalog: the tiers priced on zones,
+        records per zone and queries per day.'
       tags:
       - plans
   /v1/plans/entitlements/{id}:
     get:
-      operationId: get_v1_plans_entitlements_by_id
+      description: |-
+        GetPlanEntitlements returns what one plan GRANTS and not what it costs: the
+        canonical namespaced entitlement block and the flat license-feature list
+        derived from it. It is the entitlement half of ResolvePlan, over the same
+        catalog and the same 404 for an id no catalog holds — the read a licensing or
+        quota gate makes.
+      operationId: get_v1_plans_entitlements_id
       parameters:
-      - in: path
+      - description: |-
+          ID is the plan's catalog id or slug — "pro", "team", "world-enterprise",
+          "rpc-growth". Both are matched, so a slug resolves the plan it names.
+        example: team
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planEntitlements'
+          description: ok
+      summary: 'GetPlanEntitlements returns what one plan GRANTS and not what it costs:
+        the canonical namespaced entitlement block and the flat license-feature list
+        derived from it.'
       tags:
       - plans
   /v1/plans/entries:
@@ -29778,38 +29978,128 @@ paths:
       - plans
   /v1/plans/gpu:
     get:
+      description: |-
+        ListGPUTiers returns the rentable GPU configurations, each with its accelerator
+        count and model, VRAM, vCPUs, host memory and hourly price.
       operationId: get_v1_plans_gpu
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planTierList'
+          description: ok
+      summary: ListGPUTiers returns the rentable GPU configurations, each with its
+        accelerator count and model, VRAM, vCPUs, host memory and hourly price.
       tags:
       - plans
   /v1/plans/health:
     get:
+      description: |-
+        Health reports that the plans subsystem is mounted and serving. It answers from
+        the process itself and consults neither the catalog bundle nor the goja host,
+        so it stays "ok" while either is degraded.
       operationId: get_v1_plans_health
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                service: plans
+                status: ok
+              schema:
+                $ref: '#/components/schemas/planHealth'
+          description: ok
+      summary: Health reports that the plans subsystem is mounted and serving.
       tags:
       - plans
   /v1/plans/policy:
     get:
+      description: |-
+        GetPricingPolicy returns the published pricing policy: whether pricing is
+        transparent, the revenue-sharing terms (idle compute resale and the open-source
+        share) and the principles the catalog is priced by.
       operationId: get_v1_plans_policy
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties: {}
+                type: object
+          description: ok
+      summary: 'GetPricingPolicy returns the published pricing policy: whether pricing
+        is transparent, the revenue-sharing terms (idle compute resale and the open-source
+        share) and the principles the catalog is priced by.'
       tags:
       - plans
   /v1/plans/regions:
     get:
+      description: |-
+        ListRegions returns the regions cloud capacity is offered in, each with its
+        display name and physical location.
       operationId: get_v1_plans_regions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planRegionList'
+          description: ok
+      summary: ListRegions returns the regions cloud capacity is offered in, each
+        with its display name and physical location.
       tags:
       - plans
   /v1/plans/resolve/{id}:
     get:
-      operationId: get_v1_plans_resolve_by_id
+      description: |-
+        ResolvePlan resolves one plan to everything a consumer of the catalog needs at
+        once: its canonical entitlement block, the flat license-feature list a signed
+        license carries, its billing reference, and the catalog it came from. The id
+        may be the plan's id or its slug, and it is resolved against the caller's
+        catalog, so a reseller's override wins over the canonical record. An id no
+        catalog holds answers 404.
+      operationId: get_v1_plans_resolve_id
       parameters:
-      - in: path
+      - description: |-
+          ID is the plan's catalog id or slug — "pro", "team", "world-enterprise",
+          "rpc-growth". Both are matched, so a slug resolves the plan it names.
+        example: pro
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planResolution'
+          description: ok
+      summary: 'ResolvePlan resolves one plan to everything a consumer of the catalog
+        needs at once: its canonical entitlement block, the flat license-feature list
+        a signed license carries, its billing reference, and the catalog it came from.'
       tags:
       - plans
   /v1/plans/schema:
     get:
+      description: |-
+        GetPlanSchemas returns the two JSON Schema documents this surface speaks:
+        entitlements.schema.json, which declares every entitlement key with its type,
+        unit and enum, and plan.schema.json, which a catalog plan record conforms to.
       operationId: get_v1_plans_schema
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planSchemas'
+          description: ok
+      summary: 'GetPlanSchemas returns the two JSON Schema documents this surface
+        speaks: entitlements.schema.json, which declares every entitlement key with
+        its type, unit and enum, and plan.schema.json, which a catalog plan record
+        conforms to.'
       tags:
       - plans
   /v1/plans/seed:
@@ -29819,22 +30109,78 @@ paths:
       - plans
   /v1/plans/storage:
     get:
+      description: |-
+        GetStoragePricing returns the block-storage price block: the price per GB per
+        month and the volume size bounds a cloud plan may attach.
       operationId: get_v1_plans_storage
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties: {}
+                type: object
+          description: ok
+      summary: 'GetStoragePricing returns the block-storage price block: the price
+        per GB per month and the volume size bounds a cloud plan may attach.'
       tags:
       - plans
   /v1/plans/subscriptions:
     get:
+      description: |-
+        ListSubscriptionPlans returns the subscription ladder — the personal and team
+        tiers a customer buys to use the cloud, each with its monthly and annual price,
+        seat rules, limits and billing reference. Scoped to the caller's catalog.
       operationId: get_v1_plans_subscriptions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planList'
+          description: ok
+      summary: ListSubscriptionPlans returns the subscription ladder — the personal
+        and team tiers a customer buys to use the cloud, each with its monthly and
+        annual price, seat rules, limits and billing reference.
       tags:
       - plans
   /v1/plans/tools:
     get:
+      description: |-
+        ListToolPrices returns the per-use price of every metered tool — web search,
+        code interpreter, image generation, speech — each with the unit it is billed
+        in.
       operationId: get_v1_plans_tools
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planToolList'
+          description: ok
+      summary: ListToolPrices returns the per-use price of every metered tool — web
+        search, code interpreter, image generation, speech — each with the unit it
+        is billed in.
       tags:
       - plans
   /v1/plans/vocab:
     get:
+      description: |-
+        GetEntitlementVocabulary returns the entitlement key vocabulary: every key with
+        its namespace, JSON type, nullability, unit, enum and title, the list of
+        namespaces, and the engine features a license can grant. It is derived from
+        entitlements.schema.json on every call, so it cannot fall behind the schema.
       operationId: get_v1_plans_vocab
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/planVocab'
+          description: ok
+      summary: 'GetEntitlementVocabulary returns the entitlement key vocabulary: every
+        key with its namespace, JSON type, nullability, unit, enum and title, the
+        list of namespaces, and the engine features a license can grant.'
       tags:
       - plans
   /v1/platform/fleet:
