@@ -733,11 +733,18 @@ document pipeline" below.)
   signature, which drops all three. typed.go.)
 - **Catch-alls are opaque, by construction.** `app.Post("/v1/billing/*")` proxies
   to another service, so `POST /v1/billing/deposit` is NOT a route in this process
-  and cannot appear. Measured on the live table: 3 products are wholly opaque
-  (`bot`, `licensing`, `sentry` — the catch-all IS the product) and 12 more mix
-  concrete ops with a catch-all hiding an unknown remainder.
-  **`iam` is a FOURTH wholly-opaque product, and it is the extreme case** — see
-  "apps/iam (0 of 25, and why)" below. Its subset publishes 35 operations, every
+  and cannot appear. Re-measured over the committed subsets (145 `/v1` products in
+  `plugin/*/openapi.json`): 3 PRODUCTS are wholly opaque — `dns`, `licensing`,
+  `sentry`, where the catch-all IS the product — and 20 more mix concrete ops with
+  a catch-all hiding a remainder. Two names have left the first list since it was
+  written, both for the same reason: a SECOND app publishes concrete paths for
+  their product (`plugin/bot` beside `plugin/runtime`'s catch-all; `plugin/account`
+  beside `plugin/iam`, contributing `/v1/iam/keys` and `/v1/iam/onboard`). So
+  opacity is a property of a SUBSET before it is one of a product — measure the one
+  you mean. Three subsets are opaque end to end, and two of them (`plugin/tasks`,
+  `plugin/iam`) publish exactly a bare noun plus one wildcard.
+- **`plugin/iam` is the extreme case of an opaque subset** — see
+  "apps/iam (0 of 25, and why)" below. It publishes 35 operations, every
   one of them a method on one of five `app.All` wildcards relaying
   `iamserver.Handler(db)`: github.com/hanzoai/iam's ENTIRE standalone zip app —
   94 typed ops of its own — adapted to net/http and hung on a wildcard. The
@@ -748,6 +755,17 @@ document pipeline" below.)
   projected — at that nested app's own `/.well-known/openapi.json` and `/mcp`,
   which cloud's document does not read. So iam's 25 undescribed operations are
   not an absence of knowledge, they are an absence of COMPOSITION.
+- **Opaque does not always mean UNKNOWABLE, and `tasks` is the case that shows
+  the difference.** Its whole product is `/v1/tasks` (a 307 to `/v1/tasks/`) plus
+  one `/v1/tasks/*` relay, so it publishes 28 operations and describes none —
+  but the remainder behind that relay is not off in another service. It is 64
+  operations in THIS process, dispatched by path SEGMENT inside
+  hanzoai/tasks' own `net/http` mux, over inputs that are anonymous structs
+  local to that module's handlers. So the routes cannot be typed here (there is
+  no route in cloud's router to type, and re-shaping a relayed answer is a wire
+  break); they become typeable in hanzoai/tasks, which owns them.
+  `apps/tasks/tasks.go` records the refusal and `apps/tasks/typed_wire_test.go`
+  measures each of its four legs.
 
 ## The document pipeline: ONE registry, N projections
 
