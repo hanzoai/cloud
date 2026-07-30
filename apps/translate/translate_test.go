@@ -272,7 +272,7 @@ func TestMachineWriteCannotOverwriteHumanWork(t *testing.T) {
 	defer func() { _ = mem.Close() }()
 	ctx := context.Background()
 
-	base := Entry{Source: "Hello", Target: "es", Tier: TierQuality, Text: "HELLO", State: StateMachine, UpdatedAt: 1}
+	base := MemoryEntry{Source: "Hello", Target: "es", Tier: TierQuality, Text: "HELLO", State: StateMachine, UpdatedAt: 1}
 	if err := mem.put(ctx, base, false); err != nil {
 		t.Fatalf("machine put: %v", err)
 	}
@@ -326,13 +326,13 @@ func TestMemoryListFilters(t *testing.T) {
 		t.Fatal("approve failed")
 	}
 
-	entries := func(query string) []Entry {
+	entries := func(query string) []MemoryEntry {
 		code, raw := call(t, app, http.MethodGet, "/v1/translate/memory"+query, "acme", nil)
 		if code != http.StatusOK {
 			t.Fatalf("GET memory%s = %d: %s", query, code, raw)
 		}
 		var out struct {
-			Data []Entry `json:"data"`
+			Data []MemoryEntry `json:"data"`
 		}
 		if err := json.Unmarshal(raw, &out); err != nil {
 			t.Fatalf("decode: %v (%s)", err, raw)
@@ -491,10 +491,10 @@ func TestQualityRejectsAShortEnvelope(t *testing.T) {
 		t.Fatalf("short envelope = %d, want 502", code)
 	}
 	// Nothing was written: the next call still reaches the model.
-	if out, _, err := func() (Entry, bool, error) {
+	if out, _, err := func() (MemoryEntry, bool, error) {
 		mem, err := mounted.stores.For("acme", "")
 		if err != nil {
-			return Entry{}, false, err
+			return MemoryEntry{}, false, err
 		}
 		return mem.get(context.Background(), key("a", "es", "", TierQuality))
 	}(); err != nil || out.Text != "" {

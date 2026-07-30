@@ -18,8 +18,8 @@ package entitlements
 
 import (
 	"context"
-	"net/http"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
@@ -30,24 +30,45 @@ import (
 // over it unconditionally; `tier` is "" when the org has no active licensing
 // subscription (the shell treats that as its free/locked default).
 type projectionView struct {
-	Tier string          `json:"tier"`
+	// Tier is the plan slug commerce resolved for the org, or "" when the org has no
+	// active licensing subscription — which the console treats as its free default.
+	Tier string `json:"tier"`
+	// Apps says, per console app, whether the org may open it. The SAME six keys are
+	// always present (studio, bot, world, platform, team, admin), so a client maps
+	// over it unconditionally; a key is false both when the plan does not grant the
+	// app and when commerce could not be reached, because a read that decides what to
+	// SHOW fails to LOCKED rather than to an error.
 	Apps map[string]bool `json:"apps"`
 }
 
-// projection serves GET /v1/entitlements for the CALLER's org.
-func (s *service) projection(c *zip.Ctx) error {
-	org, ok := principal.Org(c)
+// Projection reports which console apps the CALLER's org may open, and the plan slug
+// that decides it. It is the READ side of the unified paywall: the org's plan tier
+// resolved from commerce, which is a different authority from the enablement store
+// behind GET /v1/orgs/{org}/entitlements (that one is the org's own on/off intent).
+//
+// It fails SAFE-TO-LOCKED, never 500: an unvalidated principal is a 403, but a
+// commerce outage reports every app locked at 200 rather than breaking the shell.
+// The ENFORCEMENT path still fails open, so functionality survives the same outage
+// even while the UI conservatively shows locked.
+func (o ops) projection(ctx context.Context, _ *noArgs) (*projectionView, error) {
+	org, ok := principal.OrgFrom(ctx)
 	if !ok {
-		return zip.ErrForbidden("no validated principal")
+		return nil, zip.ErrForbidden("no validated principal")
 	}
 
 	// "admin" is the platform-sudo predicate, not a commerce product: resolve it
-	// from the unforgeable X-User-IsAdmin bit, never via CheckEntitlement.
-	apps := map[string]bool{"admin": principal.IsSuperAdmin(c)}
+	// from the unforgeable X-User-IsAdmin bit, never via CheckEntitlement. That bit
+	// is not carried by the parked org, so it comes off the request — and off the
+	// HTTP path, where there is no attested principal, it is simply false.
+	superAdmin := false
+	if c, ok := cloud.Request(ctx); ok {
+		superAdmin = principal.IsSuperAdmin(c)
+	}
+	apps := map[string]bool{"admin": superAdmin}
 
 	tier := ""
 	for _, product := range appProducts {
-		active, plan, resolved := s.licensed(c.Context(), org, product)
+		active, plan, resolved := o.s.licensed(ctx, org, product)
 		apps[product] = active
 		// The resolved plan slug is the same for every product of one org (it is the
 		// org's subscription tier); capture the first commerce could name so a single
@@ -57,8 +78,11 @@ func (s *service) projection(c *zip.Ctx) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, projectionView{Tier: tier, Apps: apps})
+	return &projectionView{Tier: tier, Apps: apps}, nil
 }
+
+// noArgs is the input of an op that takes none: no body, no query, no path param.
+type noArgs struct{}
 
 // licensed reports whether org holds an ACTIVE entitlement for product, plus the
 // plan slug commerce resolved. resolved is false when commerce could not answer
