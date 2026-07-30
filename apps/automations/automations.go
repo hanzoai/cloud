@@ -17,6 +17,9 @@
 //
 //	✓ GET    /v1/automations/connectors             the connector catalogue (org-gated)
 //	✓ GET    /v1/automations/pieces                 back-compat alias of /connectors
+//	✓ POST   /v1/automations/connectors/:id/run     execute ONE connector action (apps/connectorruntime,
+//	                                                sub-mounted below — typed there, and the reason this
+//	                                                prefix serves NINETEEN routes while routes() registers 18)
 //	✓ GET    /v1/automations/flows                  list flows
 //	✓ POST   /v1/automations/flows                  create a flow (+ initial draft version)
 //	✓ GET    /v1/automations/flows/:id              flow + latest version
@@ -233,8 +236,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(g, "/runs", o.listRuns)
 	zip.Get(g, "/runs/:id", o.getRun)
 	// UNTYPED — the resume payload is an ARBITRARY JSON value delivered verbatim into
-	// the workflow, and its size is gated on the RAW bytes before any parse. See
-	// resumeRun.
+	// the workflow, while the run is addressed by the URL. An In can accept one or the
+	// other, never both: a struct 400s every non-object payload, and a non-struct In
+	// takes them all but receives no path param. See resumeRun.
 	g.Post("/runs/:id/resume", cloud.Handle(s, resumeRun))
 
 	// Inbound event sink (IFTTT): an authenticated producer POSTs an event and every
@@ -243,8 +247,11 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// provider webhooks (GitHub/Stripe) + inbound channels reach the SAME Deliver via
 	// the wire seam (SetTrigger), so this is one dispatch door, three entrances.
 	//
-	// UNTYPED — the dedupe key content-hashes the RAW received bytes, which a decoded
-	// In is not, and two headers carry the rest of the contract. See inboundHook.
+	// UNTYPED — the body is an OPEN-KEYED event payload and the (source,event) key is in
+	// the URL. An In can carry one or the other: a struct binds the path params and
+	// DISCARDS every payload key it has no field for (silently — 200, matched, and an
+	// empty {{trigger.*}}), while a non-struct In takes the open body and receives no
+	// path param at all. See inboundHook.
 	g.Post("/hooks/:source/:event", cloud.Handle(s, inboundHook))
 
 	// UNTYPED — JSON-RPC answers a body it cannot parse with HTTP 200 and a -32700
@@ -605,9 +612,20 @@ func (o ops) createVersion(ctx context.Context, in *createVersionIn) (*FlowVersi
 // FLOW and every other operation with the VERSION it edited — two response bodies on
 // one route. A typed op declares ONE Out, so typing this would have to change the
 // body one of the two branches sends, and the wire is not the migration's to move.
-// It converts when zip can declare a response per outcome (the same multi-status gap
-// the conditional-status class waits on); until then the builder's edit door stays a
-// route and nothing else — no MCP tool, no CLI command, no SDK method.
+//
+// Its In is not the problem — {id, type, request} is a closed shape — and neither is a
+// UNION Out, which fails for a stated reason: Flow's externalId, folderId and
+// publishedVersionId carry no omitempty and so are emitted unconditionally today, and
+// the omitempty a union needs to keep the version branch clean would delete them from
+// the flow branch. Nor is `Out any` a conversion. It would compile and preserve the
+// bytes, and it publishes `{"type":"object"}` — an SDK method returning an untyped
+// blob and an MCP tool whose result says nothing, which is what the untyped route
+// already offers. A typed op exists for the schema; declaring one with no schema
+// spends the route's one chance to be described and buys nothing.
+//
+// It converts when zip can declare a response per outcome (the multi-SHAPE sibling of
+// the multi-status gap the conditional-status class waits on); until then the builder's
+// edit door stays a route and nothing else — no MCP tool, no CLI command, no SDK method.
 func applyOperation(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(s, c)
 	if !ok {
@@ -848,12 +866,22 @@ func (o ops) getRun(ctx context.Context, in *runRef) (*FlowRun, error) {
 
 // resumeRun delivers a waitpoint's output into a paused run, resuming it.
 //
-// UNTYPED, for two facts about its body that an In cannot state. The payload is an
-// ARBITRARY JSON value — an object, an array, a string, a number, null — handed
-// verbatim to the waitpoint; zip's invoke unmarshals into the In BEFORE the handler,
-// so a struct In would turn every non-object payload into a 400. And the size bound
-// is measured on the RAW received bytes before any parse, which is the only place it
-// can be measured: a decoded value has no byte count of its own.
+// UNTYPED, because the body and the address pull the In in opposite directions and it
+// can only answer to one of them.
+//
+// The payload is an ARBITRARY JSON value — an object, an array, a string, a number,
+// null — handed verbatim to the waitpoint. zip's invoke unmarshals into the In BEFORE
+// the handler runs, so a struct In turns every non-object payload into a 400. The
+// obvious repair is a non-struct In (`any` accepts all six shapes), and it trades the
+// 400 for something quieter: bindURL walks a STRUCT only, so an `any` In never
+// receives :id, GetRun is asked for the empty id, and EVERY resume answers 404 — with
+// no 400 anywhere to show for it. That is why TestResumeAcceptsAnyJSONValue pins the
+// addressing (a seeded run and an unknown one must answer differently) and not only
+// the acceptance: acceptance alone is green through that retype, verified.
+//
+// The size bound is measured on the RAW received bytes before any parse, which is the
+// only place it can be measured — a decoded value has no byte count of its own. That
+// one IS reachable from a typed op via cloud.Request(ctx), so it is not the blocker.
 func resumeRun(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(s, c)
 	if !ok {
@@ -890,13 +918,27 @@ func resumeRun(s *cloud.Service[state], c *zip.Ctx) error {
 // makes a re-delivery a no-op. Returns how many flows the event matched+started.
 //
 // UNTYPED, and the DECISIVE reason is that the body is an OPEN-KEYED payload while the
-// path params are not: zip binds :source and :event by NAME (bindURL matches a path
-// param to the field whose json tag, else field name, equals it), so a typed In MUST
-// carry fields named source and event. A producer may legitimately send an event key
-// called "source" or "event" holding any JSON type, and zip decodes the body into the
-// In BEFORE the handler runs — so {"source": 42} becomes `invalid body:` 400 where
-// today it is accepted and delivered. That 400 is returned before the handler, so
-// nothing inside the handler can recover it.
+// address (source,event) is in the URL. An In can serve one of those, never both, and
+// each choice breaks the wire differently:
+//
+//   - A STRUCT In binds :source and :event — zip matches a path param to the field
+//     whose json tag, else field name, equals it — so it must own fields named source
+//     and event. A producer may legitimately send an event key called "source" or
+//     "event" holding any JSON type, and zip decodes the body into the In BEFORE the
+//     handler runs, so {"source": 42} becomes `invalid body:` 400 where today it is
+//     accepted and delivered. Worse is the case that does NOT error: a payload key the
+//     struct has no field for is not a failure, it is DISCARDED. {"msg":"hello"} still
+//     answers 200 with the same matched count, and the flow receives {{trigger.msg}}
+//     EMPTY. Nothing 400s and nothing logs — every webhook keeps "working" while every
+//     payload arrives blank.
+//   - A NON-STRUCT In (map[string]any) takes the open body — and bindURL walks a struct
+//     only, so :source and :event never arrive. The event matches no subscription and
+//     answers matched:0.
+//
+// Both retypes were run: each leaves the pre-existing suite green except for the
+// assertions in untyped_wire_test.go written for exactly this, which is why that test
+// pins DELIVERY (the payload the flow receives, and the match count) and not just the
+// status code.
 //
 // The rest of the contract is raw-byte-shaped but NOT independently blocking, and the
 // distinction matters because the recoverable half is the tempting one: with no
@@ -905,11 +947,9 @@ func resumeRun(s *cloud.Service[state], c *zip.Ctx) error {
 // stop collapsing to one run), two request HEADERS carry the remainder
 // (X-Idempotency-Key and X-Causation-Depth, which stops an in-platform trigger cycle
 // amplifying), and the size bound is measured on the raw bytes before any parse — yet
-// all four ARE reachable from a typed op via cloud.Request(ctx). Recovering them does
-// not make this route typeable; the key collision above still breaks the wire, and
-// TestInboundHookAcceptsPayloadKeysCollidingWithPathParams pins exactly that, because
-// the rest of the suite stays green through such a retype. Same family as the
-// raw-byte-signed provider webhooks in apps/integrations.
+// all four ARE reachable from a typed op via cloud.Request(ctx), so none of them is
+// the reason. Same family as the raw-byte-signed provider webhooks in
+// apps/integrations.
 func inboundHook(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(s, c)
 	if !ok {
