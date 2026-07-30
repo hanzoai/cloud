@@ -39,6 +39,7 @@ import (
 const (
 	maxPluginSource = 512 << 10 // 512 KiB of TypeScript is a very large connector
 	maxSpecBytes    = 256 << 10
+	maxSkillContent = 256 << 10 // one SKILL.md; prose, not a program
 	buildModel      = "claude-sonnet-4-6"
 )
 

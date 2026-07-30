@@ -33,6 +33,7 @@ type state struct {
 	activation *ActivationStore
 	servers    *MCPServerStore
 	authored   *AuthoredStore // org-authored plugins (pluginbuild.go)
+	skills     *SkillStore    // org-authored skills (skillstore.go)
 	kms        types.KMSClient
 	ai         types.AIClient // generates plugin source from an API spec; nil ⇒ source-only builds
 	audit      *audit.Recorder
@@ -70,17 +71,28 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("tools.Mount: open authored-plugin store: %w", err)
 	}
 
-	// Install the activation store on the process-wide registry and register the two
-	// providers this package owns.
+	skills, err := OpenSkillStore(filepath.Join(deps.DataDir, "tools-skills.db"))
+	if err != nil {
+		_ = activation.Close()
+		_ = servers.Close()
+		_ = authored.Close()
+		return fmt.Errorf("tools.Mount: open skill store: %w", err)
+	}
+
+	// Install the activation store on the process-wide registry and register the
+	// providers this package owns: builtin, the external-MCP-server source, and
+	// the org's own skills.
 	std.SetActivation(activation)
 	std.Register(newBuiltinProvider(app))
 	std.Register(newMCPProvider(servers, deps.KMS))
+	std.Register(orgSkillProvider{store: skills})
 
 	b := cloud.NewBase(deps, "tools")
 	s := &cloud.Service[state]{Base: b, State: state{
 		activation: activation,
 		servers:    servers,
 		authored:   authored,
+		skills:     skills,
 		kms:        deps.KMS,
 		ai:         deps.AI,
 		audit:      deps.Audit,
@@ -105,6 +117,10 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// skills and mcp are Source views of this registry; plugins is the mounted
 	// subsystem inventory, which is a different thing entirely.
 	app.Get("/v1/skills", cloud.Handle(s, listBySource(SourceSkill)))
+	app.Post("/v1/skills", cloud.Handle(s, putSkill))
+	skillG := app.Group("/v1/skills")
+	skillG.Get("/authored", cloud.Handle(s, listAuthoredSkills))
+	skillG.Delete("/:id", cloud.Handle(s, deleteSkill))
 	app.Get("/v1/mcp", cloud.Handle(s, listBySource(SourceMCP)))
 	app.Get("/v1/plugins", cloud.Handle(s, listPlugins))
 
@@ -142,6 +158,11 @@ func Shutdown(_ context.Context) error {
 	}
 	if mounted.State.authored != nil {
 		if err := mounted.State.authored.Close(); err != nil && first == nil {
+			first = err
+		}
+	}
+	if mounted.State.skills != nil {
+		if err := mounted.State.skills.Close(); err != nil && first == nil {
 			first = err
 		}
 	}
