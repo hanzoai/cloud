@@ -97,20 +97,94 @@ func Shutdown(_ context.Context) error {
 	return err
 }
 
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document,
+// the MCP tool list and the generated SDK — Go drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // routes registers the surface.
+//
+// cloud.Bridge comes FIRST, ahead of every leaf: a typed op receives a
+// context.Context and its decoded In and nothing else, so the validated org — and
+// the request the admin predicates read their attested claims off — cross on the
+// context. Installed through the subsystem's Router, it lands once per prefix this
+// subsystem DECLARES (/v1/usage/activity, /v1/usage/leaderboard,
+// /v1/usage/rollup/backfill) and never on the /v1/usage/* paths clients/usage owns.
+// Serve installs the same middleware binary-wide; nesting is harmless (the inner one
+// is the one the handler sees) and declaring it here is what makes the subsystem
+// self-sufficient when a test or a non-Serve composition root mounts it on a bare app.
+//
+// The group is a bare path prefix — no middleware, so it gates nothing on the
+// co-owned /v1/usage root — and exists only so each op's path is composed the one way
+// the router composes it.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/usage/leaderboard", cloud.Handle(s, leaderboardHandler))
-	app.Get("/v1/usage/activity", cloud.Handle(s, activityHandler))
-	app.Get("/v1/usage/leaderboard/optin", cloud.Handle(s, getOptin))
-	app.Put("/v1/usage/leaderboard/optin", cloud.Handle(s, putUserOptin))
-	app.Put("/v1/usage/leaderboard/optin/org", cloud.Handle(s, putOrgOptin))
-	app.Post("/v1/usage/rollup/backfill", cloud.Handle(s, backfillHandler))
+	app.Use(cloud.Bridge())
+	g := app.Group("/v1/usage")
+	o := boardOps{s: s}
+	zip.Get(g, "/leaderboard", o.leaderboard)
+	zip.Get(g, "/activity", o.activity)
+	zip.Get(g, "/leaderboard/optin", o.getOptin)
+	zip.Put(g, "/leaderboard/optin", o.putUserOptin)
+	zip.Put(g, "/leaderboard/optin/org", o.putOrgOptin)
+	zip.Post(g, "/rollup/backfill", o.backfill)
 }
+
+// boardOps binds the service to leaderboard's typed ops. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value, which is also the only bound
+// form cmd/zipdoc can lift prose from.
+type boardOps struct{ s *cloud.Service[state] }
+
+// noInput is the In of an op addressed entirely by the caller's principal: it takes
+// nothing off the wire. ONE of these for the whole package.
+type noInput struct{}
 
 // ── identity helpers ──────────────────────────────────────────────────────────
 
-// tenant resolves the caller's validated effective org (fail-closed). ONE gate.
-func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
+// tenantOf resolves the caller's validated effective org, fail-closed — the ONE
+// tenancy gate this subsystem has. It is the value principal.Org decided at the
+// identity boundary, which cloud.Bridge parked on the context; it is never an In
+// field, because an In field is caller-supplied and a tenant key read from one is a
+// cross-tenant read the caller asserted for itself. `why` is the refusal the surface
+// shows, so each op keeps the wording it has always sent.
+func tenantOf(ctx context.Context, why string) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrUnauthorized(why)
+	}
+	return org, nil
+}
+
+// requestOf is the request a typed op is serving. This subsystem needs it for the
+// three facts that live in headers rather than in the tenant key — the caller's
+// username, org-admin-ness and platform-admin-ness — and for the one response header
+// it sets. Absent off the HTTP path (a CLI LocalInvoke), where the honest answer is
+// that there is no request; every reader below then fails closed.
+func requestOf(ctx context.Context) (*zip.Ctx, bool) { return cloud.Request(ctx) }
+
+// superOf reports whether the caller is a platform SuperAdmin. False off the HTTP
+// path: no request, no attested claim, no elevation.
+func superOf(ctx context.Context) bool {
+	c, ok := requestOf(ctx)
+	return ok && principal.IsSuperAdmin(c)
+}
+
+// adminOf reports whether the caller may see their org's members named — an org
+// admin or a SuperAdmin. False off the HTTP path, for the same reason as superOf.
+func adminOf(ctx context.Context) bool {
+	c, ok := requestOf(ctx)
+	return ok && (principal.IsSuperAdmin(c) || principal.IsOrgAdmin(c))
+}
+
+// noStore marks a response uncacheable. Per-tenant analytics must never be held by a
+// browser or an intermediary. A no-op off the HTTP path, where there is no response
+// to head.
+func noStore(ctx context.Context) {
+	if c, ok := requestOf(ctx); ok {
+		c.SetHeader("Cache-Control", "no-store")
+	}
+}
 
 // selfLedgerID is the caller's user_id AS RECORDED in the ledger for `org`:
 // "<org>/<name>", matching the write path (organization + "/" + name). Empty when
@@ -122,4 +196,14 @@ func selfLedgerID(c *zip.Ctx, org string) string {
 		return ""
 	}
 	return org + "/" + name
+}
+
+// selfIDOf is selfLedgerID for a typed op. Empty off the HTTP path — the same honest
+// degrade an absent username header already produces.
+func selfIDOf(ctx context.Context, org string) string {
+	c, ok := requestOf(ctx)
+	if !ok {
+		return ""
+	}
+	return selfLedgerID(c, org)
 }
