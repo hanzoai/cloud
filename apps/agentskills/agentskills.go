@@ -80,6 +80,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("agentskills.Mount: empty catalog (run `make agentskills`)")
 	}
 
+	// BOTH routes are UNTYPED BY DESIGN, and neither is a judgement call — see
+	// serveIndex and serveSkill. A typed op re-marshals its output through
+	// encoding/json and always answers application/json; this surface serves EMBEDDED
+	// BYTES verbatim, one of them as text/markdown, both under a Cache-Control the
+	// discovery convention depends on. Typing either would change what the wire
+	// carries, so the cost of staying raw is paid knowingly: no prose, no MCP tool,
+	// no CLI command, no typed SDK method for these two addresses. The catalogue
+	// itself IS the machine-readable description, which is what makes that cost
+	// bearable here and nowhere else in this partition.
 	app.Get(wellKnown+"/index.json", h.serveIndex)
 	app.Get(wellKnown+"/:skill/SKILL.md", h.serveSkill)
 
@@ -110,11 +119,34 @@ func (h *handler) brandFor(host string) string {
 	return cloud.DefaultBrand
 }
 
+// serveIndex answers GET /.well-known/agent-skills/index.json with the brand's
+// master catalogue, exactly as generated.
+//
+// UNTYPED BY DESIGN — three independent wire facts a typed op cannot carry:
+//
+//  1. The response is the EMBEDDED FILE'S BYTES. index.json carries a sha256 per
+//     skill computed over the served SKILL.md, and the catalogue is the artifact
+//     hanzoai/openapi's skills.py generated; a typed Out re-marshals through
+//     encoding/json, which re-orders keys and re-indents, so the document a client
+//     verifies would no longer be the document that was signed.
+//  2. `Cache-Control: public, max-age=300`. zip's typed path writes the JSON body
+//     and the status and nothing else — it has no vocabulary for a response header,
+//     and this one is part of the discovery convention.
+//  3. A miss answers `{"error": "..."}` at 404. A typed op's only refusal is a
+//     returned error, which zip's errorHandler renders as the flat
+//     `{"status","code","error"}` — a different body for the same condition.
 func (h *handler) serveIndex(c *zip.Ctx) error {
 	brand := h.brandFor(c.Fiber().Hostname())
 	return h.serveFile(c, path.Join(brand, "index.json"), "application/json; charset=utf-8")
 }
 
+// serveSkill answers GET /.well-known/agent-skills/{skill}/SKILL.md with one skill
+// document.
+//
+// UNTYPED BY DESIGN, and structurally so: the response is `text/markdown` — a
+// DOCUMENT, not a JSON value. A typed op marshals its Out with c.JSON and always
+// answers application/json, so there is no shape of In/Out that serves this route's
+// wire at all. It also carries serveIndex's Cache-Control and its 404 body.
 func (h *handler) serveSkill(c *zip.Ctx) error {
 	brand := h.brandFor(c.Fiber().Hostname())
 	id := c.Param("skill")

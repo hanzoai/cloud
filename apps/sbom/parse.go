@@ -41,34 +41,59 @@ const maxComponents = 5000
 // SbomComponent is one flattened dependency: name/version/type/purl + a single
 // license string (first id | name | expression found, else "").
 type SbomComponent struct {
-	Name    string `json:"name"`
+	// Name is the dependency's package name as CycloneDX records it.
+	Name string `json:"name"`
+	// Version is the resolved version of that package.
 	Version string `json:"version"`
-	Type    string `json:"type"`
-	Purl    string `json:"purl"`
+	// Type is the CycloneDX component type: library, application, framework, …
+	Type string `json:"type"`
+	// Purl is the package URL — the ecosystem-qualified identity a vulnerability
+	// feed can be joined on.
+	Purl string `json:"purl"`
+	// License is the FIRST license fact found for the component: its SPDX id, else
+	// its name, else the expression. Empty when the document declares none.
 	License string `json:"license"`
 }
 
 // SbomIngest is the POST /v1/sbom body from CI: the image identity + a raw
 // CycloneDX document whose components[] we flatten and persist.
 type SbomIngest struct {
-	ImageDigest string          `json:"imageDigest"`
-	ImageRef    string          `json:"imageRef"`
-	SourceRepo  string          `json:"sourceRepo"`
-	GitSha      string          `json:"gitSha"`
-	Format      string          `json:"format"`
-	Document    json.RawMessage `json:"document"`
+	// ImageDigest is the content-addressed digest (sha256:…) the components are
+	// keyed under. Required — it, not a tenant, is what an SBOM belongs to.
+	ImageDigest string `json:"imageDigest"`
+	// ImageRef is the human-readable image reference the digest was published as.
+	// A resolve matches on either this or the digest.
+	ImageRef string `json:"imageRef"`
+	// SourceRepo is the repository the image was built from.
+	SourceRepo string `json:"sourceRepo"`
+	// GitSha is the commit the image was built from.
+	GitSha string `json:"gitSha"`
+	// Format names the document format; "cyclonedx" is the only one parsed.
+	Format string `json:"format"`
+	// Document is the raw CycloneDX bill of materials, any JSON. Its components[]
+	// are flattened and persisted; nothing else is read or stored.
+	Document json.RawMessage `json:"document"`
 }
 
 // SbomView is the GET /v1/sbom/{ref} response the console renders.
 type SbomView struct {
-	ImageDigest    string          `json:"imageDigest"`
-	ImageRef       string          `json:"imageRef"`
-	SourceRepo     string          `json:"sourceRepo"`
-	GitSha         string          `json:"gitSha"`
-	IngestedAt     string          `json:"ingestedAt"`
-	ComponentCount int             `json:"componentCount"`
-	Truncated      bool            `json:"truncated,omitempty"`
-	Components     []SbomComponent `json:"components"`
+	// ImageDigest is the content-addressed digest the components are keyed under.
+	ImageDigest string `json:"imageDigest"`
+	// ImageRef is the image reference recorded alongside the digest.
+	ImageRef string `json:"imageRef"`
+	// SourceRepo is the repository the image was built from.
+	SourceRepo string `json:"sourceRepo"`
+	// GitSha is the commit the image was built from.
+	GitSha string `json:"gitSha"`
+	// IngestedAt is when the bill of materials was recorded, RFC 3339.
+	IngestedAt string `json:"ingestedAt"`
+	// ComponentCount is how many components this response carries — after the cap,
+	// so it matches components exactly rather than the image's true total.
+	ComponentCount int `json:"componentCount"`
+	// Truncated is true when the image has MORE components than the cap returns.
+	Truncated bool `json:"truncated,omitempty"`
+	// Components is the flattened dependency set, ordered by type then name.
+	Components []SbomComponent `json:"components"`
 }
 
 // ── CycloneDX shapes (only the fields we consume) ───────────────────────────
