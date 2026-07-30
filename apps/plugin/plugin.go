@@ -125,7 +125,7 @@ type ListOut struct {
 	Msg    string  `json:"msg"`
 	Data   []Host  `json:"data"`
 	Drift  []Drift `json:"drift,omitempty"`
-	Data2  *int    `json:"data2,omitempty"`
+	Total  *int    `json:"total,omitempty"`
 }
 
 // ReloadIn names an artifact to run. Exactly one of Version or URL+Sum, or
@@ -195,10 +195,10 @@ func (o *ops) list(ctx context.Context, in *ListIn) (*ListOut, error) {
 		return nil, err
 	}
 	if in.Scope == scopeHost {
-		return &ListOut{Status: core.OK, Data: []Host{o.here()}, Data2: core.Total(1)}, nil
+		return &ListOut{Status: core.OK, Data: []Host{o.here()}, Total: core.Total(1)}, nil
 	}
 	hosts := o.fleet(ctx, c)
-	return &ListOut{Status: core.OK, Data: hosts, Drift: drift(hosts), Data2: core.Total(len(hosts))}, nil
+	return &ListOut{Status: core.OK, Data: hosts, Drift: drift(hosts), Total: core.Total(len(hosts))}, nil
 }
 
 // here is this host's own account, the only one it can answer without a hop.

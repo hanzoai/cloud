@@ -66,12 +66,12 @@ func call(t *testing.T, app *zip.App, path, user, org string) (int, []audit.Wire
 	}
 	var env struct {
 		Data  []audit.Wire `json:"data"`
-		Data2 int          `json:"data2"`
+		Total int          `json:"total"`
 	}
 	if err := json.Unmarshal(b, &env); err != nil {
 		t.Fatalf("decode envelope: %v (%s)", err, b)
 	}
-	return resp.StatusCode, env.Data, env.Data2
+	return resp.StatusCode, env.Data, env.Total
 }
 
 func TestList_ScopedToCallerOrg(t *testing.T) {

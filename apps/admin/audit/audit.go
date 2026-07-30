@@ -79,7 +79,7 @@ type RecordsOut struct {
 	Status    string                `json:"status"`
 	Msg       string                `json:"msg"`
 	Data      any                   `json:"data"`
-	Data2     *int                  `json:"data2,omitempty"`
+	Total     *int                  `json:"total,omitempty"`
 	Integrity *auditstore.Integrity `json:"integrity"`
 }
 
@@ -94,7 +94,7 @@ type RecordsOut struct {
 // Example: {"org":"acme","action":"admin.waitlist.grant","since":"2026-07-01T00:00:00Z","pageSize":"50"}
 // Response: {"status":"ok","msg":"","data":[{"seq":41,"ts":"2026-07-26T18:00:00Z","org":"acme",
 // "sub":"z@hanzo.ai","action":"admin.waitlist.grant","resource":"waitlist","result":"success"}],
-// "data2":1,"integrity":{"ok":true,"count":42,"headHash":"9f2c","brokenAt":-1}}
+// "total":1,"integrity":{"ok":true,"count":42,"headHash":"9f2c","brokenAt":-1}}
 func (o ops) Records(ctx context.Context, in *RecordsIn) (*RecordsOut, error) {
 	c, err := core.Admit(ctx)
 	if err != nil {
@@ -112,7 +112,7 @@ func (o ops) Records(ctx context.Context, in *RecordsIn) (*RecordsOut, error) {
 		if len(rows) == 0 {
 			rows = json.RawMessage("[]") // an absent page is an empty list, never a null
 		}
-		return &RecordsOut{Status: core.OK, Data: rows, Data2: core.Total(res.Total)}, nil
+		return &RecordsOut{Status: core.OK, Data: rows, Total: core.Total(res.Total)}, nil
 	}
 
 	rows, total, err := s.State.AuditStore.Query(ctx, in.filter())
@@ -132,7 +132,7 @@ func (o ops) Records(ctx context.Context, in *RecordsIn) (*RecordsOut, error) {
 		integrity = &iv
 	}
 
-	return &RecordsOut{Status: core.OK, Data: out, Data2: core.Total(total), Integrity: integrity}, nil
+	return &RecordsOut{Status: core.OK, Data: out, Total: core.Total(total), Integrity: integrity}, nil
 }
 
 // VerifyOut is the GET /v1/admin/audit/verify envelope.

@@ -4,7 +4,7 @@
 // It is an AGGREGATOR, not a new store: identity (orgs/users/roles/applications/audit/me)
 // is read from IAM, the money panels (spend/tokens/credits) from commerce, and System
 // Health from o11y — every one a real upstream. The facade fans out over HTTP, shaping
-// the reads into the /v1 envelope { status, msg, data, data2 } the operator's transport
+// the reads into the /v1 envelope { status, msg, data, total } the operator's transport
 // decodes.
 //
 // The subsystem is decomposed into a shared kernel (clients/admin/core) plus one package
@@ -236,7 +236,7 @@ func (o ops) me(ctx context.Context, _ *core.None) (*meOut, error) {
 //
 // Response: {"status":"ok","msg":"","data":[{"org":"acme","display":"Acme","users":7,
 // "products":0,"spendCents":12500,"creditsCents":5000,"tokens":0,
-// "created":"2026-01-04T00:00:00Z"}],"data2":1}
+// "created":"2026-01-04T00:00:00Z"}],"total":1}
 func (o ops) orgs(ctx context.Context, _ *core.None) (*orgsOut, error) {
 	c, err := core.AdmitScoped(ctx, o.s)
 	if err != nil {
@@ -266,13 +266,13 @@ func (o ops) orgs(ctx context.Context, _ *core.None) (*orgsOut, error) {
 		})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Org < rows[j].Org })
-	return &orgsOut{Status: core.OK, Data: rows, Data2: core.Total(len(rows))}, nil
+	return &orgsOut{Status: core.OK, Data: rows, Total: core.Total(len(rows))}, nil
 }
 
 // ── /v1/admin/users — cross-org directory (OperatorUser[]) ───────────────────
 
 // users lists the user directory across the caller's tenant window, one page at a time.
-// data2 is IAM's REAL total, so the console can page through it.
+// total is IAM's REAL total, so the console can page through it.
 //
 // A SuperAdmin may aim the read at one tenant with org; a white-label admin cannot — for
 // them the owner is hard-pinned to their own org and org is ignored, which is what keeps
@@ -281,7 +281,7 @@ func (o ops) orgs(ctx context.Context, _ *core.None) (*orgsOut, error) {
 // Example: {"org":"acme","q":"ada","p":"1","pageSize":"50"}
 // Response: {"status":"ok","msg":"","data":[{"owner":"acme","name":"ada","email":"ada@acme.com",
 // "displayName":"Ada","isAdmin":true,"isSuperAdmin":false,"tag":"","created":"2026-01-04T00:00:00Z",
-// "lastSignin":"2026-07-01T09:12:00Z","forbidden":false}],"data2":222}
+// "lastSignin":"2026-07-01T09:12:00Z","forbidden":false}],"total":222}
 func (o ops) users(ctx context.Context, in *usersIn) (*usersOut, error) {
 	c, err := core.AdmitScoped(ctx, o.s)
 	if err != nil {
@@ -348,7 +348,7 @@ func (o ops) users(ctx context.Context, in *usersIn) (*usersOut, error) {
 	if total < len(rows) {
 		total = len(rows)
 	}
-	return &usersOut{Status: core.OK, Data: rows, Data2: core.Total(total)}, nil
+	return &usersOut{Status: core.OK, Data: rows, Total: core.Total(total)}, nil
 }
 
 // ── /v1/admin/roles and /applications — verbatim IAM passthrough ─────────────
@@ -356,7 +356,7 @@ func (o ops) users(ctx context.Context, in *usersIn) (*usersOut, error) {
 // roles lists IAM roles for one owner org, forwarded VERBATIM from IAM's get-roles.
 //
 // Example: {"owner":"admin","p":"1","pageSize":"50"}
-// Response: {"status":"ok","msg":"","data":[{"owner":"admin","name":"ops","displayName":"Ops"}],"data2":1}
+// Response: {"status":"ok","msg":"","data":[{"owner":"admin","name":"ops","displayName":"Ops"}],"total":1}
 func (o ops) roles(ctx context.Context, in *iamPageIn) (*iamRowsOut, error) {
 	return o.iamPassthrough(ctx, in, "/v1/iam/roles")
 }
@@ -366,7 +366,7 @@ func (o ops) roles(ctx context.Context, in *iamPageIn) (*iamRowsOut, error) {
 // off each row.
 //
 // Example: {"owner":"admin","p":"1","pageSize":"50"}
-// Response: {"status":"ok","msg":"","data":[{"owner":"admin","name":"hanzo-cloud","clientId":"cid"}],"data2":1}
+// Response: {"status":"ok","msg":"","data":[{"owner":"admin","name":"hanzo-cloud","clientId":"cid"}],"total":1}
 func (o ops) applications(ctx context.Context, in *iamPageIn) (*iamRowsOut, error) {
 	return o.iamPassthrough(ctx, in, "/v1/iam/applications")
 }
@@ -402,7 +402,7 @@ func (o ops) iamPassthrough(ctx context.Context, in *iamPageIn, path string) (*i
 	if len(rows) == 0 {
 		rows = json.RawMessage("[]") // an absent page is an empty list, never a null
 	}
-	return &iamRowsOut{Status: core.OK, Data: rows, Data2: core.Total(res.Total)}, nil
+	return &iamRowsOut{Status: core.OK, Data: rows, Total: core.Total(res.Total)}, nil
 }
 
 // ── /v1/admin/usage — fleet usage roll-up (UsageData) ────────────────────────
@@ -594,7 +594,7 @@ func syncNow(ctx context.Context, _ *core.None) (*syncOut, error) {
 
 // ── aggregation helpers ──────────────────────────────────────────────────────
 
-// orgUserCount returns the member count for one org from the IAM list total (data2).
+// orgUserCount returns the member count for one org from the IAM list total.
 // Best-effort: an error yields 0 rather than failing the whole row.
 func orgUserCount(s *cloud.Service[core.State], ctx context.Context, cr iam.Creds, org string) int {
 	q := url.Values{}
