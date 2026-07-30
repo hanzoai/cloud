@@ -4,7 +4,7 @@ package cloud
 //
 // THE PROBLEM. zip.Ctx.Org()/IsAdmin()/User() read the X-Org-Id / X-User-IsAdmin
 // / X-User-Id request headers verbatim. In production the gateway
-// (hanzoai/gateway) is the sole minter of those headers: it strips any
+// (hanzoai/gateway) is the sole author of those headers: it strips any
 // client-supplied copy and re-injects them from a validated IAM JWT (HIP-0026).
 // cloud TRUSTS that contract. But cloud-api is also reachable WITHOUT the gateway
 // in front — directly in-cluster (cloud-api.hanzo.svc:8000, used by console's
@@ -19,7 +19,7 @@ package cloud
 // catalog + /v1/pricing/sync, provisioning, ml, eval, plan) becomes
 // trustworthy without touching a single handler.
 //
-// ADMIN IS SUPERADMIN. The gateway mints X-User-IsAdmin from the JWT `isAdmin`
+// ADMIN IS SUPERADMIN. The gateway writes X-User-IsAdmin from the JWT `isAdmin`
 // bool, which IAM also sets true for ORG admins (an org owner). The cloud admin
 // surfaces (global catalog writes, the literal "admin" org bucket) mean
 // SuperAdmin. So the admin authority here is granted ONLY to a validated
@@ -77,7 +77,7 @@ func OrgHasUnsafeRune(s string) bool {
 // account.go, clients/team), and are read only if no un-shadowable cookie is present.
 var cookieTokenNames = []string{"__Host-hanzo_iam_token", "hanzo_iam_token", "iam_access_token", "access_token", "hanzo_token"}
 
-// authorityHeaders are the identity/authority headers the gateway mints and the
+// authorityHeaders are the identity/authority headers the gateway writes and the
 // ONLY ones a downstream may trust. The sanitizer deletes every one on ingress
 // so nothing a client sent survives as identity, then re-injects from a
 // validated principal.
@@ -86,12 +86,12 @@ var cookieTokenNames = []string{"__Host-hanzo_iam_token", "hanzo_iam_token", "ia
 // X-Environment). A sub-scope NARROWS within an org; it is not identity authority,
 // so it is handled in a separate pass (sanitizeSubScopes, keyed on
 // subScopeHeaders): every raw client copy is deleted on ingress, then X-Project-Id
-// is RE-MINTED from the validated `project` claim (claims.mintedProject) exactly
+// is RE-WRITTEN from the validated `project` claim (claims.renderProject) exactly
 // like X-Org-Id from `owner`, still checked non-foreign to the effective org
 // (projectIsForeign — org_scope.go refuses a project REGISTERED to a DIFFERENT org,
 // which also drops an admin's own-org project when a SuperAdmin views another
 // org), and dropped on the anonymous path. The raw client X-Project-Id is NEVER a
-// source. So after this pass X-Project-Id is a TRUSTWORTHY server-minted scope,
+// source. So after this pass X-Project-Id is a TRUSTWORTHY server-written scope,
 // which is exactly why principal.ValidatedProject reports it claim-backed and per-
 // project spend caps HARD-enforce. The native evals subsystem, which scopes
 // exclusively by c.Org() and ignores X-Project-Id, is unaffected.
@@ -105,7 +105,7 @@ var authorityHeaders = []string{
 	"X-User-IsAdmin",
 	"X-User-IsOrgAdmin",
 	// X-User-Owner is the HOME org (the validated `owner` claim) — the identity +
-	// BILLING anchor, minted below DISTINCT from X-Org-Id (the effective/acted-on
+	// BILLING anchor, written below DISTINCT from X-Org-Id (the effective/acted-on
 	// org). Stripped on ingress like every authority header so a client can never
 	// forge who pays, then re-injected only from validated claims.
 	"X-User-Owner",
@@ -120,7 +120,7 @@ var authorityHeaders = []string{
 // authority. All are deleted on ingress like the authority headers so no raw client
 // copy survives, then re-injected by sanitizeSubScopes only for a validated
 // principal:
-//   - X-Project-Id is MINTED from the validated `project` claim (claims.mintedProject),
+//   - X-Project-Id is WRITTEN from the validated `project` claim (claims.renderProject),
 //     exactly like X-Org-Id from `owner`, then still checked non-foreign to the
 //     effective org (defense in depth; it also drops an admin's own-org project when
 //     a SuperAdmin views another org). The raw client copy is never a source.
@@ -178,7 +178,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 		// billing-account attribution hints), then delete every authority header AND
 		// every sub-scope header, so nothing a client sent survives as identity OR
 		// scope. X-Project-Id is NOT captured: it is minted from the validated
-		// `project` claim below (claims.mintedProject), never from a client value. A
+		// `project` claim below (claims.renderProject), never from a client value. A
 		// client org bearing a whitespace/control/format rune is refused here (not trimmed):
 		// trimming would collapse "acme " onto "acme", and the injective org
 		// boundary must never fold two distinct org identifiers into one.
@@ -352,7 +352,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			if (claims.IsAdmin || isOrgAdmin(claims.Orgs, effOrg)) && isHuman(claims) {
 				req.Header.Set(authz.HeaderUserOrgAdmin, "true")
 			}
-			sanitizeSubScopes(c, effOrg, claims.mintedProject(), cliApp, claims.mintedBillingAccount())
+			sanitizeSubScopes(c, effOrg, claims.renderProject(), cliApp, claims.renderBillingAccount())
 			return c.Continue()
 		}
 
@@ -380,7 +380,7 @@ func IdentityMiddleware(cfg *Config) zip.Handler {
 // VALIDATED principal, the raw client copies having been deleted on ingress. It
 // is the project/app half of the trust boundary:
 //
-//   - project is the caller's MINTED `project` claim (claims.mintedProject — empty
+//   - project is the caller's validated `project` claim (claims.renderProject — empty
 //     for the default project, so the header stays absent ⟺ default). It is
 //     re-injected only when NON-foreign to org (projectIsForeign): the caller's own
 //     claim survives; a project REGISTERED to a different org is refused (dropped),
@@ -410,7 +410,7 @@ func sanitizeSubScopes(c *zip.Ctx, org, project, app, billingAccount string) {
 		req.Header.Set(authz.HeaderApp, app)
 	}
 	// X-Billing-Account-Id names WHO PAYS, so it is minted from the validated
-	// `billing_account` claim (claims.mintedBillingAccount) and never from a client
+	// `billing_account` claim (claims.renderBillingAccount) and never from a client
 	// value — the raw copy is deleted on ingress and not restored here. It used to
 	// be forwarded as-is, which was defensible only while it was a mere attribution
 	// hint that no debit read. It is not one anymore: ai/object.Payer now resolves
