@@ -179,9 +179,18 @@ type statsUser struct {
 // object — for a map that can never hold one, which an SDK generates as a
 // `Dict[str, Dict]` field carrying only `{}`. Empty-struct publishes the honest
 // shape instead, and ANONYMOUS keeps it out of the fleet's flat schema
-// namespace, since there is no value to name. (The class is zip-side and wider
-// than this field: openapi.yaml carries the same claim in 14 more places. The
-// one-line fix is a reflect.Interface case projecting the OPEN schema `true`.)
+// namespace, since there is no value to name.
+//
+// The class is zip-side and wider than this field. MEASURED over the golden with
+// this instance already removed: 15 remain, spread across owners that share
+// nothing but the Go type — guide (JourneyStep.args, stepView.args), pricing
+// (seven list envelopes), admin (adminCatalogOut), framework (documentList.data),
+// Application.metadata, StepSettings.input and runIn.props. Count it, never tally
+// it from prose: LLM.md recorded 15 BEFORE this fix, so the figure was already
+// stale — the class grows every time an app is typed, because an untyped route
+// contributes no schema and therefore cannot state anything false yet. The
+// one-line cure is a reflect.Interface case in schemaOf projecting the OPEN
+// schema `true`: an unconstrained element is open, not an object.
 type statsOut struct {
 	// Metrics is the upstream transactor's metrics block. This server does not
 	// populate it, so it is always the empty object — the front reads the key,
