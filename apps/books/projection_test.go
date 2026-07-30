@@ -27,8 +27,11 @@ package books
 import (
 	"encoding/json"
 	"net/http"
+	"sort"
 	"strings"
 	"testing"
+
+	"github.com/hanzoai/cloud/openapi"
 )
 
 // booksOp is one typed op and the identity it carries into every projection. The CLI
@@ -85,6 +88,12 @@ var typedBooksOps = []booksOp{
 // contract, which is worse than an undocumented route. They also do not read their body
 // today, so any bytes at all are accepted; a typed op would start refusing non-JSON with
 // a 400 the route has never sent. See bank_api.go for the dead link flow behind them.
+//
+// "Cannot be a typed op" is not "must be undocumented", and the split between these two
+// groups is exactly the split between what can still be declared and what cannot. The
+// three byte-body routes DO declare both halves through openapi.Register (a Binary
+// request, their own response view) — see declaredRawBodies below. The two 501 stubs
+// declare nothing, because there is nothing true to say.
 var untypedBooksRoutes = []struct {
 	method, path, why string
 }{
@@ -228,6 +237,135 @@ func TestTheUntypedBooksRoutesAreLiveButProjectNothing(t *testing.T) {
 	if n := len(typedBooksOps) + len(untypedBooksRoutes); n != 25 {
 		t.Errorf("the two ledgers cover %d routes, the /v1/books surface has 25 — a route was added without being declared in either", n)
 	}
+}
+
+// declaredRawBodies is the three exempt routes that still SAY what they take and
+// answer, mapped to the response component the document must publish for each. The
+// value is the Go view type the handler marshals on success, which is the whole point:
+// the declaration is read off the code (openapi.Register in scan.go / bank_api.go), so
+// it cannot drift from what the route really returns.
+var declaredRawBodies = map[string]string{
+	"POST /v1/books/scan":        "ScanDraft",
+	"POST /v1/books/inbox":       "InboxItem",
+	"POST /v1/books/bank/import": "BankTally",
+}
+
+// TestTheRawBodyRoutesDeclareBytesInAndAShapeOut is the OTHER half of the exemption:
+// the three routes cannot be typed ops, but the cost of that must be exactly one
+// missing thing (prose, MCP, CLI) and not four.
+//
+// Before this, all three published operationId and tags and NOTHING else — no request
+// body, no response. That is indistinguishable, to every consumer of the document,
+// from a route that takes no body and returns nothing, so an SDK generated off
+// openapi.yaml offered `scan()` with nowhere to put the receipt and no return type. The
+// request is declared as bytes (application/octet-stream, string/binary — OpenAPI's own
+// spelling for an opaque body, and the one an SDK generator turns into a file
+// parameter), and the response as the view the handler actually marshals.
+//
+// The two 501 stubs are asserted to declare NOTHING, in the same test, because that
+// silence is a decision and not an omission: a route that has never once succeeded has
+// no success body to state, and stating one would be invention.
+func TestTheRawBodyRoutesDeclareBytesInAndAShapeOut(t *testing.T) {
+	app := mountBooks(t)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "books", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+
+	for key, wantComponent := range declaredRawBodies {
+		method, path, _ := strings.Cut(key, " ")
+		op := doc.Paths[path][strings.ToLower(method)]
+		if op == nil {
+			t.Errorf("%s is not served — the ledger is stale", key)
+			continue
+		}
+		// The request: bytes, under the content type that means bytes.
+		var req struct {
+			Content map[string]struct {
+				Schema struct {
+					Type   string `json:"type"`
+					Format string `json:"format"`
+				} `json:"schema"`
+			} `json:"content"`
+		}
+		remarshal(t, op.RequestBody, &req)
+		media, ok := req.Content["application/octet-stream"]
+		if !ok {
+			t.Errorf("%s declares no application/octet-stream request — the declaration in "+
+				"openapi.Register is what tells an SDK this route takes a file; have %v",
+				key, sortedKeys(req.Content))
+			continue
+		}
+		if media.Schema.Type != "string" || media.Schema.Format != "binary" {
+			t.Errorf("%s request schema = %s/%s, want string/binary",
+				key, media.Schema.Type, media.Schema.Format)
+		}
+		// The response: the view the handler marshals, as a shared component.
+		var resp map[string]struct {
+			Content map[string]struct {
+				Schema struct {
+					Ref string `json:"$ref"`
+				} `json:"schema"`
+			} `json:"content"`
+		}
+		remarshal(t, op.Responses, &resp)
+		success, ok := resp["2XX"]
+		if !ok {
+			t.Errorf("%s declares no success response — the SDK has no return type; have %v",
+				key, sortedKeys(resp))
+			continue
+		}
+		wantRef := "#/components/schemas/" + wantComponent
+		if got := success.Content["application/json"].Schema.Ref; got != wantRef {
+			t.Errorf("%s success schema $ref = %q, want %q", key, got, wantRef)
+		}
+		if doc.Components == nil || doc.Components.Schemas[wantComponent] == nil {
+			t.Errorf("%s $refs %s, which the document does not define", key, wantRef)
+		}
+	}
+
+	// The 501 stubs declare nothing — asserted, so a later "let's document these too"
+	// has to argue with a test instead of quietly inventing a contract.
+	for _, key := range []string{
+		"POST /v1/books/bank/link-token",
+		"POST /v1/books/bank/exchange",
+	} {
+		method, path, _ := strings.Cut(key, " ")
+		op := doc.Paths[path][strings.ToLower(method)]
+		if op == nil {
+			t.Errorf("%s is not served — the ledger is stale", key)
+			continue
+		}
+		if op.RequestBody != nil || op.Responses != nil {
+			t.Errorf("%s declares a body (%v / %v) — it answers 501 unconditionally, so any "+
+				"declared shape is invented, not described", key, op.RequestBody, op.Responses)
+		}
+	}
+}
+
+// remarshal reads a document value the way a consumer does — through JSON — rather
+// than through the structs that built it, which is the only reading that proves what an
+// SDK generator will see.
+func remarshal(t *testing.T, from, into any) {
+	t.Helper()
+	b, err := json.Marshal(from)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if err := json.Unmarshal(b, into); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+}
+
+// sortedKeys names what a map DOES carry, so a failure above reports the shape found
+// instead of only the one wanted.
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // TestBookScanCarriesItsSchemaProseAndExample is the ONE op inspected in full, so the

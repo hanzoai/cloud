@@ -55,11 +55,32 @@ var (
 	registry = map[opKey]registration{}
 )
 
+// Binary is the request declaration for a body that is not JSON at all: opaque
+// bytes under the caller's own content type — an uploaded PDF or image, an
+// OFX/QFX/CSV bank statement, a script. Pass it as Register's req for a route
+// whose handler reads the body raw.
+//
+// It exists because "no declaration" and "a byte body" were rendering
+// IDENTICALLY, and they are opposite facts. An operation with no requestBody is
+// what a route that takes no body publishes, so every SDK generator reading the
+// document emitted a call with no payload parameter for routes that cannot work
+// without one (POST /v1/books/scan eats a receipt; /v1/books/bank/import eats a
+// statement). OpenAPI's own spelling for an opaque body is a string of format
+// binary, which is what this renders — the honest declaration a Go struct cannot
+// make, since no struct describes a file.
+//
+// It is a REQUEST-only value: a response that is bytes is a different fact this
+// generator has no route needing yet, and inventing the second half before
+// anything asks for it is how one seam becomes two.
+type Binary struct{}
+
+var binaryReq = reflect.TypeOf(Binary{})
+
 // Register declares the request and response body types for one route, keyed by
 // the fiber pattern exactly as the route is registered. Pass the zero value of
 // the handler's own binding struct (or a slice of the view type for list
-// endpoints); pass nil for a side that has no body. Called from the owning
-// subsystem's init, next to its route table.
+// endpoints), [Binary] for a raw byte body, and nil for a side that has no body.
+// Called from the owning subsystem's init, next to its route table.
 //
 // A duplicate registration for the same (method, path) is a programming error
 // at init time and panics loudly rather than letting two declarations race for
@@ -101,7 +122,14 @@ func newComponents() *components {
 // status code is not derivable (201 vs 200 lives in the handler body), and the
 // range is what this generator can honestly assert — the success body's shape.
 func (r *registration) apply(op *Operation, c *components) error {
-	if r.req != nil {
+	switch {
+	case r.req == binaryReq:
+		// Not JSON, and not a component: an opaque body has no fields to name, so
+		// it is declared inline under the content type that means "bytes".
+		op.RequestBody = &RequestBody{Content: map[string]Media{
+			"application/octet-stream": {Schema: &Schema{Type: "string", Format: "binary"}},
+		}}
+	case r.req != nil:
 		s, err := schemaOf(r.req, c)
 		if err != nil {
 			return fmt.Errorf("%s request: %w", op.OperationID, err)

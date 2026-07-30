@@ -773,9 +773,26 @@ one before it.
   a registration whose route is not in the router simply never renders, so the
   document still cannot disagree with the router. Schemas are additive metadata
   on routes that exist. A duplicate registration for one `(method, path)` panics
-  at init rather than letting two declarations race. Seven declarations live
-  there today, all `apps/platform` (platform.go:248-254) — this is a bridge,
-  not the destination; the destination is the typed op.
+  at init rather than letting two declarations race. Thirteen declarations live
+  there today — `apps/platform` (7), `apps/cloudflare` (3), `apps/books` (3);
+  re-measure with `grep -rn 'openapi.Register(' --include='*.go' apps`. This is a
+  bridge, not the destination; the destination is the typed op. What it buys is
+  narrow and worth naming: an untyped route with no declaration publishes
+  operationId and tags and NOTHING else, which no consumer of the document can
+  distinguish from a route that takes no body and returns none — so the SDKs
+  generated off it offered calls with no payload and no return type. It still
+  buys no prose, no MCP tool and no CLI command; only a typed op does.
+- **A body that is not JSON is declarable too: `openapi.Register(path, method,
+  openapi.Binary{}, resp)`.** Some routes can never be typed ops because they eat
+  RAW BYTES — an uploaded receipt (`POST /v1/books/scan`), an OFX/QFX/CSV
+  statement (`/v1/books/bank/import`), a KV value. zip's typed path decodes the
+  body with `jsonenc.Unmarshal`, so declaring any `In` on one would turn a working
+  PDF upload into a 400: the wire would MOVE, which a description task may not do.
+  `Binary` is the honest declaration a Go struct cannot make (no struct describes
+  a file) and renders OpenAPI's own spelling, `application/octet-stream` with
+  `{type: string, format: binary}` — which is what an SDK generator turns into a
+  file parameter. It is REQUEST-only: a byte RESPONSE is a second fact no route
+  needs yet, and adding it before one asks is how one seam becomes two.
 - **zipdoc is why the prose exists at all.** Go drops comments at compile time,
   so the build-time pass is the ONLY way a handler's doc comment, its field
   descriptions and its `Example:`/`Response:` lines reach the document.
@@ -1128,7 +1145,7 @@ tree: they are disjoint, so agents do not collide in source.
 | tranche | apps | untyped |
 |---|---|---|
 | A | ~~integrations 47~~ (done: 22 typed, 19 refused), cloudflare 34, platform 32, projects 31, captable 31 | 128 |
-| B | agents 26, ~~git 24~~ (done: 24 typed, 24 refused — four wire families, apps/git/LLM.md), ~~books 11~~ (done: 20 typed, 5 refused — 3 raw-byte uploads, 2 unconditional-501 link stubs; each named at its registration and pinned by a wire test. The refusals are now MEASURED, not asserted: apps/books/projection_test.go holds two exhaustive ledgers — the 20 ops must each reach OpenAPI-with-prose + MCP + CLI under one operation id, the 5 exempt routes must each still answer 401 (live, fail-closed) and appear in none of the three, and the two ledgers must sum to 25. Typing any of the 3 uploads needs a zip capability that does not exist: v1.18.7 decodes every typed body with jsonenc.Unmarshal and has no octet-stream/binary request declaration, so an In on a PDF upload turns 200 into 400), ~~o11y 11~~ (done: 12 typed, 8 refused, all wire-bound — 2 verbatim-status VM proxies, 3 reverse proxies (query/query_range/sessions), 2 text/plain Alertmanager receipts, 1 sentry wildcard; apps/o11y/LLM.md names each — the 11 counted 3 comment lines quoting `app.All("/v1/o11y/*")`, real count was 8), ~~company 22~~ (2 left, both permanent) | 50 |
+| B | agents 26, ~~git 24~~ (done: 24 typed, 24 refused — four wire families, apps/git/LLM.md), ~~books 11~~ (done: 20 typed, 5 refused — 3 raw-byte uploads, 2 unconditional-501 link stubs; each named at its registration and pinned by a wire test. The refusals are now MEASURED, not asserted: apps/books/projection_test.go holds two exhaustive ledgers — the 20 ops must each reach OpenAPI-with-prose + MCP + CLI under one operation id, the 5 exempt routes must each still answer 401 (live, fail-closed) and appear in none of the three, and the two ledgers must sum to 25. Typing any of the 3 uploads needs a zip capability that does not exist: v1.18.7 decodes every typed body with jsonenc.Unmarshal and has no octet-stream/binary request declaration, so an In on a PDF upload turns 200 into 400. But the 3 uploads no longer publish NOTHING: each declares its byte request and its response view through openapi.Register + openapi.Binary — scan/ScanDraft, inbox/InboxItem, bank-import/BankTally — so the SDKs stop offering a receipt upload with nowhere to put the receipt. The 2 501 stubs declare nothing, deliberately, and a test asserts that silence), ~~o11y 11~~ (done: 12 typed, 8 refused, all wire-bound — 2 verbatim-status VM proxies, 3 reverse proxies (query/query_range/sessions), 2 text/plain Alertmanager receipts, 1 sentry wildcard; apps/o11y/LLM.md names each — the 11 counted 3 comment lines quoting `app.All("/v1/o11y/*")`, real count was 8), ~~company 22~~ (2 left, both permanent) | 50 |
 | C | ~~team 20~~ (done: 9 typed, 10 refused), ~~guide 20~~ (done: 13 typed, 6 refused — 2 YAML-or-JSON document PUTs, 3 structured-409 gated transitions of which /do also streams SSE, 1 opaque merge-patch; each named at its registration, the 409/YAML wires pinned by tests), ~~crm 20~~ (done: 19 typed, 1 refused — the public intake POST; see "crm is 19 of 20" below), ~~ingress 19~~ (done, and the 19 was 18: **18 typed, 0 refused**, re-verified — the
 19th was `r.Header.Get("X-Forwarded-Proto")`, see the measure below. Nothing in this
 package is wire-bound: three uniform CRUD kinds behind four generic helpers, all

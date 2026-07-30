@@ -2912,6 +2912,27 @@ components:
             within a cluster, and an operator reads the name off the board.
           type: string
       type: object
+    ScanDraft:
+      properties:
+        balanced:
+          type: boolean
+        category:
+          type: string
+        confidence:
+          type: string
+        extracted:
+          $ref: '#/components/schemas/Extracted'
+        questions:
+          items:
+            $ref: '#/components/schemas/Question'
+          type: array
+        scanId:
+          type: string
+        vendor:
+          type: string
+        voucher:
+          $ref: '#/components/schemas/Voucher'
+      type: object
     ScheduleInput:
       properties:
         id:
@@ -15142,6 +15163,19 @@ paths:
   /v1/books/bank/import:
     post:
       operationId: post_v1_books_bank_import
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              format: binary
+              type: string
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankTally'
+          description: Success
       tags:
       - books
   /v1/books/bank/link-token:
@@ -15365,6 +15399,19 @@ paths:
       - books
     post:
       operationId: post_v1_books_inbox
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              format: binary
+              type: string
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboxItem'
+          description: Success
       tags:
       - books
   /v1/books/metrics:
@@ -15547,6 +15594,19 @@ paths:
   /v1/books/scan:
     post:
       operationId: post_v1_books_scan
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              format: binary
+              type: string
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanDraft'
+          description: Success
       tags:
       - books
   /v1/books/scan/book:
