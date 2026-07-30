@@ -2420,8 +2420,15 @@ components:
     ProviderInfo:
       properties:
         displayName:
+          description: |-
+            DisplayName is the human label for the sign-in button; this deployment
+            sends "Hanzo". Omitted from the body when empty.
           type: string
         name:
+          description: |-
+            Name is the provider id, and it is the value that goes back in the URL to
+            start a login: GET /v1/team/account/auth/{provider}. This deployment
+            surfaces exactly one, "openid" — the hanzo.id door.
           type: string
       type: object
     ProvidersCreditOut:
@@ -4794,6 +4801,11 @@ components:
     botMember:
       properties:
         active:
+          description: |-
+            Active is whether the agent projects as a LIVE workspace member, derived
+            from its registry status: empty, "active" and "ready" are live, anything
+            else (archived/retired) is not. An inactive bot drops out of the Team list
+            while its past authorship survives.
           type: boolean
         id:
           description: the agent id
