@@ -46,6 +46,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/account"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
@@ -306,6 +307,33 @@ func usage(s *cloud.Service[state], c *zip.Ctx) error {
 func balance(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
+		// TRUSTED S2S read before refusing. ai's prepaid gate reads this endpoint to
+		// decide whether to admit a paid request, and once ai became its own plugin
+		// PROCESS it stopped seeing build.go's in-process balanceReader hook — a
+		// process-local func var cannot cross a process boundary — so it falls back to
+		// the HTTP path documented as the split-deploy fallback. That request carries
+		// COMMERCE_SERVICE_TOKEN, not a user session, so principal.Org is empty and this
+		// handler answered "sign in to view billing" with a 401.
+		//
+		// The gate is fail-CLOSED (a balance it cannot verify must never degrade to free
+		// inference), so that 401 denied EVERY paid call fleet-wide on v1.801.320:
+		//
+		//   [billing] GET /v1/billing/balance  err="sign in to view billing"
+		//   [ai] balance_gate: balance unverifiable for cold subject=hanzo:
+		//        commerce returned 401 (fail-CLOSED, retryable)
+		//
+		// Scope is NOT widened by this. The token is compared constant-time against the
+		// configured COMMERCE_SERVICE_TOKEN by the same predicate apps/account already
+		// trusts (account.IsServiceToken), and the org comes from the gateway-pinned
+		// X-Org-Id — which the gateway strips from every client request — never from a
+		// caller-supplied field. A wrong or absent token still gets the 401 below.
+		if account.IsServiceToken(c) {
+			if o := strings.TrimSpace(c.Org()); o != "" {
+				org = o
+			}
+		}
+	}
+	if org == "" {
 		// A customer's OWN billing — never admin-gate it; an absent identity is a
 		// true "not signed in" (401), matching usage/gpuCharge.
 		return zip.ErrUnauthorized("sign in to view billing")
