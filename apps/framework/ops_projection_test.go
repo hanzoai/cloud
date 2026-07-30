@@ -58,45 +58,60 @@ var typedOps = []string{
 // these two would publish a request schema naming the path segments and nothing
 // else: an SDK method that cannot send a document.
 //
-// It takes THREE halves of one capability, and only the first is ever named. zip
-// must be able to DECLARE an open object — today `map[string]any` projects
+// It takes THREE halves of one capability, and a partial fix converts nothing.
+// zip must be able to DECLARE an open object — today `map[string]any` projects
 // `additionalProperties: {"type":"object"}`, which asserts every field VALUE is a
 // JSON object and is refuted by every document these tests send. bindURL must
 // be able to BIND the URL onto one: it returns early unless the In is a struct, so
 // an open-object In carries no :doctype/:name while a struct In carries no
 // document. And the bound params must ride OUTSIDE the body namespace: off the
 // REST path op.invoke receives no path map (MCP tools/call and the call plane
-// pass nil), so URL params could only travel as body keys — and a create body's
-// `name` IS the requested document name (engine ops.go, stringField(in, "name")),
-// so folding :name into the body collides with a field the document owns.
-// A partial fix converts nothing. Re-verified against zip v1.18.6 (the pin) and
-// v1.18.8 (the newest published tag): none of the three shipped.
+// pass nil), so URL params could only travel as body keys — and for a
+// prompt-named DocType the create body's `name` IS the document's name (engine
+// ops.go `stringField(in, "name")` → doctype ResolveName), so folding :name into
+// the body collides with a key the document owns. Re-verified against zip v1.18.6
+// (the pin) and v1.18.8 (the newest published tag): none of the three shipped.
+// TestOpenObjectRefusalStillHolds now reads ALL THREE, so no leg of this can
+// outlive its cause.
+//
+// What it COSTS, measured rather than assumed: these two reach openapi.yaml as
+// route-only entries — path parameters, no requestBody, no responses, no prose
+// (plugin/framework/openapi.json). An SDK method generated from that cannot send
+// a document either, so the choice here is not "typed and broken vs. absent", it
+// is "broken with a schema that lies about the body vs. broken with no schema at
+// all". The second is the honest one, and it is the one that goes away when the
+// capability lands rather than having to be un-published.
+//
+// Leg 1 is not only a blocker — it is a LIVE defect in the published document.
+// docView is already the Out of four typed ops (get/submit/cancel one document,
+// and the items of the list), so openapi.yaml today tells every SDK and every
+// agent that each field of a returned document is a JSON object. The fix is one
+// `case reflect.Interface` in zip's schemaOf returning `{}` (JSON Schema "any");
+// it needs a zip release, so it is not made here.
 var rawRoutes = map[string]string{
 	"POST /v1/framework/:doctype":      "free-form document body: shape is metadata, not a Go type",
 	"PUT /v1/framework/:doctype/:name": "free-form document body: shape is metadata, not a Go type",
 }
 
 // TestOpenObjectRefusalStillHolds makes the refusal above EXPIRE on its own. The
-// reason cites two properties of zip and, until this test, nothing read either —
+// reason cites three properties, and until this test nothing read any of them —
 // so the day zip gains the capability nothing here goes red and the refusal
 // outlives its cause, which is how a considered decision becomes stale prose.
 //
-// It pins shapes that are WRONG on purpose. Each assertion failing is the GOOD
-// news: the capability shipped, and POST /v1/framework/:doctype and PUT
-// /v1/framework/:doctype/:name can finally become typed ops. Do not "correct"
-// the expectations to keep it green — convert the two routes and delete it.
-//
-// The third property (bound params must ride outside the body namespace) is a
-// property of the MCP and call planes, which pass no path map at all (zip
-// mcp.go, `op.invoke(…, params.Arguments, nil, nil)`), and has no seam here to
-// read it through — it stays prose, cited above.
+// It pins shapes and facts that are INCONVENIENT on purpose. Each assertion
+// failing is the GOOD news: a leg of the refusal has expired, and once all three
+// have, POST /v1/framework/:doctype and PUT /v1/framework/:doctype/:name can
+// finally become typed ops. Do not "correct" the expectations to keep it green —
+// convert the two routes and delete it.
 func TestOpenObjectRefusalStillHolds(t *testing.T) {
+	app := mountApp(t)
+
 	// 1. zip cannot DECLARE an open object. A document IS map[string]any, and
 	// schemaOf has no reflect.Interface case, so the element type falls through
 	// to the default and every field VALUE is published as a JSON object. This is
 	// SHIPPED and FALSE: TestDocTypeAndDocumentRoundTrip reads a document back
 	// with a string and a number in it, neither of which this schema admits.
-	spec, err := json.Marshal(mountApp(t).OpenAPISpec())
+	spec, err := json.Marshal(app.OpenAPISpec())
 	if err != nil {
 		t.Fatalf("marshal spec: %v", err)
 	}
@@ -139,6 +154,34 @@ func TestOpenObjectRefusalStillHolds(t *testing.T) {
 	if v, ok := bound["doctype"]; ok {
 		t.Errorf("zip bound :doctype=%v onto an open-object In — it can now carry the URL:\n"+
 			"convert the two document writes (and check the params ride outside the body namespace)", v)
+	}
+
+	// 3. The bound params could only ride INSIDE the body namespace, and `name`
+	// there is already taken. Off the REST path op.invoke receives no path map at
+	// all (zip mcp.go, `op.invoke(…, params.Arguments, nil, nil)`), so a typed
+	// write's :doctype/:name could only travel as body keys — and for a
+	// prompt-named DocType the create body's `name` IS the document's name, read
+	// straight off it (engine ops.go `stringField(in, "name")` → doctype
+	// ResolveName). Folding :name into the body would therefore collide with a key
+	// the document owns, which is a wire change, not a description.
+	//
+	// Asserted over the live wire rather than left as prose: the day the engine
+	// stops naming a document from its body, THIS leg of the refusal has expired
+	// too, and it should go red saying so.
+	do(t, app, http.MethodPost, "/v1/framework/doctypes", "acme", map[string]any{
+		"name": "Ticket", "autoname": "prompt",
+		"fields": []map[string]any{{"fieldname": "subject", "fieldtype": "Data"}},
+	})
+	code, created := do(t, app, http.MethodPost, "/v1/framework/Ticket", "acme",
+		map[string]any{"name": "chosen-name", "subject": "x"})
+	var made struct {
+		Name string `json:"name"`
+	}
+	_ = json.Unmarshal(created, &made)
+	if code != http.StatusCreated || made.Name != "chosen-name" {
+		t.Errorf("create with a body `name` = %d %s, pinned as 201 named %q — if the body no longer names\n"+
+			"the document, :name can ride in the body namespace: re-check leg 3 of the refusal",
+			code, created, "chosen-name")
 	}
 }
 
