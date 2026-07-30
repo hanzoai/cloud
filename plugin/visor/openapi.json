@@ -12,9 +12,6 @@
   ],
   "tags": [
     {
-      "name": "agent-bindings"
-    },
-    {
       "name": "clusters"
     },
     {
@@ -34,38 +31,6 @@
     }
   ],
   "paths": {
-    "/v1/agent-bindings": {
-      "get": {
-        "operationId": "listAgentBindings",
-        "summary": "listAgentBindings returns every agent↔machine binding in the caller's org — which machines are running which cloud Agent, with vm's own reconciled status.",
-        "description": "listAgentBindings returns every agent↔machine binding in the caller's org — which\nmachines are running which cloud Agent, with vm's own reconciled status.",
-        "tags": [
-          "agent-bindings"
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "agentBindings": [
-                    {
-                      "agentName": "bot-a",
-                      "machineId": "drop-a",
-                      "publicIp": "1.2.3.4",
-                      "status": "running"
-                    }
-                  ]
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/bindingList"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      }
-    },
     "/v1/clusters": {
       "get": {
         "operationId": "listClusters",
@@ -1109,6 +1074,38 @@
         ]
       }
     },
+    "/v1/machines/agents": {
+      "get": {
+        "operationId": "listMachineAgents",
+        "summary": "listAgents returns every agent↔machine binding in the caller's org — which machines are running which cloud Agent, with vm's own reconciled status.",
+        "description": "listAgents returns every agent↔machine binding in the caller's org — which\nmachines are running which cloud Agent, with vm's own reconciled status.",
+        "tags": [
+          "machines"
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "agentBindings": [
+                    {
+                      "agentName": "bot-a",
+                      "machineId": "drop-a",
+                      "publicIp": "1.2.3.4",
+                      "status": "running"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/bindingList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    },
     "/v1/machines/{id}": {
       "delete": {
         "operationId": "deleteMachine",
@@ -1175,11 +1172,11 @@
         }
       }
     },
-    "/v1/machines/{id}/agent-binding": {
+    "/v1/machines/{id}/agent": {
       "delete": {
         "operationId": "unbindMachineAgent",
-        "summary": "unbindMachineAgent detaches the agent runtime from one of the caller org's machines.",
-        "description": "unbindMachineAgent detaches the agent runtime from one of the caller org's\nmachines. The machine stays — this halts the bot, it does not terminate the\ncompute. Answers 204.",
+        "summary": "unbindAgent detaches the agent runtime from one of the caller org's machines.",
+        "description": "unbindAgent detaches the agent runtime from one of the caller org's\nmachines. The machine stays — this halts the bot, it does not terminate the\ncompute. Answers 204.",
         "tags": [
           "machines"
         ],
@@ -1201,9 +1198,9 @@
         }
       },
       "get": {
-        "operationId": "getMachineAgentBinding",
-        "summary": "getMachineAgentBinding returns the agent binding of one of the caller org's machines, or 404 when the machine runs no bot runtime.",
-        "description": "getMachineAgentBinding returns the agent binding of one of the caller org's\nmachines, or 404 when the machine runs no bot runtime.",
+        "operationId": "getMachineAgent",
+        "summary": "getAgent returns the agent binding of one of the caller org's machines, or 404 when the machine runs no bot runtime.",
+        "description": "getAgent returns the agent binding of one of the caller org's\nmachines, or 404 when the machine runs no bot runtime.",
         "tags": [
           "machines"
         ],
@@ -1236,13 +1233,11 @@
             "description": "ok"
           }
         }
-      }
-    },
-    "/v1/machines/{id}/bind-agent": {
-      "post": {
+      },
+      "put": {
         "operationId": "bindMachineAgent",
-        "summary": "bindMachineAgent binds a cloud Agent to one of the caller org's machines: the machine is recorded as running that Agent's @hanzo/bot runtime.",
-        "description": "bindMachineAgent binds a cloud Agent to one of the caller org's machines: the\nmachine is recorded as running that Agent's @hanzo/bot runtime. The owning org is\nthe validated tenant, never a client field.",
+        "summary": "bindAgent binds a cloud Agent to one of the caller org's machines: the machine is recorded as running that Agent's @hanzo/bot runtime.",
+        "description": "bindAgent binds a cloud Agent to one of the caller org's machines: the\nmachine is recorded as running that Agent's @hanzo/bot runtime. The owning org is\nthe validated tenant, never a client field.",
         "tags": [
           "machines"
         ],

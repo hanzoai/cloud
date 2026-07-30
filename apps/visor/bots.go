@@ -1,6 +1,6 @@
-// bots.go mounts the bot-MACHINE surface (/v1/compute/bots) plus the machine
-// agent-binding proxies (/v1/machines/:id/{bind-agent,agent-binding},
-// /v1/agent-bindings). It is the SIBLING of machines: a bot machine is not a new
+// bots.go mounts the bot-MACHINE surface (/v1/compute/bots) plus a machine's
+// AGENT (/v1/machines/agents, /v1/machines/:id/agent). It is the SIBLING of
+// machines: a bot machine is not a new
 // state this subsystem owns, it is a composition of two things vm already owns — a
 // kind=bot Machine and an AgentBinding. So every route here is a thin, org-scoped
 // translation over the SAME Visor client the machines routes use (client.go),
@@ -437,7 +437,13 @@ func botOp(ctx context.Context, in *botRef) (c *zip.Ctx, org, id string, err err
 	return c, org, id, nil
 }
 
-// ---- machine agent-binding proxies (thin, mirror vm exactly) ----
+// ---- a machine's agent (thin proxies over vm's binding surface) ----
+//
+// OUR addresses are /v1/machines/agents and /v1/machines/:id/agent — one noun,
+// the method carrying the verb. The paths in the cl.call lines below are VM'S,
+// and they keep vm's spelling (bind-agent, agent-binding) because that is the
+// wire vm answers on. A rename here would call a route that does not exist.
+// Two wires, one translation, stated once so nobody "fixes" the wrong side.
 
 // bindAgentReq marks a machine as running the @hanzo/bot runtime for a cloud Agent.
 // ID is flat rather than an embedded machineRef because zip binds a path segment
@@ -451,13 +457,13 @@ type bindAgentReq struct {
 	BotVersion string `json:"botVersion"`
 }
 
-// bindMachineAgent binds a cloud Agent to one of the caller org's machines: the
+// bindAgent binds a cloud Agent to one of the caller org's machines: the
 // machine is recorded as running that Agent's @hanzo/bot runtime. The owning org is
 // the validated tenant, never a client field.
 //
 // Example: {"agentName":"bot-a","botVersion":"1.4.0"}
 // Response: {"machineId":"drop-a","agentName":"bot-a","status":"binding"}
-func (o ops) bindMachineAgent(ctx context.Context, in *bindAgentReq) (*agentBinding, error) {
+func (o ops) bindAgent(ctx context.Context, in *bindAgentReq) (*agentBinding, error) {
 	c, org, err := scope(ctx)
 	if err != nil {
 		return nil, err
@@ -481,11 +487,11 @@ func (o ops) bindMachineAgent(ctx context.Context, in *bindAgentReq) (*agentBind
 	return &binding, nil
 }
 
-// getMachineAgentBinding returns the agent binding of one of the caller org's
+// getAgent returns the agent binding of one of the caller org's
 // machines, or 404 when the machine runs no bot runtime.
 //
 // Response: {"machineId":"drop-a","agentName":"bot-a","status":"running","botVersion":"1.4.0"}
-func (o ops) getMachineAgentBinding(ctx context.Context, in *machineRef) (*agentBinding, error) {
+func (o ops) getAgent(ctx context.Context, in *machineRef) (*agentBinding, error) {
 	c, org, err := scope(ctx)
 	if err != nil {
 		return nil, err
@@ -504,10 +510,10 @@ func (o ops) getMachineAgentBinding(ctx context.Context, in *machineRef) (*agent
 	return &binding, nil
 }
 
-// unbindMachineAgent detaches the agent runtime from one of the caller org's
+// unbindAgent detaches the agent runtime from one of the caller org's
 // machines. The machine stays — this halts the bot, it does not terminate the
 // compute. Answers 204.
-func (o ops) unbindMachineAgent(ctx context.Context, in *machineRef) (*struct{}, error) {
+func (o ops) unbindAgent(ctx context.Context, in *machineRef) (*struct{}, error) {
 	c, org, err := scope(ctx)
 	if err != nil {
 		return nil, err
@@ -529,11 +535,11 @@ type bindingList struct {
 	AgentBindings []agentBinding `json:"agentBindings"`
 }
 
-// listAgentBindings returns every agent↔machine binding in the caller's org — which
+// listAgents returns every agent↔machine binding in the caller's org — which
 // machines are running which cloud Agent, with vm's own reconciled status.
 //
 // Response: {"agentBindings":[{"machineId":"drop-a","agentName":"bot-a","status":"running","publicIp":"1.2.3.4"}]}
-func (o ops) listAgentBindings(ctx context.Context, _ *noArgs) (*bindingList, error) {
+func (o ops) listAgents(ctx context.Context, _ *noArgs) (*bindingList, error) {
 	c, org, err := scope(ctx)
 	if err != nil {
 		return nil, err

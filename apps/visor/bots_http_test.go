@@ -98,7 +98,9 @@ func (a *fakeAgents) wasCreated(name string) bool {
 	return ok
 }
 
-// botVM is a stand-in for the vm (Visor) resell compute + agent-binding surface.
+// botVM is a stand-in for the vm (Visor) resell compute + binding surface. It
+// keeps VM'S spelling (bind-agent, agent-binding) on purpose: it impersonates vm,
+// whose wire did not change. Cloud's own routes are /v1/machines/:id/agent.
 // It speaks the casibase {status,msg,data} envelope, scopes every read by the
 // ?owner query (so a test proves cloud forwards the VALIDATED principal's org),
 // and records the last bind/unbind it saw so a test can assert the composition.
@@ -232,7 +234,7 @@ func mountBots(t *testing.T, f *botVM, agentsURL string) *zip.App {
 
 func TestBotsGatedNoPrincipal(t *testing.T) {
 	app := mountBots(t, newBotVM(), "")
-	// Every bot + agent-binding route must 403 (not 404) without a validated
+	// Every bot + machine-agent route must 403 (not 404) without a validated
 	// principal — routed and org-gated exactly like /v1/machines.
 	cases := []struct {
 		method, path string
@@ -244,10 +246,10 @@ func TestBotsGatedNoPrincipal(t *testing.T) {
 		{http.MethodDelete, "/v1/compute/bots/drop-x"},
 		{http.MethodPost, "/v1/compute/bots/drop-x/stop"},
 		{http.MethodPost, "/v1/compute/bots/drop-x/message"},
-		{http.MethodPost, "/v1/machines/drop-x/bind-agent"},
-		{http.MethodGet, "/v1/machines/drop-x/agent-binding"},
-		{http.MethodDelete, "/v1/machines/drop-x/agent-binding"},
-		{http.MethodGet, "/v1/agent-bindings"},
+		{http.MethodPut, "/v1/machines/drop-x/agent"},
+		{http.MethodGet, "/v1/machines/drop-x/agent"},
+		{http.MethodDelete, "/v1/machines/drop-x/agent"},
+		{http.MethodGet, "/v1/machines/agents"},
 	}
 	for _, tc := range cases {
 		if code, _ := do(t, app, tc.method, tc.path, "", nil); code != http.StatusForbidden {
@@ -442,7 +444,7 @@ func TestBotLaunchAutoCreateClosesTheGap(t *testing.T) {
 	// un-messageable — run Resolves nothing → 404. We reproduce it by binding an
 	// agent directly (the thin proxy does NOT auto-create), then messaging it.
 	f.bots["drop-ghost"] = map[string]any{"owner": "acme", "name": "ghost", "id": "drop-ghost", "state": "running", "tag": "hanzo-kind:bot"}
-	if code, _ := do(t, app, http.MethodPost, "/v1/machines/drop-ghost/bind-agent", "acme",
+	if code, _ := do(t, app, http.MethodPut, "/v1/machines/drop-ghost/agent", "acme",
 		map[string]any{"agentName": "ghost"}); code != http.StatusOK {
 		t.Fatal("seed direct bind")
 	}
@@ -490,8 +492,8 @@ func TestMachineAgentBindingProxies(t *testing.T) {
 	// Seed a resell machine to bind against.
 	f.bots["drop-m"] = map[string]any{"owner": "acme", "name": "m", "id": "drop-m", "state": "running"}
 
-	// bind-agent → 200 binding, org forwarded from the validated principal.
-	code, body := do(t, app, http.MethodPost, "/v1/machines/drop-m/bind-agent", "acme",
+	// PUT agent → 200 binding, org forwarded from the validated principal.
+	code, body := do(t, app, http.MethodPut, "/v1/machines/drop-m/agent", "acme",
 		map[string]any{"agentName": "worker", "botVersion": "1.2.3"})
 	if code != http.StatusOK {
 		t.Fatalf("bind want 200, got %d %s", code, body)
@@ -501,20 +503,20 @@ func TestMachineAgentBindingProxies(t *testing.T) {
 	if b.AgentName != "worker" || f.lastBindOrg != "acme" || f.lastBindName != "worker" {
 		t.Fatalf("bind mismatch: view=%+v bindOrg=%q", b, f.lastBindOrg)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/machines/drop-m/bind-agent", "acme", map[string]any{}); code != http.StatusBadRequest {
+	if code, _ := do(t, app, http.MethodPut, "/v1/machines/drop-m/agent", "acme", map[string]any{}); code != http.StatusBadRequest {
 		t.Fatalf("bind without agentName want 400, got %d", code)
 	}
 
 	// GET the binding → 200; a machine with none → 404.
-	if code, _ := do(t, app, http.MethodGet, "/v1/machines/drop-m/agent-binding", "acme", nil); code != http.StatusOK {
+	if code, _ := do(t, app, http.MethodGet, "/v1/machines/drop-m/agent", "acme", nil); code != http.StatusOK {
 		t.Fatalf("get binding want 200, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodGet, "/v1/machines/nope/agent-binding", "acme", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/machines/nope/agent", "acme", nil); code != http.StatusNotFound {
 		t.Fatalf("get missing binding want 404, got %d", code)
 	}
 
-	// list agent-bindings → 200 {agentBindings:[...]} with the one we bound.
-	code, body = do(t, app, http.MethodGet, "/v1/agent-bindings", "acme", nil)
+	// list machine agents → 200 {agentBindings:[...]} with the one we bound.
+	code, body = do(t, app, http.MethodGet, "/v1/machines/agents", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list bindings want 200, got %d", code)
 	}
@@ -527,7 +529,7 @@ func TestMachineAgentBindingProxies(t *testing.T) {
 	}
 
 	// DELETE the binding → 204, and it is gone.
-	if code, _ := do(t, app, http.MethodDelete, "/v1/machines/drop-m/agent-binding", "acme", nil); code != http.StatusNoContent {
+	if code, _ := do(t, app, http.MethodDelete, "/v1/machines/drop-m/agent", "acme", nil); code != http.StatusNoContent {
 		t.Fatalf("unbind want 204, got %d", code)
 	}
 	if f.lastUnbind != "drop-m" || len(f.bindings) != 0 {
