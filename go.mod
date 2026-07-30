@@ -19,7 +19,7 @@ require (
 	github.com/hanzoai/flags/go v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
 	github.com/hanzoai/iam v1.33.26
-	github.com/hanzoai/kafka v1.2.1
+	github.com/hanzoai/kafka v1.3.1
 	github.com/hanzoai/money v0.2.1
 	github.com/hanzoai/notify v1.7.2
 	github.com/hanzoai/otel-collector v1.2.0
@@ -132,8 +132,6 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2 // indirect
 	github.com/HdrHistogram/hdrhistogram-go v1.2.0 // indirect
 	github.com/antithesishq/antithesis-sdk-go v0.7.0 // indirect
-	github.com/bmatcuk/doublestar/v4 v4.9.2 // indirect
-	github.com/casbin/govaluate v1.3.0 // indirect
 	github.com/coreos/go-oidc/v3 v3.17.0 // indirect
 	github.com/dennwc/varint v1.0.0 // indirect
 	github.com/edsrzf/mmap-go v1.2.0 // indirect
