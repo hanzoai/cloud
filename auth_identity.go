@@ -62,7 +62,7 @@ type idClaims struct {
 // scoped to the caller's org exactly like `owner` — trusted, not forgeable. The
 // default project (absent claim, or the literal principal.DefaultProject) writes
 // nothing, so X-Project-Id is present iff a non-default project is in scope. This
-// mirrors the edge (iamauth.Claims.MintedProject) byte-for-byte, so the in-binary
+// mirrors the edge (the edge (hanzoai/authz/edge)) byte-for-byte, so the in-binary
 // path binds the same header the gateway would.
 func (c *idClaims) renderProject() string {
 	if principal.IsDefaultProject(c.Project) {
@@ -78,7 +78,7 @@ func (c *idClaims) renderProject() string {
 // WHO PAYS IS NOT A CLIENT'S TO NAME. This rides the validated `billing_account`
 // claim — IAM's signed statement, resolved at the identity boundary from the real
 // grant context — exactly like `owner` and `project`. It mirrors the edge
-// (iamauth.Claims.MintedBillingAccount) byte-for-byte, so the in-binary path binds
+// (the edge (hanzoai/authz/edge)) byte-for-byte, so the in-binary path binds
 // the same header the gateway would, and ai/object.Payer reads the same payer on
 // both. The raw client copy is deleted on ingress and NEVER restored.
 func (c *idClaims) renderBillingAccount() string {
