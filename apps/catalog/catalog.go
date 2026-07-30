@@ -42,9 +42,12 @@
 // there is no credential that could publish into the published catalog at all.
 package catalog
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
@@ -130,11 +133,57 @@ type Entry struct {
 	Note string `json:"note,omitempty"`
 }
 
-// Response is the ONE result shape. Facets ship with every response because
+// browseQuery is the GET /v1/catalog request: a free-text q plus the exact-match
+// browse axes, every one of them optional and every one of them a query
+// parameter.
+//
+// The axes are STRINGS rather than the bools and ints they read as, and that is
+// deliberate: this surface has always answered an unparseable value by NOT
+// applying that filter, and zip's URL binder leaves an unparseable value at the
+// field's ZERO — so `?limit=0` and `?limit=abc` would arrive identically through
+// an int, while the wire distinguishes them (0 is a page of nothing; abc is the
+// default 50). Same for forkable, which is TRI-state here: yes, no, and unasked.
+type browseQuery struct {
+	// Q is the free-text query the lexical index scores relevance on. Empty is a
+	// browse rather than a search — the same request either way.
+	Q string `json:"q"`
+	// Org narrows to one builder org: hanzo | lux | zoo. Case-insensitive.
+	Org string `json:"org"`
+	// Kind narrows to repo | site. Case-insensitive.
+	Kind string `json:"kind"`
+	// Origin narrows to what a row IS to you: template | community | third-party |
+	// product. This is the axis the two hanzo.app lanes are cut on.
+	Origin string `json:"origin"`
+	// Archetype narrows to one project archetype. Case-insensitive.
+	Archetype string `json:"archetype"`
+	// Language narrows to one implementation language. Case-insensitive.
+	Language string `json:"language"`
+	// Template narrows a lane to ONE lineage: the id of the parent everything
+	// returned was forked from.
+	Template string `json:"template"`
+	// Forkable is tri-state: "true" selects the forkable rows, "false" selects the
+	// rest, and anything else — including absent — applies no filter at all.
+	Forkable string `json:"forkable"`
+	// Limit caps the page at 200, default 50. A value that is not a non-negative
+	// integer falls back to the default.
+	Limit string `json:"limit"`
+	// Offset is where the page starts, default 0, with the same tolerance.
+	Offset string `json:"offset"`
+}
+
+// catalogPage is the ONE result shape. Facets ship with every response because
 // browse and search are the same request here — a query with no q is a browse.
-type Response struct {
-	Data   []Entry           `json:"data"`
-	Total  int               `json:"total"`
+//
+// It is named for its product rather than called `Response`: a typed op's Go type
+// name IS its schema name across the WHOLE fleet, the namespace is flat, and
+// openapi.Weave refuses one name with two shapes.
+type catalogPage struct {
+	// Data is the page of matching entries, most recently updated first.
+	Data []Entry `json:"data"`
+	// Total is how many entries matched BEFORE paging — what a pager sizes itself on.
+	Total int `json:"total"`
+	// Facets counts the whole matching set along every browse axis, so a rail a
+	// client renders is a rail that has results behind it. Keyed axis → value → count.
 	Facets map[string]counts `json:"facets"`
 }
 
@@ -142,9 +191,21 @@ type counts map[string]int
 
 type state struct{}
 
+// ops binds the subsystem to its typed handler: a TypedHandler has no parameter
+// for the service, so it arrives as a RECEIVER and the op is a method value —
+// the only bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
+
 // Mount wires the lens and starts the corpus reconcile. No store, no DataDir:
 // the corpus is the index's, and the sync is a goroutine, not an endpoint.
 func Mount(app cloud.Router, deps cloud.Deps) error {
+	// The typed-op registry lives on the App: it is what makes the browse a
+	// document operation, an MCP tool, a CLI command and an SDK method rather than
+	// only a route. A Router that cannot reach it must fail the mount rather than
+	// serve a route no projection knows about.
+	if app != nil && cloud.ZipApp(app) == nil {
+		return fmt.Errorf("catalog.Mount: router carries no typed-op registry")
+	}
 	return cloud.Mount(app, deps, "catalog", build, routes)
 }
 
@@ -153,8 +214,23 @@ func build(b cloud.Base) (state, error) {
 	return state{}, nil
 }
 
+// routes registers the lens.
+//
+// Bridge FIRST, on the subsystem's own prefix and BEFORE the leaf: fiber runs
+// middleware in registration order, so one installed after its route never runs.
+// A typed op receives only a context, so the validated org reaches it by being
+// parked there — never as an In field, which is caller-supplied and would be a
+// cross-tenant read the caller asserted for itself. Serve installs one app-wide
+// too; nesting is harmless, and this package's own tests mount on a bare app with
+// no Serve, so this install is what makes them pass.
+//
+// The op is declared on the App with its WHOLE path, not on the group with an
+// empty leaf: joining "/v1/catalog" with "" yields "/v1/catalog/", a different
+// path from the one this API has always served.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/catalog", cloud.Handle(s, browse))
+	app.Group("/v1/catalog", cloud.Bridge())
+	o := ops{s: s}
+	zip.Get(cloud.ZipApp(app), "/v1/catalog", o.browse)
 }
 
 // loop reconciles the corpus on a timer, first pass delayed so a boot never waits
@@ -174,39 +250,53 @@ func loop(b cloud.Base) {
 	}
 }
 
-// browse answers search AND browse. The lexical index does relevance over the
-// free-text q; the facet filters are applied here because they are exact-match
-// dimensions, and asking a term index to express "language = Go" as a term match
-// would let "go" in a description score as a language.
-func browse(s *cloud.Service[state], c *zip.Ctx) error {
+// Browse searches AND browses the cross-org catalog: every project, app and site
+// the fleet has built, whichever org built it.
+//
+// It reads TWO corpora and returns them as one page — the published,
+// world-readable catalog that every caller sees, plus the caller's OWN org's
+// private entries when the request carries a validated principal. Each row says
+// which it came from in `scope`, so a client can warn before sharing a link. An
+// anonymous caller simply gets the published one; no filter can ever widen a
+// caller into another tenant's corpus, because the query that would return it is
+// never run for them.
+//
+// A request with no q is a browse rather than a search, and both answer the same
+// shape: the page, the total before paging, and the facet counts over the whole
+// matching set.
+//
+// Example: {"origin":"template","language":"typescript","forkable":"true","limit":"20"}
+func (o ops) browse(ctx context.Context, in *browseQuery) (*catalogPage, error) {
 	if !index.Ready() {
-		return zip.Errorf(http.StatusServiceUnavailable, "catalog: index not mounted")
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "catalog: index not mounted")
 	}
-	q := strings.TrimSpace(c.Query("q"))
-	rows, err := read(c, PublicOrg, q, "public")
+	q := strings.TrimSpace(in.Q)
+	rows, err := read(ctx, PublicOrg, q, "public")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// The caller's OWN corpus, read with the validated principal and nothing else.
-	// Anonymous callers simply get the published one.
-	if org, ok := principal.Org(c); ok && org != PublicOrg {
-		own, err := read(c, org, q, "org")
+	// Anonymous callers simply get the published one. The org is the one Bridge
+	// parked, never a request field: an In field is caller-supplied, so an org read
+	// from one is a cross-tenant read the caller asserted for itself.
+	if org, ok := principal.OrgFrom(ctx); ok && org != PublicOrg {
+		own, err := read(ctx, org, q, "org")
 		if err != nil {
-			return err
+			return nil, err
 		}
 		rows = append(rows, own...)
 	}
 
-	rows = filter(rows, c)
+	rows = filter(rows, in)
 	facets := facet(rows)
 	total := len(rows)
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Updated > rows[j].Updated })
-	return c.JSON(http.StatusOK, Response{Data: page(rows, c), Total: total, Facets: facets})
+	return &catalogPage{Data: page(rows, in), Total: total, Facets: facets}, nil
 }
 
 // read pulls one corpus out of the index and stamps its scope.
-func read(c *zip.Ctx, org, q, scope string) ([]Entry, error) {
-	raw, err := index.Query(c.Context(), org, uid, q, scan, 0)
+func read(ctx context.Context, org, q, scope string) ([]Entry, error) {
+	raw, err := index.Query(ctx, org, uid, q, scan, 0)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "catalog: %v", err)
 	}
@@ -230,16 +320,16 @@ func read(c *zip.Ctx, org, q, scope string) ([]Entry, error) {
 // narrow, never select the complement, so `?forkable=false` silently meant "no
 // filter" — a boolean axis whose negative case is unaskable is a label, not a
 // filter.
-func filter(in []Entry, c *zip.Ctx) []Entry {
-	org, arch := strings.ToLower(c.Query("org")), strings.ToLower(c.Query("archetype"))
-	lang, kind := strings.ToLower(c.Query("language")), strings.ToLower(c.Query("kind"))
+func filter(rows []Entry, in *browseQuery) []Entry {
+	org, arch := strings.ToLower(in.Org), strings.ToLower(in.Archetype)
+	lang, kind := strings.ToLower(in.Language), strings.ToLower(in.Kind)
 	// origin cuts the corpus into the lanes a person actually browses; parent
 	// narrows a lane to one lineage ("everything built from folio"), which is what
 	// turns the community lane from a pile into something you can read.
-	orig, parent := strings.ToLower(c.Query("origin")), strings.ToLower(c.Query("template"))
-	fork, forkSet := boolQuery(c, "forkable")
-	out := in[:0]
-	for _, e := range in {
+	orig, parent := strings.ToLower(in.Origin), strings.ToLower(in.Template)
+	fork, forkSet := boolQuery(in.Forkable)
+	out := rows[:0]
+	for _, e := range rows {
 		switch {
 		case org != "" && strings.ToLower(e.Org) != org,
 			arch != "" && strings.ToLower(e.Archetype) != arch,
@@ -256,8 +346,14 @@ func filter(in []Entry, c *zip.Ctx) []Entry {
 }
 
 // boolQuery reads a flag that has three answers, not two: yes, no, and unasked.
-func boolQuery(c *zip.Ctx, name string) (v, ok bool) {
-	b, err := strconv.ParseBool(strings.TrimSpace(c.Query(name)))
+//
+// It takes the raw STRING rather than a *bool because the two disagree on the
+// wire: zip's URL binder reads a bare `?forkable` (no value at all) as TRUE,
+// while this surface has always read it as unasked — ParseBool refuses an empty
+// string. A bool In would therefore return a different set of rows for a URL that
+// has not changed.
+func boolQuery(raw string) (v, ok bool) {
+	b, err := strconv.ParseBool(strings.TrimSpace(raw))
 	return b, err == nil
 }
 
@@ -283,22 +379,29 @@ func facet(in []Entry) map[string]counts {
 	return f
 }
 
-func page(in []Entry, c *zip.Ctx) []Entry {
-	limit, offset := intQuery(c, "limit", 50), intQuery(c, "offset", 0)
+func page(rows []Entry, in *browseQuery) []Entry {
+	limit, offset := intQuery(in.Limit, 50), intQuery(in.Offset, 0)
 	if limit > maxLimit {
 		limit = maxLimit
 	}
-	if offset >= len(in) {
+	if offset >= len(rows) {
 		return []Entry{}
 	}
-	if end := offset + limit; end < len(in) {
-		return in[offset:end]
+	if end := offset + limit; end < len(rows) {
+		return rows[offset:end]
 	}
-	return in[offset:]
+	return rows[offset:]
 }
 
-func intQuery(c *zip.Ctx, name string, def int) int {
-	n, err := strconv.Atoi(c.Query(name))
+// intQuery reads a paging bound from its raw string, falling back to def for
+// every value that is not a non-negative integer.
+//
+// It takes the STRING rather than an int field for the same reason boolQuery
+// does: zip's URL binder leaves an unparseable value at the field's ZERO, so an
+// int In could not tell `?limit=0` (a page of nothing, which this surface
+// serves) from `?limit=abc` (unset, which it answers with 50).
+func intQuery(raw string, def int) int {
+	n, err := strconv.Atoi(raw)
 	if err != nil || n < 0 {
 		return def
 	}

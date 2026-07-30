@@ -1495,6 +1495,81 @@ components:
             $ref: '#/components/schemas/Enrollment'
           type: array
       type: object
+    Entry:
+      properties:
+        archetype:
+          type: string
+        description:
+          type: string
+        forkable:
+          description: |-
+            Forkable is NOT omitempty: false is an answer here, not a missing field.
+            Omitted, a client could not tell "you cannot fork this" from "nobody said".
+          type: boolean
+        id:
+          type: string
+        kind:
+          description: repo | site
+          type: string
+        language:
+          type: string
+        license:
+          type: string
+        name:
+          type: string
+        note:
+          description: |-
+            Note is why a row is NOT in the published catalog, set by the admission gate
+            (gate.go) on the sites it holds back. It is the difference between a demo
+            that silently vanished from the public lens and one whose owner can read the
+            reason and fix it. A published row never carries one.
+          type: string
+        org:
+          description: hanzo | lux | zoo
+          type: string
+        origin:
+          description: |-
+            Origin is WHAT THIS IS TO YOU: template | community | third-party | product
+            (origin.go owns the four nouns and derives them). Not omitempty, for the
+            same reason Forkable is not: every row has an answer, and a missing one is
+            exactly the flattening this field exists to end.
+          type: string
+        repo:
+          description: source
+          type: string
+        scope:
+          description: |-
+            Scope is provenance, not storage: "public" for a row from the published
+            corpus, "org" for one only this caller can see. A UI that cannot tell them
+            apart cannot warn before sharing a link.
+          type: string
+        stars:
+          type: integer
+        template:
+          description: lineage, if forked from one
+          type: string
+        title:
+          type: string
+        updated:
+          type: string
+        upstream:
+          description: |-
+            Upstream/License credit the third-party work an entry was published from:
+            the difference between "this org built it" and "somebody else built it and
+            we are showing it to you".
+
+            WHO built it is Org, above — the account that paid for the project. There
+            was once a separate admin-gated `official` boolean here claiming the same
+            thing, and because it was gated it disagreed: apps Hanzo wrote and hosts
+            were published by a script holding an ordinary org token, so it stayed
+            false on all of them and this directory filed our own work as somebody
+            else's. A field that restates an unforgeable fact can only ever be the
+            wrong copy of it.
+          type: string
+        url:
+          description: live, if it is deployed
+          type: string
+      type: object
     EnvVarJSON:
       properties:
         key:
@@ -3243,6 +3318,36 @@ components:
         msg:
           type: string
         status:
+          type: string
+      type: object
+    Receipt:
+      properties:
+        amount:
+          description: exact 18-dp USD (money.Amount string)
+          type: string
+        from:
+          description: payer address
+          type: string
+        id:
+          type: string
+        nonce:
+          type: string
+        payee:
+          description: recipient address
+          type: string
+        payeeOrg:
+          type: string
+        payer:
+          description: payer ORG (the debited ledger)
+          type: string
+        resource:
+          type: string
+        settledAt:
+          type: integer
+        settledVia:
+          description: '"ledger" (live) | "chain" (seam)'
+          type: string
+        txHash:
           type: string
       type: object
     RecordsOut:
@@ -5902,6 +6007,33 @@ components:
             $ref: '#/components/schemas/Application'
           type: array
       type: object
+    askRequest:
+      properties:
+        followUps:
+          type: boolean
+        language:
+          type: string
+        maxQueries:
+          type: integer
+        maxSources:
+          type: integer
+        mode:
+          type: string
+        model:
+          type: string
+        q:
+          type: string
+        question:
+          type: string
+        sources:
+          items:
+            type: string
+          type: array
+        stream:
+          type: boolean
+        system:
+          type: string
+      type: object
     auditList:
       properties:
         data:
@@ -7201,6 +7333,28 @@ components:
             $ref: '#/components/schemas/CatalogEntry'
           type: array
       type: object
+    catalogPage:
+      properties:
+        data:
+          description: Data is the page of matching entries, most recently updated
+            first.
+          items:
+            $ref: '#/components/schemas/Entry'
+          type: array
+        facets:
+          additionalProperties:
+            additionalProperties:
+              type: integer
+            type: object
+          description: |-
+            Facets counts the whole matching set along every browse axis, so a rail a
+            client renders is a rail that has results behind it. Keyed axis → value → count.
+          type: object
+        total:
+          description: Total is how many entries matched BEFORE paging — what a pager
+            sizes itself on.
+          type: integer
+      type: object
     channelList:
       properties:
         data:
@@ -7825,6 +7979,32 @@ components:
           items:
             $ref: '#/components/schemas/strategyView'
           type: array
+      type: object
+    crawlDocument:
+      properties:
+        markdown:
+          type: string
+        metadata:
+          additionalProperties: {}
+          type: object
+        title:
+          type: string
+        url:
+          type: string
+      type: object
+    crawlRequest:
+      properties:
+        url:
+          type: string
+      type: object
+    crawlResult:
+      properties:
+        data:
+          $ref: '#/components/schemas/crawlDocument'
+        error:
+          type: string
+        success:
+          type: boolean
       type: object
     createAgentIn:
       properties:
@@ -12847,6 +13027,26 @@ components:
           items:
             $ref: '#/components/schemas/Tool'
           type: array
+      type: object
+    trailPage:
+      properties:
+        data:
+          description: Data is one page of the org's events, newest first. Empty,
+            never null.
+          items:
+            $ref: '#/components/schemas/Wire'
+          type: array
+        msg:
+          description: Msg is the envelope's message slot, empty on success.
+          type: string
+        status:
+          description: Status is the envelope's status slot, "ok" on success.
+          type: string
+        total:
+          description: |-
+            Total is how many events match the filter, across all pages — what a pager
+            needs to size itself.
+          type: integer
       type: object
     transactionsOut:
       properties:
@@ -17986,11 +18186,101 @@ paths:
   /v1/ask:
     post:
       operationId: post_v1_ask
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/askRequest'
       tags:
       - ask
   /v1/audit:
     get:
+      description: |-
+        List reads the caller's OWN org audit trail, newest first, with the total the
+        filter matched so a console can page it.
+
+        Every filter is optional and applies WITHIN the caller's org — the org itself is
+        the validated principal's and can never be widened by a request. Fails closed:
+        an absent principal is a true "not signed in" (401), and a deployment with no
+        local tamper-evident store answers an honest 501 rather than silently serving
+        somebody else's trail.
       operationId: get_v1_audit
+      parameters:
+      - description: |-
+          Sub narrows the trail to one actor — the validated subject that made the
+          request. Blank means every actor in the org.
+        in: query
+        name: sub
+        required: false
+        schema:
+          type: string
+      - description: Action narrows it to one action name, e.g. "machine.create".
+        example: machine.create
+        in: query
+        name: action
+        required: false
+        schema:
+          type: string
+      - description: Resource narrows it to one resource TYPE, e.g. "apikey".
+        in: query
+        name: resource
+        required: false
+        schema:
+          type: string
+      - description: ResourceID narrows it to one resource instance.
+        in: query
+        name: resourceId
+        required: false
+        schema:
+          type: string
+      - description: 'Result narrows it to one outcome: "success", "deny" or "error".'
+        example: success
+        in: query
+        name: result
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Since is the inclusive lower time bound, RFC3339. An unparseable value is
+          ignored rather than refused — one malformed filter must not hide the trail.
+        example: "2026-07-01T00:00:00Z"
+        in: query
+        name: since
+        required: false
+        schema:
+          type: string
+      - description: Until is the upper time bound, RFC3339, with the same tolerance.
+        in: query
+        name: until
+        required: false
+        schema:
+          type: string
+      - description: |-
+          PageSize is rows per page, default 100. A value that is not a positive
+          integer falls back to the default.
+        example: "50"
+        in: query
+        name: pageSize
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Page is the 1-based page number, driving the offset. Anything below 2 reads
+          the first page.
+        in: query
+        name: p
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trailPage'
+          description: ok
+      summary: List reads the caller's OWN org audit trail, newest first, with the
+        total the filter matched so a console can page it.
       tags:
       - audit
   /v1/authors:
@@ -20204,7 +20494,106 @@ paths:
       - captable
   /v1/catalog:
     get:
+      description: |-
+        Browse searches AND browses the cross-org catalog: every project, app and site
+        the fleet has built, whichever org built it.
+
+        It reads TWO corpora and returns them as one page — the published,
+        world-readable catalog that every caller sees, plus the caller's OWN org's
+        private entries when the request carries a validated principal. Each row says
+        which it came from in `scope`, so a client can warn before sharing a link. An
+        anonymous caller simply gets the published one; no filter can ever widen a
+        caller into another tenant's corpus, because the query that would return it is
+        never run for them.
+
+        A request with no q is a browse rather than a search, and both answer the same
+        shape: the page, the total before paging, and the facet counts over the whole
+        matching set.
       operationId: get_v1_catalog
+      parameters:
+      - description: |-
+          Q is the free-text query the lexical index scores relevance on. Empty is a
+          browse rather than a search — the same request either way.
+        in: query
+        name: q
+        required: false
+        schema:
+          type: string
+      - description: 'Org narrows to one builder org: hanzo | lux | zoo. Case-insensitive.'
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      - description: Kind narrows to repo | site. Case-insensitive.
+        in: query
+        name: kind
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Origin narrows to what a row IS to you: template | community | third-party |
+          product. This is the axis the two hanzo.app lanes are cut on.
+        example: template
+        in: query
+        name: origin
+        required: false
+        schema:
+          type: string
+      - description: Archetype narrows to one project archetype. Case-insensitive.
+        in: query
+        name: archetype
+        required: false
+        schema:
+          type: string
+      - description: Language narrows to one implementation language. Case-insensitive.
+        example: typescript
+        in: query
+        name: language
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Template narrows a lane to ONE lineage: the id of the parent everything
+          returned was forked from.
+        in: query
+        name: template
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Forkable is tri-state: "true" selects the forkable rows, "false" selects the
+          rest, and anything else — including absent — applies no filter at all.
+        example: "true"
+        in: query
+        name: forkable
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit caps the page at 200, default 50. A value that is not a non-negative
+          integer falls back to the default.
+        example: "20"
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: string
+      - description: Offset is where the page starts, default 0, with the same tolerance.
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/catalogPage'
+          description: ok
+      summary: 'Browse searches AND browses the cross-org catalog: every project,
+        app and site the fleet has built, whichever org built it.'
       tags:
       - catalog
   /v1/catalog/entries:
@@ -23372,9 +23761,21 @@ paths:
         it and returns the honest per-channel outcome.
       tags:
       - content
-  /v1/crawl/:
+  /v1/crawl:
     post:
       operationId: post_v1_crawl
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/crawlRequest'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/crawlResult'
+          description: Success
       tags:
       - crawl
   /v1/crm/applications:
@@ -37270,13 +37671,32 @@ paths:
       - world
   /v1/x402/settlements/{id}:
     get:
-      operationId: get_v1_x402_settlements_by_id
+      description: |-
+        Settlement reads one x402 payment receipt by id.
+
+        It is scoped to the caller's PAYER org — the ledger that was debited — so one
+        tenant can never read another's settlement, and an id that exists but belongs
+        to somebody else is a 404 exactly like one that does not exist. A caller with
+        no billable identity is refused outright.
+      operationId: get_v1_x402_settlements_id
       parameters:
-      - in: path
+      - description: |-
+          ID is the settlement id from the URL — the deterministic keccak(from|nonce)
+          key an x402 receipt is issued under (the `id` field of a Receipt, and the
+          value of the X-Payment-Response header a paid request answers with).
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Receipt'
+          description: ok
+      summary: Settlement reads one x402 payment receipt by id.
       tags:
       - x402
 servers:
