@@ -61,18 +61,14 @@ func postBody(t *testing.T, app *zip.App, path, body, auth string) (int, Capture
 
 // ── the evidence for the door ────────────────────────────────────────────────
 
-// TestCanonicalWireSilentlyDropsTeamBatch is THE reason /v1/event/collect exists, and
-// it is a test of the OLD behavior, not the new: it pins what a naive repoint of
-// ANALYTICS_COLLECTOR_URL at the canonical door would have done.
-//
-// decodeIngest sees the leading '[' and decodes []Event, whose keys are `distinctId`
-// and `time`. The team wire has neither, so the person id and the timestamp are lost,
-// and toCapture leaves Type empty. canonicalType("") is "event", which is not in
-// publicKinds — so admitPublic drops EVERY event. Accepted 0, dropped 2.
-//
-// That is the accepted-then-dropped failure: the SPA would see a 200 and discard its
-// retry queue while nothing was ever stored.
-func TestCanonicalWireSilentlyDropsTeamBatch(t *testing.T) {
+// TestCanonicalDoorDecodesTeamBatch pins the fold that retired the /collect
+// door as a distinct wire: the canonical decode now dispatches the team SPA's
+// bare snake_case array by shape (isTeamArray), so a repoint of
+// ANALYTICS_COLLECTOR_URL at the canonical door loses nothing. This INVERTS the
+// old TestCanonicalWireSilentlyDropsTeamBatch, which pinned the
+// accepted-then-dropped failure the fold fixed: the person id, the timestamp
+// and the kind all survive now.
+func TestCanonicalDoorDecodesTeamBatch(t *testing.T) {
 	evs, err := decodeIngest([]byte(teamWire))
 	if err != nil {
 		t.Fatalf("decodeIngest: %v", err)
@@ -80,16 +76,14 @@ func TestCanonicalWireSilentlyDropsTeamBatch(t *testing.T) {
 	if len(evs) != 2 {
 		t.Fatalf("decodeIngest events = %d, want 2", len(evs))
 	}
-	// The two fields the canonical wire cannot see.
-	if evs[0].DistinctID != "" {
-		t.Errorf("canonical decode DistinctID = %q, want empty (key is distinct_id, not distinctId)", evs[0].DistinctID)
+	if evs[0].DistinctID == "" {
+		t.Error("the team person id (distinct_id) must survive the canonical decode")
 	}
-	if evs[0].Timestamp != "" {
-		t.Errorf("canonical decode Timestamp = %q, want empty (key is timestamp:number, not time:string)", evs[0].Timestamp)
+	if evs[0].Timestamp == "" {
+		t.Error("the team epoch-millis timestamp must survive the canonical decode")
 	}
-	admitted, dropped := admitPublic(evs)
-	if len(admitted) != 0 || dropped != 2 {
-		t.Fatalf("canonical wire admitted %d dropped %d, want 0 admitted / 2 dropped", len(admitted), dropped)
+	if evs[0].Type == "" {
+		t.Error("the team kind must be named — an unnamed kind is dropped whole by admitPublic")
 	}
 }
 
@@ -447,26 +441,22 @@ func resolvedTeamOrg(t *testing.T, app *zip.App, bearer string) (string, bool) {
 
 // ── the door ─────────────────────────────────────────────────────────────────
 
-// TestTeamDoorIsRegistered proves the route exists and is the TEAM wire, by the
-// clearest discriminator available without a warehouse:
-//
-//	/v1/event        + the team wire -> everything dropped -> the write core is never
-//	                                    reached (len(evs)==0 short-circuits) -> 200.
-//	/v1/event/collect+ the team wire -> events survive admission -> the write core IS
-//	                                    reached -> 503 (no warehouse in the harness).
-//
-// A wrong or missing route would 404/405; a route bound to the canonical decoder would
-// 200 with dropped=2. Only the correct binding produces 503.
+// TestTeamDoorIsRegistered proves BOTH spellings of the door carry the team
+// wire since the fold: the canonical /v1/event dispatches the team array by
+// shape (isTeamArray) and the sunsetting caller-owned /collect path binds the
+// same ONE decode — so on both, team events survive admission and REACH the
+// write core, which is 503 in this warehouse-less harness. A wrong or missing
+// route would 404/405; a decode regression that silently dropped the batch
+// would answer 200 dropped=2 — the exact accepted-then-discarded failure the
+// old two-wire split existed to prevent.
 func TestTeamDoorIsRegistered(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "a-real-team-secret")
 	app := mountApp(t)
 
-	code, res := postBody(t, app, "/v1/event", teamWire, "")
-	if code != http.StatusOK || res.Accepted != 0 || res.Dropped != 2 {
-		t.Fatalf("canonical door with team wire = %d %+v, want 200 accepted=0 dropped=2", code, res)
-	}
-	if code, _ := postBody(t, app, "/v1/event/collect", teamWire, ""); code != http.StatusServiceUnavailable {
-		t.Fatalf("team door with team wire = %d, want 503 (reached the write core)", code)
+	for _, path := range []string{"/v1/event", "/v1/event/collect"} {
+		if code, res := postBody(t, app, path, teamWire, ""); code != http.StatusServiceUnavailable {
+			t.Fatalf("%s with team wire = %d %+v, want 503 (events must survive admission and reach the write core)", path, code, res)
+		}
 	}
 }
 

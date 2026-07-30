@@ -50,7 +50,9 @@ var wantDoors = []door{
 	{path: "/v1/analytics", decode: decodeIngest, source: sourceCapture},
 	{path: "/v1/analytics/batch", decode: decodeIngest, source: sourceCapture},
 	{path: "/v1/tracker", decode: decodeIngest, source: sourceCapture},
-	{path: "/v1/event/collect", decode: decodeTeam, source: sourceTeam},
+	// The team wire folded into the ONE canonical decode (isTeamArray dispatch);
+	// this sunsetting caller-owned path keeps only its $source identity.
+	{path: "/v1/event/collect", decode: decodeIngest, source: sourceTeam},
 }
 
 // samePtr reports whether two func values are the SAME function, by code pointer.

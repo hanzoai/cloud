@@ -8,7 +8,7 @@
 //	  - SuperAdmin VM proxy  /v1/o11y/vm/{query,query_range}   (vmproxy.go)
 //	  - flat builder query   /v1/o11y/{query,query_range}      (query.go)
 //	  - event ingest         POST /v1/event/ingestion          (event_ingest.go)
-//	  - Sentry-wire ingest   POST /v1/event/error/…            (eventToRuntimePath)
+//	  - Sentry-wire ingest   POST /v1/event/api/…              (eventToRuntimePath)
 //	RUNTIME handler the hanzoai/o11y wildcard (order 70) delegates to via
 //	  o11y.SetHandler — the in-process runtime (embed.go) or a reverse-proxy
 //	  fallback (this file).
@@ -239,34 +239,29 @@ func mountSentry(a cloud.Router) {
 	})))
 }
 
-// eventToRuntimePath maps a Sentry-wire ingest path on the /v1/event family to
-// its runtime route. Two wire spellings arrive under /v1/event/error/: real
-// Sentry SDKs expand a DSN of …/v1/event/error/<project> to
-// /v1/event/error/api/<project>/envelope|store(/) (they insert "api"), which
-// maps onto the /v1/o11y/api ingest routes; a bare
-// /v1/event/error/<project>/envelope|store(/) maps onto /v1/sentry. ok=false
-// for anything else — the family carries ingest ONLY, so no READ API is
-// reachable through it and the principal gate's two existing ingest exemptions
-// (isErrorIngestPath, isSentryIngestPath) stay the only exemptions.
+// eventToRuntimePath maps a Sentry-wire ingest path on the ONE /v1/event door
+// to its runtime route: /v1/event/api/<project>/envelope|store(/) — the form a
+// real Sentry SDK produces from a DSN of …/v1/event/<project> (SDKs insert the
+// "api" segment) — onto the /v1/o11y/api ingest routes. ok=false for anything
+// else — the subtree carries ingest ONLY, so no READ API is reachable through
+// it and the principal gate's existing ingest exemption (isErrorIngestPath)
+// stays the only exemption on this path.
 func eventToRuntimePath(method, path string) (string, bool) {
-	rest, found := strings.CutPrefix(path, "/v1/event/error/")
+	rest, found := strings.CutPrefix(path, "/v1/event/api/")
 	if !found {
 		return "", false
 	}
-	if apiRest, isAPI := strings.CutPrefix(rest, "api/"); isAPI {
-		mapped := "/v1/o11y/api/" + apiRest
-		return mapped, isErrorIngestPath(method, mapped)
-	}
-	mapped := "/v1/sentry/" + rest
-	return mapped, isSentryIngestPath(method, mapped)
+	mapped := "/v1/o11y/api/" + rest
+	return mapped, isErrorIngestPath(method, mapped)
 }
 
-// mountEventFamily registers the /v1/event/error/* Sentry wire, rewritten onto
+// mountEventFamily registers the /v1/event/api/* Sentry wire, rewritten onto
 // the runtime ingest routes and delegated to the SAME gated runtime handler
-// (the rewrite happens before the gate sees the path, so the two existing
-// ingest exemptions are the only exemptions).
+// (the rewrite happens before the gate sees the path, so the existing ingest
+// exemption is the only exemption). Disjoint from analytics' exact /v1/event
+// and /v1/event/collect routes by construction.
 func mountEventFamily(a cloud.Router) {
-	a.All("/v1/event/error/*", zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	a.All("/v1/event/api/*", zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mapped, ok := eventToRuntimePath(r.Method, r.URL.Path)
 		if !ok {
 			http.NotFound(w, r)
@@ -329,9 +324,9 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	// to mount /v1/sentry as a second prefix or the request 404s before it ever
 	// reaches this process — see cloud.PluginSpec in apps.Wire().
 	mountSentry(a)
-	// /v1/event/error/… — the Sentry wire on the canonical /v1/event ingest
-	// family. A DSN of https://<key>@api.hanzo.ai/v1/event/error/<project> works
-	// out of the box (Sentry SDKs expand it to …/error/api/<project>/envelope/).
+	// /v1/event/api/… — the Sentry wire on the ONE /v1/event door. A DSN of
+	// https://<key>@api.hanzo.ai/v1/event/<project> works out of the box: Sentry
+	// SDKs expand it to …/v1/event/api/<project>/envelope/.
 	mountEventFamily(a)
 	// WRITE plane — opt-in, order-independent (no /v1/o11y/* Fiber route).
 	if err := mountIngest(deps); err != nil { // ZAP ingest collector (:4317)

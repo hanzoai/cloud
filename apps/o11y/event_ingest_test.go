@@ -252,14 +252,14 @@ func TestObsBatchOfClaimsStrictly(t *testing.T) {
 		t.Error("an all-known-types batch must be claimed")
 	}
 	for name, body := range map[string]string{
-		"product event":        `{"event":"$pageview","distinctId":"d"}`,
-		"product batch":        `{"batch":[{"event":"$pageview"}]}`,
-		"mixed batch":          `{"batch":[{"type":"trace-create"},{"event":"$pageview"}]}`,
-		"unknown type":         `{"batch":[{"type":"mystery"}]}`,
-		"empty batch":          `{"batch":[]}`,
-		"array wire":           `[{"event":"x"}]`,
-		"empty body":           ``,
-		"not json":             `hello`,
+		"product event": `{"event":"$pageview","distinctId":"d"}`,
+		"product batch": `{"batch":[{"event":"$pageview"}]}`,
+		"mixed batch":   `{"batch":[{"type":"trace-create"},{"event":"$pageview"}]}`,
+		"unknown type":  `{"batch":[{"type":"mystery"}]}`,
+		"empty batch":   `{"batch":[]}`,
+		"array wire":    `[{"event":"x"}]`,
+		"empty body":    ``,
+		"not json":      `hello`,
 	} {
 		if claims(body) {
 			t.Errorf("%s must be declined, was claimed", name)

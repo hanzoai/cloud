@@ -15,14 +15,17 @@
 // team.go — the Hanzo Team SPA's ingest WIRE, and the team session token as an
 // ingest CREDENTIAL. Two independent things, which is why they are two functions:
 //
-//	POST /v1/event/collect   body: [TeamEvent]   -> {accepted, dropped}
+//	POST /v1/event (or the sunsetting caller-owned /v1/event/collect)
+//	body: [TeamEvent]   -> {accepted, dropped}
 //
 // THE WIRE. The team SPA is a PUBLISHED bundle (ghcr.io/hanzoai/front), so its
 // emitter is a caller fact we adapt to, not a design we choose. It POSTs a BARE
 // JSON ARRAY of {event, properties, timestamp, distinct_id} where `event` is a
 // closed 7-member enum, `timestamp` is epoch MILLIS as a NUMBER, and the person id
-// is snake_case `distinct_id`. That is a second WIRE in the exact sense
-// /v1/insights/e is one — the canonical decoder cannot serve it:
+// is snake_case `distinct_id`. Those two keys are exactly what lets the ONE
+// canonical decode dispatch it (isTeamArray, event.go) — the shape IS the wire
+// id, so the door needs no path of its own. Left alone, the canonical array
+// decode would eat it wrong:
 //
 //	decodeIngest sees the leading '[' and decodes []Event, whose fields are
 //	`distinctId` and `time`. Neither key is present, so DistinctID and Time come
