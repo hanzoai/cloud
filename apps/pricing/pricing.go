@@ -164,13 +164,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	zip.Get(zapp, "/v1/pricing/model/:name", o.getModel)
 
 	// Admin write surface for the overlay (SuperAdmin only; see admin.go). These
-	// two PATCHes are the ONLY untyped routes left on this surface, and both for a
-	// wire fact: the model id routes through a greedy wildcard fiber names `*1`
-	// while the document names it `{wildcard1}`, so the bound field and the
-	// published parameter cannot agree; and the shared `overrides` field is an RFC
-	// 7386 merge patch stored and echoed VERBATIM, which zip publishes as an array
-	// of integers (it is []byte) and which map[string]any would reorder. ops.go
-	// carries the full reasoning; typed_wire_test.go pins it.
+	// two PATCHes are the ONLY untyped routes left on this surface: the model id
+	// routes through a greedy wildcard, and typing that turns the WHOLE document
+	// red (zip keys the op at `/…/models/*`, the document at `/…/models/{wildcard1}`,
+	// and openapi.Fold refuses a registry entry whose route it cannot find); the
+	// shared `overrides` field is an RFC 7386 merge patch stored and echoed
+	// VERBATIM, which pins it to json.RawMessage — published as an array of
+	// integers (it is []byte) — while map[string]any would reorder it. ops.go
+	// carries the full reasoning and typed_wire_test.go PROVES both, so a fix
+	// upstream shows up as a red test rather than as stale prose.
 	zip.Get(zapp, "/v1/admin/catalog", o.adminCatalog)
 	app.Patch("/v1/admin/catalog/models/*", adminPatchModel)
 	app.Patch("/v1/admin/catalog/providers/:name", adminPatchProvider)
