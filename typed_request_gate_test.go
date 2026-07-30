@@ -177,6 +177,16 @@ var allowedRequestUses = map[string]string{
 		"request too. The tenant itself is read with principal.OrgFrom (tenantOf, in this same file), " +
 		"never through the request. All three fail closed off the HTTP path: no request means the org's " +
 		"default project, no actor, and no audit row — an unattributable record is worse than none.",
+	"apps/deploy/typed.go": "scopeOf / consoleUser — the deploy console's TENANT SCOPE, which is not the " +
+		"org principal.OrgFrom carries. Two facts say why, both live: a platform SuperAdmin has NO org at all " +
+		"(X-User-IsAdmin, a header OrgFrom does not carry) and reads every platform namespace rather than one " +
+		"tenant's, so an org is not merely absent from that scope, it would be wrong; and a normal org's scope " +
+		"is the injective provisioning.SanitizeOrg slug — the name of the tenant-<org> namespace its App CRs " +
+		"live in — not the verbatim owner claim. consoleUser is the second: the session read must ANSWER for " +
+		"an anonymous caller rather than refuse one, and it reports the validated user ID (X-User-Id) " +
+		"beside admin-ness. TWO functions in ONE file, delegating to the same resolveScope every raw handler " +
+		"beside them uses; both fail closed off the HTTP path, where there is no attested caller and therefore " +
+		"no scope.",
 	"apps/destinations/destinations.go": "orgAdmin — the gate every destination MUTATION keeps " +
 		"(disconnect and test both forget or spend a credential). It reads org-admin-ness, which is " +
 		"X-User-IsOrgAdmin, a claim principal.OrgFrom does not carry. The tenant itself is read with " +

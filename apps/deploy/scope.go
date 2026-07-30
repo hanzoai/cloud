@@ -24,6 +24,7 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 
@@ -86,16 +87,52 @@ func resolveScope(c *zip.Ctx) (scope, bool) {
 	return scope{}, false
 }
 
-// refuse is the fail-closed refusal shared by guard() and every scoped route: a browser
-// NAVIGATION is bounced to sign-in (a 403 page with no way to sign in is a dead end), while
-// every API/XHR call keeps its 403. Identical shape to the original guard(); the message is
-// deliberately generic so the 403 discloses no policy (whether admin or an org would pass).
-func refuse(c *zip.Ctx) error {
-	if wantsDocument(c.Method(), c.Header("Sec-Fetch-Dest"), c.Header("Sec-Fetch-Mode"),
-		c.Header("Accept"), c.Header("X-Requested-With")) {
+// THE REFUSAL IS TWO FACTS, AND THEY LIVE IN TWO PLACES ON PURPOSE.
+//
+// The DECISION — this caller may not have this — belongs to whatever resolved the
+// scope, and it is always the same value: forbidden(). The PRESENTATION — a
+// browser NAVIGATION is bounced to sign-in, because a 403 page with no way to
+// sign in is a dead end, while every API/XHR call keeps its 403 — belongs to the
+// one middleware every /v1/deploy route passes through: bounce.
+//
+// They were braided together in a single refuse(c) that only a handler holding
+// the request could call. A typed op holds no request, so keeping them braided
+// meant either giving up the bounce (a wire change for every browser) or gating
+// in middleware (invisible to the MCP, CLI and call projections, which never run
+// it). Separated, the decision is stated once wherever it is made and the shape
+// is applied once wherever the response is written — and the wire is exactly what
+// it was.
+
+// forbidden is the ONE refusal this console answers with. The message is
+// deliberately generic so the 403 discloses no policy (whether admin, or an org,
+// would have passed).
+func forbidden() error { return zip.ErrForbidden("not authorized for this deploy console") }
+
+// errBadName is the refusal for a {name} segment that is not a DNS-1123 label —
+// the injection guard on every application-addressed route (appName, typed.go).
+var errBadName = zip.ErrBadRequest("name must be a DNS-1123 label")
+
+// navigating reports that this request is a browser NAVIGATION rather than an API
+// call, so a refusal should send it somewhere it can act on.
+func navigating(c *zip.Ctx) bool {
+	return wantsDocument(c.Method(), c.Header("Sec-Fetch-Dest"), c.Header("Sec-Fetch-Mode"),
+		c.Header("Accept"), c.Header("X-Requested-With"))
+}
+
+// bounce turns a REFUSED browser navigation into the sign-in redirect, and leaves
+// every other answer alone. Installed once, on the /v1/deploy group (routes,
+// deploy.go), so it covers the typed ops and the raw handlers with one rule.
+//
+// It reads the ANSWER, not the caller: a 403 is the only thing it reshapes, and
+// only for a request that positively identifies as a document GET — so the API
+// contract, and every client that depends on the 403, is untouched.
+func bounce(c *zip.Ctx) error {
+	err := c.Continue()
+	var he *zip.HTTPError
+	if errors.As(err, &he) && he.Status == http.StatusForbidden && navigating(c) {
 		return c.Redirect(http.StatusFound, loginPath+"?returnTo="+url.QueryEscape(currentPath(c)))
 	}
-	return zip.ErrForbidden("not authorized for this deploy console")
+	return err
 }
 
 // orgOf / projectOf read the tenant + IAM-project labels off an App CR ("" when absent).
@@ -163,9 +200,9 @@ func (sc scope) appCRs(s *cloud.Service[state], ctx context.Context) ([]unstruct
 // scope's namespaces in order and REQUIRING the CR be visible to the scope. A cross-tenant
 // name (org A's app requested by org B) is reported as a clean 404 — never confirmed to
 // exist, so the detail routes leak no cross-tenant existence oracle.
-func (sc scope) findNamespace(s *cloud.Service[state], c *zip.Ctx, name string) (string, error) {
+func (sc scope) findNamespace(s *cloud.Service[state], ctx context.Context, name string) (string, error) {
 	for _, ns := range sc.namespaces() {
-		cr, _, err := getAppCR(s, c.Context(), ns, name)
+		cr, _, err := getAppCR(s, ctx, ns, name)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				continue

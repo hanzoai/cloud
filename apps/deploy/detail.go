@@ -11,7 +11,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"net/http"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -33,28 +32,33 @@ type argoSyncWindows struct {
 	CanSync         bool  `json:"canSync"`
 }
 
-// dashSyncWindows is GET /v1/deploy/applications/:name/syncwindows — the permissive
-// empty ApplicationSyncWindowState, gated to the caller's own app (a cross-tenant
-// name 404s before the static body is returned, so the endpoint discloses nothing
-// about another tenant's fleet).
-func dashSyncWindows(s *cloud.Service[state], c *zip.Ctx) error {
-	sc, ok := resolveScope(c)
-	if !ok {
-		return refuse(c)
+// GetDeploySyncWindows returns one application's argocd
+// ApplicationSyncWindowState — the answer to "is anything blocking a sync of this
+// application right now?".
+//
+// This platform runs NO sync windows, so the answer is always the permissive
+// empty one: canSync true, with no active and no assigned windows. The
+// application is still resolved first, so a name that is not the caller's is not
+// found rather than handed the static body — the endpoint discloses nothing about
+// another tenant's fleet.
+func (o ops) syncWindows(ctx context.Context, in *appRef) (*argoSyncWindows, error) {
+	sc, err := scopeOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if err := ready(s); err != nil {
-		return err
+	if err := ready(o.s); err != nil {
+		return nil, err
 	}
-	name := reqName(c)
-	if !appNameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must be a DNS-1123 label")
+	name, err := appName(in.Name)
+	if err != nil {
+		return nil, err
 	}
 	// Existence + ownership check (discard the namespace): 404 a name that is not the
 	// caller's, so a tenant cannot probe whether another org runs an app of a given name.
-	if _, err := sc.findNamespace(s, c, name); err != nil {
-		return err
+	if _, err := sc.findNamespace(o.s, ctx, name); err != nil {
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, argoSyncWindows{CanSync: true})
+	return &argoSyncWindows{CanSync: true}, nil
 }
 
 // ── revision metadata ────────────────────────────────────────────────────────
@@ -73,38 +77,42 @@ type argoRevisionMetadata struct {
 // bloat the response (the value is otherwise inert — JSON-escaped, never a shell/path arg).
 const maxRevisionLen = 256
 
-// dashRevisionMetadata is GET /v1/deploy/applications/:name/revisions/:revision/metadata.
+// GetDeployRevisionMetadata returns the argocd RevisionMetadata for one revision
+// of one application — what the detail view shows beside a revision.
 //
-// The App CR is IMAGE-based: the deploy is pinned to an image tag, not a git commit, and
-// the projection's git source (git.hanzo.ai/hanzoai/universe) is the display-only manifest
-// repo, NOT the app's own source — so there is no in-process commit to resolve a revision
-// author/date/message from (clients/git exposes CloneURL + VerifyRef only, neither of which
-// yields commit metadata for an arbitrary revision). Rather than 404 (the toast) or
-// fabricate a git author, this returns an HONEST minimal RevisionMetadata: message = the
-// revision (HEAD resolves to the CR's declared image tag), date = when the app was declared
-// (the CR creation time), author = "" (none). Real git enrichment is a follow-on gated on
-// the CR carrying a real git source + a clients/git CommitMetadata export.
-func dashRevisionMetadata(s *cloud.Service[state], c *zip.Ctx) error {
-	sc, ok := resolveScope(c)
-	if !ok {
-		return refuse(c)
-	}
-	if err := ready(s); err != nil {
-		return err
-	}
-	name := reqName(c)
-	if !appNameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must be a DNS-1123 label")
-	}
-	ns, err := sc.findNamespace(s, c, name)
+// An App CR is IMAGE-pinned rather than commit-pinned: the deploy names an image
+// tag, and the git source this projection reports is the display-only manifest
+// repo, not the application's own source. Nothing in this process can read a
+// commit's author or message for an arbitrary revision. So rather than 404 (which
+// the SPA turns into an error toast) or invent a git author, it answers the
+// HONEST minimum: date is when the App CR was created, message is the revision
+// asked for — with the empty revision and "HEAD" resolving to the image tag the
+// CR declares — and author is empty. An over-long revision is truncated before it
+// is echoed back.
+//
+// Tenant-scoped exactly like the application read.
+func (o ops) revisionMetadata(ctx context.Context, in *revisionRef) (*argoRevisionMetadata, error) {
+	sc, err := scopeOf(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	cr, _, err := getAppCR(s, c.Context(), ns, name)
+	if err := ready(o.s); err != nil {
+		return nil, err
+	}
+	name, err := appName(in.Name)
 	if err != nil {
-		return k8sErr(s, "get", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, revisionMetadataOf(cr, c.Param("revision")))
+	ns, err := sc.findNamespace(o.s, ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	cr, _, err := getAppCR(o.s, ctx, ns, name)
+	if err != nil {
+		return nil, k8sErr(o.s, "get", err)
+	}
+	meta := revisionMetadataOf(cr, in.Revision)
+	return &meta, nil
 }
 
 // revisionMetadataOf builds the honest minimal RevisionMetadata for an image-based App CR.
@@ -143,16 +151,16 @@ func dashStreamResourceTree(s *cloud.Service[state], c *zip.Ctx) error {
 	// caller is authorized for this specific app.
 	sc, ok := resolveScope(c)
 	if !ok {
-		return refuse(c)
+		return forbidden()
 	}
 	if err := ready(s); err != nil {
 		return err
 	}
-	name := reqName(c)
-	if !appNameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must be a DNS-1123 label")
+	name, err := appName(c.Param("name"))
+	if err != nil {
+		return err
 	}
-	ns, err := sc.findNamespace(s, c, name)
+	ns, err := sc.findNamespace(s, c.Context(), name)
 	if err != nil {
 		return err // cross-tenant / unknown name → 404 BEFORE any stream is opened
 	}

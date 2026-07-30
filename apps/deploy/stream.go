@@ -58,7 +58,7 @@ func dashStreamApps(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	sc, ok := resolveScope(c)
 	if !ok {
-		return refuse(c)
+		return forbidden()
 	}
 	// Capture the context BEFORE SendStreamWriter: its callback runs AFTER this
 	// handler returns (fasthttp body writer) and must not touch c. c.Context() is
