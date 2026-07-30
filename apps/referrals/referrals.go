@@ -9,7 +9,7 @@
 //  1. Every org has a STABLE referral code (deriveCode: deterministic base32 of a
 //     hash of the org id) and a link https://<brand>/?ref=<code>.
 //  2. A new org signs up via a link → the console posts POST /v1/referrals/claim
-//     with the code → we record referrer↔referee at status signed_up. Self-referral
+//     with the code → we record referrer↔referee at status signup. Self-referral
 //     is blocked; one referral per referee ever (idempotent).
 //  3. When the referee QUALIFIES (the honest signal: they've made metered spend —
 //     actually USED the product, not just claimed a welcome grant) we grant BOTH
@@ -47,10 +47,10 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/cloud/apps/treasury"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
 
@@ -314,7 +314,7 @@ type claimView struct {
 	CreatedAt int64 `json:"createdAt"`
 	// ID is the referral's handle.
 	ID string `json:"id"`
-	// Status is the referral's lifecycle state: "signed_up" until the referee
+	// Status is the referral's lifecycle state: "signup" until the referee
 	// makes metered spend, then "qualified", then "credited".
 	Status string `json:"status"`
 }
@@ -606,7 +606,7 @@ type myReferralView struct {
 	ID string `json:"id"`
 	// Referee is the org that signed up with my code.
 	Referee string `json:"referee"`
-	// Status is the referral's lifecycle state: "signed_up" until the referee
+	// Status is the referral's lifecycle state: "signup" until the referee
 	// makes metered spend, then "qualified", then "credited".
 	Status string `json:"status"`
 	// CreditsCents is what I earned from this referral, in USD cents. It is 0
@@ -632,7 +632,7 @@ type adminReferralView struct {
 	RefereeOrg string `json:"refereeOrg"`
 	// Code is the referral code the referral was recorded against.
 	Code string `json:"code"`
-	// Status is the referral's lifecycle state: "signed_up", "qualified" or
+	// Status is the referral's lifecycle state: "signup", "qualified" or
 	// "credited".
 	Status string `json:"status"`
 	// ReferrerGrantCents is what the referrer was granted, in USD cents; 0 until
@@ -661,8 +661,8 @@ type adminReferralView struct {
 type statusCounts struct {
 	// Total is every referral this org has made.
 	Total int `json:"total"`
-	// SignedUp is how many referees have signed up but not yet spent.
-	SignedUp int `json:"signedUp"`
+	// Signup is how many referees have signed up but not yet spent.
+	Signup int `json:"signup"`
 	// Qualified is how many referees have spent but are not yet credited.
 	Qualified int `json:"qualified"`
 	// Credited is how many referrals have paid both bonuses.
@@ -672,8 +672,8 @@ type statusCounts struct {
 func (s *statusCounts) add(status string) {
 	s.Total++
 	switch status {
-	case StatusSignedUp:
-		s.SignedUp++
+	case StatusSignup:
+		s.Signup++
 	case StatusQualified:
 		s.Qualified++
 	case StatusCredited:
@@ -686,8 +686,8 @@ func (s *statusCounts) add(status string) {
 type adminSummary struct {
 	// Total is every referral in the ledger.
 	Total int `json:"total"`
-	// SignedUp is how many are recorded but not yet qualified.
-	SignedUp int `json:"signedUp"`
+	// Signup is how many are recorded but not yet qualified.
+	Signup int `json:"signup"`
 	// Qualified is how many have qualified but are not yet credited.
 	Qualified int `json:"qualified"`
 	// Credited is how many have paid both bonuses.
@@ -700,8 +700,8 @@ type adminSummary struct {
 func (a *adminSummary) add(r Referral) {
 	a.Total++
 	switch r.Status {
-	case StatusSignedUp:
-		a.SignedUp++
+	case StatusSignup:
+		a.Signup++
 	case StatusQualified:
 		a.Qualified++
 	case StatusCredited:
