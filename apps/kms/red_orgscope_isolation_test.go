@@ -68,7 +68,8 @@ type isoTok struct {
 	orgs    []string // signed membership set, home first; nil ⇒ [owner]
 	aud     []string // audience set; nil ⇒ none
 	isAdmin bool
-	typ     string // IAM account kind; "application" ⇒ machine principal
+	typ     string // IAM account kind, as the token carries it
+	machine bool   // mint NO membership set — IAM's client_credentials shape
 	expired bool
 }
 
@@ -82,9 +83,17 @@ func (tk isoTok) mint(t *testing.T, key *rsa.PrivateKey) string {
 	if err != nil {
 		t.Fatalf("signer: %v", err)
 	}
+	// A USER token always carries its home org first (store.MemberOrgRefs), so nil
+	// defaults to that. A MACHINE carries NONE — that absence IS the machine signal
+	// (isMachinePrincipal), so it has to be expressible here or the harness quietly
+	// hands every machine fixture a membership IAM never signs, and the refusals
+	// asserted below never run.
 	orgs := tk.orgs
-	if orgs == nil {
+	if orgs == nil && !tk.machine {
 		orgs = []string{tk.owner}
+	}
+	if tk.machine {
+		orgs = nil
 	}
 	refs := make([]model.OrgRef, 0, len(orgs))
 	for _, o := range orgs {
@@ -318,16 +327,36 @@ func TestRedIso_C_AdminCrossOrg(t *testing.T) {
 		isValue(t, "s3kr3t-of-admin-ISO")
 
 	// A MACHINE principal in the admin org, even asserting isAdmin=true, is denied
-	// the SuperAdmin arm (isMachinePrincipal) and so cannot switch — it stays
-	// pinned to its own org. Both machine discriminators are exercised: IAM's
-	// `type` claim, and the owner-bound <owner>-platform-kms audience.
+	// the SuperAdmin arm (isHuman) and so cannot switch. What it gets instead depends
+	// on which machine it is, and the two answers are deliberately different because
+	// the org question GRANTS an org out of an app-selected claim:
+	//
+	//   the KMS sync identity is POSITIVELY identified by its owner-bound
+	//   <owner>-platform-kms audience, so it is org-scoped to its own org and its data
+	//   access keeps working;
+	//
+	//   a GENERIC machine is not positively identified at all — its token is
+	//   indistinguishable from a human's minted before the `orgs` claim shipped — so it
+	//   resolves NO org and is refused. That is the same rule
+	//   TestLegacyOrgsClaimFailsClosed asserts, and it is one rule rather than two: a
+	//   token with no membership set never has an org read out of `owner`.
+	//
+	// This case used to assert the KMS answer for BOTH, because the fixture marked the
+	// generic machine with `type: "application"` — a claim IAM stamps nowhere, so in
+	// production that principal was taking the SuperAdmin arm instead, which is the
+	// leak probe (c) above now catches.
+	isoGet(t, app, "(c) generic admin-org MACHINE + X-Org-Id:maxpower", path,
+		isoTok{owner: "admin", isAdmin: true, machine: true}.mint(t, key),
+		map[string]string{"X-Org-Id": paasOrgA}).
+		noLeak(t, paasValueA).
+		noLeak(t, "s3kr3t-of-admin-ISO")
+
 	for _, tk := range []isoTok{
-		{owner: "admin", isAdmin: true, typ: "application"},
 		{owner: "admin", isAdmin: true, aud: []string{"admin-platform-kms"}},
 		{owner: "admin", isAdmin: true, aud: []string{"hanzo-console", "admin-platform-kms"}},
 		{owner: "admin", isAdmin: true, aud: []string{"admin-platform-kms", "hanzo-console"}},
 	} {
-		isoGet(t, app, "(c) admin-org MACHINE + X-Org-Id:maxpower", path, tk.mint(t, key),
+		isoGet(t, app, "(c) KMS-sync MACHINE + X-Org-Id:maxpower", path, tk.mint(t, key),
 			map[string]string{"X-Org-Id": paasOrgA}).
 			noLeak(t, paasValueA).
 			isValue(t, "s3kr3t-of-admin-ISO")

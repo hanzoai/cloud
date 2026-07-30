@@ -235,12 +235,18 @@ func TestBlueAudit_NonAdminCrossOrg_RefusedAndNotImpersonation(t *testing.T) {
 		noLeak(t, paasValueA).
 		isValue(t, isoValueB)
 
-	// A MACHINE principal in the admin org is denied the switch entirely.
-	isoGet(t, app, "admin-org MACHINE + X-Org-Id:maxpower", path,
-		isoTok{owner: "admin", isAdmin: true, typ: "application"}.mint(t, key),
+	// A MACHINE principal in the admin org is denied the switch entirely. A GENERIC
+	// one — no membership set, no owner-bound machine audience — is not positively
+	// identified at all: its token is indistinguishable from a human's minted before
+	// the `orgs` claim shipped, so it resolves NO org and is refused outright rather
+	// than having one read out of the app-selected `owner` claim. The KMS-sync
+	// identity, which its audience DOES vouch for, stays org-scoped and working
+	// (TestRedIso_C_AdminCrossOrg covers both halves).
+	isoGet(t, app, "generic admin-org MACHINE + X-Org-Id:maxpower", path,
+		isoTok{owner: "admin", isAdmin: true, machine: true}.mint(t, key),
 		map[string]string{"X-Org-Id": paasOrgA}).
 		noLeak(t, paasValueA).
-		isValue(t, adminSecret)
+		noLeak(t, adminSecret)
 
 	// Anonymous forge: no principal, so the org gate refuses it outright.
 	isoGet(t, app, "forged X-Org-Id, NO bearer", path, "",
