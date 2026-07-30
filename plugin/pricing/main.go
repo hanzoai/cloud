@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/apps/pricing"
 )
 
@@ -27,7 +28,7 @@ func main() {
 		// none) by the tracing and price index cloud.Declare builds from this, and
 		// the subsystem could not install its own middleware on them. The list is
 		// the app's, so it cannot drift from the routes it registers.
-		Prefixes:   pricing.Prefixes,
+		Prefixes:   manifest.PrefixesFor("pricing"),
 		OwnsHealth: true,
 	}}, []string{"pricing"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
