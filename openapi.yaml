@@ -6491,6 +6491,11 @@ components:
             else is accepted.'
           type: string
       type: object
+    deckOut:
+      properties:
+        documentId:
+          type: string
+      type: object
     deployment:
       properties:
         instance:
@@ -18411,6 +18416,19 @@ paths:
   /v1/company/fundraise/deck:
     post:
       operationId: post_v1_company_fundraise_deck
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              format: binary
+              type: string
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/deckOut'
+          description: Success
       tags:
       - company
   /v1/company/fundraise/round:
@@ -18667,6 +18685,13 @@ paths:
   /v1/company/payment:
     post:
       operationId: post_v1_company_payment
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/formationView'
+          description: Success
       tags:
       - company
   /v1/company/register:

@@ -1,6 +1,7 @@
 package company
 
 import (
+	"encoding/json"
 	"sort"
 	"strings"
 	"testing"
@@ -29,6 +30,12 @@ import (
 // exactly one body codec and exactly one error shape, and these two routes need
 // neither. Both are re-checked against zip v1.18.6 source, not inherited as
 // prose.
+//
+// Being exempt from the REGISTRY is not being exempt from the DOCUMENT. Both of
+// these declare their bodies through openapi.Register (company.go init), so the
+// cost of staying untyped is exactly the three things that come from zip's
+// registry — prose, an MCP tool, a CLI command — and not also a wrong description.
+// TestTheUntypedRoutesStillDeclareTheirBodies is the other half of each exemption.
 var untypedByDesign = map[string]string{
 	// The deck is document BYTES of any content type, named by ?name=. zip's
 	// typed path decodes EVERY non-empty request body with jsonenc.Unmarshal
@@ -122,6 +129,122 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 			t.Errorf("untypedByDesign names %q, which IS a typed op — delete the entry", key)
 		}
 	}
+}
+
+// TestTheUntypedRoutesStillDeclareTheirBodies is the OTHER half of both
+// exemptions: these two routes cannot be typed ops, but the cost of that must be
+// exactly the three things zip's registry supplies (prose, an MCP tool, a CLI
+// command) and not a FOURTH — a document that describes them wrongly.
+//
+// Before this, both published an operationId and a tag and nothing else. That is
+// indistinguishable, to every consumer of the document, from a route that takes no
+// body and returns none, so an SDK generated off openapi.yaml offered a deck
+// upload with nowhere to put the deck and no return type for either call. The deck
+// declares its request as bytes (application/octet-stream, string/binary —
+// OpenAPI's own spelling for an opaque body, and what an SDK generator turns into
+// a file parameter); both declare the response the handler actually marshals.
+//
+// The success shape lands under the "2XX" range key, not "200"/"201": the exact
+// status lives in the handler body and is not derivable from a registration, so the
+// range is what this generator can honestly assert.
+func TestTheUntypedRoutesStillDeclareTheirBodies(t *testing.T) {
+	app, _, _ := mountFake(t)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "company", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+
+	// The deck: a byte request, and the data room receipt back.
+	deck := doc.Paths["/v1/company/fundraise/deck"]["post"]
+	if deck == nil {
+		t.Fatal("POST /v1/company/fundraise/deck is not served — the ledger is stale")
+	}
+	if deck.RequestBody == nil {
+		t.Error("the deck declares no request body — openapi.Register is what tells an SDK " +
+			"this route takes a file, and without it the document says the route takes nothing")
+	} else {
+		req := decodeBody(t, deck.RequestBody)
+		if media, ok := req.Content["application/octet-stream"]; !ok {
+			t.Errorf("the deck declares no application/octet-stream request; have %v",
+				sortedKeys(req.Content))
+		} else if media.Schema.Type != "string" || media.Schema.Format != "binary" {
+			t.Errorf("deck request schema = %s/%s, want string/binary",
+				media.Schema.Type, media.Schema.Format)
+		}
+	}
+	assertSuccessBody(t, "POST /v1/company/fundraise/deck", deck.Responses)
+
+	// Payment takes NO body (pay never reads one), so the absence of a request
+	// declaration here is the true statement, not a missing one. Its success shape
+	// is the formation view every other action on this surface answers with.
+	pay := doc.Paths["/v1/company/payment"]["post"]
+	if pay == nil {
+		t.Fatal("POST /v1/company/payment is not served — the ledger is stale")
+	}
+	if pay.RequestBody != nil {
+		t.Errorf("POST /v1/company/payment declares a request body, but the handler never reads "+
+			"one — declaring a body it ignores would be invention; have %v",
+			sortedKeys(decodeBody(t, pay.RequestBody).Content))
+	}
+	assertSuccessBody(t, "POST /v1/company/payment", pay.Responses)
+}
+
+// body is the shape of a requestBody/response object this test reads. The Document
+// carries both as `any` so the router projection and the typed fold can share one
+// field, so they are round-tripped through JSON to be inspected.
+type body struct {
+	Content map[string]struct {
+		Schema struct {
+			Type   string `json:"type"`
+			Format string `json:"format"`
+			Ref    string `json:"$ref"`
+		} `json:"schema"`
+	} `json:"content"`
+}
+
+func decodeBody(t *testing.T, from any) body {
+	t.Helper()
+	var out body
+	remarshalJSON(t, from, &out)
+	return out
+}
+
+// assertSuccessBody proves a route states SOME success body. Keyed on "2XX"
+// because that is the only key registration.apply can honestly emit: the exact
+// status lives in the handler and is not derivable from a registration.
+func assertSuccessBody(t *testing.T, key string, responses any) {
+	t.Helper()
+	var byStatus map[string]body
+	remarshalJSON(t, responses, &byStatus)
+	r, ok := byStatus["2XX"]
+	if !ok {
+		t.Errorf("%s states no 2XX success body — a consumer cannot tell it from a route that "+
+			"returns nothing; have %v", key, sortedKeys(byStatus))
+		return
+	}
+	if _, ok := r.Content["application/json"]; !ok {
+		t.Errorf("%s 2XX declares no application/json body; have %v", key, sortedKeys(r.Content))
+	}
+}
+
+func remarshalJSON(t *testing.T, from, into any) {
+	t.Helper()
+	b, err := json.Marshal(from)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if err := json.Unmarshal(b, into); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // TestEveryTypedOpIsDescribed proves the lifted prose reached the binary. That
