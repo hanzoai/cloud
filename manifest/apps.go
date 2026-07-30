@@ -111,7 +111,14 @@ var Apps = []App{
 	{Name: "destinations", Prefixes: []string{"/v1/destinations"}},
 	{Name: "cloudflare", Prefixes: []string{"/v1/cloudflare"}},
 	{Name: "sbom", Prefixes: []string{"/v1/sbom"}},
-	{Name: "team", Prefixes: []string{"/v1/team"}},
+	// /collaborator is team's SECOND plane and it is app-level on purpose: the Team
+	// front derives both the Y.js WebSocket (GET /collaborator) and the markup
+	// snapshot RPC (POST /collaborator/rpc/{documentId}) from COLLABORATOR_URL, not
+	// from the /v1/team base. Unnamed here they fell past every prefix to the
+	// console the host serves at "/", so the collaborative editor got the HTML shell
+	// and the typed RPC — published in openapi.yaml and therefore in every generated
+	// SDK and the MCP tool list — reached no app at all.
+	{Name: "team", Prefixes: []string{"/collaborator", "/v1/team"}},
 	{Name: "meet", Prefixes: []string{"/v1/meet/getToken", "/v1/meet/health"}},
 	{Name: "settings", Prefixes: []string{"/v1/settings"}},
 	{Name: "prefs", Prefixes: []string{"/v1/prefs"}},
