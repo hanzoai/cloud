@@ -260,11 +260,39 @@
         ]
       }
     },
-    "/v1/event/collect": {
+    "/v1/event/{project}/envelope": {
       "post": {
-        "operationId": "post_v1_event_collect",
+        "operationId": "post_v1_event_by_project_envelope",
         "tags": [
           "event"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/event/{project}/store": {
+      "post": {
+        "operationId": "post_v1_event_by_project_store",
+        "tags": [
+          "event"
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ]
       }
     },

@@ -251,7 +251,7 @@ func TestTeamTimestampAbsentClampsToNow(t *testing.T) {
 // opinion about ONE: `"timestamp":1` is a well-formed epoch-millis that decodes to
 // 1970-01-01, which the write core used to accept verbatim into the leading column of
 // ORDER BY. That is the widest possible key range from the smallest possible request, on
-// a door reachable at /v1/event/collect.
+// the one event door.
 func TestTeamEpochMillisCannotReach1970(t *testing.T) {
 	evs, err := decodeTeam([]byte(`[{"event":"error","properties":{"error_message":"x"},"timestamp":1,"distinct_id":"u"}]`))
 	if err != nil {
@@ -333,12 +333,12 @@ func TestTeamTenantResolvesSignedOrg(t *testing.T) {
 	// warehouse (503).
 	const custom = `[{"event":"customEvent","properties":{"event":"checkout_started","revenue":42},"timestamp":1750000000000,"distinct_id":"u"}]`
 
-	code, res := postBody(t, app, "/v1/event/collect", custom, tok)
+	code, res := postBody(t, app, "/v1/event", custom, tok)
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("member POST = %d %+v, want 503 (full capability reached the write core)", code, res)
 	}
 	// Same bytes, NO credential: dropped by the projection, never reaching the store.
-	code, res = postBody(t, app, "/v1/event/collect", custom, "")
+	code, res = postBody(t, app, "/v1/event", custom, "")
 	if code != http.StatusOK || res.Accepted != 0 || res.Dropped != 1 {
 		t.Fatalf("anonymous POST = %d %+v, want 200 accepted=0 dropped=1", code, res)
 	}
@@ -397,7 +397,7 @@ func TestTeamTenantRefusals(t *testing.T) {
 			//
 			// 200-with-rows-under-$public is the exact pathology this door exists to
 			// prevent: the caller sees success and the org cannot read its own data.
-			code, _ := postBody(t, app, "/v1/event/collect", teamWire, bearer)
+			code, _ := postBody(t, app, "/v1/event", teamWire, bearer)
 			if code != http.StatusForbidden {
 				t.Fatalf("POST = %d, want 403 (a presented team credential that does not resolve is refused)", code)
 			}
@@ -453,10 +453,8 @@ func TestTeamDoorIsRegistered(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "a-real-team-secret")
 	app := mountApp(t)
 
-	for _, path := range []string{"/v1/event", "/v1/event/collect"} {
-		if code, res := postBody(t, app, path, teamWire, ""); code != http.StatusServiceUnavailable {
-			t.Fatalf("%s with team wire = %d %+v, want 503 (events must survive admission and reach the write core)", path, code, res)
-		}
+	if code, res := postBody(t, app, "/v1/event", teamWire, ""); code != http.StatusServiceUnavailable {
+		t.Fatalf("/v1/event with team wire = %d %+v, want 503 (events must survive admission and reach the write core)", code, res)
 	}
 }
 
@@ -479,18 +477,18 @@ func TestGuestWritesProjectedIntoItsOwnOrg(t *testing.T) {
 	// The forgeable payload: a custom event carrying revenue. kind "event" is not in
 	// publicKinds, so the projection drops it whole.
 	const revenue = `[{"event":"customEvent","properties":{"event":"order_completed","revenue":99999},"timestamp":1750000000000,"distinct_id":"u"}]`
-	code, res := postBody(t, app, "/v1/event/collect", revenue, guest)
+	code, res := postBody(t, app, "/v1/event", revenue, guest)
 	if code != http.StatusOK || res.Accepted != 0 || res.Dropped != 1 {
 		t.Fatalf("guest revenue POST = %d %+v, want 200 accepted=0 dropped=1 (projected away)", code, res)
 	}
 	// A member CAN write it — so the refusal is about the role, not the payload.
-	if code, _ := postBody(t, app, "/v1/event/collect", revenue, member); code != http.StatusServiceUnavailable {
+	if code, _ := postBody(t, app, "/v1/event", revenue, member); code != http.StatusServiceUnavailable {
 		t.Fatalf("member revenue POST = %d, want 503 (reached the write core)", code)
 	}
 
 	// But the guest is NOT silenced: its errors/pageviews still land, and they land in
 	// ITS OWN org — not $public, which acme could never read.
-	code, res = postBody(t, app, "/v1/event/collect", teamWire, guest)
+	code, res = postBody(t, app, "/v1/event", teamWire, guest)
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("guest error/pageview POST = %d %+v, want 503 (admitted, reached the store)", code, res)
 	}
@@ -638,7 +636,7 @@ func TestUnidentifiableBearerStillTakesTheAnonymousLane(t *testing.T) {
 	// A well-formed JWT with no `account` claim (an IAM-shaped bearer).
 	foreign := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
 		"eyJzdWIiOiJ1c2VyLTEiLCJpc3MiOiJodHRwczovL2hhbnpvLmlkIn0.c2ln"
-	if code, _ := postBody(t, app, "/v1/event/collect", teamWire, foreign); code != http.StatusServiceUnavailable {
+	if code, _ := postBody(t, app, "/v1/event", teamWire, foreign); code != http.StatusServiceUnavailable {
 		t.Fatalf("foreign bearer = %d, want 503 (anonymous lane reached the store), NOT 403", code)
 	}
 	if teamPresented2(t, foreign) {
@@ -692,7 +690,7 @@ func TestGuestRowsLandInItsOwnOrgNotPublic(t *testing.T) {
 		`[{"event":"error","properties":{"error_message":"boom"},"timestamp":1750000000000,"distinct_id":"u"}]`,
 		`[{"event":"navigation","properties":{"path":"/pricing"},"timestamp":1750000000000,"distinct_id":"u"}]`,
 	} {
-		code, res := postBody(t, app, "/v1/event/collect", body, guest)
+		code, res := postBody(t, app, "/v1/event", body, guest)
 		if code != http.StatusOK || res.Accepted != 1 {
 			t.Fatalf("guest POST = %d %+v, want 200 accepted:1 (admitted and written)", code, res)
 		}
@@ -728,7 +726,7 @@ func TestReducedLaneAttributesToTheSignedAccount(t *testing.T) {
 	const victim = "ada@acme.example"
 	body := `[{"event":"navigation","properties":{"path":"/salaries","$anonymous_id":"anon-of-ada"},` +
 		`"timestamp":1750000000000,"distinct_id":"` + victim + `"}]`
-	if code, res := postBody(t, app, "/v1/event/collect", body, guest); code != http.StatusOK || res.Accepted != 1 {
+	if code, res := postBody(t, app, "/v1/event", body, guest); code != http.StatusOK || res.Accepted != 1 {
 		t.Fatalf("guest POST = %d %+v, want 200 accepted:1", code, res)
 	}
 	if got := w.col(t, 0, "distinct_id"); got == victim {
@@ -748,7 +746,7 @@ func TestReducedLaneAttributesToTheSignedAccount(t *testing.T) {
 	// pass for a version that clobbered identity everywhere.
 	member := teamToken(t, "acme", "a-real-team-secret", nil, time.Now().Add(time.Hour).Unix())
 	w2 := fakeWarehouse(t)
-	if code, res := postBody(t, app, "/v1/event/collect", body, member); code != http.StatusOK || res.Accepted != 1 {
+	if code, res := postBody(t, app, "/v1/event", body, member); code != http.StatusOK || res.Accepted != 1 {
 		t.Fatalf("member POST = %d %+v, want 200 accepted:1", code, res)
 	}
 	if got := w2.col(t, 0, "distinct_id"); got != victim {
@@ -765,7 +763,7 @@ func TestAnonymousLaneIdentityIsUntouched(t *testing.T) {
 	w := fakeWarehouse(t)
 	app := mountApp(t)
 	body := `[{"event":"navigation","properties":{"path":"/pricing"},"timestamp":1750000000000,"distinct_id":"visitor-7"}]`
-	if code, res := postBody(t, app, "/v1/event/collect", body, ""); code != http.StatusOK || res.Accepted != 1 {
+	if code, res := postBody(t, app, "/v1/event", body, ""); code != http.StatusOK || res.Accepted != 1 {
 		t.Fatalf("anonymous POST = %d %+v, want 200 accepted:1", code, res)
 	}
 	if got := w.tenants(t); len(got) != 1 || got[0] != publicTenant {

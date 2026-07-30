@@ -50,9 +50,6 @@ var wantDoors = []door{
 	{path: "/v1/analytics", decode: decodeIngest, source: sourceCapture},
 	{path: "/v1/analytics/batch", decode: decodeIngest, source: sourceCapture},
 	{path: "/v1/tracker", decode: decodeIngest, source: sourceCapture},
-	// The team wire folded into the ONE canonical decode (isTeamArray dispatch);
-	// this sunsetting caller-owned path keeps only its $source identity.
-	{path: "/v1/event/collect", decode: decodeIngest, source: sourceTeam},
 }
 
 // samePtr reports whether two func values are the SAME function, by code pointer.
@@ -500,9 +497,14 @@ func TestRoutedPostSetIsExactlyTheDoors(t *testing.T) {
 			posts = append(posts, r.Path)
 		}
 	}
-	if !sameSet(posts, doorPaths()) {
-		t.Fatalf("registered POST routes = %v, declared doors = %v — every ingest route must\n"+
-			"come from doors, and nothing else may be registered as a POST here", posts, doorPaths())
+	// The POST surface is the doors PLUS the obs error wire the door carries:
+	// /v1/event/{project}/envelope|store forwards to the o11y plane's installed
+	// consumer (cloud.ObsErrorIngest) and is DSN-authenticated there — a wire on
+	// the one event door, not a new door for handle to admit.
+	want := append(doorPaths(), "/v1/event/:project/envelope", "/v1/event/:project/store")
+	if !sameSet(posts, want) {
+		t.Fatalf("registered POST routes = %v, want doors + the obs error wire = %v — every other\n"+
+			"ingest route must come from doors, and nothing else may be registered as a POST here", posts, want)
 	}
 }
 
