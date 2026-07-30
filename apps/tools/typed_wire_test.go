@@ -29,7 +29,7 @@ var untypedByDesign = map[string]string{
 	//    200 carrying the JSON-RPC parse error (-32700) — the MCP convention, and
 	//    what TestMCPToleratesAMalformedBody below pins. op.invoke decodes the
 	//    body BEFORE the handler runs and returns ErrBadRequest on any failure
-	//    (v1.18.11 typed.go:243-247), so typing this route turns every one of
+	//    (v1.18.11 typed.go:240-243), so typing this route turns every one of
 	//    those 200s into a 400 that no MCP client expects.
 	// 2. ITS REQUEST AND RESPONSE ARE ENVELOPES WHOSE SHAPE DEPENDS ON `method`.
 	//    params is `any` — tools/call reads name+arguments, initialize and ping
@@ -51,7 +51,7 @@ var untypedByDesign = map[string]string{
 	// renders as the flat HTTPError {status, code, error} (errorHandler is the only
 	// path a typed op's error can take), and there is nowhere in that shape for the
 	// source. Writing the body from inside the op does not escape it either: a nil
-	// Out makes zip stamp cmp.Or(op.Status, 204) over the 422 (typed.go:305-309).
+	// Out makes zip stamp cmp.Or(op.Status, 204) over the 422 (typed.go:302-306).
 	// So this is a 201-or-422 pair of DIFFERENT shapes and zip has one Out and one
 	// declared status per op — the multi-status gap (#78), not an oversight.
 	// TestBuildFailureCarriesItsDiagnostics pins the 422 body.
@@ -227,6 +227,144 @@ func TestBuildFailureCarriesItsDiagnostics(t *testing.T) {
 		if _, ok := body[k]; !ok {
 			t.Errorf("the 422 build body must carry %q; got %s", k, r.Body)
 		}
+	}
+}
+
+// TestTheUntypedRoutesStillDeclareTheirBodies is the OTHER half of a refusal.
+// Staying out of zip's registry costs prose, an MCP tool, a CLI command and a
+// typed SDK method — it must not also cost the SHAPE. Both of these rendered as
+// an operationId and a tag and nothing else, which is precisely what a route
+// taking no input and returning none publishes, so no consumer of the document
+// could tell "takes a JSON-RPC envelope" from "takes nothing". openapi.Register
+// (tools.go's init) states the halves that ARE statable; this is the gate that
+// they stay stated.
+func TestTheUntypedRoutesStillDeclareTheirBodies(t *testing.T) {
+	app := newApp(t, nil)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "tools", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	// Operation.RequestBody and .Responses are `any` — the two seams build
+	// JSON-identical but differently-typed shapes — so read the operation the way
+	// every consumer does, through the marshalled document.
+	type media struct {
+		Schema struct {
+			Ref string `json:"$ref"`
+		} `json:"schema"`
+	}
+	for _, c := range []struct{ path, req, resp string }{
+		{"/v1/tools/mcp", "mcpRequest", "mcpResponse"},
+		{"/v1/plugins/build", "buildRequest", "buildOut"},
+	} {
+		raw, err := json.Marshal(doc.Paths[c.path]["post"])
+		if err != nil {
+			t.Fatalf("marshal POST %s: %v", c.path, err)
+		}
+		var op struct {
+			RequestBody *struct {
+				Content map[string]media `json:"content"`
+			} `json:"requestBody"`
+			Responses map[string]struct {
+				Content map[string]media `json:"content"`
+			} `json:"responses"`
+		}
+		if err := json.Unmarshal(raw, &op); err != nil {
+			t.Fatalf("decode POST %s: %v (%s)", c.path, err, raw)
+		}
+		if op.RequestBody == nil {
+			t.Errorf("POST %s declares no request body — openapi.Register is what tells an SDK "+
+				"this route takes one; without it the document says it takes nothing", c.path)
+		} else if got := op.RequestBody.Content["application/json"].Schema.Ref; got != "#/components/schemas/"+c.req {
+			t.Errorf("POST %s request schema = %q, want the %s component", c.path, got, c.req)
+		}
+		if got := op.Responses["2XX"].Content["application/json"].Schema.Ref; got != "#/components/schemas/"+c.resp {
+			t.Errorf("POST %s success response schema = %q, want the %s component", c.path, got, c.resp)
+		}
+	}
+	// AuthoredPlugin is claimed by BOTH seams — the untyped declaration above and
+	// the typed listAuthoredPlugins. Fold merges the typed schema over the other,
+	// so the shared row keeps the prose zipdoc lifted; a regression here would
+	// silently strip every description off it.
+	//
+	// Read it the way every consumer does — through the marshalled document —
+	// rather than by type-asserting whichever seam happened to write the value.
+	raw, err := json.Marshal(doc.Components.Schemas["AuthoredPlugin"])
+	if err != nil {
+		t.Fatalf("marshal AuthoredPlugin component: %v", err)
+	}
+	var ap struct {
+		Properties map[string]struct {
+			Description string `json:"description"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(raw, &ap); err != nil {
+		t.Fatalf("decode AuthoredPlugin component: %v (%s)", err, raw)
+	}
+	if strings.TrimSpace(ap.Properties["org"].Description) == "" {
+		t.Errorf("AuthoredPlugin.org lost its description — the untyped declaration must not "+
+			"overwrite the typed schema for a component both seams name; got %s", raw)
+	}
+}
+
+// TestMCPEnvelopeIsByteIdentical pins the rename that made the MCP response
+// declarable. The envelope was a Go map, which encoding/json writes in SORTED KEY
+// order; mcpResponse's fields are alphabetical for exactly that reason. Asserting
+// the marshalled BYTES is what proves naming the shape did not move the wire —
+// a status-code test would pass either way.
+func TestMCPEnvelopeIsByteIdentical(t *testing.T) {
+	for _, c := range []struct {
+		name       string
+		got, maply any
+	}{
+		{
+			"result",
+			rpcResult(7, map[string]any{"tools": []any{}}),
+			map[string]any{"jsonrpc": "2.0", "id": 7, "result": map[string]any{"tools": []any{}}},
+		},
+		{
+			"result with a null id",
+			rpcResult(nil, map[string]any{}),
+			map[string]any{"jsonrpc": "2.0", "id": nil, "result": map[string]any{}},
+		},
+		{
+			"error",
+			rpcError("abc", -32601, "method not found: nope"),
+			map[string]any{"jsonrpc": "2.0", "id": "abc", "error": map[string]any{"code": -32601, "message": "method not found: nope"}},
+		},
+		{
+			"parse error, no id to echo",
+			rpcError(nil, -32700, "parse error: x"),
+			map[string]any{"jsonrpc": "2.0", "id": nil, "error": map[string]any{"code": -32700, "message": "parse error: x"}},
+		},
+	} {
+		got, err := json.Marshal(c.got)
+		if err != nil {
+			t.Fatalf("%s: marshal struct: %v", c.name, err)
+		}
+		want, err := json.Marshal(c.maply)
+		if err != nil {
+			t.Fatalf("%s: marshal map: %v", c.name, err)
+		}
+		if string(got) != string(want) {
+			t.Errorf("%s:\n got %s\nwant %s", c.name, got, want)
+		}
+	}
+}
+
+// TestBuildReceiptIsByteIdentical is the same pin for the builder's 201 body,
+// which was also a map. buildOut's fields are alphabetical so the bytes match.
+func TestBuildReceiptIsByteIdentical(t *testing.T) {
+	stored := AuthoredPlugin{ID: "p1", Org: "acme", Name: "hello", Source: "export default {}", CreatedAt: 42}
+	got, err := json.Marshal(buildOut{Bytes: 12, Generated: true, Plugin: stored})
+	if err != nil {
+		t.Fatalf("marshal struct: %v", err)
+	}
+	want, err := json.Marshal(map[string]any{"plugin": stored, "generated": true, "bytes": 12})
+	if err != nil {
+		t.Fatalf("marshal map: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("build receipt moved:\n got %s\nwant %s", got, want)
 	}
 }
 

@@ -235,7 +235,28 @@
         "operationId": "post_v1_plugins_build",
         "tags": [
           "plugins"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/buildRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/buildOut"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/skills": {
@@ -466,7 +487,28 @@
         "operationId": "post_v1_tools_mcp",
         "tags": [
           "tools"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/mcpRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mcpResponse"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -667,6 +709,37 @@
         },
         "type": "object"
       },
+      "buildOut": {
+        "type": "object",
+        "properties": {
+          "bytes": {
+            "type": "integer"
+          },
+          "generated": {
+            "type": "boolean"
+          },
+          "plugin": {
+            "$ref": "#/components/schemas/AuthoredPlugin"
+          }
+        }
+      },
+      "buildRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "spec": {
+            "type": "string"
+          }
+        }
+      },
       "createServerReq": {
         "properties": {
           "authHeader": {
@@ -687,6 +760,32 @@
           }
         },
         "type": "object"
+      },
+      "mcpRequest": {
+        "type": "object",
+        "properties": {
+          "id": {},
+          "jsonrpc": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          },
+          "params": {}
+        }
+      },
+      "mcpResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/rpcErrorBody"
+          },
+          "id": {},
+          "jsonrpc": {
+            "type": "string"
+          },
+          "result": {}
+        }
       },
       "mcpServerList": {
         "properties": {
@@ -740,6 +839,17 @@
           }
         },
         "type": "object"
+      },
+      "rpcErrorBody": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
       },
       "skillDeleted": {
         "properties": {

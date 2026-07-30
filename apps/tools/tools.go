@@ -9,9 +9,43 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 )
+
+// The two routes on this plane that cannot be typed ops still have to be
+// DESCRIBED. "Carries no zip registry entry" was being read as "publishes
+// nothing", and those are opposite facts: both rendered as an operationId and a
+// tag and NO BODY AT ALL, which is exactly what a route taking no input and
+// returning none publishes. No consumer of the document can tell the two apart,
+// so every SDK generated off openapi.yaml offered an MCP call with nowhere to put
+// the JSON-RPC envelope and a plugin build with nowhere to put the source.
+//
+// openapi.Register is the seam for the halves that ARE statable. It attaches to a
+// route the router already carries, so it can never contradict the router, and it
+// does NOT make these typed ops: there is still no prose, no MCP tool, no CLI
+// command and no SDK method, because those come from zip's registry alone. See
+// untypedByDesign in typed_wire_test.go for why each one stays out of it.
+//
+// What is still NOT declared here, honestly — each a missing capability, not a
+// missing edit, so none is papered over with prose that overstates:
+//
+//   - the builder's 422 diagnostics. apply states the success shape under the
+//     "2XX" range key only; the failure body needs the same declarable-error-body
+//     capability that keeps this route untyped in the first place.
+//   - the MCP envelope's per-method result. One response schema cannot say that
+//     `result` is server info for initialize and a tools array for tools/list, so
+//     it is declared as what it is: unconstrained JSON.
+//   - field prose on all four shapes. zipdoc lifts doc comments off TYPED ops
+//     only, and Register's reflection seam reads Go types, not comments — so
+//     buildOut publishes `bytes: integer` with no description. AuthoredPlugin is
+//     unaffected: it is already described through the typed ops that share it,
+//     and Fold merges the typed schema over this one.
+func init() {
+	openapi.Register("/v1/tools/mcp", "POST", mcpRequest{}, mcpResponse{})
+	openapi.Register("/v1/plugins/build", "POST", buildRequest{}, buildOut{})
+}
 
 // Mount wires the unified tool plane at /v1/tools/* and installs the two providers
 // this package OWNS — builtin (full-cloud-control over the live route table) and
