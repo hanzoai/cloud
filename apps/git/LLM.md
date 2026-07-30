@@ -1,11 +1,22 @@
 # apps/git — typed-op status
 
-COMPLETE at **24 typed / 24 refused**. Every route with a JSON request/response
-shape is a typed op (ops.go states the seam; routes() in git.go registers them
-on the /v1/git group behind bridgePrincipal). The 24 raw registrations that
-remain each carry a wire fact a typed op cannot express — verified against the
-handlers, not the prose. Do not re-type them; re-measure here before believing
-any route counter that says git has untyped work left.
+COMPLETE at **24 typed / 24 refused**, and that partition is now a **GATE, not
+prose**: `untypedByDesign` (typed_wire_test.go) is the closed list of the 24
+refusals with the wire fact behind each, and `TestEveryRouteIsTypedOrNamed`
+fails three ways — a served operation that is neither typed nor named, a name
+that describes an operation git no longer serves, and a name that IS a typed op.
+So the next git route is typed BY DEFAULT and a stale reason cannot outlive the
+route it described. `TestEveryTypedOpIsDescribed` pins the other half: every
+typed op carries lifted prose, because an op added without regenerating
+zipdoc_gen.go is a nameless MCP tool. Prose was the previous form of this
+partition, and prose cannot fail — that is the whole reason it moved.
+
+Every route with a JSON request/response shape is a typed op (ops.go states the
+seam; routes() in git.go registers them on the /v1/git group behind
+bridgePrincipal). The four refusal families below were re-verified against the
+handlers and against zip v1.18.6 itself, not against this file. Do not re-type
+them; run the gate before believing any route counter that says git has untyped
+work left.
 
 ## The four refusal families
 
@@ -34,10 +45,16 @@ any route counter that says git has untyped work left.
 4. **ZAP procedure adapters** (zap.go:69-73) — 5 routes. The published
    envelope contract: success is the cloud.OK envelope, failure is a non-2xx
    `{status:"error", msg}` body (zap.go:88), while a typed op's returned error
-   renders zip's flat `{status, code, error}` — typing renames the error field
-   on a wire the bridge's clients parse. Expected to shrink: the shared /zap
-   plane already replays the typed /v1 ops frame-for-frame (see zap.go's
-   header comment); retiring these is a client migration, not a typing task.
+   renders zip's `HTTPError` — `{status:<int>, code, error:<msg>}`
+   (zip/ctx.go:200-206, written by `errorHandler` at ctx.go:222) — so typing
+   both RENAMES the message field (`msg`→`error`) and changes the TYPE of
+   `status` (string→int) on a wire the bridge's clients parse. There is no shim:
+   `cloud.Bridge` applies a handler-set status only when the handler returned
+   `err == nil` (typed.go:78), and the only exported setters are
+   `Created`/`Accepted`, so nothing lets a typed op answer a 4xx with a body of
+   its own. Expected to shrink: the shared /zap plane already replays the typed
+   /v1 ops frame-for-frame (see zap.go's header comment); retiring these is a
+   client migration, not a typing task.
 
 ## Internal plane ops
 
@@ -59,3 +76,27 @@ main; if you add a plane op, name the handler, write the doc comment, and run
   path last); waits on zip declaring a bodyless POST.
 - Conditional status (playbook "Statuses"): **0** — every git op has one
   success status; the four 201 creators declare `zip.WithStatus`.
+- **NEW: the `summary` carries a raw newline** — **20 of git's 24** typed ops,
+  and **215 of the fleet's 387** described operations across 18 packages.
+  `firstSentence` (zip/openapi.go:606) returns the substring up to the first
+  `". "` VERBATIM, so a first sentence that wraps in the Go source ships its
+  line break into the OpenAPI `summary`, the CLI command summary
+  (clispec.go:41, cli.go:133) and every generated SDK's first docstring line.
+  Re-measure from the committed subsets, never from prose:
+
+      python3 - <<'EOF'
+      import json,glob,os,collections
+      n=collections.Counter(); tot=0
+      for f in sorted(glob.glob('plugin/*/openapi.json')):
+          a=os.path.basename(os.path.dirname(f))
+          for p,ops in json.load(open(f)).get('paths',{}).items():
+              for m,op in ops.items():
+                  s=isinstance(op,dict) and op.get('summary') or ''
+                  if '\n' in s: n[a]+=1; tot+=1
+      print(tot, n.most_common())
+      EOF
+
+  The fix belongs in `firstSentence` — collapse internal whitespace, once — NOT
+  in 215 doc comments. Reflowing the prose so sentence one fits one 100-column
+  line would leave the class alive for the next op anybody writes and make cloud
+  a special case of a general bug. Do not "fix" this file's comments.
