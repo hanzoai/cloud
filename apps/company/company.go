@@ -140,7 +140,8 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 
 	// UNTYPED, and registered HERE so the body cap below never applies to it: the
 	// deck is document BYTES, not JSON, and its size ceiling has always been the
-	// edge's. Typing it would mean declaring a JSON body it does not take.
+	// edge's. Typing it would mean declaring a JSON body it does not take — the
+	// decoder would refuse a PDF with 400. Pinned by TestDeckTakesRawBytes.
 	g.Post("/fundraise/deck", cloud.Handle(s, fundraiseDeck))
 
 	// The JSON body cap, in ONE place instead of once per handler. Registered
@@ -168,6 +169,7 @@ func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
 	// (cloud.DenyResource — {"error":{"code","message"}}), a body zip's error type
 	// cannot express. Typing it would silently reshape that error for every
 	// metered client, so it stays a raw handler until zip errors can carry a body.
+	// Pinned by TestPaymentDenialWire, so that reason is a wire, not a comment.
 	g.Post("/payment", cloud.Handle(s, pay))
 	zip.Post(g, "/documents", o.generateDocuments)
 	zip.Post(g, "/esign", o.requestEsign)
@@ -625,8 +627,13 @@ func (o ops) kycDecision(ctx context.Context, in *decisionIn) (*formationView, e
 // that is NOT a typed op: a denial answers the fleet-wide billing contract
 // (cloud.DenyResource — 402 insufficient_balance / spend_cap_exceeded, 503
 // balance_unavailable, each a {"error":{"code","message"}} body), and zip's error
-// type renders a different shape. Typing it would reshape that error for every
-// metered client, so it stays a raw handler — see routes().
+// type renders a flat {status,code,error}. Typing it would reshape that error for
+// every metered client, so it stays a raw handler — see routes().
+//
+// The gate is the LAST thing it does, after the stage check and the paid
+// short-circuit, so a caller the machine is about to refuse is never charged.
+// That ordering is why the gate cannot lift into middleware, where it would run
+// first. Both facts are pinned: TestPaymentDenialWire, TestPaymentChargesLast.
 func pay(s *cloud.Service[state], c *zip.Ctx) error {
 	ctx := c.Context()
 	f, org, err := load(ctx, s)
