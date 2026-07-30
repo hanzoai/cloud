@@ -273,3 +273,53 @@ func sorted(m map[string]bool) string {
 	sort.Strings(out)
 	return strings.Join(out, ", ")
 }
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the op-level
+// gate above cannot see. Typing a route documents its ADDRESS and its SHAPE; it
+// does not document the shape's FIELDS, and those come from a different place —
+// doc comments on the In/Out struct fields, which zipdoc lifts per field.
+//
+// It found twelve when it was written, and the split is the tell: publishKitIn
+// and replaceKitIn — written AT the conversion — described every field, while
+// StarterKit, the view all five routes answer with, described four of fourteen.
+// So the REQUEST side of the gallery was documented and the RESPONSE side was
+// not, in openapi.yaml, in every generated SDK and in every MCP inputSchema. The
+// two that mattered most were `tier` and `rating`, which a caller could see are
+// numbers and nowhere that they are public-catalog curation no request can set.
+// Add a field to a view without saying what it is and this fails.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	reg, err := openapi.Typed(mountApp(t))
+	if err != nil {
+		t.Fatalf("typed registry: %v", err)
+	}
+	if len(reg.Schemas) == 0 {
+		t.Fatal("no templates schemas in the typed registry at all")
+	}
+	var bare []string
+	for name, raw := range reg.Schemas {
+		sch, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		props, ok := sch["properties"].(map[string]any)
+		if !ok {
+			continue // a scalar or an array schema has no properties to describe
+		}
+		for field, praw := range props {
+			p, ok := praw.(map[string]any)
+			if !ok {
+				continue
+			}
+			if desc, _ := p["description"].(string); strings.TrimSpace(desc) == "" {
+				bare = append(bare, name+"."+field)
+			}
+		}
+	}
+	if len(bare) > 0 {
+		sort.Strings(bare)
+		t.Errorf("published propert(ies) with no description: %s\n"+
+			"Every field of a published schema is read by SDK users and by a model choosing a tool. Write a "+
+			"doc comment on the struct field and run: go generate -run zipdoc ./apps/templates/...",
+			strings.Join(bare, ", "))
+	}
+}
