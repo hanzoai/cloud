@@ -191,7 +191,10 @@ type ops struct{ s *cloud.Service[state] }
 // every generated SDK method; an untyped route is in none of them.
 //
 // FOUR stay untyped, and each names a wire fact a typed op cannot carry today. They
-// are marked below and the reason is restated at each handler.
+// are marked below and the reason is restated at each handler. Prose is not a gate, so
+// each fact is also PINNED by a test (untyped_wire_test.go): retyping any of these four
+// turns one red and names the fact that was lost. Three of the four break on inputs no
+// other test in this package sends, which is precisely why the pins exist.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/automations")
 	// Bridge FIRST: a typed op receives only a context, so the validated org reaches
@@ -886,14 +889,27 @@ func resumeRun(s *cloud.Service[state], c *zip.Ctx) error {
 // payload threaded to matching flows as {{trigger.*}}. An optional X-Idempotency-Key
 // makes a re-delivery a no-op. Returns how many flows the event matched+started.
 //
-// UNTYPED, and the reason is the idempotency key: with no X-Idempotency-Key the
-// dedupe key is a CONTENT HASH OF THE RAW RECEIVED BYTES, which a decoded In is not —
-// re-encoding a decoded value gives different bytes, so a hammer of identical POSTs
-// would stop collapsing to one run and start minting one per POST. Two request
-// HEADERS carry the rest of the contract (X-Idempotency-Key itself and
-// X-Causation-Depth, which is what stops an in-platform trigger cycle amplifying),
-// and the size bound is measured on the raw bytes before any parse. Same family as
-// the raw-byte-signed provider webhooks in apps/integrations.
+// UNTYPED, and the DECISIVE reason is that the body is an OPEN-KEYED payload while the
+// path params are not: zip binds :source and :event by NAME (bindURL matches a path
+// param to the field whose json tag, else field name, equals it), so a typed In MUST
+// carry fields named source and event. A producer may legitimately send an event key
+// called "source" or "event" holding any JSON type, and zip decodes the body into the
+// In BEFORE the handler runs — so {"source": 42} becomes `invalid body:` 400 where
+// today it is accepted and delivered. That 400 is returned before the handler, so
+// nothing inside the handler can recover it.
+//
+// The rest of the contract is raw-byte-shaped but NOT independently blocking, and the
+// distinction matters because the recoverable half is the tempting one: with no
+// X-Idempotency-Key the dedupe key is a CONTENT HASH OF THE RAW RECEIVED BYTES (a
+// re-encoded decoded value gives different bytes, so a hammer of identical POSTs would
+// stop collapsing to one run), two request HEADERS carry the remainder
+// (X-Idempotency-Key and X-Causation-Depth, which stops an in-platform trigger cycle
+// amplifying), and the size bound is measured on the raw bytes before any parse — yet
+// all four ARE reachable from a typed op via cloud.Request(ctx). Recovering them does
+// not make this route typeable; the key collision above still breaks the wire, and
+// TestInboundHookAcceptsPayloadKeysCollidingWithPathParams pins exactly that, because
+// the rest of the suite stays green through such a retype. Same family as the
+// raw-byte-signed provider webhooks in apps/integrations.
 func inboundHook(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(s, c)
 	if !ok {
