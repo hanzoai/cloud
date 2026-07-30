@@ -9,19 +9,20 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The separately-listed registries: /v1/skills, /v1/mcp, /v1/plugins.
+// The separately-listed registries: /v1/skills, /v1/mcp/servers, /v1/plugins.
 //
-// /v1/skills and /v1/mcp are the SAME registry as /v1/tools viewed through one
-// Source each, so a client asking "what skills does this org have" does not
-// have to know to pass ?source=skill. They are views, not stores — a tool is
-// still registered in exactly one place (tools.Register) and activation lives
-// in exactly one place (ActivationStore), which is what keeps a source from
-// drifting into its own half-parallel plane.
+// /v1/skills is the SAME registry as /v1/tools viewed through one Source, so a
+// client asking "what skills does this org have" does not have to know to pass
+// ?source=skill. It is a view, not a store — a tool is still registered in
+// exactly one place (tools.Register) and activation lives in exactly one place
+// (ActivationStore), which is what keeps a source from drifting into its own
+// half-parallel plane.
 //
-// /v1/mcp additionally owns the EXTERNAL MCP SERVER registry (the connection
-// records), because a server is a thing an org creates and deletes, not a tool
-// the registry enumerates. That surface MOVED here from /v1/tools/servers — it
-// was not copied.
+// /v1/mcp/servers owns the EXTERNAL MCP SERVER registry (the connection records),
+// because a server is a thing an org creates and deletes, not a tool the registry
+// enumerates. The tools those servers offer are reported by GET /v1/tools with
+// ?source=mcp — there is no second view of them, and /v1/mcp itself is the
+// FLEET's one agent door, served by the host.
 //
 // /v1/plugins is deliberately NOT a tool source. A plugin here is a mounted
 // subsystem (cloud.Plugin: Name, Mount, Price, Prefixes) — code that extends
@@ -60,16 +61,7 @@ func (o toolOps) listSkills(ctx context.Context, in *sourceQuery) (*sourceToolLi
 	return o.bySource(ctx, SourceSkill, in)
 }
 
-// ListMCPTools lists the tools reachable on the external MCP servers the caller's
-// org has registered, with each one's activation flag. Every name is prefixed by
-// the server id it came from, which is what keeps two servers offering "search"
-// from colliding. It is GET /v1/tools narrowed to one source, so an external tool
-// still cannot shadow a native one — mcp is the lowest-precedence source.
-func (o toolOps) listMCPTools(ctx context.Context, in *sourceQuery) (*sourceToolList, error) {
-	return o.bySource(ctx, SourceMCP, in)
-}
-
-// bySource is the ONE body behind the two source views: it filters the
+// bySource is the ONE body behind the source view: it filters the
 // PER-PRINCIPAL list, so activation and precedence are already applied and a
 // source view can never widen what the caller may see.
 func (o toolOps) bySource(ctx context.Context, src Source, in *sourceQuery) (*sourceToolList, error) {

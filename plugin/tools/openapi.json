@@ -25,39 +25,6 @@
     }
   ],
   "paths": {
-    "/v1/mcp": {
-      "get": {
-        "operationId": "get_v1_mcp",
-        "summary": "ListMCPTools lists the tools reachable on the external MCP servers the caller's org has registered, with each one's activation flag.",
-        "description": "ListMCPTools lists the tools reachable on the external MCP servers the caller's\norg has registered, with each one's activation flag. Every name is prefixed by\nthe server id it came from, which is what keeps two servers offering \"search\"\nfrom colliding. It is GET /v1/tools narrowed to one source, so an external tool\nstill cannot shadow a native one — mcp is the lowest-precedence source.",
-        "tags": [
-          "mcp"
-        ],
-        "parameters": [
-          {
-            "name": "activated",
-            "in": "query",
-            "required": false,
-            "description": "Activated keeps only the tools activated for the caller's org and project,\nand only when it is exactly the string \"true\".",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/sourceToolList"
-                }
-              }
-            },
-            "description": "ok"
-          }
-        }
-      }
-    },
     "/v1/mcp/servers": {
       "get": {
         "operationId": "get_v1_mcp_servers",
@@ -386,7 +353,7 @@
       "get": {
         "operationId": "get_v1_tools",
         "summary": "ListTools lists every tool the caller's org and project can reach, from every source, each flagged with whether it is activated.",
-        "description": "ListTools lists every tool the caller's org and project can reach, from every\nsource, each flagged with whether it is activated. This is the discovery\nsurface: one flat set of names spanning builtin cloud controls, connector\nactions, user functions, zap-service routes, agents, skills and the org's own\nexternal MCP servers, deduplicated by name so the highest-precedence source\nwins a collision. It lists; it does not call — dispatch is the MCP endpoint.",
+        "description": "ListTools lists every tool the caller's org and project can reach, from every\nsource, each flagged with whether it is activated. This is the discovery\nsurface: one flat set of names spanning connector actions, user functions,\nzap-service routes, agents, skills and the org's own external MCP servers,\ndeduplicated by name so the highest-precedence source wins a collision. It\nlists; it does not call — dispatch is POST /v1/tools/call.",
         "tags": [
           "tools"
         ],
@@ -395,7 +362,7 @@
             "name": "source",
             "in": "query",
             "required": false,
-            "description": "Source keeps only tools from one source — builtin, connector, function,\nzap-service, agent, skill or mcp. Empty keeps every source.",
+            "description": "Source keeps only tools from one source — connector, function, zap-service,\nagent, skill or mcp. Empty keeps every source.",
             "schema": {
               "type": "string"
             }
@@ -482,31 +449,41 @@
         }
       }
     },
-    "/v1/tools/mcp": {
+    "/v1/tools/call": {
       "post": {
-        "operationId": "post_v1_tools_mcp",
+        "operationId": "post_v1_tools_call",
+        "summary": "CallTool runs one of the caller's activated tools and answers with its output.",
+        "description": "CallTool runs one of the caller's activated tools and answers with its output.\n\nThis is the door onto the tool plane's DYNAMIC half — the half no build-time\ncatalogue can hold, because it is per-tenant: an org's connected connector\nactions, its authored skills, its agents and functions, and the tools of every\nexternal MCP server it registered. A tool's existence, its price and its\nactivation are all rows, not code, so they cannot be known until the caller is.\n\nOne policy, the registry's: resolve by precedence, refuse an unactivated tool\n403, settle a priced one through the x402 seam or fail closed 402, then\ndispatch to the winning source bound to the caller's own (org, project). One\nmetered unit, one audit record. A caller can only ever dispatch its own tools.\n\nDiscovery is GET /v1/tools — ?activated=true for the callable set.",
         "tags": [
           "tools"
         ],
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "arguments": {
+                  "channel": "#general",
+                  "text": "hi"
+                },
+                "name": "slack_post_message"
+              },
               "schema": {
-                "$ref": "#/components/schemas/mcpRequest"
+                "$ref": "#/components/schemas/toolCall"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
-          "2XX": {
-            "description": "Success",
+          "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/mcpResponse"
+                  "$ref": "#/components/schemas/toolResult"
                 }
               }
-            }
+            },
+            "description": "ok"
           }
         }
       }
@@ -648,7 +625,7 @@
             "description": "Price is what a call costs and who is paid, absent for a free tool.\nEnforcement is the x402 settlement seam; this is the declaration."
           },
           "source": {
-            "description": "Source is where the tool comes from: builtin, connector, function,\nzap-service, agent, skill or mcp.",
+            "description": "Source is where the tool comes from: connector, function, zap-service,\nagent, skill or mcp.",
             "type": "string"
           }
         },
@@ -761,32 +738,6 @@
         },
         "type": "object"
       },
-      "mcpRequest": {
-        "type": "object",
-        "properties": {
-          "id": {},
-          "jsonrpc": {
-            "type": "string"
-          },
-          "method": {
-            "type": "string"
-          },
-          "params": {}
-        }
-      },
-      "mcpResponse": {
-        "type": "object",
-        "properties": {
-          "error": {
-            "$ref": "#/components/schemas/rpcErrorBody"
-          },
-          "id": {},
-          "jsonrpc": {
-            "type": "string"
-          },
-          "result": {}
-        }
-      },
       "mcpServerList": {
         "properties": {
           "servers": {
@@ -840,17 +791,6 @@
         },
         "type": "object"
       },
-      "rpcErrorBody": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "integer"
-          },
-          "message": {
-            "type": "string"
-          }
-        }
-      },
       "skillDeleted": {
         "properties": {
           "deleted": {
@@ -902,6 +842,22 @@
         },
         "type": "object"
       },
+      "toolCall": {
+        "properties": {
+          "arguments": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "description": "Arguments is the tool's own input object, passed through verbatim to\nwhichever source owns it.",
+            "type": "object"
+          },
+          "name": {
+            "description": "Name is the tool to run, exactly as GET /v1/tools reports it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "toolList": {
         "properties": {
           "tools": {
@@ -910,6 +866,19 @@
               "$ref": "#/components/schemas/Tool"
             },
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "toolResult": {
+        "properties": {
+          "name": {
+            "description": "Name is the tool that ran.",
+            "type": "string"
+          },
+          "result": {
+            "description": "Result is the tool's own output, verbatim — its shape is the tool's, not\nthis plane's.",
+            "type": "object"
           }
         },
         "type": "object"

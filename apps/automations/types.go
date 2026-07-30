@@ -224,7 +224,7 @@ type ConnectorTrigger struct {
 
 // PropSpec describes one input property of an action/trigger. It is the ONE prop
 // shape shared by the connector framework (connector.go), the catalogue, and the
-// MCP tool input-schema derivation (mcp.go) — one definition, three consumers.
+// Tool input-schema derivation (tool.go) — one definition, every consumer.
 type PropSpec struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"displayName,omitempty"`

@@ -9,15 +9,21 @@ import (
 	"time"
 )
 
-// Four /v1/automations routes are deliberately NOT typed ops, and routes() names the
+// Three /v1/automations routes are deliberately NOT typed ops, and routes() names the
 // wire fact behind each one. Prose is not a gate: a later reader can retype any of
-// them, watch the suite stay green, and ship a silent wire change — three of the four
-// break on inputs no existing test sends.
+// them, watch the suite stay green, and ship a silent wire change — each one breaks
+// on inputs no existing test sends.
+//
+// There used to be a fourth: the subsystem's own MCP JSON-RPC door, excluded because
+// a JSON-RPC envelope answers an unparseable body with HTTP 200. It is gone, not
+// retyped — the fleet serves ONE MCP door, on the host, and every connector action
+// reaches it through the unified tool plane. A transport nobody duplicates needs no
+// exclusion.
 //
 // These tests pin the FACTS, so the exclusion is enforced rather than asserted. Each
 // one fails the moment its route becomes a typed op, and says which fact was lost.
 //
-// The shared mechanism for three of them is zip's typed-op invoke (typed.go): it
+// The shared mechanism for all three is zip's typed-op invoke (typed.go): it
 // unmarshals the request body into the op's In BEFORE the handler runs and answers
 // `invalid body:` 400 when that fails. So an In can only describe a body whose shape
 // is CLOSED and known. Reading raw bytes from cloud.Request(ctx) does NOT recover
@@ -64,38 +70,6 @@ import (
 // a typed op must be addressable through its In ALONE, because for two of its four
 // transports the In is the only channel there is. TestOpsAddressThroughArgumentsAlone
 // pins that, so this retype goes red where the REST pins cannot see it.
-
-// TestMCPAnswersUnparseableBody200 pins the JSON-RPC contract on POST
-// /v1/automations/mcp: a body that is not JSON is a PROTOCOL result, not a transport
-// failure, so it answers HTTP 200 carrying a -32700 (parse error) object. A typed op
-// would answer 400 with no JSON-RPC envelope at all, which every conforming client
-// reads as a transport failure instead of the parse error it is.
-//
-// This one is closed at a layer BELOW zip, which is why no In type reaches it: the
-// decoder is encoding/json (zip's internal/jsonenc, stdlib only), and Unmarshal
-// validates the WHOLE input before it dispatches to any UnmarshalJSON. So neither an
-// In of json.RawMessage nor an In whose UnmarshalJSON never fails sees the bytes —
-// both answer the same `invalid body: unexpected end of JSON input` 400. A syntax
-// error is unreachable from Go, so it cannot be re-answered as -32700 from a handler.
-func TestMCPAnswersUnparseableBody200(t *testing.T) {
-	app := newApp(t)
-
-	r := reqRaw(t, app, "/v1/automations/mcp", "acme", `{"jsonrpc":"2.0","id":1,`)
-	if r.Code != http.StatusOK {
-		t.Fatalf("unparseable JSON-RPC body must answer 200 (the error rides in the envelope), got %d: %s", r.Code, r.Body)
-	}
-	var out struct {
-		Error struct {
-			Code int `json:"code"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(r.Body, &out); err != nil {
-		t.Fatalf("body must be a JSON-RPC envelope: %v (%s)", err, r.Body)
-	}
-	if out.Error.Code != -32700 {
-		t.Fatalf("want JSON-RPC parse error -32700, got %d: %s", out.Error.Code, r.Body)
-	}
-}
 
 // TestResumeAcceptsAnyJSONValue pins the resume payload on POST
 // /v1/automations/runs/{id}/resume: it is an ARBITRARY JSON value — a number, a

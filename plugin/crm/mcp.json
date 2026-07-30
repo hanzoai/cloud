@@ -1,0 +1,476 @@
+[
+  {
+    "description": "DeleteCompany removes one of the caller org's companies and answers 204. Any\ncontact or opportunity in the org that referenced it keeps existing with the\nreference cleared, so nothing is left pointing at a company that is gone.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the record to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_crm_companies_id"
+  },
+  {
+    "description": "DeleteContact removes one of the caller org's contacts and answers 204. Any\nopportunity in the org that named it point of contact keeps existing with\nthat reference cleared.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the record to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_crm_contacts_id"
+  },
+  {
+    "description": "DeleteOpportunity removes one of the caller org's deals and answers 204.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the record to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_crm_opportunities_id"
+  },
+  {
+    "description": "ListApplications returns the org's Startup Program applications, newest first.\nEach carries its AI screen and its stage history; a stage narrows the page to\none pipeline stage.",
+    "inputSchema": {
+      "properties": {
+        "limit": {
+          "description": "Limit caps the rows returned: 200 by default, 1000 at most.",
+          "type": "integer"
+        },
+        "stage": {
+          "description": "Stage returns only the applications at that pipeline stage when set:\napplied, screened, qualified, credits-offered, onboarded or rejected.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_crm_applications"
+  },
+  {
+    "description": "GetApplication returns one Startup Program application with its AI screen and stage history.\nAn id belonging to another org reads as not found.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the record to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_crm_applications_id"
+  },
+  {
+    "description": "ListCompanies returns the caller org's companies, most recently updated first.",
+    "inputSchema": {
+      "properties": {
+        "limit": {
+          "description": "Limit caps the rows returned: 200 by default, 1000 at most.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_crm_companies"
+  },
+  {
+    "description": "GetCompany returns one of the caller org's companies. An id belonging to\nanother org reads as not found.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the record to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_crm_companies_id"
+  },
+  {
+    "description": "ListContacts returns the caller org's contacts, most recently updated first.\nA companyId narrows the page to the people at that company.",
+    "inputSchema": {
+      "properties": {
+        "companyId": {
+          "description": "CompanyID returns only the contacts at that company when set.",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Limit caps the rows returned: 200 by default, 1000 at most.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_crm_contacts"
+  },
+  {
+    "description": "GetContact returns one of the caller org's contacts. An id belonging to\nanother org reads as not found.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the record to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_crm_contacts_id"
+  },
+  {
+    "description": "ListOpportunities returns the caller org's deals, most recently updated first.\nA stage narrows the page to one pipeline stage.",
+    "inputSchema": {
+      "properties": {
+        "limit": {
+          "description": "Limit caps the rows returned: 200 by default, 1000 at most.",
+          "type": "integer"
+        },
+        "stage": {
+          "description": "Stage returns only the opportunities at that pipeline stage when set\n(NEW, SCREENING, MEETING, PROPOSAL or CUSTOMER; case-insensitive).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_crm_opportunities"
+  },
+  {
+    "description": "GetOpportunity returns one of the caller org's deals. An id belonging to\nanother org reads as not found.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the record to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_crm_opportunities_id"
+  },
+  {
+    "description": "Summary counts the caller org's CRM records: companies, contacts, opportunities.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_crm_summary"
+  },
+  {
+    "description": "PatchApplication moves one Startup Program application through the pipeline. The\nmove is recorded on the application's timeline, attributed to the calling\nstaff user: it may advance exactly one stage, go back to any earlier stage,\nreject from any non-rejected stage, or reopen a rejected application to\n`applied`; anything else is refused. Rejecting requires a reason. A note with\nno stage change is still recorded.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the application to move, from the path.",
+          "type": "string"
+        },
+        "note": {
+          "description": "Note is a free-text comment recorded on the timeline, with or without a\nstage change.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Reason records WHY, and is required to reject.",
+          "type": "string"
+        },
+        "stage": {
+          "description": "Stage is the stage to move to: applied, screened, qualified,\ncredits-offered, onboarded or rejected. Omit to leave the stage alone.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "patch_v1_crm_applications_id"
+  },
+  {
+    "description": "CreateCompany adds a company to the caller's org and answers 201 with the stored record.\nA name is required; an empty currency defaults to USD.",
+    "inputSchema": {
+      "properties": {
+        "arr": {
+          "description": "ARR is annual recurring revenue in minor units (cents) of Currency.",
+          "type": "integer"
+        },
+        "city": {
+          "description": "City is the head-office city.",
+          "type": "string"
+        },
+        "country": {
+          "description": "Country is the head-office country.",
+          "type": "string"
+        },
+        "currency": {
+          "description": "Currency is the ISO code ARR is denominated in; empty defaults to USD.",
+          "type": "string"
+        },
+        "domainName": {
+          "description": "DomainName is the company's primary domain, e.g. \"acme.com\".",
+          "type": "string"
+        },
+        "employees": {
+          "description": "Employees is the headcount.",
+          "type": "integer"
+        },
+        "id": {
+          "description": "ID names the company to update and comes from the path. A create ignores\nit: the server mints the id.",
+          "type": "string"
+        },
+        "idealCustomerProfile": {
+          "description": "ICP marks the company as an ideal-customer-profile fit.",
+          "type": "boolean"
+        },
+        "linkedinLink": {
+          "description": "Linkedin is the company's LinkedIn URL.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name is the company name. Required.",
+          "type": "string"
+        },
+        "xLink": {
+          "description": "XLink is the company's X (Twitter) URL.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_crm_companies"
+  },
+  {
+    "description": "CreateContact adds a person to the caller's org and answers 201 with the stored record.\nOne of firstName, lastName or email is required, and a companyId must name a\ncompany in the same org.",
+    "inputSchema": {
+      "properties": {
+        "city": {
+          "description": "City is where the person is based.",
+          "type": "string"
+        },
+        "companyId": {
+          "description": "CompanyID links the contact to one of the org's companies.",
+          "type": "string"
+        },
+        "email": {
+          "description": "Email is the person's email address.",
+          "type": "string"
+        },
+        "firstName": {
+          "description": "FirstName is the person's given name.",
+          "type": "string"
+        },
+        "id": {
+          "description": "ID names the contact to update and comes from the path. A create ignores\nit: the server mints the id.",
+          "type": "string"
+        },
+        "jobTitle": {
+          "description": "JobTitle is the person's role at their company.",
+          "type": "string"
+        },
+        "lastName": {
+          "description": "LastName is the person's family name.",
+          "type": "string"
+        },
+        "linkedinLink": {
+          "description": "Linkedin is the person's LinkedIn URL.",
+          "type": "string"
+        },
+        "phone": {
+          "description": "Phone is the person's phone number.",
+          "type": "string"
+        },
+        "xLink": {
+          "description": "XLink is the person's X (Twitter) URL.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_crm_contacts"
+  },
+  {
+    "description": "CreateOpportunity adds a deal to the caller's org and answers 201 with the stored record.\nA name is required; the stage defaults to NEW; companyId and pointOfContactId\nmust name records in the same org.",
+    "inputSchema": {
+      "properties": {
+        "amount": {
+          "description": "Amount is the deal value in minor units (cents) of Currency.",
+          "type": "integer"
+        },
+        "closeDate": {
+          "description": "CloseDate is the expected close, as a unix second (0 = unset).",
+          "type": "integer"
+        },
+        "companyId": {
+          "description": "CompanyID links the deal to one of the org's companies.",
+          "type": "string"
+        },
+        "currency": {
+          "description": "Currency is the ISO code Amount is denominated in; empty defaults to USD.",
+          "type": "string"
+        },
+        "id": {
+          "description": "ID names the opportunity to update and comes from the path. A create\nignores it: the server mints the id.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name is the deal name. Required.",
+          "type": "string"
+        },
+        "pointOfContactId": {
+          "description": "PointOfContact links the deal to one of the org's contacts.",
+          "type": "string"
+        },
+        "stage": {
+          "description": "Stage is the pipeline stage: NEW, SCREENING, MEETING, PROPOSAL or CUSTOMER\n(case-insensitive). Empty defaults to NEW.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_crm_opportunities"
+  },
+  {
+    "description": "UpdateCompany replaces one of the caller org's companies. Every writable\nfield is taken from the request, so a field the request omits is CLEARED —\nsend the whole record. A name is required.",
+    "inputSchema": {
+      "properties": {
+        "arr": {
+          "description": "ARR is annual recurring revenue in minor units (cents) of Currency.",
+          "type": "integer"
+        },
+        "city": {
+          "description": "City is the head-office city.",
+          "type": "string"
+        },
+        "country": {
+          "description": "Country is the head-office country.",
+          "type": "string"
+        },
+        "currency": {
+          "description": "Currency is the ISO code ARR is denominated in; empty defaults to USD.",
+          "type": "string"
+        },
+        "domainName": {
+          "description": "DomainName is the company's primary domain, e.g. \"acme.com\".",
+          "type": "string"
+        },
+        "employees": {
+          "description": "Employees is the headcount.",
+          "type": "integer"
+        },
+        "id": {
+          "description": "ID names the company to update and comes from the path. A create ignores\nit: the server mints the id.",
+          "type": "string"
+        },
+        "idealCustomerProfile": {
+          "description": "ICP marks the company as an ideal-customer-profile fit.",
+          "type": "boolean"
+        },
+        "linkedinLink": {
+          "description": "Linkedin is the company's LinkedIn URL.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name is the company name. Required.",
+          "type": "string"
+        },
+        "xLink": {
+          "description": "XLink is the company's X (Twitter) URL.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "put_v1_crm_companies_id"
+  },
+  {
+    "description": "UpdateContact replaces one of the caller org's contacts. Every writable field\nis taken from the request, so a field the request omits is CLEARED — send the\nwhole record. One of firstName, lastName or email is required.",
+    "inputSchema": {
+      "properties": {
+        "city": {
+          "description": "City is where the person is based.",
+          "type": "string"
+        },
+        "companyId": {
+          "description": "CompanyID links the contact to one of the org's companies.",
+          "type": "string"
+        },
+        "email": {
+          "description": "Email is the person's email address.",
+          "type": "string"
+        },
+        "firstName": {
+          "description": "FirstName is the person's given name.",
+          "type": "string"
+        },
+        "id": {
+          "description": "ID names the contact to update and comes from the path. A create ignores\nit: the server mints the id.",
+          "type": "string"
+        },
+        "jobTitle": {
+          "description": "JobTitle is the person's role at their company.",
+          "type": "string"
+        },
+        "lastName": {
+          "description": "LastName is the person's family name.",
+          "type": "string"
+        },
+        "linkedinLink": {
+          "description": "Linkedin is the person's LinkedIn URL.",
+          "type": "string"
+        },
+        "phone": {
+          "description": "Phone is the person's phone number.",
+          "type": "string"
+        },
+        "xLink": {
+          "description": "XLink is the person's X (Twitter) URL.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "put_v1_crm_contacts_id"
+  },
+  {
+    "description": "UpdateOpportunity replaces one of the caller org's deals. Every writable\nfield is taken from the request, so a field the request omits is CLEARED —\nsend the whole record. A name is required and the stage must be a pipeline\nstage.",
+    "inputSchema": {
+      "properties": {
+        "amount": {
+          "description": "Amount is the deal value in minor units (cents) of Currency.",
+          "type": "integer"
+        },
+        "closeDate": {
+          "description": "CloseDate is the expected close, as a unix second (0 = unset).",
+          "type": "integer"
+        },
+        "companyId": {
+          "description": "CompanyID links the deal to one of the org's companies.",
+          "type": "string"
+        },
+        "currency": {
+          "description": "Currency is the ISO code Amount is denominated in; empty defaults to USD.",
+          "type": "string"
+        },
+        "id": {
+          "description": "ID names the opportunity to update and comes from the path. A create\nignores it: the server mints the id.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name is the deal name. Required.",
+          "type": "string"
+        },
+        "pointOfContactId": {
+          "description": "PointOfContact links the deal to one of the org's contacts.",
+          "type": "string"
+        },
+        "stage": {
+          "description": "Stage is the pipeline stage: NEW, SCREENING, MEETING, PROPOSAL or CUSTOMER\n(case-insensitive). Empty defaults to NEW.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "put_v1_crm_opportunities_id"
+  }
+]

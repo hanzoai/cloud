@@ -29,24 +29,6 @@ func init() {
 			"skillRef.id":          "ID is the skill to remove, from the path. It is the skill's name.",
 		},
 	})
-	zip.Describe("GET /v1/mcp", zip.Doc{
-		Description: "ListMCPTools lists the tools reachable on the external MCP servers the caller's\norg has registered, with each one's activation flag. Every name is prefixed by\nthe server id it came from, which is what keeps two servers offering \"search\"\nfrom colliding. It is GET /v1/tools narrowed to one source, so an external tool\nstill cannot shadow a native one — mcp is the lowest-precedence source.",
-		Fields: map[string]string{
-			"Price.amountCents":     "AmountCents is what ONE call costs, in minor units of Currency.",
-			"Price.currency":        "Currency is the ISO 4217 code, e.g. \"USD\". Empty means USD.",
-			"Price.recipient":       "Recipient is the payout wallet ref the marketplace seller is paid at.",
-			"Tool.activated":        "Activated is filled by the registry from the activation store for the\nrequesting (org,project); providers leave it zero. An unactivated tool is\ndiscoverable but refused 403 at dispatch.",
-			"Tool.description":      "Description is the prose a model reads to decide whether to call the tool.",
-			"Tool.dispatchable":     "Dispatchable is whether the tool can be CALLED. False for a listing-only\nentry: a skill is activated and attached to an agent, never called.",
-			"Tool.inputSchema":      "Schema is the JSON Schema of the call arguments — the MCP inputSchema.\nAbsent for a tool that takes none.",
-			"Tool.name":             "Name is the tool's id in the flat, fleet-wide tool namespace — the value a\ntools/call passes. Unique across sources: a collision is resolved by source\nprecedence before the caller ever sees it.",
-			"Tool.price":            "Price is what a call costs and who is paid, absent for a free tool.\nEnforcement is the x402 settlement seam; this is the declaration.",
-			"Tool.source":           "Source is where the tool comes from: builtin, connector, function,\nzap-service, agent, skill or mcp.",
-			"sourceQuery.activated": "Activated keeps only the tools activated for the caller's org and project,\nand only when it is exactly the string \"true\".",
-			"sourceToolList.source": "Source is the source these tools came from.",
-			"sourceToolList.tools":  "Tools is the caller's tools from that source. Never null.",
-		},
-	})
 	zip.Describe("GET /v1/mcp/servers", zip.Doc{
 		Description: "ListServers lists the external MCP servers the caller's org has registered.\nEach record carries the URL and the name of the header its credential is\ninjected into; the credential VALUE lives only in KMS and is never returned,\nso hasSecret is the whole of what this surface says about it.",
 		Fields: map[string]string{
@@ -94,7 +76,7 @@ func init() {
 			"Tool.inputSchema":      "Schema is the JSON Schema of the call arguments — the MCP inputSchema.\nAbsent for a tool that takes none.",
 			"Tool.name":             "Name is the tool's id in the flat, fleet-wide tool namespace — the value a\ntools/call passes. Unique across sources: a collision is resolved by source\nprecedence before the caller ever sees it.",
 			"Tool.price":            "Price is what a call costs and who is paid, absent for a free tool.\nEnforcement is the x402 settlement seam; this is the declaration.",
-			"Tool.source":           "Source is where the tool comes from: builtin, connector, function,\nzap-service, agent, skill or mcp.",
+			"Tool.source":           "Source is where the tool comes from: connector, function, zap-service,\nagent, skill or mcp.",
 			"sourceQuery.activated": "Activated keeps only the tools activated for the caller's org and project,\nand only when it is exactly the string \"true\".",
 			"sourceToolList.source": "Source is the source these tools came from.",
 			"sourceToolList.tools":  "Tools is the caller's tools from that source. Never null.",
@@ -113,7 +95,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/tools", zip.Doc{
-		Description: "ListTools lists every tool the caller's org and project can reach, from every\nsource, each flagged with whether it is activated. This is the discovery\nsurface: one flat set of names spanning builtin cloud controls, connector\nactions, user functions, zap-service routes, agents, skills and the org's own\nexternal MCP servers, deduplicated by name so the highest-precedence source\nwins a collision. It lists; it does not call — dispatch is the MCP endpoint.",
+		Description: "ListTools lists every tool the caller's org and project can reach, from every\nsource, each flagged with whether it is activated. This is the discovery\nsurface: one flat set of names spanning connector actions, user functions,\nzap-service routes, agents, skills and the org's own external MCP servers,\ndeduplicated by name so the highest-precedence source wins a collision. It\nlists; it does not call — dispatch is POST /v1/tools/call.",
 		Fields: map[string]string{
 			"Price.amountCents":   "AmountCents is what ONE call costs, in minor units of Currency.",
 			"Price.currency":      "Currency is the ISO 4217 code, e.g. \"USD\". Empty means USD.",
@@ -124,10 +106,10 @@ func init() {
 			"Tool.inputSchema":    "Schema is the JSON Schema of the call arguments — the MCP inputSchema.\nAbsent for a tool that takes none.",
 			"Tool.name":           "Name is the tool's id in the flat, fleet-wide tool namespace — the value a\ntools/call passes. Unique across sources: a collision is resolved by source\nprecedence before the caller ever sees it.",
 			"Tool.price":          "Price is what a call costs and who is paid, absent for a free tool.\nEnforcement is the x402 settlement seam; this is the declaration.",
-			"Tool.source":         "Source is where the tool comes from: builtin, connector, function,\nzap-service, agent, skill or mcp.",
+			"Tool.source":         "Source is where the tool comes from: connector, function, zap-service,\nagent, skill or mcp.",
 			"toolList.tools":      "Tools is every tool the caller may see, deduplicated by name with source\nprecedence applied.",
 			"toolQuery.activated": "Activated keeps only the tools activated for the caller's org and project,\nand only when it is exactly the string \"true\".",
-			"toolQuery.source":    "Source keeps only tools from one source — builtin, connector, function,\nzap-service, agent, skill or mcp. Empty keeps every source.",
+			"toolQuery.source":    "Source keeps only tools from one source — connector, function, zap-service,\nagent, skill or mcp. Empty keeps every source.",
 		},
 	})
 	zip.Describe("GET /v1/tools/activation", zip.Doc{
@@ -168,6 +150,16 @@ func init() {
 			"skillWritten.skill":  "Skill is the skill as stored, with its derived id and creation time.",
 		},
 		Example: json.RawMessage(`{"name":"triage","description":"how we triage","content":"# Triage\n…"}`),
+	})
+	zip.Describe("POST /v1/tools/call", zip.Doc{
+		Description: "CallTool runs one of the caller's activated tools and answers with its output.\n\nThis is the door onto the tool plane's DYNAMIC half — the half no build-time\ncatalogue can hold, because it is per-tenant: an org's connected connector\nactions, its authored skills, its agents and functions, and the tools of every\nexternal MCP server it registered. A tool's existence, its price and its\nactivation are all rows, not code, so they cannot be known until the caller is.\n\nOne policy, the registry's: resolve by precedence, refuse an unactivated tool\n403, settle a priced one through the x402 seam or fail closed 402, then\ndispatch to the winning source bound to the caller's own (org, project). One\nmetered unit, one audit record. A caller can only ever dispatch its own tools.\n\nDiscovery is GET /v1/tools — ?activated=true for the callable set.",
+		Fields: map[string]string{
+			"toolCall.arguments": "Arguments is the tool's own input object, passed through verbatim to\nwhichever source owns it.",
+			"toolCall.name":      "Name is the tool to run, exactly as GET /v1/tools reports it.",
+			"toolResult.name":    "Name is the tool that ran.",
+			"toolResult.result":  "Result is the tool's own output, verbatim — its shape is the tool's, not\nthis plane's.",
+		},
+		Example: json.RawMessage(`{"name":"slack_post_message","arguments":{"channel":"#general","text":"hi"}}`),
 	})
 	zip.Describe("PUT /v1/tools/activation", zip.Doc{
 		Description: "PutActivation switches tools on and off for the caller's org and project, and\nanswers with the resulting activated set. It is the ONE write path that turns\nskills, plugins and connectors into callable tools — an unactivated tool is\nlisted by discovery but refused 403 at dispatch. Activate is applied before\nDeactivate, so a name in both lists ends up off. More than 256 toggles in one\nrequest is refused 413.",

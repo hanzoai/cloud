@@ -1,0 +1,164 @@
+[
+  {
+    "description": "DeleteProject removes one tracker project of the caller's org AND every issue\nfiled under it, and answers 204 with no body. 404 when the org has no project\nunder that key.\n\nThe cascade is the point: an issue has no meaning without the board whose key\nnames it, so deleting the board deletes them together rather than leaving\norphans addressable by an identifier that no longer resolves.",
+    "inputSchema": {
+      "properties": {
+        "key": {
+          "description": "Key is the project's org-unique handle: 2-8 uppercase alphanumerics starting\nwith a letter (\"ENG\", \"OPS2\"). Matched case-insensitively.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_tracker_projects_key"
+  },
+  {
+    "description": "DeleteIssue removes one issue from a tracker project and answers 204 with no\nbody. 404 when the project or the issue does not exist in the caller's org.\n\nThe issue's number is NOT reused: the next issue on the board takes the next\nnumber, so a deleted identifier stays retired rather than silently pointing at\ndifferent work.",
+    "inputSchema": {
+      "properties": {
+        "key": {
+          "description": "Key is the issue's project, from the path.",
+          "type": "string"
+        },
+        "num": {
+          "description": "Num is the issue's number within that project — the digits of KEY-14.\nPositive; anything else is refused with 400.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_tracker_projects_key_issues_num"
+  },
+  {
+    "description": "ListProjects returns every tracker project in the caller's org, newest first.\n\nA project is the board: it owns a KEY (the uppercase handle that prefixes every\nissue identifier, \"ENG-14\") and the issues filed under it. The listing is\norg-scoped server-side — the org is the validated bearer claim, never a\nclient-supplied header — so one org can never see another's boards.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_tracker_projects"
+  },
+  {
+    "description": "GetProject returns one tracker project of the caller's org by its key —\nits name, description and timestamps. 404 when the org has no project\nunder that key.",
+    "inputSchema": {
+      "properties": {
+        "key": {
+          "description": "Key is the project's org-unique handle: 2-8 uppercase alphanumerics starting\nwith a letter (\"ENG\", \"OPS2\"). Matched case-insensitively.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_tracker_projects_key"
+  },
+  {
+    "description": "ListIssues returns the issues of one tracker project, optionally filtered by\nstatus, kind, repo and source.\n\nThis is the ONE place a surface takes its slice of the shared issue table:\nhanzo.team passes no filter or a status, a git repository's Issues tab passes\nkind=issue\u0026repo=\u003cr\u003e and its Pull Requests tab kind=pr\u0026repo=\u003cr\u003e. A filter value\noutside its closed set is refused with 400 rather than silently returning an\nempty board.",
+    "inputSchema": {
+      "properties": {
+        "key": {
+          "description": "Key is the project whose issues to list, from the path.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind keeps only work items of that shape: issue, pr or epic. An unknown\nvalue is refused with 400.",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repo keeps only issues bound to that git repository.",
+          "type": "string"
+        },
+        "source": {
+          "description": "Source keeps only issues opened from that surface: team, git, crm,\nhelpdesk, cms or agent. An unknown value is refused with 400.",
+          "type": "string"
+        },
+        "status": {
+          "description": "Status keeps only issues in that board column: backlog, todo, in_progress,\ndone or canceled. An unknown value is refused with 400.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_tracker_projects_key_issues"
+  },
+  {
+    "description": "GetIssue returns one issue of one tracker project by its per-project number —\ntitle, description, status, priority, assignee, labels, kind, source and its\ngit bindings. 404 when the project or the issue does not exist in the caller's\norg.",
+    "inputSchema": {
+      "properties": {
+        "key": {
+          "description": "Key is the issue's project, from the path.",
+          "type": "string"
+        },
+        "num": {
+          "description": "Num is the issue's number within that project — the digits of KEY-14.\nPositive; anything else is refused with 400.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_tracker_projects_key_issues_num"
+  },
+  {
+    "description": "UpdateProject renames a tracker project or rewrites its description, and\nreturns the updated project. Both fields are optional: one the caller omits\nkeeps its stored value.\n\nThe project KEY is never editable — it prefixes every issue identifier already\nfiled under the board, so changing it would rewrite the human handle of every\nissue in it.",
+    "inputSchema": {
+      "properties": {
+        "description": {
+          "description": "Description is the board's free-form blurb, at most 32768 characters.",
+          "type": "string"
+        },
+        "key": {
+          "description": "Key is the project to update, from the path.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name is the project's display name. Non-empty, at most 256 characters.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "patch_v1_tracker_projects_key"
+  },
+  {
+    "description": "UpdateIssue edits one issue in place and returns it — retitle it, rewrite its\nbody, move it between board columns, reprioritize, reassign, or replace its\nlabels. Every field is optional: one the caller omits keeps its stored value,\nand `labels` REPLACES the set rather than adding to it.\n\nThe issue's kind, source and git bindings are not editable here: they record\nwhere the work item came FROM, which is a fact about its origin rather than\nits current state.",
+    "inputSchema": {
+      "properties": {
+        "assignee": {
+          "description": "Assignee is who owns the issue, at most 256 characters. Empty unassigns it.",
+          "type": "string"
+        },
+        "description": {
+          "description": "Description is the issue body, at most 32768 characters.",
+          "type": "string"
+        },
+        "key": {
+          "description": "Key is the issue's project, from the path.",
+          "type": "string"
+        },
+        "labels": {
+          "description": "Labels REPLACES the issue's labels with exactly this set. Each label is at\nmost 48 characters and may not contain a comma (the storage separator);\nempty entries are dropped.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "num": {
+          "description": "Num is the issue's number within that project, from the path.",
+          "type": "integer"
+        },
+        "priority": {
+          "description": "Priority is none, urgent, high, medium or low. Empty resets it to none.",
+          "type": "string"
+        },
+        "status": {
+          "description": "Status moves the issue between board columns: backlog, todo, in_progress,\ndone or canceled. Empty resets it to backlog.",
+          "type": "string"
+        },
+        "title": {
+          "description": "Title is the issue's one-line summary. Non-empty, at most 512 characters.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "patch_v1_tracker_projects_key_issues_num"
+  }
+]

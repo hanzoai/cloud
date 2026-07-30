@@ -79,9 +79,10 @@ func toolsCall(t *testing.T, app *zip.App, org, op string, args string) (string,
 }
 
 // derivedTools returns the names of the tools ZIP derives from this package's
-// typed-op registry — one per typed op, none for an untyped route. Distinct from
-// mcp.go's mcpTools, which is the connector-scoped list automations serves itself
-// at /v1/automations/mcp.
+// typed-op registry — one per typed op, none for an untyped route. This is the
+// catalogue `automations describe` serialises and the host composes onto the
+// fleet's one MCP door; a connector ACTION is a different value, published into
+// the unified tool plane by connectorToolProvider.
 func derivedTools(app *zip.App) []string {
 	var names []string
 	for _, tool := range app.MCPTools() {

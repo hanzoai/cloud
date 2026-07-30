@@ -1,0 +1,272 @@
+[
+  {
+    "description": "ListResearchArtifacts returns the caller org's research-diary feed newest-first —\nthe snapshots and reports tied to its runs, as metadata and content addresses;\nthe bytes themselves are fetched by hash. ?run= narrows to one run, ?project=\nto one project (default the caller's project scope), and ?since= to a unix second.",
+    "inputSchema": {
+      "properties": {
+        "project": {
+          "description": "Project narrows to one project. Empty takes the caller's project scope.",
+          "type": "string"
+        },
+        "run": {
+          "description": "Run narrows to one run's artifacts by its stable id.",
+          "type": "string"
+        },
+        "since": {
+          "description": "Since bounds the feed to artifacts recorded at or after this unix second.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_research_artifacts"
+  },
+  {
+    "description": "ListExperiments returns the caller org's CANONICAL experiments — the deterministic\ndeduped view over the versioned history. With no ?project= it reads the org's\nwhole set across projects (the ops board's cross-project view, since a project is\na sub-scope of the one tenant); ?project= narrows to one and ?kind= to one\ndiscriminator.",
+    "inputSchema": {
+      "properties": {
+        "kind": {
+          "description": "Kind narrows to one discriminator: benchmark, kernel-perf, training, ablation or policy-eval.",
+          "type": "string"
+        },
+        "project": {
+          "description": "Project narrows to one project. Empty reads the org's whole set across projects.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_research_experiments"
+  },
+  {
+    "description": "ListResearchProjects returns every research project in the caller's org with its\nreal totals — canonical and retained side by side — which is the ops board's\n\"every project + real totals\" view.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_research_projects"
+  },
+  {
+    "description": "GetResearchTotals returns the caller org's headline aggregate plus a per-kind\nbreakdown — the observatory's poll target. Canonical and retained counts travel\ntogether, so a deduped view never reads as loss. ?project= narrows to one project.",
+    "inputSchema": {
+      "properties": {
+        "project": {
+          "description": "Project narrows the aggregate to one project. Empty aggregates the whole org.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_research_totals"
+  },
+  {
+    "description": "RecordResearchArtifact records one research-diary artifact — a board snapshot or a\ngenerated report — CONTENT-ADDRESSED inside the trust boundary. The caller submits\nthe bytes as base64 `content`; the SERVER hashes them and THAT hash is the identity\nand the ref, so the address can never be poisoned by a client-asserted one. A\nclient-supplied sha256, if present, must match the bytes. The project is the\nSERVER's value and visibility is forced private. Re-posting the same bytes is a\nno-op that reports created=false.",
+    "inputSchema": {
+      "properties": {
+        "content": {
+          "description": "base64 bytes on write; the server hashes + stores them (never returned)",
+          "type": "string"
+        },
+        "git_branch": {
+          "type": "string"
+        },
+        "git_dirty": {
+          "type": "boolean"
+        },
+        "git_sha": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "lib_versions": {},
+        "project": {
+          "type": "string"
+        },
+        "ref": {
+          "description": "server-derived content address (sha256:\u003chash\u003e)",
+          "type": "string"
+        },
+        "retention_class": {
+          "type": "string"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "sha256": {
+          "description": "SERVER-derived on write; the identity",
+          "type": "string"
+        },
+        "ts": {
+          "type": "integer"
+        },
+        "visibility": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_research_artifacts"
+  },
+  {
+    "description": "IngestExperiments appends one batch of experiment and attempt versions to the\ncaller org's evidence store, idempotently by content, then rolls it up to the\nanalytics plane best-effort. The project is the SERVER's value and visibility is\nforced private — an upload grants no training or publication right, which is a\nseparate call. A run carrying a BYO endpoint is SSRF-checked before the store is\ntouched. The answer carries BOTH the canonical (deduped) and retained (full\nhistory) counts, so a caller sees the versioned truth rather than a dedup that\nreads as loss.",
+    "inputSchema": {
+      "$defs": {
+        "Attempt": {
+          "properties": {
+            "answer": {
+              "type": "string"
+            },
+            "benchmark": {
+              "type": "string"
+            },
+            "correct": {
+              "type": "boolean"
+            },
+            "gold": {
+              "type": "string"
+            },
+            "item": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "response": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "ts": {
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "Experiment": {
+          "properties": {
+            "canonical": {
+              "type": "boolean"
+            },
+            "cost_usd": {
+              "type": "number"
+            },
+            "endpoint": {
+              "type": "string"
+            },
+            "git_branch": {
+              "type": "string"
+            },
+            "git_dirty": {
+              "type": "boolean"
+            },
+            "git_sha": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "lib_versions": {},
+            "meta": {},
+            "metric": {
+              "type": "string"
+            },
+            "n": {
+              "type": "integer"
+            },
+            "n_total": {
+              "type": "integer"
+            },
+            "project": {
+              "type": "string"
+            },
+            "publishable": {
+              "type": "boolean"
+            },
+            "revision": {
+              "description": "original | corrected | retracted",
+              "type": "string"
+            },
+            "status": {
+              "description": "planning | running | complete | faulted",
+              "type": "string"
+            },
+            "subject": {
+              "type": "string"
+            },
+            "task": {
+              "type": "string"
+            },
+            "trainable": {
+              "type": "boolean"
+            },
+            "ts": {
+              "type": "integer"
+            },
+            "value": {
+              "type": "number"
+            },
+            "visibility": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "attempts": {
+          "items": {
+            "$ref": "#/$defs/Attempt"
+          },
+          "type": "array"
+        },
+        "experiments": {
+          "items": {
+            "$ref": "#/$defs/Experiment"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_research_experiments"
+  },
+  {
+    "description": "GrantResearchVisibility records the SEPARATE authorization an upload never\nimplies: a record's visibility (private, org or public) and, for a run, its\ntraining and commons-publication consent. Address a run by its stable id or an\nartifact by its sha256; an artifact grant sets visibility only. The ORG is the\ntenant boundary and comes from the validated principal, so a caller can only ever\ngrant within its own org; `project` locates WHICH record inside it and defaults to\nthe caller's project scope.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "an experiment (run) stable id",
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "publishable": {
+          "type": "boolean"
+        },
+        "sha256": {
+          "description": "OR an artifact content hash",
+          "type": "string"
+        },
+        "trainable": {
+          "type": "boolean"
+        },
+        "visibility": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_research_grants"
+  }
+]
