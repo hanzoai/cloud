@@ -1359,9 +1359,19 @@ document. Half the fix converts nothing, which is why the refusal is recorded in
 TEST (`rawRoutes` in `ops_projection_test.go`) with both halves named, not in
 prose that only ever named one.
 
-Re-verified against zip v1.18.6, the current pin and the newest published
-version: neither half shipped. The re-check surfaced a THIRD half the first two
-hide. Off the REST path `op.invoke` receives no path map at all — `mcpCall` and
+A cited reason nothing reads is a reason that outlives its cause, so the two
+observable halves are now PINNED rather than merely cited:
+`TestOpenObjectRefusalStillHolds` asserts the false document schema zip publishes
+today and that an open-object In receives no `:doctype`, on the same harness where
+a struct In provably does. Both assertions are wrong on purpose — either one going
+red IS the signal to convert the two writes and delete the test. That is the
+difference between a refusal that expires and one that rots.
+
+Re-verified against zip v1.18.6 (the current pin) and again against v1.18.8 (the
+newest published tag, two ahead of it): none of the three shipped — `schemaOf`
+still has no `reflect.Interface` case, `bindURL` still returns early on a
+non-struct, and `mcp.go` still invokes with a nil path map. The first re-check
+surfaced a THIRD half the first two hide. Off the REST path `op.invoke` receives no path map at all — `mcpCall` and
 the call plane both pass nil — so an op's URL params can reach it only as In
 fields decoded from the args body. On THIS wire the body key `name` is live
 data: a create body's `name` IS the requested document name
