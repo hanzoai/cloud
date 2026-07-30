@@ -66,6 +66,24 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 			},
 		},
 	}
+	// UNTYPED BY DESIGN — and it is the only route here, so this whole subsystem
+	// publishes no prose, no MCP tool and no CLI command. Three wire facts make it
+	// untypable as it stands, each on its own sufficient:
+	//
+	//   - it is ONE registration for EVERY method (All), including OPTIONS and
+	//     TRACE. zip's typed registrars are per-method and it has no All[In, Out];
+	//     seven ops would each have to name a body the relay does not parse.
+	//   - the path is a GREEDY wildcard. fiber calls the segment `*1` and the
+	//     document calls it `{wildcard1}`, so a typed In's bound field and the
+	//     published parameter cannot agree — and the value is a whole sub-path,
+	//     not a scalar the binder can set.
+	//   - the response is the DNS plane's own, verbatim: its status code
+	//     (c.Bytes(res.StatusCode, out), below), its Content-Type, and its
+	//     Location on a 3xx. A typed op answers the status its op DECLARED and
+	//     serialises its Out as JSON, so every one of those three moves.
+	//
+	// Typing this means giving the DNS plane a typed control surface in the plane
+	// itself, not wrapping it here. See LLM.md, "the typed migration".
 	app.Group("/v1/dns").All("/*", e.forward)
 	if deps.Logger != nil {
 		deps.Logger.Info("dns forward head mounted", "upstream", e.base)

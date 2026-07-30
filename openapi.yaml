@@ -1033,6 +1033,46 @@ components:
         sql:
           type: string
       type: object
+    DestinationField:
+      properties:
+        example:
+          type: string
+        key:
+          type: string
+        label:
+          type: string
+        required:
+          type: boolean
+      type: object
+    DestinationStatus:
+      properties:
+        account:
+          type: string
+        category:
+          type: string
+        config:
+          additionalProperties:
+            type: string
+          type: object
+        connected:
+          type: boolean
+        enabled:
+          type: boolean
+        fields:
+          items:
+            $ref: '#/components/schemas/DestinationField'
+          type: array
+        live:
+          type: boolean
+        name:
+          type: string
+        platform:
+          type: string
+        secrets:
+          items:
+            type: string
+          type: array
+      type: object
     DoCost:
       properties:
         accountBalanceCents:
@@ -3600,6 +3640,44 @@ components:
           description: To is the stage moved into.
           type: string
       type: object
+    StarterKit:
+      properties:
+        category:
+          type: string
+        demo:
+          description: live demo (<slug>.hanzo.app), when deployed
+          type: string
+        description:
+          type: string
+        features:
+          items:
+            type: string
+          type: array
+        framework:
+          type: string
+        org:
+          description: owner of a PRIVATE template; empty in the public catalog
+          type: string
+        preview:
+          type: string
+        rating:
+          type: number
+        slug:
+          type: string
+        source:
+          type: string
+        tier:
+          type: integer
+        title:
+          type: string
+        useCase:
+          type: string
+        variants:
+          description: the shapes this template ships in
+          items:
+            $ref: '#/components/schemas/Variant'
+          type: array
+      type: object
     Status:
       properties:
         addr:
@@ -4234,6 +4312,23 @@ components:
         tokens:
           description: Tokens is prompt plus completion tokens over those calls.
           type: integer
+      type: object
+    Variant:
+      properties:
+        framework:
+          description: only when it differs from the template's
+          type: string
+        id:
+          description: selector, unique within the template ("react", "grid-3-fluid")
+          type: string
+        kind:
+          description: 'the axis it varies: format | page | theme'
+          type: string
+        label:
+          description: human label for the picker
+          type: string
+        source:
+          type: string
       type: object
     Vendor:
       properties:
@@ -7512,6 +7607,38 @@ components:
         up:
           type: boolean
       type: object
+    destinationDisconnected:
+      properties:
+        disconnected:
+          description: Disconnected is true when the credentials and the row are gone.
+          type: boolean
+      type: object
+    destinationList:
+      properties:
+        destinations:
+          description: Destinations is one card per registered platform, in slug order.
+          items:
+            $ref: '#/components/schemas/DestinationStatus'
+          type: array
+      type: object
+    destinationTest:
+      properties:
+        error:
+          description: Error is the platform's rejection, present only on a failed
+            send.
+          type: string
+        message:
+          description: Message is the platform's own note about the send, present
+            only on success.
+          type: string
+        ok:
+          description: OK is true when the platform accepted the synthetic event.
+          type: boolean
+        sent:
+          description: Sent is how many events the platform accepted, present only
+            on success.
+          type: integer
+      type: object
     devicePollOut:
       properties:
         connector:
@@ -8480,6 +8607,15 @@ components:
           description: Title is the key's label — the caller's, or the comment on
             the key line.
           type: string
+      type: object
+    kitList:
+      properties:
+        data:
+          description: Data is the public catalog followed by the caller org's own
+            kits.
+          items:
+            $ref: '#/components/schemas/StarterKit'
+          type: array
       type: object
     kycRefreshOut:
       properties:
@@ -10135,6 +10271,49 @@ components:
             being materialized by the operator.
           type: string
       type: object
+    publishKitIn:
+      properties:
+        category:
+          description: Category groups the kit in the gallery browser.
+          type: string
+        demo:
+          description: Demo is the deployed site itself, when there is one.
+          type: string
+        description:
+          description: Description is the browse-card blurb, max 4096 characters.
+          type: string
+        features:
+          description: Features are the highlights the card lists, at most 32.
+          items:
+            type: string
+          type: array
+        framework:
+          description: Framework is the stack the kit is built on ("Next.js 14").
+          type: string
+        preview:
+          description: Preview is the still image the browse card renders, max 4096
+            characters.
+          type: string
+        slug:
+          description: Slug is the kit's identity — lowercase alphanumeric with dashes,
+            max 40.
+          type: string
+        source:
+          description: Source is the repository the kit is forked from, max 4096 characters.
+          type: string
+        title:
+          description: Title is the display name. Required, max 200 characters.
+          type: string
+        useCase:
+          description: UseCase is what the kit is for, in a phrase.
+          type: string
+        variants:
+          description: Variants are the shapes this kit ships in, at most 32; the
+            fork picks one.
+          items:
+            $ref: '#/components/schemas/Variant'
+          type: array
+      type: object
     purgeIn:
       properties:
         files:
@@ -10423,6 +10602,48 @@ components:
           type: string
         title:
           type: string
+      type: object
+    replaceKitIn:
+      properties:
+        category:
+          description: Category groups the kit in the gallery browser.
+          type: string
+        demo:
+          description: Demo is the deployed site itself, when there is one.
+          type: string
+        description:
+          description: Description is the browse-card blurb, max 4096 characters.
+          type: string
+        features:
+          description: Features are the highlights the card lists, at most 32.
+          items:
+            type: string
+          type: array
+        framework:
+          description: Framework is the stack the kit is built on ("Next.js 14").
+          type: string
+        preview:
+          description: Preview is the still image the browse card renders, max 4096
+            characters.
+          type: string
+        slug:
+          description: Slug is the kit to replace, from the path.
+          type: string
+        source:
+          description: Source is the repository the kit is forked from, max 4096 characters.
+          type: string
+        title:
+          description: Title is the display name. Required, max 200 characters.
+          type: string
+        useCase:
+          description: UseCase is what the kit is for, in a phrase.
+          type: string
+        variants:
+          description: Variants are the shapes this kit ships in, at most 32; the
+            fork picks one.
+          items:
+            $ref: '#/components/schemas/Variant'
+          type: array
       type: object
     repoList:
       properties:
@@ -22903,30 +23124,79 @@ paths:
       operationId: get_v1_deploy_version
       tags:
       - deploy
-  /v1/destinations/:
+  /v1/destinations:
     get:
+      description: |-
+        list reports every destination this deployment can forward to, each with the
+        caller org's connection state: whether it is connected, whether it is enabled,
+        whether a credential resolves right now, and the config fields the console
+        renders for it.
       operationId: get_v1_destinations
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/destinationList'
+          description: ok
+      summary: 'list reports every destination this deployment can forward to, each
+        with the caller org''s connection state: whether it is connected, whether
+        it is enabled, whether a credential resolves right now, and the config fields
+        the console renders for it.'
       tags:
       - destinations
   /v1/destinations/{platform}:
     delete:
-      operationId: delete_v1_destinations_by_platform
+      description: |-
+        disconnect forgets a destination for the caller's org: every credential held in
+        KMS, then the stored config. Idempotent, and it requires org admin.
+      operationId: delete_v1_destinations_platform
       parameters:
-      - in: path
+      - description: |-
+          Platform is the destination to act on, from the path: ga4 | meta | tiktok |
+          linkedin | x | reddit | posthog | umami.
+        example: ga4
+        in: path
         name: platform
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/destinationDisconnected'
+          description: ok
+      summary: 'disconnect forgets a destination for the caller''s org: every credential
+        held in KMS, then the stored config.'
       tags:
       - destinations
     get:
-      operationId: get_v1_destinations_by_platform
+      description: |-
+        get reports one destination's card for the caller's org — its config fields,
+        its connection state, and whether a credential resolves right now. A platform
+        this deployment does not carry is not found.
+      operationId: get_v1_destinations_platform
       parameters:
-      - in: path
+      - description: |-
+          Platform is the destination to act on, from the path: ga4 | meta | tiktok |
+          linkedin | x | reddit | posthog | umami.
+        example: ga4
+        in: path
         name: platform
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DestinationStatus'
+          description: ok
+      summary: get reports one destination's card for the caller's org — its config
+        fields, its connection state, and whether a credential resolves right now.
       tags:
       - destinations
     post:
@@ -22937,17 +23207,48 @@ paths:
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              additionalProperties: {}
+              type: object
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DestinationStatus'
+          description: Success
       tags:
       - destinations
   /v1/destinations/{platform}/test:
     post:
-      operationId: post_v1_destinations_by_platform_test
+      description: |-
+        test sends ONE synthetic pageview through the connected destination end to end
+        and reports what the platform said. A send the platform refuses is reported as
+        data — {"ok": false, "error": …} at 200 — so the console shows the platform's
+        own words rather than an error about Hanzo. It requires org admin.
+      operationId: post_v1_destinations_platform_test
       parameters:
-      - in: path
+      - description: |-
+          Platform is the destination to act on, from the path: ga4 | meta | tiktok |
+          linkedin | x | reddit | posthog | umami.
+        example: ga4
+        in: path
         name: platform
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/destinationTest'
+          description: ok
+      summary: test sends ONE synthetic pageview through the connected destination
+        end to end and reports what the platform said.
       tags:
       - destinations
   /v1/dns/{wildcard1}:
@@ -34214,42 +34515,127 @@ paths:
       - team
   /v1/templates:
     get:
+      description: |-
+        browse lists the public starter-kit catalog plus, for a validated caller, that
+        org's own private kits. No request field can widen the scope: the org comes
+        from the validated principal, so an anonymous or cross-org caller structurally
+        sees the public catalog only.
       operationId: get_v1_templates
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kitList'
+          description: ok
+      summary: browse lists the public starter-kit catalog plus, for a validated caller,
+        that org's own private kits.
       tags:
       - templates
     post:
+      description: |-
+        publish creates a starter kit PRIVATE to the caller's org and answers 201 with
+        the stored kit. The owner is stamped by the server, so a body "org" is never
+        trusted; publishing over a public-catalog slug is 409, so a slug still names
+        exactly one kit.
       operationId: post_v1_templates
+      requestBody:
+        content:
+          application/json:
+            example:
+              framework: Next.js 14
+              slug: acme-portal
+              title: Acme Internal Portal
+            schema:
+              $ref: '#/components/schemas/publishKitIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StarterKit'
+          description: created
+      summary: publish creates a starter kit PRIVATE to the caller's org and answers
+        201 with the stored kit.
       tags:
       - templates
   /v1/templates/{slug}:
     delete:
-      operationId: delete_v1_templates_by_slug
+      description: |-
+        remove deletes the caller org's OWN starter kit. A slug they do not own is a
+        404, never a delete: the DELETE binds org.
+      operationId: delete_v1_templates_slug
       parameters:
-      - in: path
+      - description: Slug is the starter kit to act on, from the path.
+        example: acme-portal
+        in: path
         name: slug
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: remove deletes the caller org's OWN starter kit.
       tags:
       - templates
     get:
-      operationId: get_v1_templates_by_slug
+      description: |-
+        get returns one starter kit: the caller org's own by that slug, else the public
+        catalog's. A slug another org owns reads as not found.
+      operationId: get_v1_templates_slug
       parameters:
-      - in: path
+      - description: Slug is the starter kit to act on, from the path.
+        example: folio
+        in: path
         name: slug
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StarterKit'
+          description: ok
+      summary: 'get returns one starter kit: the caller org''s own by that slug, else
+        the public catalog''s.'
       tags:
       - templates
     put:
-      operationId: put_v1_templates_by_slug
+      description: |-
+        replace overwrites the caller org's OWN starter kit at the path slug, answering
+        the stored kit. A slug they do not own is 404, never a create: the UPDATE binds
+        org, so a PUT can never reach another org's kit.
+      operationId: put_v1_templates_slug
       parameters:
-      - in: path
+      - description: Slug is the kit to replace, from the path.
+        example: acme-portal
+        in: path
         name: slug
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              slug: acme-portal
+              title: Acme Internal Portal v2
+            schema:
+              $ref: '#/components/schemas/replaceKitIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StarterKit'
+          description: ok
+      summary: replace overwrites the caller org's OWN starter kit at the path slug,
+        answering the stored kit.
       tags:
       - templates
   /v1/tools:

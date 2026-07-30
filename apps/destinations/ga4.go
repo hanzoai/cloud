@@ -48,7 +48,7 @@ func (ga4) Category() string { return categoryAnalytics }
 
 func (ga4) Spec() Spec {
 	return Spec{
-		Fields: []Field{
+		Fields: []DestinationField{
 			{Key: "measurementId", Label: "Measurement ID", Required: true, Example: "G-XXXXXXX"},
 		},
 		Secrets: []string{"api_secret"},

@@ -39,7 +39,7 @@ func (tiktok) Category() string { return categoryAdvertising }
 
 func (tiktok) Spec() Spec {
 	return Spec{
-		Fields: []Field{
+		Fields: []DestinationField{
 			{Key: "pixelCode", Label: "Pixel Code", Required: true, Example: "C1A2B3..."},
 		},
 		Secrets:  []string{"access_token"},
