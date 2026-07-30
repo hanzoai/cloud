@@ -27,6 +27,31 @@ func doRaw(t *testing.T, app *zip.App, rq *http.Request) *http.Response {
 	return resp
 }
 
+// TestHealthNeedsNoPrincipal pins the ONE route on this surface that does not
+// read a tenant. It is the route the group's cloud.Bridge could most easily have
+// broken: Bridge is what parks the validated org for every other op, and if it
+// REFUSED a request that carries no org, installing it in front of the leaves
+// would have turned liveness into a 403 — the failure mode where a subsystem
+// reports itself down to every prober that (correctly) sends no tenant header.
+// Bridge is fail-open by construction (it parks what it has and continues), and
+// this is the assertion that keeps it that way.
+func TestHealthNeedsNoPrincipal(t *testing.T) {
+	app, _ := mount(t)
+
+	// No X-Org-Id, no X-User-Id — exactly what a liveness prober sends.
+	code, out := do(t, app, http.MethodGet, "/v1/compliance/health", "", nil)
+	if code != http.StatusOK {
+		t.Fatalf("GET /health with no principal = %d, want 200 — liveness must never need a tenant", code)
+	}
+	if out["status"] != "ok" {
+		t.Errorf("status = %v, want ok", out["status"])
+	}
+	// The wired provider is named, so a prober can tell Manual from a real one.
+	if out["provider"] != mounted.State.idv.Name() {
+		t.Errorf("provider = %v, want %q", out["provider"], mounted.State.idv.Name())
+	}
+}
+
 // TestTypedOpsPreserveTheWire pins the envelope details the typed conversion had
 // to carry over from the untyped handlers, none of which the behavior suite
 // above measures: the no-store cache pin on the PII-bearing and per-org reads,
