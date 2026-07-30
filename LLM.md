@@ -1176,10 +1176,50 @@ The typed packages are `apps/admin` and its eight sub-packages, plus `apps/accou
 `apps/agents`, `apps/automations`, `apps/company`, `apps/compliance`, `apps/crm`, `apps/framework`,
 `apps/git`, `apps/guide`, `apps/ingress`, `apps/integrations`, `apps/marketing`,
 `apps/o11y`, `apps/plugin`, `apps/search`, `apps/team`, `apps/visor`.
-`crm` is 19 of 20: its one refusal, the public Startup Program intake POST, is
-named at its registration — the IP rate limit and the pre-parse 64 KiB body cap
-are wire, and a typed op's MCP/CLI projections would publish an unmetered,
-uncapped alias of a deliberately metered public endpoint.
+`crm` is 19 of 20, and its partition is now a GATE rather than prose:
+`untypedByDesign` + `TestEveryRouteIsTypedOrNamed` (apps/crm/typed_wire_test.go)
+fail the same three ways team's and git's do, so the count cannot outlive the
+route that falsifies it. Its one refusal, the public Startup Program intake POST,
+names a zip gap that is NOT #78 and is worth reading as its own family: **per-op
+projection SCOPE**. The IP rate limit is fiber middleware, and zip's MCP arm
+dispatches a `tools/call` straight into `op.invoke` (zip@v1.18.6 mcp.go:152)
+while the CLI's `LocalInvoke` does the same (cli.go:427) — neither runs the
+route's middleware chain, and there is no per-op way to decline a projection
+(the only OpOptions are `WithSummary`, `WithTags`, `WithOperationID`,
+`WithStatus`; `MCP.Disabled` is app-wide). So typing it publishes an unmetered
+alias of the one deliberately metered public write in the surface — and worse
+than unmetered, because `apply` never calls `tenant()`: it writes into
+`intakeOrg(s)`, the deployment BRAND's pipeline, so the alias would let any
+caller reaching `/mcp` inject unbounded rows into the brand's own CRM. The 64 KiB
+`maxIntakeBody` cap is the second wire fact and fails the same way (`op.invoke`
+unmarshals before the handler, so the cap could only run after the parse it
+exists to prevent). Its 200-vs-201 split would shim, and the honeypot's third
+body needs only `omitempty` — neither is what blocks it. **A route whose safety
+depends on HTTP middleware cannot be projected onto transports that skip
+middleware**; that wants either a per-op projection opt-out or middleware zip
+runs on every arm, and it is not closable inside cloud.
+crm is also the worked example of the half of the surface an op-level count does
+NOT measure. Typing a route documents its ADDRESS and its SHAPE, never the
+shape's FIELDS: those come from doc comments on the In/Out struct FIELDS, which
+zipdoc lifts per field. crm shipped fully-described REQUEST types beside RESPONSE
+types with **65 bare properties** — every field of `Company`, `Contact`,
+`Opportunity`, `Application`, `ScreenResult` and `StageEvent` reached
+openapi.yaml, all four generated SDKs and the MCP `inputSchema`s with no
+description at all, because those are store ROW types nobody had written field
+prose on. A reader could see `arr` was an integer and nowhere that it was CENTS.
+The row types now carry the prose and `TestEveryPublishedFieldIsDescribed` gates
+it. **Check this in every package the migration touches: a package can be "100%
+typed" and still publish a wholly undescribed response surface**, because the two
+facts live in different places and only the op-level one is counted. The class is
+fleet-scale, not a crm quirk — measured on this commit's `openapi.yaml`, **1,424
+of 2,716 published properties (52%) carry no description, and 195 schemas are
+100% undescribed** (worst: `appView` 26, `Wire` 21, `Node` 20, `Volume` 20,
+`Totals` 18). crm is 0 of 65. Re-measure with:
+
+    python3 -c 'import yaml;d=yaml.safe_load(open("openapi.yaml"));s=d["components"]["schemas"];
+    p=[(n,k) for n,v in s.items() if isinstance(v,dict) and isinstance(v.get("properties"),dict)
+    for k,f in v["properties"].items() if not (isinstance(f,dict) and str(f.get("description","")).strip())];
+    print(len(p))'
 `team` is 9 of 19, and its partition is a GATE rather than prose:
 `untypedByDesign` (typed_wire_test.go) is the closed list of the 10 refusals —
 two WebSocket upgrades (transactor, collaborator), the account JSON-RPC
