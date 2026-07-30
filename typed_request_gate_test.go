@@ -69,7 +69,7 @@ var allowedRequestUses = map[string]string{
 		"principal.OrgFrom carries. Both fail closed off the HTTP path: no request, no attested caller, " +
 		"no management rights.",
 	"apps/agents/routing_http.go": "claimKeyOf — the route-work plane authenticates a MACHINE with a " +
-		"claim key that rides in its own header (X-Agent-Claim-Key), which is the second of that plane's two " +
+		"claim key that rides in its own header (X-Target-Key), which is the second of that plane's two " +
 		"independent proofs alongside the validated org. principal.OrgFrom carries the org and nothing else, " +
 		"and the key is a credential rather than an addressing value, so it must not become an In field a " +
 		"caller can also put in the body. Fails closed off the HTTP path: no request, no key, and " +
@@ -149,6 +149,12 @@ var allowedRequestUses = map[string]string{
 		"tenant itself is read with principal.OrgFrom (tenant, right beside them), never through the " +
 		"request. All fail closed off the HTTP path: no request, no attested reviewer, no audit actor " +
 		"to invent, nothing cached.",
+	"apps/destinations/destinations.go": "orgAdmin — the gate every destination MUTATION keeps " +
+		"(disconnect and test both forget or spend a credential). It reads org-admin-ness, which is " +
+		"X-User-IsOrgAdmin, a claim principal.OrgFrom does not carry. The tenant itself is read with " +
+		"principal.OrgFrom (tenantOf, right beside it), never through the request. ONE function, so the " +
+		"two mutating ops share one seam; it fails closed off the HTTP path: no request, no attested " +
+		"caller, no mutation.",
 }
 
 // TestRequestEscapeHatchIsPinned fails when a new cloud.Request call site

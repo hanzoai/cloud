@@ -51,7 +51,7 @@ func (meta) Category() string { return categoryAdvertising }
 
 func (meta) Spec() Spec {
 	return Spec{
-		Fields: []Field{
+		Fields: []DestinationField{
 			{Key: "pixelId", Label: "Pixel / Dataset ID", Required: true, Example: "1234567890"},
 			{Key: "testEventCode", Label: "Test Event Code", Required: false, Example: "TEST12345"},
 		},

@@ -100,5 +100,17 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		}
 		return f(ctx, subject, namespace)
 	})
+	// UNTYPED BY DESIGN, and NOT this package's to fix. aimod.Mount registers a
+	// single `app.All("/v1/*")` (hanzoai/ai mount.go) adapting the legacy beego
+	// ControllerRegister through zip.AdaptNetHTTP, so ai's ~200 real routes —
+	// /v1/chat/completions, /v1/models, /v1/messages and the rest — reach the wire
+	// through ONE greedy wildcard. Typing it here is impossible on three counts
+	// (All has no typed registrar; a `{wildcard1}` path segment cannot be a bound
+	// In field; the adapter relays the beego handler's own status and Content-Type
+	// verbatim), and typing it AT ALL means declaring ops inside github.com/hanzoai/ai
+	// where those handlers live. The consequence is worth stating plainly because
+	// it is the largest hole in the fleet document: plugin/ai/openapi.json publishes
+	// seven operations at /v1/{wildcard1} and NONE of the AI API, so no generated
+	// SDK and no MCP tool list carries chat completions today.
 	return aimod.Mount(app, deps)
 }

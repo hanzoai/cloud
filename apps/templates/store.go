@@ -28,7 +28,7 @@ var errConflict = errors.New("templates: slug taken")
 // remember to write — the two live in different containers, and every read of
 // this one binds org.
 //
-// The whole Template is one JSON `doc`: it is already the exact shape the API
+// The whole StarterKit is one JSON `doc`: it is already the exact shape the API
 // serves, so a row can never drift from it as fields are added, and (org, slug)
 // — the only two things ever queried on — stay real columns.
 type Store struct{ db *sql.DB }
@@ -67,7 +67,7 @@ func (s *Store) Close() error { return s.db.Close() }
 // the org already holds that slug; create=false replaces an existing row and
 // reports sql.ErrNoRows if there is none — so "publish" can never silently
 // clobber and "edit" can never silently create.
-func (s *Store) Put(ctx context.Context, t Template, create bool, now int64) error {
+func (s *Store) Put(ctx context.Context, t StarterKit, create bool, now int64) error {
 	doc, err := json.Marshal(t)
 	if err != nil {
 		return fmt.Errorf("templates: encode %q: %w", t.Slug, err)
@@ -96,15 +96,15 @@ func (s *Store) Put(ctx context.Context, t Template, create bool, now int64) err
 
 // Get returns org's own template at slug. found=false (nil error) when absent —
 // including when the row belongs to ANOTHER org, because the WHERE binds org.
-func (s *Store) Get(ctx context.Context, org, slug string) (Template, bool, error) {
+func (s *Store) Get(ctx context.Context, org, slug string) (StarterKit, bool, error) {
 	var doc []byte
 	err := s.db.QueryRowContext(ctx,
 		`SELECT doc FROM org_templates WHERE org=? AND slug=?`, org, slug).Scan(&doc)
 	if errors.Is(err, sql.ErrNoRows) {
-		return Template{}, false, nil
+		return StarterKit{}, false, nil
 	}
 	if err != nil {
-		return Template{}, false, fmt.Errorf("templates: get %q: %w", slug, err)
+		return StarterKit{}, false, fmt.Errorf("templates: get %q: %w", slug, err)
 	}
 	t, err := decode(doc, org)
 	return t, err == nil, err
@@ -112,13 +112,13 @@ func (s *Store) Get(ctx context.Context, org, slug string) (Template, bool, erro
 
 // List returns org's own templates (tenant-scoped read; there is no all-orgs
 // counterpart, because nothing in this subsystem legitimately wants one).
-func (s *Store) List(ctx context.Context, org string) ([]Template, error) {
+func (s *Store) List(ctx context.Context, org string) ([]StarterKit, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT doc FROM org_templates WHERE org=? ORDER BY slug`, org)
 	if err != nil {
 		return nil, fmt.Errorf("templates: list: %w", err)
 	}
 	defer rows.Close()
-	out := []Template{}
+	out := []StarterKit{}
 	for rows.Next() {
 		var doc []byte
 		if err := rows.Scan(&doc); err != nil {
@@ -143,13 +143,13 @@ func (s *Store) Delete(ctx context.Context, org, slug string) (bool, error) {
 	return n > 0, nil
 }
 
-// decode restores a stored Template and re-stamps Org from the ROW's key, so the
+// decode restores a stored StarterKit and re-stamps Org from the ROW's key, so the
 // served owner is the column the query isolated on and never whatever a stale
 // doc happens to carry.
-func decode(doc []byte, org string) (Template, error) {
-	var t Template
+func decode(doc []byte, org string) (StarterKit, error) {
+	var t StarterKit
 	if err := json.Unmarshal(doc, &t); err != nil {
-		return Template{}, fmt.Errorf("templates: decode %q: %w", org, err)
+		return StarterKit{}, fmt.Errorf("templates: decode %q: %w", org, err)
 	}
 	t.Org = org
 	if t.Features == nil {
