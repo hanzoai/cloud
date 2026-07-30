@@ -10,12 +10,12 @@ import (
 // match keys), drops unroutable events, and dispatches them to the installed sink.
 func TestFanOutTranslatesAndFiresSink(t *testing.T) {
 	got := make(chan []SinkEvent, 1)
-	SetSink(func(org string, evs []SinkEvent) {
+	remove := AddSink(func(org string, evs []SinkEvent) {
 		if org == "acme" {
 			got <- evs
 		}
 	})
-	defer SetSink(nil)
+	defer remove()
 
 	fanOut("acme", []CaptureEvent{
 		{Type: "event", Event: "order_completed", DistinctID: "u1", Revenue: 49, Currency: "USD",
@@ -43,10 +43,11 @@ func TestFanOutTranslatesAndFiresSink(t *testing.T) {
 	}
 }
 
-// TestFanOutNilSinkIsNoOp verifies fan-out is inert (no panic, no goroutine) when no
-// sink is installed — the default when destinations is disabled.
-func TestFanOutNilSinkIsNoOp(t *testing.T) {
-	SetSink(nil)
+// TestFanOutNoSinksIsNoOp verifies fan-out is inert (no panic, no goroutine) when
+// every registered sink has been removed — the default when the consumers are off.
+func TestFanOutNoSinksIsNoOp(t *testing.T) {
+	remove := AddSink(func(string, []SinkEvent) {})
+	remove()
 	fanOut("acme", []CaptureEvent{{Type: "event", Event: "order_completed"}})
 	// Nothing to assert beyond "did not panic / block".
 }
