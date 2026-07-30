@@ -206,6 +206,13 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// concatLink(LOVE_ENDPOINT, '/getToken') from a published bundle, so with
 	// LOVE_ENDPOINT=/v1/meet the wire lands here. Renaming it means shipping a new
 	// front image, not editing a manifest.
+	//
+	// UNTYPED BY DESIGN — the response body is the raw token as text/plain
+	// (c.String, see mint), which is the office client's contract: it reads the
+	// answer with res.text(). A typed op always marshals its Out to JSON, so typing
+	// this route turns `<token>` into `"<token>"` under application/json and breaks
+	// every published bundle in the field. It stays the escape hatch until zip can
+	// declare a non-JSON response.
 	app.Post("/v1/meet/getToken", cloud.Handle(s, mint))
 
 	// /v1/meet/health makes "the office is unconfigured" a SIGNAL rather than a grep.
@@ -219,6 +226,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// public. ready:false is the whole dashboard fact; the reason, which names the key
 	// file and the Secret, stays in the boot log where the operator already is. Same
 	// posture as the getToken 503 (see health, below) — one file, one answer.
+	//
+	// UNTYPED BY DESIGN — this route answers 200 with a body when meet can mint and
+	// 503 WITH THE SAME BODY when it cannot, and that pair is exactly what zip cannot
+	// declare. WithStatus takes ONE unconditional 2xx; the only way a typed op sends
+	// 503 is by returning an error, and an error is rendered as zip's flat
+	// {status,code,error} — so ready:false, the whole dashboard fact, would vanish
+	// from the degraded answer. This is the multi-status gap (#78); the route
+	// converts when that lands.
 	app.Get("/v1/meet/health", cloud.Handle(s, health))
 
 	if !s.State.ready() {
