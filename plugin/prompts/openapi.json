@@ -19,36 +19,111 @@
     "/v1/prompts": {
       "get": {
         "operationId": "get_v1_prompts",
+        "summary": "List returns the caller org's prompt library as one row per prompt: its name, type, every version number it has, its taxonomy and when it last changed.",
+        "description": "List returns the caller org's prompt library as one row per prompt: its name,\ntype, every version number it has, its taxonomy and when it last changed. The\ntemplate bodies are deliberately absent — fetch one prompt to read its text.",
         "tags": [
           "prompts"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/promptList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_prompts",
+        "summary": "Create records a prompt for the caller's org and answers 201 with it.",
+        "description": "Create records a prompt for the caller's org and answers 201 with it. A name the\norg already uses is NOT an error and NOT an overwrite: it appends a new version,\nso the library keeps real, inspectable history and the response carries the whole\nversion list. The name is also the URL segment the prompt is fetched by, which is\nwhy its shape is constrained and a handful of names are reserved.",
         "tags": [
           "prompts"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "greeting",
+                "prompt": "You are a helpful assistant.",
+                "tags": [
+                  "support"
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/promptReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/promptDetail"
+                }
+              }
+            },
+            "description": "created"
+          }
+        }
       }
     },
     "/v1/prompts/catalog": {
       "get": {
         "operationId": "get_v1_prompts_catalog",
+        "summary": "Catalog returns the read-only starter prompt library shipped with the binary — reference content every tenant sees the same, NOT the caller's own prompts and never mixed into them.",
+        "description": "Catalog returns the read-only starter prompt library shipped with the binary —\nreference content every tenant sees the same, NOT the caller's own prompts and\nnever mixed into them. An org's library stays honestly empty until someone\nexplicitly imports a starter, which is an ordinary POST /v1/prompts. Entries that\nwould fail the create guards are dropped, so everything offered here can actually\nbe imported.",
         "tags": [
           "prompts"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalogList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/prompts/metrics": {
       "get": {
         "operationId": "get_v1_prompts_metrics",
+        "summary": "Metrics returns real per-prompt statistics for the caller's org: how many versions each prompt has, which one is current, and when it was created and last changed.",
+        "description": "Metrics returns real per-prompt statistics for the caller's org: how many versions\neach prompt has, which one is current, and when it was created and last changed.\nEvery number is counted from the store — nothing here is estimated or fabricated.",
         "tags": [
           "prompts"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/metricList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/prompts/{name}": {
       "delete": {
-        "operationId": "delete_v1_prompts_by_name",
+        "operationId": "delete_v1_prompts_name",
+        "summary": "Delete removes one of the caller org's prompts and every version of it, answering 204.",
+        "description": "Delete removes one of the caller org's prompts and every version of it, answering\n204. It is scoped to the caller's org, so a name another tenant owns is the same\n404 an unknown name gives. There is no undo: the version history goes with it.",
         "tags": [
           "prompts"
         ],
@@ -57,14 +132,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the prompt to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "greeting"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_prompts_by_name",
+        "operationId": "get_v1_prompts_name",
+        "summary": "Get returns one of the caller org's prompts: its CURRENT template text plus the metadata of every version it has had.",
+        "description": "Get returns one of the caller org's prompts: its CURRENT template text plus the\nmetadata of every version it has had. The history carries version numbers, types\nand timestamps only — not each version's body — so a long history cannot inflate\nthis response. A name the caller's org does not own is 404, whoever owns it.",
         "tags": [
           "prompts"
         ],
@@ -73,11 +157,232 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the prompt to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "greeting"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/promptDetail"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CatalogEntry": {
+        "properties": {
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "catalogList": {
+        "properties": {
+          "data": {
+            "description": "Data is every starter prompt, each importable as-is with POST /v1/prompts.",
+            "items": {
+              "$ref": "#/components/schemas/CatalogEntry"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "metricList": {
+        "properties": {
+          "data": {
+            "description": "Data is one row per prompt the org owns.",
+            "items": {
+              "$ref": "#/components/schemas/metricRow"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "metricRow": {
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "currentVersion": {
+            "type": "integer"
+          },
+          "lastUpdatedAt": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "versions": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "promptDetail": {
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "lastUpdatedAt": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "versionHistory": {
+            "items": {
+              "$ref": "#/components/schemas/versionView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "promptList": {
+        "properties": {
+          "data": {
+            "description": "Data is one row per prompt the org owns, each with its version numbers and\ntaxonomy — never the template bodies.",
+            "items": {
+              "$ref": "#/components/schemas/promptMeta"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "promptMeta": {
+        "properties": {
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "lastUpdatedAt": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": {
+            "type": "string"
+          },
+          "versions": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "promptReq": {
+        "properties": {
+          "labels": {
+            "description": "Labels is free-form taxonomy, each up to 64 characters, capped at 32 entries.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Name is the org-unique handle AND the URL segment the prompt is addressed by:\n1-64 characters matching ^[A-Za-z0-9][A-Za-z0-9._-]*$. \"metrics\", \"new\" and\n\"catalog\" are reserved. A name that already exists appends a new version.",
+            "type": "string"
+          },
+          "prompt": {
+            "description": "Prompt is the template body, capped at 64 KiB. It holds template text only —\nnever a secret.",
+            "type": "string"
+          },
+          "tags": {
+            "description": "Tags is free-form taxonomy under the same bounds as Labels.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": {
+            "description": "Type labels the template's kind; defaults to \"text\".",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "versionView": {
+        "properties": {
+          "createdAt": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }
