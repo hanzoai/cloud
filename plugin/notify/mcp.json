@@ -1,0 +1,10 @@
+[
+  {
+    "description": "health reports that the notify send surface is mounted.\n\nIt is a pure liveness probe: it answers 200 whenever this subsystem is mounted\nand checks nothing downstream, so an \"ok\" here says the routes are reachable, not\nthat any provider credential is configured. The body is notifyd's verbatim, so\nprobes and clients that keyed on the standalone service keep working unchanged.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_notify_health"
+  }
+]

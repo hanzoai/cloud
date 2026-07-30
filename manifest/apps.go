@@ -158,7 +158,7 @@ var Apps = []App{
 	{Name: "admission", Prefixes: []string{"/v1/flags/waitlist"}},
 	{Name: "tasks", Prefixes: []string{"/tasks", "/v1/tasks"}},
 	{Name: "automations", Prefixes: []string{"/v1/automations"}},
-	{Name: "tools", Prefixes: []string{"/v1/mcp", "/v1/plugins", "/v1/skills", "/v1/tools"}},
+	{Name: "tools", Prefixes: []string{"/v1/mcp/servers", "/v1/plugins", "/v1/skills", "/v1/tools"}},
 	{Name: "marketplace", Prefixes: []string{"/v1/marketplace"}},
 	{Name: "referrals", Prefixes: []string{"/v1/admin/referrals/bonuses", "/v1/admin/referrals/sweep", "/v1/referrals"}},
 	{Name: "guide", Prefixes: []string{"/v1/guide"}},

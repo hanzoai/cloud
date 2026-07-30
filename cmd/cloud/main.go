@@ -44,6 +44,7 @@ import (
 
 	"github.com/hanzoai/cloud/credz/launch"
 	"github.com/hanzoai/cloud/manifest"
+	"github.com/hanzoai/cloud/plugin"
 	"github.com/hanzoai/cloud/webui"
 	"github.com/zap-proto/zip"
 )
@@ -93,7 +94,17 @@ func forward(kv map[string]string) {
 }
 
 func run(addr, zapAddr, enable string) error {
-	app := zip.New(zip.Config{AppName: "cloud"})
+	// THE FLEET'S ONE AGENT DOOR, at POST /v1/mcp. zip serves it: initialize, ping,
+	// tools/list and tools/call are its handleMCP, and the tool list is the union
+	// of every mounted plugin's build-time catalogue (mount below), rendered once
+	// as bytes. So tools/list — the method an MCP client calls constantly — is a
+	// memcpy and starts NO child; only a tools/call wakes one, the single plugin
+	// that owns the named tool, over ZAP on its private socket.
+	//
+	// The host is the only process that can own it. MCPTools() is in-process, so a
+	// plugin cannot enumerate a lazy sibling, and a plugin-hosted door would cost
+	// its own wake on the very first list.
+	app := zip.New(zip.Config{AppName: "cloud", MCP: zip.MCPConfig{Path: "/v1/mcp"}})
 
 	// Mint this host's child-signing secret and take the KMS root key OUT of the
 	// host's own environment — both BEFORE the first Load spawns an eager child.
@@ -231,6 +242,10 @@ func mount(app *zip.App, a manifest.App, eager bool, secret, rootKey string, abs
 	}
 	p := a.Plugin()
 	p.Lazy = !eager
+	// This app's MCP tools, from the artifact its own binary wrote when it was
+	// built. Given them, zip serves this app's tools on the host's door and
+	// forwards a tools/call to this app alone — without ever running it to ask.
+	p.Tools = plugin.Tools(a.Name)
 	// Per-plugin, on the plugin's OWN Env, which zip appends to that ONE child's
 	// environment: a scoped token for every child, and — for the broker alone —
 	// the launch secret and the root key. A token or key placed in the host's

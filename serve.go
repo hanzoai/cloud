@@ -41,12 +41,12 @@ import (
 // pipeline (Recover → RequestID → Logger), and shuts down gracefully on
 // SIGINT/SIGTERM.
 func Serve(plugins []Plugin, enable []string) error {
-	// `<binary> openapi <file>` describes instead of serving. Before LoadConfig
-	// AND before credz.Boot because the document must be a function of the code
+	// `<binary> describe <dir>` projects instead of serving. Before LoadConfig
+	// AND before credz.Boot because the artifacts must be a function of the code
 	// alone: both read the environment, and a route set that moved with a
-	// developer's shell is a spec that cannot be a golden — see openapi_dump.go.
-	if dest, ok := SpecRequested(); ok {
-		return dumpSpec(plugins, dest)
+	// developer's shell is a spec that cannot be a golden — see describe.go.
+	if dir, ok := DescribeRequested(); ok {
+		return describe(plugins, dir)
 	}
 
 	// Credentials FIRST — before config is read, before any store opens. A child

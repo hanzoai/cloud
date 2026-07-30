@@ -1,0 +1,117 @@
+[
+  {
+    "description": "DeleteModel deletes a deployed inference model. kserve owns the teardown: the\nInferenceService goes away and the serving deployment behind it follows, so the\nmodel stops answering predict calls. Answers 204, or 404 for a name the\ncaller's org does not own.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_ml_models_name"
+  },
+  {
+    "description": "DeleteExperiment deletes a hyperparameter-tuning experiment. Kubernetes\ngarbage-collects the Trials katib created under it, because they carry the\nExperiment as their owner. Answers 204, or 404 for a name the caller's org does\nnot own.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_train_experiments_name"
+  },
+  {
+    "description": "DeleteJob deletes a training job. Kubernetes garbage-collects the pods the\ntrainer operator created under it, because they carry the TrainJob as their\nowner — so deleting the job is how a run is stopped. Answers 204, or 404 for a\nname the caller's org does not own.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_train_jobs_name"
+  },
+  {
+    "description": "ListModels lists the inference models deployed in the caller's org. Each entry\ncarries the model's name, when Kubernetes admitted it, and kserve's live status\n— the spec is on the single-model read. An org that has deployed nothing gets\nan empty list.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_ml_models"
+  },
+  {
+    "description": "GetModel returns one deployed inference model. Its spec comes with it, and\nkserve's live status, which is where readiness and the serving address appear.\nA name the caller's org does not own answers 404, exactly as an unknown name\ndoes, so a probe learns nothing about another tenant's models.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_ml_models_name"
+  },
+  {
+    "description": "ListExperiments lists the caller org's tuning experiments. Each entry carries\nthe experiment's name, when Kubernetes admitted it, and katib's live status —\nthe spec is on the single-experiment read.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_train_experiments"
+  },
+  {
+    "description": "GetExperiment returns one hyperparameter-tuning experiment. Its spec comes with\nit, and katib's live status, which is where the best trial found so far is\nreported.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_train_experiments_name"
+  },
+  {
+    "description": "ListTrials lists the katib Trials one experiment owns. The experiment is read\nFIRST, so a name the caller's org does not own is a clean 404 rather than an\nempty list; the Trials themselves are selected by katib's own\nkatib.kubeflow.org/experiment label within the caller's tenant namespace.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_train_experiments_name_trials"
+  },
+  {
+    "description": "ListJobs lists the training jobs in the caller's org. Each entry carries the\njob's name, when Kubernetes admitted it, and the trainer operator's live status\n— the spec is on the single-job read.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_train_jobs"
+  },
+  {
+    "description": "GetJob returns one training job. Its spec comes with it, and the trainer\noperator's live status, which is where a run's phase and its conditions are\nreported.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_train_jobs_name"
+  }
+]
