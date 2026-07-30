@@ -15,7 +15,12 @@ func TestRewrapCarriesTheSameDEK(t *testing.T) {
 	for i := range master {
 		master[i] = byte(i + 1)
 	}
-	SetMasterKey(master)
+	// resetMaster, not SetMasterKey: the master is resolved through a sync.Once, so a
+	// plain Set is a no-op once a sibling test has already resolved it. This test
+	// passed alone and failed in the package for exactly that reason — it minted its
+	// sidecar under its own key while Rewrap read whichever key won the race to the
+	// Once. resetMaster clears the Once first, which is what every other test here does.
+	resetMaster(master)
 
 	dir := t.TempDir()
 	db := filepath.Join(dir, "kms.db")
@@ -69,7 +74,12 @@ func TestRewrapRefusesAnUnknownSidecar(t *testing.T) {
 	for i := range master {
 		master[i] = byte(i + 9)
 	}
-	SetMasterKey(master)
+	// resetMaster, not SetMasterKey: the master is resolved through a sync.Once, so a
+	// plain Set is a no-op once a sibling test has already resolved it. This test
+	// passed alone and failed in the package for exactly that reason — it minted its
+	// sidecar under its own key while Rewrap read whichever key won the race to the
+	// Once. resetMaster clears the Once first, which is what every other test here does.
+	resetMaster(master)
 	dir := t.TempDir()
 	db := filepath.Join(dir, "x.db")
 	junk := make([]byte, fileIDLen+40)
