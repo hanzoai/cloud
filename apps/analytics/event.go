@@ -481,13 +481,6 @@ var doors = []door{
 	{path: "/v1/analytics", decode: decodeIngest, source: sourceCapture},
 	{path: "/v1/analytics/batch", decode: decodeIngest, source: sourceCapture},
 	{path: "/v1/tracker", decode: decodeIngest, source: sourceCapture},
-	// SUNSETTING like the three above: the Team SPA is a published bundle that
-	// appends /collect to its collector URL, so the PATH is the caller's — but
-	// the WIRE is no longer door-distinct: decodeIngest dispatches the team
-	// array by shape (isTeamArray), so a rebuilt SPA pointed at /v1/event needs
-	// nothing else and this row is deleted when properties.$source='team'
-	// arriving via THIS path reads zero.
-	{path: "/v1/event/collect", decode: decodeIngest, source: sourceTeam},
 }
 
 // ingest is the door's API-host handler: admission (handle) over the door's wire.

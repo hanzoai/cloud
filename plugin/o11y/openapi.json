@@ -12,9 +12,6 @@
   ],
   "tags": [
     {
-      "name": "event"
-    },
-    {
       "name": "o11y"
     },
     {
@@ -22,120 +19,6 @@
     }
   ],
   "paths": {
-    "/v1/event/api/{wildcard1}": {
-      "delete": {
-        "operationId": "delete_v1_event_api_by_wildcard1",
-        "tags": [
-          "event"
-        ],
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "get": {
-        "operationId": "get_v1_event_api_by_wildcard1",
-        "tags": [
-          "event"
-        ],
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "options": {
-        "operationId": "options_v1_event_api_by_wildcard1",
-        "tags": [
-          "event"
-        ],
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "patch": {
-        "operationId": "patch_v1_event_api_by_wildcard1",
-        "tags": [
-          "event"
-        ],
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "post": {
-        "operationId": "post_v1_event_api_by_wildcard1",
-        "tags": [
-          "event"
-        ],
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "put": {
-        "operationId": "put_v1_event_api_by_wildcard1",
-        "tags": [
-          "event"
-        ],
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      },
-      "trace": {
-        "operationId": "trace_v1_event_api_by_wildcard1",
-        "tags": [
-          "event"
-        ],
-        "parameters": [
-          {
-            "name": "wildcard1",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      }
-    },
     "/v1/o11y/alerts/last": {
       "get": {
         "operationId": "get_v1_o11y_alerts_last",
