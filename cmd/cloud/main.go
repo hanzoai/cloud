@@ -220,6 +220,15 @@ func run(addr, zapAddr, enable string) error {
 // failure mode this fleet keeps getting bitten by: an error log here, the reason
 // on the host's health route, and Running=false in zip's own plugin table.
 func mount(app *zip.App, a manifest.App, eager bool, secret, rootKey string, absent map[string]string) error {
+	// A co-resident app routes no prefix of its own: it is middleware on another
+	// app's router and decides per request whether to serve or Next. There is
+	// nothing for the host to claim or spawn, so there is nothing to mount. This
+	// is not new behaviour — zen's row named ai's own "/v1", so ai matched first
+	// and zen's child never saw a request. The difference is that the fleet now
+	// says so instead of relying on registration order to mean it.
+	if a.Coresident {
+		return nil
+	}
 	p := a.Plugin()
 	p.Lazy = !eager
 	// Per-plugin, on the plugin's OWN Env, which zip appends to that ONE child's

@@ -56,7 +56,15 @@ var Apps = []App{
 	{Name: "licensing", Prefixes: []string{"/v1/licensing"}},
 	{Name: "plan", Prefixes: []string{"/v1/plans"}},
 	{Name: "pricing", Prefixes: []string{"/v1/admin/catalog", "/v1/admin/enablement", "/v1/enablement", "/v1/pricing", "/v1/pricing-policy"}},
-	{Name: "storage", Prefixes: []string{"/v1/s3"}},
+	// storage is the S3 DATA plane (buckets, objects, health); provisioning below
+	// PROVISIONS an s3 resource and answers /v1/s3 + /v1/s3/{name}. Both rows once
+	// read "/v1/s3" — one prefix, two owners — so whichever mounted first took the
+	// other's routes with it, and provisioning's /v1/s3/{name} matched
+	// /v1/s3/buckets and /v1/s3/health besides. Naming the deeper prefixes storage
+	// actually serves lets longest-prefix match separate them, which is exactly how
+	// the same pair already works for /v1/vector (provisioning) against
+	// /v1/vector/collections (product). No route moves.
+	{Name: "storage", Prefixes: []string{"/v1/s3/buckets", "/v1/s3/health"}},
 	{Name: "provisioning", Prefixes: []string{"/v1/datastore", "/v1/docdb", "/v1/kv", "/v1/s3", "/v1/search", "/v1/sql", "/v1/vector"}},
 	{Name: "billing", Prefixes: []string{"/v1/billing/balance", "/v1/billing/gpu-charge", "/v1/billing/gpu-eligibility", "/v1/billing/payment-methods", "/v1/billing/usage", "/v1/finance/balance", "/v1/finance/credits", "/v1/finance/invoices", "/v1/finance/ledger", "/v1/finance/payment-methods", "/v1/finance/usage"}},
 	{Name: "rollingcap", Prefixes: []string{"/v1/rollingcap"}},
@@ -172,13 +180,10 @@ var Apps = []App{
 	// surface exists at all. Every deeper prefix above still wins; ai takes only
 	// what nobody named.
 	{Name: "ai", Prefixes: []string{"/v1"}},
-	// zen serves only CO-RESIDENT: its mount is a Claim middleware on ai's
-	// router (apps/zen), routing zen-SKU requests and Next()ing the rest — a
-	// contract a per-process prefix cannot express, since a proxied request
-	// never falls through to the next candidate. Behind ai's identical "/v1"
-	// this row is deliberately shadowed on the light host; it exists because
-	// every plugin/<name> binary must have its manifest row (gen-app-cmds
-	// bijection).
-	{Name: "zen", Prefixes: []string{"/v1"}},
+	// zen serves only CO-RESIDENT: its mount is a Claim middleware on ai's router
+	// (apps/zen), routing zen-SKU requests and Next()ing the rest. It therefore
+	// routes NO prefix of its own — see App.Coresident. The row exists because
+	// every plugin/<name> binary must have one (gen-app-cmds bijection).
+	{Name: "zen", Coresident: true},
 	{Name: "plugins", Prefixes: []string{"/v1/admin/plugins"}},
 }

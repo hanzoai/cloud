@@ -1147,7 +1147,28 @@
       },
       "agentDetail": {
         "properties": {
+          "computeRef": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "executionMode": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
           "instructions": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "name": {
             "type": "string"
           },
           "recentRuns": {
@@ -1155,6 +1176,27 @@
               "$ref": "#/components/schemas/agentRunView"
             },
             "type": "array"
+          },
+          "runs": {
+            "type": "integer"
+          },
+          "schedule": {
+            "type": "string"
+          },
+          "serviceAccountId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updatedAt": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -1750,17 +1792,92 @@
       },
       "sessionDetail": {
         "properties": {
+          "account": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
           "childSessions": {
             "items": {
               "$ref": "#/components/schemas/sessionView"
             },
             "type": "array"
           },
+          "children": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "endedAt": {
+            "type": "string"
+          },
+          "events": {
+            "type": "integer"
+          },
+          "host": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "lastEvent": {
+            "$ref": "#/components/schemas/lastEventView"
+          },
+          "org": {
+            "type": "string"
+          },
+          "parentSessionId": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "published": {
+            "type": "boolean"
+          },
           "recentEvents": {
             "items": {
               "$ref": "#/components/schemas/eventView"
             },
             "type": "array"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "rootSessionId": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "taskRunId": {
+            "type": "string"
+          },
+          "taskWorkflowId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
           }
         },
         "type": "object"
