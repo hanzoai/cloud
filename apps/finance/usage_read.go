@@ -12,10 +12,19 @@ import (
 // (USD minor units); Model is the metered-unit label the debit carried (Entry.Memo);
 // CreatedAt is unix seconds.
 type UsageRow struct {
-	ID        string `json:"id"`
-	Cents     int64  `json:"cents"`
-	Model     string `json:"model"`
-	CreatedAt int64  `json:"createdAt"`
+	ID    string `json:"id"`
+	Cents int64  `json:"cents"`
+	// Amount is the debit exactly as the ledger holds it — the same 18-decimal
+	// value the wallet→revenue posting moved. Cents beside it is the ROUNDING of
+	// this value, kept for the wires that already carry cents; it is never the
+	// source. TxnRow below has said why since it was written: "Flattening to
+	// cents here would round away everything below a cent, which is most of what
+	// a per-token AI price IS" — and this row, read from the SAME ledger, was
+	// flattening. A customer whose usage was a thousand sub-cent calls read back
+	// a page of zeros that summed to zero.
+	Amount    money.Amount `json:"amount"`
+	Model     string       `json:"model"`
+	CreatedAt int64        `json:"createdAt"`
 }
 
 // ListUsage returns org's recorded usage debits, most-recent-first, up to limit
@@ -45,6 +54,7 @@ func (f *ledgerFinance) ListUsage(ctx context.Context, org string, limit int) ([
 		rows = append(rows, UsageRow{
 			ID:        e.ID,
 			Cents:     e.Amount.Cents(),
+			Amount:    e.Amount,
 			Model:     e.Memo,
 			CreatedAt: e.CreatedAt,
 		})
