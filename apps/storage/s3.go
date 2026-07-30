@@ -133,6 +133,31 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// /v1/s3/objects to provisioning's GET /v1/s3/:name (a 404 "resource not
 	// found") instead of the honest 503 — the file-manager surface must fail closed
 	// under its own name, never fall through to a different subsystem's handler.
+	// EVERY ROUTE ON THIS SURFACE STAYS UNTYPED, and none of it is for want of
+	// effort — each refusal is a wire this stack cannot yet describe. Recorded here
+	// so the next engineer re-checks the blocker instead of re-deriving it:
+	//
+	//  1. THE MONEY WIRE (the seven data-plane ops). Every one runs through guard →
+	//     ResourceMeter.Gate, and a refused balance answers through
+	//     cloud.DenyResource, which writes the fleet's NESTED
+	//     {"error":{"code","message"}} 402/503 contract IN BAND on the response
+	//     (resource_billing.go:224). A typed op's only refusal channel is a returned
+	//     error, which zip renders as the FLAT {"status","code","error"} HTTPError —
+	//     a different body for the same denial, silently reshaped for every metered
+	//     client that reads error.code across Hanzo. Writing in band from inside a
+	//     typed op does not help either: zip stamps 204 over the status after a nil
+	//     Out (zip typed.go), so the client would get a 204 carrying a 402 body.
+	//     Same refusal apps/ml (ml.go:218) and apps/company (company.go:200) file.
+	//
+	//  2. THE WILDCARD (the two /objects/* ops, refused twice over). fiber's `*` has
+	//     no typed-op spelling: zip's closeColonParams leaves the `*` in the op path
+	//     while cloud's openapi.translate renders the ROUTE as {wildcard1}, so
+	//     openapi.Fold would fail with "typed op has no live route".
+	//
+	//  3. TWO STATUSES, ONE OBJECT (/health). See the handler's own note.
+	//
+	// All three clear on the same zip change: an error that can carry a body, and a
+	// second declarable success status.
 	g := app.Group("/v1/s3")
 	g.Get("/health", cloud.Handle(s, health))
 	g.Get("/buckets", guard(s, cloud.Handle(s, listBuckets)))
@@ -290,6 +315,18 @@ func friendlyBucket(org, physical string) (string, bool) {
 // health is a REAL probe: 200 only when admin credentials are present (the store
 // is reachable in principle); 503 + honest reason in health-only mode. Not
 // JWT-gated — liveness must be probe-able without a token.
+//
+// UNTYPED BY DESIGN, and the only route here refused for a reason other than the
+// money wire: it answers ONE JSON object under TWO statuses — 200 with
+// {service,status:"ok",ready,presign} and 503 with
+// {service,status:"degraded",ready:false,error}. A typed op declares exactly one
+// success status (zip.WithStatus), and its only other channel is a returned
+// error, which zip's errorHandler renders as the flat {"status","code","error"}
+// HTTPError (zip ctx.go:224) — a different body under a different key set. A
+// custom error type does not help: errorHandler matches *zip.HTTPError and
+// *fiber.Error and answers 500 for everything else, so the 503 would become a
+// 500. Typing this would change both the status and the body of every degraded
+// probe. It clears with the same zip change the metered routes above wait on.
 func health(s *cloud.Service[state], ctx *zip.Ctx) error {
 	res := map[string]any{"service": "s3", "status": "ok"}
 	if !s.State.admin.Configured() {
