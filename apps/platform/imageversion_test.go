@@ -37,3 +37,30 @@ func TestBuildArgsFromImageTag(t *testing.T) {
 		}
 	}
 }
+
+// Every build job is a fresh pod with an empty local cache, so without a REGISTRY
+// cache each build re-downloads its whole dependency set (for studio: the entire
+// torch stack plus requirements, on every push). Both flags must be present and
+// must point at a per-repo `buildcache` tag.
+func TestBuildFrontendCmdCarriesRegistryCache(t *testing.T) {
+	join := func(cmd []any) string {
+		out := ""
+		for _, a := range cmd {
+			out += " " + a.(string)
+		}
+		return out
+	}
+	got := join(buildFrontendCmd("ctx", "Dockerfile", "ghcr.io/hanzoai/studio:v1.2.3"))
+	for _, want := range []string{
+		"--import-cache type=registry,ref=ghcr.io/hanzoai/studio:buildcache",
+		"--export-cache type=registry,ref=ghcr.io/hanzoai/studio:buildcache,mode=max",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("build command missing %q\ngot:%s", want, got)
+		}
+	}
+	// A digest-pinned ref names no tag to hang a cache off — no cache flags, no crash.
+	if d := join(buildFrontendCmd("ctx", "Dockerfile", "ghcr.io/hanzoai/studio@sha256:abc")); strings.Contains(d, "-cache") {
+		t.Errorf("digest ref must carry no cache flags, got:%s", d)
+	}
+}
