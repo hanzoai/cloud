@@ -41,6 +41,27 @@ func launchCampaign(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, saved)
 }
 
+// pauseCampaign pauses every live channel on the provider and moves the campaign
+// to paused. A channel whose executor is gone, or whose pause errors, is recorded
+// honestly; the campaign still reports paused (no live channel remains that this
+// process will meter).
+func pauseCampaign(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("valid bearer required")
+	}
+	camp, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
+	if err != nil {
+		return mapErr(err, "campaign not found")
+	}
+	camp = pauseAll(c.Context(), org, camp)
+	saved, err := s.State.store.Save(c.Context(), camp)
+	if err != nil {
+		return mapErr(err, "campaign not found")
+	}
+	return c.JSON(http.StatusOK, saved)
+}
+
 // fanOut is the pure orchestration core (no store, no HTTP): it launches every
 // not-yet-live channel on the campaign through its registered executor, records
 // each outcome (live / failed / unavailable) on the channel, and sets the
@@ -90,27 +111,6 @@ func fanOut(ctx context.Context, org string, camp Campaign) Campaign {
 	}
 	camp.UpdatedAt = time.Now().Unix()
 	return camp
-}
-
-// pauseCampaign pauses every live channel on the provider and moves the campaign
-// to paused. A channel whose executor is gone, or whose pause errors, is recorded
-// honestly; the campaign still reports paused (no live channel remains that this
-// process will meter).
-func pauseCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	camp, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
-	if err != nil {
-		return mapErr(err, "campaign not found")
-	}
-	camp = pauseAll(c.Context(), org, camp)
-	saved, err := s.State.store.Save(c.Context(), camp)
-	if err != nil {
-		return mapErr(err, "campaign not found")
-	}
-	return c.JSON(http.StatusOK, saved)
 }
 
 // pauseAll is the pure pause core: it pauses every live channel on the provider

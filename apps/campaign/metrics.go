@@ -4,13 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"math"
-	"net/http"
 	"strings"
 	"time"
-
-	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/apps/analytics"
-	"github.com/zap-proto/zip"
 )
 
 // metrics.go reads a campaign's RESULTS. Per the GTM architecture there is exactly
@@ -69,60 +64,6 @@ type Metrics struct {
 	ABTest json.RawMessage `json:"abTest,omitempty"`
 }
 
-// metricsCampaign serves GET /v1/campaign/:id/metrics: the analytics funnel +
-// connector spend + KPIs, org-scoped. A missing datastore is surfaced honestly by
-// analytics.CampaignMetrics (Available=false), never a 500.
-func metricsCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	camp, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
-	if err != nil {
-		return mapErr(err, "campaign not found")
-	}
-	start, end, rangeLabel := metricsWindow(c)
-
-	// Funnel — the ONE analytics query for a campaign's results (org + campaign
-	// bound POSITIONALLY inside analytics; honest-empty when the events table is
-	// absent). "" = whole-campaign (all creatives).
-	ev, aerr := analytics.CampaignMetrics(c.Context(), org, camp.ID, "", start, end)
-	if aerr != nil {
-		// A datastore outage is honest-empty here too — the campaign still reports
-		// its spend + channels; the funnel is simply unavailable this read.
-		s.Log.Debug("campaign analytics unavailable (honest-empty)", "campaign", camp.ID, "err", aerr)
-	}
-
-	// Spend — each live channel's connector-reported spend, fanned in fail-soft.
-	spendCents, chMetrics := channelSpend(c.Context(), org, camp)
-
-	m := Metrics{
-		CampaignID:  camp.ID,
-		Name:        camp.Name,
-		Status:      camp.Status,
-		Range:       rangeLabel,
-		Start:       start.UTC().Format(time.RFC3339),
-		End:         end.UTC().Format(time.RFC3339),
-		Available:   ev.Available,
-		Impressions: ev.Impressions,
-		Clicks:      ev.Clicks,
-		Conversions: ev.Conversions,
-		Revenue:     ev.Revenue,
-		Visitors:    ev.Visitors,
-		SpendCents:  spendCents,
-		Channels:    chMetrics,
-		Source:      ev.Source,
-	}
-	m.CTR = ratio(ev.Clicks, ev.Impressions)
-	m.CVR = ratio(ev.Conversions, ev.Clicks)
-	m.CAC = perConversion(spendCents, ev.Conversions)
-	m.ROAS = roas(ev.Revenue, spendCents)
-	// A/B lens: the experiments primitive's pull-model analysis (nil when the
-	// campaign runs a single creative or no experiment is wired).
-	m.ABTest = analyzeExperiment(c.Context(), org, camp, start, end)
-	return c.JSON(http.StatusOK, m)
-}
-
 // channelSpend fans the spend read across a campaign's live channels. Each read
 // is best-effort: a connector-disabled or provider-error channel contributes 0
 // with an honest SpendError, never failing the whole metrics read. The org is
@@ -148,18 +89,20 @@ func channelSpend(ctx context.Context, org string, camp Campaign) (int64, []Chan
 	return total, out
 }
 
-// metricsWindow resolves [start,end) + a label from ?range (24h|7d|30d|90d) or an
-// explicit ?start/?end (RFC3339). Bad/absent input falls back to the 30-day default.
-func metricsWindow(c *zip.Ctx) (time.Time, time.Time, string) {
+// window resolves [start,end) + a label from a range (24h|7d|30d|90d) or an
+// explicit start/end pair (RFC3339). Bad or absent input falls back to the
+// 30-day default. It takes the three VALUES rather than the request, so the typed
+// op and any caller reach the same rule through the same function.
+func window(startStr, endStr, rangeLabel string) (time.Time, time.Time, string) {
 	now := time.Now().UTC()
-	if s, e := strings.TrimSpace(c.Query("start")), strings.TrimSpace(c.Query("end")); s != "" && e != "" {
+	if s, e := strings.TrimSpace(startStr), strings.TrimSpace(endStr); s != "" && e != "" {
 		st, err1 := time.Parse(time.RFC3339, s)
 		en, err2 := time.Parse(time.RFC3339, e)
 		if err1 == nil && err2 == nil && en.After(st) {
 			return st.UTC(), en.UTC(), "custom"
 		}
 	}
-	label := strings.ToLower(strings.TrimSpace(c.Query("range")))
+	label := strings.ToLower(strings.TrimSpace(rangeLabel))
 	var d time.Duration
 	switch label {
 	case "24h":
@@ -168,9 +111,6 @@ func metricsWindow(c *zip.Ctx) (time.Time, time.Time, string) {
 		d = 7 * 24 * time.Hour
 	case "90d":
 		d = 90 * 24 * time.Hour
-	case "30d", "":
-		d = defaultRangeDays * 24 * time.Hour
-		label = "30d"
 	default:
 		d = defaultRangeDays * 24 * time.Hour
 		label = "30d"
