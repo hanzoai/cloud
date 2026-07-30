@@ -52,26 +52,26 @@ type idClaims struct {
 	// UNEXPORTED AND UNTAGGED ON PURPOSE. encoding/json cannot populate it, so no
 	// token can carry it and no caller can forge it — it is only ever set by the
 	// code path that already authenticated the key against IAM. That is the same
-	// rule the identity headers follow: never decoded from the request, only minted
+	// rule the identity headers follow: never decoded from the request, only written
 	// from something verified.
 	subjectOrg string
 }
 
-// mintedProject returns the project id to stamp into X-Project-Id, or "" when the
+// renderProject returns the project id to stamp into X-Project-Id, or "" when the
 // header must be OMITTED. The project rides in the validated JWT `project` claim,
 // scoped to the caller's org exactly like `owner` — trusted, not forgeable. The
-// default project (absent claim, or the literal principal.DefaultProject) mints
+// default project (absent claim, or the literal principal.DefaultProject) writes
 // nothing, so X-Project-Id is present iff a non-default project is in scope. This
 // mirrors the edge (iamauth.Claims.MintedProject) byte-for-byte, so the in-binary
 // path binds the same header the gateway would.
-func (c *idClaims) mintedProject() string {
+func (c *idClaims) renderProject() string {
 	if principal.IsDefaultProject(c.Project) {
 		return ""
 	}
 	return strings.TrimSpace(c.Project)
 }
 
-// mintedBillingAccount returns the funding account to stamp into
+// renderBillingAccount returns the funding account to stamp into
 // X-Billing-Account-Id, or "" when the header must be OMITTED (a token minted
 // before IAM shipped the claim, or one IAM could not attribute).
 //
@@ -81,7 +81,7 @@ func (c *idClaims) mintedProject() string {
 // (iamauth.Claims.MintedBillingAccount) byte-for-byte, so the in-binary path binds
 // the same header the gateway would, and ai/object.Payer reads the same payer on
 // both. The raw client copy is deleted on ingress and NEVER restored.
-func (c *idClaims) mintedBillingAccount() string {
+func (c *idClaims) renderBillingAccount() string {
 	return strings.TrimSpace(c.BillingAccount)
 }
 
@@ -104,7 +104,7 @@ func (c *idClaims) userID() string {
 // returns the subject: sub is a UUID, and `<owner>/<uuid>` fails IAM's
 // GetOwnerAndNameFromId user lookup ("password or code is incorrect"). This is
 // the distinct-from-userID() value stamped as X-User-Name so the direct-Bearer
-// path builds owner/name correctly — the gateway historically minted
+// path builds owner/name correctly — the gateway historically wrote
 // X-User-Id==name, which userID() (sub-first) breaks on the in-binary path.
 // PREFERRED_USERNAME FIRST, and `name` only as a legacy fallback. The order used
 // to be reversed on the belief that IAM's `name` claim carried IAM's canonical
