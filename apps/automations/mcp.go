@@ -31,10 +31,18 @@ type mcpRequest struct {
 // carrying a -32700 error OBJECT — that is what the protocol says, and it is what a
 // JSON-RPC client parses — while zip's invoke unmarshals the body BEFORE the handler
 // runs, so typing this would turn that 200 into a 400 and every method's result and
-// error envelope into a shape one Out cannot hold. Same refusal, and the same reason,
-// as the header-authed webhooks in apps/integrations. The tools this endpoint
-// dispatches are not lost to the projections: tools.Register (Mount) publishes every
-// connector action on the unified tool plane.
+// error envelope into a shape one Out cannot hold.
+//
+// Unlike the other three exclusions, no In type reaches this one, because it is closed
+// a layer BELOW zip: the decoder is stdlib encoding/json (zip's internal/jsonenc), and
+// Unmarshal validates the WHOLE input before dispatching to any UnmarshalJSON. An In of
+// json.RawMessage and an In whose UnmarshalJSON never fails were both tried and both
+// answer `invalid body: unexpected end of JSON input` 400 — a syntax error is
+// unreachable from Go here, so no handler can re-answer it as -32700.
+//
+// Same refusal, and the same reason, as the header-authed webhooks in apps/integrations.
+// The tools this endpoint dispatches are not lost to the projections: tools.Register
+// (Mount) publishes every connector action on the unified tool plane.
 func mcp(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
