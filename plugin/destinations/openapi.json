@@ -182,15 +182,19 @@
       "DestinationField": {
         "properties": {
           "example": {
+            "description": "a sample value of the right shape (\"G-XXXXXXX\"), when one helps",
             "type": "string"
           },
           "key": {
+            "description": "the camelCase key on both the connect body and the stored config",
             "type": "string"
           },
           "label": {
+            "description": "human label for the console card's input",
             "type": "string"
           },
           "required": {
+            "description": "when true, a connect that leaves it empty is refused 400",
             "type": "boolean"
           }
         },
@@ -199,39 +203,49 @@
       "DestinationStatus": {
         "properties": {
           "account": {
+            "description": "Account is the operator's own label for the connected account, as supplied on\nconnect. Absent when unset.",
             "type": "string"
           },
           "category": {
+            "description": "groups the card: Analytics | Advertising",
             "type": "string"
           },
           "config": {
             "additionalProperties": {
               "type": "string"
             },
+            "description": "Config is the org's stored NON-SECRET configuration — the measurement/pixel\nids keyed by DestinationField.Key. A secret is never in here; secrets live in\nKMS and only their names are published, in Secrets.",
             "type": "object"
           },
           "connected": {
+            "description": "Connected is true when this org has a stored row for the platform — it has\nbeen configured here at least once. It says nothing about whether a\ncredential still resolves; that is Live.",
             "type": "boolean"
           },
           "enabled": {
+            "description": "Enabled is whether the fan-out forwards to this destination. False on a\ndestination that is connected but paused, and on one never connected.",
             "type": "boolean"
           },
           "fields": {
+            "description": "Fields are the non-secret inputs this platform needs, which the console card\nrenders and the connect body fills.",
             "items": {
               "$ref": "#/components/schemas/DestinationField"
             },
             "type": "array"
           },
           "live": {
+            "description": "Live is whether a credential resolves RIGHT NOW: a KMS-sealed secret for this\norg, else the integrations connection named by the platform's Fallback, else\nno credential needed at all (a public-ingest sink like Umami). False on a\nconnected destination whose secret has gone missing — Connected \u0026\u0026 !Live is\nexactly the \"reconnect me\" state.",
             "type": "boolean"
           },
           "name": {
+            "description": "the platform's display name (\"Google Analytics 4\")",
             "type": "string"
           },
           "platform": {
+            "description": "the platform slug, and the path segment every route addresses it by",
             "type": "string"
           },
           "secrets": {
+            "description": "Secrets are the KMS secret NAMES this platform custodies for the org — names\nonly, never values. The connect body accepts each under its camelCase form.",
             "items": {
               "type": "string"
             },
