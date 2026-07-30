@@ -68,7 +68,7 @@ func TestPerProjectStoreFileIsolation(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("list under beta: %d %s", code, b)
 	}
-	var betaList []projectView
+	var betaList []trackerProject
 	if err := json.Unmarshal(b, &betaList); err != nil {
 		t.Fatalf("beta list json: %v (%s)", err, b)
 	}
@@ -81,7 +81,7 @@ func TestPerProjectStoreFileIsolation(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("list under alpha: %d %s", code, b)
 	}
-	var alphaList []projectView
+	var alphaList []trackerProject
 	if err := json.Unmarshal(b, &alphaList); err != nil {
 		t.Fatalf("alpha list json: %v (%s)", err, b)
 	}

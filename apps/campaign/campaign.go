@@ -59,7 +59,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
@@ -107,6 +106,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("campaign.Mount: empty DataDir")
 	}
+	// A typed op is a route PLUS a registry entry, and the registry lives on the
+	// App. A router that cannot reach it would serve every route with no schema,
+	// no prose, no MCP tool and no SDK method — so the mount FAILS rather than
+	// quietly publishing a surface no projection knows about.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("campaign.Mount: router is not a zip app, so the typed ops have no registry")
+	}
 	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
 		return fmt.Errorf("campaign.Mount: data dir: %w", err)
 	}
@@ -118,7 +125,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: b, State: state{store: store}}
 	mounted = s
 
-	routes(app, s)
+	routes(app, zapp, s)
 
 	b.Log.Info("campaign mounted", "brand", deps.Brand, "channels", registeredKinds())
 	return nil
@@ -128,21 +135,39 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // is first-match): the static /summary is registered before /:id so it is never
 // captured by the id param, and the deeper /:id/… routes have a distinct segment
 // count so none shadows another.
-func routes(app cloud.Router, s *cloud.Service[state]) {
-	app.Get("/v1/campaign/summary", cloud.Handle(s, summary))
+func routes(app cloud.Router, zapp *zip.App, s *cloud.Service[state]) {
+	o := ops{s: s}
+	g := app.Group("/v1/campaign")
+	// Bridge FIRST: a typed op receives only a context, so the validated org
+	// reaches it by being parked there — never as an In field, which is
+	// caller-supplied and would be a cross-tenant read the caller asserted for
+	// itself. fiber runs middleware in registration order, so this must precede
+	// every leaf below; nesting under Serve's own Bridge is harmless (the inner
+	// one is what the handler sees).
+	g.Use(cloud.Bridge())
 
-	app.Get("/v1/campaign", cloud.Handle(s, listCampaigns))
-	app.Post("/v1/campaign", cloud.Handle(s, createCampaign))
-	app.Get("/v1/campaign/:id", cloud.Handle(s, getCampaign))
-	app.Put("/v1/campaign/:id", cloud.Handle(s, updateCampaign))
-	app.Delete("/v1/campaign/:id", cloud.Handle(s, deleteCampaign))
+	zip.Get(g, "/summary", o.summary)
 
-	app.Post("/v1/campaign/:id/launch", cloud.Handle(s, launchCampaign))
-	app.Post("/v1/campaign/:id/pause", cloud.Handle(s, pauseCampaign))
-	app.Get("/v1/campaign/:id/metrics", cloud.Handle(s, metricsCampaign))
+	// The root of the surface, declared on the App with its whole path rather than
+	// on the group with an empty leaf: joining "/v1/campaign" with "" yields
+	// "/v1/campaign/", a DIFFERENT path from the one these two have always served.
+	zip.Get(zapp, "/v1/campaign", o.list)
+	zip.Post(zapp, "/v1/campaign", o.create, zip.WithStatus(http.StatusCreated))
 
-	app.Post("/v1/campaign/:id/channels", cloud.Handle(s, addChannel))
-	app.Delete("/v1/campaign/:id/channels/:kind", cloud.Handle(s, removeChannel))
+	zip.Get(g, "/:id", o.get)
+	zip.Put(g, "/:id", o.update)
+	zip.Delete(g, "/:id", o.del)
+
+	// UNTYPED BY DESIGN — neither has ever read a request body, and zip's invoke
+	// refuses one it cannot parse before the handler runs, so typing them would
+	// turn today's 200 into a 400 for a caller that posts junk to a route that
+	// ignores it. typed.go states the measurement and the zip-side fix.
+	g.Post("/:id/launch", cloud.Handle(s, launchCampaign))
+	g.Post("/:id/pause", cloud.Handle(s, pauseCampaign))
+	zip.Get(g, "/:id/metrics", o.metrics)
+
+	zip.Post(g, "/:id/channels", o.addChannel)
+	zip.Delete(g, "/:id/channels/:kind", o.removeChannel)
 }
 
 // ---- shared helpers (mirror clients/ads) ----
@@ -268,211 +293,6 @@ func shortErr(err error) string {
 		s = s[:200]
 	}
 	return s
-}
-
-// ---- CRUD ----
-
-func createCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	var body Campaign
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name := clip(body.Name)
-	if name == "" {
-		return zip.ErrBadRequest("name is required")
-	}
-	channels, okCh := normChannels(body.Channels)
-	if !okCh {
-		return zip.ErrBadRequest("each channel kind must be one of paid, organic, email")
-	}
-	id, err := genID("cmp")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	now := time.Now().Unix()
-	camp := Campaign{
-		ID: id, Org: org, Name: name, Audience: clip(body.Audience),
-		Content: clipContent(body.Content), Channels: channels,
-		ScheduleAt: nonNeg(body.ScheduleAt), Budget: nonNeg(body.Budget),
-		Status: StatusDraft, CreatedAt: now, UpdatedAt: now,
-	}
-	saved, err := s.State.store.CreateCampaign(c.Context(), camp)
-	if err != nil {
-		return mapErr(err, "")
-	}
-	return c.JSON(http.StatusCreated, saved)
-}
-
-func listCampaigns(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
-	rows, err := s.State.store.ListCampaigns(c.Context(), org, status, limitOf(c))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
-	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
-}
-
-func getCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	camp, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
-	if err != nil {
-		return mapErr(err, "campaign not found")
-	}
-	return c.JSON(http.StatusOK, camp)
-}
-
-// updateCampaign edits the campaign's core fields. Channels are replaced only
-// when the campaign is a draft — once launched, channels carry provider state
-// (add/remove them explicitly via the channels sub-resource so a live launch is
-// never silently orphaned).
-func updateCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	current, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
-	if err != nil {
-		return mapErr(err, "campaign not found")
-	}
-	var body Campaign
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name := clip(body.Name)
-	if name == "" {
-		return zip.ErrBadRequest("name is required")
-	}
-	current.Name = name
-	current.Audience = clip(body.Audience)
-	current.Content = clipContent(body.Content)
-	current.ScheduleAt = nonNeg(body.ScheduleAt)
-	current.Budget = nonNeg(body.Budget)
-	if current.Status == StatusDraft {
-		channels, okCh := normChannels(body.Channels)
-		if !okCh {
-			return zip.ErrBadRequest("each channel kind must be one of paid, organic, email")
-		}
-		current.Channels = channels
-	}
-	current.UpdatedAt = time.Now().Unix()
-	saved, err := s.State.store.Save(c.Context(), current)
-	if err != nil {
-		return mapErr(err, "campaign not found")
-	}
-	return c.JSON(http.StatusOK, saved)
-}
-
-func deleteCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	deleted, err := s.State.store.DeleteCampaign(c.Context(), org, idParam(c))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
-	}
-	if !deleted {
-		return zip.ErrNotFound("campaign not found")
-	}
-	return c.NoContent(http.StatusNoContent)
-}
-
-// ---- channels sub-resource ----
-
-func addChannel(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	camp, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
-	if err != nil {
-		return mapErr(err, "campaign not found")
-	}
-	var body ChannelSpec
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	n, okCh := normChannel(body)
-	if !okCh {
-		return zip.ErrBadRequest("channel kind must be one of paid, organic, email")
-	}
-	// Replace an existing channel of the same kind, else append (one per kind).
-	replaced := false
-	for i := range camp.Channels {
-		if camp.Channels[i].Kind == n.Kind {
-			camp.Channels[i] = n
-			replaced = true
-			break
-		}
-	}
-	if !replaced {
-		if len(camp.Channels) >= maxChannels {
-			return zip.ErrBadRequest("too many channels")
-		}
-		camp.Channels = append(camp.Channels, n)
-	}
-	camp.UpdatedAt = time.Now().Unix()
-	saved, err := s.State.store.Save(c.Context(), camp)
-	if err != nil {
-		return mapErr(err, "campaign not found")
-	}
-	return c.JSON(http.StatusOK, saved)
-}
-
-func removeChannel(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	camp, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
-	if err != nil {
-		return mapErr(err, "campaign not found")
-	}
-	kind := strings.ToLower(strings.TrimSpace(c.Param("kind")))
-	out := make([]ChannelSpec, 0, len(camp.Channels))
-	for _, ch := range camp.Channels {
-		if ch.Kind != kind {
-			out = append(out, ch)
-		}
-	}
-	if len(out) == len(camp.Channels) {
-		return zip.ErrNotFound("channel not found")
-	}
-	camp.Channels = out
-	camp.UpdatedAt = time.Now().Unix()
-	saved, err := s.State.store.Save(c.Context(), camp)
-	if err != nil {
-		return mapErr(err, "campaign not found")
-	}
-	return c.JSON(http.StatusOK, saved)
-}
-
-// ---- summary ----
-
-func summary(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
-	}
-	total, live, budget, err := s.State.store.Counts(c.Context(), org)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "summary: %v", err)
-	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"campaigns": total, "live": live, "budget": budget,
-		"channels": registeredKinds(),
-	})
 }
 
 // Shutdown closes the campaign store. Idempotent.
