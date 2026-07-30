@@ -1099,17 +1099,48 @@ tree: they are disjoint, so agents do not collide in source.
 |---|---|---|
 | A | ~~integrations 47~~ (done: 22 typed, 19 refused), cloudflare 34, platform 32, projects 31, captable 31 | 128 |
 | B | agents 26, ~~git 24~~ (done: 24 typed, 24 refused — four wire families, apps/git/LLM.md), ~~books 11~~ (done: 20 typed, 5 refused — 3 raw-byte uploads, 2 unconditional-501 link stubs; each named at its registration and pinned by a wire test), ~~o11y 11~~ (done: 12 typed, 8 refused, all wire-bound — 2 verbatim-status VM proxies, 3 reverse proxies (query/query_range/sessions), 2 text/plain Alertmanager receipts, 1 sentry wildcard; apps/o11y/LLM.md names each — the 11 counted 3 comment lines quoting `app.All("/v1/o11y/*")`, real count was 8), ~~company 22~~ (2 left, both permanent) | 50 |
-| C | ~~team 20~~ (done: 9 typed, 10 refused), ~~guide 20~~ (done: 13 typed, 6 refused — 2 YAML-or-JSON document PUTs, 3 structured-409 gated transitions of which /do also streams SSE, 1 opaque merge-patch; each named at its registration, the 409/YAML wires pinned by tests), ~~crm 20~~ (done: 19 typed, 1 refused — the public intake POST; see "crm is 19 of 20" below), ~~ingress 19~~ (done), ~~framework 19~~ (done: 17 typed, 2 refused — the document writes; see "apps/framework (17 of 19)" below), ~~account 19~~ (done: 11 typed, 7 refused) | 117 |
+| C | ~~team 20~~ (done: 9 typed, 10 refused), ~~guide 20~~ (done: 13 typed, 6 refused — 2 YAML-or-JSON document PUTs, 3 structured-409 gated transitions of which /do also streams SSE, 1 opaque merge-patch; each named at its registration, the 409/YAML wires pinned by tests), ~~crm 20~~ (done: 19 typed, 1 refused — the public intake POST; see "crm is 19 of 20" below), ~~ingress 19~~ (done, and the 19 was 18: **18 typed, 0 refused**, re-verified — the
+19th was `r.Header.Get("X-Forwarded-Proto")`, see the measure below. Nothing in this
+package is wire-bound: three uniform CRUD kinds behind four generic helpers, all
+three DELETEs answering 204 from a `*struct{}` Out, and `TestSurfaceIsRegistered`
+gates the whole surface as an EXACT set — live router == `app.Commands()` == the
+18 — so a route added untyped goes red without anyone remembering to name it), ~~framework 19~~ (done: 17 typed, 2 refused — the document writes; see "apps/framework (17 of 19)" below), ~~account 19~~ (done: 11 typed, 7 refused) | 117 |
 | D | ~~pricing 18~~ (done: 30 typed, 2 refused — both admin overlay PATCHes: one addresses a slashed model id through a greedy wildcard fiber calls `*1` and the document calls `{wildcard1}`, so the bound field and the published parameter cannot agree; the other carries an RFC 7386 merge patch stored and echoed VERBATIM, which `json.RawMessage` publishes as an array of integers and `map[string]any` reorders. The 15 "verbatim byte proxy" refusals came OFF the list: apps/goja already re-marshals the bundle's answer through Go's encoding/json, so a typed op re-marshalling the same value is byte-identical — apps/pricing/sections_wire_test.go proves it route by route), ml 18, ~~automations 18~~ (done: 14 typed, 4 refused), index 17, dataroom 17, ~~compliance 17~~ (done: 16 typed, 1 refused — the HMAC webhook: the signature is computed over the RAW body bytes and verified before any parse, and an unknown reference answers a second 200 shape; the refusal is now GATED, not prose — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` in typed_wire_test.go), affiliates 17 | 104 |
 | E | eval 16, social 13, esign 13, link 12, functions 12, commerce 12, billing 12 | 90 |
 | F | the ~70 remaining packages, 1–11 routes each | ~358 |
 
-Re-measure rather than trusting the table:
+Re-measure rather than trusting the table — with the ONE command below, because
+the two this file used to carry were each half-right and disagreed by 83 routes:
 
     for d in apps/*/; do a=$(basename $d); \
-      u=$(grep -rn --include='*.go' -E '\.(Get|Post|Put|Patch|Delete|All)\("' $d | grep -v _test.go | grep -cv 'zip\.'); \
+      u=$(grep -rn --include='*.go' -E '\.(Get|Post|Put|Patch|Delete|All)\("(/|")' $d \
+          | grep -v _test.go | grep -v 'zip\.' | grep -vcE ':[0-9]+:[[:space:]]*//'); \
       t=$(grep -rn --include='*.go' -E 'zip\.(Get|Post|Put|Patch|Delete)[[(]' $d | grep -vc _test.go); \
       [ "$u" -gt 0 ] && printf '%s %s %s\n' "$a" "$u" "$t"; done | sort -k2 -rn
+
+**A route is a VERB PLUS A PATH, and the measure has to say both** — otherwise it
+counts values that merely share a method name. Two mistakes, both live in this
+file until now, in opposite directions:
+
+- **No path anchor** counts every `hdr.Get("Retry-After")`, `form.Get("team_id")`
+  and `vm.Get("console")` as an untyped route: **83 phantoms across `apps/`**,
+  which is why `integrations` read 45 when it serves 19, `platform` 32 for 30,
+  `tools` 18 for 16 and — the reason this note exists — **`ingress` read 1 when it
+  serves 0**, on the strength of one `r.Header.Get("X-Forwarded-Proto")` in
+  `middleware.go`. This is the same miscount already documented for team ("the
+  other 26 hits are `hdr.Get(\"Retry-After\")`"), rediscovered because the command
+  was never fixed — a wrong count is not a documentation nit, it dispatches an
+  agent at a package that has no work left in it.
+- **Anchoring on `("/` alone** (the other command, below) drops the EMPTY-leaf
+  registrations, which are real routes at a collection root: 7 of them, in
+  `apps/prefs` (2), `apps/webhooks` (2), `apps/share`, `apps/crawl`,
+  `apps/destinations`. So the anchor is a path — `("/` **or** `("" ` — and the
+  `//` filter is not optional either: 11 of the empty-leaf hits are comment lines
+  quoting the form.
+
+Corrected, `apps/` holds **666** untyped route registrations. The number to trust
+it against is `integrations`, whose 19 the corrected measure reproduces exactly
+and independently — the count its own conversion recorded as refusals.
 
 **Collisions, and the resolution.** Source does not collide; two artifacts do —
 the regenerated `openapi.yaml` golden and `go.sum`. Both resolve the same way:
@@ -1129,9 +1160,10 @@ branch point and the merge; that is the rate.)
     grep -rEn 'zip\.(Get|Post|Put|Patch|Delete)\(' --include='*.go' . \
       | grep -v _test | grep -vE ':[0-9]+:[[:space:]]*//'          # 165, 15 pkgs
 
-    # untyped: a METHOD call on a router/group value
-    grep -rEn '\.(Get|Post|Put|Patch|Delete)\("/' --include='*.go' . \
-      | grep -v _test | grep -vE ':[0-9]+:[[:space:]]*//'          # ~900, ~95 pkgs
+    # untyped: a METHOD call on a router/group value. Same path anchor as the
+    # per-app measure above — verb PLUS path, or it counts hdr.Get("…") too.
+    grep -rEn '\.(Get|Post|Put|Patch|Delete|All)\("(/|")' --include='*.go' . \
+      | grep -v _test | grep -v 'zip\.' | grep -vE ':[0-9]+:[[:space:]]*//' # ~900, ~95 pkgs
 
 The discriminator is `zip.X(` (package-qualified generic) versus `<receiver>.X(`
 (method on `*zip.App`/Router) — NOT the presence of square brackets. The
