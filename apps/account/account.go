@@ -53,6 +53,14 @@
 //     they are opaque by construction, not by omission. What they may reach is
 //     nonetheless bounded, by an allowlist rather than by a type (billing.go).
 //
+// That partition is a GATE, not prose: typed_wire_test.go holds the seven as a
+// CLOSED list with the wire fact behind each, and fails on any account operation
+// that is neither a typed op nor named there — so the next route added here is
+// typed by default, and dropping one out of the registry takes a deliberate edit
+// with a reason. Re-check the seven when zip gains raw-body binding and
+// multi-status/passthrough responses; until then eleven of eighteen is the honest
+// floor for this package.
+//
 // TENANCY. The caller is resolved from the VALIDATED identity headers ONLY
 // (principal.Validated / c.Org() / c.User()), the same trust boundary every mutating
 // subsystem uses. The IAM id targeted is DERIVED as `<owner>/<name>` from those
