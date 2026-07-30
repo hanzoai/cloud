@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/referrals"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the referrals app.
@@ -20,6 +21,13 @@ func main() {
 		Name:  "referrals",
 		Price: cloud.Free,
 		Mount: referrals.Mount,
+		// The /v1/<Name> default covers /v1/referrals but NOT the two admin leaves
+		// this subsystem also serves, /v1/admin/referrals/{bonuses,sweep}: those
+		// were attributed to no subsystem by cloud.Declare, and middleware the
+		// subsystem installed for them through the scoped Router was recorded as an
+		// escape rather than installed. The list comes from the manifest so it
+		// cannot drift from the prefixes the host routes here.
+		Prefixes: manifest.PrefixesFor("referrals"),
 	}}, []string{"referrals"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
