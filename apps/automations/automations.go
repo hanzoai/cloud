@@ -197,7 +197,10 @@ type ops struct{ s *cloud.Service[state] }
 // are marked below and the reason is restated at each handler. Prose is not a gate, so
 // each fact is also PINNED by a test (untyped_wire_test.go): retyping any of these four
 // turns one red and names the fact that was lost. Three of the four break on inputs no
-// other test in this package sends, which is precisely why the pins exist.
+// other test in this package sends, which is precisely why the pins exist. A FIFTH pin
+// covers the retype the other four leak — an In that swallows the body preserves the
+// REST wire and silently loses the MCP tool and the ZAP call, where the In is the whole
+// message and an address that lives only in the URL never arrives.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/automations")
 	// Bridge FIRST: a typed op receives only a context, so the validated org reaches
@@ -238,7 +241,10 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// UNTYPED — the resume payload is an ARBITRARY JSON value delivered verbatim into
 	// the workflow, while the run is addressed by the URL. An In can accept one or the
 	// other, never both: a struct 400s every non-object payload, and a non-struct In
-	// takes them all but receives no path param. See resumeRun.
+	// takes them all but receives no path param. Nor does a struct whose UnmarshalJSON
+	// swallows the body rescue it — that keeps REST intact and leaves the op
+	// unaddressable over MCP and the call plane, where the In is the whole message.
+	// See resumeRun.
 	g.Post("/runs/:id/resume", cloud.Handle(s, resumeRun))
 
 	// Inbound event sink (IFTTT): an authenticated producer POSTs an event and every
@@ -251,7 +257,9 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// the URL. An In can carry one or the other: a struct binds the path params and
 	// DISCARDS every payload key it has no field for (silently — 200, matched, and an
 	// empty {{trigger.*}}), while a non-struct In takes the open body and receives no
-	// path param at all. See inboundHook.
+	// path param at all. A body-swallowing UnmarshalJSON is not the third way either:
+	// see the resume note above — it costs the MCP and call-plane projections, which is
+	// what typing is FOR. See inboundHook.
 	g.Post("/hooks/:source/:event", cloud.Handle(s, inboundHook))
 
 	// UNTYPED — JSON-RPC answers a body it cannot parse with HTTP 200 and a -32700
@@ -882,6 +890,16 @@ func (o ops) getRun(ctx context.Context, in *runRef) (*FlowRun, error) {
 // The size bound is measured on the RAW received bytes before any parse, which is the
 // only place it can be measured — a decoded value has no byte count of its own. That
 // one IS reachable from a typed op via cloud.Request(ctx), so it is not the blocker.
+//
+// One retype looks like it beats both and does not: a STRUCT In holding an id field
+// plus an UnmarshalJSON that swallows the whole body. Nothing can fail it, and bindURL
+// still binds :id, so the REST wire is preserved exactly — measured. What it gives up
+// is everything typing was for. A tools/call and a ZAP by-name call carry every
+// argument in ONE JSON object and bind no path from it, so an In that discards its own
+// keys never receives the address: the tool answers "run not found" for a run that
+// exists, while the published schema advertises a body of {"id": string} this route has
+// never accepted. TestOpsAddressThroughArgumentsAlone is the pin; the four REST pins
+// stay green through it, which is why that fifth one exists.
 func resumeRun(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(s, c)
 	if !ok {
@@ -950,6 +968,11 @@ func resumeRun(s *cloud.Service[state], c *zip.Ctx) error {
 // all four ARE reachable from a typed op via cloud.Request(ctx), so none of them is
 // the reason. Same family as the raw-byte-signed provider webhooks in
 // apps/integrations.
+//
+// The struct-with-a-swallowing-UnmarshalJSON retype fails here for the same reason it
+// fails at resumeRun above: it holds the REST wire and gives up the MCP tool and the
+// ZAP call, because those carry the arguments object as the WHOLE input and (source,
+// event) live only in the URL. See TestOpsAddressThroughArgumentsAlone.
 func inboundHook(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(s, c)
 	if !ok {

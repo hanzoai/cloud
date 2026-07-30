@@ -31,6 +31,67 @@ func newApp(t *testing.T) *zip.App {
 	return app
 }
 
+// newAppMCP mounts the subsystem the way the SERVER does: one cloud.Bridge at the
+// app ROOT. zip's own projections of the typed-op registry — the MCP endpoint at
+// /mcp and the call plane at /.well-known/zip/op/ — are ordinary routes on the app
+// itself, so they sit OUTSIDE every subsystem's group and the group's own Bridge
+// never runs for them. cloud.Serve installs the root one (serve.go), which is what
+// gives them a validated org in production; newApp above does not, so a tools/call
+// there refuses before it reaches a handler. Use this harness to exercise an op
+// through MCP.
+func newAppMCP(t *testing.T) *zip.App {
+	t.Helper()
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	app.Use(cloud.Bridge())
+	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}
+	if err := Mount(app, deps); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	// zip installs /mcp in prepare(), which Listen would call; a Fiber().Test app
+	// never listens. Once-guarded, so calling it here is safe.
+	app.Prepare()
+	t.Cleanup(func() { _ = Shutdown(context.Background()) })
+	return app
+}
+
+// toolsCall invokes op through zip's MCP endpoint with args as the tools/call
+// arguments object, and returns the result text and whether MCP reported an error.
+// The arguments object is the WHOLE input over this transport — see derivedTools below.
+func toolsCall(t *testing.T, app *zip.App, org, op string, args string) (string, bool) {
+	t.Helper()
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + op + `","arguments":` + args + `}}`
+	r := reqRaw(t, app, "/mcp", org, body)
+	var env struct {
+		Result struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+			IsError bool `json:"isError"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(r.Body, &env); err != nil {
+		t.Fatalf("tools/call %s: %v (%s)", op, err, r.Body)
+	}
+	if len(env.Result.Content) == 0 {
+		t.Fatalf("tools/call %s returned no content: %s", op, r.Body)
+	}
+	return env.Result.Content[0].Text, env.Result.IsError
+}
+
+// derivedTools returns the names of the tools ZIP derives from this package's
+// typed-op registry — one per typed op, none for an untyped route. Distinct from
+// mcp.go's mcpTools, which is the connector-scoped list automations serves itself
+// at /v1/automations/mcp.
+func derivedTools(app *zip.App) []string {
+	var names []string
+	for _, tool := range app.MCPTools() {
+		if n, _ := tool["name"].(string); n != "" {
+			names = append(names, n)
+		}
+	}
+	return names
+}
+
 // newAppWithAudit mounts the subsystem with a REAL in-memory audit recorder so a
 // test can read the tamper-evident trail back and assert outcomes (LOW-1) and
 // exactly-once run bookkeeping (MED-1). Returns the recorder for querying.
