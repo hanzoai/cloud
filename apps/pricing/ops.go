@@ -29,16 +29,22 @@ package pricing
 //     which the document's own `{wildcard1}` could never agree with. A schema
 //     nobody can read is worse than none; a document that will not build is worse
 //     than both.
-//   - PATCH /v1/admin/catalog/providers/:name carries `overrides`, a raw JSON
-//     merge patch (RFC 7386) that is STORED and echoed verbatim. Verbatim echo
-//     pins the Go type to json.RawMessage, and that type publishes a lie: zip
-//     reflects it as an ARRAY OF INTEGERS (it is []byte — openapi.go's schemaOf
-//     takes the Slice arm). Retyping is no escape — map[string]any and any both
-//     re-marshal the patch, which sorts its keys, so the overlay this route echoes,
-//     and the one GET /v1/admin/catalog echoes later under "_overlay", would come
-//     back in a different order than the admin sent. That is a wire change. The
-//     escape is a schemaOf that can describe an arbitrary JSON value; it has no
-//     arm for one.
+// PATCH /v1/admin/catalog/providers/:name was on this list and is now an op. Its
+// reason was that `overrides`, an RFC 7386 merge patch stored and echoed verbatim,
+// pins the Go type to json.RawMessage — which zip published as an ARRAY OF
+// INTEGERS, because schemaOf took the Slice arm before it asked whether the type
+// has a marshaler of its own. zip v1.18.9 asks first, so a RawMessage now
+// publishes as the unconstrained "any JSON" it is, and the refusal expired. The
+// escape named here — "a schemaOf that can describe an arbitrary JSON value" — is
+// exactly what arrived. typed_wire_test.go is what noticed, by pinning the lie and
+// going red when it stopped being told.
+//
+// One residual delta, recorded rather than hidden: zip decodes the body before the
+// handler runs, so a NON-admin sending malformed JSON now sees 400 instead of the
+// 403 the raw handler answered (it checked IsAdmin first). The authorizer is
+// deliberately post-decode in zip — it authorizes the decoded value so the
+// decision cannot diverge from execution — so this is not avoidable without
+// giving up the op. It reveals only that the body was unparseable.
 //
 // The fifteen fixed sections (/v1/pricing/{compute,cloud,subscriptions,…} and
 // /v1/pricing-policy) were on this list too, on the grounds that they proxy the

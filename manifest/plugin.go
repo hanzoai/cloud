@@ -33,6 +33,22 @@ type App struct {
 	// one binary.
 	Prefixes []string
 
+	// Coresident means the app is NOT prefix-routed: it mounts as middleware on
+	// another app's router and decides per request whether to serve or call Next.
+	// The light host must not Load it, because Load's whole job is to claim a
+	// prefix and hand matching requests to a process — a contract a middleware
+	// cannot express, since a proxied request never falls through to the next
+	// candidate.
+	//
+	// The row still exists, because every plugin/<name> binary needs one (the
+	// gen-app-cmds bijection). What it must not do is state a Prefix it does not
+	// route: zen said "/v1", the same prefix ai serves, so the manifest carried a
+	// duplicate claim that only worked because nothing checked. zip now refuses
+	// two owners for one prefix at compose time, which is how this surfaced.
+	// Naming the property is the fix; tolerating the duplicate would have been a
+	// second way to say one thing.
+	Coresident bool
+
 	// Eager starts the child WITH the host instead of on the first request
 	// reaching one of its prefixes. It is for a subsystem whose work is not
 	// request-driven — one that owns a listener or a background loop, where

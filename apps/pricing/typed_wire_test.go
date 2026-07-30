@@ -15,7 +15,7 @@ import (
 )
 
 // This file is the GATE on the typed/raw partition of the pricing surface: the
-// 2 raw routes are a CLOSED list, each named with the wire fact that keeps it
+// 1 raw route is a CLOSED list, each named with the wire fact that keeps it
 // raw, and any route that is neither a typed op nor on that list fails the
 // suite — so the next pricing route is typed by default, and dropping one out
 // of the registry takes a deliberate edit with a reason. Same shape as
@@ -26,16 +26,16 @@ import (
 // ops, each with the reason it cannot be one. A typed op is a route PLUS a
 // registry entry — the one value the OpenAPI operation, the MCP tool, the CLI
 // command and the SDK method all come from — so an operation missing from that
-// registry is invisible to all four. These 2 are missing on purpose. Addresses
+// registry is invisible to all four. This 1 is missing on purpose. Addresses
 // are written the way the DOCUMENT writes them, which is the identity every
 // projection keys on. "Cannot be typed" is a claim about a DEPENDENCY, and a
-// dependency moves, so neither reason is asserted from prose: the two tests at
-// the bottom of this file register the shape at issue on a throwaway app and
+// dependency moves, so neither reason is asserted from prose: the test at
+// the bottom of this file registers the shape at issue on a throwaway app and
 // check that zip and openapi.translate still behave as the reason says. A blocker
 // fixed upstream turns this suite RED and names the route that just became
 // convertible, instead of leaving a stale reason standing.
 //
-// It was 17. The fifteen fixed sections came off it once the premise was
+// It was 17, then 2. The fifteen fixed sections came off it once the premise was
 // re-checked: they were held to be verbatim byte proxies of the @hanzo/pricing
 // bundle, but apps/goja re-marshals the bundle's answer through Go's
 // encoding/json (Host.DispatchWith) before any handler sees it, so a typed op
@@ -52,14 +52,9 @@ var untypedByDesign = map[string]string{
 		"`*1`, so the In needs a field tagged json:\"*1\" — which every projection would publish, " +
 		"and which the document's own {wildcard1} could not agree with. A schema nobody can read " +
 		"is worse than none; a document that will not build is worse than both. Its body also " +
-		"carries `overrides` (see providers/{name}).",
-	"PATCH /v1/admin/catalog/providers/{name}": "the body carries `overrides`, a raw JSON " +
-		"merge patch (RFC 7386) stored and echoed verbatim: zip reflects json.RawMessage — it " +
-		"is []byte — as an ARRAY OF INTEGERS, a false schema; and retyping the field " +
-		"map[string]any (or any) re-marshals the patch, sorting its keys, so the overlay this " +
-		"route echoes and GET /v1/admin/catalog echoes later comes back reordered. A wire change. " +
-		"Verbatim echo pins the type and the type publishes a lie: the escape is a zip that can " +
-		"describe an arbitrary JSON value, which schemaOf has no arm for.",
+		"carries `overrides`, which is no longer a blocker on its own: zip v1.18.9 publishes " +
+		"json.RawMessage as the unconstrained value it is, so PATCH providers/{name} became an " +
+		"op. The wildcard is what still holds THIS one.",
 }
 
 // pricingOps reads BOTH projections of the live router at their one shared
@@ -111,7 +106,7 @@ func pricingOps(t *testing.T) (served map[string]bool, typed map[string]string) 
 }
 
 // TestEveryRouteIsTypedOrNamed fails when a pricing operation is neither a
-// typed op nor one of the 2 above — so the next route added here is typed by
+// typed op nor the 1 above — so the next route added here is typed by
 // default, and dropping one out of the registry takes a deliberate edit with a
 // reason.
 func TestEveryRouteIsTypedOrNamed(t *testing.T) {
@@ -159,7 +154,7 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 	}
 }
 
-// ---- the two reasons, made executable ----
+// ---- the reason, made executable ----
 //
 // Each reason above is a claim about a DEPENDENCY, and a dependency moves. These
 // two tests re-check the claims on every run instead of on somebody remembering
@@ -207,11 +202,17 @@ func TestTypingTheWildcardRefusesTheWholeDocument(t *testing.T) {
 	}
 }
 
-// TestMergePatchPublishesAnIntegerArray proves the providers/{name} reason: the
-// `overrides` merge patch is echoed VERBATIM, which pins its Go type to
-// json.RawMessage, and zip reflects that as the []byte it is — so typing the route
-// as it stands would ship an array-of-integers schema to every SDK and MCP client.
-func TestMergePatchPublishesAnIntegerArray(t *testing.T) {
+// TestMergePatchPublishesAnyJSON is the other half of the tripwire that retired
+// the providers/{name} refusal. It once pinned the LIE — json.RawMessage published
+// as an array of integers, because schemaOf took the Slice arm before asking
+// whether the type marshals itself — and went red when zip v1.18.9 stopped telling
+// it. Now it pins the truth, so a regression that reintroduces the integer array
+// fails here rather than shipping a schema no client can satisfy.
+//
+// The verbatim echo it protects is the point: the overlay this route returns, and
+// the one GET /v1/admin/catalog returns under "_overlay", must carry the admin's
+// own key order. That is why the field stays json.RawMessage and not map[string]any.
+func TestMergePatchPublishesAnyJSON(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	zip.Patch(app, "/v1/admin/catalog/providers/:name", func(context.Context, *probePatch) (*probeOut, error) {
 		return &probeOut{OK: true}, nil
@@ -224,9 +225,11 @@ func TestMergePatchPublishesAnIntegerArray(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal schema: %v", err)
 	}
-	const lie = `{"properties":{"overrides":{"items":{"type":"integer"},"type":"array"}},"type":"object"}`
-	if string(got) != lie {
-		t.Fatalf("the json.RawMessage schema moved:\n got %s\nwant %s\nIf zip now describes a raw "+
-			"JSON value as one, the providers/{name} reason is stale — type the route.", got, lie)
+	const anyJSON = `{"properties":{"overrides":{}},"type":"object"}`
+	if string(got) != anyJSON {
+		t.Fatalf("the json.RawMessage schema moved:\n got %s\nwant %s\nAn unconstrained schema is "+
+			"what a raw JSON value IS. If this went back to an array of integers, schemaOf is "+
+			"reading the Slice arm before the marshaler again and PATCH providers/{name} is "+
+			"publishing a shape no client can send.", got, anyJSON)
 	}
 }

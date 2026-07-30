@@ -118,42 +118,77 @@ func adminPatchModel(c *zip.Ctx) error {
 	return adminPatch(c, kindModel, id)
 }
 
-// adminPatchProvider upserts the overlay for one provider name.
-func adminPatchProvider(c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// providerPatchIn is the provider name from the URL plus the overlay patch.
+//
+// The patch fields are POINTERS on purpose: absent means "leave this alone", and
+// only a pointer can tell absent from a zero the caller meant. Note that
+// encoding/json also leaves a pointer nil for an explicit null WITHOUT calling
+// UnmarshalJSON, so {"enabled":null} and {} arrive identically — which is what
+// this route already did, and so is preserved.
+type providerPatchIn struct {
+	// Name is the provider the overlay belongs to, from the URL.
+	Name string `json:"name"`
+	patchBody
+}
+
+// PatchProvider sets one provider's availability overlay.
+//
+// The overlay decides whether a provider is off, in beta for named orgs, or
+// generally available, and carries the price overrides applied on top of the
+// catalog. Only the fields the patch names change; every other field keeps the
+// value it had, and an absent overlay starts from the catalog default (enabled).
+// Answers the new effective overlay, so a console needs no second read.
+//
+// SuperAdmin only.
+func adminPatchProvider(ctx context.Context, in *providerPatchIn) (*Overlay, error) {
+	if !callerIsAdmin(ctx) {
+		return nil, zip.ErrForbidden("SuperAdmin required")
 	}
-	name := strings.TrimSpace(c.Param("name"))
+	name := strings.TrimSpace(in.Name)
 	if name == "" {
-		return zip.ErrBadRequest("provider name required")
+		return nil, zip.ErrBadRequest("provider name required")
 	}
-	return adminPatch(c, kindProvider, name)
+	return applyPatch(ctx, kindProvider, name, in.patchBody)
 }
 
 // adminPatch reads the current overlay (or the enabled-default), applies only
 // the fields present in the body, and writes it back. Returns the new effective
 // overlay so the admin UI can reflect it without a re-fetch.
+//
+// It is the *zip.Ctx door onto [applyPatch], kept for the ONE route that cannot
+// be a typed op: PATCH /v1/admin/catalog/models/* routes through a greedy
+// wildcard (see ops.go). The typed providers op calls applyPatch directly, so
+// both doors run the same code and cannot drift.
 func adminPatch(c *zip.Ctx, kind, id string) error {
-	if cat == nil {
-		return c.JSON(http.StatusServiceUnavailable, map[string]any{"error": "catalog overlay not initialised"})
-	}
-
 	var body patchBody
 	if raw := c.Body(); len(raw) > 0 {
 		if err := json.Unmarshal(raw, &body); err != nil {
 			return zip.ErrBadRequest("invalid JSON body: " + err.Error())
 		}
 	}
+	out, err := applyPatch(c.Context(), kind, id, body)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
+// applyPatch is the overlay upsert itself, with no request in sight: read the
+// current overlay (or the enabled-default), apply only the fields the patch
+// carries, write it back, and answer with the new effective overlay.
+func applyPatch(ctx context.Context, kind, id string, body patchBody) (*Overlay, error) {
+	if cat == nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "catalog overlay not initialised")
+	}
 	if body.Overrides != nil {
 		if err := checkOverride(*body.Overrides); err != nil {
-			return zip.ErrBadRequest(err.Error())
+			return nil, zip.ErrBadRequest(err.Error())
 		}
 	}
 
-	ctx := c.Context()
 	cur, ok, err := cat.Get(ctx, kind, id)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "overlay read failed"})
+		return nil, zip.Errorf(http.StatusInternalServerError, "overlay read failed")
 	}
 	if !ok {
 		cur = Overlay{Kind: kind, ID: id, Enabled: true} // catalog default.
@@ -167,7 +202,7 @@ func adminPatch(c *zip.Ctx, kind, id string) error {
 		case "off", "disabled":
 			cur.Enabled, cur.Beta = false, false
 		default:
-			return zip.ErrBadRequest("state must be off|beta|ga")
+			return nil, zip.ErrBadRequest("state must be off|beta|ga")
 		}
 	}
 	if body.Enabled != nil {
@@ -194,9 +229,9 @@ func adminPatch(c *zip.Ctx, kind, id string) error {
 	cur.UpdatedAt = time.Now().Unix()
 
 	if err := cat.Upsert(ctx, cur); err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "overlay write failed"})
+		return nil, zip.Errorf(http.StatusInternalServerError, "overlay write failed")
 	}
-	return c.JSON(http.StatusOK, cur)
+	return &cur, nil
 }
 
 // normalizeOrgs trims, drops empties, and de-duplicates a beta-org list.
