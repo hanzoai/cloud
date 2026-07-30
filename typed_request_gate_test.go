@@ -59,6 +59,31 @@ var allowedRequestUses = map[string]string{
 		"ask, delegating to the same tenant() the untyped create beside them uses; fails closed off the HTTP " +
 		"path, where there is no principal and therefore no tenant to key on.",
 	"apps/search/search.go": "Query resolves the tenant from the validated principal at the top of the op.",
+	"apps/tracker/typed.go": "scope / requireBody. scope needs the IAM PROJECT (X-Project-Id), which " +
+		"picks the physical per-(org,project) store a tracker read opens — principal.OrgFrom carries the org " +
+		"and nothing else, so an op without it would open a different file than the create wrote. requireBody " +
+		"replays the c.Bind refusal the raw PATCH handlers answered on a bodyless request, at the point in " +
+		"the sequence they reached it; zip's typed decode is tolerant and would have turned that 400 into a " +
+		"200-with-nothing-changed. Both fail closed off the HTTP path.",
+	"apps/campaign/typed.go": "requireBody — the three writes that bind a body (create, update, addChannel) " +
+		"have always refused a request with none, or with a content type this service does not parse, with " +
+		"c.Bind's own 400. zip's typed decode is TOLERANT by construction (it skips an empty body and leaves " +
+		"the In at its zero value), so without this a bodyless create would write empty values instead of " +
+		"refusing. It calls the SAME c.Bind over an empty target, so it is one decision rather than a second " +
+		"implementation free to drift, and it is a no-op off the HTTP path where there is no body to require.",
+	"apps/legal/typed.go": "checkBody / noStore / audited. checkBody replays decode's 1 MiB REQUEST-BODY " +
+		"CAP — a typed op receives its DECODED In, so a size check inside one runs after the parse it exists " +
+		"to precede, and cloud's global limit is far larger than this package's 413. noStore pins " +
+		"Cache-Control on the two document reads, which return contract text and must never be cached; a " +
+		"typed op returns its Out and has no response value of its own. audited carries the ACTOR — the " +
+		"validated subject, email and admin bit, all headers principal.OrgFrom does not carry — onto the " +
+		"tamper-evident trail, and an audit record without its actor is a log, not a trail.",
+	"apps/authors/typed.go": "requireAdmin / connect+verify / requireBody. requireAdmin is the SuperAdmin " +
+		"gate on the six /v1/admin/authors ops, reading X-User-IsAdmin, which principal.OrgFrom does not " +
+		"carry. connect and verify need the validated user subject (X-User-Id) to ask IAM for the caller's " +
+		"LINKED forge account, which is the strong proof of a login and the difference between a claimed " +
+		"and a proven identity. requireBody replays the c.Bind refusal the payout route has always answered " +
+		"on a bodyless request. All fail closed off the HTTP path.",
 	"apps/ingress/ingress.go": "admin — the SuperAdmin gate on the fleet EDGE's config. The edge is platform " +
 		"infrastructure (AC-6), so every /v1/ingress op requires SuperAdmin, which is X-User-IsAdmin — a claim " +
 		"principal.OrgFrom does not carry. Fails closed off the HTTP path: no request, no attested admin, no " +
