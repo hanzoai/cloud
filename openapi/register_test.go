@@ -180,3 +180,53 @@ func TestSharedViewYieldsOneComponent(t *testing.T) {
 		t.Fatalf("list schema = %+v, want array of $ref widgetView", list)
 	}
 }
+
+// A POLYMORPHIC body renders `oneOf` over every declared alternative, in the
+// order declared, and a named struct among them is the SAME component the other
+// alternatives and other routes $ref — one shape, one name, however many wires
+// mention it.
+func TestOneOfRendersEveryAlternative(t *testing.T) {
+	Register("/v1/poly", "POST", OneOf{widgetReq{}, []widgetReq{}, widgetView{}}, widgetView{})
+	t.Cleanup(func() { unregister("/v1/poly", "POST") })
+
+	doc, err := From([]Route{{Method: "POST", Path: "/v1/poly"}}, Info{Title: "t", Version: "v1"})
+	if err != nil {
+		t.Fatalf("From: %v", err)
+	}
+	body, ok := doc.Paths["/v1/poly"]["post"].RequestBody.(*RequestBody)
+	if !ok {
+		t.Fatalf("requestBody = %+v, want *RequestBody", doc.Paths["/v1/poly"]["post"].RequestBody)
+	}
+	got := body.Content["application/json"].Schema
+	if got.Ref != "" || got.Type != "" {
+		t.Errorf("polymorphic schema = %+v, want oneOf alone — naming one shape is the under-description this exists to avoid", got)
+	}
+	if len(got.OneOf) != 3 {
+		t.Fatalf("oneOf = %d alternatives, want 3", len(got.OneOf))
+	}
+	if got.OneOf[0].Ref != "#/components/schemas/widgetReq" {
+		t.Errorf("oneOf[0] = %+v, want $ref widgetReq", got.OneOf[0])
+	}
+	if got.OneOf[1].Type != "array" || got.OneOf[1].Items == nil || got.OneOf[1].Items.Ref != "#/components/schemas/widgetReq" {
+		t.Errorf("oneOf[1] = %+v, want array of $ref widgetReq", got.OneOf[1])
+	}
+	if got.OneOf[2].Ref != "#/components/schemas/widgetView" {
+		t.Errorf("oneOf[2] = %+v, want $ref widgetView", got.OneOf[2])
+	}
+	// Two alternatives and the response all name widgetReq/widgetView, so the
+	// document carries exactly the two components those two Go types claim.
+	if n := len(doc.Components.Schemas); n != 2 {
+		t.Fatalf("components = %d, want 2 (widgetReq, widgetView)", n)
+	}
+}
+
+// An empty OneOf is a declaration that says nothing while looking like one, so it
+// is refused at registration rather than rendering an empty `oneOf: []`.
+func TestEmptyOneOfIsRefused(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("Register(OneOf{}) did not panic")
+		}
+	}()
+	Register("/v1/poly/empty", "POST", OneOf{}, nil)
+}

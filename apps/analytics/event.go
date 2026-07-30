@@ -67,6 +67,7 @@ import (
 	"net/http"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -411,9 +412,15 @@ func handle(c *zip.Ctx, dec decode, source string) error {
 
 // door is one ingest door: a PATH bound to the WIRE it speaks. Capability is not a
 // field and cannot become one — handle decides it, once, for every door.
+//
+// decode and wire are the two halves of ONE fact: what this door accepts. decode is
+// the half that runs; wire is the half that is PUBLISHED, and it sits here rather
+// than in a table of its own so a door cannot be routed with one wire and documented
+// with another — the drift that put /v1/tracker in the router and not in the carve.
 type door struct {
 	path   string
 	decode decode
+	wire   any // openapi.Register's request declaration; see declare below
 	source string
 }
 
@@ -476,11 +483,50 @@ type door struct {
 // generalize to /v1/insights/e, whose callers arrive through an ingress rewrite — see
 // its entry below before applying a $source count to any door.
 var doors = []door{
-	{path: "/v1/event", decode: decodeIngest, source: sourceEvent},
-	{path: "/v1/insights/e", decode: decodeInsights, source: sourcePostHog},
-	{path: "/v1/analytics", decode: decodeIngest, source: sourceCapture},
-	{path: "/v1/analytics/batch", decode: decodeIngest, source: sourceCapture},
-	{path: "/v1/tracker", decode: decodeIngest, source: sourceCapture},
+	{path: "/v1/event", decode: decodeIngest, wire: canonicalWire, source: sourceEvent},
+	{path: "/v1/insights/e", decode: decodeInsights, wire: insightsBody{}, source: sourcePostHog},
+	{path: "/v1/analytics", decode: decodeIngest, wire: canonicalWire, source: sourceCapture},
+	{path: "/v1/analytics/batch", decode: decodeIngest, wire: canonicalWire, source: sourceCapture},
+	{path: "/v1/tracker", decode: decodeIngest, wire: canonicalWire, source: sourceCapture},
+}
+
+// canonicalWire is what decodeIngest accepts, said in the document's own vocabulary:
+// three shapes on one path, so an SDK generated from it can send any of the three a
+// real client sends. Declaring only the bare object — the one shape a lone Go type
+// could state — would document an ingest API that cannot batch, which is most of
+// what @hanzo/event does.
+var canonicalWire = openapi.OneOf{Event{}, []Event{}, CaptureBatch{}}
+
+// declare publishes what every ingest door ACCEPTS and RETURNS. These doors cannot be
+// typed ops (typed_wire_test.go names each one's wire fact), and an untyped route with
+// no declaration publishes an operationId and NOTHING else — indistinguishable, to
+// every SDK generator reading the document, from a route that takes no body and
+// returns none. That is how the platform's primary ingest door came to offer, in every
+// generated SDK, a call with nowhere to put the event.
+//
+// It buys schema and only schema: prose, an MCP tool and a CLI command come from zip's
+// typed registry, which is exactly what these doors cannot enter. And it derives from
+// the doors table, so a door added tomorrow declares itself or fails the gate in
+// doors_test.go rather than silently publishing nothing.
+//
+// The receipt is the SAME for every door and every lane — the anonymous projection,
+// the reduced team principal, the full credential and the o11y plane's claim all
+// answer CaptureResult (handle/publicIngest/ingestDecoded, above), so one response
+// declaration is the whole truth rather than the common case.
+func init() {
+	for _, d := range doors {
+		openapi.Register(d.path, http.MethodPost, d.wire, CaptureResult{})
+	}
+	openapi.Register("/v1/analytics/health", http.MethodGet, nil, healthReport{})
+	// The Sentry error wire (registered in analytics.go's routes, on the same
+	// /v1/event door). Its body is an opaque envelope stream the o11y consumer reads
+	// itself, so openapi.Binary is the whole truth — no struct describes it, exactly
+	// as none describes an upload. Its RESPONSE is deliberately undeclared: the
+	// handler relays cloud.ObsErrorIngest verbatim, so this package does not know
+	// what comes back and publishing a shape would be inventing one.
+	for _, path := range []string{"/v1/event/:project/envelope", "/v1/event/:project/store"} {
+		openapi.Register(path, http.MethodPost, openapi.Binary{}, nil)
+	}
 }
 
 // ingest is the door's API-host handler: admission (handle) over the door's wire.
