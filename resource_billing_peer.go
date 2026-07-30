@@ -74,9 +74,16 @@ func (rm *ResourceMeter) gatePeer(ctx context.Context, org, project string, proj
 // logged for reconciliation rather than swallowed — an unbilled create is a number
 // somebody has to find later, so it says so now.
 func (rm *ResourceMeter) meterPeer(org, kind string, u metering.Usage) {
+	// The EXACT debit, never the cents field. plane.Money is a decimal string
+	// precisely so a debit crosses the process boundary unrounded, and the
+	// receiver honors that (meter_rpc.go parses the decimal and debits it
+	// verbatim) — but this sender flattened first, so a usage priced only as a
+	// typed Amount arrived as $0.00. Usage.Money resolves the three amount
+	// sources with their documented precedence; it is the same question
+	// MeterUsage already asks to decide there is anything to bill at all.
 	in := plane.RecordIn{
 		Subject: org,
-		Amount:  plane.Amount(money.FromUSD(u.AmountCents)),
+		Amount:  plane.Amount(u.Money().Unwrap()),
 		Usage: plane.Usage{
 			Project: u.Project,
 			Service: firstNonEmpty(u.Service, rm.provider),
@@ -91,7 +98,7 @@ func (rm *ResourceMeter) meterPeer(org, kind string, u metering.Usage) {
 		defer cancel()
 		if _, err := Ask[plane.RecordIn, plane.Recorded](ctx, peerCommerce, plane.FinanceRecord, &in); err != nil && log != nil {
 			log.Error("resource debit failed over the internal plane (resource created, not billed)",
-				"org", org, "kind", kind, "cents", u.AmountCents, "err", err)
+				"org", org, "kind", kind, "amount", u.Money().String(), "err", err)
 		}
 	}()
 }
