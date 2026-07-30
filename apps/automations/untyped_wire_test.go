@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -33,6 +34,36 @@ import (
 // (source,event). Acceptance alone passes under a non-struct In — every payload
 // 404s or matches nothing, uniformly, which a test comparing the answers to each
 // OTHER cannot see.
+
+// One retype the four pins below do NOT catch, which is why there is a fifth:
+// a STRUCT In whose UnmarshalJSON swallows the whole body.
+//
+//	type resumeIn struct {
+//		ID      string `json:"id"`
+//		payload json.RawMessage
+//	}
+//	func (r *resumeIn) UnmarshalJSON(b []byte) error { r.payload = b; return nil }
+//
+// That In accepts every JSON value (nothing can fail) AND is a struct, so bindURL
+// still binds :id from the path. The REST wire survives intact — measured: with
+// resume retyped this way the whole package suite, all four pins included, stays
+// GREEN. It is not a repair, though. It moves the break to the projections typing
+// exists to serve, where nothing in this package was watching:
+//
+//   - Over MCP a tools/call carries every argument in ONE JSON object and zip binds
+//     no path from it (mcp.go: `op.invoke(ctx, dec, params.Arguments, nil, nil)`),
+//     and the ZAP call plane does the same (call.go). The In IS the whole message
+//     there. So an In that discards its own JSON keys can never receive the address:
+//     measured, that tools/call answers "run not found" for a run that exists.
+//   - The published schema becomes a lie in the one direction nobody checks. The
+//     MCP inputSchema and the OpenAPI requestBody for that op read
+//     {"properties":{"id":{"type":"string"}}} — an object with an id — while the body
+//     this route actually takes is an arbitrary JSON value in which id never appears.
+//
+// So the rule the exclusions really rest on is sharper than "an In cannot bind both":
+// a typed op must be addressable through its In ALONE, because for two of its four
+// transports the In is the only channel there is. TestOpsAddressThroughArgumentsAlone
+// pins that, so this retype goes red where the REST pins cannot see it.
 
 // TestMCPAnswersUnparseableBody200 pins the JSON-RPC contract on POST
 // /v1/automations/mcp: a body that is not JSON is a PROTOCOL result, not a transport
@@ -264,5 +295,77 @@ func TestOperationsAnswersTwoBodyShapes(t *testing.T) {
 	}
 	if _, ok := flowBody["schemaVersion"]; ok {
 		t.Fatalf("the flow branch must not carry schemaVersion: %s", st.Body)
+	}
+}
+
+// TestOpsAddressThroughArgumentsAlone pins the rule the two URL-addressed exclusions
+// rest on: a typed op must be addressable through its In alone. Over MCP and over the
+// ZAP call plane there is no URL — the arguments object IS the whole input — so an op
+// whose address reaches it only from the path is addressable over REST and nowhere
+// else.
+//
+// It has two halves, and the first is what makes the second real:
+//
+//   - the CHANNEL, on an op that is typed today (GET /v1/automations/runs/:id): a
+//     tools/call carrying the run id in its arguments must return that run, and the
+//     same call without it must not. If zip ever stopped binding an op's address from
+//     the arguments object, this half goes red for all fourteen ops at once.
+//   - the EXCLUSIONS, dormant: resume and hooks register no op, so zip derives no tool
+//     for them and the loop below finds nothing — that absence IS the cost routes()
+//     names. The moment either becomes an op it appears here, and a body-swallowing In
+//     (see the file note) fails it while every REST pin above stays green.
+func TestOpsAddressThroughArgumentsAlone(t *testing.T) {
+	app := newAppMCP(t)
+
+	now := time.Now().UnixMilli()
+	run := FlowRun{
+		ID: "run_mcp", Org: "acme", FlowID: "flow_mcp", FlowVersionID: "ver_mcp",
+		WorkflowID: "wf_mcp", Status: RunSucceeded, StartTime: now, Created: now, Updated: now,
+	}
+	if _, err := mounted.State.store.CreateRunIfAbsent(context.Background(), run); err != nil {
+		t.Fatalf("seed run: %v", err)
+	}
+
+	text, isErr := toolsCall(t, app, "acme", "get_v1_automations_runs_id", `{"id":"run_mcp"}`)
+	if isErr {
+		t.Fatalf("a typed op must be addressable by its arguments alone: %s", text)
+	}
+	if !strings.Contains(text, `"id":"run_mcp"`) {
+		t.Fatalf("tools/call must answer the run its arguments named, got %s", text)
+	}
+	// Without the address the SAME tool cannot find it — so "found" below discriminates.
+	if _, isErr := toolsCall(t, app, "acme", "get_v1_automations_runs_id", `{}`); !isErr {
+		t.Fatal("a tools/call with no id must not resolve a run — the discriminator is dead")
+	}
+
+	for _, tool := range derivedTools(app) {
+		switch {
+		case strings.HasSuffix(tool, "_resume"):
+			// The run the arguments name has to reach the handler. A body-swallowing
+			// In discards it and every resume answers not-found.
+			text, isErr := toolsCall(t, app, "acme", tool, `{"id":"run_mcp","a":1}`)
+			if isErr && strings.Contains(text, "run not found") {
+				t.Fatalf("%s cannot address a run over MCP: its In does not receive id from the arguments object, "+
+					"so the REST wire survived and this projection did not (%s)", tool, text)
+			}
+		case strings.Contains(tool, "_hooks_"):
+			// The (source,event) the arguments name has to reach the subscription
+			// index, and the open payload has to reach the flow.
+			starts := captureStarter(t)
+			seedWebhookFlow(t, mounted.State.store, "acme", "github", "push")
+			text, isErr := toolsCall(t, app, "acme", tool, `{"source":"github","event":"push","msg":"a"}`)
+			if isErr {
+				t.Fatalf("%s cannot address a subscription over MCP: %s", tool, text)
+			}
+			if !strings.Contains(text, `"matched":1`) {
+				t.Fatalf("%s must match the subscribed flow over MCP, got %s", tool, text)
+			}
+			if len(*starts) != 1 {
+				t.Fatalf("%s must deliver over MCP: want 1 start, got %d", tool, len(*starts))
+			}
+			if got, _ := (*starts)[0].Trigger["msg"].(string); got != "a" {
+				t.Fatalf("%s must carry the payload verbatim over MCP, got %#v", tool, (*starts)[0].Trigger)
+			}
+		}
 	}
 }
