@@ -73,20 +73,32 @@ type ztEdgeRouter struct {
 // org's edge-routers. chain/rpc are honestly omitted (a ZT overlay is not a
 // blockchain with an RPC), so those columns render blank rather than fabricated.
 type networkView struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
+	// ID is the org-derived id of the overlay network — the key
+	// GET /v1/networks/{id} addresses.
+	ID string `json:"id"`
+	// Name is the org the overlay belongs to.
+	Name string `json:"name"`
+	// Status is "connected" once at least one of the org's edge-routers is
+	// online, else "provisioning" (routers exist but none has dialed home).
 	Status string `json:"status"`
-	Nodes  int    `json:"nodes"`
+	// Nodes is how many edge-routers the org has on the fabric.
+	Nodes int `json:"nodes"`
 }
 
 // meshView is the shape console ServiceMeshModule (MeshService) consumes — one row
 // per ZT edge service. mtls reflects the service's E2E encryption requirement;
 // requests is omitted (the management API carries no per-service metrics).
 type meshView struct {
-	ID      string `json:"id"`
+	// ID is the ZT edge service's id.
+	ID string `json:"id"`
+	// Service is the edge service's name.
 	Service string `json:"service"`
-	Mtls    string `json:"mtls"`
-	Status  string `json:"status"`
+	// Mtls is "required" when the service mandates end-to-end encryption, else
+	// "enabled" — the fabric mutually authenticates every link, so it is never
+	// truly off.
+	Mtls string `json:"mtls"`
+	// Status is "active": a listed service is a configured, dialable mesh entry.
+	Status string `json:"status"`
 }
 
 // edgeNodeView is the shape console EdgeModule (EdgeNode) consumes — one row per ZT
@@ -94,9 +106,15 @@ type meshView struct {
 // only from a "region-<slug>" role attribute (honest "—" otherwise); requests and
 // latency are omitted (no per-router telemetry in the management API).
 type edgeNodeView struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
+	// ID is the ZT edge-router's id.
+	ID string `json:"id"`
+	// Name is the edge-router's name, falling back to its id when it has none.
+	Name string `json:"name"`
+	// Region comes from a "region-<slug>" role attribute and is omitted when the
+	// router carries none, so the column renders "—" rather than a guess.
 	Region string `json:"region,omitempty"`
+	// Status is the controller's own health signal: "online" when connected,
+	// "disabled" when administratively disabled, "offline" otherwise.
 	Status string `json:"status"`
 }
 
