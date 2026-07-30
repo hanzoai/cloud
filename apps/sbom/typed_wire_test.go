@@ -19,7 +19,7 @@ import (
 // DOCUMENT writes it, which is the identity every projection keys on.
 var untypedByDesign = map[string]string{
 	// The greedy resolve wildcard — the apps/pricing refusal, one subsystem over,
-	// and re-measured against the PINNED zip (v1.18.11) rather than inherited.
+	// and re-measured against the PINNED zip (v1.18.12) rather than inherited.
 	//
 	// The BOUND name and the PUBLISHED name cannot agree. fiber names this capture
 	// `*1` (zip's bindURL matches c.Route().Params, so an input field would need
