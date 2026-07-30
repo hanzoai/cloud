@@ -129,12 +129,20 @@ func (s *Store) Put(ctx context.Context, f *Formation) error {
 // last. openapi.Weave refuses that composition, and it refused this one the
 // moment the register became a typed op.
 type Registration struct {
-	Org       string    `json:"org"`
-	Stage     Stage     `json:"stage"`
+	// Org is the org whose formation this row projects.
+	Org string `json:"org"`
+	// Stage is the formation's current state — what the platform reads to see which
+	// formations are stalled and where.
+	Stage Stage `json:"stage"`
+	// Structure is the legal entity being formed: c-corp, llc or dao-llc.
 	Structure Structure `json:"structure"`
-	Name      string    `json:"name"`
-	CreatedAt int64     `json:"createdAt"`
-	UpdatedAt int64     `json:"updatedAt"`
+	// Name is the company name the entity is being formed under.
+	Name string `json:"name"`
+	// CreatedAt is the unix second the formation was opened.
+	CreatedAt int64 `json:"createdAt"`
+	// UpdatedAt is the unix second of the most recent write to the formation, and
+	// the key the register sorts on (newest activity first).
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 // Filter narrows the register. A zero Filter lists every formation.
