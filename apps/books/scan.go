@@ -32,6 +32,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -64,9 +65,27 @@ func scannerRoutes(app cloud.Router, s *cloud.Service[*state]) {
 	// UNTYPED, for a stated reason. scan and the inbox upload take RAW document bytes
 	// (a PDF, an image, plain text) as their body: zip's typed decoder unmarshals the
 	// body as JSON, so a PDF upload would answer 400 instead of scanning — there is no
-	// JSON In that names a file.
+	// JSON In that names a file. They still DECLARE what they take and answer, in the
+	// init below.
 	app.Post("/v1/books/scan", cloud.Handle(s, scanHandler))
 	app.Post("/v1/books/inbox", cloud.Handle(s, inboxUploadHandler))
+}
+
+// "Cannot be a typed op" is not "must be undocumented". Both routes above published
+// nothing at all — no request, no response — which a consumer of the document cannot
+// distinguish from a route that takes no body and returns none. openapi.Register is
+// the seam for exactly that: the request is [openapi.Binary] (a receipt, byte for
+// byte, under the caller's own content type — see scanText, which accepts a PDF or
+// plain UTF-8), and the response is the very value each handler marshals on success:
+// ScanDraft for the scan, InboxItem for the upload. Pure DESCRIPTION — no route,
+// status, field or byte moves. What they still lack, and only a typed op can give
+// them, is prose, an MCP tool and a CLI command.
+//
+// init, not scannerRoutes: Register panics on a duplicate declaration, and
+// scannerRoutes runs once per Mount.
+func init() {
+	openapi.Register("/v1/books/scan", "POST", openapi.Binary{}, ScanDraft{})
+	openapi.Register("/v1/books/inbox", "POST", openapi.Binary{}, InboxItem{})
 }
 
 // LineItem is one line of a scanned document — a description and its amount in exact cents.
