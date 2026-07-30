@@ -88,7 +88,7 @@ func ensureReserveWallet(s *cloud.Service[state], ctx context.Context, org, chai
 		}
 	}
 	if acctID == "" {
-		a := &Account{ID: newID("acct"), Org: org, Name: reserveAccountName, CreatedAt: time.Now().Unix()}
+		a := &WalletAccount{ID: newID("acct"), Org: org, Name: reserveAccountName, CreatedAt: time.Now().Unix()}
 		if err := s.State.store.createAccount(ctx, a); err != nil {
 			return nil, err
 		}

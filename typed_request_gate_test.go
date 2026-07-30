@@ -58,6 +58,33 @@ var allowedRequestUses = map[string]string{
 		"through it alone would turn that live admin bucket into a 403. ONE function, which all 21 typed ops " +
 		"ask, delegating to the same tenant() the untyped create beside them uses; fails closed off the HTTP " +
 		"path, where there is no principal and therefore no tenant to key on.",
+	"apps/channels/routes.go": "requireOrgAdmin — the mutation gate on the chat plane. Approving a " +
+		"pairing and editing a channel allowlist decide WHO may talk to the org's bots, so both take " +
+		"admin of the org: X-User-IsAdmin / X-User-IsOrgAdmin, two claims principal.OrgFrom does not " +
+		"carry and that must never become In fields a caller could assert for itself. ONE function, " +
+		"which both write ops ask; the TENANT is resolved with principal.OrgFrom (tenant, right beside " +
+		"it), never through the request. Fails closed off the HTTP path: no request, no attested admin, " +
+		"no mutation.",
+	"apps/wallets/wallets.go": "actor / ambientProject — TWO facts a wallet write needs beyond the org, " +
+		"neither of which principal.OrgFrom carries and neither of which may be an In field. actor is the " +
+		"validated user id (X-User-Id) the tamper-evident audit trail ATTRIBUTES a key creation, rotation, " +
+		"signature or Safe proposal to. ambientProject is the caller's server-minted project scope " +
+		"(X-Project-Id, which the gateway and cloud.SanitizeIdentity bind from a validated claim after " +
+		"stripping any client copy) — it becomes a SEGMENT OF THE KMS KEY REF, so a caller-supplied one " +
+		"would address key material under a scope no minter ever validated. TWO functions in ONE file, so " +
+		"eight typed ops share one seam; the TENANT is resolved with principal.OrgFrom (tenant, right " +
+		"beside them), never through the request. Both fail closed off the HTTP path: no request means an " +
+		"unattributed audit record (emitAudit falls back to the subsystem name, as it always did) and the " +
+		"org's default project scope.",
+	"apps/code/code.go": "meter — the PAYER and the PROJECT a code retrieval is charged and scoped " +
+		"against. The payer is principal.Ledger, the SELECTED billing org, which a SuperAdmin masquerade " +
+		"deliberately moves OFF the effective org, so it is not what principal.OrgFrom carries. The " +
+		"project is X-Project-Id, minted SERVER-SIDE from a validated claim after any client copy is " +
+		"stripped; a caller-supplied one would bill and scope an embedding call under a project no " +
+		"minter ever validated, so neither may be an In field. ONE function, which all seven typed ops " +
+		"ask; the TENANT is resolved with principal.OrgFrom (tenant, right beside it), never through the " +
+		"request. Fails closed off the HTTP path: no request means the unbilled, default-project answer, " +
+		"and tenant() has already refused before any op reaches it.",
 	"apps/search/search.go": "Query resolves the tenant from the validated principal at the top of the op.",
 	"apps/tracker/typed.go": "scope / requireBody. scope needs the IAM PROJECT (X-Project-Id), which " +
 		"picks the physical per-(org,project) store a tracker read opens — principal.OrgFrom carries the org " +

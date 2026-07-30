@@ -1492,6 +1492,77 @@ deliberately imports neither cloud nor ai); and that same route relays an upstre
 class and stays untyped even after the bridge lands.
 
 **The earlier six-plugin pass (ai, destinations, dns, licensing, runtime, templates):
+
+**The six-plugin pass (wallets, webhooks, account-bridge, ads, channels, code):
+35 typed, 9 refused, and 7 of the 9 were already a recorded refusal.** The work
+list came from the published subsets — every operation carrying neither
+`description` nor `summary`, which is exactly the set that projects to NOTHING —
+and it was 44 operations across six plugins, every one of them 100% undescribed.
+Per plugin: wallets 8/8, webhooks 8/8, code 7/7, ads 6 of 7, channels 6 of 7,
+account-bridge 0 of 7. Each of the five converted packages now carries
+`untypedByDesign` + `TestEveryRouteIsTypedOrNamed` + `TestEveryTypedOpIsDescribed`
+reading the LIVE router, whose two ledgers must SUM to the served surface.
+
+- **`account-bridge` is apps/account's already-closed refusal, seen from the
+  plugin side.** Its 7 operations are TWO registrations — `GET|POST /v1/billing/*`
+  and the five-method `/v1/commerce/*` — verbatim per-tenant forwards on a greedy
+  wildcard (`*1` to fiber, `{wildcard1}` to the document, so a bound In field and
+  the published parameter cannot agree), already held as a CLOSED list by
+  `apps/account/typed_wire_test.go`. Nothing to convert; the count is not a gap.
+- **Three refusal classes, each measured rather than asserted.**
+  `POST /v1/ads/campaigns/{id}/launch` is deliberately BODY-TOLERANT
+  (`_ = c.Bind(&body)`, apps/ads/ads.go), so a malformed body launches on the
+  stored account at 200 where `op.invoke`'s unconditional decode would 400 —
+  `TestLaunchStillIgnoresAMalformedBody` pins it.
+  `POST /v1/channels/{channel}/send` carries a PACKAGE-LOCAL 1 MiB body cap that a
+  typed op never sees (cloud's global zip BodyLimit is far larger) *and*
+  `DisallowUnknownFields`, which refuses a spoofed identity field LOUDLY where
+  jsonenc.Unmarshal would drop it silently — `TestSendKeepsItsCapAndItsStrictness`
+  pins both.
+- **A route whose body OVERRIDES its query is typable — with one field per
+  source.** `POST /v1/code/ask` has always read `?q=` first and let a non-empty
+  body `query` win, which is the OPPOSITE of zip's body→query→path order. Spelling
+  the two halves separately (`Q string json:"-" url:"q"` beside
+  `Query string json:"query" url:"-"`) reproduces the original precedence instead
+  of inverting it; `TestAskKeepsBodyOverQueryPrecedence` asserts all four
+  combinations. Generalise it: `url:"-"` and `json:"-"` are not only opt-outs,
+  they are how a route with TWO sources for one value stays declarable.
+- **A query filter that 400s on a bad value must stay a STRING.** zip's
+  `setScalar` silently leaves an unparseable int at the field's zero, so
+  `GET /v1/channels/inbox?since=abc` would turn today's 400 into a read from the
+  beginning. Where the handler DEFAULTS on a parse failure instead
+  (`?limit=` on ads, webhooks and code search) an int field is wire-identical,
+  because 0 is exactly the "absent or unusable" case those branches already
+  answered — so this is per-route, not per-package.
+- **Latent defects found by typing, all fixed here.** (1) FIVE packages had no
+  `//go:generate zipdoc` directive at all, which is why 44 operations published
+  nothing: the prose had nowhere to be lifted to. (2) `GET|POST /v1/webhooks/`
+  published a TRAILING SLASH — failure mode #9, the group's empty leaf — for a
+  collection every caller addresses without one; declaring the root on the app
+  with its absolute path fixes the artifact and not the wire, and
+  `TestTheCollectionRootHasNoTrailingSlash` proves BOTH spellings still reach the
+  handler. (3) `apps/code`'s own test harness RECONSTRUCTED its seven routes by
+  hand instead of calling the registration the binary calls, so nothing it
+  asserted was evidence about the served surface; `routes()` is now a function and
+  `newTestApp` calls it. (4) None of the five packages installed a `cloud.Bridge`
+  of its own — each relied on Serve's app-wide install, which no package's own
+  test harness runs, so the org path was untested everywhere. (5) Two one-name/
+  two-shape collisions were about to enter the flat schema namespace, which
+  `openapi.Weave` refuses: wallets' `Account` against books', and ads' `Campaign`
+  against marketing's. Both unpublished names yielded — `WalletAccount`,
+  `AdCampaign` — Go-level renames with no wire movement. A THIRD appeared at the
+  REBASE, which is the lesson: apps/content landed a `channelList` for its SOCIAL
+  channels while this pass was in flight, so a name that was free when it was
+  chosen was taken by the time it merged. The weave caught it, channels yielded
+  (`chatChannels`), and the wire key stayed `channels`. Check before you name AND
+  re-check after you rebase — the namespace is fleet-wide and it moves.
+- **One delta taken and recorded rather than glossed.** webhooks' `tenant` gate
+  answered 401 with two different MESSAGES ("authentication required" vs "org
+  scope required"); `principal.OrgFrom` folds both halves into one answer, so the
+  typed ops answer one 401 naming both. Status, body shape and ordering are
+  unchanged; `TestFailsClosedWithoutAValidatedPrincipal` drives both branches.
+
+**The six-plugin pass (ai, destinations, dns, licensing, runtime, templates):
 9 typed, 29 refused, and the 29 are 4 registrations.** The work list came from the
 published subsets — every operation carrying neither `description` nor `summary`,
 which is exactly the set that projects to NOTHING: no prose, no MCP tool, no CLI
