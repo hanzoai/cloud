@@ -78,7 +78,7 @@ and reports this 5-route plane as 29. Two products, one string prefix.
 | `/v1/cloud` | Cloud accounts: link DO/AWS/GCP/Azure, discover native k8s clusters, fold into the fleet | `apps/venue` | Shipped — 5 ops |
 | `/v1/blueprint` | Cost: OSS-template SBOM (compose→images) + compute-cost estimate | `apps/blueprint` | Shipped — 3 ops |
 | `/v1/templates` | Starter kits: ONE entry per template, shapes as variants | `apps/templates` | Shipped — 2 ops |
-| `/v1/iam` | Identity: users, orgs, roles | `apps/iam` | Shipped — opaque (catch-all, see below) |
+| `/v1/iam` | Identity: users, orgs, roles | `apps/iam` | Shipped — opaque (5 wildcards relaying a nested app of 94 ops; see below) |
 | `/v1/kms` | Secret custody: sealed secrets | `apps/kms` | Shipped — 7 ops |
 
 `/v1/bots` and `/v1/compute/bots` are two nouns with two owners; the row above
@@ -736,6 +736,18 @@ document pipeline" below.)
   and cannot appear. Measured on the live table: 3 products are wholly opaque
   (`bot`, `licensing`, `sentry` — the catch-all IS the product) and 12 more mix
   concrete ops with a catch-all hiding an unknown remainder.
+  **`iam` is a FOURTH wholly-opaque product, and it is the extreme case** — see
+  "apps/iam (0 of 25, and why)" below. Its subset publishes 30 operations, every
+  one of them a method on one of five `app.All` wildcards relaying
+  `iamserver.Handler(db)`: github.com/hanzoai/iam's ENTIRE standalone zip app —
+  94 typed ops of its own — adapted to net/http and hung on a wildcard. The
+  opaque class therefore has two shapes, and the difference decides what a fix
+  even looks like: `bot`/`licensing`/`sentry` proxy to ANOTHER PROCESS, where the
+  route table is genuinely not in this binary; `iam` proxies to a nested app IN
+  this process, whose 94 ops each already carry a `WithSummary` and are already
+  projected — at that nested app's own `/.well-known/openapi.json` and `/mcp`,
+  which cloud's document does not read. So iam's 25 undescribed operations are
+  not an absence of knowledge, they are an absence of COMPOSITION.
 
 ## The document pipeline: ONE registry, N projections
 
@@ -1173,6 +1185,7 @@ gates the whole surface as an EXACT set — live router == `app.Commands()` == t
 | D | ~~pricing 18~~ (done: 30 typed, 2 refused — both admin overlay PATCHes: one addresses a slashed model id through a greedy wildcard fiber calls `*1` and the document calls `{wildcard1}`, so the bound field and the published parameter cannot agree; the other carries an RFC 7386 merge patch stored and echoed VERBATIM, which `json.RawMessage` publishes as an array of integers and `map[string]any` reorders. The 15 "verbatim byte proxy" refusals came OFF the list: apps/goja already re-marshals the bundle's answer through Go's encoding/json, so a typed op re-marshalling the same value is byte-identical — apps/pricing/sections_wire_test.go proves it route by route), ~~ml 18~~ (done, and the 18 was 17: **10 typed, 7 refused**, every refusal wire-bound and GATED rather than asserted — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` in apps/ml/typed_wire_test.go, whose two ledgers must SUM to the served surface. The seven: the three creates (`POST /v1/ml/models`, `/v1/train/jobs`, `/v1/train/experiments`) answer 402/503 IN BAND through `cloud.DenyResource` with the fleet's nested `{"error":{"code","message"}}` contract, and a typed op can only refuse by RETURNING an error, which zip renders as the flat `{"status","code","error"}` HTTPError — a NEW refusal class, distinct from multi-status #78: a non-2xx with a DOMAIN body. Moving the gate to middleware does not rescue them either, because it would run before the body decode and turn today's 400-on-a-bad-name into a 402. `PATCH /v1/ml/models/{name}` relays an opaque RFC 7386 merge patch VERBATIM to the Kubernetes API (`map[string]any` turns `{"replicas":1000000}` into `1e+06` and patches a float over an int). `POST …/predict` returns the predictor's own status, bytes and Content-Type. The two `/health` probes answer 503 carrying the degraded REPORT as their body. One `view()` now returns the published `mlResource` for BOTH the typed reads and the untyped create/patch, so the shape cannot depend on which route served it; `TestView` asserts the marshalled BYTES, which is what proves the map→struct swap did not move the wire, and mlResource's field order is ALPHABETICAL for exactly that reason), ~~automations 18~~ (done: 14 typed, 4 refused), index 17, dataroom 17, ~~compliance 17~~ (done: 16 typed, 1 refused — the HMAC webhook: the signature is computed over the RAW body bytes and verified before any parse, and an unknown reference answers a second 200 shape; the refusal is now GATED, not prose — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` in typed_wire_test.go), affiliates 17 | 104 |
 | E | eval 16, social 13, esign 13, link 12, functions 12, commerce 12, billing 12 | 90 |
 | F | the ~70 remaining packages, 1–11 routes each | ~358 |
+| — | ~~iam 25~~ (done: **0 typed, 25 refused** — the whole product is five `app.All` wildcards relaying a nested app; see "apps/iam (0 of 25, and why)" above. The refusal is gated, and the pass fixed a live fail-closed hole) | 0 |
 
 Re-measure rather than trusting the table — with the ONE command below, because
 the two this file used to carry were each half-right and disagreed by 83 routes:
@@ -1628,6 +1641,79 @@ with no filename, against a commerce that sets `application/pdf` + `attachment`
 commerceDo returning response headers, three call sites including the top-up
 money path, keeping `Cache-Control: no-store` (a tenancy property, not a content
 one) — and recorded at the lines that cause it.
+
+`apps/iam` (0 of 25, and why) is the FLOOR of the migration — the one partition
+where the honest answer is that none of it converts, and the reason is worth more
+than the count. Its published subset is 30 operations and ZERO described. All 30
+are methods on five `app.All` wildcards in `safeMount` (apps/iam/iam.go): `/v1/iam`,
+`/v1/iam/*`, `/login/oauth`, `/login/oauth/*` and the root `/.well-known/*`, each
+handed `zip.AdaptNetHTTP(iamserver.Handler(db))` — and that handler is
+`server.NewApp(db)`, github.com/hanzoai/iam's WHOLE standalone zip app (94 typed
+ops: OIDC discovery/JWKS, the oauth protocol endpoints, credential login, the v2
+entity CRUD, SCIM, the Casdoor verb-alias compat layer) adapted to net/http. Three
+independent facts each forbid a typed op, and they are pinned by
+`TestTheRelayIsWhyNothingIsTyped` rather than asserted:
+
+1. **One registration serves an OPEN set of sub-paths.** A typed op has one path.
+   Enumerating the leaves would mean cloud restating another module's route table,
+   and any leaf missed 404s a path IAM serves today.
+2. **The bytes, the status and the Content-Type are the nested app's own** —
+   including its Guard answering `{"status":401,"error":"authentication required"}`,
+   which is not cloud's error shape, and `/login/oauth`'s 302 + `Location` with no
+   body. A typed op answers one declared status with one marshalled `Out`.
+3. **The oauth token/introspect/revoke endpoints take
+   `application/x-www-form-urlencoded`** by RFC 6749/7662/7009, and zip's
+   `op.invoke` decodes every non-empty typed body with `jsonenc.Unmarshal` — so
+   declaring any `In` turns a working token exchange into a 400. Same wall as
+   apps/books' uploads, one content type over.
+
+**The fix is COMPOSITION, not typing.** Unlike `bot`/`licensing`/`sentry`, whose
+route tables are in another process, iam's 94 ops are in THIS process, each already
+carrying a `WithSummary`, already projected by zip at the nested app's own
+`/.well-known/openapi.json` and `/mcp` (94 ops, logged at mount). Cloud's
+`openapi.Spec` = `From` ∘ `Live` reads cloud's fiber table, which holds the wildcard
+and not what is behind it, so those 94 reach neither `openapi.yaml` nor any SDK nor
+the MCP tool list. Closing it means teaching the projection to MERGE a nested app's
+own document at the prefix it is mounted on — a second document source, so it is a
+deliberate seam decision and not a side effect of a typing pass. Two things to
+verify first, both measured: `hanzoai/iam v1.33.26` ships NO `zipdoc_gen.go` and no
+`zip.Describe` call anywhere (`grep -rl zip.Describe` over the module: empty), so
+those 94 ops have summaries and no descriptions and no field prose — composing
+today buys shapes and one-liners, not the full product surface; and the merge has to
+respect that cloud's own static `/.well-known/openapi.json` and agentskills'
+`/.well-known/agent-skills/*` sit UNDER iam's root wildcard and win only because
+zip's matcher takes the most specific pattern regardless of registration order
+(zip specificity_test.go — checked, not assumed).
+
+The refusal is a GATE: `apps/iam/typed_wire_test.go` holds `untypedByDesign` keyed
+by PATH rather than `METHOD /path` (one `app.All` refuses for every method at once;
+keying by method would state one fact six times and let five copies rot) and
+`TestEveryRouteIsTypedOrNamed` expands it over the methods the document publishes
+and checks the SUM — 0 typed + 30 named = 30 — so a sixth wildcard, a narrowed
+wildcard, or a route added here as a raw handler all go red.
+
+**The defect typing surfaced.** `mountFailClosed` iterated `Prefixes` alone while
+`safeMount` also registered the root `/.well-known/*`, so the degraded surface was
+strictly SMALLER than the mounted one. The terminal handler in every plugin binary
+is `webui.Mount`'s `/*` console catch-all, and `/.well-known/…` is not in the
+console's `apiPrefixes`, so with IAM broken `GET /.well-known/openid-configuration`
+— the FIRST call every relying party makes — answered **200 with the SPA's HTML**
+instead of the honest 503, and an OIDC client parsed a web page as its discovery
+document. Both halves now derive from one `patterns()` list, and
+`TestFailClosedCoversEveryMountedAddress` checks the derivation as well as the
+statuses. (The bare prefixes were never the hole they looked like: fiber's greedy
+`/*` matches the empty remainder, so `/v1/iam/*` already answered `/v1/iam` — 
+verified by probe before changing anything. safeMount still registers the bare form
+because the DOCUMENT derives its paths from the route table, so without it the
+resource's own address appears nowhere in the subset.)
+
+Still open and NOT fixed here, because it is a routing decision at the composition
+root rather than a description one: `manifest/router_test.go`'s `unreachable`
+ledger already records `iam /.well-known/{wildcard1} -> nothing` — iam's row in
+`manifest.Apps` names `/login/oauth` and `/v1/iam` only, so under the light host
+OIDC discovery never reaches the iam plugin at all and falls to the console.
+Fixing it is one line in `Apps` and one deletion from the ledger; it wants the
+router-oracle run and an owner who is changing routing on purpose.
 
 **What compensates today, and how it dies.** hanzoai/openapi carries an AUTHORED
 master, `hanzo.yaml`, which is the only source of request-body and query-parameter
