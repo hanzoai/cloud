@@ -18166,30 +18166,6 @@ paths:
       operationId: post_v1_agent
       tags:
       - agent
-  /v1/agent-bindings:
-    get:
-      description: |-
-        listAgentBindings returns every agent↔machine binding in the caller's org — which
-        machines are running which cloud Agent, with vm's own reconciled status.
-      operationId: listAgentBindings
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                agentBindings:
-                - agentName: bot-a
-                  machineId: drop-a
-                  publicIp: 1.2.3.4
-                  status: running
-              schema:
-                $ref: '#/components/schemas/bindingList'
-          description: ok
-      summary: listAgentBindings returns every agent↔machine binding in the caller's
-        org — which machines are running which cloud Agent, with vm's own reconciled
-        status.
-      tags:
-      - agent-bindings
   /v1/agent/conversations:
     get:
       operationId: get_v1_agent_conversations
@@ -32041,10 +32017,10 @@ paths:
         name.
       tags:
       - machines
-  /v1/machines/{id}/agent-binding:
+  /v1/machines/{id}/agent:
     delete:
       description: |-
-        unbindMachineAgent detaches the agent runtime from one of the caller org's
+        unbindAgent detaches the agent runtime from one of the caller org's
         machines. The machine stays — this halts the bot, it does not terminate the
         compute. Answers 204.
       operationId: unbindMachineAgent
@@ -32060,15 +32036,15 @@ paths:
       responses:
         "204":
           description: no content
-      summary: unbindMachineAgent detaches the agent runtime from one of the caller
-        org's machines.
+      summary: unbindAgent detaches the agent runtime from one of the caller org's
+        machines.
       tags:
       - machines
     get:
       description: |-
-        getMachineAgentBinding returns the agent binding of one of the caller org's
+        getAgent returns the agent binding of one of the caller org's
         machines, or 404 when the machine runs no bot runtime.
-      operationId: getMachineAgentBinding
+      operationId: getMachineAgent
       parameters:
       - description: |-
           ID is the machine's org-scoped NAME — the stable key Visor addresses a
@@ -32090,14 +32066,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/agentBinding'
           description: ok
-      summary: getMachineAgentBinding returns the agent binding of one of the caller
-        org's machines, or 404 when the machine runs no bot runtime.
+      summary: getAgent returns the agent binding of one of the caller org's machines,
+        or 404 when the machine runs no bot runtime.
       tags:
       - machines
-  /v1/machines/{id}/bind-agent:
-    post:
+    put:
       description: |-
-        bindMachineAgent binds a cloud Agent to one of the caller org's machines: the
+        bindAgent binds a cloud Agent to one of the caller org's machines: the
         machine is recorded as running that Agent's @hanzo/bot runtime. The owning org is
         the validated tenant, never a client field.
       operationId: bindMachineAgent
@@ -32128,8 +32103,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/agentBinding'
           description: ok
-      summary: 'bindMachineAgent binds a cloud Agent to one of the caller org''s machines:
+      summary: 'bindAgent binds a cloud Agent to one of the caller org''s machines:
         the machine is recorded as running that Agent''s @hanzo/bot runtime.'
+      tags:
+      - machines
+  /v1/machines/agents:
+    get:
+      description: |-
+        listAgents returns every agent↔machine binding in the caller's org — which
+        machines are running which cloud Agent, with vm's own reconciled status.
+      operationId: listMachineAgents
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                agentBindings:
+                - agentName: bot-a
+                  machineId: drop-a
+                  publicIp: 1.2.3.4
+                  status: running
+              schema:
+                $ref: '#/components/schemas/bindingList'
+          description: ok
+      summary: listAgents returns every agent↔machine binding in the caller's org
+        — which machines are running which cloud Agent, with vm's own reconciled status.
       tags:
       - machines
   /v1/marketing/audiences:
@@ -39413,7 +39411,6 @@ tags:
 - name: ads
 - name: affiliates
 - name: agent
-- name: agent-bindings
 - name: agents
 - name: analytics
 - name: ask
