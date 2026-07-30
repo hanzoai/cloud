@@ -2,6 +2,7 @@ package pricing
 
 import (
 	"context"
+	"encoding/json"
 	"sort"
 	"strings"
 	"testing"
@@ -27,12 +28,12 @@ import (
 // command and the SDK method all come from — so an operation missing from that
 // registry is invisible to all four. These 2 are missing on purpose. Addresses
 // are written the way the DOCUMENT writes them, which is the identity every
-// projection keys on. Each reason was re-verified against zip v1.18.6's own
-// source (typed.go: invoke unmarshals before the handler and binds the URL by
-// fiber's own parameter name; openapi.go: schemaOf reflects []byte as an integer
-// array) and against openapi.translate here, because "cannot be typed" is a
-// claim about a dependency and a dependency moves — re-check on the next zip
-// bump and convert.
+// projection keys on. "Cannot be typed" is a claim about a DEPENDENCY, and a
+// dependency moves, so neither reason is asserted from prose: the two tests at
+// the bottom of this file register the shape at issue on a throwaway app and
+// check that zip and openapi.translate still behave as the reason says. A blocker
+// fixed upstream turns this suite RED and names the route that just became
+// convertible, instead of leaving a stale reason standing.
 //
 // It was 17. The fifteen fixed sections came off it once the premise was
 // re-checked: they were held to be verbatim byte proxies of the @hanzo/pricing
@@ -42,17 +43,23 @@ import (
 // sections_wire_test.go proves route by route against the live router.
 var untypedByDesign = map[string]string{
 	"PATCH /v1/admin/catalog/models/{wildcard1}": "the model id may contain '/' " +
-		"(anthropic/claude-opus-4.6), so it routes through a greedy wildcard fiber names `*1`; " +
-		"binding it needs an In field tagged json:\"*1\", which every projection would then " +
-		"publish — and the document names that same segment {wildcard1}, because `*1` is not a " +
-		"legal URI-template name, so the published parameter and the bound field cannot even " +
-		"agree. A schema nobody can read is worse than none. Its body also carries " +
-		"`overrides` (see providers/{name}).",
+		"(anthropic/claude-opus-4.6), so it routes through a greedy wildcard, and TWO facts follow. " +
+		"First, typing it does not merely publish a bad parameter — it REFUSES THE WHOLE DOCUMENT: " +
+		"zip keys a typed op by the fiber pattern (\".../models/*\") while this document keys the " +
+		"route by its URI template (\".../models/{wildcard1}\", openapi.translate), so Fold cannot " +
+		"find the op's route and errors, and Spec builds ONE document, so every other pricing " +
+		"operation goes down with it. Second, past that, fiber binds the segment under the name " +
+		"`*1`, so the In needs a field tagged json:\"*1\" — which every projection would publish, " +
+		"and which the document's own {wildcard1} could not agree with. A schema nobody can read " +
+		"is worse than none; a document that will not build is worse than both. Its body also " +
+		"carries `overrides` (see providers/{name}).",
 	"PATCH /v1/admin/catalog/providers/{name}": "the body carries `overrides`, a raw JSON " +
 		"merge patch (RFC 7386) stored and echoed verbatim: zip reflects json.RawMessage — it " +
 		"is []byte — as an ARRAY OF INTEGERS, a false schema; and retyping the field " +
-		"map[string]any re-marshals the patch, sorting its keys, so the overlay this route " +
-		"echoes and GET /v1/admin/catalog echoes later comes back reordered. A wire change.",
+		"map[string]any (or any) re-marshals the patch, sorting its keys, so the overlay this " +
+		"route echoes and GET /v1/admin/catalog echoes later comes back reordered. A wire change. " +
+		"Verbatim echo pins the type and the type publishes a lie: the escape is a zip that can " +
+		"describe an arbitrary JSON value, which schemaOf has no arm for.",
 }
 
 // pricingOps reads BOTH projections of the live router at their one shared
@@ -149,5 +156,77 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 		if strings.TrimSpace(desc) == "" {
 			t.Errorf("%s has no description — run: go generate -run zipdoc ./apps/pricing/...", key)
 		}
+	}
+}
+
+// ---- the two reasons, made executable ----
+//
+// Each reason above is a claim about a DEPENDENCY, and a dependency moves. These
+// two tests re-check the claims on every run instead of on somebody remembering
+// to, so a blocker that gets fixed upstream turns this suite RED and names the
+// route that just became convertible.
+//
+// Both probe a THROWAWAY app carrying the SHAPE at issue, never pricing's own
+// router: the claim is about what the toolchain does with a shape, and asserting
+// it on the live surface would mean registering the very op the reason says
+// cannot be registered.
+
+// probeIn/probeOut are the minimal typed op. The wildcard refusal is about the
+// PATH, so that probe's payload is deliberately empty; the merge-patch probe
+// carries `overrides` exactly as admin.go's patchBody declares it.
+type (
+	probeIn  struct{}
+	probeOut struct {
+		OK bool `json:"ok"`
+	}
+	probePatch struct {
+		Overrides *json.RawMessage `json:"overrides,omitempty"`
+	}
+)
+
+// TestTypingTheWildcardRefusesTheWholeDocument proves the FIRST half of the
+// models/{wildcard1} reason, and proves it is stronger than an unreadable
+// parameter name: zip keys a typed op by the fiber pattern while this package's
+// document keys the route by its URI template, so Fold cannot find the op's route
+// and refuses — and Spec builds one document, so the refusal takes every other
+// pricing operation with it.
+func TestTypingTheWildcardRefusesTheWholeDocument(t *testing.T) {
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	zip.Patch(app, "/v1/admin/catalog/models/*", func(context.Context, *probeIn) (*probeOut, error) {
+		return &probeOut{OK: true}, nil
+	})
+	_, err := openapi.Spec(app, openapi.Info{Title: "probe", Version: "v1"})
+	if err == nil {
+		t.Fatal("openapi.Spec now accepts a typed op on a greedy wildcard — the " +
+			"models/{wildcard1} reason is stale on its first half. Re-check the second " +
+			"(fiber binds the segment as `*1`, which no document can publish) and convert " +
+			"the route if that is gone too.")
+	}
+	if !strings.Contains(err.Error(), "has no live route") {
+		t.Fatalf("the wildcard refusal moved: %v — the reason names the mechanism, re-read it", err)
+	}
+}
+
+// TestMergePatchPublishesAnIntegerArray proves the providers/{name} reason: the
+// `overrides` merge patch is echoed VERBATIM, which pins its Go type to
+// json.RawMessage, and zip reflects that as the []byte it is — so typing the route
+// as it stands would ship an array-of-integers schema to every SDK and MCP client.
+func TestMergePatchPublishesAnIntegerArray(t *testing.T) {
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	zip.Patch(app, "/v1/admin/catalog/providers/:name", func(context.Context, *probePatch) (*probeOut, error) {
+		return &probeOut{OK: true}, nil
+	})
+	doc, err := openapi.Spec(app, openapi.Info{Title: "probe", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	got, err := json.Marshal(doc.Components.Schemas["probePatch"])
+	if err != nil {
+		t.Fatalf("marshal schema: %v", err)
+	}
+	const lie = `{"properties":{"overrides":{"items":{"type":"integer"},"type":"array"}},"type":"object"}`
+	if string(got) != lie {
+		t.Fatalf("the json.RawMessage schema moved:\n got %s\nwant %s\nIf zip now describes a raw "+
+			"JSON value as one, the providers/{name} reason is stale — type the route.", got, lie)
 	}
 }
