@@ -59,7 +59,7 @@ func TestSQLStore_TxRollback(t *testing.T) {
 	sentinel := errors.New("boom")
 	err := s.Tx(ctx, func(tx ledger.Tx) error {
 		if ierr := tx.Insert(
-			ledger.Entry{ID: "e_x", Kind: "seed", Ref: "x", Amount: money.FromCents(100), CreatedAt: 1},
+			ledger.JournalEntry{ID: "e_x", Kind: "seed", Ref: "x", Amount: money.FromCents(100), CreatedAt: 1},
 			[]ledger.Posting{{Account: ledger.AccountReserve, Amount: money.FromCents(100)}, {Account: ledger.AccountRevenue, Amount: money.FromCents(-100)}},
 		); ierr != nil {
 			return ierr

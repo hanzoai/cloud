@@ -19,15 +19,87 @@
     "/v1/research/artifacts": {
       "get": {
         "operationId": "get_v1_research_artifacts",
+        "summary": "ListResearchArtifacts returns the caller org's research-diary feed newest-first — the snapshots and reports tied to its runs, as metadata and content addresses; the bytes themselves are fetched by hash.",
+        "description": "ListResearchArtifacts returns the caller org's research-diary feed newest-first —\nthe snapshots and reports tied to its runs, as metadata and content addresses;\nthe bytes themselves are fetched by hash. ?run= narrows to one run, ?project=\nto one project (default the caller's project scope), and ?since= to a unix second.",
         "tags": [
           "research"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project narrows to one project. Empty takes the caller's project scope.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "run",
+            "in": "query",
+            "required": false,
+            "description": "Run narrows to one run's artifacts by its stable id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "description": "Since bounds the feed to artifacts recorded at or after this unix second.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/artifactsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_research_artifacts",
+        "summary": "RecordResearchArtifact records one research-diary artifact — a board snapshot or a generated report — CONTENT-ADDRESSED inside the trust boundary.",
+        "description": "RecordResearchArtifact records one research-diary artifact — a board snapshot or a\ngenerated report — CONTENT-ADDRESSED inside the trust boundary. The caller submits\nthe bytes as base64 `content`; the SERVER hashes them and THAT hash is the identity\nand the ref, so the address can never be poisoned by a client-asserted one. A\nclient-supplied sha256, if present, must match the bytes. The project is the\nSERVER's value and visibility is forced private. Re-posting the same bytes is a\nno-op that reports created=false.",
         "tags": [
           "research"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "content": "iVBORw0KGgo=",
+                "kind": "snapshot",
+                "run_id": "benchmark:zen-1:mmlu"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/Artifact"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/artifactOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/research/artifacts/{sha256}": {
@@ -51,39 +123,585 @@
     "/v1/research/experiments": {
       "get": {
         "operationId": "get_v1_research_experiments",
+        "summary": "ListExperiments returns the caller org's CANONICAL experiments — the deterministic deduped view over the versioned history.",
+        "description": "ListExperiments returns the caller org's CANONICAL experiments — the deterministic\ndeduped view over the versioned history. With no ?project= it reads the org's\nwhole set across projects (the ops board's cross-project view, since a project is\na sub-scope of the one tenant); ?project= narrows to one and ?kind= to one\ndiscriminator.",
         "tags": [
           "research"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project narrows to one project. Empty reads the org's whole set across projects.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Kind narrows to one discriminator: benchmark, kernel-perf, training, ablation or policy-eval.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/experimentsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_research_experiments",
+        "summary": "IngestExperiments appends one batch of experiment and attempt versions to the caller org's evidence store, idempotently by content, then rolls it up to the analytics plane best-effort.",
+        "description": "IngestExperiments appends one batch of experiment and attempt versions to the\ncaller org's evidence store, idempotently by content, then rolls it up to the\nanalytics plane best-effort. The project is the SERVER's value and visibility is\nforced private — an upload grants no training or publication right, which is a\nseparate call. A run carrying a BYO endpoint is SSRF-checked before the store is\ntouched. The answer carries BOTH the canonical (deduped) and retained (full\nhistory) counts, so a caller sees the versioned truth rather than a dedup that\nreads as loss.",
         "tags": [
           "research"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "attempts": [],
+                "experiments": [
+                  {
+                    "id": "benchmark:zen-1:mmlu",
+                    "kind": "benchmark",
+                    "metric": "accuracy",
+                    "subject": "zen-1",
+                    "ts": 1750000000,
+                    "value": 0.81
+                  }
+                ]
+              },
+              "schema": {
+                "$ref": "#/components/schemas/IngestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ingestOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/research/grants": {
       "post": {
         "operationId": "post_v1_research_grants",
+        "summary": "GrantResearchVisibility records the SEPARATE authorization an upload never implies: a record's visibility (private, org or public) and, for a run, its training and commons-publication consent.",
+        "description": "GrantResearchVisibility records the SEPARATE authorization an upload never\nimplies: a record's visibility (private, org or public) and, for a run, its\ntraining and commons-publication consent. Address a run by its stable id or an\nartifact by its sha256; an artifact grant sets visibility only. The ORG is the\ntenant boundary and comes from the validated principal, so a caller can only ever\ngrant within its own org; `project` locates WHICH record inside it and defaults to\nthe caller's project scope.",
         "tags": [
           "research"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "id": "benchmark:zen-1:mmlu",
+                "trainable": true,
+                "visibility": "public"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/GrantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/grantOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/research/projects": {
       "get": {
         "operationId": "get_v1_research_projects",
+        "summary": "ListResearchProjects returns every research project in the caller's org with its real totals — canonical and retained side by side — which is the ops board's \"every project + real totals\" view.",
+        "description": "ListResearchProjects returns every research project in the caller's org with its\nreal totals — canonical and retained side by side — which is the ops board's\n\"every project + real totals\" view.",
         "tags": [
           "research"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/projectsOut"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/research/totals": {
       "get": {
         "operationId": "get_v1_research_totals",
+        "summary": "GetResearchTotals returns the caller org's headline aggregate plus a per-kind breakdown — the observatory's poll target.",
+        "description": "GetResearchTotals returns the caller org's headline aggregate plus a per-kind\nbreakdown — the observatory's poll target. Canonical and retained counts travel\ntogether, so a deduped view never reads as loss. ?project= narrows to one project.",
         "tags": [
           "research"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "description": "Project narrows the aggregate to one project. Empty aggregates the whole org.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchTotals"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Artifact": {
+        "properties": {
+          "content": {
+            "description": "base64 bytes on write; the server hashes + stores them (never returned)",
+            "type": "string"
+          },
+          "git_branch": {
+            "type": "string"
+          },
+          "git_dirty": {
+            "type": "boolean"
+          },
+          "git_sha": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "lib_versions": {},
+          "project": {
+            "type": "string"
+          },
+          "ref": {
+            "description": "server-derived content address (sha256:\u003chash\u003e)",
+            "type": "string"
+          },
+          "retention_class": {
+            "type": "string"
+          },
+          "run_id": {
+            "type": "string"
+          },
+          "sha256": {
+            "description": "SERVER-derived on write; the identity",
+            "type": "string"
+          },
+          "ts": {
+            "type": "integer"
+          },
+          "visibility": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Attempt": {
+        "properties": {
+          "answer": {
+            "type": "string"
+          },
+          "benchmark": {
+            "type": "string"
+          },
+          "correct": {
+            "type": "boolean"
+          },
+          "gold": {
+            "type": "string"
+          },
+          "item": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "response": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "Experiment": {
+        "properties": {
+          "canonical": {
+            "type": "boolean"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "git_branch": {
+            "type": "string"
+          },
+          "git_dirty": {
+            "type": "boolean"
+          },
+          "git_sha": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "lib_versions": {},
+          "meta": {},
+          "metric": {
+            "type": "string"
+          },
+          "n": {
+            "type": "integer"
+          },
+          "n_total": {
+            "type": "integer"
+          },
+          "project": {
+            "type": "string"
+          },
+          "publishable": {
+            "type": "boolean"
+          },
+          "revision": {
+            "description": "original | corrected | retracted",
+            "type": "string"
+          },
+          "status": {
+            "description": "planning | running | complete | faulted",
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          },
+          "trainable": {
+            "type": "boolean"
+          },
+          "ts": {
+            "type": "integer"
+          },
+          "value": {
+            "type": "number"
+          },
+          "visibility": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GrantRequest": {
+        "properties": {
+          "id": {
+            "description": "an experiment (run) stable id",
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "publishable": {
+            "type": "boolean"
+          },
+          "sha256": {
+            "description": "OR an artifact content hash",
+            "type": "string"
+          },
+          "trainable": {
+            "type": "boolean"
+          },
+          "visibility": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "IngestRequest": {
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/components/schemas/Attempt"
+            },
+            "type": "array"
+          },
+          "experiments": {
+            "items": {
+              "$ref": "#/components/schemas/Experiment"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "KindTotal": {
+        "properties": {
+          "cost_usd": {
+            "type": "number"
+          },
+          "experiments": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ProjectSummary": {
+        "properties": {
+          "attempts": {
+            "description": "canonical",
+            "type": "integer"
+          },
+          "attempts_retained": {
+            "type": "integer"
+          },
+          "benchmarks": {
+            "type": "integer"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "experiments": {
+            "description": "canonical",
+            "type": "integer"
+          },
+          "experiments_retained": {
+            "type": "integer"
+          },
+          "kinds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "models": {
+            "type": "integer"
+          },
+          "project": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ResearchTotals": {
+        "properties": {
+          "attempts": {
+            "description": "canonical",
+            "type": "integer"
+          },
+          "attempts_retained": {
+            "type": "integer"
+          },
+          "benchmarks": {
+            "type": "integer"
+          },
+          "by_kind": {
+            "items": {
+              "$ref": "#/components/schemas/KindTotal"
+            },
+            "type": "array"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "experiments": {
+            "description": "canonical",
+            "type": "integer"
+          },
+          "experiments_retained": {
+            "type": "integer"
+          },
+          "models": {
+            "type": "integer"
+          },
+          "project": {
+            "type": "string"
+          },
+          "projects": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "artifactOut": {
+        "properties": {
+          "created": {
+            "description": "Created is false when these exact bytes were already recorded — the write is a no-op.",
+            "type": "boolean"
+          },
+          "ref": {
+            "description": "Ref is the content address, \"sha256:\u003chash\u003e\".",
+            "type": "string"
+          },
+          "rolled_up": {
+            "description": "RolledUp is false when the OLAP roll-up was skipped; the SQLite write still stands.",
+            "type": "boolean"
+          },
+          "sha256": {
+            "description": "SHA256 is the SERVER's hash of the bytes — the artifact's identity.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "artifactsOut": {
+        "properties": {
+          "data": {
+            "description": "Data are the artifacts, newest first. Content bytes are never returned here.",
+            "items": {
+              "$ref": "#/components/schemas/Artifact"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is len(data).",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "experimentsOut": {
+        "properties": {
+          "data": {
+            "description": "Data are the canonical experiment versions.",
+            "items": {
+              "$ref": "#/components/schemas/Experiment"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is len(data) — the rows in this answer, not the store's history.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "grantOut": {
+        "properties": {
+          "updated": {
+            "description": "Updated is the number of records the grant applied to. Zero is a 404, never a silent no-op.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ingestOut": {
+        "properties": {
+          "attempts_ingested": {
+            "description": "AttemptsIngested is how many attempt versions this call appended.",
+            "type": "integer"
+          },
+          "attempts_retained": {
+            "description": "AttemptsRetained is the full versioned attempt history the store now holds.",
+            "type": "integer"
+          },
+          "canonical_attempts": {
+            "description": "CanonicalAttempts is the deduped attempt count the store now holds.",
+            "type": "integer"
+          },
+          "canonical_experiments": {
+            "description": "CanonicalExperiments is the deduped experiment count the store now holds.",
+            "type": "integer"
+          },
+          "experiments_ingested": {
+            "description": "ExperimentsIngested is how many experiment versions this call appended.",
+            "type": "integer"
+          },
+          "experiments_retained": {
+            "description": "ExperimentsRetained is the full versioned experiment history the store now holds.",
+            "type": "integer"
+          },
+          "project": {
+            "description": "Project is the project the batch was filed under — the SERVER's value, never the body's.",
+            "type": "string"
+          },
+          "rolled_up": {
+            "description": "RolledUp is false when the OLAP roll-up was skipped; the SQLite write still stands.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "projectsOut": {
+        "properties": {
+          "data": {
+            "description": "Data are the org's projects with canonical + retained counts.",
+            "items": {
+              "$ref": "#/components/schemas/ProjectSummary"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Total is len(data).",
+            "type": "integer"
+          }
+        },
+        "type": "object"
       }
     }
   }

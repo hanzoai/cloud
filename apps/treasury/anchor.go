@@ -11,7 +11,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/treasury/ledger"
 	luxlog "github.com/luxfi/log"
-	"github.com/zap-proto/zip"
 )
 
 // The Hanzo L1 EVM anchor. The treasury's books live off-chain (Base/SQLite), so to
@@ -153,27 +152,46 @@ func (a *anchorer) status(ctx context.Context, b ledger.Backend) anchorStatus {
 	return st
 }
 
-// adminAnchor answers POST /v1/admin/treasury/anchor — commit the current ledger
-// root to Hanzo L1. SuperAdmin only. When the chain path is wired it signs +
-// submits the anchor tx and records it; otherwise it returns the root that WOULD be
-// committed plus the exact remaining step (honest, records nothing false).
-func adminAnchor(s *cloud.Service[state], c *zip.Ctx) error {
-	if !c.IsAdmin() {
-		return zip.ErrForbidden("SuperAdmin required")
+// AnchorTreasury commits the current ledger root to Hanzo L1, making the books
+// tamper-evident on chain, and returns the anchoring status. When the chain path
+// is wired it signs and submits the anchor transaction and records it; when it is
+// not, it returns the root that WOULD be committed plus the exact remaining
+// wiring step and records nothing false. A submit that fails still answers 200
+// with the anchor's own status set to "error" — the attempt is the product.
+// SuperAdmin only.
+func (o ops) adminAnchor(ctx context.Context, _ *noInput) (*anchorOut, error) {
+	if _, err := admin(ctx); err != nil {
+		return nil, err
 	}
-	ctx := c.Context()
-	if s.State.anchor.configured() {
-		rec, err := s.State.anchor.submit(ctx, s.State.record)
+	if o.s.State.anchor.configured() {
+		rec, err := o.s.State.anchor.submit(ctx, o.s.State.record)
 		if err != nil {
-			s.Log.Error("treasury: anchor submit failed", "err", err)
-			st := s.State.anchor.status(ctx, s.State.record)
+			o.s.Log.Error("treasury: anchor submit failed", "err", err)
+			st := o.s.State.anchor.status(ctx, o.s.State.record)
 			st.Status = "error"
 			st.Note = "submit: " + err.Error()
-			return adminOK(c, map[string]any{"anchor": st})
+			return &anchorOut{Status: "ok", Data: anchorData{Anchor: st}}, nil
 		}
-		emitAudit(s, ctx, "treasury.anchor", "", rec.TxHash, map[string]any{
-			"root": rec.Root, "txHash": rec.TxHash, "block": rec.Block, "chainId": s.State.anchor.chainID,
+		emitAudit(o.s, ctx, "treasury.anchor", "", rec.TxHash, map[string]any{
+			"root": rec.Root, "txHash": rec.TxHash, "block": rec.Block, "chainId": o.s.State.anchor.chainID,
 		})
 	}
-	return adminOK(c, map[string]any{"anchor": s.State.anchor.status(ctx, s.State.record)})
+	return &anchorOut{Status: "ok", Data: anchorData{Anchor: o.s.State.anchor.status(ctx, o.s.State.record)}}, nil
+}
+
+// anchorData carries the anchoring status.
+type anchorData struct {
+	// Anchor is the Hanzo L1 anchoring status of the ledger root after this call.
+	Anchor anchorStatus `json:"anchor"`
+}
+
+// anchorOut is anchorData in the admin envelope.
+type anchorOut struct {
+	// Status is "ok" on success. A submit that failed still answers ok with the
+	// anchor's own status set to "error" — the attempt is the product.
+	Status string `json:"status"`
+	// Msg carries an operator-facing note; empty on success.
+	Msg string `json:"msg"`
+	// Data is the anchoring status.
+	Data anchorData `json:"data"`
 }

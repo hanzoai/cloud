@@ -12,11 +12,11 @@ import (
 	"github.com/hanzoai/cloud/apps/treasury/ledger"
 )
 
-// memPolicy is an in-memory ledger.PolicyStore for the adapter tests.
-type memPolicy struct{ p ledger.Policy }
+// memPolicy is an in-memory ledger.SharePolicyStore for the adapter tests.
+type memPolicy struct{ p ledger.SharePolicy }
 
-func (m *memPolicy) Policy(context.Context) (ledger.Policy, error) { return m.p, nil }
-func (m *memPolicy) SetPolicy(_ context.Context, p ledger.Policy) error {
+func (m *memPolicy) Policy(context.Context) (ledger.SharePolicy, error) { return m.p, nil }
+func (m *memPolicy) SetPolicy(_ context.Context, p ledger.SharePolicy) error {
 	m.p = p
 	return nil
 }
