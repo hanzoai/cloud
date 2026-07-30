@@ -23,7 +23,7 @@ import (
 // DOCUMENT writes it, which is the identity every projection keys on.
 var untypedByDesign = map[string]string{
 	// The launch stub. Two facts, either one sufficient, and both re-read against
-	// the PINNED zip (v1.18.11) rather than inherited as prose.
+	// the PINNED zip (v1.18.12) rather than inherited as prose.
 	//
 	//  1. IT HAS NO SUCCESS. zip publishes a response schema for every typed op
 	//     (typed.go registerTyped → responses keyed on cmp.Or(op.Status, 200)), so

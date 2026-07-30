@@ -253,7 +253,7 @@ func (o ops) ingest(ctx context.Context, in *SbomIngest) (*SbomIngested, error) 
 // this capture `*1` (zip's bindURL matches c.Route().Params, so an input field must
 // carry `url:"*1"`), while the untyped projection publishes the address as
 // `/v1/sbom/{wildcard1}` with a PATH parameter of that name. A typed op publishes
-// op.Path VERBATIM — measured against zip v1.18.11 — so the address would become
+// op.Path VERBATIM — measured against zip v1.18.12 — so the address would become
 // `/v1/sbom/*` and `*1` would be declared as a QUERY parameter, which it is not:
 // three published facts changed (path, parameter name, parameter location) for a
 // route whose wire did not. Typing this needs a zip capability that does not exist —
