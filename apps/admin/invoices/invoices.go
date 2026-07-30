@@ -54,7 +54,7 @@ func Invoices(ctx context.Context, in *InvoicesIn) (*InvoicesOut, error) {
 	// Honest-empty when the warehouse is not connected or the collector's events
 	// table is not provisioned yet (the emitter is still being wired).
 	if !core.BillingEventsReady(ctx) {
-		return &InvoicesOut{Status: core.OK, Data: []InvoiceRow{}, Data2: core.Total(0)}, nil
+		return &InvoicesOut{Status: core.OK, Data: []InvoiceRow{}, Total: core.Total(0)}, nil
 	}
 
 	rows, err := datastore.Query(ctx, invoicesSQL())
@@ -79,7 +79,7 @@ func Invoices(ctx context.Context, in *InvoicesIn) (*InvoicesOut, error) {
 	if len(out) > limit {
 		out = out[:limit]
 	}
-	return &InvoicesOut{Status: core.OK, Data: out, Data2: core.Total(total)}, nil
+	return &InvoicesOut{Status: core.OK, Data: out, Total: core.Total(total)}, nil
 }
 
 // InvoicesIn is the GET /v1/admin/invoices filter.
@@ -89,17 +89,17 @@ type InvoicesIn struct {
 	Status string `json:"status"`
 	// Org filters to one tenant, matched exactly.
 	Org string `json:"org"`
-	// Limit caps the rows returned. data2 still reports the full match count.
+	// Limit caps the rows returned. total still reports the full match count.
 	Limit string `json:"limit"`
 }
 
-// InvoicesOut is the GET /v1/admin/invoices envelope. data2 is the count BEFORE limit
+// InvoicesOut is the GET /v1/admin/invoices envelope. total is the count BEFORE limit
 // truncates, so the console can say "showing 50 of 812".
 type InvoicesOut struct {
 	Status string       `json:"status"`
 	Msg    string       `json:"msg"`
 	Data   []InvoiceRow `json:"data"`
-	Data2  *int         `json:"data2,omitempty"`
+	Total  *int         `json:"total,omitempty"`
 }
 
 // invoicesSQL resolves each invoice's LATEST lifecycle state from commerce.events

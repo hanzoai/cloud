@@ -58,13 +58,13 @@ type GrantsIn struct {
 	Limit string `json:"limit"`
 }
 
-// GrantsOut is the GET /v1/admin/grants envelope. data2 is the store's total for the
+// GrantsOut is the GET /v1/admin/grants envelope. total is the store's total for the
 // filter, which can exceed len(data) when limit truncates.
 type GrantsOut struct {
 	Status string     `json:"status"`
 	Msg    string     `json:"msg"`
 	Data   []GrantRow `json:"data"`
-	Data2  *int       `json:"data2,omitempty"`
+	Total  *int       `json:"total,omitempty"`
 }
 
 // GrantFilter is the ONE audit query that identifies a credit grant. Both the grants
@@ -94,7 +94,7 @@ func GrantFilter(org, result string, limit int) audit.Filter {
 // Example: {"result":"success","limit":"50"}
 // Response: {"status":"ok","msg":"","data":[{"org":"acme","amountCents":5000,"currency":"usd",
 // "source":"trial","reason":"launch comp","actor":"z@hanzo.ai","createdAt":"2026-07-26T18:00:00Z",
-// "transactionId":"tx_01J","result":"success"}],"data2":1}
+// "transactionId":"tx_01J","result":"success"}],"total":1}
 func (o ops) Grants(ctx context.Context, in *GrantsIn) (*GrantsOut, error) {
 	if _, err := core.Admit(ctx); err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ func (o ops) Grants(ctx context.Context, in *GrantsIn) (*GrantsOut, error) {
 		msg = "grant history is unavailable (no local audit store configured on this deployment)"
 	}
 
-	return &GrantsOut{Status: core.OK, Msg: msg, Data: out, Data2: core.Total(total)}, nil
+	return &GrantsOut{Status: core.OK, Msg: msg, Data: out, Total: core.Total(total)}, nil
 }
 
 // GrantRows projects the audit trail into grant rows. It is split out of the handler so

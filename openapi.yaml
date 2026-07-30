@@ -1018,12 +1018,12 @@ components:
           items:
             $ref: '#/components/schemas/CustomerRow'
           type: array
-        data2:
-          type: integer
         msg:
           type: string
         status:
           type: string
+        total:
+          type: integer
       type: object
     D1Query:
       properties:
@@ -1868,12 +1868,12 @@ components:
           items:
             $ref: '#/components/schemas/GrantRow'
           type: array
-        data2:
-          type: integer
         msg:
           type: string
         status:
           type: string
+        total:
+          type: integer
       type: object
     Host:
       properties:
@@ -1982,12 +1982,12 @@ components:
           items:
             $ref: '#/components/schemas/InvoiceRow'
           type: array
-        data2:
-          type: integer
         msg:
           type: string
         status:
           type: string
+        total:
+          type: integer
       type: object
     JourneyStep:
       properties:
@@ -2104,8 +2104,6 @@ components:
           items:
             $ref: '#/components/schemas/Host'
           type: array
-        data2:
-          type: integer
         drift:
           items:
             $ref: '#/components/schemas/Drift'
@@ -2114,6 +2112,8 @@ components:
           type: string
         status:
           type: string
+        total:
+          type: integer
       type: object
     LoadBalancer:
       properties:
@@ -2912,14 +2912,14 @@ components:
       properties:
         data:
           type: object
-        data2:
-          type: integer
         integrity:
           $ref: '#/components/schemas/Integrity'
         msg:
           type: string
         status:
           type: string
+        total:
+          type: integer
       type: object
     RedeemInput:
       properties:
@@ -3889,12 +3889,12 @@ components:
           items:
             $ref: '#/components/schemas/SubscriptionRow'
           type: array
-        data2:
-          type: integer
         msg:
           type: string
         status:
           type: string
+        total:
+          type: integer
       type: object
     SubsystemsOut:
       properties:
@@ -5546,12 +5546,12 @@ components:
           items:
             $ref: '#/components/schemas/baseInstance'
           type: array
-        data2:
-          type: integer
         msg:
           type: string
         status:
           type: string
+        total:
+          type: integer
       type: object
     beginIn:
       properties:
@@ -7065,12 +7065,12 @@ components:
           items:
             $ref: '#/components/schemas/computeLeaf'
           type: array
-        data2:
-          type: integer
         msg:
           type: string
         status:
           type: string
+        total:
+          type: integer
       type: object
     connView:
       properties:
@@ -8357,12 +8357,12 @@ components:
       properties:
         data:
           type: object
-        data2:
-          type: integer
         msg:
           type: string
         status:
           type: string
+        total:
+          type: integer
       type: object
     imageView:
       properties:
@@ -9441,12 +9441,12 @@ components:
           items:
             $ref: '#/components/schemas/orgRow'
           type: array
-        data2:
-          type: integer
         msg:
           type: string
         status:
           type: string
+        total:
+          type: integer
       type: object
     overviewData:
       properties:
@@ -10086,12 +10086,12 @@ components:
           items:
             $ref: '#/components/schemas/productRow'
           type: array
-        data2:
-          type: integer
         msg:
           type: string
         status:
           type: string
+        total:
+          type: integer
       type: object
     profileMetrics:
       properties:
@@ -10486,12 +10486,12 @@ components:
       properties:
         data:
           type: object
-        data2:
-          type: integer
         msg:
           type: string
         status:
           type: string
+        total:
+          type: integer
       type: object
     readmeJSON:
       properties:
@@ -12165,12 +12165,12 @@ components:
           items:
             $ref: '#/components/schemas/operatorUser'
           type: array
-        data2:
-          type: integer
         msg:
           type: string
         status:
           type: string
+        total:
+          type: integer
       type: object
     vendorsOut:
       properties:
@@ -13102,9 +13102,9 @@ paths:
                 - clientId: cid
                   name: hanzo-cloud
                   owner: admin
-                data2: 1
                 msg: ""
                 status: ok
+                total: 1
               schema:
                 $ref: '#/components/schemas/iamRowsOut'
           description: ok
@@ -13204,7 +13204,6 @@ paths:
                   seq: 41
                   sub: z@hanzo.ai
                   ts: "2026-07-26T18:00:00Z"
-                data2: 1
                 integrity:
                   brokenAt: -1
                   count: 42
@@ -13212,6 +13211,7 @@ paths:
                   ok: true
                 msg: ""
                 status: ok
+                total: 1
               schema:
                 $ref: '#/components/schemas/RecordsOut'
           description: ok
@@ -13330,9 +13330,9 @@ paths:
                   region: nyc3
                   status: running
                   url: https://acme.base.hanzo.ai
-                data2: 1
                 msg: ""
                 status: ok
+                total: 1
               schema:
                 $ref: '#/components/schemas/basesOut'
           description: ok
@@ -13516,9 +13516,9 @@ paths:
                   org: acme
                   project: default
                   spendCents: 900
-                data2: 1
                 msg: ""
                 status: ok
+                total: 1
               schema:
                 $ref: '#/components/schemas/computeOut'
           description: ok
@@ -13604,9 +13604,9 @@ paths:
                   spendCents: 12500
                   status: active
                   users: 7
-                data2: 1
                 msg: ""
                 status: ok
+                total: 1
               schema:
                 $ref: '#/components/schemas/CustomersOut'
           description: ok
@@ -14012,9 +14012,9 @@ paths:
                   result: success
                   source: trial
                   transactionId: tx_01J
-                data2: 1
                 msg: ""
                 status: ok
+                total: 1
               schema:
                 $ref: '#/components/schemas/GrantsOut'
           description: ok
@@ -14495,7 +14495,7 @@ paths:
         required: false
         schema:
           type: string
-      - description: Limit caps the rows returned. data2 still reports the full match
+      - description: Limit caps the rows returned. total still reports the full match
           count.
         in: query
         name: limit
@@ -14669,9 +14669,9 @@ paths:
                   spendCents: 12500
                   tokens: 0
                   users: 7
-                data2: 1
                 msg: ""
                 status: ok
+                total: 1
               schema:
                 $ref: '#/components/schemas/orgsOut'
           description: ok
@@ -14970,9 +14970,9 @@ paths:
                   runningTag: v1.4.2
                   tier: data
                   updated: ""
-                data2: 1
                 msg: ""
                 status: ok
+                total: 1
               schema:
                 $ref: '#/components/schemas/productsOut'
           description: ok
@@ -15001,9 +15001,9 @@ paths:
                   plans:
                   - pro
                   start: "2026-07-01T00:00:00Z"
-                data2: 0
                 msg: ""
                 status: ok
+                total: 0
               schema:
                 $ref: '#/components/schemas/rawOut'
           description: ok
@@ -15043,9 +15043,9 @@ paths:
                   plans:
                   - pro
                   start: "2026-07-01T00:00:00Z"
-                data2: 0
                 msg: ""
                 status: ok
+                total: 0
               schema:
                 $ref: '#/components/schemas/rawOut'
           description: ok
@@ -15172,9 +15172,9 @@ paths:
                 - displayName: Ops
                   name: ops
                   owner: admin
-                data2: 1
                 msg: ""
                 status: ok
+                total: 1
               schema:
                 $ref: '#/components/schemas/iamRowsOut'
           description: ok
@@ -15336,9 +15336,9 @@ paths:
                   periodSpendCents: 42000
                   resetsAt: "2026-08-01T00:00:00Z"
                   warn: false
-                data2: 0
                 msg: ""
                 status: ok
+                total: 0
               schema:
                 $ref: '#/components/schemas/rawOut'
           description: ok
@@ -15371,9 +15371,9 @@ paths:
                   enforce: true
                   id: cap_1
                   limitCents: 100000
-                data2: 0
                 msg: ""
                 status: ok
+                total: 0
               schema:
                 $ref: '#/components/schemas/rawOut'
           description: ok
@@ -15450,9 +15450,9 @@ paths:
                   enforce: false
                   id: cap_1
                   limitCents: 250000
-                data2: 0
                 msg: ""
                 status: ok
+                total: 0
               schema:
                 $ref: '#/components/schemas/rawOut'
           description: ok
@@ -15479,7 +15479,7 @@ paths:
         required: false
         schema:
           type: string
-      - description: Limit caps the rows returned. data2 still reports the full match
+      - description: Limit caps the rows returned. total still reports the full match
           count.
         in: query
         name: limit
@@ -15674,7 +15674,7 @@ paths:
     get:
       description: |-
         users lists the user directory across the caller's tenant window, one page at a time.
-        data2 is IAM's REAL total, so the console can page through it.
+        total is IAM's REAL total, so the console can page through it.
 
         A SuperAdmin may aim the read at one tenant with org; a white-label admin cannot — for
         them the owner is hard-pinned to their own org and org is ignored, which is what keeps
@@ -15731,9 +15731,9 @@ paths:
                   name: ada
                   owner: acme
                   tag: ""
-                data2: 222
                 msg: ""
                 status: ok
+                total: 222
               schema:
                 $ref: '#/components/schemas/usersOut'
           description: ok
