@@ -11,17 +11,24 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
-// Request is the /v1/crawl body. One URL per call: batching would make the
+// crawlRequest is the /v1/crawl body. One URL per call: batching would make the
 // response a partial-failure envelope that every caller then has to unpack, and no
 // caller has asked for more than one.
-type Request struct {
+//
+// The three types here are named for their product rather than Request /
+// Response / Document. They are DECLARED to the document (see the init below), a
+// declared type's Go name IS its schema name, and that namespace is FLAT across
+// the whole fleet — so the generic spelling would have claimed three of the most
+// collidable names in the API for one small surface.
+type crawlRequest struct {
 	URL string `json:"url"`
 }
 
-// Response is the /v1/crawl body.
+// crawlResult is the /v1/crawl response.
 //
 // Success is a field rather than an HTTP status because "the page could not be
 // fetched" is a normal outcome of asking about a URL, not a fault of the request:
@@ -29,18 +36,41 @@ type Request struct {
 // was unreachable. Reserving non-2xx for auth and malformed input keeps a caller's
 // error handling honest — a 200 means the surface worked, and Success says what it
 // found.
-type Response struct {
-	Success bool      `json:"success"`
-	Data    *Document `json:"data,omitempty"`
-	Error   string    `json:"error,omitempty"`
+type crawlResult struct {
+	Success bool           `json:"success"`
+	Data    *crawlDocument `json:"data,omitempty"`
+	Error   string         `json:"error,omitempty"`
 }
 
-// Document is the crawled page.
-type Document struct {
+// crawlDocument is the crawled page.
+type crawlDocument struct {
 	URL      string         `json:"url"`
 	Title    string         `json:"title,omitempty"`
 	Markdown string         `json:"markdown"`
 	Metadata map[string]any `json:"metadata,omitempty"`
+}
+
+// This route is NOT a typed op, and it cannot become one without moving the wire.
+// Two independent facts keep it out, both measured by TestCrawlRefusalIsTheWire:
+//
+//  1. It is deliberately BODY-TOLERANT, and its refusal carries a DOMAIN body. A
+//     malformed body and an empty url are the SAME answer here — 400 with
+//     `{"success":false,"error":"missing url"}`, this package's own shape. zip's
+//     op.invoke 400s on any unparseable non-empty body before a handler runs, with
+//     zip's flat HTTPError (`{status,code,error}`) — a different body — and a typed
+//     op's only way to refuse is to RETURN an error, which takes that same shape.
+//     So neither branch of today's 400 is expressible.
+//  2. The body is read through io.LimitReader(r.Body, 1<<20). A typed op receives
+//     its DECODED In and never sees the raw length, so the 1 MiB bound would be
+//     silently dropped — cloud's global zip BodyLimit is far larger, and this
+//     surface fetches a caller-chosen URL from inside the cluster.
+//
+// Staying untyped costs exactly three things — the prose, the MCP tool and the CLI
+// command zip's registry supplies — and it must not also cost a document that says
+// this route takes no body. The declaration below is what buys that back: it is the
+// same reflection over the same structs the handler binds, so it cannot drift.
+func init() {
+	openapi.Register("/v1/crawl", http.MethodPost, crawlRequest{}, crawlResult{})
 }
 
 // serviceKey is the shared key a service caller presents. It is deliberately the
@@ -90,9 +120,18 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return zip.AdaptNetHTTP(guard(h))(c)
 	}
 
-	g := app.Group("/v1/crawl")
-	g.Post("", serve)
-	g.Post("/", serve)
+	// ONE registration, at the address this API is called on.
+	//
+	// It used to be two — `g.Post("", serve)` and `g.Post("/", serve)` on a
+	// Group("/v1/crawl") — and they were the SAME route: zip normalises an empty
+	// leaf to "/", so both composed to "/v1/crawl/" and the second was dead. The
+	// consequence was not on the wire (the router is non-strict, so both URLs are
+	// served either way) but in the ARTIFACTS: op.Path is the identity every
+	// projection reads, so the published document, the operation id, the MCP tool
+	// and the URL every generated SDK calls all carried a trailing slash for a path
+	// this API's callers do not use. Declaring the whole path here is the fix
+	// LLM.md prescribes for that class.
+	app.Post("/v1/crawl", serve)
 
 	// No "archive" field: it used to log deps.VFS != nil, which is ALWAYS true —
 	// deps.VFS is guaranteed non-nil by contract (R-7, so consumers never
@@ -113,7 +152,7 @@ func guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		want := serviceKey()
 		if want == "" {
-			writeJSON(w, http.StatusServiceUnavailable, Response{Error: "crawl not configured"})
+			writeJSON(w, http.StatusServiceUnavailable, crawlResult{Error: "crawl not configured"})
 			return
 		}
 		got := strings.TrimSpace(r.Header.Get("X-API-Key"))
@@ -123,7 +162,7 @@ func guard(next http.Handler) http.Handler {
 		// Constant-time: a byte-at-a-time comparison leaks the key's prefix to a
 		// caller willing to time enough requests.
 		if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
-			writeJSON(w, http.StatusUnauthorized, Response{Error: "invalid api key"})
+			writeJSON(w, http.StatusUnauthorized, crawlResult{Error: "invalid api key"})
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -145,9 +184,9 @@ func scope(c *zip.Ctx) Scope {
 // handleScoped serves one crawl under a caller scope. The scope selects the corpus
 // prefix, so it comes from the VERIFIED principal and never from the body.
 func handleScoped(w http.ResponseWriter, r *http.Request, s Scope) {
-	var req Request
+	var req crawlRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil || strings.TrimSpace(req.URL) == "" {
-		writeJSON(w, http.StatusBadRequest, Response{Error: "missing url"})
+		writeJSON(w, http.StatusBadRequest, crawlResult{Error: "missing url"})
 		return
 	}
 
@@ -156,12 +195,12 @@ func handleScoped(w http.ResponseWriter, r *http.Request, s Scope) {
 		// 200 with Success:false — see the note on Response. The message is the
 		// error verbatim: a caller debugging a failed crawl needs to know whether the
 		// host was refused, unreachable, or served the wrong type.
-		writeJSON(w, http.StatusOK, Response{Error: err.Error()})
+		writeJSON(w, http.StatusOK, crawlResult{Error: err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, Response{
+	writeJSON(w, http.StatusOK, crawlResult{
 		Success: true,
-		Data: &Document{
+		Data: &crawlDocument{
 			URL:      page.URL,
 			Title:    page.Title,
 			Markdown: page.Markdown,
