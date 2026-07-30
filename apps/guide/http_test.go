@@ -3,9 +3,14 @@ package guide
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
+
+	fiber "github.com/zap-proto/fiber/v3"
 )
 
 // TestStepViewCarriesJourneyStep pins the stepView projection: every JourneyStep
@@ -313,5 +318,61 @@ func TestHTTPDoStepDelegatesToAgent(t *testing.T) {
 	// do on a blocked step is 409 (slack is gated by gsuite, still todo).
 	if r := req(t, app, http.MethodPost, "/v1/guide/steps/slack/do", "acme", nil); r.Code != http.StatusConflict {
 		t.Fatalf("do on blocked slack want 409, got %d", r.Code)
+	}
+}
+
+// TestDoStreamsSSE pins the SECOND wire fact POST /v1/guide/steps/{id}/do stays an
+// untyped handler for: asked for a stream, it answers text/event-stream and writes
+// the agent's actions as SSE frames as they happen. A typed op answers exactly one
+// JSON value, so typing this route would replace the stream with a single body —
+// the silent wire change the registration-site refusal forbids. The 409 half of the
+// same refusal is pinned above (blocked /do) and in TestHTTPTransitionsAndGating;
+// this is the half nothing else covered.
+//
+// Both triggers are pinned, because wantsSSE accepts either: the Accept header and
+// the ?stream=1 alias the browser fetch path uses.
+func TestDoStreamsSSE(t *testing.T) {
+	for _, tc := range []struct {
+		name, path string
+		header     map[string]string
+	}{
+		{"accept-header", "/v1/guide/steps/incorporate/do", map[string]string{"Accept": "text/event-stream"}},
+		{"stream-query", "/v1/guide/steps/incorporate/do?stream=1", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app := newApp(t)
+			mounted.State.ai = &fakeAI{content: "positioning copy"}
+			mounted.State.model = "zen"
+			mounted.State.invoke = func(_ context.Context, _, tool string, _ map[string]any) (any, error) {
+				return map[string]any{"doc": "Company-1", "tool": tool}, nil
+			}
+			mounted.State.toolOK = func(string) bool { return true }
+
+			rq := httptest.NewRequest(http.MethodPost, tc.path, nil)
+			rq.Header.Set("X-Org-Id", "acme")
+			rq.Header.Set("X-User-Id", "u-acme")
+			for k, v := range tc.header {
+				rq.Header.Set(k, v)
+			}
+			resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 0})
+			if err != nil {
+				t.Fatalf("Test POST %s: %v", tc.path, err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "text/event-stream") {
+				t.Fatalf("stream Content-Type want text/event-stream, got %q", ct)
+			}
+			body, _ := io.ReadAll(resp.Body)
+			// The frames: at least the plan the agent opens with and the end frame
+			// carrying the terminal state — the shape a single JSON body cannot have.
+			for _, want := range []string{"event: plan\ndata: ", "event: end\ndata: "} {
+				if !strings.Contains(string(body), want) {
+					t.Fatalf("SSE body missing %q frame, got:\n%s", want, body)
+				}
+			}
+			if !strings.Contains(string(body), `"state":"done"`) {
+				t.Fatalf("end frame must carry the terminal state, got:\n%s", body)
+			}
+		})
 	}
 }
