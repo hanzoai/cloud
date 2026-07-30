@@ -8730,6 +8730,34 @@ components:
           description: Zone is the 32-hex Cloudflare zone id, from the path.
           type: string
       type: object
+    pushEvent:
+      properties:
+        after:
+          type: string
+        pusher:
+          properties:
+            login:
+              type: string
+            username:
+              type: string
+          type: object
+        ref:
+          type: string
+        repository:
+          properties:
+            clone_url:
+              type: string
+            name:
+              type: string
+            owner:
+              properties:
+                login:
+                  type: string
+                username:
+                  type: string
+              type: object
+          type: object
+      type: object
     pushFile:
       properties:
         content:
@@ -10313,6 +10341,15 @@ components:
             $ref: '#/components/schemas/byoWorker'
           type: array
       type: object
+    zapProcReq:
+      properties:
+        description:
+          type: string
+        name:
+          type: string
+        project:
+          type: string
+      type: object
 info:
   description: 'Generated from the live router — every operation below is a route
     the unified cloud binary actually serves. Tagged by product: the first path segment
@@ -10463,6 +10500,12 @@ paths:
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              format: binary
+              type: string
   /{org}/{repo}/git-upload-pack:
     post:
       operationId: post_by_org_by_repo_git-upload-pack
@@ -10477,6 +10520,12 @@ paths:
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              format: binary
+              type: string
   /{org}/{repo}/info/refs:
     get:
       operationId: get_by_org_by_repo_info_refs
@@ -22665,6 +22714,12 @@ paths:
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              format: binary
+              type: string
       tags:
       - git
   /v1/git/{org}/{repo}/git-upload-pack:
@@ -22681,6 +22736,12 @@ paths:
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              format: binary
+              type: string
       tags:
       - git
   /v1/git/{org}/{repo}/info/refs:
@@ -23597,21 +23658,41 @@ paths:
   /v1/git/webhook:
     post:
       operationId: post_v1_git_webhook
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/pushEvent'
       tags:
       - git
   /v1/git/zap/createRepo:
     post:
       operationId: post_v1_git_zap_createrepo
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/zapProcReq'
       tags:
       - git
   /v1/git/zap/deleteRepo:
     post:
       operationId: post_v1_git_zap_deleterepo
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/zapProcReq'
       tags:
       - git
   /v1/git/zap/getRepo:
     post:
       operationId: post_v1_git_zap_getrepo
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/zapProcReq'
       tags:
       - git
   /v1/git/zap/listRepos:

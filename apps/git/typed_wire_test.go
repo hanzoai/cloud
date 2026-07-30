@@ -186,6 +186,81 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 	}
 }
 
+// declaredBodies is the CLOSED list of untypedByDesign routes that DECLARE the
+// request they read (openapi.Register, webhook.go). "Cannot be a typed op" is not
+// "must be undocumented": a route publishing an operationId and nothing else is
+// indistinguishable, to every SDK generator, from a route that takes no body — so
+// the forge webhook shipped with nowhere to put the delivery and three ZAP
+// procedures with nowhere to put the repo name.
+//
+// The value is the media type the declaration renders under, which is the fact
+// worth pinning: JSON for a body that is a document, octet-stream for one that is
+// opaque bytes. Every OTHER route in untypedByDesign must publish NO requestBody,
+// because it reads none — the two ZAP procedures that ignore the body (listRepos,
+// usage), the ref advertisement, and the twelve HTML pages. Declaring a body for
+// one of those would replace an honest silence with a fresh falsehood.
+var declaredBodies = map[string]string{
+	"POST /v1/git/webhook":                       "application/json",
+	"POST /v1/git/zap/createRepo":                "application/json",
+	"POST /v1/git/zap/getRepo":                   "application/json",
+	"POST /v1/git/zap/deleteRepo":                "application/json",
+	"POST /v1/git/{org}/{repo}/git-upload-pack":  "application/octet-stream",
+	"POST /v1/git/{org}/{repo}/git-receive-pack": "application/octet-stream",
+	"POST /{org}/{repo}/git-upload-pack":         "application/octet-stream",
+	"POST /{org}/{repo}/git-receive-pack":        "application/octet-stream",
+}
+
+// TestRefusedRoutesDeclareTheBodyTheyRead holds the description of the 24 refusals
+// to the list above, in both directions.
+func TestRefusedRoutesDeclareTheBodyTheyRead(t *testing.T) {
+	doc, err := openapi.Spec(mountApp(t), openapi.Info{Title: "git", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	for key := range untypedByDesign {
+		method, path, ok := strings.Cut(key, " ")
+		if !ok {
+			t.Fatalf("malformed key %q", key)
+		}
+		op := doc.Paths[path][strings.ToLower(method)]
+		if op == nil {
+			continue // TestEveryRouteIsTypedOrNamed owns the "still served" half
+		}
+		want, declared := declaredBodies[key]
+		switch {
+		case declared && op.RequestBody == nil:
+			t.Errorf("%s reads a %s body and declares none — every generated SDK offers "+
+				"this call with no payload parameter. Restore its openapi.Register (webhook.go).", key, want)
+		case declared:
+			// Operation.RequestBody is `any` because two seams write it; a REFUSED
+			// route's can only have come from openapi.Register.
+			body, ok := op.RequestBody.(*openapi.RequestBody)
+			if !ok {
+				t.Errorf("%s: request body is %T, not the *openapi.RequestBody Register writes", key, op.RequestBody)
+				continue
+			}
+			if _, ok := body.Content[want]; !ok {
+				got := make([]string, 0, len(body.Content))
+				for media := range body.Content {
+					got = append(got, media)
+				}
+				sort.Strings(got)
+				t.Errorf("%s declares %v, want %s", key, got, want)
+			}
+		case op.RequestBody != nil:
+			t.Errorf("%s declares a request body but reads none — an SDK would demand a "+
+				"payload the handler never looks at. Either it now reads one (add it to "+
+				"declaredBodies) or the declaration is false.", key)
+		}
+	}
+	for key := range declaredBodies {
+		if _, named := untypedByDesign[key]; !named {
+			t.Errorf("declaredBodies names %q, which is not a refused route — a TYPED op states "+
+				"its own body from its In type, so a declaration beside it is a second source", key)
+		}
+	}
+}
+
 // cliNameCollisions is the CLOSED list of CLI command names that MORE THAN ONE of
 // git's typed ops derives — the fourth projection's version of the partition
 // above, and a live defect rather than a design choice.
