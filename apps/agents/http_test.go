@@ -99,7 +99,7 @@ func TestHTTPGateIsolationAndRun(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("run want 200, got %d (%s)", code, body)
 	}
-	var rv runView
+	var rv agentRunView
 	_ = json.Unmarshal(body, &rv)
 	if rv.Status != "ok" || rv.Output != "the answer" {
 		t.Fatalf("run should return the model output, got %+v", rv)
@@ -172,7 +172,7 @@ func TestHTTPCreateThenGetRunByReturnedID(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("run by returned id want 200, got %d (%s)", code, body)
 	}
-	var rv runView
+	var rv agentRunView
 	_ = json.Unmarshal(body, &rv)
 	if rv.Status != "ok" || rv.Output != "the answer" {
 		t.Fatalf("run by id must return the model output, got %+v", rv)

@@ -536,11 +536,12 @@ func toTargetView(t Target, load TargetLoad) targetView {
 // is also the only bound form cmd/zipdoc can lift prose from.
 type targetOps struct{ s *cloud.Service[state] }
 
-// targetCaller is caller() for a typed op: the validated principal that owns a
-// machine it registers. Empty off the HTTP path, where there is no request and
-// therefore no caller — which fails closed, since an empty owner never satisfies
-// the ownership arm of targetOwns.
-func targetCaller(ctx context.Context) string {
+// callerOf is caller() for a typed op: the validated principal behind the
+// request — the owner of a machine it registers, the actor a session is recorded
+// under. Empty off the HTTP path, where there is no request and therefore no
+// caller — which fails closed, since an empty owner never satisfies the ownership
+// arm of targetOwns.
+func callerOf(ctx context.Context) string {
 	if c, ok := cloud.Request(ctx); ok {
 		return caller(c)
 	}
@@ -570,12 +571,18 @@ func tenantOf(ctx context.Context) (string, error) {
 	return org, nil
 }
 
+// noInput is the In of an op addressed entirely by the caller's principal: it
+// takes nothing off the wire. ONE of these for the whole package.
+type noInput struct{}
+
+// noContent is the Out of an op that answers 204 with an empty body. It is an
+// ALIAS for the unnamed empty struct, not a definition: zip keys the response on
+// 204 only when the Out type has no name, so a defined type here would publish
+// "200 with a body" about a route that answers 204 with none.
+type noContent = struct{}
+
 // targetRef addresses one target. The id is the path segment: the URL is the
 // addressing authority, so it binds from there whatever a body says.
-// noTargetInput is the In of an op addressed entirely by the caller's principal:
-// it takes nothing off the wire.
-type noTargetInput struct{}
-
 type targetRef struct {
 	// ID is the target to act on, from the path.
 	ID string `json:"id"`
@@ -597,10 +604,22 @@ type targetDeleted struct {
 
 // patchTargetIn is a partial update. Every field is optional — a nil field is
 // left alone — and the id comes from the path.
+//
+// The mutable fields are spelled out HERE, not embedded from a body struct with
+// one user. They used to be embedded, and the shipped consequence was measurable:
+// zip's schema walk takes only EXPORTED fields and an embedded field of an
+// unexported type is not one, so openapi.yaml published this request body as
+// `{id}` alone and no generated client could send a single mutable field.
 type patchTargetIn struct {
 	// ID is the target to update, from the path.
-	ID string `json:"id"`
-	patchTargetReq
+	ID       string   `json:"id"`
+	Label    *string  `json:"label"`
+	Kind     *string  `json:"kind"`
+	Status   *string  `json:"status"`
+	Capacity *string  `json:"capacity"`
+	Host     *string  `json:"host"`
+	Spec     *Spec    `json:"spec"`
+	Metrics  *Metrics `json:"metrics"` // present => a heartbeat; the server stamps its time
 }
 
 // zipdoc lifts the doc comment off each typed op and its In/Out fields into
@@ -614,14 +633,12 @@ type patchTargetIn struct {
 // captured as a ref. The static /v1/agents/targets precedes /v1/agents/targets/:id.
 func mountTargets(s *cloud.Service[state], app cloud.Router) {
 	g := app.Group("/v1/agents")
-	// Bridge FIRST: a typed op receives only a context, so the validated org
-	// reaches it by being parked there — never as an In field, which is
-	// caller-supplied and would be a cross-tenant read the caller asserted for
-	// itself. fiber runs middleware in registration order, so this must precede
-	// the leaves below; it is prefix-scoped, and nesting under Serve's own Bridge
-	// is harmless (the inner one is what the handler sees). Same shape
-	// apps/search and apps/integrations already use.
-	g.Use(cloud.Bridge())
+	// cloud.Bridge is installed ONCE, at the top of Mount, ahead of every leaf on
+	// this prefix. It used to be installed here, which was too late for the leaves
+	// registered before this call: fiber runs middleware in registration order, so
+	// the sessions and agent-CRUD routes above would have had no org on the context
+	// the moment they became typed ops.
+	//
 	// TYPED ops, declared on the group itself: zip.Get and friends take any
 	// Router since v1.18.0, so the prefix is part of each op's path and every
 	// projection — the document, the MCP tool, the CLI command, the call plane —
@@ -709,7 +726,7 @@ func (o targetOps) registerTarget(ctx context.Context, in *targetReq) (*targetVi
 	// The registering principal OWNS this machine (least privilege): only it (or an
 	// org admin) may later mint the claim key, claim runs, report, patch, or delete
 	// it. tenant() already required a validated principal, so this is non-empty.
-	owner := targetCaller(ctx)
+	owner := callerOf(ctx)
 
 	// Idempotent re-link: the SAME machine (org+host+owner) refreshes its existing
 	// target rather than piling up duplicates, so mission-control shows one row per
@@ -760,7 +777,7 @@ func (o targetOps) registerTarget(ctx context.Context, in *targetReq) (*targetVi
 
 // ListTargets returns every machine registered to the caller's org, newest
 // first, each with its live session load.
-func (o targetOps) listTargets(ctx context.Context, _ *noTargetInput) (*targetList, error) {
+func (o targetOps) listTargets(ctx context.Context, _ *noInput) (*targetList, error) {
 	org, err := tenantOf(ctx)
 	if err != nil {
 		return nil, err
@@ -839,7 +856,7 @@ func (o targetOps) patchTarget(ctx context.Context, in *patchTargetIn) (*targetV
 	if !targetOwns(ctx, t) {
 		return nil, zip.ErrNotFound("target not found")
 	}
-	body := in.patchTargetReq
+	body := *in
 	if body.Label != nil {
 		nl := strings.TrimSpace(*body.Label)
 		if nl == "" {

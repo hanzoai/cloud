@@ -9,6 +9,13 @@ import (
 )
 
 func init() {
+	zip.Describe("DELETE /v1/agents/:ref", zip.Doc{
+		Description: "DeleteAgent removes an agent and every run recorded against it. Answers 204.",
+		Fields: map[string]string{
+			"agentRef.ref": "Ref is the agent's public id (the agent_… handle create and list return) or\nits org-unique name, from the path. Either resolves the same agent.",
+		},
+		Example: json.RawMessage(`{"ref":"helper"}`),
+	})
 	zip.Describe("DELETE /v1/agents/targets/:id", zip.Doc{
 		Description: "DeleteTarget deregisters one machine. Only its owner, or an org admin, may\nremove it; an unknown id, a cross-org id and a machine owned by someone else\nall answer the same not-found, so a probe learns nothing about what exists.",
 		Fields: map[string]string{
@@ -17,6 +24,113 @@ func init() {
 			"targetRef.id":          "ID is the target to act on, from the path.",
 		},
 		Example: json.RawMessage(`{"id":"tgt_1"}`),
+	})
+	zip.Describe("GET /v1/agents", zip.Doc{
+		Description: "ListAgents returns every agent defined in the caller's org, each with the\nnumber of runs recorded against it.",
+		Fields: map[string]string{
+			"agentList.agents": "Agents is the org's agents, each carrying its recorded run count.",
+		},
+	})
+	zip.Describe("GET /v1/agents/:ref", zip.Doc{
+		Description: "GetAgent returns one agent with its system prompt and its 20 most recent runs.\nThe ref is the agent's public id or its org-unique name — a created agent is\nimmediately gettable by whatever create handed back.",
+		Fields: map[string]string{
+			"agentRef.ref": "Ref is the agent's public id (the agent_… handle create and list return) or\nits org-unique name, from the path. Either resolves the same agent.",
+		},
+		Example: json.RawMessage(`{"ref":"helper"}`),
+	})
+	zip.Describe("GET /v1/agents/:ref/runs", zip.Doc{
+		Description: "ListAgentRuns returns one agent's execution history, newest first — each run's\ninput, its output or its error, and how long it took. Every row is a run that\nactually happened.",
+		Fields: map[string]string{
+			"runList.runs":    "Runs is the agent's executions, newest first.",
+			"runsQuery.limit": "Limit caps how many runs come back, newest first. Absent, zero or out of\nrange (1..200) reads as 50.",
+			"runsQuery.ref":   "Ref is the agent's public id or its org-unique name, from the path.",
+		},
+		Example: json.RawMessage(`{"ref":"helper","limit":20}`),
+	})
+	zip.Describe("GET /v1/agents/activity", zip.Doc{
+		Description: "AgentActivity serves the org-wide recent-activity feed. Events are REAL: each\nrecorded run is an invoked (ok) or failed (error) event; each agent's own\ncreate/update timestamps are created/updated events. Merged, newest first,\ncapped. Nothing is invented — an org with no agents and no runs gets [].",
+		Fields: map[string]string{
+			"activityFeed.activity": "Activity is the merged run/create/update events, newest first, capped at 50.",
+			"activityView.agent":    "agent name",
+			"activityView.at":       "RFC3339 UTC",
+			"activityView.kind":     "invoked|failed|created|updated (from real events)",
+		},
+	})
+	zip.Describe("GET /v1/agents/builds", zip.Doc{
+		Description: "ListBuilds returns the public index of every published build, most recently\nupdated first, so a gallery can link straight to the story behind each product.\nPUBLIC, no tenancy: publishing is the author's act, and only published root\nsessions appear here.",
+		Fields: map[string]string{
+			"buildList.builds":  "Builds is every published build, most recently updated first.",
+			"buildsQuery.limit": "Limit caps the page. Absent, zero or over 500 reads as 100.",
+		},
+	})
+	zip.Describe("GET /v1/agents/builds/:org/:project", zip.Doc{
+		Description: "ReadBuild returns the readable build of one product: the agent session that\nproduced it, turn by turn — the prompts, the reasoning, the commits each turn\nproduced — plus the exact `git log` that re-derives every commit binding from\ngit itself, so nothing here has to be taken on trust.\n\nPUBLIC, no tenancy: it answers only for a session its author explicitly\npublished, which is what makes it safe to be anonymous. An unpublished session\nis invisible here no matter who asks; its owner reads it through the org-scoped\n/v1/agents/sessions routes, which need a validated principal.",
+		Fields: map[string]string{
+			"buildRef.org":     "Org is the org that published the build, from the path.",
+			"buildRef.project": "Project is the product's slug, from the path.",
+			"buildView.verify": "Verify is the exact command that re-derives every commit binding below\nstraight from git, so nothing here has to be taken on trust.",
+		},
+		Example: json.RawMessage(`{"org":"hanzo","project":"landing"}`),
+	})
+	zip.Describe("GET /v1/agents/metrics", zip.Doc{
+		Description: "AgentMetrics serves the invocations-over-time histogram for the org's Agents\ndashboard. Every point is a REAL count of recorded runs in that time bucket —\none series line per agent that ran in the window. The Resource Usage rollup is\nall-null because this store meters no CPU/memory/storage/cost; the console\nrenders those as \"—\" rather than a fabricated figure. No runs => empty series\n(an honest \"not connected / no activity yet\"), never a synthesized trend.",
+		Fields: map[string]string{
+			"metricsQuery.range": "Range is the window to bucket: 24H, 7D or 30D. Anything else reads as 30D.",
+			"metricsView.range":  "echoes the requested window (24H|7D|30D)",
+			"metricsView.series": "per-agent invocation histogram (real)",
+			"seriesLine.key":     "agent name",
+			"seriesPoint.t":      "bucket start, RFC3339 UTC",
+			"seriesPoint.v":      "real invocation count in the bucket",
+		},
+		Example: json.RawMessage(`{"range":"7D"}`),
+	})
+	zip.Describe("GET /v1/agents/sessions", zip.Doc{
+		Description: "ListSessions returns the caller org's live sessions, newest first — each with\nits event count, its direct-child count and a one-line preview of its latest\nevent. With no filter it returns ROOT sessions only, so a dashboard shows one\nrow per flow rather than one per subagent; ?root= or ?parent= descends.",
+		Fields: map[string]string{
+			"sessionList.sessions":  "Sessions is the matching sessions, each with its event and child counts and\na one-line preview of its latest event.",
+			"sessionQuery.limit":    "Limit caps the page. Absent, zero or over 500 reads as 100.",
+			"sessionQuery.parent":   "Parent scopes the page to the direct children of one session. Ignored when\nroot is set; with neither, only ROOT sessions come back.",
+			"sessionQuery.project":  "Project filters to the sessions tagged with one product slug.",
+			"sessionQuery.root":     "Root scopes the page to one subagent tree (its root session id).",
+			"sessionQuery.status":   "Status filters to running, paused, done or error.",
+			"sessionView.host":      "Execution context (mission-control): the machine/repo/cwd a card shows and\nthe run-target a session is dispatched to. Omitted when a surface didn't report it.",
+			"sessionView.lastEvent": "LastEvent is the compact latest-activity line for the list projection (nil in\nregister/patch/tree responses; set by list + detail). It lets a swipe card show\na live one-line preview without fetching full detail.",
+			"sessionView.org":       "Org is the caller's OWN tenant, echoed so a client can build the public\nbuild URL (/builds/:org/:project) without a second call or a guess. It is\nnever another tenant's — every read is org-scoped before it gets here.",
+			"sessionView.project":   "The readable build: the product this session built and whether its story\nis public (provenance.go).",
+		},
+		Example: json.RawMessage(`{"status":"running","limit":20}`),
+	})
+	zip.Describe("GET /v1/agents/sessions/:id", zip.Doc{
+		Description: "GetSession returns one session with its direct child sessions and its 50 most\nrecent events, oldest of those first.",
+		Fields: map[string]string{
+			"sessionRef.id":         "ID is the session to act on, from the path.",
+			"sessionView.host":      "Execution context (mission-control): the machine/repo/cwd a card shows and\nthe run-target a session is dispatched to. Omitted when a surface didn't report it.",
+			"sessionView.lastEvent": "LastEvent is the compact latest-activity line for the list projection (nil in\nregister/patch/tree responses; set by list + detail). It lets a swipe card show\na live one-line preview without fetching full detail.",
+			"sessionView.org":       "Org is the caller's OWN tenant, echoed so a client can build the public\nbuild URL (/builds/:org/:project) without a second call or a guess. It is\nnever another tenant's — every read is org-scoped before it gets here.",
+			"sessionView.project":   "The readable build: the product this session built and whether its story\nis public (provenance.go).",
+		},
+		Example: json.RawMessage(`{"id":"sess_1"}`),
+	})
+	zip.Describe("GET /v1/agents/sessions/:id/control", zip.Doc{
+		Description: "DrainSessionControl returns the steering commands (pause/resume/stop/message)\nrecorded against the caller's own session that are newer than the cursor,\noldest first, with the cursor to poll from next. It is how a locally started\n`hanzo code` session — which is not task-backed, so nothing forwards its\ncommands to an execution engine — consumes what the dashboard posted. Read-only\nand bounded at 200 per poll, so a steady poll is cheap and an applied command is\nnever redelivered.",
+		Fields: map[string]string{
+			"controlDrain.commands": "Commands is the session's control commands newer than the cursor, oldest first.",
+			"controlDrain.cursor":   "Cursor is the seq to send as `after` on the next poll — the highest seq in\nthis page, or the cursor sent in when the page is empty.",
+			"controlDrainIn.after":  "After is the last seq this poller applied; only commands newer than it come\nback. Absent or negative reads as 0, which drains from the beginning.",
+			"controlDrainIn.id":     "ID is the session whose commands are being drained, from the path.",
+		},
+		Example: json.RawMessage(`{"id":"sess_1","after":12}`),
+	})
+	zip.Describe("GET /v1/agents/sessions/:id/tree", zip.Doc{
+		Description: "SessionTree returns the subagent-flow graph rooted at this session: the session,\nits children, their children, each node carrying its own event count. One\nindexed read pulls the whole flow (every node of a flow shares a root id), so\nthe shape is assembled in memory rather than by walking the store per node.",
+		Fields: map[string]string{
+			"sessionRef.id":         "ID is the session to act on, from the path.",
+			"sessionView.host":      "Execution context (mission-control): the machine/repo/cwd a card shows and\nthe run-target a session is dispatched to. Omitted when a surface didn't report it.",
+			"sessionView.lastEvent": "LastEvent is the compact latest-activity line for the list projection (nil in\nregister/patch/tree responses; set by list + detail). It lets a swipe card show\na live one-line preview without fetching full detail.",
+			"sessionView.org":       "Org is the caller's OWN tenant, echoed so a client can build the public\nbuild URL (/builds/:org/:project) without a second call or a guess. It is\nnever another tenant's — every read is org-scoped before it gets here.",
+			"sessionView.project":   "The readable build: the product this session built and whether its story\nis public (provenance.go).",
+		},
+		Example: json.RawMessage(`{"id":"sess_1"}`),
 	})
 	zip.Describe("GET /v1/agents/targets", zip.Doc{
 		Description: "ListTargets returns every machine registered to the caller's org, newest\nfirst, each with its live session load.",
@@ -53,24 +167,61 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"tgt_1"}`),
 	})
+	zip.Describe("PATCH /v1/agents/:ref", zip.Doc{
+		Description: "UpdateAgent changes an agent in place. Every field is optional; a field the\nrequest omits keeps its stored value. The resulting mode+schedule are\nre-validated together, so a partial update can never leave a long-running\nagent without the cron the scheduler needs to fire it, and a transition INTO\nlong-running counts against the per-org cap on scheduled agents.",
+		Fields: map[string]string{
+			"updateAgentIn.ref": "Ref is the agent to update — its public id or org-unique name, from the path.",
+		},
+		Example: json.RawMessage(`{"ref":"helper","instructions":"be terse and cite sources"}`),
+	})
+	zip.Describe("PATCH /v1/agents/sessions/:id", zip.Doc{
+		Description: "PatchSession updates a session's surface-owned truth: its status, its title,\nthe run-target it is dispatched to, and the product it built plus whether that\nbuild's story is public. A FINISHED session stays finished — reopening a\ndone/error run would fabricate liveness — and publishing is refused unless the\nsession names the project it built, because the public build route is keyed on\n(org, project).",
+		Fields: map[string]string{
+			"patchSessionIn.id":      "ID is the session to update, from the path.",
+			"patchSessionIn.project": "Project tags the product this session built; Published is the author's\ndecision to let anyone read the story (provenance.go). Both are pointers so\n\"absent\" and \"cleared\" are different requests.",
+			"patchSessionIn.target":  "Target re-dispatches a session to a run-target (the #48 association). \"\" detaches.",
+			"sessionView.host":       "Execution context (mission-control): the machine/repo/cwd a card shows and\nthe run-target a session is dispatched to. Omitted when a surface didn't report it.",
+			"sessionView.lastEvent":  "LastEvent is the compact latest-activity line for the list projection (nil in\nregister/patch/tree responses; set by list + detail). It lets a swipe card show\na live one-line preview without fetching full detail.",
+			"sessionView.org":        "Org is the caller's OWN tenant, echoed so a client can build the public\nbuild URL (/builds/:org/:project) without a second call or a guess. It is\nnever another tenant's — every read is org-scoped before it gets here.",
+			"sessionView.project":    "The readable build: the product this session built and whether its story\nis public (provenance.go).",
+		},
+		Example: json.RawMessage(`{"id":"sess_1","status":"done"}`),
+	})
 	zip.Describe("PATCH /v1/agents/targets/:id", zip.Doc{
 		Description: "PatchTarget updates one machine in place. Every field is optional; a field the\nrequest omits is left alone. A metrics patch IS a heartbeat — the server stamps\nits own clock, so a client can neither forge nor backdate staleness.",
 		Fields: map[string]string{
-			"GPU.memory":             "VRAM bytes, 0 = unknown",
-			"GPU.model":              "\"GB10\", \"8060S\", \"RTX 4090\"",
-			"GPU.vendor":             "nvidia | amd | apple | intel | ...",
-			"Metrics.at":             "unix seconds, server-stamped",
-			"Metrics.gpuUtil":        "0..1 aggregate utilization",
-			"Metrics.memFree":        "bytes",
-			"Metrics.memUsed":        "bytes",
-			"Spec.arch":              "amd64 | arm64 | ...",
-			"Spec.cpus":              "logical cores",
-			"Spec.memory":            "total RAM, bytes",
-			"Spec.os":                "linux | darwin | windows",
-			"patchTargetIn.id":       "ID is the target to update, from the path.",
-			"patchTargetReq.metrics": "present => a heartbeat; the server stamps its time",
+			"GPU.memory":            "VRAM bytes, 0 = unknown",
+			"GPU.model":             "\"GB10\", \"8060S\", \"RTX 4090\"",
+			"GPU.vendor":            "nvidia | amd | apple | intel | ...",
+			"Metrics.at":            "unix seconds, server-stamped",
+			"Metrics.gpuUtil":       "0..1 aggregate utilization",
+			"Metrics.memFree":       "bytes",
+			"Metrics.memUsed":       "bytes",
+			"Spec.arch":             "amd64 | arm64 | ...",
+			"Spec.cpus":             "logical cores",
+			"Spec.memory":           "total RAM, bytes",
+			"Spec.os":               "linux | darwin | windows",
+			"patchTargetIn.id":      "ID is the target to update, from the path.",
+			"patchTargetIn.metrics": "present => a heartbeat; the server stamps its time",
 		},
 		Example: json.RawMessage(`{"id":"tgt_1","status":"draining"}`),
+	})
+	zip.Describe("POST /v1/agents", zip.Doc{
+		Description: "CreateAgent defines an agent in the caller's org: a model, a system prompt\n(instructions) and a set of tool names. The name must be unique in the org and\nmatch ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$. An omitted model takes the\ndeployment's configured default; a named one is checked against the gateway's\nserved catalog, so a model this deployment never serves is refused here rather\nthan failing at run time. A long-running agent must carry a 5-field cron\nschedule (the scheduler would otherwise never fire it) and counts against a\nper-org cap on scheduled agents.",
+		Example:     json.RawMessage(`{"name":"helper","model":"enso-flash","instructions":"be terse"}`),
+	})
+	zip.Describe("POST /v1/agents/sessions", zip.Doc{
+		Description: "RegisterSession opens a live agent session in the caller's org — the row every\nsurface (the CLI's outer agent, hanzo.bot, the console, chat) hangs its\nactivity off. A session with a parentSessionId becomes a subagent of that\nsession and inherits its root, so one flow is one tree; without one it is\nitself a root. Registering with a terminal status records a session that has\nalready finished.",
+		Fields: map[string]string{
+			"registerReq.host":      "Execution context — where this session runs (all optional).",
+			"registerReq.project":   "The readable build (provenance.go): which product this session builds, and\nwhether its story may be read by the world.",
+			"registerReq.provider":  "Account tag — the linked AI account this session ran under (login manager).",
+			"sessionView.host":      "Execution context (mission-control): the machine/repo/cwd a card shows and\nthe run-target a session is dispatched to. Omitted when a surface didn't report it.",
+			"sessionView.lastEvent": "LastEvent is the compact latest-activity line for the list projection (nil in\nregister/patch/tree responses; set by list + detail). It lets a swipe card show\na live one-line preview without fetching full detail.",
+			"sessionView.org":       "Org is the caller's OWN tenant, echoed so a client can build the public\nbuild URL (/builds/:org/:project) without a second call or a guess. It is\nnever another tenant's — every read is org-scoped before it gets here.",
+			"sessionView.project":   "The readable build: the product this session built and whether its story\nis public (provenance.go).",
+		},
+		Example: json.RawMessage(`{"agent":"hanzo-dev","title":"ship the landing page","host":"gpu-01"}`),
 	})
 	zip.Describe("POST /v1/agents/targets", zip.Doc{
 		Description: "RegisterTarget registers a machine as an agent target, or re-links one that is\nalready registered. Re-linking is idempotent and keyed on org+host+owner, so a\nmachine that reconnects refreshes its own row rather than piling up duplicates;\nit answers 200, while a first registration answers 201.",
@@ -88,5 +239,35 @@ func init() {
 			"Spec.os":         "linux | darwin | windows",
 		},
 		Example: json.RawMessage(`{"label":"workshop","kind":"gpu","host":"gpu-01"}`),
+	})
+	zip.Describe("POST /v1/agents/targets/:id/claim", zip.Doc{
+		Description: "ClaimRoutedRun is the machine's long poll for work: it authenticates the\ndaemon, stamps the liveness the dispatch gate reads (the poll IS the proof a\nrunner is listening), and waits up to 25 seconds for the next run addressed to\nTHIS machine. It answers the run when one arrives and 204 with no body when the\nwindow elapses, on which the daemon re-polls immediately.\n\nTWO independent proofs are required and both fail closed to the same 403: the\ncaller must own this machine (or be an org admin) AND present its claim key in\nX-Target-Key. A run offered to one machine is unreachable from another's claim.",
+		Fields: map[string]string{
+			"routedRunOut.repo":           "Repo is the repository to work in and CloneURL is how to fetch it.",
+			"routedRunOut.sessionId":      "SessionID is the live session opened at dispatch; the machine streams its\nturns into it.",
+			"routedRunOut.timeoutSeconds": "TimeoutSeconds bounds the run on the machine; 0 means the machine's own default.",
+			"targetRef.id":                "ID is the target to act on, from the path.",
+		},
+		Example: json.RawMessage(`{"id":"tgt_1"}`),
+	})
+	zip.Describe("POST /v1/agents/targets/:id/claim-key", zip.Doc{
+		Description: "MintTargetClaimKey mints (or rotates) the claim key a `hanzo code --serve`\ndaemon presents to claim work for this machine, and returns it ONCE: only its\nSHA-256 hash is stored. Rotating supersedes any prior daemon, so only the\nmachine's owner — or an org admin — may call it; every other caller gets the\nsame not-found an unknown id gets, and learns nothing about what exists.",
+		Fields: map[string]string{
+			"claimKeyOut.claimKey": "ClaimKey is the capability itself. It is returned ONCE and never again — only\nits SHA-256 hash is stored — so a daemon that loses it mints a new one.",
+			"claimKeyOut.targetId": "TargetID is the machine the key authenticates.",
+			"targetRef.id":         "ID is the target to act on, from the path.",
+		},
+		Example: json.RawMessage(`{"id":"tgt_1"}`),
+	})
+	zip.Describe("POST /v1/agents/targets/:id/runs/:runId/report", zip.Doc{
+		Description: "ReportRoutedRun completes a claimed run: it delivers the terminal result to the\nrun's durable owner, which is what lets that workflow finish. Scoped to (org,\ntarget, run) and claim-key-authenticated, so a machine can only ever report a\nrun it legitimately holds. Idempotent — a report for an unknown or\nalready-finished run answers delivered:false rather than failing, because the\nsession's terminal state was already set by the machine's own stream.",
+		Fields: map[string]string{
+			"reportOut.delivered": "Delivered is true when a waiting durable owner received this result. False\nmeans there was none to deliver to — an unknown or already-finished run — which\nis a clean no-op, not an error.",
+			"reportRunIn.branch":  "Branch, CommitSha and Diffstat describe what the run produced; Error is the\nfailure when OK is false. Each is clamped, never rejected.",
+			"reportRunIn.id":      "ID is the machine reporting, from the path.",
+			"reportRunIn.ok":      "OK is whether the run succeeded; Changed whether it produced any commit.",
+			"reportRunIn.runId":   "RunID is the routed run being completed, from the path.",
+		},
+		Example: json.RawMessage(`{"id":"tgt_1","runId":"run_1","ok":true,"changed":true,"branch":"hanzo/fix"}`),
 	})
 }
