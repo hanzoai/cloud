@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/zap-proto/zip"
 )
@@ -27,16 +28,29 @@ const (
 // NewsItem is the normalized, source-agnostic shape every upstream (GDELT, RSS,
 // Atom) is projected into and the wire contract for GET /v1/world/news.
 type NewsItem struct {
-	Source  string `json:"source"`
-	Title   string `json:"title"`
-	Link    string `json:"link"`
-	PubDate string `json:"pubDate"` // RFC3339 UTC, or "" when the upstream gave no parseable date
-	Lang    string `json:"lang,omitempty"`
-	Image   string `json:"image,omitempty"`
-	Tone    string `json:"tone,omitempty"`
+	// Source is the outlet the item came from, as the upstream named it.
+	Source string `json:"source"`
+	// Title is the headline.
+	Title string `json:"title"`
+	// Link is the article's URL at the outlet.
+	Link string `json:"link"`
+	// PubDate is when the outlet published it, RFC3339 UTC. Empty when the
+	// upstream gave no date this could parse — items with no date sort last.
+	PubDate string `json:"pubDate"`
+	// Lang is the article's language code when the upstream reported one.
+	Lang string `json:"lang,omitempty"`
+	// Image is a lead-image URL when the upstream carried one.
+	Image string `json:"image,omitempty"`
+	// Tone is GDELT's own sentiment score for the article, as text. Only GDELT
+	// items carry it.
+	Tone string `json:"tone,omitempty"`
 }
 
+// newsResponse is one read of the merged feed.
 type newsResponse struct {
+	// Items is the merged, filtered, deduped feed, freshest first and capped at
+	// 50. A source that failed is skipped rather than failing the read, so this
+	// can be shorter than the pipeline's reach — it is never an error.
 	Items []NewsItem `json:"items"`
 }
 
@@ -69,26 +83,57 @@ func scope(c *zip.Ctx) (org, project string, err error) {
 	return org, project, nil
 }
 
-// getNews serves the merged, filtered, freshest-first news feed for the caller's
-// (org, project). It loads the pipeline (or the default), fans out to GDELT (per
-// keyword) + RSS (per feed) concurrently, applies the project filters, dedupes,
-// sorts by recency, caps the result, and publishes a live refresh to the SSE bus.
-func (s *service) getNews(c *zip.Ctx) error {
-	org, project, err := scope(c)
-	if err != nil {
-		return err
+// scopeOf is scope() for a typed op, which receives only a context.
+//
+// It reaches the REQUEST rather than taking either value from an In field, and both
+// halves of that are deliberate. The PROJECT is a claim the identity boundary minted
+// (X-Project-Id), which principal.OrgFrom does not carry, and it is a tenant key: an
+// In field is caller-supplied, so reading it from one would be a cross-scope read
+// the caller asserted for itself. The ?project QUERY is only ever cross-CHECKED
+// against that claim, and it cannot be an In field either — zip binds an In field
+// from the BODY as well as the URL, so PUT /v1/world/pipeline would start rejecting
+// a body that named a project, a wire this route has never had.
+//
+// Off the HTTP path there is no request and no principal, so it fails closed and
+// every op refuses — the handler's own gate, with no second gate to keep in sync.
+func scopeOf(ctx context.Context) (org, project string, err error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return "", "", zip.ErrForbidden("X-Org-Id required")
 	}
-	pipe, gerr := s.store.Get(c.Context(), org, project)
+	return scope(c)
+}
+
+// newsQuery is the news read's input. It carries nothing: the feed a caller gets is
+// entirely the (org, project) pipeline's, resolved server-side.
+type newsQuery struct{}
+
+// news returns the caller's merged world-news feed: every source their project's
+// pipeline names — GDELT once per keyword, plus each allowlisted RSS or Atom feed —
+// fetched concurrently, narrowed by the pipeline's keyword/region/source filters,
+// deduplicated by link and sorted freshest first, capped at 50 items.
+//
+// A project with no stored pipeline gets a sensible default set of world feeds
+// rather than an empty answer. A source that fails or times out is SKIPPED: the feed
+// degrades to honest partial results and never 5xxs because one outlet was down.
+// Reading also publishes the result to the /v1/world/stream subscribers of the same
+// (org, project), so a dashboard's own refresh updates every open tab.
+func (s *service) news(ctx context.Context, _ *newsQuery) (*newsResponse, error) {
+	org, project, err := scopeOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	pipe, gerr := s.store.Get(ctx, org, project)
 	if errors.Is(gerr, errNotFound) {
 		pipe = defaultPipeline()
 	} else if gerr != nil {
-		return zip.Errorf(http.StatusInternalServerError, "load pipeline: %v", gerr)
+		return nil, zip.Errorf(http.StatusInternalServerError, "load pipeline: %v", gerr)
 	}
 
-	ctx, cancel := context.WithTimeout(c.Context(), newsFetchTimeout)
+	fetchCtx, cancel := context.WithTimeout(ctx, newsFetchTimeout)
 	defer cancel()
 
-	items := s.collect(ctx, pipe)
+	items := s.collect(fetchCtx, pipe)
 	items = applyFilters(items, pipe.Filters)
 	items = dedupeByLink(items)
 	sortByPubDateDesc(items)
@@ -102,7 +147,7 @@ func (s *service) getNews(c *zip.Ctx) error {
 	if s.bus != nil {
 		s.bus.publish(streamUpdate{Org: org, Project: project, Items: items})
 	}
-	return c.JSON(http.StatusOK, newsResponse{Items: items})
+	return &newsResponse{Items: items}, nil
 }
 
 // collect fans out to every upstream (one GDELT query per keyword, one fetchRSS
@@ -218,60 +263,95 @@ func sortByPubDateDesc(items []NewsItem) {
 
 // ── pipeline handlers ──────────────────────────────────────────────────────
 
+// pipelineView is one project's configured news pipeline.
 type pipelineView struct {
-	Org       string   `json:"org"`
-	Project   string   `json:"project"`
-	Feeds     []string `json:"feeds"`
-	Filters   Filters  `json:"filters"`
-	Default   bool     `json:"default"` // true when no stored pipeline (default feeds returned)
-	CreatedAt string   `json:"createdAt,omitempty"`
-	UpdatedAt string   `json:"updatedAt,omitempty"`
+	// Org is the tenant the pipeline belongs to, resolved server-side from the
+	// validated principal.
+	Org string `json:"org"`
+	// Project is the org sub-scope the pipeline belongs to.
+	Project string `json:"project"`
+	// Feeds is the RSS/Atom feed URLs the pipeline reads. Every host is on the
+	// server's allowlist — a URL that is not cannot be stored.
+	Feeds []string `json:"feeds"`
+	// Filters narrows the merged feed.
+	Filters Filters `json:"filters"`
+	// Default is true when no pipeline is stored for this project and these are
+	// the built-in world feeds. Writing one turns it false.
+	Default bool `json:"default"`
+	// CreatedAt is when the pipeline was first stored, RFC3339 UTC. Absent on the
+	// default.
+	CreatedAt string `json:"createdAt,omitempty"`
+	// UpdatedAt is when it was last written, RFC3339 UTC. Absent on the default.
+	UpdatedAt string `json:"updatedAt,omitempty"`
 }
 
-func (s *service) getPipeline(c *zip.Ctx) error {
-	org, project, err := scope(c)
+// pipelineQuery is the pipeline read's input. It carries nothing: which pipeline is
+// read is entirely the caller's validated (org, project).
+type pipelineQuery struct{}
+
+// pipeline returns the caller project's news pipeline: which feeds it reads and how
+// the merged result is filtered. A project that has never written one is answered
+// with the built-in world feeds and `default: true`, so a fresh project sees the
+// same feed /v1/world/news would actually serve rather than an empty configuration.
+func (s *service) pipeline(ctx context.Context, _ *pipelineQuery) (*pipelineView, error) {
+	org, project, err := scopeOf(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	pipe, gerr := s.store.Get(c.Context(), org, project)
+	pipe, gerr := s.store.Get(ctx, org, project)
 	if errors.Is(gerr, errNotFound) {
-		return c.JSON(http.StatusOK, toPipelineView(org, project, defaultPipeline(), true))
+		v := toPipelineView(org, project, defaultPipeline(), true)
+		return &v, nil
 	}
 	if gerr != nil {
-		return zip.Errorf(http.StatusInternalServerError, "load pipeline: %v", gerr)
+		return nil, zip.Errorf(http.StatusInternalServerError, "load pipeline: %v", gerr)
 	}
-	return c.JSON(http.StatusOK, toPipelineView(org, project, pipe, false))
+	v := toPipelineView(org, project, pipe, false)
+	return &v, nil
 }
 
+// pipelineReq replaces the caller project's pipeline WHOLE. It is not a patch: a
+// field left out is stored empty, so sending only feeds clears the filters.
 type pipelineReq struct {
-	Feeds   []string `json:"feeds"`
-	Filters Filters  `json:"filters"`
+	// Feeds is the RSS/Atom feed URLs to read, at most 64. Each must be an
+	// http(s) URL whose host is on the server's allowlist — the SSRF guard is
+	// applied here, at the write, so a stored pipeline can never name a host the
+	// fetcher would refuse. Blank entries are dropped and duplicates collapse.
+	Feeds []string `json:"feeds"`
+	// Filters narrows the merged feed. Terms are trimmed, de-duplicated
+	// case-insensitively, and capped at 64 per axis.
+	Filters Filters `json:"filters"`
 }
 
-func (s *service) putPipeline(c *zip.Ctx) error {
-	org, project, err := scope(c)
+// setPipeline replaces the caller project's news pipeline and returns what was
+// stored. It is a WHOLE replacement, not a patch: a field the request leaves out is
+// stored empty, so sending only feeds clears the filters.
+//
+// Every feed URL is validated HERE, at the write boundary — http(s) only, and the
+// host must be on the server's allowlist — so a stored pipeline can never name a
+// host the fetcher would later refuse, and the allowlist is one decision in one
+// place rather than a check at each fetch.
+func (s *service) setPipeline(ctx context.Context, in *pipelineReq) (*pipelineView, error) {
+	org, project, err := scopeOf(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var body pipelineReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	feeds, err := s.sanitizeFeeds(body.Feeds)
+	feeds, err := s.sanitizeFeeds(in.Feeds)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	pipe, perr := s.store.Put(c.Context(), Pipeline{
+	pipe, perr := s.store.Put(ctx, Pipeline{
 		Org:       org,
 		Project:   project,
 		Feeds:     feeds,
-		Filters:   sanitizeFilters(body.Filters),
+		Filters:   sanitizeFilters(in.Filters),
 		UpdatedAt: time.Now().Unix(),
 	})
 	if perr != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist pipeline: %v", perr)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist pipeline: %v", perr)
 	}
-	return c.JSON(http.StatusOK, toPipelineView(org, project, pipe, false))
+	v := toPipelineView(org, project, pipe, false)
+	return &v, nil
 }
 
 // sanitizeFeeds validates the requested feed URLs at the WRITE boundary: each

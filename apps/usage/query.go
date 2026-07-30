@@ -19,9 +19,16 @@ const llmTable = "hanzo.cloud_usage"
 
 // ── Response shape ──────────────────────────────────────────────────────────
 
-type Scope struct {
-	Org  string `json:"org"`
-	User string `json:"user,omitempty"` // the caller's subject; whose linked-account rows the accounts block carries
+// usageScope is the tenant a usage read was answered for. It is resolved
+// server-side from the validated principal and echoed so a reader can prove which
+// tenant it is looking at; it is never something a caller sets.
+type usageScope struct {
+	// Org is the IAM org slug the rows were read under — the validated
+	// principal's, never a client header.
+	Org string `json:"org"`
+	// User is the caller's own subject, whose linked-account rows the accounts
+	// block carries. Absent on a read that is org-scoped only.
+	User string `json:"user,omitempty"`
 }
 
 // CategorySpend is one row of the spend-by-category breakdown: a friendly category
@@ -29,15 +36,22 @@ type Scope struct {
 // into it. Categories are DERIVED from the commerce ledger's own tags — never
 // fabricated — so an unknown tag surfaces as its own honest bucket.
 type CategorySpend struct {
+	// Category is the bucket the ledger's own tag mapped to. An untagged or
+	// unrecognised line gets its own honest bucket rather than being folded away.
 	Category string `json:"category"`
-	Cents    int64  `json:"cents"`
-	Count    int64  `json:"count"`
+	// Cents is what the org spent in that bucket over the window, in US cents.
+	Cents int64 `json:"cents"`
+	// Count is how many ledger lines rolled up into it.
+	Count int64 `json:"count"`
 }
 
 // SpendPoint is one time bucket of consumption (usage/withdrawal cents).
 type SpendPoint struct {
-	T     string `json:"t"` // RFC3339 bucket start (UTC)
-	Cents int64  `json:"cents"`
+	// T is the bucket's start instant, RFC3339 UTC. Buckets are gap-filled, so a
+	// window with no spend still has its points.
+	T string `json:"t"`
+	// Cents is the consumption recorded in that bucket, in US cents.
+	Cents int64 `json:"cents"`
 }
 
 // Spend is the cost roll-up: the genuinely-missing aggregation. TotalCents is the
@@ -46,36 +60,60 @@ type SpendPoint struct {
 // wallet the gateway debits. Available=false means commerce was unconfigured or
 // unreachable — honest zeros, never fabricated spend.
 type Spend struct {
-	Available      bool            `json:"available"`
-	TotalCents     int64           `json:"totalCents"`
-	MTDCents       int64           `json:"mtdCents"`
-	OverageCents   int64           `json:"overageCents"`
-	BalanceCents   int64           `json:"balanceCents"`
-	AvailableCents int64           `json:"availableCents"`
-	ByCategory     []CategorySpend `json:"byCategory"`
-	Series         []SpendPoint    `json:"series"`
-	Source         string          `json:"source"`
+	// Available is false when the commerce ledger was unconfigured or
+	// unreachable. Every number below is then an honest zero, NOT a measured one.
+	Available bool `json:"available"`
+	// TotalCents is consumption over the requested window, in US cents. It is
+	// self-consistent with ByCategory and Series.
+	TotalCents int64 `json:"totalCents"`
+	// MTDCents is commerce's authoritative month-to-date consumed figure, which
+	// is a different period from the window and is not derived from it.
+	MTDCents int64 `json:"mtdCents"`
+	// OverageCents is month-to-date consumption beyond the plan's allowance.
+	OverageCents int64 `json:"overageCents"`
+	// BalanceCents is the prepaid wallet's balance, in US cents.
+	BalanceCents int64 `json:"balanceCents"`
+	// AvailableCents is what of that balance is still spendable.
+	AvailableCents int64 `json:"availableCents"`
+	// ByCategory is the window's spend split by ledger category, largest first.
+	ByCategory []CategorySpend `json:"byCategory"`
+	// Series is the window's spend over time, gap-filled at the window's
+	// interval.
+	Series []SpendPoint `json:"series"`
+	// Source names where the roll-up came from.
+	Source string `json:"source"`
 }
 
 // LLM is the org's LLM usage totals from the warehouse ledger. Available=false when
 // the datastore is not connected (honest zeros). The detailed per-model / timeseries
 // breakdown lives at /v1/analytics/*; this is the KPI-band total.
 type LLM struct {
-	Available        bool   `json:"available"`
-	Requests         int64  `json:"requests"`
-	Tokens           int64  `json:"tokens"`
-	PromptTokens     int64  `json:"promptTokens"`
-	CompletionTokens int64  `json:"completionTokens"`
-	CostCents        int64  `json:"costCents"`
-	Models           int64  `json:"models"`
-	Source           string `json:"source"`
+	// Available is false when the warehouse was not connected or a query blipped.
+	// The totals below are then honest zeros, NOT measured ones.
+	Available bool `json:"available"`
+	// Requests is how many completions the org made in the window.
+	Requests int64 `json:"requests"`
+	// Tokens is the total tokens those completions consumed.
+	Tokens int64 `json:"tokens"`
+	// PromptTokens is the input half of that total.
+	PromptTokens int64 `json:"promptTokens"`
+	// CompletionTokens is the output half.
+	CompletionTokens int64 `json:"completionTokens"`
+	// CostCents is what they cost the org, in US cents. This IS a Hanzo charge.
+	CostCents int64 `json:"costCents"`
+	// Models is how many distinct models were used.
+	Models int64 `json:"models"`
+	// Source names the warehouse table the totals came from.
+	Source string `json:"source"`
 }
 
 // Sources reports which upstreams actually answered, so the console can badge a
 // board as "connected" vs "no data yet" honestly instead of showing a fabricated
 // zero as if it were real.
 type Sources struct {
-	Commerce  bool `json:"commerce"`
+	// Commerce is whether the billing ledger answered the spend block.
+	Commerce bool `json:"commerce"`
+	// Warehouse is whether the usage warehouse answered the LLM block.
 	Warehouse bool `json:"warehouse"`
 }
 
@@ -88,34 +126,57 @@ type Sources struct {
 // This is the account-usage plane's global view (moved from clients/link) unified
 // under the ONE /v1/usage/summary; the per-account time series is GET /v1/usage/samples.
 type Accounts struct {
-	Rows    []TotalView `json:"rows"`
+	// Rows is the two row sets CONCATENATED, never summed — each row says which
+	// side it came from. A percent is not money and a provider's own spend is not
+	// a Hanzo charge, so adding them would produce a number that means nothing.
+	Rows []TotalView `json:"rows"`
+	// Account is the state of the caller's own linked-account side.
 	Account SourceState `json:"account"`
-	Hanzo   SourceState `json:"hanzo"`
+	// Hanzo is the state of the org's Hanzo-routed side.
+	Hanzo SourceState `json:"hanzo"`
 }
 
 // SourceState is one side of the account board's availability + labelling: which
 // ledger answered, at what scope, and a human note.
 type SourceState struct {
-	Available bool   `json:"available"`
-	Scope     string `json:"scope"`
-	Source    string `json:"source"` // the table of record
-	Note      string `json:"note"`
+	// Available is whether this side's ledger answered. False means its rows are
+	// missing, not that there were none.
+	Available bool `json:"available"`
+	// Scope is whose rows this side carries: "user" or "org".
+	Scope string `json:"scope"`
+	// Source is the table of record the rows came from.
+	Source string `json:"source"`
+	// Note is the human sentence that says what this side's numbers mean, so a
+	// board cannot present a plan percentage as a Hanzo charge.
+	Note string `json:"note"`
 }
 
-// Summary is the whole own-scoped usage footprint roll-up over one window: the cost
-// roll-up (spend) + the org's LLM usage totals (llm) + the caller's linked-account
-// board (accounts). Spend/LLM are org-scoped; the account board is the caller's own
-// (org+subject). One screen, one authoritative money source, one window.
-type Summary struct {
-	Range    string   `json:"range"`
-	Start    string   `json:"start"`
-	End      string   `json:"end"`
-	Interval string   `json:"interval"`
-	Scope    Scope    `json:"scope"`
-	Spend    Spend    `json:"spend"`
-	LLM      LLM      `json:"llm"`
+// usageSummary is the whole own-scoped usage footprint roll-up over one window: the
+// cost roll-up (spend) + the org's LLM usage totals (llm) + the caller's
+// linked-account board (accounts). Spend/LLM are org-scoped; the account board is
+// the caller's own (org+subject). One screen, one authoritative money source, one
+// window.
+type usageSummary struct {
+	// Range is the window label that was served.
+	Range string `json:"range"`
+	// Start is the window's inclusive start, RFC3339 UTC.
+	Start string `json:"start"`
+	// End is the window's exclusive end, RFC3339 UTC.
+	End string `json:"end"`
+	// Interval is the bucket width the spend series is gap-filled at.
+	Interval string `json:"interval"`
+	// Scope is the tenant and subject the roll-up was answered for.
+	Scope usageScope `json:"scope"`
+	// Spend is the categorized cost roll-up from the billing ledger.
+	Spend Spend `json:"spend"`
+	// LLM is the org's Hanzo-routed inference totals from the warehouse.
+	LLM LLM `json:"llm"`
+	// Accounts is the caller's own linked provider accounts beside the org's
+	// Hanzo-routed usage, labelled row by row and never summed together.
 	Accounts Accounts `json:"accounts"`
-	Sources  Sources  `json:"sources"`
+	// Sources says which upstreams actually answered, so a zero can be read as
+	// "no data yet" rather than as a measurement.
+	Sources Sources `json:"sources"`
 }
 
 // ── Commerce ledger row (mirrors commerce GET /v1/billing/transactions) ──────

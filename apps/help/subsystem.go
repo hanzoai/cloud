@@ -24,12 +24,13 @@
 package help
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -82,6 +83,17 @@ func publicOrg(brand string) string {
 	return strings.TrimSpace(brand)
 }
 
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by
+// `make -C apps/help openapi` and by the Dockerfile before every build.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// ops binds the mounted Service so each op can be a method value — the only bound
+// form cmd/zipdoc can lift prose from. It carries STATE and no logic.
+type ops struct{ s *cloud.Service[state] }
+
 // routes mounts the four public endpoints under /v1/help. Per-client edge rate
 // limiting is the INGRESS's job: hanzoai/ingress terminates the client connection, so
 // it is the only layer that sees the real, unspoofable client IP. Behind it the app's
@@ -93,32 +105,80 @@ func publicOrg(brand string) string {
 // the edge limit to the ingress — the house pattern ("ingress carries the edge limit").
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/help")
-	g.Get("/articles", cloud.Handle(s, listArticles))
-	g.Get("/articles/:slug", cloud.Handle(s, getArticle))
-	g.Get("/categories", cloud.Handle(s, listCategories))
-	g.Post("/tickets", cloud.Handle(s, fileTicket))
+	// No cloud.Bridge here, deliberately. Bridge parks the VALIDATED org and the
+	// request on the context for ops that need them; this plane serves exactly ONE
+	// org, resolved server-side at mount (publicOrg) and never from a request, and
+	// no op here reads any other request fact. Installing it would carry an
+	// identity these routes must not consult.
+	//
+	// Declared on the GROUP: the op's path is the prefix composed with the leaf,
+	// which is the identity every projection keys on, and cmd/zipdoc resolves the
+	// prefix the same way, so the prose below reaches the document and the tool
+	// list.
+	o := ops{s: s}
+	zip.Get(g, "/articles", o.listArticles)
+	zip.Get(g, "/articles/:slug", o.getArticle)
+	zip.Get(g, "/categories", o.listCategories)
+	zip.Post(g, "/tickets", o.fileTicket, zip.WithStatus(http.StatusCreated))
 }
 
 // ---- public knowledge base ----
 
-// listArticles returns the public knowledge base: the public org's Published +
-// public articles. The org is server-fixed and the status/is_public filter is
-// server-set, so neither the tenant nor the visibility can be widened by the caller.
-func listArticles(s *cloud.Service[state], c *zip.Ctx) error {
-	org := s.State.publicOrg
+// helpArticleCard is one article in a public list: everything a card needs and
+// nothing more. The body is deliberately absent — a list is a navigation surface,
+// and the full text is one fetch away at /v1/help/articles/{slug}.
+type helpArticleCard struct {
+	// Slug is the article's stable public identifier and the path segment
+	// /v1/help/articles/{slug} addresses it by.
+	Slug string `json:"slug"`
+	// Title is the article's headline.
+	Title string `json:"title"`
+	// Category is the name of the knowledge-base section the article sits in, or
+	// empty when it is filed under none.
+	Category string `json:"category"`
+	// Excerpt is the short summary the author wrote for listings, or empty.
+	Excerpt string `json:"excerpt"`
+	// UpdatedAt is the unix second the article was last written, in the help
+	// center's own store.
+	UpdatedAt int64 `json:"updatedAt"`
+}
+
+// helpArticleList is the public knowledge base as a list.
+type helpArticleList struct {
+	// Data is the matching Published, public articles, newest write order last —
+	// the store's order, not a ranking. Empty when the center has none.
+	Data []helpArticleCard `json:"data"`
+}
+
+// helpArticlesQuery selects which public articles to list.
+type helpArticlesQuery struct {
+	// Category narrows the list to one knowledge-base section, matched against
+	// the article's category by exact name. Empty lists every section.
+	Category string `json:"category"`
+	// Limit caps how many articles are returned. Anything that is not a positive
+	// integer uses 50, and values above 200 are clamped to 200.
+	Limit int `json:"limit"`
+}
+
+// listArticles returns the public knowledge base: the help center's Published,
+// publicly-visible articles as cards. The org is server-fixed and the
+// status/is_public filter is server-set, so neither the tenant nor the visibility
+// can be widened by the caller. A deployment with no help center answers 404.
+func (o ops) listArticles(ctx context.Context, in *helpArticlesQuery) (*helpArticleList, error) {
+	org := o.s.State.publicOrg
 	if org == "" {
-		return zip.ErrNotFound("help center not available")
+		return nil, zip.ErrNotFound("help center not available")
 	}
 	filters := map[string]string{"status": "Published", "is_public": "1"}
-	if cat := strings.TrimSpace(c.Query("category")); cat != "" {
+	if cat := strings.TrimSpace(in.Category); cat != "" {
 		filters["category"] = cat
 	}
-	docs, err := framework.Search(c.Context(), org, DTArticle, filters, articleLimit(c))
+	docs, err := framework.Search(ctx, org, DTArticle, filters, articleLimit(in.Limit))
 	if err != nil {
-		s.Log.Warn("help: list articles", "org", org, "err", err)
-		return zip.Errorf(http.StatusInternalServerError, "list articles")
+		o.s.Log.Warn("help: list articles", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list articles")
 	}
-	out := make([]map[string]any, 0, len(docs))
+	out := make([]helpArticleCard, 0, len(docs))
 	for _, d := range docs {
 		// Defense in depth: never trust the SQL filter alone for a public read.
 		if !isPublished(d) {
@@ -126,49 +186,95 @@ func listArticles(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		out = append(out, articleCard(d))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &helpArticleList{Data: out}, nil
 }
 
-// getArticle returns one public article by slug (the article's document name IS its
-// slug). A missing, Draft, or internal (non-public) article is 404 — fail-closed, no
-// existence oracle beyond "published + public".
-func getArticle(s *cloud.Service[state], c *zip.Ctx) error {
-	org := s.State.publicOrg
-	slug := strings.TrimSpace(c.Param("slug"))
+// helpArticle is one public article, whole. It is the card plus the body: the
+// same fields a listing shows, so a client never has to reconcile two shapes.
+type helpArticle struct {
+	// Slug is the article's stable public identifier — the path segment it was
+	// addressed by.
+	Slug string `json:"slug"`
+	// Title is the article's headline.
+	Title string `json:"title"`
+	// Category is the name of the knowledge-base section the article sits in, or
+	// empty when it is filed under none.
+	Category string `json:"category"`
+	// Excerpt is the short summary the author wrote for listings, or empty.
+	Excerpt string `json:"excerpt"`
+	// Body is the article's rich-text content as the author saved it.
+	Body string `json:"body"`
+	// UpdatedAt is the unix second the article was last written.
+	UpdatedAt int64 `json:"updatedAt"`
+}
+
+// helpArticleRef addresses one public article.
+type helpArticleRef struct {
+	// Slug is the article's public identifier, from the path. It IS the document
+	// name in the help center's store.
+	Slug string `json:"slug"`
+}
+
+// getArticle returns one public article by slug, with its body. A missing, Draft,
+// or internal (non-public) article is 404 — fail-closed, so this route is no
+// existence oracle for anything beyond "published and public".
+func (o ops) getArticle(ctx context.Context, in *helpArticleRef) (*helpArticle, error) {
+	org := o.s.State.publicOrg
+	slug := strings.TrimSpace(in.Slug)
 	if org == "" || slug == "" {
-		return zip.ErrNotFound("article not found")
+		return nil, zip.ErrNotFound("article not found")
 	}
-	doc, err := framework.Get(c.Context(), org, DTArticle, slug)
+	doc, err := framework.Get(ctx, org, DTArticle, slug)
 	if err != nil {
 		if !errors.Is(err, framework.ErrNotFound) {
-			s.Log.Warn("help: get article", "org", org, "err", err)
+			o.s.Log.Warn("help: get article", "org", org, "err", err)
 		}
-		return zip.ErrNotFound("article not found")
+		return nil, zip.ErrNotFound("article not found")
 	}
 	if !isPublished(doc) {
-		return zip.ErrNotFound("article not found")
+		return nil, zip.ErrNotFound("article not found")
 	}
-	return c.JSON(http.StatusOK, articleDetail(doc))
+	v := articleDetail(doc)
+	return &v, nil
 }
 
-// listCategories returns the KB sections for the public center's navigation — but
-// ONLY the sections that front at least one Published + public article, so an internal
-// (agent-only) category name or description never leaks. A section with no public
-// article is invisible; an org with no public articles has no sections (empty, not an
-// error).
-func listCategories(s *cloud.Service[state], c *zip.Ctx) error {
-	org := s.State.publicOrg
+// helpCategory is one knowledge-base section a visitor can browse.
+type helpCategory struct {
+	// Name is the section's name, and the value an article's category matches.
+	Name string `json:"name"`
+	// Description is the section's blurb, or empty.
+	Description string `json:"description"`
+}
+
+// helpCategoryList is the public center's navigation.
+type helpCategoryList struct {
+	// Data is the sections that front at least one public article. Empty when the
+	// center publishes none.
+	Data []helpCategory `json:"data"`
+}
+
+// helpCategoriesQuery is the empty input of an op that takes nothing: this plane's category list
+// is the whole navigation and has no filter.
+type helpCategoriesQuery struct{}
+
+// listCategories returns the knowledge-base sections for the public center's
+// navigation — but ONLY the sections that front at least one Published, public
+// article, so an internal (agent-only) category name or description never leaks. A
+// section with no public article is invisible; a center with no public articles has
+// no sections, which is an empty list rather than an error.
+func (o ops) listCategories(ctx context.Context, _ *helpCategoriesQuery) (*helpCategoryList, error) {
+	org := o.s.State.publicOrg
 	if org == "" {
-		return zip.ErrNotFound("help center not available")
+		return nil, zip.ErrNotFound("help center not available")
 	}
 	// The categories reachable from public articles. Same Published+public predicate
 	// the KB serves, re-checked in Go (defense in depth), so this never widens beyond
 	// what the article list already exposes.
-	arts, err := framework.Search(c.Context(), org, DTArticle,
+	arts, err := framework.Search(ctx, org, DTArticle,
 		map[string]string{"status": "Published", "is_public": "1"}, maxArticleLimit)
 	if err != nil {
-		s.Log.Warn("help: list categories (articles)", "org", org, "err", err)
-		return zip.Errorf(http.StatusInternalServerError, "list categories")
+		o.s.Log.Warn("help: list categories (articles)", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list categories")
 	}
 	public := make(map[string]bool, len(arts))
 	for _, a := range arts {
@@ -179,66 +285,122 @@ func listCategories(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 	}
 	if len(public) == 0 {
-		return c.JSON(http.StatusOK, map[string]any{"data": []map[string]any{}})
+		return &helpCategoryList{Data: []helpCategory{}}, nil
 	}
-	docs, err := framework.Search(c.Context(), org, DTCategory, nil, maxArticleLimit)
+	docs, err := framework.Search(ctx, org, DTCategory, nil, maxArticleLimit)
 	if err != nil {
-		s.Log.Warn("help: list categories", "org", org, "err", err)
-		return zip.Errorf(http.StatusInternalServerError, "list categories")
+		o.s.Log.Warn("help: list categories", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list categories")
 	}
-	out := make([]map[string]any, 0, len(docs))
+	out := make([]helpCategory, 0, len(docs))
 	for _, d := range docs {
 		if !public[d.Name] { // a category name IS its document name; the article Links it by that name
 			continue
 		}
-		out = append(out, map[string]any{
-			"name":        d.Name,
-			"description": strField(d, "description"),
-		})
+		out = append(out, helpCategory{Name: d.Name, Description: strField(d, "description")})
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &helpCategoryList{Data: out}, nil
 }
 
 // ---- customer intake ----
 
-// ticketIntake is the anonymous customer submission. Only these fields are honored;
+// helpTicketIntake is the anonymous customer submission. Only these fields are honored;
 // status/source/assignment are server-owned (a customer can never open a ticket
 // pre-assigned or in a non-Open state).
-type ticketIntake struct {
-	Subject     string `json:"subject"`
+//
+// The two unexported fields are the request's SIZE and its SHAPE, recorded by
+// UnmarshalJSON below and read back in the handler. They exist because this route
+// decides four different statuses in a fixed order — 404 no center, 503 not
+// configured, 413 too large, 400 unusable — and a typed op never sees the request,
+// so zip would otherwise decode (and 400) the body before the first three gates
+// ran. Unexported means they reach no schema and no URL binding: they are not
+// something a caller sends.
+//
+// It preserves that order for an oversized body and for one that parses to the
+// wrong shape, and NOT for a body that is not valid JSON at all: encoding/json
+// validates the whole document before invoking any custom Unmarshaler, so zip's
+// decoder refuses a syntax error before this method is ever called.
+// TestSyntacticallyInvalidJSONIs400Early measures exactly that, so the one delta
+// typing this route took is a number in the suite rather than a claim here.
+type helpTicketIntake struct {
+	oversize  bool
+	malformed bool
+
+	// Subject is the one-line summary of the problem. Required; longer than 300
+	// characters is clipped rather than refused.
+	Subject string `json:"subject"`
+	// Description is the customer's message. Optional; it becomes the ticket's
+	// description AND the opening entry of its conversation thread. Clipped at
+	// 16 KiB.
 	Description string `json:"description"`
-	Email       string `json:"email"`
-	Priority    string `json:"priority"`
+	// Email is how the support team replies. Required; clipped at 320 characters
+	// (the RFC 5321 maximum). It is recorded as the ticket's customer, and it is
+	// not verified.
+	Email string `json:"email"`
+	// Priority is Low, Medium, High or Urgent, case-insensitively. Anything else —
+	// including omitting it — is recorded as Medium rather than refused.
+	Priority string `json:"priority"`
 }
 
-// fileTicket files a customer ticket into the public org. It creates the ticket
-// (status Open, source portal) with the customer's message on the description, then
-// records that message as the opening conversation entry. The description carries
-// the message regardless, so a failure to write the opening entry loses nothing.
-func fileTicket(s *cloud.Service[state], c *zip.Ctx) error {
-	org := s.State.publicOrg
+// UnmarshalJSON records the body's size and whether it decoded into this shape, and
+// refuses NOTHING — every judgement stays in fileTicket, in the order the route has
+// always decided it. A body that is valid JSON but not an object (an array, a bare
+// scalar) leaves every field at its zero value and is recorded as unusable, which
+// the handler answers with the same 400 it always did — after its two earlier gates.
+func (in *helpTicketIntake) UnmarshalJSON(b []byte) error {
+	type body helpTicketIntake // sheds the method, so this does not recurse
+	var v body
+	oversize := len(b) > maxIntakeBytes
+	malformed := json.Unmarshal(b, &v) != nil
+	*in = helpTicketIntake(v)
+	in.oversize, in.malformed = oversize, malformed
+	return nil
+}
+
+// helpTicketFiled is the receipt an anonymous submitter gets back.
+type helpTicketFiled struct {
+	// Ticket is the opaque, random customer-facing reference ("tkt_" + 24 hex
+	// characters). It is NOT the ticket's internal name: that name is sequential,
+	// and handing it out would disclose the center's ticket volume.
+	Ticket string `json:"ticket"`
+	// Status is the lifecycle state the ticket was filed in — always "Open".
+	Status string `json:"status"`
+}
+
+// fileTicket files a customer support ticket into the public help center. It
+// creates the ticket (status Open, source portal) with the customer's message on
+// the description, then records that same message as the opening entry of the
+// ticket's conversation thread; the description carries it regardless, so failing
+// to write that entry loses nothing. Answers 201 with an opaque reference.
+//
+// A deployment with no help center answers 404, one whose center has not installed
+// the Help model answers 503, and a body over 64 KiB answers 413 — in that order,
+// which is the order the route has always decided them in.
+func (o ops) fileTicket(ctx context.Context, in *helpTicketIntake) (*helpTicketFiled, error) {
+	org := o.s.State.publicOrg
 	if org == "" {
-		return zip.ErrNotFound("help center not available")
+		return nil, zip.ErrNotFound("help center not available")
 	}
-	if !framework.Installed(c.Context(), org, DTTicket) {
-		return zip.Errorf(http.StatusServiceUnavailable, "help center not configured")
+	if !framework.Installed(ctx, org, DTTicket) {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "help center not configured")
 	}
-	// Bound the whole body BEFORE parsing: the meaningful content is a subject + a
-	// bounded message + an email, far under this cap, so a larger body is abuse.
-	if len(c.Body()) > maxIntakeBytes {
-		return zip.Errorf(http.StatusRequestEntityTooLarge, "request too large")
+	// The whole body is bounded BEFORE anything reads it: the meaningful content is
+	// a subject + a bounded message + an email, far under this cap, so a larger body
+	// is abuse. Recorded at decode, decided here — after the two gates above, which
+	// is the order the untyped handler used.
+	if in.oversize {
+		return nil, zip.Errorf(http.StatusRequestEntityTooLarge, "request too large")
 	}
-	var in ticketIntake
-	if err := c.Bind(&in); err != nil {
-		return err
+	if in.malformed {
+		return nil, zip.ErrBadRequest("invalid request body")
 	}
 	subject := clip(in.Subject, maxSubject)
 	if subject == "" {
-		return zip.ErrBadRequest("subject is required")
+		return nil, zip.ErrBadRequest("subject is required")
 	}
 	email := clip(in.Email, maxSender)
 	if email == "" {
-		return zip.ErrBadRequest("email is required")
+		return nil, zip.ErrBadRequest("email is required")
 	}
 	message := clip(in.Description, maxMessage)
 
@@ -246,11 +408,11 @@ func fileTicket(s *cloud.Service[state], c *zip.Ctx) error {
 	// submitter reveals nothing about ticket volume; the monotonic name stays internal.
 	ref, err := newPublicRef()
 	if err != nil {
-		s.Log.Warn("help: mint ticket ref", "org", org, "err", err)
-		return zip.Errorf(http.StatusInternalServerError, "file ticket")
+		o.s.Log.Warn("help: mint ticket ref", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "file ticket")
 	}
 
-	created, err := framework.Ingest(c.Context(), org, DTTicket, map[string]any{
+	created, err := framework.Ingest(ctx, org, DTTicket, map[string]any{
 		"subject":     subject,
 		"description": message,
 		"customer":    email,
@@ -261,14 +423,14 @@ func fileTicket(s *cloud.Service[state], c *zip.Ctx) error {
 	}, "")
 	if err != nil {
 		if framework.IsValidationError(err) {
-			return zip.ErrBadRequest(err.Error())
+			return nil, zip.ErrBadRequest(err.Error())
 		}
-		s.Log.Warn("help: file ticket", "org", org, "err", err)
-		return zip.Errorf(http.StatusInternalServerError, "file ticket")
+		o.s.Log.Warn("help: file ticket", "org", org, "err", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "file ticket")
 	}
 
 	if message != "" {
-		if _, cerr := framework.Ingest(c.Context(), org, DTCommunication, map[string]any{
+		if _, cerr := framework.Ingest(ctx, org, DTCommunication, map[string]any{
 			"ticket":      created.Name,
 			"sender":      email,
 			"sender_type": "customer",
@@ -276,10 +438,10 @@ func fileTicket(s *cloud.Service[state], c *zip.Ctx) error {
 			"channel":     "portal",
 		}, ""); cerr != nil {
 			// Non-fatal: the message is already on the ticket description.
-			s.Log.Warn("help: opening message not recorded", "ticket", created.Name, "err", cerr)
+			o.s.Log.Warn("help: opening message not recorded", "ticket", created.Name, "err", cerr)
 		}
 	}
-	return c.JSON(http.StatusCreated, map[string]any{"ticket": ref, "status": "Open"})
+	return &helpTicketFiled{Ticket: ref, Status: "Open"}, nil
 }
 
 // newPublicRef mints the opaque, random customer-facing ticket reference — 96 bits of
@@ -297,25 +459,25 @@ func newPublicRef() (string, error) {
 // ---- projections & helpers ----
 
 // articleCard is the light list projection (no body). Only public-safe fields.
-func articleCard(d framework.Document) map[string]any {
-	return map[string]any{
-		"slug":      d.Name,
-		"title":     strField(d, "title"),
-		"category":  strField(d, "category"),
-		"excerpt":   strField(d, "excerpt"),
-		"updatedAt": d.UpdatedAt,
+func articleCard(d framework.Document) helpArticleCard {
+	return helpArticleCard{
+		Slug:      d.Name,
+		Title:     strField(d, "title"),
+		Category:  strField(d, "category"),
+		Excerpt:   strField(d, "excerpt"),
+		UpdatedAt: d.UpdatedAt,
 	}
 }
 
 // articleDetail is the full projection (with body). Only public-safe fields.
-func articleDetail(d framework.Document) map[string]any {
-	return map[string]any{
-		"slug":      d.Name,
-		"title":     strField(d, "title"),
-		"category":  strField(d, "category"),
-		"excerpt":   strField(d, "excerpt"),
-		"body":      strField(d, "body"),
-		"updatedAt": d.UpdatedAt,
+func articleDetail(d framework.Document) helpArticle {
+	return helpArticle{
+		Slug:      d.Name,
+		Title:     strField(d, "title"),
+		Category:  strField(d, "category"),
+		Excerpt:   strField(d, "excerpt"),
+		Body:      strField(d, "body"),
+		UpdatedAt: d.UpdatedAt,
 	}
 }
 
@@ -377,10 +539,11 @@ func clip(s string, max int) string {
 	return s
 }
 
-// articleLimit bounds the public list size (?limit=, default 50, max 200).
-func articleLimit(c *zip.Ctx) int {
-	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if err != nil || n <= 0 {
+// articleLimit bounds the public list size (?limit=, default 50, max 200). A
+// value zip could not read as an integer arrives as 0 and takes the default,
+// which is what the untyped handler did with a value strconv.Atoi rejected.
+func articleLimit(n int) int {
+	if n <= 0 {
 		return defaultArticleLimit
 	}
 	if n > maxArticleLimit {
