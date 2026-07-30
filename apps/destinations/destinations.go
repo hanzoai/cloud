@@ -513,16 +513,35 @@ func sealSecrets(s *cloud.Service[state], path string, secrets map[string]string
 // DestinationStatus is a destination's card for an org: its Spec (fields the console renders),
 // this org's connection state, and whether a credential is resolvable (live).
 type DestinationStatus struct {
-	Platform  string             `json:"platform"`
-	Name      string             `json:"name"`
-	Category  string             `json:"category"`
-	Connected bool               `json:"connected"`
-	Enabled   bool               `json:"enabled"`
-	Live      bool               `json:"live"`
-	Account   string             `json:"account,omitempty"`
-	Config    Config             `json:"config,omitempty"`
-	Fields    []DestinationField `json:"fields"`
-	Secrets   []string           `json:"secrets"`
+	Platform string `json:"platform"` // the platform slug, and the path segment every route addresses it by
+	Name     string `json:"name"`     // the platform's display name ("Google Analytics 4")
+	Category string `json:"category"` // groups the card: Analytics | Advertising
+	// Connected is true when this org has a stored row for the platform — it has
+	// been configured here at least once. It says nothing about whether a
+	// credential still resolves; that is Live.
+	Connected bool `json:"connected"`
+	// Enabled is whether the fan-out forwards to this destination. False on a
+	// destination that is connected but paused, and on one never connected.
+	Enabled bool `json:"enabled"`
+	// Live is whether a credential resolves RIGHT NOW: a KMS-sealed secret for this
+	// org, else the integrations connection named by the platform's Fallback, else
+	// no credential needed at all (a public-ingest sink like Umami). False on a
+	// connected destination whose secret has gone missing — Connected && !Live is
+	// exactly the "reconnect me" state.
+	Live bool `json:"live"`
+	// Account is the operator's own label for the connected account, as supplied on
+	// connect. Absent when unset.
+	Account string `json:"account,omitempty"`
+	// Config is the org's stored NON-SECRET configuration — the measurement/pixel
+	// ids keyed by DestinationField.Key. A secret is never in here; secrets live in
+	// KMS and only their names are published, in Secrets.
+	Config Config `json:"config,omitempty"`
+	// Fields are the non-secret inputs this platform needs, which the console card
+	// renders and the connect body fills.
+	Fields []DestinationField `json:"fields"`
+	// Secrets are the KMS secret NAMES this platform custodies for the org — names
+	// only, never values. The connect body accepts each under its camelCase form.
+	Secrets []string `json:"secrets"`
 }
 
 // statusOf builds the card for a destination, folding in the org's live row (row may
