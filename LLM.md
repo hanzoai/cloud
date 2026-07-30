@@ -1432,6 +1432,68 @@ default and a reason that stops being true goes red. `ai` and `licensing` stay
 ungated on purpose: their registrations are in another module, so there is no
 cloud-side route for a cloud-side gate to hold.
 
+**The six-plugin pass (graph, meet, prefs, settings, share, admission): 8 typed,
+3 refused, out of 11 operations that published NOTHING.** Small subsets, and the
+finding is not in the count:
+
+- **Five apps have a `plugin/<app>/main.go` and NO `apps/<app>/Makefile`, and
+  `mk/fleet.mk` reads `APPDIRS := $(wildcard apps/*/Makefile)` — so `openapi-check`,
+  the gate that regenerates the document from source and fails on drift, has never
+  regenerated `plugin/{meet,bot,catalog,crawl,zen}/openapi.json`.** Five published
+  subsets sit OUTSIDE the only gate that can catch failure mode #1, which is the
+  eight-path ingress loss. `apps/meet/Makefile` is added here (its subset
+  regenerated clean, so no drift had accumulated yet); `bot`, `catalog`, `crawl`
+  and `zen` are still outside. The claim in each generated Makefile's own header —
+  "Written from the same apps.Wire() parse that writes plugin/<app>/main.go, so an
+  app cannot have a main and no Makefile" — is false today: `plugin/gen-app-cmds`
+  scaffolds the main and writes no Makefile at all (`grep -c Makefile
+  plugin/gen-app-cmds/main.go` → 0). Find them with:
+
+      for p in plugin/*/main.go; do a=$(basename $(dirname $p)); \
+        [ -d apps/$a ] && [ ! -f apps/$a/Makefile ] && echo "$a"; done
+
+- **Failure mode #9 (the empty leaf) was live in two more places, and fixing it
+  cost nothing.** `prefs` and `share` each declared their collection root as
+  `g.Get("", …)` on a group, so `openapi.yaml` carried `/v1/prefs/` and
+  `/v1/share/` — paths this API has never served — beside every sibling without
+  one. Declaring the root on the app with its whole path (`zip.Get(zapp,
+  "/v1/share", …)`) fixes the document AND keeps the operationId: the untyped
+  projection derived `get_v1_share` from the slashed path and `defaultOpID` derives
+  the same from the unslashed one, so no SDK method moves. The untyped PATCH
+  sibling moved with it, or the document would have split one resource across two
+  keys. Fiber is non-strict, so both URL forms still answer;
+  `TestPrefsAnswerAtBothPathForms` and `TestSharesAnswerAtBothPathForms` pin that.
+- **The three refusals are all "zip cannot state this", and each is MEASURED.**
+  `POST /v1/meet/getToken` answers the raw join token as `text/plain` — the office
+  client reads it with `res.text()` — and a typed op always marshals JSON.
+  `GET /v1/meet/health` answers 200 or 503 with the SAME body, `ready` being the
+  whole dashboard fact at both, which is the multi-status gap (#78): a typed op's
+  only refusal is a returned error, rendered as zip's flat `{status,code,error}`,
+  so `ready:false` would vanish from the degraded answer. `PATCH /v1/prefs` is
+  three facts at once — a 16 KiB REQUEST-BYTE cap answering 413 that a typed op
+  cannot see (the #2 body-cap class), an empty body and a literal `null` body each
+  answering 400 where `op.invoke` skips the decode and `null` decodes to a nil map,
+  and an OPEN key space whose only carrier is `map[string]any`, whose `typeName` is
+  `""` so `hasRequestBody` publishes no request body at all. `apps/meet/
+  typed_wire_test.go` and `apps/prefs/wire_test.go` hold those wires, so a later
+  conversion has a ledger rather than a re-derivation.
+- **Failure mode #8 gained one instance and it is unavoidable today.**
+  `settingsReq.config` is `map[string]any` and publishes
+  `additionalProperties:{"type":"object"}` — false, since a config value is
+  routinely a string or a number. The alternatives all MOVE THE WIRE:
+  `json.RawMessage` changes `{"config":null}` from "store `{}`" to "store `null`"
+  and stops re-encoding, `map[string]json.RawMessage` changes number formatting and
+  large-int precision. Wire preservation wins; the fix is the one `reflect.Interface`
+  case in zip's `schemaOf` (an unconstrained element is `{}`, not an object).
+- Three `cloud.Request` entries were added and each is a request FACT, not a
+  tenant: graph FORWARDS the caller's `Authorization` to the indexer/graph when no
+  service token is configured, prefs' isolation key is the qualified
+  `<owner>/<name>` rather than the org, and admission's `?host=` default is the
+  request's own Host. All three fail closed off the HTTP path. Two of them had NO
+  test at all before — `apps/graph`'s forwarding and `apps/admission`'s Host
+  fallback both would have degraded silently (a 200 with an anonymous upstream
+  read; a 200 with `known:false` for every guard that omits the query).
+
 Re-measure rather than trusting the table — with the ONE command below, because
 the two this file used to carry were each half-right and disagreed by 83 routes:
 
