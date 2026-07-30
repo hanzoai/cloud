@@ -73,11 +73,27 @@ DECLARE an open-object input (`additionalProperties: true` — today
 `map[string]any` projects `additionalProperties: {"type":"object"}`, a false
 schema), BIND the URL onto one (`bindURL` returns early unless the In is a
 struct), and carry URL params OUTSIDE the body namespace — off the REST path
-`op.invoke` gets no path map (MCP and the call plane pass nil), and a create
-body's `name` IS the requested document name (`stringField(in, "name")`, engine
-ops.go), so folding `:name` into the body collides with a field the document
-owns. Re-verified against zip v1.18.6: none shipped. A schema that lies is
-worse than the route-only entry they carry today.
+`op.invoke` gets no path map (MCP and the call plane pass nil), and for a
+prompt-named DocType the create body's `name` IS the document's name
+(`stringField(in, "name")` → `doctype.ResolveName`), so folding `:name` into the
+body collides with a key the document owns. Re-verified against zip v1.18.6 (the
+pin) and v1.18.8 (the newest published tag): none of the three shipped.
+`TestOpenObjectRefusalStillHolds` reads all three, so no leg of this refusal can
+outlive its cause.
+
+The cost, measured: the two writes reach `openapi.yaml` as route-only entries —
+path parameters, no `requestBody`, no `responses`, no prose. An SDK method
+generated from that cannot send a document either, so the real choice is between
+a schema that lies about the body and no schema at all, and only the second goes
+away by itself when the capability lands.
+
+**Known spec defect (leg 1, live).** `docView` is `map[string]any`, and it is
+already the Out of four typed ops — get/submit/cancel one document, and the items
+of the list — so `openapi.yaml` currently tells every SDK and every agent that
+each field of a returned document is a JSON object. It is not: a document holds
+strings and numbers. The fix is one `case reflect.Interface` in zip's `schemaOf`
+returning `{}` (JSON Schema "any"), which is also leg 1 of the refusal above; it
+needs a zip release, so it is not made in this package.
 
 **Identity across the typed seam.** A typed op receives only a `context.Context`,
 so the engine `Caller` is assembled from two carriers parked ahead of the leaves
