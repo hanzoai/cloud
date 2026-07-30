@@ -160,14 +160,44 @@ func build(b cloud.Base, o oauth) (state, error) {
 
 // routes registers the /v1/deploy/* surface. Every observing/mutating route is
 // SuperAdmin-gated; the health probe is public (real k8s reachability).
+//
+// The first statement is the plane's MIDDLEWARE, hung on the /v1/deploy prefix so
+// it reaches every route below — the typed ops in dashboard.go included, which
+// register their own leaves on the same prefix. It carries the two facts every
+// route beneath it needs:
+//
+//   - cloud.Bridge, which parks the request on the context so a TYPED op — which
+//     receives only a context — can still reach the validated principal its
+//     scope is derived from (typed.go). Serve installs the same bridge for the
+//     whole binary; nesting is harmless (the inner one is what the handler sees)
+//     and this keeps the ops scoped wherever they are mounted, including a test
+//     app that never calls Serve.
+//   - bounce, which turns a REFUSED browser navigation into the sign-in redirect
+//     (scope.go). It is one rule for the typed ops and the raw handlers alike.
+//
+// It is installed FIRST: fiber runs middleware in registration order, so one
+// installed after its leaves never runs.
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	// Liveness — public (probe-able without a JWT).
-	app.Get("/v1/deploy/health", cloud.Handle(s, health))
+	app.Group(dashPrefix).Use(cloud.Bridge(), bounce)
+
+	// Liveness — public (probe-able without a JWT). It stays a RAW handler because
+	// it answers 503 carrying the SAME domain body as its 200 (status + the k8s and
+	// crd booleans), and a typed op's only non-2xx is a returned error, which zip
+	// renders as the flat HTTPError {status,code,error} — there is nowhere in that
+	// shape for the probe's facts. zip.WithStatus refuses a non-2xx by design
+	// (typed.go:112), so this is the multi-status gap, not an oversight.
+	app.Get(dashPrefix+"/health", cloud.Handle(s, health))
 	// Sign-in — necessarily public: these three routes ARE how a browser gets an
 	// authenticated principal for this host. They grant nothing themselves; the
 	// session they mint is an IAM JWT the identity boundary re-verifies on every
 	// later request, and a principal outside the admin org is refused a cookie.
 	// See login.go.
+	//
+	// login and callback stay RAW because their success IS a 302 with a Set-Cookie:
+	// a typed op answers 200/204 or a 2xx it DECLARED, and redirecting from inside
+	// one does not escape that — zip stamps cmp.Or(op.Status, 204) over the 302 for
+	// a nil Out (typed.go:305-309). logout stays raw for the body-decode reason the
+	// other POSTs do (registerDashboardRoutes).
 	app.Get(loginPath, cloud.Handle(s, login))
 	app.Get(callbackPath, cloud.Handle(s, callback))
 	// POST, not GET: signing out changes state, and a state-changing GET is
@@ -195,15 +225,15 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // restored from client input, so it already implies a validated principal, and
 // adding the conjunct here alone would give the console two admin rules.
 //
-// The SHAPE of the refusal is this console's own: a browser NAVIGATION to a
-// deploy URL is sent to the sign-in page (a 403 page with no way to sign in is a
-// dead end), while every API call keeps its 403. wantsDocument decides, and it
-// decides "no" unless the request positively identifies as a document GET — so
-// the API contract, and every client that depends on the 403, is untouched.
+// The SHAPE of the refusal is not decided here: the gate states the DECISION
+// (forbidden), and the one middleware every /v1/deploy route passes through
+// (bounce, scope.go) is what sends a browser NAVIGATION to the sign-in page
+// instead of handing it a 403 it cannot act on. Splitting the two is what let the
+// typed ops beside these raw handlers keep the identical wire — see scope.go.
 func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
 		if !principal.IsSuperAdmin(c) {
-			return refuse(c) // the ONE fail-closed refusal (redirect a navigation, 403 an API call)
+			return forbidden() // the ONE fail-closed refusal
 		}
 		return h(c)
 	}
