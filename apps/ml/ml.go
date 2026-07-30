@@ -178,65 +178,98 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// /v1/clusters; ml only READS it to federate serving onto the org's cluster).
 	s.State.fleet = fleet.New(deps.Brand, s.Log)
 
-	// Models (kserve InferenceService).
-	app.Get("/v1/ml/models", list(s, modelKind))
-	app.Post("/v1/ml/models", create(s, modelKind))
-	app.Get("/v1/ml/models/:name", get(s, modelKind))
-	app.Patch("/v1/ml/models/:name", patch(s, modelKind))
-	app.Delete("/v1/ml/models/:name", del(s, modelKind))
-	app.Post("/v1/ml/models/:name/predict", cloud.Handle(s, predict))
-
-	// Training jobs (trainer TrainJob).
-	app.Get("/v1/train/jobs", list(s, jobKind))
-	app.Post("/v1/train/jobs", create(s, jobKind))
-	app.Get("/v1/train/jobs/:name", get(s, jobKind))
-	app.Delete("/v1/train/jobs/:name", del(s, jobKind))
-
-	// Experiments + trials (katib).
-	app.Get("/v1/train/experiments", list(s, expKind))
-	app.Post("/v1/train/experiments", create(s, expKind))
-	app.Get("/v1/train/experiments/:name", get(s, expKind))
-	app.Delete("/v1/train/experiments/:name", del(s, expKind))
-	app.Get("/v1/train/experiments/:name/trials", cloud.Handle(s, trials))
-
-	// Real-probe health. The subsystem registers with cloud.HealthOwner, so
-	// serve.go skips its generic auto-health and these two own the probes,
-	// reporting ACTUAL k8s reachability + CRD presence.
-	app.Get("/v1/ml/health", health(s, "ml", isvcGVR))
-	app.Get("/v1/train/health", health(s, "train", trainjobGVR, experimentGVR))
-
+	mount(s, app)
 	s.Log.Info("ml/train surface mounted", "k8s", s.State.dyn != nil, "brand", deps.Brand, "env", deps.Env, "billing", s.State.bill.Enabled())
 	return nil
 }
 
-// ── CRUD (generic across the three kinds) ────────────────────────────────────
+// mount registers the surface on app. It is separate from Mount because Mount
+// BUILDS the state — a Kubernetes client from whatever config the process can
+// resolve — and the routes do not care where the state came from. Splitting the
+// two lets a test pin the state (a fake client, or a deliberately nil one) and
+// exercise the ROUTES, instead of asserting a wire that depends on whether the
+// box running the suite happens to have a kubeconfig.
+func mount(s *cloud.Service[state], app cloud.Router) {
+	// TWO groups, one per top-level noun this subsystem owns, so each op's path is
+	// its group's prefix composed with its leaf — the identity every projection
+	// keys on, and the composition cmd/zipdoc resolves the same way (zip v1.18.3+),
+	// which is what carries the prose in typed.go to the document and the MCP tool
+	// list.
+	//
+	// cloud.Bridge FIRST on each group: a typed op receives only a context, so the
+	// request its tenant seam reads (tenantFrom — the org SUB-SCOPE and
+	// platform-admin-ness live in headers principal.OrgFrom does not carry) has to
+	// be parked there. fiber runs middleware in registration order, so this must
+	// precede the leaves below; nesting under Serve's own app-wide Bridge is
+	// harmless — the inner one is what the handler sees.
+	// One `g := <router>.Group("/prefix")` per line: cmd/zipdoc resolves a group's
+	// prefix by reading that exact assignment form, and it FAILS the generate rather
+	// than filing prose under a path that does not exist — so a tuple assignment
+	// costs the doc comments below, silently, in both the document and the MCP tool
+	// list.
+	gml := app.Group("/v1/ml")
+	gtrain := app.Group("/v1/train")
+	gml.Use(cloud.Bridge())
+	gtrain.Use(cloud.Bridge())
+	o := ops{s: s}
 
-func list(s *cloud.Service[state], k resourceKind) zip.Handler {
-	return func(c *zip.Ctx) error {
-		if err := ready(s); err != nil {
-			return err
-		}
-		ns, _, _, err := tenant(s, c)
-		if err != nil {
-			return err
-		}
-		ul, err := s.State.dyn.Resource(k.gvr).Namespace(ns).List(c.Context(), metav1.ListOptions{})
-		if err != nil {
-			if apierrors.IsNotFound(err) { // tenant namespace not created yet
-				return c.JSON(http.StatusOK, map[string]any{"items": []any{}})
-			}
-			return k8sErr(s, c, k, "list", err)
-		}
-		return c.JSON(http.StatusOK, map[string]any{"items": viewList(ul.Items)})
-	}
+	// Models (kserve InferenceService).
+	zip.Get(gml, "/models", o.listModels)
+	// UNTYPED BY DESIGN — the pre-create billing gate. cloud.DenyResource writes
+	// the fleet's nested {"error":{"code","message"}} 402/503 contract IN BAND on
+	// the response; a typed op's only refusal channel is a returned error, which
+	// zip renders as the flat {"status","code","error"} HTTPError. Typing it would
+	// change the 402 body every funded-balance client already parses. Same for the
+	// two below. See typed_wire_test.go.
+	gml.Post("/models", create(s, modelKind))
+	zip.Get(gml, "/models/:name", o.getModel)
+	// UNTYPED BY DESIGN — an opaque RFC 7386 merge patch, relayed VERBATIM to the
+	// Kubernetes API. A typed In would re-encode it, and re-encoding a merge patch
+	// changes what it means (an integer round-trips through float64).
+	gml.Patch("/models/:name", patch(s, modelKind))
+	zip.Delete(gml, "/models/:name", o.deleteModel)
+	// UNTYPED BY DESIGN — a verbatim proxy: the predictor's own status code, body
+	// bytes and Content-Type are returned unchanged, which no typed Out can carry.
+	gml.Post("/models/:name/predict", cloud.Handle(s, predict))
+
+	// Training jobs (trainer TrainJob).
+	zip.Get(gtrain, "/jobs", o.listJobs)
+	gtrain.Post("/jobs", create(s, jobKind)) // untyped by design — see /v1/ml/models
+	zip.Get(gtrain, "/jobs/:name", o.getJob)
+	zip.Delete(gtrain, "/jobs/:name", o.deleteJob)
+
+	// Experiments + trials (katib).
+	zip.Get(gtrain, "/experiments", o.listExperiments)
+	gtrain.Post("/experiments", create(s, expKind)) // untyped by design — see /v1/ml/models
+	zip.Get(gtrain, "/experiments/:name", o.getExperiment)
+	zip.Delete(gtrain, "/experiments/:name", o.deleteExperiment)
+	zip.Get(gtrain, "/experiments/:name/trials", o.listTrials)
+
+	// Real-probe health. The subsystem registers with cloud.HealthOwner, so
+	// serve.go skips its generic auto-health and these two own the probes,
+	// reporting ACTUAL k8s reachability + CRD presence.
+	//
+	// UNTYPED BY DESIGN — both answer 503 carrying the degraded REPORT as their
+	// body (status/k8s/error/crds), which is the point of a real probe. A typed op
+	// can only reach a non-2xx by returning an error, and zip renders that as its
+	// own envelope, dropping the report.
+	gml.Get("/health", health(s, "ml", isvcGVR))
+	gtrain.Get("/health", health(s, "train", trainjobGVR, experimentGVR))
 }
+
+// ── CRUD ─────────────────────────────────────────────────────────────────────
+//
+// list, get, delete and the trials leaf are TYPED ops — see typed.go. What
+// remains here is the three routes whose wire a typed op cannot state: create
+// (the in-band billing denial) and patch (the verbatim merge patch), plus the
+// predict proxy and the two real health probes below.
 
 func create(s *cloud.Service[state], k resourceKind) zip.Handler {
 	return func(c *zip.Ctx) error {
 		if err := ready(s); err != nil {
 			return err
 		}
-		ns, org, project, err := tenant(s, c)
+		ns, org, project, err := tenant(c)
 		if err != nil {
 			return err
 		}
@@ -294,7 +327,7 @@ func create(s *cloud.Service[state], k resourceKind) zip.Handler {
 			case apierrors.IsInvalid(err), apierrors.IsBadRequest(err):
 				return zip.Errorf(http.StatusUnprocessableEntity, "%s rejected by kubernetes: %v", k.kind, err)
 			default:
-				return k8sErr(s, c, k, "create", err)
+				return k8sErr(s, k, "create", err)
 			}
 		}
 		// Resource created — debit the caller's org ledger for the compute
@@ -305,32 +338,12 @@ func create(s *cloud.Service[state], k resourceKind) zip.Handler {
 	}
 }
 
-func get(s *cloud.Service[state], k resourceKind) zip.Handler {
-	return func(c *zip.Ctx) error {
-		if err := ready(s); err != nil {
-			return err
-		}
-		ns, _, _, err := tenant(s, c)
-		if err != nil {
-			return err
-		}
-		out, err := s.State.dyn.Resource(k.gvr).Namespace(ns).Get(c.Context(), reqName(c), metav1.GetOptions{})
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				return zip.ErrNotFound(k.kind + " not found")
-			}
-			return k8sErr(s, c, k, "get", err)
-		}
-		return c.JSON(http.StatusOK, view(out, true))
-	}
-}
-
 func patch(s *cloud.Service[state], k resourceKind) zip.Handler {
 	return func(c *zip.Ctx) error {
 		if err := ready(s); err != nil {
 			return err
 		}
-		ns, _, _, err := tenant(s, c)
+		ns, _, _, err := tenant(c)
 		if err != nil {
 			return err
 		}
@@ -346,29 +359,10 @@ func patch(s *cloud.Service[state], k resourceKind) zip.Handler {
 			case apierrors.IsInvalid(err), apierrors.IsBadRequest(err):
 				return zip.Errorf(http.StatusUnprocessableEntity, "patch rejected by kubernetes: %v", err)
 			default:
-				return k8sErr(s, c, k, "patch", err)
+				return k8sErr(s, k, "patch", err)
 			}
 		}
 		return c.JSON(http.StatusOK, view(out, true))
-	}
-}
-
-func del(s *cloud.Service[state], k resourceKind) zip.Handler {
-	return func(c *zip.Ctx) error {
-		if err := ready(s); err != nil {
-			return err
-		}
-		ns, _, _, err := tenant(s, c)
-		if err != nil {
-			return err
-		}
-		if err := s.State.dyn.Resource(k.gvr).Namespace(ns).Delete(c.Context(), reqName(c), metav1.DeleteOptions{}); err != nil {
-			if apierrors.IsNotFound(err) {
-				return zip.ErrNotFound(k.kind + " not found")
-			}
-			return k8sErr(s, c, k, "delete", err)
-		}
-		return c.NoContent(http.StatusNoContent)
 	}
 }
 
@@ -382,7 +376,7 @@ func predict(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := ready(s); err != nil {
 		return err
 	}
-	ns, _, _, err := tenant(s, c)
+	ns, _, _, err := tenant(c)
 	if err != nil {
 		return err
 	}
@@ -392,7 +386,7 @@ func predict(s *cloud.Service[state], c *zip.Ctx) error {
 		if apierrors.IsNotFound(err) {
 			return zip.ErrNotFound("model not found")
 		}
-		return k8sErr(s, c, modelKind, "get", err)
+		return k8sErr(s, modelKind, "get", err)
 	}
 	addr := internalURL(obj)
 	if addr == "" {
@@ -423,33 +417,6 @@ func predict(s *cloud.Service[state], c *zip.Ctx) error {
 		c.SetHeader("Content-Type", respCT)
 	}
 	return c.Bytes(resp.StatusCode, rb)
-}
-
-// trials lists the katib Trials owned by an experiment in the caller's tenant
-// namespace. The experiment is fetched first so a cross-tenant or missing name
-// is a clean 404 rather than an empty list.
-func trials(s *cloud.Service[state], c *zip.Ctx) error {
-	if err := ready(s); err != nil {
-		return err
-	}
-	ns, _, _, err := tenant(s, c)
-	if err != nil {
-		return err
-	}
-	name := reqName(c)
-	if _, err := s.State.dyn.Resource(experimentGVR).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{}); err != nil {
-		if apierrors.IsNotFound(err) {
-			return zip.ErrNotFound("experiment not found")
-		}
-		return k8sErr(s, c, expKind, "get", err)
-	}
-	ul, err := s.State.dyn.Resource(trialGVR).Namespace(ns).List(c.Context(), metav1.ListOptions{
-		LabelSelector: katibExpLabel + "=" + name,
-	})
-	if err != nil {
-		return k8sErr(s, c, resourceKind{trialGVR, "kubeflow.org/v1beta1", "Trial"}, "list", err)
-	}
-	return c.JSON(http.StatusOK, map[string]any{"experiment": name, "items": viewList(ul.Items)})
 }
 
 // health is a REAL probe: it verifies the API server is reachable and that the
@@ -492,7 +459,11 @@ func health(s *cloud.Service[state], name string, gvrs ...schema.GroupVersionRes
 // gateway-minted identity. Pure mapping lives in tenantNS for testability. The
 // returned project is the validated sub-scope (DefaultProject for a single-project
 // caller) — used for resource labels and the BYO-cluster federation shard.
-func tenant(s *cloud.Service[state], c *zip.Ctx) (ns, org, project string, err error) {
+//
+// It takes the REQUEST and nothing else: the tenant is a fact about the caller,
+// not about the service. tenantFrom (typed.go) is the same answer for a typed op,
+// which reaches the request through cloud.Bridge.
+func tenant(c *zip.Ctx) (ns, org, project string, err error) {
 	if !principal.Validated(c) {
 		// No validated principal — the restored X-Org-Id is a forge. Refuse before
 		// mapping to a per-org k8s namespace (provisions/reads ML resources).
@@ -570,7 +541,7 @@ func ready(s *cloud.Service[state]) error {
 // k8sErr maps a raw API error to an honest gateway-level error. RBAC denials
 // name the missing access so the operator knows exactly what to grant the
 // cloud-api service account.
-func k8sErr(s *cloud.Service[state], c *zip.Ctx, k resourceKind, op string, err error) error {
+func k8sErr(s *cloud.Service[state], k resourceKind, op string, err error) error {
 	s.Log.Error("k8s op failed", "op", op, "kind", k.kind, "resource", k.gvr.Resource, "err", err)
 	if apierrors.IsForbidden(err) {
 		return zip.Errorf(http.StatusBadGateway,
@@ -592,8 +563,18 @@ const mlTokenFileEnv = "HANZO_ML_TOKEN_FILE"
 // dynForOrg returns the client ML operations should target for an org+project: its
 // registered BYO cluster (federated via the shared fleet registry, read-only from
 // ml's side) or the home in-cluster client when the shard has no attached cluster.
-// The ONE federation seam — handlers resolve their client through here so a BYO
-// cluster transparently becomes the org+project's ML compute plane.
+//
+// DEFECT, NOT A DESIGN: this is documented as "the ONE federation seam — handlers
+// resolve their client through here" and NO handler calls it. Every route above
+// reaches s.State.dyn directly, so an org that registers a BYO cluster at
+// /v1/clusters gets its models and jobs on the HOME cluster and is told nothing.
+// Go does not complain about an unused function, which is why it went unnoticed.
+//
+// Left UNWIRED on purpose here: routing an op through this changes WHICH CLUSTER a
+// resource lands on, which is a behaviour change and not the description task the
+// typed migration is. Whoever fixes it owns the migration question too — resources
+// already created on the home cluster do not move — so it needs its own change with
+// its own tests, not a line slipped into a typing commit.
 func dynForOrg(s *cloud.Service[state], org, project string) dynamic.Interface {
 	if d := s.State.fleet.DynForOrg(org, project); d != nil {
 		return d
@@ -631,7 +612,13 @@ func newDynamic() (dynamic.Interface, error) {
 
 // ── pure helpers ─────────────────────────────────────────────────────────────
 
-func reqName(c *zip.Ctx) string { return strings.ToLower(strings.TrimSpace(c.Param("name"))) }
+// normName is the ONE normalisation of a caller-supplied resource name: lowered
+// and trimmed to the DNS-1123 label a CustomResource's metadata.name must be. The
+// untyped handlers read it off the path param, a typed op off its In field, and
+// both land on this function so the two cannot drift.
+func normName(name string) string { return strings.ToLower(strings.TrimSpace(name)) }
+
+func reqName(c *zip.Ctx) string { return normName(c.Param("name")) }
 
 // labelsFor stamps the managed-by + tenant-org(+project) labels onto a create. The
 // org label is set LAST (after any user labels) so a caller can never override the
@@ -653,24 +640,28 @@ func labelsFor(org, project string, user map[string]string) map[string]any {
 // view trims a CR to an honest, non-bloated shape: name + creation time + live
 // status, plus the spec on single-object reads. Namespace is intentionally
 // omitted (internal tenant detail).
-func view(obj *unstructured.Unstructured, withSpec bool) map[string]any {
-	m := map[string]any{
-		"name":      obj.GetName(),
-		"createdAt": obj.GetCreationTimestamp().UTC().Format(time.RFC3339),
+//
+// It returns the mlResource the typed ops publish (typed.go) and the untyped
+// create/patch writes with c.JSON — ONE projection, so the shape a caller reads
+// cannot depend on which route it came through, and the document describes both.
+func view(obj *unstructured.Unstructured, withSpec bool) mlResource {
+	v := mlResource{
+		Name:      obj.GetName(),
+		CreatedAt: obj.GetCreationTimestamp().UTC().Format(time.RFC3339),
 	}
 	if st, ok, _ := unstructured.NestedMap(obj.Object, "status"); ok {
-		m["status"] = st
+		v.Status = &st
 	}
 	if withSpec {
 		if sp, ok, _ := unstructured.NestedMap(obj.Object, "spec"); ok {
-			m["spec"] = sp
+			v.Spec = &sp
 		}
 	}
-	return m
+	return v
 }
 
-func viewList(items []unstructured.Unstructured) []map[string]any {
-	out := make([]map[string]any, 0, len(items))
+func viewList(items []unstructured.Unstructured) []mlResource {
+	out := make([]mlResource, 0, len(items))
 	for i := range items {
 		out = append(out, view(&items[i], false))
 	}
