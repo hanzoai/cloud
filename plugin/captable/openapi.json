@@ -74,7 +74,9 @@
     },
     "/v1/captable/convertibles/{id}": {
       "delete": {
-        "operationId": "delete_v1_captable_convertibles_by_id",
+        "operationId": "delete_v1_captable_convertibles_id",
+        "summary": "DeleteConvertible removes one of the caller org's convertible notes, taking its\nprincipal out of the cap table's unconverted-instrument totals.",
+        "description": "DeleteConvertible removes one of the caller org's convertible notes, taking its\nprincipal out of the cap table's unconverted-instrument totals. An id this org\ndoes not hold is not found.",
         "tags": [
           "captable"
         ],
@@ -83,11 +85,24 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the convertible note to delete.",
             "schema": {
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captableDeleted"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/captable/equity-plans": {
@@ -170,7 +185,9 @@
     },
     "/v1/captable/options/{id}": {
       "delete": {
-        "operationId": "delete_v1_captable_options_by_id",
+        "operationId": "delete_v1_captable_options_id",
+        "summary": "DeleteOption removes one of the caller org's option grants, taking its shares\nout of the cap table's granted-options and fully-diluted counts.",
+        "description": "DeleteOption removes one of the caller org's option grants, taking its shares\nout of the cap table's granted-options and fully-diluted counts. An id this org\ndoes not hold is not found.",
         "tags": [
           "captable"
         ],
@@ -179,11 +196,24 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the option grant to delete.",
             "schema": {
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captableDeleted"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/captable/rounds": {
@@ -216,7 +246,9 @@
     },
     "/v1/captable/rounds/{id}": {
       "get": {
-        "operationId": "get_v1_captable_rounds_by_id",
+        "operationId": "get_v1_captable_rounds_id",
+        "summary": "GetRound returns one of the caller org's fundraising rounds together with every\ninvestment written into it, oldest first.",
+        "description": "GetRound returns one of the caller org's fundraising rounds together with every\ninvestment written into it, oldest first. A round id that does not exist in the\ncaller's org is not found — including one that exists in another tenant, since\nthe org comes from the caller's principal and is part of the lookup.",
         "tags": [
           "captable"
         ],
@@ -225,11 +257,24 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the round to read. It is the path segment: the URL is the addressing\nauthority, and the org it is resolved in comes from the caller's principal,\nso an id from another tenant is simply not found.",
             "schema": {
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captableRoundDetail"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/captable/rounds/{id}/close": {
@@ -298,7 +343,9 @@
     },
     "/v1/captable/safes/{id}": {
       "delete": {
-        "operationId": "delete_v1_captable_safes_by_id",
+        "operationId": "delete_v1_captable_safes_id",
+        "summary": "DeleteSafe removes one of the caller org's SAFEs, taking its capital out of the\ncap table's unconverted-instrument totals.",
+        "description": "DeleteSafe removes one of the caller org's SAFEs, taking its capital out of the\ncap table's unconverted-instrument totals. An id this org does not hold is not\nfound.",
         "tags": [
           "captable"
         ],
@@ -307,11 +354,24 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the SAFE to delete.",
             "schema": {
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captableDeleted"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/captable/share-classes": {
@@ -401,7 +461,9 @@
     },
     "/v1/captable/shares/{id}": {
       "delete": {
-        "operationId": "delete_v1_captable_shares_by_id",
+        "operationId": "delete_v1_captable_shares_id",
+        "summary": "DeleteShare removes one of the caller org's share certificates, taking its\nshares out of the cap table's outstanding and fully-diluted counts.",
+        "description": "DeleteShare removes one of the caller org's share certificates, taking its\nshares out of the cap table's outstanding and fully-diluted counts. An id this\norg does not hold is not found.",
         "tags": [
           "captable"
         ],
@@ -410,11 +472,24 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the share certificate to delete.",
             "schema": {
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captableDeleted"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/captable/stakeholders": {
@@ -450,7 +525,9 @@
     },
     "/v1/captable/stakeholders/{id}": {
       "delete": {
-        "operationId": "delete_v1_captable_stakeholders_by_id",
+        "operationId": "delete_v1_captable_stakeholders_id",
+        "summary": "DeleteStakeholder removes one of the caller org's stakeholders.",
+        "description": "DeleteStakeholder removes one of the caller org's stakeholders. It REFUSES to\norphan issued equity: a holder that still holds share certificates or option\ngrants cannot be deleted, and answers 400 saying so — release or transfer the\nholdings first. An id this org does not hold is not found.",
         "tags": [
           "captable"
         ],
@@ -459,11 +536,24 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the stakeholder to delete.",
             "schema": {
               "type": "string"
             }
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/captableDeleted"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "patch": {
         "operationId": "patch_v1_captable_stakeholders_by_id",
@@ -578,6 +668,15 @@
           "safes": {
             "$ref": "#/components/schemas/captableInstrumentTotal",
             "description": "Safes is the SAFEs total."
+          }
+        },
+        "type": "object"
+      },
+      "captableDeleted": {
+        "properties": {
+          "success": {
+            "description": "Success is true when the row was removed.",
+            "type": "boolean"
           }
         },
         "type": "object"
@@ -905,6 +1004,55 @@
           "targetAmount": {
             "description": "TargetAmount is how much the round set out to raise.",
             "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "captableRoundDetail": {
+        "properties": {
+          "investments": {
+            "description": "Investments is every investment into this round, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/captableRoundInvestment"
+            },
+            "type": "array"
+          },
+          "round": {
+            "$ref": "#/components/schemas/captableRound",
+            "description": "Round is the round itself."
+          }
+        },
+        "type": "object"
+      },
+      "captableRoundInvestment": {
+        "properties": {
+          "amount": {
+            "description": "Amount is the cash invested.",
+            "type": "number"
+          },
+          "comments": {
+            "description": "Comments is the note recorded with the cheque, if any.",
+            "type": "string"
+          },
+          "date": {
+            "description": "Date is the ISO date of the investment.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the investment id.",
+            "type": "string"
+          },
+          "shares": {
+            "description": "Shares is how many shares the investment bought; 0 when the round issues no\nequity at the time of investment.",
+            "type": "integer"
+          },
+          "stakeholderId": {
+            "description": "StakeholderID is the investor.",
+            "type": "string"
+          },
+          "stakeholderName": {
+            "description": "StakeholderName is that investor's name.",
+            "type": "string"
           }
         },
         "type": "object"
