@@ -40,7 +40,7 @@ func (umami) Category() string { return categoryAnalytics }
 
 func (umami) Spec() Spec {
 	return Spec{
-		Fields: []Field{
+		Fields: []DestinationField{
 			{Key: "websiteId", Label: "Website ID", Required: true, Example: "b1e2c3d4-5678-90ab-cdef-1234567890ab"},
 			{Key: "host", Label: "Host (optional, self-hosted)", Required: false, Example: umamiHost},
 		},

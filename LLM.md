@@ -1224,6 +1224,59 @@ gates the whole surface as an EXACT set — live router == `app.Commands()` == t
 | F | ~~plan~~ (done: **15 typed, 0 refused** — the whole `/v1/plans` surface, which published 15 addresses and NOTHING about any of them. It is apps/pricing's shape one subsystem over, so it took pricing's answer: apps/goja re-marshals the bundle's reply with Go's encoding/json before a handler sees it, so decoding and re-marshalling is byte-identical, and `apps/plan/wire_test.go` proves it against the live router for all 12 sections × 3 identity shapes plus BOTH parameterised routes over EVERY id the shipped catalog holds. Opaque catalog values are `json.RawMessage`, not `map[string]any`: zip ≥v1.18.9 asks whether a type marshals itself before asking what it is made of, so a RawMessage publishes `{}` — "any JSON", true — while `map[string]any` publishes `additionalProperties:{"type":"object"}`, which the first `"priceMonthly": 20` in the catalog refutes. Two deltas recorded and PINNED rather than glossed: Content-Type gains `; charset=utf-8` (what every zip error on the surface already sent), and a non-200 body gains zip's `status` field beside the bundle's own message — the same trade main already took for `GET /v1/pricing/model/{name}`, whose 404 is equally first-class. Latent defect found and fixed by typing: the subsystem is named `plan` and serves `/v1/plans`, so `MountPrefixes`'s `/v1/<Name>` default covered NOTHING it registers — measured, `SubsystemOf("/v1/plans")` was `""` and `PriceOf` `undeclared`, and any middleware the subsystem installed (including the typed-op Bridge) landed on `/v1/plan` and never ran. `plugin/plan/main.go` now passes `manifest.PrefixesFor("plan")`; 28 other apps' `/v1/<name>` is likewise absent from their declared prefixes — most legitimately, because they declare deeper subtrees that DO cover their routes, so re-measure per app rather than fixing the list), ~~analytics 13~~ (done: **6 typed, 7 refused**, both ledgers GATED in apps/analytics/typed_wire_test.go — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed`, whose two ledgers must SUM to the served surface, so a route added untyped here goes red and a stale reason goes red too. The six are the READ lenses: `/v1/analytics/{overview,timeseries,top}`, `/v1/errors`, `/v1/insights/{events,health}`. The seven refusals are one probe and the six ingest doors, and they are MEASURED rather than asserted. `GET /v1/analytics/health` answers 503 CARRYING the degraded report as its body — the ml `/health` class — and `TestHealthStillCarriesItsReportAt503` pins the pair a typed op would have to break. The six doors share ONE admission decision (`handle`, event.go) resolved entirely from facts that never reach a typed op: the presented credential (Authorization / `x-hanzo-ingest-key` / `?ingest_key=`), the client IP and socket peer the anonymous rate caps key on, DNT/Sec-GPC, and the RAW body length that is the anonymous lane's 64 KiB→413 bound (`public.go maxPublicBytes`, invisible to a typed op and far below the fleet's global zip BodyLimit). Four of the six add a SECOND, independent blocker: the canonical wire is POLYMORPHIC (`decodeIngest` takes a bare Event object, a bare Event ARRAY, and the `{batch:[…]}`/`{events:[…]}` envelope on one path) and the team SPA's is a bare ARRAY unconditionally — bodies zip's `op.invoke` would 400 where they answer 200 today. `TestArrayBodiedDoorsStillAnswer200` is that measurement, so when zip can declare a polymorphic body the conversion is a test away rather than a re-derivation. Two latent defects surfaced and were fixed: plugin/analytics/main.go declared NO `Prefixes`, so the standalone binary's scope owned only the `/v1/<name>` default and five of the app's six prefixes were outside anything it could gate or that `cloud.Declare` could attribute — the pricing defect exactly, one app over; and `apps/analytics` had no `cloud.Bridge` of its own, relying entirely on Serve's app-wide install, which the package's own test harness does not run. A THIRD is fleet-wide and only named here: `SeriesPoint` was about to be a one-name/two-shape collision with apps/admin's `{t,value}` launch-board point, which `openapi.Weave` refuses — analytics yielded to `UsagePoint`, since its schema was not yet published. `TestEveryPublishedFieldIsDescribed` gates the response side: all 19 published schemas carry per-field prose, so `errorRate` says it is a ratio and `pct` says it is a share of the WINDOW rather than of the rows returned), the ~70 remaining packages, 1–11 routes each | ~358 |
 | — | ~~iam 25~~ (done: **0 typed, 25 refused** — the whole product is five `app.All` wildcards relaying a nested app; see "apps/iam (0 of 25, and why)" above. The refusal is gated, and the pass fixed a live fail-closed hole) | 0 |
 
+**The six-plugin pass (ai, destinations, dns, licensing, runtime, templates):
+9 typed, 29 refused, and the 29 are 4 registrations.** The work list came from the
+published subsets — every operation carrying neither `description` nor `summary`,
+which is exactly the set that projects to NOTHING: no prose, no MCP tool, no CLI
+command, no typed SDK method. It was 38 operations. Two things it taught:
+
+- **A plugin can be 100% undescribed and still have almost nothing to convert.**
+  Four of the six (`ai`, `dns`, `licensing`, `runtime`) publish 7 operations each
+  that are ONE `All("/…/*")` registration apiece, exploded across the seven
+  methods by the untyped projection. Each is a verbatim reverse proxy: greedy
+  wildcard (`*1` to fiber, `{wildcard1}` to the document — a bound In field and
+  the published parameter cannot agree), upstream status relayed through
+  `c.Bytes(res.StatusCode, …)`, upstream Content-Type frequently not JSON, and no
+  `All[In, Out]` registrar to hang seven ops on. Two are not even cloud's to type:
+  `plugin/ai` is `github.com/hanzoai/ai`'s beego `ControllerRegister` behind
+  `zip.AdaptNetHTTP`, `plugin/licensing` is `github.com/hanzoai/licensing`'s
+  `http.Handler` behind the same. Each refusal is now written AT its registration
+  (apps/dns/dns.go, apps/runtime/ops.go, apps/ai/ai.go) rather than only here.
+- **`plugin/ai` is the largest hole in the fleet document, and it is upstream's.**
+  That one wildcard stands for ~200 real routes — `/v1/chat/completions`,
+  `/v1/models`, `/v1/messages` — so the AI API appears in openapi.yaml, in every
+  generated SDK and in the MCP tool list as seven undescribed `{wildcard1}`
+  operations and in no other form. Fixing it means declaring ops inside
+  `hanzoai/ai`, next to the handlers; nothing cloud can do at the mount point
+  reaches it.
+
+`templates` went 5 of 5, `destinations` 4 of 5 — both now gated by
+`untypedByDesign` + `TestEveryRouteIsTypedOrNamed` + `TestEveryTypedOpIsDescribed`
+reading the LIVE router of the real `Mount`. Three findings worth carrying
+forward:
+
+1. **`url:"-"` is not optional on a body field, and zip v1.18.11 is what makes it
+   possible.** The binder fills an In field from the QUERY as well as the body
+   (body → query → path, increasing authority), so a converted POST silently
+   starts accepting `?slug=` — on templates' publish that redirects the write to a
+   name the body never asked for. The untyped handler read `c.Bind`, which is the
+   body and nothing else. Every body-only field on both write ops carries
+   `url:"-"`; `TestTheQueryStringCannotRedirectAWrite` is the measurement. This is
+   a WIRE-WIDENING class no status-code test sees, and it applies to every
+   POST/PUT/PATCH conversion in the fleet.
+2. **Typing is what makes you enter the flat schema namespace, and both packages
+   collided on entry.** `destinations.Status` is `apps/plugins`' `Status`;
+   `templates.Template` is `apps/guide`'s `Template` (a notification template).
+   Neither collision existed while the routes were untyped, because an untyped
+   route contributes no schema at all. The published name yields nothing and the
+   unpublished one qualifies: `DestinationStatus`, `DestinationField`,
+   `StarterKit` — all Go-level renames with no wire movement.
+3. **Failure mode #7 (the phantom bodyless-POST requestBody) is FIXED in zip
+   v1.18.11** — `hasRequestBody` (openapi.go) refines `hasBody` by skipping an
+   input whose every field is already a path param. `POST /v1/destinations/
+   {platform}/test` types cleanly and publishes no request body. The 27-instance
+   class named above should be re-counted on the current pin, not inherited.
+
 Re-measure rather than trusting the table — with the ONE command below, because
 the two this file used to carry were each half-right and disagreed by 83 routes:
 
