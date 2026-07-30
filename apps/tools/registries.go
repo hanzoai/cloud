@@ -1,7 +1,9 @@
 package tools
 
 import (
+	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
@@ -54,6 +56,78 @@ func listBySource(src Source) func(*cloud.Service[state], *zip.Ctx) error {
 			"tools":  out,
 		})
 	}
+}
+
+// putSkill — POST /v1/skills: add or revise one of the caller org's skills.
+// Writing the same name again revises it, so an org converges on a set rather
+// than accumulating near-duplicates that would collide in the registry.
+func putSkill(s *cloud.Service[state], c *zip.Ctx) error {
+	p, ok := PrincipalFrom(c)
+	if !ok {
+		return zip.ErrForbidden("a validated principal is required")
+	}
+	if s.State.skills == nil {
+		return zip.Errorf(http.StatusServiceUnavailable, "the skill store is not open")
+	}
+	var in Skill
+	if err := json.Unmarshal(c.Body(), &in); err != nil {
+		return zip.ErrBadRequest("malformed body: " + err.Error())
+	}
+	in.Name = strings.TrimSpace(in.Name)
+	if !pluginName.MatchString(in.Name) {
+		return zip.ErrBadRequest("name must be one lowercase path segment (a-z0-9, _ or -)")
+	}
+	if strings.TrimSpace(in.Content) == "" {
+		return zip.ErrBadRequest("content is required (the SKILL.md body)")
+	}
+	if len(in.Content) > maxSkillContent {
+		return zip.ErrBadRequest("content too large")
+	}
+	in.Org = p.Org
+	out, err := s.State.skills.Put(c.Context(), in)
+	if err != nil {
+		return err
+	}
+	audrecordAction(s, c, "skill.put", p.Org, out.Name, "success", http.StatusCreated)
+	return c.JSON(http.StatusCreated, map[string]any{"skill": out})
+}
+
+// deleteSkill — DELETE /v1/skills/:id.
+func deleteSkill(s *cloud.Service[state], c *zip.Ctx) error {
+	p, ok := PrincipalFrom(c)
+	if !ok {
+		return zip.ErrForbidden("a validated principal is required")
+	}
+	if s.State.skills == nil {
+		return zip.Errorf(http.StatusServiceUnavailable, "the skill store is not open")
+	}
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		return zip.ErrBadRequest("missing skill id")
+	}
+	if err := s.State.skills.Delete(c.Context(), p.Org, id); err != nil {
+		return err
+	}
+	audrecordAction(s, c, "skill.delete", p.Org, id, "success", http.StatusOK)
+	return c.JSON(http.StatusOK, map[string]any{"deleted": id})
+}
+
+// listAuthoredSkills — GET /v1/skills/authored: the org's own skills with their
+// bodies. GET /v1/skills is the registry view (brand + org, activation flags);
+// this is the editable set, so it carries content the registry view omits.
+func listAuthoredSkills(s *cloud.Service[state], c *zip.Ctx) error {
+	p, ok := PrincipalFrom(c)
+	if !ok {
+		return zip.ErrForbidden("a validated principal is required")
+	}
+	if s.State.skills == nil {
+		return c.JSON(http.StatusOK, map[string]any{"skills": []Skill{}})
+	}
+	out, err := s.State.skills.List(c.Context(), p.Org)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]any{"skills": out})
 }
 
 // listPlugins reports the mounted-subsystem inventory: every plugin the
