@@ -144,7 +144,29 @@
         "operationId": "post_v1_books_bank_import",
         "tags": [
           "books"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BankTally"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/books/bank/link-token": {
@@ -422,7 +444,29 @@
         "operationId": "post_v1_books_inbox",
         "tags": [
           "books"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxItem"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/books/metrics": {
@@ -639,7 +683,29 @@
         "operationId": "post_v1_books_scan",
         "tags": [
           "books"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanDraft"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/books/scan/book": {
@@ -1518,6 +1584,38 @@
           }
         },
         "type": "object"
+      },
+      "ScanDraft": {
+        "type": "object",
+        "properties": {
+          "balanced": {
+            "type": "boolean"
+          },
+          "category": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string"
+          },
+          "extracted": {
+            "$ref": "#/components/schemas/Extracted"
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Question"
+            }
+          },
+          "scanId": {
+            "type": "string"
+          },
+          "vendor": {
+            "type": "string"
+          },
+          "voucher": {
+            "$ref": "#/components/schemas/Voucher"
+          }
+        }
       },
       "TrialBalance": {
         "properties": {

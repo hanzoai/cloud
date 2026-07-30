@@ -171,8 +171,14 @@ type Tag struct {
 // schemas do NOT pass through it: zip already derives arbitrary JSON Schema
 // from the In/Out Go types, and restating that open vocabulary here would be a
 // second, lossier copy — they travel as `any` (see Fold).
+// Format qualifies Type where the type alone is not the whole fact. It carries
+// exactly one value today — "binary" on the string that stands for a raw byte
+// body ([Binary]) — because that is the only distinction this generator can make
+// that a consumer acts on: an SDK generator emits a file/bytes parameter for
+// `string/binary` and a text parameter for a bare `string`.
 type Schema struct {
 	Type                 string             `json:"type,omitempty"`
+	Format               string             `json:"format,omitempty"`
 	Ref                  string             `json:"$ref,omitempty"`
 	Items                *Schema            `json:"items,omitempty"`
 	Properties           map[string]*Schema `json:"properties,omitempty"`
