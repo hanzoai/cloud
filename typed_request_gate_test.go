@@ -135,6 +135,13 @@ var allowedRequestUses = map[string]string{
 		"moves off the effective org — so principal.OrgFrom would charge the org being INSPECTED for a " +
 		"platform admin's reading of its books. Empty off the HTTP path, where the meter no-ops rather " +
 		"than billing the wrong ledger.",
+	"apps/x402/x402.go": "payerOf — the receipt lookup is scoped to the org whose LEDGER was " +
+		"DEBITED, which is what every settlement row is keyed on and what the Enforce middleware " +
+		"beside it charges. principal.Ledger folds in the SuperAdmin masquerade rule (X-User-IsAdmin " +
+		"plus the X-User-Owner home claim) that principal.OrgFrom cannot carry, so reading the tenant " +
+		"through OrgFrom would silently widen a platform admin's read from their OWN receipts to the " +
+		"inspected org's. ONE function, asked by the one typed op; empty off the HTTP path, where an " +
+		"empty payer is refused rather than treated as a wildcard.",
 	"apps/pricing/ops.go": "callerIsAdmin — the catalog's SuperAdmin gate. Every read op here also " +
 		"branches on it (an admin sees disabled models, flagged, where a customer sees them hidden), and " +
 		"admin-ness lives in a header (X-User-IsAdmin) that principal.OrgFrom does not carry. The tenant " +
