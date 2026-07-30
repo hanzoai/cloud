@@ -3,12 +3,14 @@ package tools
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/types"
+	"github.com/zap-proto/zip"
 )
 
 // Mount wires the unified tool plane at /v1/tools/* and installs the two providers
@@ -104,40 +106,56 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
+// routes declares the tool plane on ONE group, /v1.
+//
+// This subsystem spans four top-level nouns — tools, skills, mcp and plugins —
+// so there is no single prefix to hang a group on, and a group per noun could not
+// carry the collection ROOTS anyway (Group(p).Get("") yields "p/"). One /v1 group
+// spells each path exactly as the wire spells it, and it is also the OpTarget the
+// typed ops are declared on, so zip composes each op's path from the same prefix
+// the router does and cmd/zipdoc resolves it the same way.
+//
+// cloud.Bridge is NOT installed here: Serve installs it once for the whole binary
+// (serve.go), after the identity boundary that makes the org trustworthy and
+// before MountAll registers any of these leaves. fiber runs middleware in
+// registration order, so one installed here — below the app-level Use — would be
+// redundant, and one installed after these leaves would never run.
+//
+// TYPED ops are the 14 that could be described without moving their wire; the two
+// that could not are registered untyped below, each named at its own definition
+// with the reason (http.go's mcp, pluginbuild.go's buildPlugin).
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	// Collection root (/v1/tools) stays flat — Group(p).Get("") yields "p/".
-	app.Get("/v1/tools", cloud.Handle(s, listTools))
-	g := app.Group("/v1/tools")
-	g.Post("/mcp", cloud.Handle(s, mcp))
-	g.Get("/activation", cloud.Handle(s, getActivation))
-	g.Put("/activation", cloud.Handle(s, putActivation))
+	v1 := app.Group("/v1")
+	o := toolOps{s: s}
 
-	// The separately-listed registries (see registries.go). Collection roots stay
-	// flat for the same reason /v1/tools does: Group(p).Get("") yields "p/".
-	// skills and mcp are Source views of this registry; plugins is the mounted
-	// subsystem inventory, which is a different thing entirely.
-	app.Get("/v1/skills", cloud.Handle(s, listBySource(SourceSkill)))
-	app.Post("/v1/skills", cloud.Handle(s, putSkill))
-	skillG := app.Group("/v1/skills")
-	skillG.Get("/authored", cloud.Handle(s, listAuthoredSkills))
-	skillG.Delete("/:id", cloud.Handle(s, deleteSkill))
-	app.Get("/v1/mcp", cloud.Handle(s, listBySource(SourceMCP)))
-	app.Get("/v1/plugins", cloud.Handle(s, listPlugins))
+	// Discovery + activation.
+	zip.Get(v1, "/tools", o.listTools)
+	zip.Get(v1, "/tools/activation", o.getActivation)
+	zip.Put(v1, "/tools/activation", o.putActivation)
+	v1.Post("/tools/mcp", cloud.Handle(s, mcp))
+
+	// The separately-listed registries (see registries.go): skills and mcp are
+	// Source views of the SAME registry; plugins is the mounted-subsystem
+	// inventory, which is a different thing entirely.
+	zip.Get(v1, "/skills", o.listSkills)
+	zip.Post(v1, "/skills", o.putSkill, zip.WithStatus(http.StatusCreated))
+	zip.Get(v1, "/skills/authored", o.listAuthoredSkills)
+	zip.Delete(v1, "/skills/:id", o.deleteSkill)
+	zip.Get(v1, "/mcp", o.listMCPTools)
+	zip.Get(v1, "/plugins", o.listPlugins)
 
 	// The builder (pluginbuild.go). /v1/plugins lists what this deployment
 	// mounted; /authored is what THIS ORG built, which is a different set with a
 	// different lifecycle, so it is a subpath rather than a mixed collection.
-	pluginG := app.Group("/v1/plugins")
-	pluginG.Post("/build", cloud.Handle(s, buildPlugin))
-	pluginG.Get("/authored", cloud.Handle(s, listAuthored))
-	pluginG.Delete("/authored/:id", cloud.Handle(s, deleteAuthored))
+	v1.Post("/plugins/build", cloud.Handle(s, buildPlugin))
+	zip.Get(v1, "/plugins/authored", o.listAuthoredPlugins)
+	zip.Delete(v1, "/plugins/authored/:id", o.deleteAuthoredPlugin)
 
 	// The external MCP server registry lives with /v1/mcp, not under /v1/tools:
 	// a server is a record an org creates, not a tool the registry enumerates.
-	mcpG := app.Group("/v1/mcp")
-	mcpG.Get("/servers", cloud.Handle(s, listServers))
-	mcpG.Post("/servers", cloud.Handle(s, createServer))
-	mcpG.Delete("/servers/:id", cloud.Handle(s, deleteServer))
+	zip.Get(v1, "/mcp/servers", o.listServers)
+	zip.Post(v1, "/mcp/servers", o.createServer, zip.WithStatus(http.StatusCreated))
+	zip.Delete(v1, "/mcp/servers/:id", o.deleteServer)
 }
 
 // Shutdown closes the stores. Idempotent.
