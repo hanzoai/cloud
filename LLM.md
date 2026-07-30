@@ -1268,6 +1268,16 @@ WebSockets), and `WithStatus` panics on a non-2xx (the two 302s). v1.18.7 is
 byte-identical to v1.18.6, so the floor for this package is 9 until zip gains
 raw-body binding, a bytes Out, or a non-2xx status; a fleet count that keeps
 listing team as 19 untyped is what sends the next agent to redo the work.
+**Re-verified again at zip v1.18.8** (the newest tag), because "the floor is 9"
+is a claim about a DEPENDENCY and expires when the dependency moves — the three
+capabilities are still absent: `WithStatus` still panics below 200/above 299
+(typed.go:110-113), the REST arm still ends in `c.JSON(out)` with no bytes or
+upgrade path, and `op.invoke` still json.Unmarshals any non-empty body into `In`
+before the handler and answers `ErrBadRequest` on a parse failure. v1.18.8's
+diff against v1.18.7 is `app.ops`→`app.registry` plus new ask/declare/ops/peer/
+tenant files and the `runtime`→`js` move; none of it touches the three. Do not
+re-derive this from the prose — the check is four greps against the module cache,
+and it is the only thing that can retire a refusal.
 What typing this package DID surface is one route away from the ops: team's
 second plane is app-level (`/collaborator` — the Team front derives both the
 Y.js WebSocket and the markup-snapshot RPC from `COLLABORATOR_URL`, not from the
@@ -1280,6 +1290,22 @@ are gone from the router oracle's `unreachable` ledger. The general lesson: a
 route's typed-ness is invisible to the manifest, so an app whose surface is not
 wholly under one `/v1/<name>` prefix can publish a perfect op the fleet never
 delivers, and only `manifest/router_test.go` asks the router.
+The second visit to team found nothing left to type and one thing left to
+DESCRIBE, which is the lesson worth carrying: "9 of 19, floor reached" was true
+about ops and silent about fields. team published **3 bare properties** —
+`ProviderInfo.name`, `ProviderInfo.displayName`, `botMember.active` — each
+reaching openapi.yaml, all four generated SDKs and the MCP `inputSchema` with no
+description, for the crm reason exactly (the two facts are counted in different
+places and only the op-level one was counted). `botMember.active` is the one that
+cost a reader something real: it is not the agent's own `active` flag but a
+DERIVED projection (`botActive`: empty/"active"/"ready" are live, archived and
+retired are not), so an SDK user could see a boolean and nowhere that a retired
+agent stays in the roster as an inactive member with its authorship intact.
+`TestEveryPublishedFieldIsDescribed` now gates team the way it gates crm, and it
+was proven to BITE by stripping the `active` prose and watching it name
+`botMember.active`. **A package reporting "100% of typable routes" says nothing
+about its field surface — run the field check on every package the migration
+calls done**, including the ones already marked done.
 `compliance` is 16 of 17 and now carries the SAME gate, which is the part worth
 copying ahead of any remaining conversion: the gate reads the LIVE router
 (`openapi.Spec` for what is served, `openapi.Typed` for what carries a registry

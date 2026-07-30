@@ -157,7 +157,12 @@ type WorkspaceInfo struct {
 
 // ProviderInfo is one entry of GET /providers.
 type ProviderInfo struct {
-	Name        string `json:"name"`
+	// Name is the provider id, and it is the value that goes back in the URL to
+	// start a login: GET /v1/team/account/auth/{provider}. This deployment
+	// surfaces exactly one, "openid" — the hanzo.id door.
+	Name string `json:"name"`
+	// DisplayName is the human label for the sign-in button; this deployment
+	// sends "Hanzo". Omitted from the body when empty.
 	DisplayName string `json:"displayName,omitempty"`
 }
 
