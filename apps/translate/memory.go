@@ -34,20 +34,32 @@ const (
 	StatePublished State = "published"
 )
 
-// Entry is one remembered translation. Source+Target+Tier+Glossary are its
+// MemoryEntry is one remembered translation. Source+Target+Tier+Glossary are its
 // identity (the HIP-0516 tuple); Text and State are what the lane holds.
-type Entry struct {
+type MemoryEntry struct {
+	// Source is the ORIGINAL string this entry translates. Part of the identity.
 	Source string `json:"source"`
+	// Target is the target language tag (BCP-47, e.g. "es" or "pt-BR"). Part of the
+	// identity.
 	Target string `json:"target"`
-	Tier   Tier   `json:"tier"`
+	// Tier is the engine tier the entry belongs to, quality or bulk. Part of the
+	// identity: the two tiers keep separate renderings of the same source.
+	Tier Tier `json:"tier"`
 	// Glossary is the glossary VERSION the entry was translated under — the digest
 	// version() derives from the terms, so changing a term changes the key and the
 	// stale rendering can never be served.
-	Glossary  string `json:"glossary_version,omitempty"`
-	Text      string `json:"text"`
-	State     State  `json:"state"`
-	Actor     string `json:"actor,omitempty"`
-	UpdatedAt int64  `json:"updated_at"`
+	Glossary string `json:"glossary_version,omitempty"`
+	// Text is the stored translation. A memory hit returns it verbatim, which is the
+	// idempotence contract.
+	Text string `json:"text"`
+	// State is the entry's position on the review ladder: machine, suggested,
+	// approved or published.
+	State State `json:"state"`
+	// Actor is the validated user id that last wrote this entry by hand. Empty on an
+	// entry an engine produced, and on one written before attribution existed.
+	Actor string `json:"actor,omitempty"`
+	// UpdatedAt is the unix second the entry last changed.
+	UpdatedAt int64 `json:"updated_at"`
 }
 
 // key is the ONE identity of an entry: the HIP-0516 tuple folded to a digest, so
@@ -119,16 +131,16 @@ func (m *memory) Close() error { return m.db.Close() }
 
 // get returns the entry stored under key. A hit is served verbatim — that is the
 // idempotence contract.
-func (m *memory) get(ctx context.Context, k string) (Entry, bool, error) {
-	var e Entry
+func (m *memory) get(ctx context.Context, k string) (MemoryEntry, bool, error) {
+	var e MemoryEntry
 	err := m.db.QueryRowContext(ctx, `
 SELECT source, target, tier, glossary, text, state, actor, updated_at FROM entry WHERE key=?`, k).
 		Scan(&e.Source, &e.Target, &e.Tier, &e.Glossary, &e.Text, &e.State, &e.Actor, &e.UpdatedAt)
 	if err == sql.ErrNoRows {
-		return Entry{}, false, nil
+		return MemoryEntry{}, false, nil
 	}
 	if err != nil {
-		return Entry{}, false, fmt.Errorf("translate get: %w", err)
+		return MemoryEntry{}, false, fmt.Errorf("translate get: %w", err)
 	}
 	return e, true, nil
 }
@@ -141,7 +153,7 @@ SELECT source, target, tier, glossary, text, state, actor, updated_at FROM entry
 //     revert human work, which is the failure that makes people distrust a
 //     translation pipeline;
 //   - a HUMAN write always wins.
-func (m *memory) put(ctx context.Context, e Entry, human bool) error {
+func (m *memory) put(ctx context.Context, e MemoryEntry, human bool) error {
 	_, err := m.db.ExecContext(ctx, `
 INSERT INTO entry (key, source, target, glossary, tier, text, state, actor, updated_at)
 VALUES (?,?,?,?,?,?,?,?,?)
@@ -159,7 +171,7 @@ WHERE ? OR entry.state=?`,
 
 // list returns the org's entries newest first, optionally narrowed to one target
 // language and/or one review state.
-func (m *memory) list(ctx context.Context, target string, st State, limit int) ([]Entry, error) {
+func (m *memory) list(ctx context.Context, target string, st State, limit int) ([]MemoryEntry, error) {
 	q := `SELECT source, target, tier, glossary, text, state, actor, updated_at FROM entry`
 	var where []string
 	var args []any
@@ -186,9 +198,9 @@ func (m *memory) list(ctx context.Context, target string, st State, limit int) (
 		return nil, fmt.Errorf("translate list: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	out := []Entry{}
+	out := []MemoryEntry{}
 	for rows.Next() {
-		var e Entry
+		var e MemoryEntry
 		if err := rows.Scan(&e.Source, &e.Target, &e.Tier, &e.Glossary, &e.Text, &e.State, &e.Actor, &e.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("translate list: %w", err)
 		}
