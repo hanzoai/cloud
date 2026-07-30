@@ -439,6 +439,26 @@ func mintSidecar(p Principal, master []byte) (dek, sidecar []byte, err error) {
 	return dek, sidecar, nil
 }
 
+// wrapExisting wraps an EXISTING DEK under a fresh fileID for the given principal.
+// mintSidecar always generates a new DEK, which is right when a store is born and
+// wrong when a store's key is being re-homed: the pages are already encrypted under
+// the DEK it has, so migrating the wrapper must carry that exact key across.
+func wrapExisting(p Principal, master, dek []byte) (fileID, wrapped []byte, err error) {
+	fileID = make([]byte, fileIDLen)
+	if _, err = rand.Read(fileID); err != nil {
+		return nil, nil, fmt.Errorf("cek: generate file id: %w", err)
+	}
+	kek, aad, err := deriveFor(p, master, fileID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer zero(kek)
+	if wrapped, err = sqlitedrv.WrapDEK(kek, dek, aad); err != nil {
+		return nil, nil, fmt.Errorf("cek: wrap DEK: %w", err)
+	}
+	return fileID, wrapped, nil
+}
+
 // unwrapSidecar reads the fileID from the sidecar head and unwraps the DEK under
 // the id-derived KEK. A wrong master key, tampered blob, or truncated sidecar
 // fails the GCM tag and errors — never a partial/garbage key.
