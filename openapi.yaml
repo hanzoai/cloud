@@ -4126,6 +4126,31 @@ components:
             $ref: '#/components/schemas/ActionRecord'
           type: array
       type: object
+    activityFeed:
+      properties:
+        activity:
+          description: Activity is the merged run/create/update events, newest first,
+            capped at 50.
+          items:
+            $ref: '#/components/schemas/activityView'
+          type: array
+      type: object
+    activityView:
+      properties:
+        agent:
+          description: agent name
+          type: string
+        at:
+          description: RFC3339 UTC
+          type: string
+        id:
+          type: string
+        kind:
+          description: invoked|failed|created|updated (from real events)
+          type: string
+        message:
+          type: string
+      type: object
     addItemsIn:
       properties:
         id:
@@ -4252,6 +4277,74 @@ components:
         status:
           type: string
         updatedTime:
+          type: string
+      type: object
+    agentDetail:
+      properties:
+        instructions:
+          type: string
+        recentRuns:
+          items:
+            $ref: '#/components/schemas/agentRunView'
+          type: array
+      type: object
+    agentList:
+      properties:
+        agents:
+          description: Agents is the org's agents, each carrying its recorded run
+            count.
+          items:
+            $ref: '#/components/schemas/agentView'
+          type: array
+      type: object
+    agentRunView:
+      properties:
+        createdAt:
+          type: string
+        durationMs:
+          type: integer
+        error:
+          type: string
+        id:
+          type: string
+        input:
+          type: string
+        model:
+          type: string
+        output:
+          type: string
+        status:
+          type: string
+      type: object
+    agentView:
+      properties:
+        computeRef:
+          type: string
+        createdAt:
+          type: string
+        description:
+          type: string
+        executionMode:
+          type: string
+        id:
+          type: string
+        model:
+          type: string
+        name:
+          type: string
+        runs:
+          type: integer
+        schedule:
+          type: string
+        serviceAccountId:
+          type: string
+        status:
+          type: string
+        tools:
+          items:
+            type: string
+          type: array
+        updatedAt:
           type: string
       type: object
     aiMetrics:
@@ -4973,6 +5066,86 @@ components:
       properties:
         name:
           description: Name is the bucket name to create.
+          type: string
+      type: object
+    buildList:
+      properties:
+        builds:
+          description: Builds is every published build, most recently updated first.
+          items:
+            $ref: '#/components/schemas/buildSummary'
+          type: array
+      type: object
+    buildSummary:
+      properties:
+        agent:
+          type: string
+        endedAt:
+          type: string
+        org:
+          type: string
+        project:
+          type: string
+        repo:
+          type: string
+        session:
+          type: string
+        startedAt:
+          type: string
+        status:
+          type: string
+        title:
+          type: string
+        turns:
+          type: integer
+      type: object
+    buildTurn:
+      properties:
+        actor:
+          type: string
+        at:
+          type: string
+        body:
+          type: string
+        commit:
+          type: string
+        kind:
+          type: string
+        subject:
+          type: string
+        turn:
+          type: integer
+      type: object
+    buildView:
+      properties:
+        agent:
+          type: string
+        endedAt:
+          type: string
+        model:
+          type: string
+        org:
+          type: string
+        project:
+          type: string
+        repo:
+          type: string
+        session:
+          type: string
+        startedAt:
+          type: string
+        status:
+          type: string
+        title:
+          type: string
+        turns:
+          items:
+            $ref: '#/components/schemas/buildTurn'
+          type: array
+        verify:
+          description: |-
+            Verify is the exact command that re-derives every commit binding below
+            straight from git, so nothing here has to be taken on trust.
           type: string
       type: object
     byoGPU:
@@ -5872,6 +6045,17 @@ components:
             subject, when one exists.
           type: string
       type: object
+    claimKeyOut:
+      properties:
+        claimKey:
+          description: |-
+            ClaimKey is the capability itself. It is returned ONCE and never again — only
+            its SHA-256 hash is stored — so a daemon that loses it mints a new one.
+          type: string
+        targetId:
+          description: TargetID is the machine the key authenticates.
+          type: string
+      type: object
     clusterAttach:
       properties:
         default:
@@ -6334,6 +6518,33 @@ components:
           description: XLink is the person's X (Twitter) URL.
           type: string
       type: object
+    controlCommandView:
+      properties:
+        command:
+          type: string
+        message:
+          type: string
+        payload:
+          items:
+            type: integer
+          type: array
+        seq:
+          type: integer
+      type: object
+    controlDrain:
+      properties:
+        commands:
+          description: Commands is the session's control commands newer than the cursor,
+            oldest first.
+          items:
+            $ref: '#/components/schemas/controlCommandView'
+          type: array
+        cursor:
+          description: |-
+            Cursor is the seq to send as `after` on the next poll — the highest seq in
+            this page, or the cursor sent in when the page is empty.
+          type: integer
+      type: object
     cookieAck:
       properties:
         result:
@@ -6354,6 +6565,29 @@ components:
           description: Strategies are the surviving tactics, in corpus authoring order.
           items:
             $ref: '#/components/schemas/strategyView'
+          type: array
+      type: object
+    createAgentIn:
+      properties:
+        computeRef:
+          type: string
+        description:
+          type: string
+        executionMode:
+          type: string
+        instructions:
+          type: string
+        model:
+          type: string
+        name:
+          type: string
+        schedule:
+          type: string
+        serviceAccountId:
+          type: string
+        tools:
+          items:
+            type: string
           type: array
       type: object
     createAppReq:
@@ -6809,6 +7043,25 @@ components:
             recorded on it.
         provider:
           description: Provider is the wired e-signature provider's name.
+          type: string
+      type: object
+    eventView:
+      properties:
+        actor:
+          type: string
+        createdAt:
+          type: string
+        id:
+          type: string
+        kind:
+          type: string
+        payload:
+          items:
+            type: integer
+          type: array
+        seq:
+          type: integer
+        sessionId:
           type: string
       type: object
     fileJSON:
@@ -7608,6 +7861,19 @@ components:
             $ref: '#/components/schemas/kycSession'
           type: array
       type: object
+    lastEventView:
+      properties:
+        actor:
+          type: string
+        at:
+          type: string
+        kind:
+          type: string
+        preview:
+          type: string
+        seq:
+          type: integer
+      type: object
     listMeta:
       properties:
         limit:
@@ -7767,6 +8033,19 @@ components:
             tokens:
               type: integer
           type: object
+      type: object
+    metricsView:
+      properties:
+        range:
+          description: echoes the requested window (24H|7D|30D)
+          type: string
+        resource:
+          $ref: '#/components/schemas/resourceUsage'
+        series:
+          description: per-agent invocation histogram (real)
+          items:
+            $ref: '#/components/schemas/seriesLine'
+          type: array
       type: object
     mintedKey:
       properties:
@@ -8438,10 +8717,47 @@ components:
             there is nothing else to update yet.
           type: boolean
       type: object
-    patchTargetIn:
+    patchSessionIn:
       properties:
         id:
+          description: ID is the session to update, from the path.
+          type: string
+        project:
+          description: |-
+            Project tags the product this session built; Published is the author's
+            decision to let anyone read the story (provenance.go). Both are pointers so
+            "absent" and "cleared" are different requests.
+          type: string
+        published:
+          type: boolean
+        status:
+          type: string
+        target:
+          description: 'Target re-dispatches a session to a run-target (the #48 association).
+            "" detaches.'
+          type: string
+        title:
+          type: string
+      type: object
+    patchTargetIn:
+      properties:
+        capacity:
+          type: string
+        host:
+          type: string
+        id:
           description: ID is the target to update, from the path.
+          type: string
+        kind:
+          type: string
+        label:
+          type: string
+        metrics:
+          $ref: '#/components/schemas/Metrics'
+          description: present => a heartbeat; the server stamps its time
+        spec:
+          $ref: '#/components/schemas/Spec'
+        status:
           type: string
       type: object
     planInfo:
@@ -9112,6 +9428,45 @@ components:
           description: Offset is the offset that was applied.
           type: integer
       type: object
+    registerReq:
+      properties:
+        account:
+          type: string
+        actor:
+          type: string
+        agent:
+          type: string
+        cwd:
+          type: string
+        host:
+          description: Execution context — where this session runs (all optional).
+          type: string
+        parentSessionId:
+          type: string
+        project:
+          description: |-
+            The readable build (provenance.go): which product this session builds, and
+            whether its story may be read by the world.
+          type: string
+        provider:
+          description: Account tag — the linked AI account this session ran under
+            (login manager).
+          type: string
+        published:
+          type: boolean
+        repo:
+          type: string
+        status:
+          type: string
+        target:
+          type: string
+        taskRunId:
+          type: string
+        taskWorkflowId:
+          type: string
+        title:
+          type: string
+      type: object
     repoList:
       properties:
         data:
@@ -9185,6 +9540,52 @@ components:
         updatedAt:
           description: UpdatedAt is RFC 3339 UTC, empty until the first write.
           type: string
+      type: object
+    reportOut:
+      properties:
+        delivered:
+          description: |-
+            Delivered is true when a waiting durable owner received this result. False
+            means there was none to deliver to — an unknown or already-finished run — which
+            is a clean no-op, not an error.
+          type: boolean
+      type: object
+    reportRunIn:
+      properties:
+        branch:
+          description: |-
+            Branch, CommitSha and Diffstat describe what the run produced; Error is the
+            failure when OK is false. Each is clamped, never rejected.
+          type: string
+        changed:
+          type: boolean
+        commitSha:
+          type: string
+        diffstat:
+          type: string
+        error:
+          type: string
+        id:
+          description: ID is the machine reporting, from the path.
+          type: string
+        ok:
+          description: OK is whether the run succeeded; Changed whether it produced
+            any commit.
+          type: boolean
+        runId:
+          description: RunID is the routed run being completed, from the path.
+          type: string
+      type: object
+    resourceUsage:
+      properties:
+        costCents:
+          type: number
+        cpuVcpuHours:
+          type: number
+        memGbHours:
+          type: number
+        storageIoBytes:
+          type: number
       type: object
     retentionCohort:
       properties:
@@ -9262,6 +9663,32 @@ components:
           description: Zone is the 32-hex Cloudflare zone id, from the path.
           type: string
       type: object
+    routedRunOut:
+      properties:
+        base:
+          type: string
+        branch:
+          type: string
+        cloneUrl:
+          type: string
+        project:
+          type: string
+        prompt:
+          type: string
+        repo:
+          description: Repo is the repository to work in and CloneURL is how to fetch
+            it.
+          type: string
+        sessionId:
+          description: |-
+            SessionID is the live session opened at dispatch; the machine streams its
+            turns into it.
+          type: string
+        timeoutSeconds:
+          description: TimeoutSeconds bounds the run on the machine; 0 means the machine's
+            own default.
+          type: integer
+      type: object
     rulesOut:
       properties:
         rules:
@@ -9292,6 +9719,14 @@ components:
           description: Props are the action's input properties, keyed by property
             name.
           type: object
+      type: object
+    runList:
+      properties:
+        runs:
+          description: Runs is the agent's executions, newest first.
+          items:
+            $ref: '#/components/schemas/agentRunView'
+          type: array
       type: object
     runPage:
       properties:
@@ -9453,6 +9888,25 @@ components:
         unit:
           type: string
       type: object
+    seriesLine:
+      properties:
+        key:
+          description: agent name
+          type: string
+        points:
+          items:
+            $ref: '#/components/schemas/seriesPoint'
+          type: array
+      type: object
+    seriesPoint:
+      properties:
+        t:
+          description: bucket start, RFC3339 UTC
+          type: string
+        v:
+          description: real invocation count in the bucket
+          type: integer
+      type: object
     serviceList:
       properties:
         services:
@@ -9496,6 +9950,94 @@ components:
         msg:
           type: string
         status:
+          type: string
+      type: object
+    sessionDetail:
+      properties:
+        childSessions:
+          items:
+            $ref: '#/components/schemas/sessionView'
+          type: array
+        recentEvents:
+          items:
+            $ref: '#/components/schemas/eventView'
+          type: array
+      type: object
+    sessionList:
+      properties:
+        sessions:
+          description: |-
+            Sessions is the matching sessions, each with its event and child counts and
+            a one-line preview of its latest event.
+          items:
+            $ref: '#/components/schemas/sessionView'
+          type: array
+      type: object
+    sessionView:
+      properties:
+        account:
+          type: string
+        actor:
+          type: string
+        agent:
+          type: string
+        children:
+          type: integer
+        createdAt:
+          type: string
+        cwd:
+          type: string
+        endedAt:
+          type: string
+        events:
+          type: integer
+        host:
+          description: |-
+            Execution context (mission-control): the machine/repo/cwd a card shows and
+            the run-target a session is dispatched to. Omitted when a surface didn't report it.
+          type: string
+        id:
+          type: string
+        lastEvent:
+          $ref: '#/components/schemas/lastEventView'
+          description: |-
+            LastEvent is the compact latest-activity line for the list projection (nil in
+            register/patch/tree responses; set by list + detail). It lets a swipe card show
+            a live one-line preview without fetching full detail.
+        org:
+          description: |-
+            Org is the caller's OWN tenant, echoed so a client can build the public
+            build URL (/builds/:org/:project) without a second call or a guess. It is
+            never another tenant's — every read is org-scoped before it gets here.
+          type: string
+        parentSessionId:
+          type: string
+        project:
+          description: |-
+            The readable build: the product this session built and whether its story
+            is public (provenance.go).
+          type: string
+        provider:
+          type: string
+        published:
+          type: boolean
+        repo:
+          type: string
+        rootSessionId:
+          type: string
+        startedAt:
+          type: string
+        status:
+          type: string
+        target:
+          type: string
+        taskRunId:
+          type: string
+        taskWorkflowId:
+          type: string
+        title:
+          type: string
+        updatedAt:
           type: string
       type: object
     setEnablementBody:
@@ -10038,6 +10580,12 @@ components:
             $ref: '#/components/schemas/targetView'
           type: array
       type: object
+    targetRef:
+      properties:
+        id:
+          description: ID is the target to act on, from the path.
+          type: string
+      type: object
     targetReq:
       properties:
         capacity:
@@ -10118,6 +10666,15 @@ components:
             $ref: '#/components/schemas/treeEntryJSON'
           type: array
       type: object
+    treeNode:
+      properties:
+        children:
+          items:
+            $ref: '#/components/schemas/treeNode'
+          type: array
+        session:
+          $ref: '#/components/schemas/sessionView'
+      type: object
     unreconciledOut:
       properties:
         questions:
@@ -10130,6 +10687,31 @@ components:
             ledger.
           items:
             $ref: '#/components/schemas/BankTxnRow'
+          type: array
+      type: object
+    updateAgentIn:
+      properties:
+        computeRef:
+          type: string
+        description:
+          type: string
+        executionMode:
+          type: string
+        instructions:
+          type: string
+        model:
+          type: string
+        ref:
+          description: Ref is the agent to update — its public id or org-unique name,
+            from the path.
+          type: string
+        schedule:
+          type: string
+        serviceAccountId:
+          type: string
+        tools:
+          items:
+            type: string
           type: array
       type: object
     updateItemIn:
@@ -14217,42 +14799,136 @@ paths:
       - agent
   /v1/agents:
     get:
+      description: |-
+        ListAgents returns every agent defined in the caller's org, each with the
+        number of runs recorded against it.
       operationId: get_v1_agents
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/agentList'
+          description: ok
+      summary: ListAgents returns every agent defined in the caller's org, each with
+        the
       tags:
       - agents
     post:
+      description: |-
+        CreateAgent defines an agent in the caller's org: a model, a system prompt
+        (instructions) and a set of tool names. The name must be unique in the org and
+        match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$. An omitted model takes the
+        deployment's configured default; a named one is checked against the gateway's
+        served catalog, so a model this deployment never serves is refused here rather
+        than failing at run time. A long-running agent must carry a 5-field cron
+        schedule (the scheduler would otherwise never fire it) and counts against a
+        per-org cap on scheduled agents.
       operationId: post_v1_agents
+      requestBody:
+        content:
+          application/json:
+            example:
+              instructions: be terse
+              model: enso-flash
+              name: helper
+            schema:
+              $ref: '#/components/schemas/createAgentIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/agentView'
+          description: created
+      summary: |-
+        CreateAgent defines an agent in the caller's org: a model, a system prompt
+        (instructions) and a set of tool names.
       tags:
       - agents
   /v1/agents/{ref}:
     delete:
-      operationId: delete_v1_agents_by_ref
+      description: DeleteAgent removes an agent and every run recorded against it.
+        Answers 204.
+      operationId: delete_v1_agents_ref
       parameters:
-      - in: path
+      - description: |-
+          Ref is the agent's public id (the agent_… handle create and list return) or
+          its org-unique name, from the path. Either resolves the same agent.
+        example: helper
+        in: path
         name: ref
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: DeleteAgent removes an agent and every run recorded against it.
       tags:
       - agents
     get:
-      operationId: get_v1_agents_by_ref
+      description: |-
+        GetAgent returns one agent with its system prompt and its 20 most recent runs.
+        The ref is the agent's public id or its org-unique name — a created agent is
+        immediately gettable by whatever create handed back.
+      operationId: get_v1_agents_ref
       parameters:
-      - in: path
+      - description: |-
+          Ref is the agent's public id (the agent_… handle create and list return) or
+          its org-unique name, from the path. Either resolves the same agent.
+        example: helper
+        in: path
         name: ref
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/agentDetail'
+          description: ok
+      summary: GetAgent returns one agent with its system prompt and its 20 most recent
+        runs.
       tags:
       - agents
     patch:
-      operationId: patch_v1_agents_by_ref
+      description: |-
+        UpdateAgent changes an agent in place. Every field is optional; a field the
+        request omits keeps its stored value. The resulting mode+schedule are
+        re-validated together, so a partial update can never leave a long-running
+        agent without the cron the scheduler needs to fire it, and a transition INTO
+        long-running counts against the per-org cap on scheduled agents.
+      operationId: patch_v1_agents_ref
       parameters:
-      - in: path
+      - description: Ref is the agent to update — its public id or org-unique name,
+          from the path.
+        example: helper
+        in: path
         name: ref
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              instructions: be terse and cite sources
+              ref: helper
+            schema:
+              $ref: '#/components/schemas/updateAgentIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/agentView'
+          description: ok
+      summary: UpdateAgent changes an agent in place.
       tags:
       - agents
   /v1/agents/{ref}/run:
@@ -14268,85 +14944,353 @@ paths:
       - agents
   /v1/agents/{ref}/runs:
     get:
-      operationId: get_v1_agents_by_ref_runs
+      description: |-
+        ListAgentRuns returns one agent's execution history, newest first — each run's
+        input, its output or its error, and how long it took. Every row is a run that
+        actually happened.
+      operationId: get_v1_agents_ref_runs
       parameters:
-      - in: path
+      - description: Ref is the agent's public id or its org-unique name, from the
+          path.
+        example: helper
+        in: path
         name: ref
         required: true
         schema:
           type: string
+      - description: |-
+          Limit caps how many runs come back, newest first. Absent, zero or out of
+          range (1..200) reads as 50.
+        example: 20
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/runList'
+          description: ok
+      summary: |-
+        ListAgentRuns returns one agent's execution history, newest first — each run's
+        input, its output or its error, and how long it took.
       tags:
       - agents
   /v1/agents/activity:
     get:
+      description: |-
+        AgentActivity serves the org-wide recent-activity feed. Events are REAL: each
+        recorded run is an invoked (ok) or failed (error) event; each agent's own
+        create/update timestamps are created/updated events. Merged, newest first,
+        capped. Nothing is invented — an org with no agents and no runs gets [].
       operationId: get_v1_agents_activity
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/activityFeed'
+          description: ok
+      summary: AgentActivity serves the org-wide recent-activity feed.
       tags:
       - agents
   /v1/agents/builds:
     get:
+      description: |-
+        ListBuilds returns the public index of every published build, most recently
+        updated first, so a gallery can link straight to the story behind each product.
+        PUBLIC, no tenancy: publishing is the author's act, and only published root
+        sessions appear here.
       operationId: get_v1_agents_builds
+      parameters:
+      - description: Limit caps the page. Absent, zero or over 500 reads as 100.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/buildList'
+          description: ok
+      summary: ListBuilds returns the public index of every published build, most
+        recently
       tags:
       - agents
   /v1/agents/builds/{org}/{project}:
     get:
-      operationId: get_v1_agents_builds_by_org_by_project
+      description: |-
+        ReadBuild returns the readable build of one product: the agent session that
+        produced it, turn by turn — the prompts, the reasoning, the commits each turn
+        produced — plus the exact `git log` that re-derives every commit binding from
+        git itself, so nothing here has to be taken on trust.
+
+        PUBLIC, no tenancy: it answers only for a session its author explicitly
+        published, which is what makes it safe to be anonymous. An unpublished session
+        is invisible here no matter who asks; its owner reads it through the org-scoped
+        /v1/agents/sessions routes, which need a validated principal.
+      operationId: get_v1_agents_builds_org_project
       parameters:
-      - in: path
+      - description: Org is the org that published the build, from the path.
+        example: hanzo
+        in: path
         name: org
         required: true
         schema:
           type: string
-      - in: path
+      - description: Project is the product's slug, from the path.
+        example: landing
+        in: path
         name: project
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/buildView'
+          description: ok
+      summary: |-
+        ReadBuild returns the readable build of one product: the agent session that
+        produced it, turn by turn — the prompts, the reasoning, the commits each turn
+        produced — plus the exact `git log` that re-derives every commit binding from
+        git itself, so nothing here has to be taken on trust.
+
+        PUBLIC, no tenancy: it answers only for a session its author explicitly
+        published, which is what makes it safe to be anonymous.
       tags:
       - agents
   /v1/agents/metrics:
     get:
+      description: |-
+        AgentMetrics serves the invocations-over-time histogram for the org's Agents
+        dashboard. Every point is a REAL count of recorded runs in that time bucket —
+        one series line per agent that ran in the window. The Resource Usage rollup is
+        all-null because this store meters no CPU/memory/storage/cost; the console
+        renders those as "—" rather than a fabricated figure. No runs => empty series
+        (an honest "not connected / no activity yet"), never a synthesized trend.
       operationId: get_v1_agents_metrics
+      parameters:
+      - description: 'Range is the window to bucket: 24H, 7D or 30D. Anything else
+          reads as 30D.'
+        example: 7D
+        in: query
+        name: range
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/metricsView'
+          description: ok
+      summary: |-
+        AgentMetrics serves the invocations-over-time histogram for the org's Agents
+        dashboard.
       tags:
       - agents
   /v1/agents/sessions:
     get:
+      description: |-
+        ListSessions returns the caller org's live sessions, newest first — each with
+        its event count, its direct-child count and a one-line preview of its latest
+        event. With no filter it returns ROOT sessions only, so a dashboard shows one
+        row per flow rather than one per subagent; ?root= or ?parent= descends.
       operationId: get_v1_agents_sessions
+      parameters:
+      - description: Root scopes the page to one subagent tree (its root session id).
+        in: query
+        name: root
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Parent scopes the page to the direct children of one session. Ignored when
+          root is set; with neither, only ROOT sessions come back.
+        in: query
+        name: parent
+        required: false
+        schema:
+          type: string
+      - description: Status filters to running, paused, done or error.
+        example: running
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
+      - description: Project filters to the sessions tagged with one product slug.
+        in: query
+        name: project
+        required: false
+        schema:
+          type: string
+      - description: Limit caps the page. Absent, zero or over 500 reads as 100.
+        example: 20
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/sessionList'
+          description: ok
+      summary: |-
+        ListSessions returns the caller org's live sessions, newest first — each with
+        its event count, its direct-child count and a one-line preview of its latest
+        event.
       tags:
       - agents
     post:
+      description: |-
+        RegisterSession opens a live agent session in the caller's org — the row every
+        surface (the CLI's outer agent, hanzo.bot, the console, chat) hangs its
+        activity off. A session with a parentSessionId becomes a subagent of that
+        session and inherits its root, so one flow is one tree; without one it is
+        itself a root. Registering with a terminal status records a session that has
+        already finished.
       operationId: post_v1_agents_sessions
+      requestBody:
+        content:
+          application/json:
+            example:
+              agent: hanzo-dev
+              host: gpu-01
+              title: ship the landing page
+            schema:
+              $ref: '#/components/schemas/registerReq'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/sessionView'
+          description: created
+      summary: |-
+        RegisterSession opens a live agent session in the caller's org — the row every
+        surface (the CLI's outer agent, hanzo.bot, the console, chat) hangs its
+        activity off.
       tags:
       - agents
   /v1/agents/sessions/{id}:
     get:
-      operationId: get_v1_agents_sessions_by_id
+      description: |-
+        GetSession returns one session with its direct child sessions and its 50 most
+        recent events, oldest of those first.
+      operationId: get_v1_agents_sessions_id
       parameters:
-      - in: path
+      - description: ID is the session to act on, from the path.
+        example: sess_1
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/sessionDetail'
+          description: ok
+      summary: GetSession returns one session with its direct child sessions and its
+        50 most
       tags:
       - agents
     patch:
-      operationId: patch_v1_agents_sessions_by_id
+      description: |-
+        PatchSession updates a session's surface-owned truth: its status, its title,
+        the run-target it is dispatched to, and the product it built plus whether that
+        build's story is public. A FINISHED session stays finished — reopening a
+        done/error run would fabricate liveness — and publishing is refused unless the
+        session names the project it built, because the public build route is keyed on
+        (org, project).
+      operationId: patch_v1_agents_sessions_id
       parameters:
-      - in: path
+      - description: ID is the session to update, from the path.
+        example: sess_1
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              id: sess_1
+              status: done
+            schema:
+              $ref: '#/components/schemas/patchSessionIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/sessionView'
+          description: ok
+      summary: |-
+        PatchSession updates a session's surface-owned truth: its status, its title,
+        the run-target it is dispatched to, and the product it built plus whether that
+        build's story is public.
       tags:
       - agents
   /v1/agents/sessions/{id}/control:
     get:
-      operationId: get_v1_agents_sessions_by_id_control
+      description: |-
+        DrainSessionControl returns the steering commands (pause/resume/stop/message)
+        recorded against the caller's own session that are newer than the cursor,
+        oldest first, with the cursor to poll from next. It is how a locally started
+        `hanzo code` session — which is not task-backed, so nothing forwards its
+        commands to an execution engine — consumes what the dashboard posted. Read-only
+        and bounded at 200 per poll, so a steady poll is cheap and an applied command is
+        never redelivered.
+      operationId: get_v1_agents_sessions_id_control
       parameters:
-      - in: path
+      - description: ID is the session whose commands are being drained, from the
+          path.
+        example: sess_1
+        in: path
         name: id
         required: true
         schema:
           type: string
+      - description: |-
+          After is the last seq this poller applied; only commands newer than it come
+          back. Absent or negative reads as 0, which drains from the beginning.
+        example: 12
+        in: query
+        name: after
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/controlDrain'
+          description: ok
+      summary: |-
+        DrainSessionControl returns the steering commands (pause/resume/stop/message)
+        recorded against the caller's own session that are newer than the cursor,
+        oldest first, with the cursor to poll from next.
       tags:
       - agents
   /v1/agents/sessions/{id}/events:
@@ -14406,13 +15350,30 @@ paths:
       - agents
   /v1/agents/sessions/{id}/tree:
     get:
-      operationId: get_v1_agents_sessions_by_id_tree
+      description: |-
+        SessionTree returns the subagent-flow graph rooted at this session: the session,
+        its children, their children, each node carrying its own event count. One
+        indexed read pulls the whole flow (every node of a flow shares a root id), so
+        the shape is assembled in memory rather than by walking the store per node.
+      operationId: get_v1_agents_sessions_id_tree
       parameters:
-      - in: path
+      - description: ID is the session to act on, from the path.
+        example: sess_1
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/treeNode'
+          description: ok
+      summary: |-
+        SessionTree returns the subagent-flow graph rooted at this session: the session,
+        its children, their children, each node carrying its own event count.
       tags:
       - agents
   /v1/agents/sessions/stream:
@@ -14547,40 +15508,132 @@ paths:
       - agents
   /v1/agents/targets/{id}/claim:
     post:
-      operationId: post_v1_agents_targets_by_id_claim
+      description: |-
+        ClaimRoutedRun is the machine's long poll for work: it authenticates the
+        daemon, stamps the liveness the dispatch gate reads (the poll IS the proof a
+        runner is listening), and waits up to 25 seconds for the next run addressed to
+        THIS machine. It answers the run when one arrives and 204 with no body when the
+        window elapses, on which the daemon re-polls immediately.
+
+        TWO independent proofs are required and both fail closed to the same 403: the
+        caller must own this machine (or be an org admin) AND present its claim key in
+        X-Target-Key. A run offered to one machine is unreachable from another's claim.
+      operationId: post_v1_agents_targets_id_claim
       parameters:
-      - in: path
+      - description: ID is the target to act on, from the path.
+        example: tgt_1
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              id: tgt_1
+            schema:
+              $ref: '#/components/schemas/targetRef'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/routedRunOut'
+          description: ok
+      summary: |-
+        ClaimRoutedRun is the machine's long poll for work: it authenticates the
+        daemon, stamps the liveness the dispatch gate reads (the poll IS the proof a
+        runner is listening), and waits up to 25 seconds for the next run addressed to
+        THIS machine.
       tags:
       - agents
   /v1/agents/targets/{id}/claim-key:
     post:
-      operationId: post_v1_agents_targets_by_id_claim-key
+      description: |-
+        MintTargetClaimKey mints (or rotates) the claim key a `hanzo code --serve`
+        daemon presents to claim work for this machine, and returns it ONCE: only its
+        SHA-256 hash is stored. Rotating supersedes any prior daemon, so only the
+        machine's owner — or an org admin — may call it; every other caller gets the
+        same not-found an unknown id gets, and learns nothing about what exists.
+      operationId: post_v1_agents_targets_id_claim-key
       parameters:
-      - in: path
+      - description: ID is the target to act on, from the path.
+        example: tgt_1
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              id: tgt_1
+            schema:
+              $ref: '#/components/schemas/targetRef'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/claimKeyOut'
+          description: ok
+      summary: |-
+        MintTargetClaimKey mints (or rotates) the claim key a `hanzo code --serve`
+        daemon presents to claim work for this machine, and returns it ONCE: only its
+        SHA-256 hash is stored.
       tags:
       - agents
   /v1/agents/targets/{id}/runs/{runId}/report:
     post:
-      operationId: post_v1_agents_targets_by_id_runs_by_runid_report
+      description: |-
+        ReportRoutedRun completes a claimed run: it delivers the terminal result to the
+        run's durable owner, which is what lets that workflow finish. Scoped to (org,
+        target, run) and claim-key-authenticated, so a machine can only ever report a
+        run it legitimately holds. Idempotent — a report for an unknown or
+        already-finished run answers delivered:false rather than failing, because the
+        session's terminal state was already set by the machine's own stream.
+      operationId: post_v1_agents_targets_id_runs_runId_report
       parameters:
-      - in: path
+      - description: ID is the machine reporting, from the path.
+        example: tgt_1
+        in: path
         name: id
         required: true
         schema:
           type: string
-      - in: path
+      - description: RunID is the routed run being completed, from the path.
+        example: run_1
+        in: path
         name: runId
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              branch: hanzo/fix
+              changed: true
+              id: tgt_1
+              ok: true
+              runId: run_1
+            schema:
+              $ref: '#/components/schemas/reportRunIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/reportOut'
+          description: ok
+      summary: |-
+        ReportRoutedRun completes a claimed run: it delivers the terminal result to the
+        run's durable owner, which is what lets that workflow finish.
       tags:
       - agents
   /v1/analytics:
