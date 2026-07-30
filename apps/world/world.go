@@ -151,7 +151,8 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// response, and this route holds the connection open writing frame after frame
 	// through c.SendStreamWriter (stream.go) until the client goes away. There is no
 	// Out that can express a stream, so typing it would turn a live feed into a
-	// single JSON object.
+	// single JSON object. Its document prose is declared instead by stream.go's
+	// init (openapi.Describe), so the SDKs and the spec-derived CLI still carry it.
 	g.Get("/stream", s.stream)
 
 	log.Info("world surface mounted", "brand", deps.Brand,
