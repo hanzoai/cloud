@@ -12,6 +12,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -38,6 +39,23 @@ func bankRoutes(app cloud.Router, s *cloud.Service[*state]) {
 	app.Post("/v1/books/bank/import", cloud.Handle(s, bankImportHandler))
 	app.Post("/v1/books/bank/link-token", cloud.Handle(s, bankLinkTokenHandler))
 	app.Post("/v1/books/bank/exchange", cloud.Handle(s, bankExchangeHandler))
+}
+
+// import cannot be a typed op, but it can still SAY what it takes: its request is
+// [openapi.Binary] — an OFX/QFX/CSV statement, bytes as uploaded — and its response is
+// the BankTally the handler marshals on success. Without this the route published no
+// request and no response at all, indistinguishable in the document from one that
+// takes neither, so every generated SDK offered a statement import with nowhere to put
+// the statement.
+//
+// link-token and exchange are declared NOWHERE, deliberately: they answer 501
+// unconditionally (see below), so there is no success body to state and no request they
+// read. A declaration for either would be invention, not description.
+//
+// init, not bankRoutes: Register panics on a duplicate declaration, and bankRoutes
+// runs once per Mount.
+func init() {
+	openapi.Register("/v1/books/bank/import", "POST", openapi.Binary{}, BankTally{})
 }
 
 // bankTxnList is the org's normalized bank rows as the route answers them: a bare array.
