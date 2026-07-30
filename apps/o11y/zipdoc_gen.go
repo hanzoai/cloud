@@ -211,7 +211,7 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"annq_1","items":[{"traceId":"tr_1"}]}`),
 	})
-	zip.Describe("POST /v1/o11y/ingestion", zip.Doc{
+	zip.Describe("POST /v1/event/ingestion", zip.Doc{
 		Description: "IngestO11yEvents persists a batch of LLM-observability events — traces,\nobservations and scores — for the caller's org. Each event routes to its table\nby type; an event carrying an unrecognised type is dropped and counted rather\nthan mis-routed, and a body over the inline cap is written to object storage\nwith only its reference kept on the row. The receipt says how many of each.",
 		Fields: map[string]string{
 			"ingestResult.accepted": "Accepted is how many events were persisted.",
