@@ -737,7 +737,7 @@ document pipeline" below.)
   (`bot`, `licensing`, `sentry` — the catch-all IS the product) and 12 more mix
   concrete ops with a catch-all hiding an unknown remainder.
   **`iam` is a FOURTH wholly-opaque product, and it is the extreme case** — see
-  "apps/iam (0 of 25, and why)" below. Its subset publishes 30 operations, every
+  "apps/iam (0 of 25, and why)" below. Its subset publishes 35 operations, every
   one of them a method on one of five `app.All` wildcards relaying
   `iamserver.Handler(db)`: github.com/hanzoai/iam's ENTIRE standalone zip app —
   94 typed ops of its own — adapted to net/http and hung on a wildcard. The
@@ -1644,7 +1644,11 @@ one) — and recorded at the lines that cause it.
 
 `apps/iam` (0 of 25, and why) is the FLOOR of the migration — the one partition
 where the honest answer is that none of it converts, and the reason is worth more
-than the count. Its published subset is 30 operations and ZERO described. All 30
+than the count. Its published subset is **35** operations and ZERO described — not
+the 25 a hand count reaches, and the ten-op gap is worth knowing before you measure
+any `All`-mounted package: `app.All` registers NINE fiber methods and
+`openapi.From` publishes SEVEN of them, so each wildcard yields
+get/post/put/patch/delete **plus OPTIONS and TRACE**. All 35
 are methods on five `app.All` wildcards in `safeMount` (apps/iam/iam.go): `/v1/iam`,
 `/v1/iam/*`, `/login/oauth`, `/login/oauth/*` and the root `/.well-known/*`, each
 handed `zip.AdaptNetHTTP(iamserver.Handler(db))` — and that handler is
@@ -1689,8 +1693,34 @@ The refusal is a GATE: `apps/iam/typed_wire_test.go` holds `untypedByDesign` key
 by PATH rather than `METHOD /path` (one `app.All` refuses for every method at once;
 keying by method would state one fact six times and let five copies rot) and
 `TestEveryRouteIsTypedOrNamed` expands it over the methods the document publishes
-and checks the SUM — 0 typed + 30 named = 30 — so a sixth wildcard, a narrowed
-wildcard, or a route added here as a raw handler all go red.
+and checks the SUM — 0 typed + 35 named = 35 — so a sixth wildcard, a narrowed
+wildcard, or a route added here as a raw handler all go red. The sum is DERIVED
+from the live document rather than written down, which is what caught the 25-vs-35
+miscount in the first place.
+
+**`TRACE` is published, and not only here.** Reading the methods instead of
+assuming them turned up a fleet-wide fact: **27 operations across 10 packages
+declare `trace`** — `exec` 8, `iam` 5, `tasks` 4, `o11y` 3, `base` 2, and one each
+in `ai`, `dns`, `licensing`, `runtime`, `websearch` — every one of them from an
+`app.All` catch-all, because `All` means all. So `openapi.yaml`, every generated
+SDK and the MCP tool list offer HTTP TRACE on ten products including the identity
+plane, a method whose only use is Cross-Site Tracing and which edges normally
+refuse outright. Re-find it, do not tally it:
+
+    python3 - <<'EOF'
+    import json,glob,os,collections
+    c=collections.Counter()
+    for f in glob.glob('plugin/*/openapi.json'):
+        a=os.path.basename(os.path.dirname(f))
+        for p,ops in json.load(open(f))['paths'].items():
+            if 'trace' in ops: c[a]+=1
+    print(sum(c.values()), c.most_common())
+    EOF
+
+Left alone here on purpose: the fix is one decision in `openapi.From`'s method
+filter (or in what `All` registers), it moves the published document for ten
+packages at once, and regenerating nine other subsets inside an iam change is how
+a concurrent agent's work gets clobbered — failure mode 1's own warning.
 
 **The defect typing surfaced.** `mountFailClosed` iterated `Prefixes` alone while
 `safeMount` also registered the root `/.well-known/*`, so the degraded surface was
