@@ -104,6 +104,38 @@
         "tags": [
           "tools"
         ]
+      },
+      "post": {
+        "operationId": "post_v1_skills",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/skills/authored": {
+      "get": {
+        "operationId": "get_v1_skills_authored",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/skills/{id}": {
+      "delete": {
+        "operationId": "delete_v1_skills_by_id",
+        "tags": [
+          "tools"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
       }
     },
     "/v1/tools": {
