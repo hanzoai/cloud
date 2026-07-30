@@ -7849,6 +7849,52 @@ components:
             stripped.
           type: string
       type: object
+    mlResource:
+      properties:
+        createdAt:
+          description: CreatedAt is when Kubernetes admitted the object, RFC 3339
+            in UTC.
+          type: string
+        name:
+          description: Name is the object's metadata.name, unique within the caller's
+            namespace.
+          type: string
+        spec:
+          additionalProperties:
+            type: object
+          description: |-
+            Spec is the resource spec, verbatim as Kubernetes stores it. Present on a
+            single-object read, absent from a list.
+          type: object
+        status:
+          additionalProperties:
+            type: object
+          description: |-
+            Status is the live status its operator owns (kserve, trainer or katib),
+            verbatim. Absent until that operator has written one.
+          type: object
+      type: object
+    mlResourceList:
+      properties:
+        items:
+          description: Items is one entry per object, newest LAST (the Kubernetes
+            list order).
+          items:
+            $ref: '#/components/schemas/mlResource'
+          type: array
+      type: object
+    mlTrials:
+      properties:
+        experiment:
+          description: Experiment is the experiment the trials belong to, echoed from
+            the path.
+          type: string
+        items:
+          description: Items is one entry per Trial, in the list shape (no spec).
+          items:
+            $ref: '#/components/schemas/mlResource'
+          type: array
+      type: object
     moduleList:
       properties:
         data:
@@ -27940,7 +27986,20 @@ paths:
       - ml
   /v1/ml/models:
     get:
+      description: |-
+        ListModels lists the inference models deployed in the caller's org. Each entry
+        carries the model's name, when Kubernetes admitted it, and kserve's live status
+        — the spec is on the single-model read. An org that has deployed nothing gets
+        an empty list.
       operationId: get_v1_ml_models
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlResourceList'
+          description: ok
+      summary: ListModels lists the inference models deployed in the caller's org.
       tags:
       - ml
     post:
@@ -27949,23 +28008,53 @@ paths:
       - ml
   /v1/ml/models/{name}:
     delete:
-      operationId: delete_v1_ml_models_by_name
+      description: |-
+        DeleteModel deletes a deployed inference model. kserve owns the teardown: the
+        InferenceService goes away and the serving deployment behind it follows, so the
+        model stops answering predict calls. Answers 204, or 404 for a name the
+        caller's org does not own.
+      operationId: delete_v1_ml_models_name
       parameters:
-      - in: path
+      - description: |-
+          Name is the resource to act on, taken from the path. Lower-cased and
+          trimmed to the DNS-1123 label a CustomResource's metadata.name must be.
+        example: sentiment
+        in: path
         name: name
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: DeleteModel deletes a deployed inference model.
       tags:
       - ml
     get:
-      operationId: get_v1_ml_models_by_name
+      description: |-
+        GetModel returns one deployed inference model. Its spec comes with it, and
+        kserve's live status, which is where readiness and the serving address appear.
+        A name the caller's org does not own answers 404, exactly as an unknown name
+        does, so a probe learns nothing about another tenant's models.
+      operationId: get_v1_ml_models_name
       parameters:
-      - in: path
+      - description: |-
+          Name is the resource to act on, taken from the path. Lower-cased and
+          trimmed to the DNS-1123 label a CustomResource's metadata.name must be.
+        example: sentiment
+        in: path
         name: name
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlResource'
+          description: ok
+      summary: GetModel returns one deployed inference model.
       tags:
       - ml
     patch:
@@ -31729,7 +31818,19 @@ paths:
       - tracker
   /v1/train/experiments:
     get:
+      description: |-
+        ListExperiments lists the caller org's tuning experiments. Each entry carries
+        the experiment's name, when Kubernetes admitted it, and katib's live status —
+        the spec is on the single-experiment read.
       operationId: get_v1_train_experiments
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlResourceList'
+          description: ok
+      summary: ListExperiments lists the caller org's tuning experiments.
       tags:
       - train
     post:
@@ -31738,34 +31839,80 @@ paths:
       - train
   /v1/train/experiments/{name}:
     delete:
-      operationId: delete_v1_train_experiments_by_name
+      description: |-
+        DeleteExperiment deletes a hyperparameter-tuning experiment. Kubernetes
+        garbage-collects the Trials katib created under it, because they carry the
+        Experiment as their owner. Answers 204, or 404 for a name the caller's org does
+        not own.
+      operationId: delete_v1_train_experiments_name
       parameters:
-      - in: path
+      - description: |-
+          Name is the resource to act on, taken from the path. Lower-cased and
+          trimmed to the DNS-1123 label a CustomResource's metadata.name must be.
+        example: sweep-1
+        in: path
         name: name
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: DeleteExperiment deletes a hyperparameter-tuning experiment.
       tags:
       - train
     get:
-      operationId: get_v1_train_experiments_by_name
+      description: |-
+        GetExperiment returns one hyperparameter-tuning experiment. Its spec comes with
+        it, and katib's live status, which is where the best trial found so far is
+        reported.
+      operationId: get_v1_train_experiments_name
       parameters:
-      - in: path
+      - description: |-
+          Name is the resource to act on, taken from the path. Lower-cased and
+          trimmed to the DNS-1123 label a CustomResource's metadata.name must be.
+        example: sweep-1
+        in: path
         name: name
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlResource'
+          description: ok
+      summary: GetExperiment returns one hyperparameter-tuning experiment.
       tags:
       - train
   /v1/train/experiments/{name}/trials:
     get:
-      operationId: get_v1_train_experiments_by_name_trials
+      description: |-
+        ListTrials lists the katib Trials one experiment owns. The experiment is read
+        FIRST, so a name the caller's org does not own is a clean 404 rather than an
+        empty list; the Trials themselves are selected by katib's own
+        katib.kubeflow.org/experiment label within the caller's tenant namespace.
+      operationId: get_v1_train_experiments_name_trials
       parameters:
-      - in: path
+      - description: |-
+          Name is the resource to act on, taken from the path. Lower-cased and
+          trimmed to the DNS-1123 label a CustomResource's metadata.name must be.
+        example: sweep-1
+        in: path
         name: name
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlTrials'
+          description: ok
+      summary: ListTrials lists the katib Trials one experiment owns.
       tags:
       - train
   /v1/train/health:
@@ -31775,7 +31922,19 @@ paths:
       - train
   /v1/train/jobs:
     get:
+      description: |-
+        ListJobs lists the training jobs in the caller's org. Each entry carries the
+        job's name, when Kubernetes admitted it, and the trainer operator's live status
+        — the spec is on the single-job read.
       operationId: get_v1_train_jobs
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlResourceList'
+          description: ok
+      summary: ListJobs lists the training jobs in the caller's org.
       tags:
       - train
     post:
@@ -31784,23 +31943,52 @@ paths:
       - train
   /v1/train/jobs/{name}:
     delete:
-      operationId: delete_v1_train_jobs_by_name
+      description: |-
+        DeleteJob deletes a training job. Kubernetes garbage-collects the pods the
+        trainer operator created under it, because they carry the TrainJob as their
+        owner — so deleting the job is how a run is stopped. Answers 204, or 404 for a
+        name the caller's org does not own.
+      operationId: delete_v1_train_jobs_name
       parameters:
-      - in: path
+      - description: |-
+          Name is the resource to act on, taken from the path. Lower-cased and
+          trimmed to the DNS-1123 label a CustomResource's metadata.name must be.
+        example: finetune-1
+        in: path
         name: name
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: DeleteJob deletes a training job.
       tags:
       - train
     get:
-      operationId: get_v1_train_jobs_by_name
+      description: |-
+        GetJob returns one training job. Its spec comes with it, and the trainer
+        operator's live status, which is where a run's phase and its conditions are
+        reported.
+      operationId: get_v1_train_jobs_name
       parameters:
-      - in: path
+      - description: |-
+          Name is the resource to act on, taken from the path. Lower-cased and
+          trimmed to the DNS-1123 label a CustomResource's metadata.name must be.
+        example: finetune-1
+        in: path
         name: name
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mlResource'
+          description: ok
+      summary: GetJob returns one training job.
       tags:
       - train
   /v1/translate:
