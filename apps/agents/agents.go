@@ -153,13 +153,26 @@ type agentView struct {
 	UpdatedAt        string   `json:"updatedAt"`
 }
 
+// agentDetail is one agent plus what only the detail read carries: the system
+// prompt and its most recent runs. agentView is EMBEDDED (promoted inline on the
+// wire) rather than spelled out again, because it is the shared list projection
+// and a second copy of its 12 fields is a second thing to forget to update.
+//
+// zip's schema walk takes only EXPORTED fields, and an embedded field of an
+// unexported type is not one, so the published response schema for this shape
+// currently lists `instructions` and `recentRuns` alone. That is a zip gap (the
+// same one that leaves the shipped PATCH /v1/agents/targets/{id} body schema
+// holding only `id`), not a wire difference — encoding/json promotes the inner
+// fields exactly as it always has. It is fixed once, in zip's structSchema, for
+// every embedded shape in the fleet; flattening it here would trade one
+// incomplete schema for a field that silently stops being sent.
 type agentDetail struct {
 	agentView
-	Instructions string    `json:"instructions"`
-	RecentRuns   []runView `json:"recentRuns"`
+	Instructions string         `json:"instructions"`
+	RecentRuns   []agentRunView `json:"recentRuns"`
 }
 
-type runView struct {
+type agentRunView struct {
 	ID         string `json:"id"`
 	Status     string `json:"status"`
 	Model      string `json:"model"`
@@ -238,8 +251,8 @@ func toView(a Agent, runs int) agentView {
 // toRunView projects one execution onto the wire. Run history is customer-visible
 // too, and a run recorded before the migration carries the model it actually ran
 // on — so it is guarded the same way the agent is.
-func toRunView(r Run) runView {
-	return runView{
+func toRunView(r Run) agentRunView {
+	return agentRunView{
 		ID: r.ID, Status: r.Status, Model: cloud.ZenModel(r.Model), Input: r.Input, Output: r.Output,
 		Error: r.Error, DurationMs: r.DurationMs, CreatedAt: rfc3339(r.CreatedAt),
 	}
@@ -267,6 +280,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
 		return fmt.Errorf("agents.Mount: data dir: %w", err)
+	}
+	// The typed-op registry lives on the App: it is what makes each op a document
+	// operation, an MCP tool, a CLI command and an SDK method rather than only a
+	// route. A Router that cannot reach it must fail the mount rather than serve
+	// routes no projection knows about.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("agents.Mount: router carries no typed-op registry")
 	}
 	store, err := openStore(filepath.Join(deps.DataDir, "agents.db"))
 	if err != nil {
@@ -297,27 +318,49 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	mounted = s
 
+	o := agentOps{s: s}
 	g := app.Group("/v1/agents")
-	app.Get("/v1/agents", cloud.Handle(s, list))
-	app.Post("/v1/agents", cloud.Handle(s, create))
+	// Bridge FIRST, and at the TOP of the whole surface: a typed op receives only
+	// a context, so the validated org reaches it by being parked there — never as
+	// an In field, which is caller-supplied and would be a cross-tenant read the
+	// caller asserted for itself. fiber runs middleware in registration order, so
+	// one installed further down never runs for the leaves above it: this used to
+	// sit inside mountTargets, below, which left every leaf registered before that
+	// call — this file's, mountSessions' — with no org on the context the moment
+	// they became typed ops. Serve installs one app-wide too; nesting is harmless
+	// (the inner one is what the handler sees) and the tests mount this subsystem
+	// on a bare app with no Serve, so the subsystem's own install is what makes
+	// them pass.
+	g.Use(cloud.Bridge())
+	// The root of the surface. Declared on the App with its WHOLE path, not on the
+	// group with an empty leaf: joining "/v1/agents" with "" yields "/v1/agents/",
+	// a different path from the one these two have always served.
+	zip.Get(zapp, "/v1/agents", o.list)
+	zip.Post(zapp, "/v1/agents", o.create, zip.WithStatus(http.StatusCreated))
 	// The static org-wide surfaces are listed before the :ref wildcard for reading
 	// order, not for matching: the router resolves by SPECIFICITY, so a literal
 	// beats a param whatever order they register in ("metrics" is never captured as
 	// a ref). Registration order decides nothing here — it only decides which
 	// handler silently wins when two patterns are byte-identical, which is a
 	// collision, not a precedence.
-	g.Get("/metrics", cloud.Handle(s, metrics))
-	g.Get("/activity", cloud.Handle(s, activity))
+	zip.Get(g, "/metrics", o.metrics)
+	zip.Get(g, "/activity", o.activity)
 	// Live agent-session control plane: /v1/agents/sessions[/...].
 	mountSessions(s, app)
 	// Agent targets: /v1/agents/targets[/...] — the #48 dispatch destinations a
 	// session runs on.
 	mountTargets(s, app)
-	g.Get("/:ref", cloud.Handle(s, get))
-	g.Patch("/:ref", cloud.Handle(s, update))
-	g.Delete("/:ref", cloud.Handle(s, del))
+	zip.Get(g, "/:ref", o.get)
+	zip.Patch(g, "/:ref", o.update)
+	zip.Delete(g, "/:ref", o.del)
+	// UNTYPED, and it has to be: a run answers 502 with the RECORDED RUN as its
+	// body (the execution happened and its error is the product), and a balance
+	// denial answers the fleet-wide 402/503 contract through cloud.DenyResource
+	// ({"error":{"code","message"}}). zip's error type carries {status,code,error}
+	// and nothing else, so a typed op would silently reshape both. It is the
+	// conditional-BODY twin of the conditional-status class — see LLM.md.
 	g.Post("/:ref/run", cloud.Handle(s, run))
-	g.Get("/:ref/runs", cloud.Handle(s, runs))
+	zip.Get(g, "/:ref/runs", o.runs)
 
 	// Long-running scheduler: invokes each long-running agent's run on its cron
 	// cadence through the SAME runAgent path as the HTTP handler (one run path,
@@ -344,7 +387,54 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 // ---- handlers ----
 
-type createReq struct {
+// agentOps binds the service to the typed agent ops. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value (o.list), which is also
+// the only bound form cmd/zipdoc can lift prose from.
+type agentOps struct{ s *cloud.Service[state] }
+
+// agentRef addresses one agent. The ref is the path segment, and the URL is the
+// addressing authority, so it binds from there whatever a body says.
+type agentRef struct {
+	// Ref is the agent's public id (the agent_… handle create and list return) or
+	// its org-unique name, from the path. Either resolves the same agent.
+	Ref string `json:"ref"`
+}
+
+// agentList is every agent defined in the caller's org.
+type agentList struct {
+	// Agents is the org's agents, each carrying its recorded run count.
+	Agents []agentView `json:"agents"`
+}
+
+// runsQuery addresses one agent's run history.
+type runsQuery struct {
+	// Ref is the agent's public id or its org-unique name, from the path.
+	Ref string `json:"ref"`
+	// Limit caps how many runs come back, newest first. Absent, zero or out of
+	// range (1..200) reads as 50.
+	Limit int `json:"limit"`
+}
+
+// runList is a page of one agent's recorded executions.
+type runList struct {
+	// Runs is the agent's executions, newest first.
+	Runs []agentRunView `json:"runs"`
+}
+
+// metricsQuery selects the dashboard window.
+type metricsQuery struct {
+	// Range is the window to bucket: 24H, 7D or 30D. Anything else reads as 30D.
+	Range string `json:"range"`
+}
+
+// activityFeed is the org-wide recent-activity feed.
+type activityFeed struct {
+	// Activity is the merged run/create/update events, newest first, capped at 50.
+	Activity []activityView `json:"activity"`
+}
+
+type createAgentIn struct {
 	Name             string   `json:"name"`
 	Model            string   `json:"model"`
 	Instructions     string   `json:"instructions"`
@@ -356,21 +446,29 @@ type createReq struct {
 	ServiceAccountID string   `json:"serviceAccountId"`
 }
 
-func create(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// CreateAgent defines an agent in the caller's org: a model, a system prompt
+// (instructions) and a set of tool names. The name must be unique in the org and
+// match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$. An omitted model takes the
+// deployment's configured default; a named one is checked against the gateway's
+// served catalog, so a model this deployment never serves is refused here rather
+// than failing at run time. A long-running agent must carry a 5-field cron
+// schedule (the scheduler would otherwise never fire it) and counts against a
+// per-org cap on scheduled agents.
+//
+// Example: {"name": "helper", "model": "enso-flash", "instructions": "be terse"}
+func (o agentOps) create(ctx context.Context, in *createAgentIn) (*agentView, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body createReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
 	name := strings.TrimSpace(body.Name)
 	if name == "" {
-		return zip.ErrBadRequest("name is required")
+		return nil, zip.ErrBadRequest("name is required")
 	}
 	if !nameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+		return nil, zip.ErrBadRequest("name must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
 	// Model resolution: a client-supplied model is validated against the
 	// gateway's served catalog (a clean 400 for e.g. claude-sonnet-4-5 that this
@@ -386,43 +484,43 @@ func create(s *cloud.Service[state], c *zip.Ctx) error {
 	model := strings.TrimSpace(body.Model)
 	if model == "" {
 		if model = s.State.defaultModel; model == "" {
-			return zip.ErrBadRequest("model is required")
+			return nil, zip.ErrBadRequest("model is required")
 		}
-	} else if err := validateModel(s, c.Context(), model); err != nil {
-		return err
+	} else if err := validateModel(s, ctx, model); err != nil {
+		return nil, err
 	}
 	model = cloud.ZenModel(model)
 	if len(body.Instructions) > maxInstructions {
-		return zip.ErrBadRequest("instructions too large")
+		return nil, zip.ErrBadRequest("instructions too large")
 	}
 	mode, schedule, err := validateLifecycle(body.ExecutionMode, body.Schedule)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	computeRef, err := validateRef("computeRef", body.ComputeRef)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	serviceAccountID, err := validateRef("serviceAccountId", body.ServiceAccountID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// Cap the org's scheduler footprint (Red LOW-1): a tenant cannot create an
 	// unbounded number of scheduled agents that each add recurring load to the
 	// shared store. Only counts when this create is itself long-running.
 	if mode == ModeLongRunning {
-		n, err := s.State.store.CountLongRunning(c.Context(), org)
+		n, err := s.State.store.CountLongRunning(ctx, org)
 		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "count: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "count: %v", err)
 		}
 		if n >= longRunningCap() {
-			return zip.Errorf(http.StatusConflict,
+			return nil, zip.Errorf(http.StatusConflict,
 				"long-running agent limit reached for this org (max %d)", longRunningCap())
 		}
 	}
 	id, err := genID("agent")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
 	a := Agent{
@@ -432,61 +530,80 @@ func create(s *cloud.Service[state], c *zip.Ctx) error {
 		ComputeRef: computeRef, ServiceAccountID: serviceAccountID,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	if err := s.State.store.Create(c.Context(), a); err != nil {
+	if err := s.State.store.Create(ctx, a); err != nil {
 		if err == errConflict {
-			return zip.ErrConflict("agent already exists in this org")
+			return nil, zip.ErrConflict("agent already exists in this org")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	return c.JSON(http.StatusCreated, toView(a, 0))
+	v := toView(a, 0)
+	return &v, nil
 }
 
-func list(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	rows, err := s.State.store.List(c.Context(), org)
+// ListAgents returns every agent defined in the caller's org, each with the
+// number of runs recorded against it.
+func (o agentOps) list(ctx context.Context, _ *noInput) (*agentList, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
+	}
+	rows, err := s.State.store.List(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	out := make([]agentView, 0, len(rows))
 	for _, a := range rows {
-		n, err := s.State.store.CountRuns(c.Context(), org, a.Name)
+		n, err := s.State.store.CountRuns(ctx, org, a.Name)
 		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "runs: %v", err)
+			return nil, zip.Errorf(http.StatusInternalServerError, "runs: %v", err)
 		}
 		out = append(out, toView(a, n))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"agents": out})
+	return &agentList{Agents: out}, nil
 }
 
-func get(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// GetAgent returns one agent with its system prompt and its 20 most recent runs.
+// The ref is the agent's public id or its org-unique name — a created agent is
+// immediately gettable by whatever create handed back.
+//
+// Example: {"ref": "helper"}
+func (o agentOps) get(ctx context.Context, in *agentRef) (*agentDetail, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	a, err := s.State.store.Resolve(c.Context(), org, refParam(c))
+	a, err := s.State.store.Resolve(ctx, org, strings.TrimSpace(in.Ref))
 	if err == errNotFound {
-		return zip.ErrNotFound("agent not found")
+		return nil, zip.ErrNotFound("agent not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	runs, err := s.State.store.ListRuns(c.Context(), org, a.Name, 20)
+	runs, err := s.State.store.ListRuns(ctx, org, a.Name, 20)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "runs: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "runs: %v", err)
 	}
-	rv := make([]runView, 0, len(runs))
+	rv := make([]agentRunView, 0, len(runs))
 	for _, r := range runs {
 		rv = append(rv, toRunView(r))
 	}
-	return c.JSON(http.StatusOK, agentDetail{
+	return &agentDetail{
 		agentView: toView(a, len(runs)), Instructions: a.Instructions, RecentRuns: rv,
-	})
+	}, nil
 }
 
-type updateReq struct {
+// updateAgentIn is a partial update. Every field is optional — a field the
+// request omits is left alone — and the agent is addressed by the path.
+//
+// The mutable fields are spelled out HERE rather than in an embedded body struct
+// that has exactly one user: zip's schema walk skips an embedded field of an
+// unexported type, so an embedded body would publish a request schema holding
+// only `ref` and every generated client would be unable to send anything.
+type updateAgentIn struct {
+	// Ref is the agent to update — its public id or org-unique name, from the path.
+	Ref              string    `json:"ref"`
 	Model            *string   `json:"model"`
 	Instructions     *string   `json:"instructions"`
 	Description      *string   `json:"description"`
@@ -497,35 +614,40 @@ type updateReq struct {
 	ServiceAccountID *string   `json:"serviceAccountId"`
 }
 
-func update(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// UpdateAgent changes an agent in place. Every field is optional; a field the
+// request omits keeps its stored value. The resulting mode+schedule are
+// re-validated together, so a partial update can never leave a long-running
+// agent without the cron the scheduler needs to fire it, and a transition INTO
+// long-running counts against the per-org cap on scheduled agents.
+//
+// Example: {"ref": "helper", "instructions": "be terse and cite sources"}
+func (o agentOps) update(ctx context.Context, in *updateAgentIn) (*agentView, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	a, err := s.State.store.Resolve(c.Context(), org, refParam(c))
+	a, err := s.State.store.Resolve(ctx, org, strings.TrimSpace(in.Ref))
 	if err == errNotFound {
-		return zip.ErrNotFound("agent not found")
+		return nil, zip.ErrNotFound("agent not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	var body updateReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
 	if body.Model != nil {
 		m := strings.TrimSpace(*body.Model)
 		if m == "" {
-			return zip.ErrBadRequest("model cannot be empty")
+			return nil, zip.ErrBadRequest("model cannot be empty")
 		}
-		if err := validateModel(s, c.Context(), m); err != nil {
-			return err
+		if err := validateModel(s, ctx, m); err != nil {
+			return nil, err
 		}
 		a.Model = cloud.ZenModel(m)
 	}
 	if body.Instructions != nil {
 		if len(*body.Instructions) > maxInstructions {
-			return zip.ErrBadRequest("instructions too large")
+			return nil, zip.ErrBadRequest("instructions too large")
 		}
 		a.Instructions = *body.Instructions
 	}
@@ -537,12 +659,12 @@ func update(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	if body.ComputeRef != nil {
 		if a.ComputeRef, err = validateRef("computeRef", *body.ComputeRef); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if body.ServiceAccountID != nil {
 		if a.ServiceAccountID, err = validateRef("serviceAccountId", *body.ServiceAccountID); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	// Re-validate the lifecycle from the RESULTING mode+schedule so a partial
@@ -557,7 +679,7 @@ func update(s *cloud.Service[state], c *zip.Ctx) error {
 		schedule = *body.Schedule
 	}
 	if a.ExecutionMode, a.Schedule, err = validateLifecycle(mode, schedule); err != nil {
-		return err
+		return nil, err
 	}
 	// Enforce the per-org scheduler cap on a TRANSITION into long-running, so a
 	// tenant can't sidestep the create-time cap by making N one-shot agents and
@@ -565,49 +687,54 @@ func update(s *cloud.Service[state], c *zip.Ctx) error {
 	// agent was NOT already long-running (a no-op re-save of an existing
 	// long-running agent must not 409 against its own row).
 	if a.ExecutionMode == ModeLongRunning && !wasLongRunning {
-		n, cerr := s.State.store.CountLongRunning(c.Context(), org)
+		n, cerr := s.State.store.CountLongRunning(ctx, org)
 		if cerr != nil {
-			return zip.Errorf(http.StatusInternalServerError, "count: %v", cerr)
+			return nil, zip.Errorf(http.StatusInternalServerError, "count: %v", cerr)
 		}
 		if n >= longRunningCap() {
-			return zip.Errorf(http.StatusConflict,
+			return nil, zip.Errorf(http.StatusConflict,
 				"long-running agent limit reached for this org (max %d)", longRunningCap())
 		}
 	}
 	a.UpdatedAt = time.Now().Unix()
-	if err := s.State.store.Update(c.Context(), a); err != nil {
+	if err := s.State.store.Update(ctx, a); err != nil {
 		if err == errNotFound {
-			return zip.ErrNotFound("agent not found")
+			return nil, zip.ErrNotFound("agent not found")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "update: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "update: %v", err)
 	}
-	n, _ := s.State.store.CountRuns(c.Context(), org, a.Name)
-	return c.JSON(http.StatusOK, toView(a, n))
+	n, _ := s.State.store.CountRuns(ctx, org, a.Name)
+	v := toView(a, n)
+	return &v, nil
 }
 
-func del(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// DeleteAgent removes an agent and every run recorded against it. Answers 204.
+//
+// Example: {"ref": "helper"}
+func (o agentOps) del(ctx context.Context, in *agentRef) (*noContent, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
 	// Resolve id-or-name first, then delete by the canonical name (agent_runs
 	// cascades on agent_name). Deleting by a raw id would never match the store's
 	// name key and silently 404 a real agent.
-	a, err := s.State.store.Resolve(c.Context(), org, refParam(c))
+	a, err := s.State.store.Resolve(ctx, org, strings.TrimSpace(in.Ref))
 	if err == errNotFound {
-		return zip.ErrNotFound("agent not found")
+		return nil, zip.ErrNotFound("agent not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "resolve: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "resolve: %v", err)
 	}
-	deleted, err := s.State.store.Delete(c.Context(), org, a.Name)
+	deleted, err := s.State.store.Delete(ctx, org, a.Name)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("agent not found")
+		return nil, zip.ErrNotFound("agent not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 type runReq struct {
@@ -865,52 +992,58 @@ func sleepBackoff(ctx context.Context, attempt int) error {
 	}
 }
 
-func runs(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// ListAgentRuns returns one agent's execution history, newest first — each run's
+// input, its output or its error, and how long it took. Every row is a run that
+// actually happened.
+//
+// Example: {"ref": "helper", "limit": 20}
+func (o agentOps) runs(ctx context.Context, in *runsQuery) (*runList, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	a, err := s.State.store.Resolve(c.Context(), org, refParam(c))
+	a, err := s.State.store.Resolve(ctx, org, strings.TrimSpace(in.Ref))
 	if err == errNotFound {
-		return zip.ErrNotFound("agent not found")
+		return nil, zip.ErrNotFound("agent not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "resolve: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "resolve: %v", err)
 	}
-	limit := 50
-	if q := strings.TrimSpace(c.Query("limit")); q != "" {
-		if n, err := strconv.Atoi(q); err == nil {
-			limit = n
-		}
-	}
-	runs, err := s.State.store.ListRuns(c.Context(), org, a.Name, limit)
+	// ListRuns owns the page bound: it reads 0 (absent) and anything outside
+	// 1..200 as its own 50, which is exactly what an unparseable ?limit= produced
+	// before — the binder leaves the field at zero for the same input.
+	runs, err := s.State.store.ListRuns(ctx, org, a.Name, in.Limit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "runs: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "runs: %v", err)
 	}
-	out := make([]runView, 0, len(runs))
+	out := make([]agentRunView, 0, len(runs))
 	for _, r := range runs {
 		out = append(out, toRunView(r))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"runs": out})
+	return &runList{Runs: out}, nil
 }
 
-// metrics serves the invocations-over-time histogram for the org's Agents
+// AgentMetrics serves the invocations-over-time histogram for the org's Agents
 // dashboard. Every point is a REAL count of recorded runs in that time bucket —
 // one series line per agent that ran in the window. The Resource Usage rollup is
 // all-null because this store meters no CPU/memory/storage/cost; the console
 // renders those as "—" rather than a fabricated figure. No runs => empty series
 // (an honest "not connected / no activity yet"), never a synthesized trend.
-func metrics(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+//
+// Example: {"range": "7D"}
+func (o agentOps) metrics(ctx context.Context, in *metricsQuery) (*metricsView, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	rng, buckets, step := metricsWindow(c.Query("range"))
+	rng, buckets, step := metricsWindow(in.Range)
 	now := time.Now()
 	start := now.Add(-time.Duration(buckets) * step) // last bucket ends at now
-	runs, err := s.State.store.RunsSince(c.Context(), org, start.Unix(), 10000)
+	runs, err := s.State.store.RunsSince(ctx, org, start.Unix(), 10000)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "metrics: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "metrics: %v", err)
 	}
 	// Bucket real runs per agent. counts[agent][i] = invocations in bucket i.
 	counts := map[string][]int{}
@@ -941,7 +1074,7 @@ func metrics(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		series = append(series, seriesLine{Key: name, Points: pts})
 	}
-	return c.JSON(http.StatusOK, metricsView{Range: rng, Series: series, Resource: resourceUsage{}})
+	return &metricsView{Range: rng, Series: series, Resource: resourceUsage{}}, nil
 }
 
 // metricsWindow maps a console range token to (canonical token, bucket count,
@@ -958,23 +1091,24 @@ func metricsWindow(raw string) (rng string, buckets int, step time.Duration) {
 	}
 }
 
-// activity serves the org-wide recent-activity feed. Events are REAL: each
+// AgentActivity serves the org-wide recent-activity feed. Events are REAL: each
 // recorded run is an invoked (ok) or failed (error) event; each agent's own
 // create/update timestamps are created/updated events. Merged, newest first,
 // capped. Nothing is invented — an org with no agents and no runs gets [].
-func activity(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+func (o agentOps) activity(ctx context.Context, _ *noInput) (*activityFeed, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
 	const limit = 50
-	runs, err := s.State.store.RunsSince(c.Context(), org, 0, 200)
+	runs, err := s.State.store.RunsSince(ctx, org, 0, 200)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "activity runs: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "activity runs: %v", err)
 	}
-	rows, err := s.State.store.List(c.Context(), org)
+	rows, err := s.State.store.List(ctx, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "activity agents: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "activity agents: %v", err)
 	}
 	evs := make([]activityView, 0, len(runs)+2*len(rows))
 	for _, r := range runs {
@@ -995,7 +1129,7 @@ func activity(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(evs) > limit {
 		evs = evs[:limit]
 	}
-	return c.JSON(http.StatusOK, map[string]any{"activity": evs})
+	return &activityFeed{Activity: evs}, nil
 }
 
 // trimMsg bounds an error string for the activity feed without hiding it.
