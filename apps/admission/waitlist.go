@@ -24,7 +24,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
@@ -251,21 +250,69 @@ func seedRegistry(brand string, log luxlog.Logger) int {
 	return len(seed)
 }
 
-// waitlistModeRoute answers GET /v1/flags/waitlist?host=<h> — the runtime lookup the
-// @file waitlist-guard caches. Public (in-cluster) read: it returns ONLY the boolean
-// mode for the ONE queried host, never an enumeration.
-func waitlistModeRoute(c *zip.Ctx) error {
-	host := strings.TrimSpace(c.Query("host"))
+// waitlistOps is the receiver the waitlist op hangs off. A method value is the only
+// bound form cmd/zipdoc can lift prose from, so the op is a method and not a
+// closure.
+type waitlistOps struct{}
+
+// waitlistQuery addresses ONE host. The host is an ADDRESS, not an identity, so it
+// is an ordinary input rather than something read off the validated principal.
+type waitlistQuery struct {
+	// Host is the host to resolve, e.g. "chat.hanzo.ai". Defaults to the request's
+	// own Host header when omitted, which is what lets a guard running on the
+	// governed host ask about itself with no argument.
+	Host string `json:"host"`
+}
+
+// waitlistModeView is the guard's answer for ONE host.
+type waitlistModeView struct {
+	// Host is the queried host, normalized (lowercased, port stripped).
+	Host string `json:"host"`
+	// Service is the registered service that governs this host, empty when none does.
+	Service string `json:"service"`
+	// WaitlistMode is true when the service is GATED to approved users, false when
+	// it is open. Always false for an ungoverned host.
+	WaitlistMode bool `json:"waitlistMode"`
+	// Known is false when no registered service claims this host, or when the
+	// registry is unavailable — the guard then lets the request through, which is
+	// why the two cases answer alike.
+	Known bool `json:"known"`
+}
+
+// WaitlistMode reports whether ONE host is currently gated by the launch waitlist.
+// It resolves the host to the service that governs it and reads that service's
+// waitlist switch, so a guard sitting in front of a hosted surface can decide in one
+// call whether to show the waitlist or the product. It answers for the ONE host
+// asked about and never enumerates the registry, which is why it needs no
+// credential. It FAILS OPEN: an unregistered host, an unmounted registry and a store
+// fault all answer known=false with mode=false, so a request is never gated pre-boot
+// or on a registry fault.
+func (waitlistOps) mode(ctx context.Context, in *waitlistQuery) (*waitlistModeView, error) {
+	host := strings.TrimSpace(in.Host)
 	if host == "" {
-		host = c.Fiber().Hostname()
+		host = requestHost(ctx)
 	}
-	mode, service, known := WaitlistModeForHost(c.Context(), host)
-	return c.JSON(http.StatusOK, map[string]any{
-		"host":         NormalizeHost(host),
-		"service":      service,
-		"waitlistMode": mode,
-		"known":        known,
-	})
+	mode, service, known := WaitlistModeForHost(ctx, host)
+	return &waitlistModeView{
+		Host:         NormalizeHost(host),
+		Service:      service,
+		WaitlistMode: mode,
+		Known:        known,
+	}, nil
+}
+
+// requestHost is the host the request itself was addressed to — the default this
+// route has always used when ?host= is omitted. It is a property of the REQUEST and
+// of nothing else, so it is read from the request rather than modeled as a second In
+// field a caller could set. Empty off the HTTP path, where there is no request and
+// therefore no host, which resolves to known=false — the same fail-open answer an
+// unregistered host gets.
+func requestHost(ctx context.Context) string {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return ""
+	}
+	return c.Fiber().Hostname()
 }
 
 // ── lifecycle ────────────────────────────────────────────────────────────────
@@ -292,10 +339,21 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// The guard's public runtime mode read (host→service→waitlist.<svc>), one namespace
 	// under /v1/flags. Exempt from the Enforce gate (see defaultExemptPrefixes) so a
 	// gated user can still resolve mode.
-	app.Get("/v1/flags/waitlist", waitlistModeRoute)
+	//
+	// A typed op receives only a context, so the request the ?host= default falls
+	// back to has to be parked there. Installed BEFORE the leaf — fiber runs
+	// middleware in registration order, so one installed after it never runs.
+	app.Group("/v1/flags/waitlist").Use(cloud.Bridge())
+	zip.Get(cloud.ZipApp(app), "/v1/flags/waitlist", waitlistOps{}.mode)
 	log.Info("admission gate ready", "services", n)
 	return nil
 }
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
 
 // Shutdown closes the launch registry's per-org store handles.
 func Shutdown() error {

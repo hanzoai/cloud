@@ -19,9 +19,59 @@
     "/v1/flags/waitlist": {
       "get": {
         "operationId": "get_v1_flags_waitlist",
+        "summary": "WaitlistMode reports whether ONE host is currently gated by the launch waitlist.",
+        "description": "WaitlistMode reports whether ONE host is currently gated by the launch waitlist.\nIt resolves the host to the service that governs it and reads that service's\nwaitlist switch, so a guard sitting in front of a hosted surface can decide in one\ncall whether to show the waitlist or the product. It answers for the ONE host\nasked about and never enumerates the registry, which is why it needs no\ncredential. It FAILS OPEN: an unregistered host, an unmounted registry and a store\nfault all answer known=false with mode=false, so a request is never gated pre-boot\nor on a registry fault.",
         "tags": [
           "flags"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "host",
+            "in": "query",
+            "required": false,
+            "description": "Host is the host to resolve, e.g. \"chat.hanzo.ai\". Defaults to the request's\nown Host header when omitted, which is what lets a guard running on the\ngoverned host ask about itself with no argument.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/waitlistModeView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "waitlistModeView": {
+        "properties": {
+          "host": {
+            "description": "Host is the queried host, normalized (lowercased, port stripped).",
+            "type": "string"
+          },
+          "known": {
+            "description": "Known is false when no registered service claims this host, or when the\nregistry is unavailable — the guard then lets the request through, which is\nwhy the two cases answer alike.",
+            "type": "boolean"
+          },
+          "service": {
+            "description": "Service is the registered service that governs this host, empty when none does.",
+            "type": "string"
+          },
+          "waitlistMode": {
+            "description": "WaitlistMode is true when the service is GATED to approved users, false when\nit is open. Always false for an ungoverned host.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
       }
     }
   }
