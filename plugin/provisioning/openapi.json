@@ -37,20 +37,60 @@
     "/v1/datastore": {
       "get": {
         "operationId": "get_v1_datastore",
+        "summary": "ListDatastore lists the caller org's Hanzo Datastore warehouses.",
+        "description": "ListDatastore lists the caller org's Hanzo Datastore warehouses. Each one is\na DEDICATED analytical instance the org alone runs, so the host is that\ninstance's own in-cluster Service and the port is its HTTP port, 8123.",
         "tags": [
           "datastore"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/provisionedSummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_datastore",
         "tags": [
           "datastore"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/provisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisionResult"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/datastore/{name}": {
       "delete": {
-        "operationId": "delete_v1_datastore_by_name",
+        "operationId": "delete_v1_datastore_name",
+        "summary": "DropDatastore deprovisions one Hanzo Datastore warehouse.",
+        "description": "DropDatastore deprovisions one Hanzo Datastore warehouse. It reverts any app\ninstance bound to it back to Base BEFORE tearing down the org's dedicated\ninstance, then deletes the sealed credential and removes the metadata row.\nAnswers 204 with no body; a second call is a 404.",
         "tags": [
           "datastore"
         ],
@@ -59,14 +99,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "warehouse"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_datastore_by_name",
+        "operationId": "get_v1_datastore_name",
+        "summary": "GetDatastore returns one Hanzo Datastore warehouse's metadata.",
+        "description": "GetDatastore returns one Hanzo Datastore warehouse's metadata. It carries the\nwarehouse's status, its instance address and the admin user the instance\nbooted with — never the password. A still-booting instance reads\n\"provisioning\", reconciled from the operator's live view rather than the row.",
         "tags": [
           "datastore"
         ],
@@ -75,30 +124,84 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "warehouse"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisionedResource"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/docdb": {
       "get": {
         "operationId": "get_v1_docdb",
+        "summary": "ListDocDB lists the caller org's Hanzo DocDB document databases.",
+        "description": "ListDocDB lists the caller org's Hanzo DocDB document databases. Each one is\na DEDICATED FerretDB instance the org alone runs, speaking the MongoDB wire\nprotocol, so the host is that instance's own in-cluster Service and the port\nis 27017.",
         "tags": [
           "docdb"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/provisionedSummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_docdb",
         "tags": [
           "docdb"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/provisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisionResult"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/docdb/{name}": {
       "delete": {
-        "operationId": "delete_v1_docdb_by_name",
+        "operationId": "delete_v1_docdb_name",
+        "summary": "DropDocDB deprovisions one Hanzo DocDB database.",
+        "description": "DropDocDB deprovisions one Hanzo DocDB database. It reverts any app instance\nbound to it back to Base BEFORE tearing down the org's dedicated FerretDB\ninstance, then deletes the sealed credential and removes the metadata row.\nAnswers 204 with no body; a second call is a 404.",
         "tags": [
           "docdb"
         ],
@@ -107,14 +210,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sessions"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_docdb_by_name",
+        "operationId": "get_v1_docdb_name",
+        "summary": "GetDocDB returns one Hanzo DocDB database's metadata.",
+        "description": "GetDocDB returns one Hanzo DocDB database's metadata. It carries the\ndatabase's status, its instance address and the SCRAM user the instance was\nset up with — never the password. A still-booting instance reads\n\"provisioning\", reconciled from the operator's live view.",
         "tags": [
           "docdb"
         ],
@@ -123,30 +235,84 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sessions"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisionedResource"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/kv": {
       "get": {
         "operationId": "get_v1_kv",
+        "summary": "ListKV lists the caller org's Hanzo KV stores.",
+        "description": "ListKV lists the caller org's Hanzo KV stores. Each one is a DEDICATED Valkey\ninstance the org alone runs, so the host is that instance's own in-cluster\nService and the port is 6379.",
         "tags": [
           "kv"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/provisionedSummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_kv",
         "tags": [
           "kv"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/provisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisionResult"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/kv/{name}": {
       "delete": {
-        "operationId": "delete_v1_kv_by_name",
+        "operationId": "delete_v1_kv_name",
+        "summary": "DropKV deprovisions one Hanzo KV store.",
+        "description": "DropKV deprovisions one Hanzo KV store. It reverts any app instance bound to\nit back to Base BEFORE tearing down the org's dedicated Valkey instance, then\ndeletes the sealed credential and removes the metadata row. Answers 204 with\nno body; a second call is a 404.",
         "tags": [
           "kv"
         ],
@@ -155,14 +321,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sessions"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_kv_by_name",
+        "operationId": "get_v1_kv_name",
+        "summary": "GetKV returns one Hanzo KV store's metadata.",
+        "description": "GetKV returns one Hanzo KV store's metadata. It carries the store's status,\nits instance address and the Valkey user it authenticates as (\"default\", the\nonly user a requirepass instance has) — never the password. A still-booting\ninstance reads \"provisioning\", reconciled from the operator's live view.",
         "tags": [
           "kv"
         ],
@@ -171,30 +346,84 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sessions"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisionedResource"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/s3": {
       "get": {
         "operationId": "get_v1_s3",
+        "summary": "ListS3 lists the caller org's object-storage buckets.",
+        "description": "ListS3 lists the caller org's object-storage buckets. A bucket lives in an\nalready-live shared object store and is reached through the public gateway.\nThe names here are the friendly ones the org provisioned; the physical bucket\nis org-namespaced underneath, which is what keeps two tenants' buckets\ndistinct.",
         "tags": [
           "s3"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/provisionedSummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_s3",
         "tags": [
           "s3"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/provisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisionResult"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/s3/{name}": {
       "delete": {
-        "operationId": "delete_v1_s3_by_name",
+        "operationId": "delete_v1_s3_name",
+        "summary": "DropS3 deletes one bucket from the shared object store and removes its metadata row.",
+        "description": "DropS3 deletes one bucket from the shared object store and removes its\nmetadata row. Answers 204 with no body; a second call is a 404.",
         "tags": [
           "s3"
         ],
@@ -203,14 +432,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "uploads"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_s3_by_name",
+        "operationId": "get_v1_s3_name",
+        "summary": "GetS3 returns one bucket's metadata.",
+        "description": "GetS3 returns one bucket's metadata. It carries the bucket's status and the\ngateway address it is reached at, and no username: the object store\nauthenticates with a shared, out-of-band key rather than a per-bucket\ncredential.",
         "tags": [
           "s3"
         ],
@@ -219,30 +457,84 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "uploads"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisionedResource"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/search": {
       "get": {
         "operationId": "get_v1_search",
+        "summary": "ListSearch lists the caller org's search indexes.",
+        "description": "ListSearch lists the caller org's search indexes. An index is a logical\nresource inside an already-live shared backend, so every one of them is\nreached through the public gateway rather than at an instance of its own.",
         "tags": [
           "search"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/provisionedSummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_search",
         "tags": [
           "search"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/provisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisionResult"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/search/{name}": {
       "delete": {
-        "operationId": "delete_v1_search_by_name",
+        "operationId": "delete_v1_search_name",
+        "summary": "DropSearch deletes one search index from the shared backend and removes its metadata row.",
+        "description": "DropSearch deletes one search index from the shared backend and removes its\nmetadata row. Answers 204 with no body; a second call is a 404.",
         "tags": [
           "search"
         ],
@@ -251,14 +543,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "products"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_search_by_name",
+        "operationId": "get_v1_search_name",
+        "summary": "GetSearch returns one search index's metadata.",
+        "description": "GetSearch returns one search index's metadata. It carries the index's status\nand the gateway address it is reached at, and no username: the backend\nauthenticates with a shared, out-of-band key rather than a per-index\ncredential.",
         "tags": [
           "search"
         ],
@@ -267,30 +568,84 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "products"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisionedResource"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/sql": {
       "get": {
         "operationId": "get_v1_sql",
+        "summary": "ListSQL lists the caller org's Hanzo SQL databases.",
+        "description": "ListSQL lists the caller org's Hanzo SQL databases. Each one is a DEDICATED\nPostgreSQL instance the org alone runs, so the host is that instance's own\nin-cluster Service and the port is 5432.",
         "tags": [
           "sql"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/provisionedSummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_sql",
         "tags": [
           "sql"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/provisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisionResult"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/sql/{name}": {
       "delete": {
-        "operationId": "delete_v1_sql_by_name",
+        "operationId": "delete_v1_sql_name",
+        "summary": "DropSQL deprovisions one Hanzo SQL database.",
+        "description": "DropSQL deprovisions one Hanzo SQL database. It reverts any app instance\nbound to it back to Base BEFORE tearing down the org's dedicated Postgres\ninstance — never a live app pointed at a deleted backend — then deletes the\nsealed credential and removes the metadata row. Answers 204 with no body; a\nsecond call is a 404, not a second delete.",
         "tags": [
           "sql"
         ],
@@ -299,14 +654,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "orders"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_sql_by_name",
+        "operationId": "get_v1_sql_name",
+        "summary": "GetSQL returns one Hanzo SQL database's metadata.",
+        "description": "GetSQL returns one Hanzo SQL database's metadata. It carries the database's\nstatus, its instance address and the admin user Postgres booted with — never\nthe password, which is returned once at create and otherwise lives only in\nHanzo KMS. A still-booting instance reads \"provisioning\", reconciled from the\noperator's live view rather than from the row.",
         "tags": [
           "sql"
         ],
@@ -315,30 +679,84 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "orders"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisionedResource"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/vector": {
       "get": {
         "operationId": "get_v1_vector",
+        "summary": "ListVector lists the caller org's vector collections.",
+        "description": "ListVector lists the caller org's vector collections. A collection is a\nlogical resource inside an already-live shared backend, so every one of them\nis reached through the public gateway rather than at an instance of its own.",
         "tags": [
           "vector"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/provisionedSummary"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_vector",
         "tags": [
           "vector"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/provisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisionResult"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/vector/{name}": {
       "delete": {
-        "operationId": "delete_v1_vector_by_name",
+        "operationId": "delete_v1_vector_name",
+        "summary": "DropVector deletes one vector collection from the shared backend and removes its metadata row.",
+        "description": "DropVector deletes one vector collection from the shared backend and removes\nits metadata row. Answers 204 with no body; a second call is a 404.",
         "tags": [
           "vector"
         ],
@@ -347,14 +765,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "embeddings"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_vector_by_name",
+        "operationId": "get_v1_vector_name",
+        "summary": "GetVector returns one vector collection's metadata.",
+        "description": "GetVector returns one vector collection's metadata. It carries the\ncollection's status and the gateway address it is reached at, and no username:\nthe backend authenticates with a shared, out-of-band key rather than a\nper-collection credential, so there is no per-resource user to report.",
         "tags": [
           "vector"
         ],
@@ -363,11 +790,145 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource's org-unique slug, from the path. Lower-cased and\ntrimmed before lookup, exactly as it was at create.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "embeddings"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/provisionedResource"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "provisionRequest": {
+        "type": "object",
+        "properties": {
+          "instance": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "provisionResult": {
+        "type": "object",
+        "properties": {
+          "connectionString": {
+            "type": "string"
+          },
+          "database": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "provisionedResource": {
+        "properties": {
+          "database": {
+            "description": "Database is the logical database, collection, index or bucket this\nresource resolves to on its backend.",
+            "type": "string"
+          },
+          "host": {
+            "description": "Host is the address that actually routes to this resource — a dedicated\ninstance's own in-cluster Service, or the public gateway for a shared one.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the resource's server-minted handle, \"rs_\"-prefixed.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the product: sql, vector, datastore, kv, search, s3 or docdb.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the org-unique slug the caller provisioned the resource under.",
+            "type": "string"
+          },
+          "port": {
+            "description": "Port is the port a client connects to on Host.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized. A dedicated resource's status is reconciled from the\noperator's live CR before this is answered, so it is never a stale ready.",
+            "type": "string"
+          },
+          "username": {
+            "description": "Username is the credential's user, for the kinds that mint one per\nresource. Absent for a kind whose backend authenticates with a shared,\nout-of-band key.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "provisionedSummary": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when the resource was provisioned, in unix seconds.",
+            "type": "integer"
+          },
+          "host": {
+            "description": "Host is the address that actually routes to this resource — a dedicated\ninstance's own in-cluster Service, or the public gateway for a shared one.\nNever the internal admin address of a shared backend.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the resource's server-minted handle, \"rs_\"-prefixed.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is the product: sql, vector, datastore, kv, search, s3 or docdb.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the org-unique slug the caller provisioned the resource under.",
+            "type": "string"
+          },
+          "port": {
+            "description": "Port is the port a client connects to on Host.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Status is \"ready\", or \"provisioning\" while a dedicated instance is still\nbeing materialized by the operator.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

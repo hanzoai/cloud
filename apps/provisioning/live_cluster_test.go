@@ -27,6 +27,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 func liveService(t *testing.T) *cloud.Service[state] {
@@ -43,14 +44,14 @@ func liveService(t *testing.T) *cloud.Service[state] {
 	return &cloud.Service[state]{Base: cloud.Base{Log: log}, State: state{store: newTestStore(t), sec: openSecrets("hanzo", log), reg: newRegistry(), orch: orch}}
 }
 
-func createLive(t *testing.T, s *cloud.Service[state], kind, org, name string) createResp {
+func createLive(t *testing.T, s *cloud.Service[state], kind, org, name string) provisionResult {
 	t.Helper()
 	resp := postCreate(t, s, kind, org, name)
 	if resp.StatusCode != http.StatusCreated {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("%s/%s create = %d body=%s", kind, name, resp.StatusCode, b)
 	}
-	var cr createResp
+	var cr provisionResult
 	_ = json.NewDecoder(resp.Body).Decode(&cr)
 	t.Logf("provisioned %s org=%s name=%s -> status=%s host=%s:%d dsn=%s", kind, org, name, cr.Status, cr.Host, cr.Port, cr.ConnectionString)
 	return cr
@@ -60,8 +61,8 @@ func waitReady(t *testing.T, s *cloud.Service[state], kind, org, name string, ti
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		resp := doReq(t, get(s, kind), http.MethodGet, "/v1/"+kind+"/:name", "/v1/"+kind+"/"+name, org, "")
-		var g getResp
+		resp := doReq(t, mountGet("/v1/"+kind+"/:name", ops{s}.viewFor(kind)), http.MethodGet, "/v1/"+kind+"/"+name, org, "")
+		var g provisionedResource
 		_ = json.NewDecoder(resp.Body).Decode(&g)
 		if g.Status == statusReady {
 			t.Logf("%s org=%s name=%s READY at %s:%d", kind, org, name, g.Host, g.Port)
@@ -74,7 +75,7 @@ func waitReady(t *testing.T, s *cloud.Service[state], kind, org, name string, ti
 
 func dropLive(t *testing.T, s *cloud.Service[state], kind, org, name string) {
 	t.Helper()
-	resp := doReq(t, drop(s, kind), http.MethodDelete, "/v1/"+kind+"/:name", "/v1/"+kind+"/"+name, org, "")
+	resp := doReq(t, mountDelete("/v1/"+kind+"/:name", ops{s}.dropFor(kind)), http.MethodDelete, "/v1/"+kind+"/"+name, org, "")
 	if resp.StatusCode != http.StatusNoContent {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("%s/%s drop = %d body=%s", kind, name, resp.StatusCode, b)
@@ -115,4 +116,47 @@ func TestLive_DedicatedProvisioning(t *testing.T) {
 	dropLive(t, s, "datastore", "clivea", "shop")
 	dropLive(t, s, "datastore", "cliveb", "shop")
 	dropLive(t, s, "docdb", "clivea", "docs")
+}
+
+// viewFor and dropFor pick a kind's typed read and delete. The live proof walks
+// the kinds at run time, and the ops are per-kind METHODS — one declaration per
+// published operation, because zipdoc has no identity to file prose under for a
+// computed path (typed.go) — so the mapping is spelled out here rather than
+// composed.
+func (o ops) viewFor(kind string) zip.TypedHandler[resourceRef, provisionedResource] {
+	switch kind {
+	case "sql":
+		return o.getSQL
+	case "kv":
+		return o.getKV
+	case "datastore":
+		return o.getDatastore
+	case "docdb":
+		return o.getDocDB
+	case "vector":
+		return o.getVector
+	case "search":
+		return o.getSearch
+	default:
+		return o.getS3
+	}
+}
+
+func (o ops) dropFor(kind string) zip.TypedHandler[resourceRef, noContent] {
+	switch kind {
+	case "sql":
+		return o.dropSQL
+	case "kv":
+		return o.dropKV
+	case "datastore":
+		return o.dropDatastore
+	case "docdb":
+		return o.dropDocDB
+	case "vector":
+		return o.dropVector
+	case "search":
+		return o.dropSearch
+	default:
+		return o.dropS3
+	}
 }

@@ -49,6 +49,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
 
@@ -158,7 +159,27 @@ type state struct {
 	stopMeter func()
 }
 
-type createResp struct {
+// provisionRequest is the create body. It is a NAMED type so the seven
+// POST /v1/<kind> routes — which stay untyped for the wire reason typed.go
+// states — can still DECLARE the body they read through openapi.Register: an
+// undeclared create publishes an SDK method with nowhere to put the name, which
+// is a strictly worse document than an under-described one.
+type provisionRequest struct {
+	// Name is the org-unique slug for the new resource, matching
+	// ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$. Every physical name derives from it.
+	Name string `json:"name"`
+	// Instance binds a DEDICATED add-on to the app instance whose
+	// <instance>-addons Secret receives the <KIND>_URL (e.g. "commerce").
+	// Optional: empty means "not instance-bound" — the DSN is returned once and
+	// wired by the caller.
+	Instance string `json:"instance"`
+}
+
+// provisionResult is the create response: the new resource plus the ONE-TIME
+// credential. The connection string and password are returned here and nowhere
+// else — the reads beside it never carry a password — so a caller that does not
+// keep them must re-provision.
+type provisionResult struct {
 	ID               string `json:"id"`
 	Kind             string `json:"kind"`
 	Name             string `json:"name"`
@@ -169,27 +190,6 @@ type createResp struct {
 	Database         string `json:"database"`
 	ConnectionString string `json:"connectionString"`
 	Password         string `json:"password,omitempty"`
-}
-
-type getResp struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Kind     string `json:"kind"`
-	Status   string `json:"status"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Username string `json:"username,omitempty"`
-	Database string `json:"database"`
-}
-
-type listItem struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Kind      string `json:"kind"`
-	Status    string `json:"status"`
-	Host      string `json:"host"`
-	Port      int    `json:"port"`
-	CreatedAt int64  `json:"createdAt"`
 }
 
 // Mount wires the provisioning surface onto app per HIP-0106. It is the complex
@@ -205,6 +205,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	if deps.DataDir == "" {
 		return fmt.Errorf("provisioning.Mount: empty DataDir")
+	}
+	// The typed half needs the op REGISTRY, not just a router: a typed op is a
+	// route plus the one entry the document, the MCP tool list, the CLI and every
+	// SDK are projected from. Fail the mount rather than serving 21 reads no
+	// projection knows about.
+	z := cloud.ZipApp(app)
+	if z == nil {
+		return fmt.Errorf("provisioning.Mount: %T does not expose the typed-op registry", app)
 	}
 	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
 		return fmt.Errorf("provisioning.Mount: data dir: %w", err)
@@ -223,7 +231,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}}
 	mounted = s
 
-	routes(app, s)
+	routes(z, s)
 
 	// Recurring per-org footprint meter for running dedicated instances.
 	startFootprintMeter(s)
@@ -240,15 +248,26 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// routes registers the CRUD surface for each provisionable kind (the same handler
-// factories bound per kind).
-func routes(app cloud.Router, s *cloud.Service[state]) {
+// routes registers the CRUD surface for each provisionable kind. The CREATE is
+// the one untyped verb left — it renders a billing denial as the fleet's nested
+// error body, which a typed op cannot express (typed.go states the wire fact) —
+// so it keeps its closure and declares its bodies through openapi.Register below.
+// The reads and the delete are typed ops, registered by mountTyped.
+func routes(z *zip.App, s *cloud.Service[state]) {
 	for _, kind := range kinds {
-		k := kind
-		app.Post("/v1/"+k, create(s, k))
-		app.Get("/v1/"+k, list(s, k))
-		app.Get("/v1/"+k+"/:name", get(s, k))
-		app.Delete("/v1/"+k+"/:name", drop(s, k))
+		z.Post("/v1/"+kind, create(s, kind))
+	}
+	mountTyped(z, ops{s: s})
+}
+
+// The seven creates state their request and response shapes here, next to their
+// registration. openapi.Register is the reflection seam for a route that is not a
+// typed op: it buys the document a body and a success shape — so a generated SDK
+// can actually construct the call — and nothing else. Prose, an MCP tool and a
+// CLI command come only from zip's registry, i.e. only from a typed op.
+func init() {
+	for _, kind := range kinds {
+		openapi.Register("/v1/"+kind, "POST", provisionRequest{}, provisionResult{})
 	}
 }
 
@@ -263,14 +282,7 @@ func create(s *cloud.Service[state], kind string) zip.Handler {
 			return zip.ErrForbidden("X-Org-Id required")
 		}
 
-		var body struct {
-			Name string `json:"name"`
-			// Instance binds a DEDICATED add-on to the app instance whose
-			// <instance>-addons Secret receives the <KIND>_URL (e.g. "commerce").
-			// Optional: empty means "not instance-bound" — the DSN is returned once
-			// and wired by the caller (the pre-instance-binding behavior).
-			Instance string `json:"instance"`
-		}
+		var body provisionRequest
 		if err := c.Bind(&body); err != nil {
 			return err
 		}
@@ -418,117 +430,11 @@ func create(s *cloud.Service[state], kind string) zip.Handler {
 		if cs != "" {
 			pubCS = strings.ReplaceAll(cs, fmt.Sprintf("%s:%d", host, port), fmt.Sprintf("%s:%d", ph, pp))
 		}
-		return c.JSON(http.StatusCreated, createResp{
+		return c.JSON(http.StatusCreated, provisionResult{
 			ID: id, Kind: kind, Name: name, Status: "ready",
 			Host: ph, Port: pp, Username: username, Database: db,
 			ConnectionString: pubCS, Password: returnPw,
 		})
-	}
-}
-
-// list returns every resource of kind for the caller's org. Never a password.
-func list(s *cloud.Service[state], kind string) zip.Handler {
-	return func(c *zip.Ctx) error {
-		org, ok := tenant(c)
-		if !ok {
-			return zip.ErrForbidden("X-Org-Id required")
-		}
-		rows, err := s.State.store.List(c.Context(), org, kind)
-		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
-		}
-		out := make([]listItem, 0, len(rows))
-		for _, r := range rows {
-			host, port := endpointFor(r)
-			out = append(out, listItem{
-				ID: r.ID, Name: r.Name, Kind: r.Kind, Status: r.Status,
-				Host: host, Port: port, CreatedAt: r.CreatedAt,
-			})
-		}
-		return c.JSON(http.StatusOK, out)
-	}
-}
-
-// get returns one resource's metadata. Never a password.
-func get(s *cloud.Service[state], kind string) zip.Handler {
-	return func(c *zip.Ctx) error {
-		org, ok := tenant(c)
-		if !ok {
-			return zip.ErrForbidden("X-Org-Id required")
-		}
-		name := strings.ToLower(strings.TrimSpace(c.Param("name")))
-		ctx := c.Context()
-		r, err := s.State.store.Get(ctx, org, kind, name)
-		if errors.Is(err, errNotFound) {
-			return zip.ErrNotFound("resource not found")
-		}
-		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
-		}
-		// For a dedicated instance, reconcile provisioning -> ready from the
-		// operator's live CR status before answering (honest readiness).
-		if _, dedicated := dedicatedEngines[r.Kind]; dedicated {
-			r = reconcileDedicated(s, ctx, r)
-		}
-		host, port := endpointFor(r)
-		return c.JSON(http.StatusOK, getResp{
-			ID: r.ID, Name: r.Name, Kind: r.Kind, Status: r.Status,
-			Host: host, Port: port, Username: r.Username, Database: r.DBName,
-		})
-	}
-}
-
-// drop deprovisions the backend resource, deletes the sealed secret, and
-// removes the metadata row.
-func drop(s *cloud.Service[state], kind string) zip.Handler {
-	return func(c *zip.Ctx) error {
-		org, ok := tenant(c)
-		if !ok {
-			return zip.ErrForbidden("X-Org-Id required")
-		}
-		name := strings.ToLower(strings.TrimSpace(c.Param("name")))
-		ctx := c.Context()
-
-		r, err := s.State.store.Get(ctx, org, kind, name)
-		if errors.Is(err, errNotFound) {
-			return zip.ErrNotFound("resource not found")
-		}
-		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
-		}
-
-		if _, dedicated := dedicatedEngines[kind]; dedicated {
-			// Revert the app instance to Base FIRST: remove the <KIND>_URL from the
-			// addons Secret so the app stops using this backend BEFORE we tear it
-			// down (never leave a live instance pointed at a deleted backend). Fail
-			// closed — block the teardown on error so a retry finishes the revert;
-			// drop is idempotent. No-op when the resource is not instance-bound.
-			if err := removeAddonURL(s, ctx, org, r.Instance, kind); err != nil {
-				s.Log.Error("revert instance to base failed", "kind", kind, "org", org, "name", name, "instance", r.Instance, "err", err)
-				return zip.Errorf(http.StatusBadGateway, "revert instance: %v", err)
-			}
-			// Tear down the org's dedicated instance (CR + admin Secret); the
-			// operator GCs the StatefulSet + Service + PVC. Removing the row below
-			// also stops the recurring footprint meter for this instance.
-			if err := dropDedicated(s, ctx, r); err != nil {
-				s.Log.Error("deprovision instance failed", "kind", kind, "org", org, "name", name, "err", err)
-				return zip.Errorf(http.StatusBadGateway, "deprovision %s failed: %v", kind, err)
-			}
-		} else if prov := s.State.reg[kind]; prov != nil {
-			if err := prov.Drop(ctx, r.PhysicalName, r.Username); err != nil {
-				s.Log.Error("deprovision failed", "kind", kind, "org", org, "name", name, "err", err)
-				return zip.Errorf(http.StatusBadGateway, "deprovision %s failed: %v", kind, err)
-			}
-		}
-		if r.SecretRef != "" {
-			if err := s.State.sec.Delete(r.SecretRef); err != nil {
-				s.Log.Warn("kms delete failed (continuing)", "ref", r.SecretRef, "err", err)
-			}
-		}
-		if _, err := s.State.store.Delete(ctx, org, kind, name); err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
-		}
-		return c.NoContent(http.StatusNoContent)
 	}
 }
 
