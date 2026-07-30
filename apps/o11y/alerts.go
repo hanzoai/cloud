@@ -26,19 +26,33 @@
 // image). It is 30 lines of behaviour that needed a pod, a Service, a
 // ConfigMap and an operator CR to exist. It belongs on the observability
 // plane that already runs, so it lives here.
+//
+// AND IT PAGES. A receipt nobody reads is not an alert, and until this landed
+// nothing reached a human: Alertmanager's slack_configs pointed at a secret
+// holding the receipt sink's own URL, so 439 "slack" notifications were
+// delivered into a log. The fix is not a second Slack credential — an incoming
+// webhook would be a second secret outside KMS and a second egress beside the
+// one the product already uses. It is the app that is already installed: this
+// receiver forwards each firing alert through integrations.SendSlack, which
+// posts with the org's KMS-custodied bot token (the ONE Slack egress, shared
+// with channels and automations). One credential, one egress, one receipt.
 
 package o11y
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/apps/integrations"
 )
 
 // recentMax bounds the replay ring. Matches the receiver this replaced, and the
@@ -100,21 +114,99 @@ func mountAlerts(a cloud.Router) {
 	g.Post("/:receiver", receive)
 }
 
-// receive records one Alertmanager notification. Always 200 with body "ok":
-// Alertmanager retries on any other status, and a receipt that pushes back is
-// a receipt that changes the thing it is measuring.
+// receive records one Alertmanager notification and pages Slack. Always 200
+// with body "ok": Alertmanager retries on any other status, and a receipt that
+// pushes back is a receipt that changes the thing it is measuring.
 func receive(c *zip.Ctx) error {
 	var p webhook
 	// A body that will not parse still proves delivery, so it is logged with
 	// empty fields rather than rejected.
 	_ = json.Unmarshal(c.Body(), &p)
 
-	for _, a := range alerts(&p) {
+	as := alerts(&p)
+	for _, a := range as {
 		line := receipt(c.Path(), &p, a)
 		fmt.Println(line)
 		recent.add(line)
 	}
+	page(&p, as)
 	return c.String(http.StatusOK, "ok")
+}
+
+// Slack paging knobs. The channel is the only thing that MUST be configured —
+// no channel, no paging (and the receipt still lands, so silence here is never
+// silence everywhere). The org owns the Slack connection whose bot token KMS
+// custodies; it defaults to the platform tenant.
+const (
+	alertsSlackChannelEnv = "CLOUD_ALERTS_SLACK_CHANNEL"
+	alertsSlackOrgEnv     = "CLOUD_ALERTS_SLACK_ORG"
+	defaultAlertsOrg      = "hanzo"
+	slackPageTimeout      = 10 * time.Second
+)
+
+// page posts the notification to Slack through the ONE egress. It is
+// DETACHED and fail-soft by construction: Alertmanager is waiting on this
+// request, and an alert path that can block or fail on a third party is an
+// alert path that goes quiet exactly when the third party is having the
+// outage. Resolved notifications page too — "it recovered" is the half of an
+// incident people actually wait for.
+func page(p *webhook, as []alert) {
+	channel := strings.TrimSpace(os.Getenv(alertsSlackChannelEnv))
+	if channel == "" || len(as) == 0 {
+		return
+	}
+	org := strings.TrimSpace(os.Getenv(alertsSlackOrgEnv))
+	if org == "" {
+		org = defaultAlertsOrg
+	}
+	text := slackText(p, as)
+	go func() {
+		defer func() { _ = recover() }()
+		ctx, cancel := context.WithTimeout(context.Background(), slackPageTimeout)
+		defer cancel()
+		if err := integrations.SendSlack(ctx, org, channel, "", text); err != nil {
+			// One line, in the same log as the receipts: a page that could not
+			// be sent is itself an operational fact, and the receipt above
+			// already proved the alert arrived.
+			fmt.Printf("PAGE-SLACK-FAILED org=%s channel=%s receiver=%s err=%v\n",
+				org, channel, or(p.Receiver, "?"), err)
+		}
+	}()
+}
+
+// slackText renders the notification as one Slack message: a firing/resolved
+// headline, then one line per alert carrying the fields an on-call reads first
+// (name, severity, instance, summary). Bounded — a storm must not post a
+// thousand-line wall — with the overflow counted rather than dropped silently.
+func slackText(p *webhook, as []alert) string {
+	const maxLines = 20
+	icon, verb := ":rotating_light:", "FIRING"
+	if strings.EqualFold(p.Status, "resolved") {
+		icon, verb = ":white_check_mark:", "RESOLVED"
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s *%s* — %d alert(s) via `%s`\n", icon, verb, len(as), or(p.Receiver, "?"))
+	for i, a := range as {
+		if i == maxLines {
+			fmt.Fprintf(&b, "_… and %d more_\n", len(as)-maxLines)
+			break
+		}
+		fmt.Fprintf(&b, "• *%s* [%s] %s%s\n",
+			or(a.Labels["alertname"], "?"),
+			or(a.Labels["severity"], "?"),
+			or(a.Labels["instance"], or(a.Labels["network"], "-")),
+			annotation(a))
+	}
+	return b.String()
+}
+
+// annotation appends the human sentence an alert carries, if it has one.
+func annotation(a alert) string {
+	s := strings.TrimSpace(or(a.Annotations["summary"], a.Annotations["description"]))
+	if s == "" {
+		return ""
+	}
+	return " — " + s
 }
 
 // alerts returns the alerts to record. Alertmanager sends a populated list; a
