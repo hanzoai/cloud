@@ -75,6 +75,19 @@ comments at compile time.
   (`registerTyped` ends in `app.fiber.Add`), so making the op visible necessarily
   makes the path stop falling through to the order-70 wildcard. Whoever takes it
   owns that wire change; typing cannot.
+  MEASURED, so the size of that decision is known rather than assumed: **the
+  fallthrough serves nothing.** The pinned runtime (`hanzoai/o11y v1.5.34`)
+  registers no `/ingestion` route at all — its only ingest-named paths are the
+  unrelated `/api/v2/gateway/ingestion_keys*` — and a no-DSN process cannot init
+  the embed either, so `mountRuntime` installs the reverse-proxy fallback and the
+  request lands on the same server build, which has no such route. The wire change
+  on the table is therefore **404 → an honest 503**, with no working write path at
+  risk; it is NOT "remote ingest stops working", which is what "stops falling
+  through" reads like and is the reason this looked more expensive than it is.
+  Re-measure before acting on it:
+
+      grep -rE '"/[^"]*ingest[^"]*"' \
+        "$(go env GOMODCACHE)/github.com/hanzoai/o11y@v1.5.34" --include='*.go'
 - **`cloud.Bridge()` is installed by `MountO11y` on the `/v1/o11y` group, first.**
   Not optional and not redundant with `cloud.Serve`: o11y runs as its OWN process
   (`plugin/o11y/main.go` builds a bare `zip.App`), and the host's context does not
