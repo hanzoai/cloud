@@ -19,19 +19,24 @@ package captable
 //     them back verbatim. So a reachable non-2xx is no longer a reason to stay
 //     untyped.
 //
-//   - WHAT IT ACCEPTS. This is the reason the fourteen remaining relays are still
+//   - WHAT IT ACCEPTS. This is the reason the eleven remaining relays are still
 //     relays, and it is about the REQUEST, not the response. The bundle validates
 //     with coercing helpers (goja/src/validate.ts): `num` takes a number OR a
-//     numeric string (z.coerce.number), `optString` takes any scalar and calls
-//     String(v), and addStakeholders takes a single object OR an array. A typed In
-//     is a Go struct, so zip's decoder refuses `{"parValue":"1.5"}` with a 400 the
-//     route has never sent — typing would make the route accept LESS. Each such
-//     route names its own reason at its registration in captable.go.
+//     numeric string (z.coerce.number), and addStakeholders takes a single object
+//     OR an array. A Go float64 field refuses `{"parValue":"1.5"}` with a 400 the
+//     route has never sent — typing would make the route accept LESS — and eight
+//     bytes cannot carry the refused token onward to keep the bundle's own
+//     envelope either. Each such route names its own reason at its registration
+//     in captable.go.
 //
-// So the typed ops below are exactly the routes with NO REQUEST BODY: the eleven
+// So the typed ops BELOW are the routes with NO REQUEST BODY: the eleven
 // org-scoped collection reads, the one round detail read, and the five deletes.
 // A bodyless route has nothing to coerce — its whole input is one path segment —
 // so its In is faithful by construction and its answer relays through bundleErr.
+//
+// The three body-carrying routes that ARE typed live in writes.go: `optString`
+// leniency is carried, not narrowed, by a verbatim scalar, which is what a
+// float64 cannot do for `num`.
 //
 // (getCompany and capTable each carry a defensive notFound("company not found");
 // it is DEAD by construction — seedCompany INSERTs the row under OnOpen, which
@@ -165,7 +170,16 @@ func (o ops) call(ctx context.Context, route string, params map[string]string, o
 	if err != nil {
 		return err
 	}
-	resp, err := o.s.State.host.Dispatch(ctx, org, goja.BaseRequest{Route: route, Params: params})
+	return o.run(ctx, org, route, params, nil, out)
+}
+
+// run is the shared tail of BOTH typed planes — the bodyless reads above and the
+// body-carrying writes in writes.go, which resolve the tenant on their own path
+// (a write refuses an oversized body between the two). It runs the bundle route
+// on the tenant's store and decodes the answer, so there is ONE place that turns
+// a bundle response into either an out value or a bundleErr.
+func (o ops) run(ctx context.Context, org, route string, params map[string]string, body any, out any) error {
+	resp, err := o.s.State.host.Dispatch(ctx, org, goja.BaseRequest{Route: route, Params: params, Body: body})
 	if err != nil {
 		o.s.Log.Error("captable dispatch failed", "route", route, "err", err)
 		return zip.Errorf(http.StatusInternalServerError, "captable dispatch failed")
