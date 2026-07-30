@@ -7,6 +7,41 @@ import (
 )
 
 func init() {
+	zip.Describe("DELETE /v1/captable/convertibles/:id", zip.Doc{
+		Description: "DeleteConvertible removes one of the caller org's convertible notes, taking its\nprincipal out of the cap table's unconverted-instrument totals. An id this org\ndoes not hold is not found.",
+		Fields: map[string]string{
+			"captableDeleted.success": "Success is true when the row was removed.",
+			"noteRef.id":              "ID is the convertible note to delete.",
+		},
+	})
+	zip.Describe("DELETE /v1/captable/options/:id", zip.Doc{
+		Description: "DeleteOption removes one of the caller org's option grants, taking its shares\nout of the cap table's granted-options and fully-diluted counts. An id this org\ndoes not hold is not found.",
+		Fields: map[string]string{
+			"captableDeleted.success": "Success is true when the row was removed.",
+			"optionRef.id":            "ID is the option grant to delete.",
+		},
+	})
+	zip.Describe("DELETE /v1/captable/safes/:id", zip.Doc{
+		Description: "DeleteSafe removes one of the caller org's SAFEs, taking its capital out of the\ncap table's unconverted-instrument totals. An id this org does not hold is not\nfound.",
+		Fields: map[string]string{
+			"captableDeleted.success": "Success is true when the row was removed.",
+			"safeRef.id":              "ID is the SAFE to delete.",
+		},
+	})
+	zip.Describe("DELETE /v1/captable/shares/:id", zip.Doc{
+		Description: "DeleteShare removes one of the caller org's share certificates, taking its\nshares out of the cap table's outstanding and fully-diluted counts. An id this\norg does not hold is not found.",
+		Fields: map[string]string{
+			"captableDeleted.success": "Success is true when the row was removed.",
+			"shareRef.id":             "ID is the share certificate to delete.",
+		},
+	})
+	zip.Describe("DELETE /v1/captable/stakeholders/:id", zip.Doc{
+		Description: "DeleteStakeholder removes one of the caller org's stakeholders. It REFUSES to\norphan issued equity: a holder that still holds share certificates or option\ngrants cannot be deleted, and answers 400 saying so — release or transfer the\nholdings first. An id this org does not hold is not found.",
+		Fields: map[string]string{
+			"captableDeleted.success": "Success is true when the row was removed.",
+			"stakeholderRef.id":       "ID is the stakeholder to delete.",
+		},
+	})
 	zip.Describe("GET /v1/captable/company", zip.Doc{
 		Description: "GetCompany returns the caller org's cap-table company record. The row is\nseeded when the tenant's store first opens, so it always exists; its name and\nincorporation details are set with PUT /v1/captable/company.",
 		Fields: map[string]string{
@@ -101,6 +136,32 @@ func init() {
 			"captableRound.status":            "Status is OPEN or CLOSED.",
 			"captableRound.targetAmount":      "TargetAmount is how much the round set out to raise.",
 			"captableRounds.data":             "Data is every round, newest first.",
+		},
+	})
+	zip.Describe("GET /v1/captable/rounds/:id", zip.Doc{
+		Description: "GetRound returns one of the caller org's fundraising rounds together with every\ninvestment written into it, oldest first. A round id that does not exist in the\ncaller's org is not found — including one that exists in another tenant, since\nthe org comes from the caller's principal and is part of the lookup.",
+		Fields: map[string]string{
+			"captableRound.closeDate":                 "CloseDate is the ISO date the round closed, once it has.",
+			"captableRound.createdAt":                 "CreatedAt is when the round was recorded, in unix milliseconds.",
+			"captableRound.id":                        "ID is the round id.",
+			"captableRound.name":                      "Name is the round name, e.g. \"Series A\".",
+			"captableRound.preMoneyValuation":         "PreMoneyValuation is the pre-money valuation, for a priced round.",
+			"captableRound.pricePerShare":             "PricePerShare is the price per share, for a priced round.",
+			"captableRound.raisedAmount":              "RaisedAmount is how much has been invested so far.",
+			"captableRound.roundType":                 "RoundType is PRICED, SAFE or CONVERTIBLE_NOTE.",
+			"captableRound.shareClassId":              "ShareClassID is the class a priced round issues into.",
+			"captableRound.status":                    "Status is OPEN or CLOSED.",
+			"captableRound.targetAmount":              "TargetAmount is how much the round set out to raise.",
+			"captableRoundDetail.investments":         "Investments is every investment into this round, oldest first.",
+			"captableRoundDetail.round":               "Round is the round itself.",
+			"captableRoundInvestment.amount":          "Amount is the cash invested.",
+			"captableRoundInvestment.comments":        "Comments is the note recorded with the cheque, if any.",
+			"captableRoundInvestment.date":            "Date is the ISO date of the investment.",
+			"captableRoundInvestment.id":              "ID is the investment id.",
+			"captableRoundInvestment.shares":          "Shares is how many shares the investment bought; 0 when the round issues no\nequity at the time of investment.",
+			"captableRoundInvestment.stakeholderId":   "StakeholderID is the investor.",
+			"captableRoundInvestment.stakeholderName": "StakeholderName is that investor's name.",
+			"roundRef.id":                             "ID is the round to read. It is the path segment: the URL is the addressing\nauthority, and the org it is resolved in comes from the caller's principal,\nso an id from another tenant is simply not found.",
 		},
 	})
 	zip.Describe("GET /v1/captable/safes", zip.Doc{
