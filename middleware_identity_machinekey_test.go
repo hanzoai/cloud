@@ -206,7 +206,7 @@ func TestMachineJWTInAdminOrgIsNotSuperAdmin(t *testing.T) {
 
 	m := tokenClaims("admin-console", "admin", "svc@example.test", true, time.Now().Add(time.Hour))
 	m.Orgs = nil
-	m.Type = "application"
+	m.Orgs = nil
 	tok := signWith(t, key, m)
 
 	app, got := newIdentityApp(t, v)

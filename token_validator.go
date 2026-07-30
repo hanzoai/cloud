@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/authz"
 	model "github.com/hanzoai/iam/pkg/model"
 )
 
@@ -87,10 +88,13 @@ func (t *TokenValidator) Validate(raw string) (VerifiedIdentity, error) {
 		Username: claims.username(),
 		Email:    claims.Email,
 		IsAdmin:  claims.IsAdmin,
-		Orgs:     claims.Orgs,
+		// The published shape stays []model.OrgRef: clients/team copies it verbatim into
+		// a session, so this is cloud's outward contract, not a second reading of the
+		// claim. ONE conversion, at the surface that publishes it.
+		Orgs: orgRefs(claims.Orgs),
 	}
-	if claims.Expiry != nil {
-		id.Expiry = claims.Expiry.Time()
+	if claims.ExpiresAt != nil {
+		id.Expiry = claims.ExpiresAt.Time
 	}
 	// An org bearing a whitespace/control/format rune is not an injective org
 	// identifier — the identity boundary refuses to grant scoping from one
@@ -111,4 +115,18 @@ func jwksURLFor(issuer string) string {
 		return override
 	}
 	return strings.TrimRight(issuer, "/") + "/v1/iam/.well-known/jwks"
+}
+
+// orgRefs renders a signed membership set in the shape VerifiedIdentity publishes.
+// Order is preserved (home org first, as IAM builds it) because a consumer reads
+// [0] as the home org.
+func orgRefs(orgs []authz.Membership) []model.OrgRef {
+	if len(orgs) == 0 {
+		return nil
+	}
+	out := make([]model.OrgRef, 0, len(orgs))
+	for _, o := range orgs {
+		out = append(out, model.OrgRef{Org: o.Org, Role: string(o.Role)})
+	}
+	return out
 }
