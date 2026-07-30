@@ -52,12 +52,49 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 		return fmt.Errorf("tasks.Mount: nil deps.Logger")
 	}
 
+	// NOT TYPED OPS, and the reason is the wire rather than the want of an edit.
+	// A typed op (zip.Get[In, Out]) is the ONE registry entry every projection
+	// reads, so what stays out of it publishes no schema, no prose, no MCP tool,
+	// no CLI command and no SDK method. The four mounts below are 28 published
+	// operations (plugin/tasks/openapi.json) with nothing said about any of them.
+	// Each address is refused for a fact typed_wire_test.go MEASURES, so a refusal
+	// here cannot outlive its reason:
+	//
+	// /v1/tasks answers 307 to /v1/tasks/ on every method — the engine's own
+	// ServeMux decides it from its subtree pattern, before a handler runs. A typed
+	// op answers 200, 204 or a 2xx it DECLARED; 307 and Location are not in its
+	// vocabulary. TestBareNounIsARedirect.
+	//
+	// /v1/tasks/* is ONE route over 64 engine operations this router never sees.
+	// They are matched by path SEGMENT inside hanzoai/tasks' own ServeMux
+	// (pkg/tasks/embed.go, HTTPHandler) rather than by patterns, so there is no
+	// route here to type; their inputs are anonymous structs local to that
+	// module's handlers, so there is no named type to type it with; and the engine
+	// hands cloud its surface only as http.Handler (HTTPHandler / ClusterHandler /
+	// MCPHandler / EventsHandler), its programmatic seam — View plus the three
+	// *ForOrg helpers — reaching 13 of the 64, so there is no value to answer
+	// with either. The one route also carries four content types at once (the JSON
+	// API, two text/plain refusals, an event STREAM), 12 of its verbs run on a
+	// malformed body a typed op would 400, and its errors carry `code` as a number
+	// where zip's carry `status`. TestOneWildcardCarriesFourContentTypes,
+	// TestCancelIgnoresAMalformedBody, TestEngineErrorEnvelopeIsNotZips.
+	//
+	// /tasks and /tasks/* are the SPA: HTML and hashed assets under their own
+	// content types and cache hints, index.html for every unknown path. A typed op
+	// publishes JSON. ui/embed_test.go's TestHandlerServesIndexAndAssets pins the
+	// bytes.
+	//
+	// The place these operations CAN become typed is hanzoai/tasks, which OWNS the
+	// surface. Typing them here would put a second copy of that module's route
+	// table in cloud, free to drift from the one that answers the requests — and
+	// re-shaping a relayed answer to fit a local struct is the wire break this
+	// migration exists to avoid.
 	h := zip.AdaptNetHTTP(&surface{})
 	app.All("/v1/tasks", h)
 	app.All("/v1/tasks/*", h)
 
 	// The UI is a static asset bundle embedded in THIS binary
-	// (clients/tasks/ui) — engine-independent, mount directly. Serving it
+	// (apps/tasks/ui) — engine-independent, mount directly. Serving it
 	// here is what lets cloud front tasks.hanzo.ai + console.hanzo.ai/tasks
 	// and retire the standalone tasks-ui pod. Mounted at /tasks (no /_/):
 	// subsystem routes register before the console SPA catch-all, so this
