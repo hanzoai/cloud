@@ -51,8 +51,18 @@ var pluginName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 // the wrong place, and a silently-stripped key looks like it worked.
 var secretish = regexp.MustCompile(`(?i)(sk-[a-z0-9]{16,}|ghp_[a-z0-9]{20,}|xox[baprs]-[a-z0-9-]{10,}|AKIA[A-Z0-9]{12,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)`)
 
+// buildRequest is what this route accepts. Staying untyped costs prose, an MCP
+// tool and a CLI command — it does not have to cost the SHAPE, so this struct is
+// DECLARED through openapi.Register (tools.go's init). Without that declaration
+// the operation renders with no requestBody, which is what a route taking no
+// input publishes, and every generated SDK offered a build call with nowhere to
+// put the source.
 type buildRequest struct {
-	Name     string `json:"name"`
+	// Name is the plugin's name: one lowercase path segment (a-z0-9, _ or -),
+	// and the id the runtime loads it by.
+	Name string `json:"name"`
+	// Provider is the connectors provider whose credential the plugin reads at
+	// run time. Empty for a plugin that needs none.
 	Provider string `json:"provider,omitempty"`
 	// Source is TypeScript to build as-is. Exactly one of Source or Spec.
 	Source string `json:"source,omitempty"`
@@ -60,6 +70,30 @@ type buildRequest struct {
 	// endpoints — that the generator turns into Source. The generated source is
 	// returned in the response, so a caller can read what will run before it runs.
 	Spec string `json:"spec,omitempty"`
+}
+
+// buildOut is the builder's receipt for a plugin that built and was stored. It is
+// a named type so the 201 response can be DECLARED (openapi.Register, tools.go's
+// init) and so the declaration and the value the handler returns are the same
+// shape — a map literal here and a struct in the document is how the two drift
+// apart.
+//
+// The fields are ALPHABETICAL because the wire they replace was a Go map, which
+// encoding/json writes in sorted key order. TestBuildReceiptIsByteIdentical pins
+// that, so naming the shape cannot move a byte of it.
+//
+// The FAILURE body (422) has no equivalent here on purpose: openapi.Register
+// states the success shape under the "2XX" range key only, so the diagnostics
+// this route answers with stay undeclarable — the same missing capability that
+// keeps the route out of zip's registry in the first place.
+type buildOut struct {
+	// Bytes is the size of the bundled CommonJS the runtime will execute.
+	Bytes int `json:"bytes"`
+	// Generated is whether a model wrote the source from a spec, rather than the
+	// caller posting the source itself.
+	Generated bool `json:"generated"`
+	// Plugin is the plugin as stored, with its derived id and build time.
+	Plugin AuthoredPlugin `json:"plugin"`
 }
 
 // buildPlugin builds, validates and stores one plugin for the caller's org.
@@ -72,7 +106,7 @@ type buildRequest struct {
 // as the flat HTTPError {status, code, error} — there is nowhere in it for the
 // source or the generated flag. Writing the body from inside the op does not
 // escape it either: a nil Out makes zip stamp cmp.Or(op.Status, 204) over the 422
-// (zip@v1.18.11/typed.go:308). So this route is a 201-or-422 pair of DIFFERENT
+// (zip@v1.18.11/typed.go:305). So this route is a 201-or-422 pair of DIFFERENT
 // shapes, and zip has one Out and one declared status per op.
 func buildPlugin(s *cloud.Service[state], c *zip.Ctx) error {
 	p, ok := PrincipalFrom(c)
@@ -133,10 +167,10 @@ func buildPlugin(s *cloud.Service[state], c *zip.Ctx) error {
 		return fmt.Errorf("store plugin: %w", err)
 	}
 	audrecordAction(s, c, "plugin.build", p.Org, req.Name, "success", http.StatusCreated)
-	return c.JSON(http.StatusCreated, map[string]any{
-		"plugin":    stored,
-		"generated": generated,
-		"bytes":     len(bundled),
+	return c.JSON(http.StatusCreated, buildOut{
+		Bytes:     len(bundled),
+		Generated: generated,
+		Plugin:    stored,
 	})
 }
 

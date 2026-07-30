@@ -5776,6 +5776,26 @@ components:
             $ref: '#/components/schemas/buildSummary'
           type: array
       type: object
+    buildOut:
+      properties:
+        bytes:
+          type: integer
+        generated:
+          type: boolean
+        plugin:
+          $ref: '#/components/schemas/AuthoredPlugin'
+      type: object
+    buildRequest:
+      properties:
+        name:
+          type: string
+        provider:
+          type: string
+        source:
+          type: string
+        spec:
+          type: string
+      type: object
     buildSummary:
       properties:
         agent:
@@ -8769,6 +8789,24 @@ components:
         vcpu:
           type: integer
       type: object
+    mcpRequest:
+      properties:
+        id: {}
+        jsonrpc:
+          type: string
+        method:
+          type: string
+        params: {}
+      type: object
+    mcpResponse:
+      properties:
+        error:
+          $ref: '#/components/schemas/rpcErrorBody'
+        id: {}
+        jsonrpc:
+          type: string
+        result: {}
+      type: object
     mcpServerList:
       properties:
         servers:
@@ -10858,6 +10896,13 @@ components:
           description: TimeoutSeconds bounds the run on the machine; 0 means the machine's
             own default.
           type: integer
+      type: object
+    rpcErrorBody:
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
       type: object
     rulesOut:
       properties:
@@ -23946,14 +23991,9 @@ paths:
       operationId: post_v1_event
       tags:
       - event
-  /v1/event/collect:
-    post:
-      operationId: post_v1_event_collect
-      tags:
-      - event
-  /v1/event/error/{wildcard1}:
+  /v1/event/api/{wildcard1}:
     delete:
-      operationId: delete_v1_event_error_by_wildcard1
+      operationId: delete_v1_event_api_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -23963,7 +24003,7 @@ paths:
       tags:
       - event
     get:
-      operationId: get_v1_event_error_by_wildcard1
+      operationId: get_v1_event_api_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -23973,7 +24013,7 @@ paths:
       tags:
       - event
     options:
-      operationId: options_v1_event_error_by_wildcard1
+      operationId: options_v1_event_api_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -23983,7 +24023,7 @@ paths:
       tags:
       - event
     patch:
-      operationId: patch_v1_event_error_by_wildcard1
+      operationId: patch_v1_event_api_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -23993,7 +24033,7 @@ paths:
       tags:
       - event
     post:
-      operationId: post_v1_event_error_by_wildcard1
+      operationId: post_v1_event_api_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -24003,7 +24043,7 @@ paths:
       tags:
       - event
     put:
-      operationId: put_v1_event_error_by_wildcard1
+      operationId: put_v1_event_api_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
@@ -24013,13 +24053,18 @@ paths:
       tags:
       - event
     trace:
-      operationId: trace_v1_event_error_by_wildcard1
+      operationId: trace_v1_event_api_by_wildcard1
       parameters:
       - in: path
         name: wildcard1
         required: true
         schema:
           type: string
+      tags:
+      - event
+  /v1/event/collect:
+    post:
+      operationId: post_v1_event_collect
       tags:
       - event
   /v1/exec:
@@ -32066,6 +32111,18 @@ paths:
   /v1/plugins/build:
     post:
       operationId: post_v1_plugins_build
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/buildRequest'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/buildOut'
+          description: Success
       tags:
       - plugins
   /v1/prefs/:
@@ -34728,6 +34785,18 @@ paths:
   /v1/tools/mcp:
     post:
       operationId: post_v1_tools_mcp
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/mcpRequest'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/mcpResponse'
+          description: Success
       tags:
       - tools
   /v1/traces/health:
