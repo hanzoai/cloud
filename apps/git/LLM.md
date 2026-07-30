@@ -18,6 +18,17 @@ handlers and against zip v1.18.6 itself, not against this file. Do not re-type
 them; run the gate before believing any route counter that says git has untyped
 work left.
 
+**A refusal is still DESCRIBED.** Eight of the 24 read a request body, and each
+now declares it through `openapi.Register` (webhook.go's init) without becoming a
+typed op: the forge webhook's push envelope, the three ZAP procedures that bind
+one, and the four pack POSTs as `openapi.Binary`. They previously published an
+operationId, tags and nothing else — which no SDK generator can tell apart from a
+route that takes no body, so the published webhook had nowhere to put a delivery.
+`declaredBodies` + `TestRefusedRoutesDeclareTheBodyTheyRead` pin it both ways: a
+declared body that vanishes fails, and a body declared for one of the sixteen
+that read none fails too. What a refusal still cannot have, and only a typed op
+gives, is prose, an MCP tool and a CLI command.
+
 ## The four refusal families
 
 1. **POST /v1/git/webhook** (git.go:296, handler webhook.go:73) — 1 route.
@@ -83,6 +94,17 @@ this copy; typing more apps that carry a project scope will keep re-finding it.
 
 ## Known class instances (blocked on zip, counted not prosed)
 
+- **The ZAP five have no declarable RESPONSE, and that is a shared-name problem,
+  not a missing seam.** Their envelope is real (`cloud.OK` → `{status, msg,
+  data}`), but `data` is `repoView` / `[]repoView` / `usageView` — names zip's
+  typed fold ALREADY publishes as components off the typed /v1 ops. Reflecting
+  them a second time through `openapi.schemaOf` would put two derivations behind
+  one schema name, which is exactly what `openapi.Weave` refuses ("every
+  generated SDK would bind whichever it read last"). So the request halves are
+  declared and the response halves wait on the two seams agreeing who owns a
+  shared view type. The pack responses and the twelve HTML pages have no seam at
+  all: `openapi.Binary` is request-only by design, and a text/html response is
+  the second half it deliberately does not invent.
 - Bodyless POST (playbook #7 in the root LLM.md): **1** — `POST
   /v1/git/repos/{name}/gc` publishes a required body over `repoRef`, whose
   only property is the `name` path param. Wire unharmed (bindURL binds the
