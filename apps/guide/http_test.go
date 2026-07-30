@@ -376,3 +376,45 @@ func TestDoStreamsSSE(t *testing.T) {
 		})
 	}
 }
+
+// TestBlueprintPatchMergeNullVsAbsent pins the WIRE FACT the untyped
+// PATCH /v1/guide/blueprint/:collection/:id rests on: its body is a JSON
+// merge-patch, so an ABSENT key changes nothing while an EXPLICIT null clears
+// the item's field — two different requests with two different effects. A typed
+// In cannot tell them apart: encoding/json decodes both `{}` and
+// `{"enabled": null}` into a nil *bool, so typing this route would collapse
+// "re-enable" and "change nothing" into one answer. This is the same discipline
+// TestDocumentPutsAcceptYAML gives the two document PUTs — the refusal cannot
+// rot into a stale claim.
+func TestBlueprintPatchMergeNullVsAbsent(t *testing.T) {
+	app := newApp(t)
+	inJourney := func() bool {
+		return hasStep(decode[overviewView](t, req(t, app, http.MethodGet, "/v1/guide", "acme", nil).Body), "gsuite")
+	}
+	patch := func(raw string) {
+		t.Helper()
+		if r := reqRaw(t, app, http.MethodPatch, "/v1/guide/blueprint/steps/gsuite", superHdr, []byte(raw)); r.Code != http.StatusOK {
+			t.Fatalf("merge-patch %s want 200, got %d (%s)", raw, r.Code, r.Body)
+		}
+	}
+
+	if !inJourney() {
+		t.Fatal("baseline journey must contain gsuite")
+	}
+	// enabled:false disables the step — it drops from every org's journey.
+	patch(`{"enabled": false}`)
+	if inJourney() {
+		t.Fatal("enabled:false must drop the step from the journey")
+	}
+	// An ABSENT key merges nothing: the disable stands.
+	patch(`{}`)
+	if inJourney() {
+		t.Fatal("an absent key must leave the disable in place")
+	}
+	// An EXPLICIT null CLEARS enabled, and a nil enabled reads as ENABLED
+	// (absence == on), so the step returns to the journey.
+	patch(`{"enabled": null}`)
+	if !inJourney() {
+		t.Fatal("an explicit null must clear the disable — a nil enabled reads as enabled")
+	}
+}
