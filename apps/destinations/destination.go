@@ -63,10 +63,10 @@ const (
 // id). It drives the connect contract and the console card. Key is the camelCase
 // key on both the connect body and the stored config.
 type DestinationField struct {
-	Key      string `json:"key"`
-	Label    string `json:"label"`
-	Required bool   `json:"required"`
-	Example  string `json:"example,omitempty"`
+	Key      string `json:"key"`               // the camelCase key on both the connect body and the stored config
+	Label    string `json:"label"`             // human label for the console card's input
+	Required bool   `json:"required"`          // when true, a connect that leaves it empty is refused 400
+	Example  string `json:"example,omitempty"` // a sample value of the right shape ("G-XXXXXXX"), when one helps
 }
 
 // Spec is a destination's declared shape: the non-secret Fields it needs, the KMS

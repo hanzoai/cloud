@@ -83,20 +83,25 @@ const (
 // key. It is empty on every public catalog entry — that emptiness is what the
 // console badges "yours" on, and it is never read from a request body.
 type StarterKit struct {
-	Slug        string    `json:"slug"`
-	Title       string    `json:"title"`
-	Category    string    `json:"category"`
-	Description string    `json:"description"`
-	Framework   string    `json:"framework"`
-	Features    []string  `json:"features"`
-	UseCase     string    `json:"useCase"`
-	Tier        *int      `json:"tier,omitempty"`
-	Rating      *float64  `json:"rating,omitempty"`
-	Source      string    `json:"source"`
-	Preview     string    `json:"preview"`
-	Demo        string    `json:"demo,omitempty"`     // live demo (<slug>.hanzo.app), when deployed
-	Variants    []Variant `json:"variants,omitempty"` // the shapes this template ships in
-	Org         string    `json:"org,omitempty"`      // owner of a PRIVATE template; empty in the public catalog
+	Slug        string   `json:"slug"`        // the kit's identity — lowercase alphanumeric with dashes, max 40
+	Title       string   `json:"title"`       // display name
+	Category    string   `json:"category"`    // groups the kit in the gallery browser ("Portfolio", "SaaS")
+	Description string   `json:"description"` // the browse-card blurb
+	Framework   string   `json:"framework"`   // the stack the kit is built on ("Next.js 14.2 + TS")
+	Features    []string `json:"features"`    // the highlights the card lists, at most 32
+	UseCase     string   `json:"useCase"`     // what the kit is for, in a phrase
+	// Tier is public-gallery curation, carried verbatim from the embedded catalog.
+	// No request can set it — neither write body has the field and neither builds a
+	// kit carrying one — so it is absent on every customer-published kit.
+	Tier *int `json:"tier,omitempty"`
+	// Rating is public-gallery curation, on the same terms as Tier: catalog-only,
+	// never accepted from a request, absent on a customer's own kit.
+	Rating   *float64  `json:"rating,omitempty"`
+	Source   string    `json:"source"`             // the repository the kit is forked from
+	Preview  string    `json:"preview"`            // the still image the browse card renders
+	Demo     string    `json:"demo,omitempty"`     // live demo (<slug>.hanzo.app), when deployed
+	Variants []Variant `json:"variants,omitempty"` // the shapes this template ships in
+	Org      string    `json:"org,omitempty"`      // owner of a PRIVATE template; empty in the public catalog
 }
 
 // Variant is one SHAPE of a template: the same design in another format
@@ -109,7 +114,7 @@ type Variant struct {
 	Label     string `json:"label"`               // human label for the picker
 	Kind      string `json:"kind"`                // the axis it varies: format | page | theme
 	Framework string `json:"framework,omitempty"` // only when it differs from the template's
-	Source    string `json:"source"`
+	Source    string `json:"source"`              // the repository this shape is forked from; the synthesized default shape carries the template's own
 }
 
 // Variant resolves a variant id against the template and is the ONE place the

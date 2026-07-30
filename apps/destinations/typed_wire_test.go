@@ -377,3 +377,52 @@ func sorted(m map[string]bool) string {
 	sort.Strings(out)
 	return strings.Join(out, ", ")
 }
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the op-level
+// gate above cannot see. Typing a route documents its ADDRESS and its SHAPE; it
+// does not document the shape's FIELDS, and those come from a different place —
+// doc comments on the In/Out struct fields, which zipdoc lifts per field.
+//
+// It found fourteen when it was written: every property of DestinationStatus —
+// the card all five routes answer with — and of DestinationField reached
+// openapi.yaml, every generated SDK and every MCP inputSchema bare. So a reader
+// could see that a card carries `connected`, `enabled` and `live` and nowhere
+// that they are three DIFFERENT facts (configured once / forwarding now / a
+// credential still resolves), which is exactly the distinction an operator needs
+// to act on. Add a field to a view without saying what it is and this fails.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	reg, err := openapi.Typed(mountApp(t))
+	if err != nil {
+		t.Fatalf("typed registry: %v", err)
+	}
+	if len(reg.Schemas) == 0 {
+		t.Fatal("no destinations schemas in the typed registry at all")
+	}
+	var bare []string
+	for name, raw := range reg.Schemas {
+		sch, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		props, ok := sch["properties"].(map[string]any)
+		if !ok {
+			continue // a scalar or an array schema has no properties to describe
+		}
+		for field, praw := range props {
+			p, ok := praw.(map[string]any)
+			if !ok {
+				continue
+			}
+			if desc, _ := p["description"].(string); strings.TrimSpace(desc) == "" {
+				bare = append(bare, name+"."+field)
+			}
+		}
+	}
+	if len(bare) > 0 {
+		sort.Strings(bare)
+		t.Errorf("published propert(ies) with no description: %s\n"+
+			"Every field of a published schema is read by SDK users and by a model choosing a tool. Write a "+
+			"doc comment on the struct field and run: go generate -run zipdoc ./apps/destinations/...",
+			strings.Join(bare, ", "))
+	}
+}
