@@ -135,6 +135,19 @@ func (a Amount) IsZero() bool { return a.a.IsZero() }
 // IsNeg reports whether a < 0.
 func (a Amount) IsNeg() bool { return a.a.Sign() < 0 }
 
+// Unwrap is the wrapped shared money.Amount — the same exact value, in the credit
+// unit. It exists for the ONE boundary that speaks the shared type: the internal
+// plane (plane.Amount takes a hanzoai/money Amount), which is a decimal-string
+// wire built so a debit crosses a process boundary UNROUNDED. Reaching that wire
+// through Cents() defeated the wire's whole reason to exist: every plane.Amount
+// call site in the repo was plane.Amount(money.FromUSD(x.Cents())) — an exact
+// value, flattened to cents, re-wrapped as "exact". A per-token debit priced
+// below a cent crossed as $0.00.
+//
+// When this wrapper collapses into hanzoai/money, call sites lose the call and
+// nothing else.
+func (a Amount) Unwrap() hz.Amount { return a.a }
+
 // Atto returns a fresh big.Int of the atto-USD magnitude — 18 decimals, the on-chain
 // uint256 value. The unit is in the name: this is NOT interchangeable with
 // money.Amount.Minor(), which renders the CURRENCY's minor unit (money.USD declares 2, so
