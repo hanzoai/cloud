@@ -262,7 +262,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			// project; a project owned by neither is refused).
 			var effOrg string
 			switch {
-			case owner != "" && owner == adminOrg && !isMachinePrincipal(claims):
+			case owner != "" && owner == adminOrg && isHuman(claims):
 				// SuperAdmin ⟺ the principal's HOME org IS the reserved admin org AND the
 				// principal is HUMAN.
 				//
@@ -285,11 +285,19 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 				// signal") and relied on by TestMasqueradeSpendsOwnBooks, whose SuperAdmin
 				// carries isAdmin=false. Reading the USER's org is what closes the
 				// escalation; a second signal is not needed and is not free. The human gate
-				// (!isMachinePrincipal) is the necessary companion once the audience is no
-				// longer a gate — otherwise ANY admin-org client_credentials app (type ==
-				// "application"), not just the KMS-sync one, would inherit platform-admin and
-				// read every org. A machine principal falls through to the owner-scoped case
-				// below (org-scoped, not super). Honored org-switch for the human admin.
+				// (isHuman) is the necessary companion once the audience is no longer a gate —
+				// otherwise ANY admin-org client_credentials app, not just the KMS-sync one,
+				// would inherit platform-admin and read every org. A machine principal falls
+				// through to the owner-scoped case below (org-scoped, not super). Honored
+				// org-switch for the human admin.
+				//
+				// It is a POSITIVE human test rather than a negated machine one on purpose:
+				// this grants the only cross-tenant scope in the system, so an unidentifiable
+				// principal must be refused, not admitted by default. The org question just
+				// below answers with the opposite polarity — it GRANTS an org from an
+				// app-selected claim, so it needs a positively identified MACHINE — and one
+				// predicate serving both is how a legacy human token came to be handed the
+				// app's org instead of failing closed.
 				req.Header.Set("X-User-IsAdmin", "true")
 				if cliOrg != "" {
 					effOrg = cliOrg
@@ -340,7 +348,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			// admin surfaces refused their own owner. Keyed on effOrg, not on the
 			// home org: the bit must describe the org the request ACTS in, so
 			// switching to an org you merely belong to never carries admin across.
-			if (claims.IsAdmin || isOrgAdmin(claims.Orgs, effOrg)) && !isMachinePrincipal(claims) {
+			if (claims.IsAdmin || isOrgAdmin(claims.Orgs, effOrg)) && isHuman(claims) {
 				req.Header.Set("X-User-IsOrgAdmin", "true")
 			}
 			sanitizeSubScopes(c, effOrg, claims.mintedProject(), cliApp, claims.mintedBillingAccount())

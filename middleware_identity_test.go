@@ -146,11 +146,17 @@ func TestSanitizeIdentity(t *testing.T) {
 	expiredAdmin := signWith(t, key, tokenClaims("hanzo-console", "admin", "z@hanzo.ai", true, past))
 	wrongKeyAdmin := signWith(t, otherKey, tokenClaims("hanzo-console", "admin", "z@hanzo.ai", true, future))
 	arbitraryAudAdmin := signWith(t, key, tokenClaims("some-other-first-party-app", "admin", "z@hanzo.ai", true, future))
-	// M1: a GENERIC admin-org MACHINE token — type=="application", ordinary app aud
-	// (NOT -platform-kms), isAdmin=true. It must be DENIED SuperAdmin (type is the
-	// discriminator once aud is no longer a gate).
+	// M1: a GENERIC admin-org MACHINE token — ordinary app aud (NOT -platform-kms),
+	// isAdmin=true. It must be DENIED SuperAdmin.
+	//
+	// The discriminator is the MEMBERSHIP SET, which IAM's client_credentials grant
+	// leaves nil ("a machine token has no user and therefore no membership set").
+	// This fixture used to set Type "application" and KEEP a membership set — but the
+	// IAM line this runs against stamps that value nowhere, so the fixture described a
+	// token that cannot exist and the refusal it asserted never ran in production.
 	adminMachine := tokenClaims("some-admin-app", "admin", "z@hanzo.ai", true, future)
-	adminMachine.Type = "application"
+	adminMachine.Subject = "admin/some-admin-app"
+	adminMachine.Orgs = nil
 	adminMachineTok := signWith(t, key, adminMachine)
 	// Owners whose IAM name carries whitespace — the RED CRIT-2 residual vector.
 	// The whitespace rides in the JWT `owner` claim (JSON-preserved, so it is
@@ -254,12 +260,19 @@ func TestSanitizeIdentity(t *testing.T) {
 		},
 		{
 			// M1 (red): a GENERIC admin-org machine app (type=="application", ordinary
-			// aud, isAdmin=true) is DENIED SuperAdmin — isMachinePrincipal catches it via
-			// `type`, not just the -platform-kms audience. It falls through org-scoped.
-			name:      "admin-org application-type token is denied SuperAdmin (M1)",
+			// aud, isAdmin=true) is DENIED SuperAdmin — isMachinePrincipal catches it by
+			// the absent membership set, not just the -platform-kms audience. It falls
+			// through org-scoped.
+			name:      "admin-org generic MACHINE token is denied SuperAdmin (M1)",
 			mutate:    bearer(adminMachineTok),
 			wantAdmin: false,
-			wantOrg:   "admin",
+			// NO org either. A generic machine is not positively identified — its token
+			// is indistinguishable from a human's minted before the `orgs` claim — so it
+			// resolves no org rather than having one read out of `owner`. Same rule as
+			// TestLegacyOrgsClaimFailsClosed; the KMS-sync machine, which IS positively
+			// identified by its owner-bound audience, still resolves its own org (the
+			// case above).
+			wantOrg: "",
 		},
 		{
 			name: "opaque hk- API key is not a JWT; no admin",
