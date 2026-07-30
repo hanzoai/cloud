@@ -33,6 +33,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/hanzoai/authz"
 	"github.com/zap-proto/zip"
 )
 
@@ -227,7 +228,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 					"sub", claims.Subject, "aud", claims.Audience)
 			}
 			if id := claims.userID(); id != "" {
-				req.Header.Set("X-User-Id", id)
+				req.Header.Set(authz.HeaderUser, id)
 			}
 			// X-User-Name is the IAM USERNAME (the `name` half of <owner>/<name>),
 			// stamped DISTINCT from X-User-Id (the UUID subject). The gateway path
@@ -239,10 +240,10 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			// authorityHeader it is stripped on ingress (line ~97) and re-injected here
 			// ONLY from validated claims — never a client value.
 			if uname := claims.username(); uname != "" {
-				req.Header.Set("X-User-Name", uname)
+				req.Header.Set(authz.HeaderUserName, uname)
 			}
 			if claims.Email != "" {
-				req.Header.Set("X-User-Email", claims.Email)
+				req.Header.Set(authz.HeaderUserEmail, claims.Email)
 			}
 			// X-User-Owner is the HOME org — the validated `owner` claim, minted
 			// here DISTINCT from X-Org-Id (the effective org set below). It is the
@@ -254,7 +255,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			// switch, so it is independent of the effective-org decision. An unsafe/
 			// empty owner mints nothing (billing then fails closed with no home org).
 			if owner != "" {
-				req.Header.Set("X-User-Owner", owner)
+				req.Header.Set(authz.HeaderUserOwner, owner)
 			}
 			// effOrg is the org actually acted as: the switched-to org for a global
 			// admin, else the principal's own owner. Sub-scopes are validated against
@@ -298,13 +299,13 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 				// app-selected claim, so it needs a positively identified MACHINE — and one
 				// predicate serving both is how a legacy human token came to be handed the
 				// app's org instead of failing closed.
-				req.Header.Set("X-User-IsAdmin", "true")
+				req.Header.Set(authz.HeaderUserAdmin, "true")
 				if cliOrg != "" {
 					effOrg = cliOrg
 				} else {
 					effOrg = owner
 				}
-				req.Header.Set("X-Org-Id", effOrg)
+				req.Header.Set(authz.HeaderOrg, effOrg)
 			case owner != "":
 				// Any other principal acts in the org it SELECTED, provided the
 				// validated token says it is a member of that org — the `orgs` claim
@@ -326,7 +327,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 				if isMember(claims.Orgs, cliOrg) {
 					effOrg = cliOrg
 				}
-				req.Header.Set("X-Org-Id", effOrg)
+				req.Header.Set(authz.HeaderOrg, effOrg)
 			}
 			// X-User-IsOrgAdmin marks a validated principal that is an admin OF ITS OWN
 			// ORG — the IAM `isAdmin` bit (claims.IsAdmin). It is minted on the SAME
@@ -349,7 +350,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			// home org: the bit must describe the org the request ACTS in, so
 			// switching to an org you merely belong to never carries admin across.
 			if (claims.IsAdmin || isOrgAdmin(claims.Orgs, effOrg)) && isHuman(claims) {
-				req.Header.Set("X-User-IsOrgAdmin", "true")
+				req.Header.Set(authz.HeaderUserOrgAdmin, "true")
 			}
 			sanitizeSubScopes(c, effOrg, claims.mintedProject(), cliApp, claims.mintedBillingAccount())
 			return c.Continue()
@@ -360,7 +361,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 		// plane gates on a validated principal anyway). Restore only the client org
 		// for the Phase-1 data path (see residual note above).
 		if cliOrg != "" {
-			req.Header.Set("X-Org-Id", cliOrg)
+			req.Header.Set(authz.HeaderOrg, cliOrg)
 		}
 		return c.Continue()
 	}
@@ -403,10 +404,10 @@ func sanitizeSubScopes(c *zip.Ctx, org, project, app, billingAccount string) {
 	}
 	req := c.Fiber().Request()
 	if project != "" && !projectIsForeign(c.Context(), org, project) {
-		req.Header.Set("X-Project-Id", project)
+		req.Header.Set(authz.HeaderProject, project)
 	}
 	if app != "" {
-		req.Header.Set("X-App-Id", app)
+		req.Header.Set(authz.HeaderApp, app)
 	}
 	// X-Billing-Account-Id names WHO PAYS, so it is minted from the validated
 	// `billing_account` claim (claims.mintedBillingAccount) and never from a client
@@ -417,7 +418,7 @@ func sanitizeSubScopes(c *zip.Ctx, org, project, app, billingAccount string) {
 	// naming its own payer — the whole thing the claim exists to prevent. Absent when
 	// IAM minted no account (a pre-claim token); Payer then falls back.
 	if billingAccount != "" {
-		req.Header.Set("X-Billing-Account-Id", billingAccount)
+		req.Header.Set(authz.HeaderBillingAccount, billingAccount)
 	}
 }
 
