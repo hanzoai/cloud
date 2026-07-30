@@ -19,7 +19,7 @@
     "/v1/agents": {
       "get": {
         "operationId": "get_v1_agents",
-        "summary": "ListAgents returns every agent defined in the caller's org, each with the",
+        "summary": "ListAgents returns every agent defined in the caller's org, each with the number of runs recorded against it.",
         "description": "ListAgents returns every agent defined in the caller's org, each with the\nnumber of runs recorded against it.",
         "tags": [
           "agents"
@@ -39,7 +39,7 @@
       },
       "post": {
         "operationId": "post_v1_agents",
-        "summary": "CreateAgent defines an agent in the caller's org: a model, a system prompt\n(instructions) and a set of tool names.",
+        "summary": "CreateAgent defines an agent in the caller's org: a model, a system prompt (instructions) and a set of tool names.",
         "description": "CreateAgent defines an agent in the caller's org: a model, a system prompt\n(instructions) and a set of tool names. The name must be unique in the org and\nmatch ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$. An omitted model takes the\ndeployment's configured default; a named one is checked against the gateway's\nserved catalog, so a model this deployment never serves is refused here rather\nthan failing at run time. A long-running agent must carry a 5-field cron\nschedule (the scheduler would otherwise never fire it) and counts against a\nper-org cap on scheduled agents.",
         "tags": [
           "agents"
@@ -98,7 +98,7 @@
     "/v1/agents/builds": {
       "get": {
         "operationId": "get_v1_agents_builds",
-        "summary": "ListBuilds returns the public index of every published build, most recently",
+        "summary": "ListBuilds returns the public index of every published build, most recently updated first, so a gallery can link straight to the story behind each product.",
         "description": "ListBuilds returns the public index of every published build, most recently\nupdated first, so a gallery can link straight to the story behind each product.\nPUBLIC, no tenancy: publishing is the author's act, and only published root\nsessions appear here.",
         "tags": [
           "agents"
@@ -131,7 +131,7 @@
     "/v1/agents/builds/{org}/{project}": {
       "get": {
         "operationId": "get_v1_agents_builds_org_project",
-        "summary": "ReadBuild returns the readable build of one product: the agent session that\nproduced it, turn by turn — the prompts, the reasoning, the commits each turn\nproduced — plus the exact `git log` that re-derives every commit binding from\ngit itself, so nothing here has to be taken on trust.\n\nPUBLIC, no tenancy: it answers only for a session its author explicitly\npublished, which is what makes it safe to be anonymous.",
+        "summary": "ReadBuild returns the readable build of one product: the agent session that produced it, turn by turn — the prompts, the reasoning, the commits each turn produced — plus the exact `git log` that re-derives every commit binding from git itself, so nothing here has to be taken on trust.",
         "description": "ReadBuild returns the readable build of one product: the agent session that\nproduced it, turn by turn — the prompts, the reasoning, the commits each turn\nproduced — plus the exact `git log` that re-derives every commit binding from\ngit itself, so nothing here has to be taken on trust.\n\nPUBLIC, no tenancy: it answers only for a session its author explicitly\npublished, which is what makes it safe to be anonymous. An unpublished session\nis invisible here no matter who asks; its owner reads it through the org-scoped\n/v1/agents/sessions routes, which need a validated principal.",
         "tags": [
           "agents"
@@ -175,7 +175,7 @@
     "/v1/agents/metrics": {
       "get": {
         "operationId": "get_v1_agents_metrics",
-        "summary": "AgentMetrics serves the invocations-over-time histogram for the org's Agents\ndashboard.",
+        "summary": "AgentMetrics serves the invocations-over-time histogram for the org's Agents dashboard.",
         "description": "AgentMetrics serves the invocations-over-time histogram for the org's Agents\ndashboard. Every point is a REAL count of recorded runs in that time bucket —\none series line per agent that ran in the window. The Resource Usage rollup is\nall-null because this store meters no CPU/memory/storage/cost; the console\nrenders those as \"—\" rather than a fabricated figure. No runs =\u003e empty series\n(an honest \"not connected / no activity yet\"), never a synthesized trend.",
         "tags": [
           "agents"
@@ -209,7 +209,7 @@
     "/v1/agents/sessions": {
       "get": {
         "operationId": "get_v1_agents_sessions",
-        "summary": "ListSessions returns the caller org's live sessions, newest first — each with\nits event count, its direct-child count and a one-line preview of its latest\nevent.",
+        "summary": "ListSessions returns the caller org's live sessions, newest first — each with its event count, its direct-child count and a one-line preview of its latest event.",
         "description": "ListSessions returns the caller org's live sessions, newest first — each with\nits event count, its direct-child count and a one-line preview of its latest\nevent. With no filter it returns ROOT sessions only, so a dashboard shows one\nrow per flow rather than one per subagent; ?root= or ?parent= descends.",
         "tags": [
           "agents"
@@ -278,7 +278,7 @@
       },
       "post": {
         "operationId": "post_v1_agents_sessions",
-        "summary": "RegisterSession opens a live agent session in the caller's org — the row every\nsurface (the CLI's outer agent, hanzo.bot, the console, chat) hangs its\nactivity off.",
+        "summary": "RegisterSession opens a live agent session in the caller's org — the row every surface (the CLI's outer agent, hanzo.bot, the console, chat) hangs its activity off.",
         "description": "RegisterSession opens a live agent session in the caller's org — the row every\nsurface (the CLI's outer agent, hanzo.bot, the console, chat) hangs its\nactivity off. A session with a parentSessionId becomes a subagent of that\nsession and inherits its root, so one flow is one tree; without one it is\nitself a root. Registering with a terminal status records a session that has\nalready finished.",
         "tags": [
           "agents"
@@ -323,7 +323,7 @@
     "/v1/agents/sessions/{id}": {
       "get": {
         "operationId": "get_v1_agents_sessions_id",
-        "summary": "GetSession returns one session with its direct child sessions and its 50 most",
+        "summary": "GetSession returns one session with its direct child sessions and its 50 most recent events, oldest of those first.",
         "description": "GetSession returns one session with its direct child sessions and its 50 most\nrecent events, oldest of those first.",
         "tags": [
           "agents"
@@ -355,7 +355,7 @@
       },
       "patch": {
         "operationId": "patch_v1_agents_sessions_id",
-        "summary": "PatchSession updates a session's surface-owned truth: its status, its title,\nthe run-target it is dispatched to, and the product it built plus whether that\nbuild's story is public.",
+        "summary": "PatchSession updates a session's surface-owned truth: its status, its title, the run-target it is dispatched to, and the product it built plus whether that build's story is public.",
         "description": "PatchSession updates a session's surface-owned truth: its status, its title,\nthe run-target it is dispatched to, and the product it built plus whether that\nbuild's story is public. A FINISHED session stays finished — reopening a\ndone/error run would fabricate liveness — and publishing is refused unless the\nsession names the project it built, because the public build route is keyed on\n(org, project).",
         "tags": [
           "agents"
@@ -403,7 +403,7 @@
     "/v1/agents/sessions/{id}/control": {
       "get": {
         "operationId": "get_v1_agents_sessions_id_control",
-        "summary": "DrainSessionControl returns the steering commands (pause/resume/stop/message)\nrecorded against the caller's own session that are newer than the cursor,\noldest first, with the cursor to poll from next.",
+        "summary": "DrainSessionControl returns the steering commands (pause/resume/stop/message) recorded against the caller's own session that are newer than the cursor, oldest first, with the cursor to poll from next.",
         "description": "DrainSessionControl returns the steering commands (pause/resume/stop/message)\nrecorded against the caller's own session that are newer than the cursor,\noldest first, with the cursor to poll from next. It is how a locally started\n`hanzo code` session — which is not task-backed, so nothing forwards its\ncommands to an execution engine — consumes what the dashboard posted. Read-only\nand bounded at 200 per poll, so a steady poll is cheap and an applied command is\nnever redelivered.",
         "tags": [
           "agents"
@@ -537,7 +537,7 @@
     "/v1/agents/sessions/{id}/tree": {
       "get": {
         "operationId": "get_v1_agents_sessions_id_tree",
-        "summary": "SessionTree returns the subagent-flow graph rooted at this session: the session,\nits children, their children, each node carrying its own event count.",
+        "summary": "SessionTree returns the subagent-flow graph rooted at this session: the session, its children, their children, each node carrying its own event count.",
         "description": "SessionTree returns the subagent-flow graph rooted at this session: the session,\nits children, their children, each node carrying its own event count. One\nindexed read pulls the whole flow (every node of a flow shares a root id), so\nthe shape is assembled in memory rather than by walking the store per node.",
         "tags": [
           "agents"
@@ -571,7 +571,7 @@
     "/v1/agents/targets": {
       "get": {
         "operationId": "get_v1_agents_targets",
-        "summary": "ListTargets returns every machine registered to the caller's org, newest",
+        "summary": "ListTargets returns every machine registered to the caller's org, newest first, each with its live session load.",
         "description": "ListTargets returns every machine registered to the caller's org, newest\nfirst, each with its live session load.",
         "tags": [
           "agents"
@@ -591,7 +591,7 @@
       },
       "post": {
         "operationId": "post_v1_agents_targets",
-        "summary": "RegisterTarget registers a machine as an agent target, or re-links one that is\nalready registered.",
+        "summary": "RegisterTarget registers a machine as an agent target, or re-links one that is already registered.",
         "description": "RegisterTarget registers a machine as an agent target, or re-links one that is\nalready registered. Re-linking is idempotent and keyed on org+host+owner, so a\nmachine that reconnects refreshes its own row rather than piling up duplicates;\nit answers 200, while a first registration answers 201.",
         "tags": [
           "agents"
@@ -740,7 +740,7 @@
     "/v1/agents/targets/{id}/claim": {
       "post": {
         "operationId": "post_v1_agents_targets_id_claim",
-        "summary": "ClaimRoutedRun is the machine's long poll for work: it authenticates the\ndaemon, stamps the liveness the dispatch gate reads (the poll IS the proof a\nrunner is listening), and waits up to 25 seconds for the next run addressed to\nTHIS machine.",
+        "summary": "ClaimRoutedRun is the machine's long poll for work: it authenticates the daemon, stamps the liveness the dispatch gate reads (the poll IS the proof a runner is listening), and waits up to 25 seconds for the next run addressed to THIS machine.",
         "description": "ClaimRoutedRun is the machine's long poll for work: it authenticates the\ndaemon, stamps the liveness the dispatch gate reads (the poll IS the proof a\nrunner is listening), and waits up to 25 seconds for the next run addressed to\nTHIS machine. It answers the run when one arrives and 204 with no body when the\nwindow elapses, on which the daemon re-polls immediately.\n\nTWO independent proofs are required and both fail closed to the same 403: the\ncaller must own this machine (or be an org admin) AND present its claim key in\nX-Target-Key. A run offered to one machine is unreachable from another's claim.",
         "tags": [
           "agents"
@@ -757,19 +757,6 @@
             "example": "tgt_1"
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "id": "tgt_1"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/targetRef"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
@@ -787,7 +774,7 @@
     "/v1/agents/targets/{id}/claim-key": {
       "post": {
         "operationId": "post_v1_agents_targets_id_claim-key",
-        "summary": "MintTargetClaimKey mints (or rotates) the claim key a `hanzo code --serve`\ndaemon presents to claim work for this machine, and returns it ONCE: only its\nSHA-256 hash is stored.",
+        "summary": "MintTargetClaimKey mints (or rotates) the claim key a `hanzo code --serve` daemon presents to claim work for this machine, and returns it ONCE: only its SHA-256 hash is stored.",
         "description": "MintTargetClaimKey mints (or rotates) the claim key a `hanzo code --serve`\ndaemon presents to claim work for this machine, and returns it ONCE: only its\nSHA-256 hash is stored. Rotating supersedes any prior daemon, so only the\nmachine's owner — or an org admin — may call it; every other caller gets the\nsame not-found an unknown id gets, and learns nothing about what exists.",
         "tags": [
           "agents"
@@ -804,19 +791,6 @@
             "example": "tgt_1"
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "id": "tgt_1"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/targetRef"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
@@ -834,7 +808,7 @@
     "/v1/agents/targets/{id}/runs/{runId}/report": {
       "post": {
         "operationId": "post_v1_agents_targets_id_runs_runId_report",
-        "summary": "ReportRoutedRun completes a claimed run: it delivers the terminal result to the\nrun's durable owner, which is what lets that workflow finish.",
+        "summary": "ReportRoutedRun completes a claimed run: it delivers the terminal result to the run's durable owner, which is what lets that workflow finish.",
         "description": "ReportRoutedRun completes a claimed run: it delivers the terminal result to the\nrun's durable owner, which is what lets that workflow finish. Scoped to (org,\ntarget, run) and claim-key-authenticated, so a machine can only ever report a\nrun it legitimately holds. Idempotent — a report for an unknown or\nalready-finished run answers delivered:false rather than failing, because the\nsession's terminal state was already set by the machine's own stream.",
         "tags": [
           "agents"
@@ -1018,7 +992,7 @@
     "/v1/agents/{ref}/runs": {
       "get": {
         "operationId": "get_v1_agents_ref_runs",
-        "summary": "ListAgentRuns returns one agent's execution history, newest first — each run's\ninput, its output or its error, and how long it took.",
+        "summary": "ListAgentRuns returns one agent's execution history, newest first — each run's input, its output or its error, and how long it took.",
         "description": "ListAgentRuns returns one agent's execution history, newest first — each run's\ninput, its output or its error, and how long it took. Every row is a run that\nactually happened.",
         "tags": [
           "agents"
@@ -1412,12 +1386,7 @@
           "message": {
             "type": "string"
           },
-          "payload": {
-            "items": {
-              "type": "integer"
-            },
-            "type": "array"
-          },
+          "payload": {},
           "seq": {
             "type": "integer"
           }
@@ -1489,12 +1458,7 @@
           "kind": {
             "type": "string"
           },
-          "payload": {
-            "items": {
-              "type": "integer"
-            },
-            "type": "array"
-          },
+          "payload": {},
           "seq": {
             "type": "integer"
           },
@@ -1918,15 +1882,6 @@
               "$ref": "#/components/schemas/targetView"
             },
             "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "targetRef": {
-        "properties": {
-          "id": {
-            "description": "ID is the target to act on, from the path.",
-            "type": "string"
           }
         },
         "type": "object"

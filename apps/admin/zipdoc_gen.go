@@ -92,6 +92,7 @@ func init() {
 	zip.Describe("GET /v1/admin/money", zip.Doc{
 		Description: "moneyBoardHandler answers GET /v1/admin/money.",
 		Fields: map[string]string{
+			"Vendor.source":                    "\"actual\" | \"estimated\"",
 			"moneyCredits.grantedPrepaidCents": "real money added",
 			"moneyCredits.grantedTrialCents":   "non-cash comps/promos",
 			"moneyRevenue.realizedCents":       "consumed spend, fleet-wide",

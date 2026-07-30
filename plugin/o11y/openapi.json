@@ -48,7 +48,7 @@
     "/v1/o11y/annotation-queues": {
       "get": {
         "operationId": "get_v1_o11y_annotation-queues",
-        "summary": "ListAnnotationQueues returns a page of the caller org's human-review queues,\nnewest first, narrowed to the caller's project.",
+        "summary": "ListAnnotationQueues returns a page of the caller org's human-review queues, newest first, narrowed to the caller's project.",
         "description": "ListAnnotationQueues returns a page of the caller org's human-review queues,\nnewest first, narrowed to the caller's project. Another org's queues are never\nvisible.",
         "tags": [
           "o11y"
@@ -90,7 +90,7 @@
       },
       "post": {
         "operationId": "post_v1_o11y_annotation-queues",
-        "summary": "CreateAnnotationQueue creates a human-review queue in the caller's org and\nproject.",
+        "summary": "CreateAnnotationQueue creates a human-review queue in the caller's org and project.",
         "description": "CreateAnnotationQueue creates a human-review queue in the caller's org and\nproject. A name already used by another queue in the same project is a 409.",
         "tags": [
           "o11y"
@@ -160,7 +160,7 @@
       },
       "get": {
         "operationId": "get_v1_o11y_annotation-queues_id",
-        "summary": "GetAnnotationQueue returns one review queue with its pending and completed\ncounts and its first page of items.",
+        "summary": "GetAnnotationQueue returns one review queue with its pending and completed counts and its first page of items.",
         "description": "GetAnnotationQueue returns one review queue with its pending and completed\ncounts and its first page of items. A queue id belonging to another org is a\n404, never a cross-tenant read.",
         "tags": [
           "o11y"
@@ -192,7 +192,7 @@
       },
       "patch": {
         "operationId": "patch_v1_o11y_annotation-queues_id",
-        "summary": "UpdateAnnotationQueue changes a review queue's name, description or\nscore-config set.",
+        "summary": "UpdateAnnotationQueue changes a review queue's name, description or score-config set.",
         "description": "UpdateAnnotationQueue changes a review queue's name, description or\nscore-config set. A field the request omits is left alone. A name another\nqueue in the same project already uses is a 409; a queue id belonging to\nanother org is a 404.",
         "tags": [
           "o11y"
@@ -240,7 +240,7 @@
     "/v1/o11y/annotation-queues/{id}/items": {
       "get": {
         "operationId": "get_v1_o11y_annotation-queues_id_items",
-        "summary": "ListAnnotationQueueItems returns a page of one review queue's items, newest\nfirst, optionally filtered to PENDING or COMPLETED.",
+        "summary": "ListAnnotationQueueItems returns a page of one review queue's items, newest first, optionally filtered to PENDING or COMPLETED.",
         "description": "ListAnnotationQueueItems returns a page of one review queue's items, newest\nfirst, optionally filtered to PENDING or COMPLETED. A queue id belonging to\nanother org is a 404, never a cross-tenant list.",
         "tags": [
           "o11y"
@@ -300,7 +300,7 @@
       },
       "post": {
         "operationId": "post_v1_o11y_annotation-queues_id_items",
-        "summary": "AddAnnotationQueueItems enqueues traces, observations or sessions on a review\nqueue.",
+        "summary": "AddAnnotationQueueItems enqueues traces, observations or sessions on a review queue.",
         "description": "AddAnnotationQueueItems enqueues traces, observations or sessions on a review\nqueue. Each item names exactly one object, either by traceId / observationId /\nsessionId or by objectType plus objectId; every item enters PENDING. A queue\nid belonging to another org is a 404.",
         "tags": [
           "o11y"
@@ -352,7 +352,7 @@
     "/v1/o11y/annotation-queues/{id}/items/{itemId}": {
       "patch": {
         "operationId": "patch_v1_o11y_annotation-queues_id_items_itemId",
-        "summary": "UpdateAnnotationQueueItem moves one queue item between PENDING and COMPLETED\nand sets its assignee.",
+        "summary": "UpdateAnnotationQueueItem moves one queue item between PENDING and COMPLETED and sets its assignee.",
         "description": "UpdateAnnotationQueueItem moves one queue item between PENDING and COMPLETED\nand sets its assignee. Completing an item stamps its completedAt. An item that\nexists under a different queue answers the same 404 an unknown item does, and\nso does a queue belonging to another org.",
         "tags": [
           "o11y"
@@ -497,7 +497,7 @@
     "/v1/o11y/metrics": {
       "get": {
         "operationId": "get_v1_o11y_metrics",
-        "summary": "GetO11yMetrics returns one product's RED series — request rate, errors, p50\nand p95 latency — for the caller's org, plus that org's LLM usage rollup over\nthe same window.",
+        "summary": "GetO11yMetrics returns one product's RED series — request rate, errors, p50 and p95 latency — for the caller's org, plus that org's LLM usage rollup over the same window.",
         "description": "GetO11yMetrics returns one product's RED series — request rate, errors, p50\nand p95 latency — for the caller's org, plus that org's LLM usage rollup over\nthe same window. The series come from org-tagged request spans, so a tenant\nonly ever aggregates its own traffic; a validated platform SuperAdmin sees the\nwhole product's RED, while usage stays the caller's own org either way. A\nwell-formed product with no backing workload answers empty series; a malformed\nslug is a 400.",
         "tags": [
           "o11y"
@@ -574,7 +574,7 @@
     "/v1/o11y/status": {
       "get": {
         "operationId": "get_v1_o11y_status",
-        "summary": "GetO11yStatus reports whether a product's service is live: an in-cluster\nhealth probe with its measured latency, fused with the per-replica up\ninventory.",
+        "summary": "GetO11yStatus reports whether a product's service is live: an in-cluster health probe with its measured latency, fused with the per-replica up inventory.",
         "description": "GetO11yStatus reports whether a product's service is live: an in-cluster\nhealth probe with its measured latency, fused with the per-replica up\ninventory. Infra health is not tenant-partitioned — a service is up or down\nfor everyone — so any validated caller is served, but an unvalidated one is\nrefused. A product with no backing workload answers down/unknown-service\nwithout probing anything; a malformed slug is a 400.",
         "tags": [
           "o11y"
