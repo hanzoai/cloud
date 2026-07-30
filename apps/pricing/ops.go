@@ -9,29 +9,36 @@ package pricing
 // this surface shares: the receiver zipdoc lifts prose through, the two identity
 // readers, and the input every op that takes nothing off the wire uses.
 //
-// WHAT STAYS RAW, and why it is a property of the wire rather than of effort.
-// The partition is PINNED by typed_wire_test.go (untypedByDesign +
-// TestEveryRouteIsTypedOrNamed): a route that is neither a typed op nor on that
-// closed list fails the suite, so the next route here is typed by default. Two
-// of thirty-two are left, and both are the SAME route pattern's two halves — the
-// admin overlay PATCHes:
+// WHAT STAYS RAW. Two of thirty-two are left, they are the SAME route pattern's
+// two halves — the admin overlay PATCHes — and neither is a matter of effort. The
+// partition is PINNED by typed_wire_test.go (untypedByDesign +
+// TestEveryRouteIsTypedOrNamed), so the next route here is typed by default, and
+// each reason below is additionally PROVED there against the toolchain in go.mod
+// rather than asserted: a blocker fixed upstream turns the suite red.
 //
 //   - PATCH /v1/admin/catalog/models/* addresses a model id that may contain
-//     '/', so it routes through a greedy wildcard. fiber names that parameter
-//     `*1`; binding it would need an input field tagged `json:"*1"`, which is
-//     what every projection would then publish — while the DOCUMENT names the
-//     same segment `{wildcard1}` (openapi.translate), because `*1` is not a
-//     legal URI-template name. So the published parameter and the bound field
-//     could not even agree on a name. A schema nobody can read is worse than
-//     none.
+//     '/', so it routes through a greedy wildcard — and typing it does not merely
+//     publish a bad parameter, it REFUSES THE WHOLE DOCUMENT. zip keys a typed op
+//     by the fiber pattern (".../models/*"); the document keys the same route by
+//     its URI template (".../models/{wildcard1}", openapi.translate, because `*1`
+//     is not a legal template name). openapi.Fold looks the op's route up under
+//     that key, does not find it, and errors — and Spec builds ONE document, so
+//     every other pricing operation goes down with it. Past that there is still
+//     the second half: fiber binds the segment under the name `*1`, so the input
+//     needs a field tagged `json:"*1"`, which every projection would publish and
+//     which the document's own `{wildcard1}` could never agree with. A schema
+//     nobody can read is worse than none; a document that will not build is worse
+//     than both.
 //   - PATCH /v1/admin/catalog/providers/:name carries `overrides`, a raw JSON
-//     merge patch (RFC 7386) that is STORED and echoed verbatim. zip reflects
-//     json.RawMessage as an ARRAY OF INTEGERS (it is []byte — openapi.go's
-//     schemaOf takes the Slice arm), so typing it as it stands publishes a false
-//     schema; and retyping the field map[string]any re-marshals the patch, which
-//     sorts its keys — so the overlay this route echoes, and the one GET
-//     /v1/admin/catalog echoes later under "_overlay", would come back in a
-//     different order than the admin sent. That is a wire change.
+//     merge patch (RFC 7386) that is STORED and echoed verbatim. Verbatim echo
+//     pins the Go type to json.RawMessage, and that type publishes a lie: zip
+//     reflects it as an ARRAY OF INTEGERS (it is []byte — openapi.go's schemaOf
+//     takes the Slice arm). Retyping is no escape — map[string]any and any both
+//     re-marshal the patch, which sorts its keys, so the overlay this route echoes,
+//     and the one GET /v1/admin/catalog echoes later under "_overlay", would come
+//     back in a different order than the admin sent. That is a wire change. The
+//     escape is a schemaOf that can describe an arbitrary JSON value; it has no
+//     arm for one.
 //
 // The fifteen fixed sections (/v1/pricing/{compute,cloud,subscriptions,…} and
 // /v1/pricing-policy) were on this list too, on the grounds that they proxy the
