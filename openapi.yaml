@@ -5575,8 +5575,8 @@ components:
             Enforcement is the x402 settlement seam; this is the declaration.
         source:
           description: |-
-            Source is where the tool comes from: builtin, connector, function,
-            zap-service, agent, skill or mcp.
+            Source is where the tool comes from: connector, function, zap-service,
+            agent, skill or mcp.
           type: string
       type: object
     Top:
@@ -13426,24 +13426,6 @@ components:
         title:
           type: string
       type: object
-    mcpRequest:
-      properties:
-        id: {}
-        jsonrpc:
-          type: string
-        method:
-          type: string
-        params: {}
-      type: object
-    mcpResponse:
-      properties:
-        error:
-          $ref: '#/components/schemas/rpcErrorBody'
-        id: {}
-        jsonrpc:
-          type: string
-        result: {}
-      type: object
     mcpServerList:
       properties:
         servers:
@@ -16378,13 +16360,6 @@ components:
             own default.
           type: integer
       type: object
-    rpcErrorBody:
-      properties:
-        code:
-          type: integer
-        message:
-          type: string
-      type: object
     rulesOut:
       properties:
         rules:
@@ -18164,6 +18139,19 @@ components:
         httpStatus:
           type: integer
       type: object
+    toolCall:
+      properties:
+        arguments:
+          additionalProperties:
+            type: object
+          description: |-
+            Arguments is the tool's own input object, passed through verbatim to
+            whichever source owns it.
+          type: object
+        name:
+          description: Name is the tool to run, exactly as GET /v1/tools reports it.
+          type: string
+      type: object
     toolList:
       properties:
         tools:
@@ -18173,6 +18161,17 @@ components:
           items:
             $ref: '#/components/schemas/Tool'
           type: array
+      type: object
+    toolResult:
+      properties:
+        name:
+          description: Name is the tool that ran.
+          type: string
+        result:
+          description: |-
+            Result is the tool's own output, verbatim — its shape is the tool's, not
+            this plane's.
+          type: object
       type: object
     trackerProject:
       properties:
@@ -24923,11 +24922,6 @@ paths:
         required: true
         schema:
           type: string
-      tags:
-      - automations
-  /v1/automations/mcp:
-    post:
-      operationId: post_v1_automations_mcp
       tags:
       - automations
   /v1/automations/pieces:
@@ -40206,35 +40200,6 @@ paths:
         so it stops being dispatchable there.
       tags:
       - marketplace
-  /v1/mcp:
-    get:
-      description: |-
-        ListMCPTools lists the tools reachable on the external MCP servers the caller's
-        org has registered, with each one's activation flag. Every name is prefixed by
-        the server id it came from, which is what keeps two servers offering "search"
-        from colliding. It is GET /v1/tools narrowed to one source, so an external tool
-        still cannot shadow a native one — mcp is the lowest-precedence source.
-      operationId: get_v1_mcp
-      parameters:
-      - description: |-
-          Activated keeps only the tools activated for the caller's org and project,
-          and only when it is exactly the string "true".
-        in: query
-        name: activated
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/sourceToolList'
-          description: ok
-      summary: ListMCPTools lists the tools reachable on the external MCP servers
-        the caller's org has registered, with each one's activation flag.
-      tags:
-      - mcp
   /v1/mcp/servers:
     get:
       description: |-
@@ -45383,15 +45348,15 @@ paths:
       description: |-
         ListTools lists every tool the caller's org and project can reach, from every
         source, each flagged with whether it is activated. This is the discovery
-        surface: one flat set of names spanning builtin cloud controls, connector
-        actions, user functions, zap-service routes, agents, skills and the org's own
-        external MCP servers, deduplicated by name so the highest-precedence source
-        wins a collision. It lists; it does not call — dispatch is the MCP endpoint.
+        surface: one flat set of names spanning connector actions, user functions,
+        zap-service routes, agents, skills and the org's own external MCP servers,
+        deduplicated by name so the highest-precedence source wins a collision. It
+        lists; it does not call — dispatch is POST /v1/tools/call.
       operationId: get_v1_tools
       parameters:
       - description: |-
-          Source keeps only tools from one source — builtin, connector, function,
-          zap-service, agent, skill or mcp. Empty keeps every source.
+          Source keeps only tools from one source — connector, function, zap-service,
+          agent, skill or mcp. Empty keeps every source.
         in: query
         name: source
         required: false
@@ -45465,21 +45430,44 @@ paths:
         and answers with the resulting activated set.
       tags:
       - tools
-  /v1/tools/mcp:
+  /v1/tools/call:
     post:
-      operationId: post_v1_tools_mcp
+      description: |-
+        CallTool runs one of the caller's activated tools and answers with its output.
+
+        This is the door onto the tool plane's DYNAMIC half — the half no build-time
+        catalogue can hold, because it is per-tenant: an org's connected connector
+        actions, its authored skills, its agents and functions, and the tools of every
+        external MCP server it registered. A tool's existence, its price and its
+        activation are all rows, not code, so they cannot be known until the caller is.
+
+        One policy, the registry's: resolve by precedence, refuse an unactivated tool
+        403, settle a priced one through the x402 seam or fail closed 402, then
+        dispatch to the winning source bound to the caller's own (org, project). One
+        metered unit, one audit record. A caller can only ever dispatch its own tools.
+
+        Discovery is GET /v1/tools — ?activated=true for the callable set.
+      operationId: post_v1_tools_call
       requestBody:
         content:
           application/json:
+            example:
+              arguments:
+                channel: '#general'
+                text: hi
+              name: slack_post_message
             schema:
-              $ref: '#/components/schemas/mcpRequest'
+              $ref: '#/components/schemas/toolCall'
+        required: true
       responses:
-        2XX:
+        "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/mcpResponse'
-          description: Success
+                $ref: '#/components/schemas/toolResult'
+          description: ok
+      summary: CallTool runs one of the caller's activated tools and answers with
+        its output.
       tags:
       - tools
   /v1/traces/health:

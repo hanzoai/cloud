@@ -1,0 +1,134 @@
+[
+  {
+    "description": "DeleteCurriculum clears the caller org's curriculum override and returns the\njourney it falls back to — the brand blueprint, else the embedded fixture.\nClearing an org that never set one is a no-op that answers the same default.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "delete_v1_guide_curriculum"
+  },
+  {
+    "description": "Overview returns the caller org's launch journey: the active curriculum's\nversion and title, every step with its state, whether it is available, what\nblocks it and whether the Business AI can run it, the done/total/percent\nprogress with the next step to take, and the org's analytics funnel folded in.\nAuto-detect runs first, so a step the org has already completed elsewhere reads\ndone without anyone marking it.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_guide"
+  },
+  {
+    "description": "ListActions returns the caller org's Business AI action ledger, most recent\nfirst: every \"do it for me\" tool call, the arguments it ran with, its result and\nwhether it succeeded. It is the audit-visible record of what the agent did on\nthe org's behalf, and the backing state for the \"acted\" auto-detect signal.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_guide_actions"
+  },
+  {
+    "description": "Analytics returns the caller org's funnel from the analytics lens plus the GTM\nrecommendations derived from it. It is the Business AI's data-grounded read —\nwhat the funnel is doing, and the next-best action to move its weakest stage. An\nunreachable or silent warehouse answers available=false, never a fabricated\nnumber.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_guide_analytics"
+  },
+  {
+    "description": "GetBlueprint returns the FULL authored brand blueprint — every principle,\nsection, step, strategy and template WITH its enabled flag made explicit,\nincluding the disabled items the org-facing reads never see — plus the active\nversion number, the brand key it is stored under and the item counts. It is the\nSuperAdmin authoring view of the platform blueprint, so it is refused 403 for\nanyone else, including a per-org admin: the brand blueprint is shared platform\ncontent, not a per-customer surface.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_guide_blueprint"
+  },
+  {
+    "description": "ListBlueprintVersions returns the brand blueprint's version history — every\nstored version's number and edit time, newest first — which is the\npoint-in-time-recovery and audit trail behind the authoring plane. Metadata\nonly: the documents are not returned. SuperAdmin only, like the rest of this\nplane. The history is listable even when the current stored document no longer\nparses, so a schema-drifted row can still be diagnosed.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_guide_blueprint_versions"
+  },
+  {
+    "description": "GetCurriculum returns the journey the caller's org is actually running, and\nwhether it comes from the org's OWN override (custom) or from the platform\ndefault — the brand blueprint, else the embedded fixture.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_guide_curriculum"
+  },
+  {
+    "description": "Profile returns the caller org's OBSERVED growth profile — the signal set, the\nclassified growth stage, and the org's own key metrics. It is a pure READ,\nrecomputed from the org's CURRENT state each request (real-time by pull): it\nreuses the reconcile path (snapshotFor runs the detectors) for launch progress\nand runs the growth probes (observe) for the signals — it never caches, never\nruns a billable effect, never targets another org. Org-scoped on the validated\nprincipal; fail-closed without one. It PRODUCES the profile and classifies the\nstage; it decides NO recommendation (that is a later surface).",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_guide_profile"
+  },
+  {
+    "description": "Strategies returns the ENABLED tactics corpus for the caller's org: the tactics\nlibrary narrowed by the explicit category/workload filters AND by the org's\nOBSERVED growth stage and capability signals (a tactic's tags are\npreconditions, so it surfaces only once the org can act on it). Passing stage\nPREVIEWS the corpus at that stage instead of the observed one. The content is\nshared platform data — no org's records — and the read is never a billable\neffect.",
+    "inputSchema": {
+      "properties": {
+        "category": {
+          "description": "Category filters to tactics in exactly this category.",
+          "type": "string"
+        },
+        "stage": {
+          "description": "Stage previews the corpus at a chosen growth stage\n(research|formed|launched|activated|scaling), overriding the org's observed\none. An unknown value is ignored and the observed stage stands.",
+          "type": "string"
+        },
+        "workload": {
+          "description": "Workload filters to tactics with exactly this workload.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_guide_strategies"
+  },
+  {
+    "description": "Suggest returns the caller org's next-best quests: the available, non-terminal\nsteps of its journey ranked by how much downstream work each unblocks, each with\nthe grounded reason it is a good next move and whether the Business AI can run\nit, plus the org's funnel and the GTM recommendations derived from it. A\nbest-effort AI narrative over exactly those quests and numbers is included when\nan AI plane is wired. READ-ONLY: it advises and never runs a step — the only\nexecuting path is POST /v1/guide/steps/{id}/do.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_guide_suggest"
+  },
+  {
+    "description": "Chat answers a founder's question about their launch journey as the Business AI\ncoach: it grounds the reply in the org's REAL progress, its ranked available\nquests and its analytics funnel, and returns those candidate quests alongside so\nthe caller can act on one. READ-ONLY — it advises and never runs a step, so it\ncannot be talked into performing an action; the only executing path is POST\n/v1/guide/steps/{id}/do. One AI completion per call, billed to the caller's own\npayer.",
+    "inputSchema": {
+      "properties": {
+        "message": {
+          "description": "Message is the founder's question for the Business AI. Required; trimmed,\nand clipped to 4 KiB so a caller cannot amplify the AI prompt.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_guide_chat"
+  },
+  {
+    "description": "ResetStep returns one step of the caller org's journey to todo — clearing a\nmanual mark or a skip — and returns the refreshed journey. Reset is never\ndependency-gated. Auto-detect runs on the next read, so a step the org has in\nfact completed elsewhere goes straight back to done.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the step's id, as it appears in the journey (e.g. \"gsuite\").",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_guide_steps_id_reset"
+  },
+  {
+    "description": "SkipStep marks one step of the caller org's journey skipped and returns the\nrefreshed journey. Skipping is never dependency-gated — the founder is\ndeclaring the step does not apply to them — so a step whose dependencies are\nunfinished can still be skipped, and a skipped step counts as terminal for\neverything downstream of it.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the step's id, as it appears in the journey (e.g. \"gsuite\").",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_guide_steps_id_skip"
+  }
+]

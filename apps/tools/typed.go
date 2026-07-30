@@ -108,6 +108,32 @@ func callerOf(ctx context.Context) string {
 	return ""
 }
 
+// principalOf is the whole validated caller a DISPATCH needs — org, project,
+// user, owner, admin-ness and the credential headers a provider replays — which
+// is strictly more than tenantOf's org. It comes off the REQUEST because the
+// credential set does, and it fails closed off the HTTP path for the same reason
+// tenantOf does: no request means no attested caller, and a dispatch with no
+// caller has no scope to be confined to.
+func principalOf(ctx context.Context) (Principal, error) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return Principal{}, zip.ErrForbidden("a validated principal is required")
+	}
+	p, ok := PrincipalFrom(c)
+	if !ok {
+		return Principal{}, zip.ErrForbidden("a validated principal is required")
+	}
+	return p, nil
+}
+
+// meter records the one orchestration unit a tool call bills — meterUnit with the
+// request resolved off the context. Off the HTTP path there is nothing to bill.
+func (o toolOps) meter(ctx context.Context) {
+	if c, ok := cloud.Request(ctx); ok {
+		meterUnit(o.s, c)
+	}
+}
+
 // audit appends one audit record from a typed op — audrecordAction with the
 // request resolved off the context. Off the HTTP path there is no actor, no
 // method, no path and no source IP, so it records NOTHING rather than an

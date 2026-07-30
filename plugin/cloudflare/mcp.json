@@ -1,0 +1,549 @@
+[
+  {
+    "description": "D1DatabaseDelete deletes a D1 database and everything stored in it. Requires\norg admin.",
+    "inputSchema": {
+      "properties": {
+        "database": {
+          "description": "Database is the Cloudflare D1 database id or name.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_cloudflare_d1_databases_database"
+  },
+  {
+    "description": "KVNamespaceDelete deletes a Workers KV namespace and every key in it. Requires\norg admin.",
+    "inputSchema": {
+      "properties": {
+        "namespace": {
+          "description": "Namespace is the Cloudflare KV namespace id.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_cloudflare_kv_namespaces_namespace"
+  },
+  {
+    "description": "KVValueDelete removes one key from a Workers KV namespace. Requires org admin.",
+    "inputSchema": {
+      "properties": {
+        "key": {
+          "description": "Key is the key within that namespace. KV keys are broad (up to 512 bytes),\nso this one is escaped rather than charset-restricted.",
+          "type": "string"
+        },
+        "namespace": {
+          "description": "Namespace is the Cloudflare KV namespace id.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_cloudflare_kv_namespaces_namespace_values_key"
+  },
+  {
+    "description": "PagesDelete deletes a Cloudflare Pages project, and with it every deployment it\nhas ever made. Requires org admin.",
+    "inputSchema": {
+      "properties": {
+        "project": {
+          "description": "Project is the Pages project name.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_cloudflare_pages_projects_project"
+  },
+  {
+    "description": "PagesDomainDelete detaches a custom domain from a Cloudflare Pages project.\nRequires org admin.",
+    "inputSchema": {
+      "properties": {
+        "domain": {
+          "description": "Domain is the attached custom domain to detach.",
+          "type": "string"
+        },
+        "project": {
+          "description": "Project is the Pages project name.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_cloudflare_pages_projects_project_domains_domain"
+  },
+  {
+    "description": "R2BucketDelete deletes an R2 bucket. Requires org admin. Cloudflare refuses a\nbucket that still holds objects, and that refusal is relayed.",
+    "inputSchema": {
+      "properties": {
+        "bucket": {
+          "description": "Bucket is the R2 bucket name.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_cloudflare_r2_buckets_bucket"
+  },
+  {
+    "description": "WorkersScriptDelete removes a Worker script from the org's Cloudflare account.\nRequires org admin. Routes bound to the script stop serving it.",
+    "inputSchema": {
+      "properties": {
+        "script": {
+          "description": "Script is the Worker script name.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_cloudflare_workers_scripts_script"
+  },
+  {
+    "description": "WorkersRouteDelete unbinds a Worker route, so its pattern stops dispatching to a\nscript. Requires org admin.",
+    "inputSchema": {
+      "properties": {
+        "route": {
+          "description": "Route is the 32-hex Cloudflare route id.",
+          "type": "string"
+        },
+        "zone": {
+          "description": "Zone is the 32-hex Cloudflare zone id.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_cloudflare_workers_zones_zone_routes_route"
+  },
+  {
+    "description": "D1DatabaseList lists the D1 databases on the org's Cloudflare account. Any org\nmember may read.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name filters to the database with this name.",
+          "type": "string"
+        },
+        "page": {
+          "description": "Page is the 1-based page of databases to return.",
+          "type": "string"
+        },
+        "per_page": {
+          "description": "PerPage is how many databases one page holds.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_cloudflare_d1_databases"
+  },
+  {
+    "description": "KVNamespaceList lists the Workers KV namespaces on the org's Cloudflare\naccount. Any org member may read.",
+    "inputSchema": {
+      "properties": {
+        "direction": {
+          "type": "string"
+        },
+        "order": {
+          "description": "Order names the field to sort by, and Direction sorts asc or desc.",
+          "type": "string"
+        },
+        "page": {
+          "description": "Page is the 1-based page of namespaces to return.",
+          "type": "string"
+        },
+        "per_page": {
+          "description": "PerPage is how many namespaces one page holds.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_cloudflare_kv_namespaces"
+  },
+  {
+    "description": "PagesList lists the org's Cloudflare Pages projects. Any org member may read.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_cloudflare_pages_projects"
+  },
+  {
+    "description": "PagesGet reads one Cloudflare Pages project — its build config, deployment\nconfigs and latest deployment. Any org member may read.",
+    "inputSchema": {
+      "properties": {
+        "project": {
+          "description": "Project is the Pages project name.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_cloudflare_pages_projects_project"
+  },
+  {
+    "description": "R2BucketList lists the R2 buckets on the org's Cloudflare account. Any org\nmember may read.",
+    "inputSchema": {
+      "properties": {
+        "cursor": {
+          "description": "Cursor continues from the position a previous page returned.",
+          "type": "string"
+        },
+        "direction": {
+          "type": "string"
+        },
+        "name_contains": {
+          "description": "NameContains filters to buckets whose name contains this substring.",
+          "type": "string"
+        },
+        "order": {
+          "description": "Order names the field to sort by, and Direction sorts asc or desc.",
+          "type": "string"
+        },
+        "per_page": {
+          "description": "PerPage is how many buckets one page holds.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_cloudflare_r2_buckets"
+  },
+  {
+    "description": "WorkersScriptList lists the Worker scripts on the org's Cloudflare account. Any\norg member may read.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_cloudflare_workers_scripts"
+  },
+  {
+    "description": "WorkersSubdomainGet reads the org account's workers.dev subdomain — the name\nunder which every subdomain-enabled script is served. Any org member may read.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_cloudflare_workers_subdomain"
+  },
+  {
+    "description": "WorkersRouteList lists the Worker routes bound within one zone — the URL\npatterns that dispatch to a script. Any org member may read. Routes are\nzone-scoped, so no account is resolved.",
+    "inputSchema": {
+      "properties": {
+        "zone": {
+          "description": "Zone is the 32-hex Cloudflare zone id.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_cloudflare_workers_zones_zone_routes"
+  },
+  {
+    "description": "ZonesList lists the Cloudflare zones the org's connected API token can see,\npaged and filtered by the query parameters Cloudflare itself accepts. Zones are\ntoken-scoped by Cloudflare, so no account is resolved. Any org member may read.\n\nZone and DNS-record MANAGEMENT is not here: it stays on the Hanzo DNS plane\n(/v1/dns). This only surfaces the Cloudflare zone objects the asset plane needs\n— a zone id is what addresses a Worker route or an analytics read.",
+    "inputSchema": {
+      "properties": {
+        "direction": {
+          "type": "string"
+        },
+        "name": {
+          "description": "Name filters to the zone with this domain name.",
+          "type": "string"
+        },
+        "order": {
+          "description": "Order names the field to sort by, and Direction sorts asc or desc.",
+          "type": "string"
+        },
+        "page": {
+          "description": "Page is the 1-based page of zones to return.",
+          "type": "string"
+        },
+        "per_page": {
+          "description": "PerPage is how many zones one page holds.",
+          "type": "string"
+        },
+        "status": {
+          "description": "Status filters by zone status (active, pending, initializing, …).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_cloudflare_zones"
+  },
+  {
+    "description": "ZoneGet reads one Cloudflare zone the org's token can see. Any org member may\nread. A zone id the token cannot see is Cloudflare's own not-found, relayed.",
+    "inputSchema": {
+      "properties": {
+        "zone": {
+          "description": "Zone is the 32-hex Cloudflare zone id.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_cloudflare_zones_zone"
+  },
+  {
+    "description": "ZoneAnalytics reads a zone's Cloudflare traffic dashboard — requests, bandwidth,\nthreats and pageviews over the since/until window. Any org member may read.\n\nA zone whose Cloudflare plan does not serve this endpoint yields Cloudflare's\nOWN error, never a fabricated success.",
+    "inputSchema": {
+      "properties": {
+        "continuous": {
+          "description": "Continuous asks Cloudflare for only fully-aggregated buckets.",
+          "type": "string"
+        },
+        "since": {
+          "description": "Since and Until bound the window, in the form Cloudflare accepts — an RFC 3339\ntime or a negative number of minutes from now (\"-1440\" is the last day).",
+          "type": "string"
+        },
+        "until": {
+          "type": "string"
+        },
+        "zone": {
+          "description": "Zone is the 32-hex Cloudflare zone id.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_cloudflare_zones_zone_analytics"
+  },
+  {
+    "description": "D1DatabaseCreate creates a D1 database on the org's Cloudflare account.\nRequires org admin.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name is the database name to create.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_cloudflare_d1_databases"
+  },
+  {
+    "description": "KVNamespaceCreate creates a Workers KV namespace on the org's Cloudflare\naccount. Requires org admin. Cloudflare mints the namespace id the value routes\naddress.",
+    "inputSchema": {
+      "properties": {
+        "title": {
+          "description": "Title is the namespace's display title. Cloudflare mints the id.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_cloudflare_kv_namespaces"
+  },
+  {
+    "description": "PagesCreate creates a Cloudflare Pages project on the org's account. Requires\norg admin. Only the modeled fields reach Cloudflare, so an unmodeled key in the\nrequest is dropped rather than forwarded.",
+    "inputSchema": {
+      "$defs": {
+        "PagesBuildConfig": {
+          "properties": {
+            "build_command": {
+              "type": "string"
+            },
+            "destination_dir": {
+              "type": "string"
+            },
+            "root_dir": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "PagesD1Binding": {
+          "properties": {
+            "id": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "PagesDeploymentConfig": {
+          "properties": {
+            "compatibility_date": {
+              "type": "string"
+            },
+            "compatibility_flags": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "d1_databases": {
+              "additionalProperties": {
+                "$ref": "#/$defs/PagesD1Binding"
+              },
+              "type": "object"
+            },
+            "env_vars": {
+              "additionalProperties": {
+                "$ref": "#/$defs/PagesEnvVar"
+              },
+              "type": "object"
+            },
+            "kv_namespaces": {
+              "additionalProperties": {
+                "$ref": "#/$defs/PagesKVBinding"
+              },
+              "type": "object"
+            },
+            "r2_buckets": {
+              "additionalProperties": {
+                "$ref": "#/$defs/PagesR2Binding"
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "PagesDeploymentConfigs": {
+          "properties": {
+            "preview": {
+              "$ref": "#/$defs/PagesDeploymentConfig"
+            },
+            "production": {
+              "$ref": "#/$defs/PagesDeploymentConfig"
+            }
+          },
+          "type": "object"
+        },
+        "PagesEnvVar": {
+          "properties": {
+            "type": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "PagesKVBinding": {
+          "properties": {
+            "namespace_id": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "PagesR2Binding": {
+          "properties": {
+            "name": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "build_config": {
+          "$ref": "#/$defs/PagesBuildConfig"
+        },
+        "deployment_configs": {
+          "$ref": "#/$defs/PagesDeploymentConfigs"
+        },
+        "name": {
+          "type": "string"
+        },
+        "production_branch": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_cloudflare_pages_projects"
+  },
+  {
+    "description": "PagesDomainAdd attaches a custom domain to a Cloudflare Pages project. Requires\norg admin. Cloudflare owns validation and certificate issuance from here on.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name is the custom domain to attach, e.g. \"www.acme.com\".",
+          "type": "string"
+        },
+        "project": {
+          "description": "Project is the Pages project name, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_cloudflare_pages_projects_project_domains"
+  },
+  {
+    "description": "R2BucketCreate creates an R2 bucket on the org's Cloudflare account. Requires\norg admin.",
+    "inputSchema": {
+      "properties": {
+        "name": {
+          "description": "Name is the bucket name to create.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_cloudflare_r2_buckets"
+  },
+  {
+    "description": "WorkersScriptSubdomainSet publishes or withdraws one Worker script on the\naccount's workers.dev subdomain. Requires org admin.",
+    "inputSchema": {
+      "properties": {
+        "enabled": {
+          "description": "Enabled publishes the script on \u003cscript\u003e.\u003csubdomain\u003e.workers.dev when true,\nand withdraws it when false.",
+          "type": "boolean"
+        },
+        "script": {
+          "description": "Script is the Worker script name, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_cloudflare_workers_scripts_script_subdomain"
+  },
+  {
+    "description": "WorkersRouteCreate binds a URL pattern in a zone to a Worker script. Requires\norg admin — a route is what puts a script in front of live traffic.",
+    "inputSchema": {
+      "properties": {
+        "pattern": {
+          "description": "Pattern is the URL pattern to bind, e.g. \"acme.com/api/*\".",
+          "type": "string"
+        },
+        "script": {
+          "description": "Script is the Worker script to dispatch to. Omit it to leave the pattern\nbound to no script, which is how Cloudflare expresses \"bypass the Worker here\".",
+          "type": "string"
+        },
+        "zone": {
+          "description": "Zone is the 32-hex Cloudflare zone id, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_cloudflare_workers_zones_zone_routes"
+  },
+  {
+    "description": "ZonePurge drops a zone's Cloudflare edge cache — either the whole zone\n(purge_everything) or exactly the listed file URLs. Requires org admin.\n\nPurging is the one zone-scoped WRITE this plane owns. It is not DNS — no record\nchanges — so it does not belong on /v1/dns, and it is not a connection, so it does\nnot belong on the integrations plane. It is a cache operation on a zone, which is\nwhat this asset plane is for. It takes the admin gate because dropping a zone's\ncache sends every subsequent request to the origin: on a site fronting a small\norigin that is a self-inflicted load spike, so it is a change, not a look.\n\nExactly one selector is required. Cloudflare treats a body with neither as a\nno-op and answers 200, which reads as \"purged\" to a caller that never purged\nanything — the failure we refuse to pass through.",
+    "inputSchema": {
+      "properties": {
+        "files": {
+          "description": "Files purges exactly the listed URLs — at most 30, Cloudflare's per-request cap.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "purge_everything": {
+          "description": "Everything drops the zone's entire edge cache.",
+          "type": "boolean"
+        },
+        "zone": {
+          "description": "Zone is the 32-hex Cloudflare zone id, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_cloudflare_zones_zone_purge"
+  }
+]

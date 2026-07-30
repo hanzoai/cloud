@@ -31,7 +31,7 @@ EXTERNAL := authz licensing metrics
 # adaptor moves out to hanzoai/stream.
 OPENAPI_NEEDS_BROKER := kafka
 
-.PHONY: openapi-weave openapi-apps openapi-check
+.PHONY: openapi-weave describe-apps surface-check
 
 # FIRST, so a bare `make -f mk/fleet.mk` runs the two-second check and not the
 # twelve-minute rebuild. (Included at the root it changes nothing: the default
@@ -49,15 +49,15 @@ openapi-weave: ## Weave the per-app subsets into the fleet spec and prove it equ
 # loop, which mounted kafka, which fails closed without a live broker. So the one
 # command told to repair a red gate could not run at all. One exemption list, read
 # everywhere it applies.
-openapi-apps: ## Regenerate EVERY app's own spec subset (one binary per app; slow by construction).
+describe-apps: ## Regenerate EVERY app's own spec subset (one binary per app; slow by construction).
 	@set -e; for d in $(APPDIRS); do \
 	  a=$$(basename $$d); \
 	  case " $(OPENAPI_NEEDS_BROKER) " in \
 	    *" $$a "*) echo ">> skip $$a — needs a live broker to mount (OPENAPI_NEEDS_BROKER)"; continue;; \
 	  esac; \
-	  $(MAKE) --no-print-directory -C $$d openapi; \
+	  $(MAKE) --no-print-directory -C $$d describe; \
 	done
-	@for a in $(EXTERNAL); do $(MAKE) --no-print-directory -f $(ROOT)/mk/plugin.mk ROOT=$(ROOT) APPS=$$a openapi || exit 1; done
+	@for a in $(EXTERNAL); do $(MAKE) --no-print-directory -f $(ROOT)/mk/plugin.mk ROOT=$(ROOT) APPS=$$a describe || exit 1; done
 	@echo ">> $$(ls $(ROOT)/plugin/*/openapi.json | wc -l) app subsets"
 
 # The drift gate. It REGENERATES FROM SOURCE and fails on any diff, which is the
@@ -82,18 +82,18 @@ openapi-apps: ## Regenerate EVERY app's own spec subset (one binary per app; slo
 # It checks with `git status --porcelain`, not `git diff`: a NEW app produces a
 # NEW subset, which is untracked and therefore invisible to a diff — the failure
 # that matters most is exactly the one a diff would miss.
-openapi-check: ## Regenerate every subset + the fleet spec FROM SOURCE and fail on any diff. The drift gate.
+surface-check: ## Regenerate every subset + the fleet spec FROM SOURCE and fail on any diff. The drift gate.
 	@set -e; \
 	for d in $(APPDIRS); do \
 	  a=$$(basename $$d); \
 	  case " $(OPENAPI_NEEDS_BROKER) " in \
 	    *" $$a "*) echo ">> skip $$a — needs a live broker to mount (OPENAPI_NEEDS_BROKER)"; continue;; \
 	  esac; \
-	  $(MAKE) --no-print-directory -C $$d openapi >/dev/null \
+	  $(MAKE) --no-print-directory -C $$d describe >/dev/null \
 	    || { echo "!! $$a cannot project its own document — an app that cannot describe itself is the bug"; exit 1; }; \
 	done; \
 	for a in $(EXTERNAL); do \
-	  $(MAKE) --no-print-directory -f $(ROOT)/mk/plugin.mk ROOT=$(ROOT) APPS=$$a openapi >/dev/null \
+	  $(MAKE) --no-print-directory -f $(ROOT)/mk/plugin.mk ROOT=$(ROOT) APPS=$$a describe >/dev/null \
 	    || { echo "!! $$a cannot project its own document"; exit 1; }; \
 	done
 	@$(MAKE) --no-print-directory -f $(ROOT)/mk/fleet.mk openapi-weave OUT=$(ROOT)/openapi.yaml >/dev/null
@@ -107,7 +107,7 @@ openapi-check: ## Regenerate every subset + the fleet spec FROM SOURCE and fail 
 	  echo "undocumented, or documented and gone. The SDK repos pull this file, so a route"; \
 	  echo "missing here is a route no generated client can reach."; \
 	  echo ""; \
-	  echo "  fix:  make openapi   # then commit openapi.yaml and plugin/*/openapi.json"; \
+	  echo "  fix:  make describe  # then commit openapi.yaml and plugin/*/{openapi,mcp}.json"; \
 	  echo ""; \
 	  exit 1; \
 	fi

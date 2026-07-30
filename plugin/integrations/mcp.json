@@ -1,0 +1,353 @@
+[
+  {
+    "description": "dropConn forgets a connector: every custodied secret, then the row.\nIdempotent — dropping a never-connected id still answers {disconnected:true}\n(disconnect() parity). No provider Revoke: none of the user-plane providers\nexposes a revoke endpoint.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the connector id, provider + \":\" + label (\"openai:default\") — the\nauth-profile-id shape. Another user's id is simply no row, so 404.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_connectors_id"
+  },
+  {
+    "description": "githubPagesDisable deletes the repo's Pages site. 404 when there is none, so a\ncaller can tell \"turned it off\" from \"there was nothing on\".",
+    "inputSchema": {
+      "properties": {
+        "repo": {
+          "description": "Repo is the repository's short name within the org's installation, with no\nowner prefix (the owner is server-derived from the grant). A trailing \".git\"\nis stripped.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_integrations_github_repos_repo_pages"
+  },
+  {
+    "description": "connectors lists the caller's OWN connectors across every provider — the set\n`hanzo connector ls` prints. Rows are keyed (org,user), so this can never\nsurface another user's connector, and no secret is in the view.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_connectors"
+  },
+  {
+    "description": "tokenConn hands the custodied access token to its owner — the ONE place\ncustody exits. The (org,user)-keyed row IS the same-user gate: another user's\nid is simply \"no row\" → 404. fresh() auto-rotates within the refreshSkew\nwindow; static providers degenerate to a plain kmsGet of Secrets[0]. Refresh\ntokens are NEVER returned — custody keeps the sink. The token is never logged.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the connector id, provider + \":\" + label (\"openai:default\") — the\nauth-profile-id shape. Another user's id is simply no row, so 404.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_connectors_id_token"
+  },
+  {
+    "description": "connectorProviders lists the user-scoped provider cards — the catalog of what a\nuser can connect, and how. Methods derive from capabilities (Device/Adopt/Verify\n— Mount asserts at least one), never from a parallel kind enum.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_connectors_providers"
+  },
+  {
+    "description": "list returns every registered integration provider together with THIS org's\nconnection status for it — the catalog the console's Integrations page renders.\nOrg-authed: a caller with no validated principal is 403, because the status is\nper-org and there is no org-less answer. User-plane providers (the /v1/connectors\nsurface) are omitted; the two planes are disjoint.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_integrations"
+  },
+  {
+    "description": "githubRepos lists the org's granted GitHub repositories, each annotated with its\nnative import + sync status from the git object plane. Org-authed: the org comes\nfrom the validated principal, and the granted set is bounded to THAT org's\ninstallation token — an org can never enumerate another org's repos. The console\npolls it to watch an import flip a repo to imported.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_integrations_github_repos"
+  },
+  {
+    "description": "githubPagesGet returns the repo's Pages status, live URL, custom domain and build\nsource. The repo is resolved against the org installation's GRANTED set, so a\ncaller can never address a repo the App was not granted; 404 when the repo has no\nPages site.",
+    "inputSchema": {
+      "properties": {
+        "repo": {
+          "description": "Repo is the repository's short name within the org's installation, with no\nowner prefix (the owner is server-derived from the grant). A trailing \".git\"\nis stripped.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_integrations_github_repos_repo_pages"
+  },
+  {
+    "description": "get returns ONE provider with this org's connection status — the same view list\ncarries, for a single id. An unknown id is 404, and so is a user-plane provider:\nthe org surface never resolves one.",
+    "inputSchema": {
+      "properties": {
+        "provider": {
+          "description": "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/connectors)\nproviders, which this surface never resolves.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_integrations_provider"
+  },
+  {
+    "description": "refreshConn forces a token rotation for a connected connector, ahead of the\nautomatic rotation a token read would do inside the expiry window. Only\nproviders that declare a Refresh support it.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the connector id, provider + \":\" + label (\"openai:default\") — the\nauth-profile-id shape. Another user's id is simply no row, so 404.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_connectors_id_refresh"
+  },
+  {
+    "description": "credential is the direct intake path: a customer-held token/setup-token\n(Verify) or an externally obtained OAuth bundle from the CLI's local PKCE\n(Adopt). ALWAYS verify-before-store: a bad credential is refused and NOTHING\nis persisted (connectByCredential's fail-closed order).",
+    "inputSchema": {
+      "$defs": {
+        "oauthBundleIn": {
+          "properties": {
+            "access": {
+              "description": "Access is the access token.",
+              "type": "string"
+            },
+            "account": {
+              "description": "Account is the account label the flow reported; sanitized on ingest.",
+              "type": "string"
+            },
+            "refresh": {
+              "description": "Refresh is the refresh token. It is sealed and NEVER handed back out.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "accountId": {
+          "description": "AccountID scopes the credential where the provider's Verify needs one.",
+          "type": "string"
+        },
+        "label": {
+          "description": "Label names this connection; empty means \"default\".",
+          "type": "string"
+        },
+        "oauth": {
+          "$ref": "#/$defs/oauthBundleIn",
+          "description": "OAuth is a bundle the CLI already obtained through its own local PKCE flow.\nPresent ⇒ the Adopt path; absent ⇒ the Token path."
+        },
+        "provider": {
+          "description": "Provider is the user-scoped provider's registry id, from the path.",
+          "type": "string"
+        },
+        "token": {
+          "description": "Token is the customer-held credential for the Verify path. Read on STDIN by\nthe CLI, never argv; never logged, echoed, or stored outside KMS.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_connectors_provider_credential"
+  },
+  {
+    "description": "startDevice begins a device sign-in and returns the code to show the user plus\nhow to poll for completion. KMS readiness is checked NOW rather than dead-ending\nthe user at poll-done (connect() parity), and the per-provider connector cap is\nchecked before the provider is called. The provider's device code is persisted\nonly in the encrypted grants table and is NEVER returned.",
+    "inputSchema": {
+      "properties": {
+        "label": {
+          "description": "Label names this connection so one user can hold several per provider\n(\"work\", \"personal\"). Empty means \"default\". 1-64 of [A-Za-z0-9._-].",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Provider is the user-scoped provider's registry id, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_connectors_provider_device"
+  },
+  {
+    "description": "pollDevice advances a device sign-in. Terminal outcomes are DATA, not errors\n(verifyConn {active:false} discipline) — the status set is closed:\npending|connected|denied|expired. pollSlow collapses to \"pending\" on the\nwire; the raised cadence rides interval.",
+    "inputSchema": {
+      "properties": {
+        "flow": {
+          "description": "Flow is the id deviceStartOut returned. Expired or another user's flow is\nindistinguishable from an unknown one: 404.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Provider is the user-scoped provider's registry id, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_connectors_provider_device_flow_poll"
+  },
+  {
+    "description": "githubIssuesBackfill seeds the native tracker with the EXISTING issues across the\norg's granted repos (default state=open); the webhook keeps them live thereafter.\nOrg-scoped by the validated principal — a caller only ever backfills its OWN org.\nSynchronous + bounded (a total time budget and an issue cap) so it returns the\ncounts directly; idempotent by ExtRef, so a re-run continues where a truncated\npass left off and never duplicates.",
+    "inputSchema": {
+      "properties": {
+        "state": {
+          "description": "State is the GitHub issue state to walk: \"open\" (the default), \"closed\" or\n\"all\". Anything else is a 400.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_integrations_github_issues_backfill"
+  },
+  {
+    "description": "GithubImport imports the selected (or all) granted repos into git.hanzo.ai. The\nselection is intersected with the installation's GRANTED set, so a client can\nnever import a repo the App was not granted (org isolation + a grant check). The\nimport runs in a bounded background worker (don't block the request), so the\nanswer is 202 Accepted; poll GET /v1/integrations/github/repos for the per-repo\nstatus to flip to imported.",
+    "inputSchema": {
+      "properties": {
+        "all": {
+          "description": "All imports every repository the installation grants, instead of naming\nthem. Archived and disabled repositories are skipped either way — they\ncannot be fetched.",
+          "type": "boolean"
+        },
+        "repos": {
+          "description": "Repos names the repositories to import: short names within the org's\ninstallation, with no owner prefix (a trailing \".git\" is stripped).\nIgnored when all is true.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_integrations_github_repos_import"
+  },
+  {
+    "description": "githubPagesEnable creates the repo's Pages site and answers 201 Created with it.\nWith buildType \"workflow\" the site builds via GitHub Actions; otherwise it builds\nfrom a branch source, defaulting to the repo's own default branch when none is\ngiven. Only \"/\" and \"/docs\" are legal source paths (GitHub's rule).",
+    "inputSchema": {
+      "properties": {
+        "branch": {
+          "description": "Branch is the legacy source branch; empty defaults to the repo's own default\nbranch. Ignored when buildType is \"workflow\".",
+          "type": "string"
+        },
+        "buildType": {
+          "description": "BuildType selects the builder: \"workflow\" builds via GitHub Actions, anything\nelse builds from the branch source above.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Path is the source directory within the branch: \"/\" (the default) or \"/docs\".\nGitHub allows no others.",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repo is the repository, from the :repo path segment.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_integrations_github_repos_repo_pages"
+  },
+  {
+    "description": "GithubPagesBuild requests a Pages rebuild and returns the queued build's status.\nThe build is queued AT GITHUB, not completed here, so the answer is 202 Accepted\nand its status is the one GitHub reported at queue time. 404 when the repository\nhas no Pages site, or when the org's installation was not granted it.",
+    "inputSchema": {
+      "properties": {
+        "repo": {
+          "description": "Repo is the repository's short name within the org's installation, with no\nowner prefix (the owner is server-derived from the grant). A trailing \".git\"\nis stripped.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_integrations_github_repos_repo_pages_builds"
+  },
+  {
+    "description": "connect acquires the org's credential for one provider. It has TWO paths and the\nREQUEST picks which: a \"token\" key in the body seals that credential directly\n(verify-before-store), and its absence begins the 3-legged OAuth flow — minting a\nsingle-use nonce plus an HMAC-signed state that binds this org to this provider,\nand answering with the provider's authorize URL for the caller to redirect to.\n\nFail-closed order, unchanged: no principal → 403; unknown provider → 404; an\nAdminOnly connector without the caller's own-org admin bit → 403; not configured\n→ 503; KMS not ready → 503 (the flow WILL need to seal a token, so refuse now\nrather than dead-end at the callback).",
+    "inputSchema": {
+      "properties": {
+        "accountId": {
+          "description": "AccountID is the provider account the credential should be scoped to, for the\nproviders whose Verify needs one (Cloudflare). Ignored by the OAuth path.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Provider is the connector's registry id, from the :provider path segment.",
+          "type": "string"
+        },
+        "token": {
+          "description": "Token is the customer's provider credential. Its PRESENCE — not its value —\nis what selects the apikey seal over the OAuth flow for a provider that\noffers both: {\"token\":\"…\"}, even empty, is an apikey attempt (→ verify, which\nanswers the \"token required\" 400 on an empty value), while a body with no\ntoken key (the console Connect button, `hanzo connector add` with no --token)\nstarts OAuth. Read on STDIN by the CLI, never argv; never logged or echoed.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_integrations_provider_connect"
+  },
+  {
+    "description": "disconnect revokes (best-effort) and forgets an org's connection: it deletes\nevery custodied KMS secret and the connection row. Idempotent — disconnecting a\nprovider that was never connected still returns {disconnected:true}. Symmetric\nwith connect: an AdminOnly connector needs the caller's own-org admin bit.",
+    "inputSchema": {
+      "properties": {
+        "provider": {
+          "description": "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/connectors)\nproviders, which this surface never resolves.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_integrations_provider_disconnect"
+  },
+  {
+    "description": "verifyConn re-checks a CONNECTED apikey connector's stored credential against the\nprovider, live (`hanzo connector verify`). Org-scoped (any member may check\nstatus); the credential is read from KMS, verified, and NEVER returned or logged.\nA verification failure is reported as {active:false}, not an error — the console/\nCLI renders it. Only apikey providers support verify (OAuth tokens are checked at\nuse, not re-verified here).",
+    "inputSchema": {
+      "properties": {
+        "provider": {
+          "description": "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/connectors)\nproviders, which this surface never resolves.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_integrations_provider_verify"
+  },
+  {
+    "description": "telegramConnect mints a short, single-use deep-link code bound to the caller's\norg and returns the t.me link the console navigates to. Org-authed: a caller with\nno validated principal is 403 (same gate as the framework connect). The code is\nstored as an oauth_nonce (org,telegram); the webhook's /start handler claims it to\nbind chat→org. It is short (128-bit hex) so it fits Telegram's 64-char `start`\npayload limit.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "post_v1_integrations_telegram_connect"
+  },
+  {
+    "description": "githubPagesUpdate sets or clears the custom domain (cname) and updates HTTPS\nenforcement, build type, or source. ONLY the provided fields are sent to GitHub,\nso an update never resets a setting the caller did not mention.",
+    "inputSchema": {
+      "properties": {
+        "branch": {
+          "description": "Branch switches the legacy source branch. Empty leaves the source alone.",
+          "type": "string"
+        },
+        "buildType": {
+          "description": "BuildType switches the builder: \"legacy\" or \"workflow\". Empty leaves it.",
+          "type": "string"
+        },
+        "cname": {
+          "description": "CNAME is the custom domain. Omit to leave it alone, \"\" to clear it, or a\nvalid FQDN to set it.",
+          "type": "string"
+        },
+        "httpsEnforced": {
+          "description": "HTTPSEnforced toggles GitHub's enforce-HTTPS bit. Omit to leave it alone.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "Path is the source directory to pair with Branch: \"/\" (the default) or\n\"/docs\". Read only when Branch is given.",
+          "type": "string"
+        },
+        "repo": {
+          "description": "Repo is the repository, from the :repo path segment.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "put_v1_integrations_github_repos_repo_pages"
+  }
+]

@@ -129,13 +129,12 @@ func TestOpenAPICarriesTheSurface(t *testing.T) {
 // TestMCPPublishesTheSurface pins the second derived projection: the same ops,
 // published as tools under the same names, with their In schema.
 //
-// The tool DESCRIPTIONS are empty, and that is a gap in zip, not here: mcp.go
-// emits op.Summary verbatim and never consults the zipdoc extraction the OpenAPI
-// builder falls back to (openapi.go docFor). The prose is already in the registry
-// — zipdoc_gen.go put it there — so when that projection learns to read it, every
-// op here gains its description with no change on this side. Passing
-// WithSummary("…") to close it today would write the same sentence twice, which
-// is the one thing the doc pass exists to prevent.
+// The tool descriptions carry the zipdoc prose now — mcpToolOf reads the same
+// docFor extraction the OpenAPI builder does (zip mcp.go), so one doc comment
+// serves the document, the CLI help and the tool list. Nothing here passes
+// WithSummary to say the same sentence twice. That prose is what the FLEET's one
+// MCP door hands a model: this app's catalogue is plugin/visor/mcp.json, and
+// manifest/mcp_test.go fails a tool whose description is empty.
 func TestMCPPublishesTheSurface(t *testing.T) {
 	tools := body(t, projectionApp(t), "POST", "/mcp",
 		`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)

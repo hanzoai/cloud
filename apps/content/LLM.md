@@ -62,7 +62,8 @@ UpdateData/Installed` (validation + lifecycle hooks run through those).
 ## Autonomous loop
 
 The `content` automations connector exposes `content_generate`/`content_transition`/
-`content_publish` as flow steps AND MCP tools (`POST /v1/automations/mcp`). It calls the
+`content_publish` as flow steps AND as tools on the unified plane (`POST /v1/tools/call`,
+and therefore on the fleet's one MCP door). It calls the
 ops IN-PROCESS (org-scoped by `rc.Org`) — NOT `core.http_request`, whose SSRF guard
 blocks internal `/v1/*`. Canonical flow (cron polling trigger):
 

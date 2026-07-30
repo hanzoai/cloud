@@ -125,13 +125,13 @@ test:
       set -e
       export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
       # ONE gate definition, called here rather than restated: mk/fleet.mk's
-      # openapi-check regenerates every subset AND weaves the golden, then fails
+      # surface-check regenerates every subset AND weaves the golden, then fails
       # on any porcelain change. This step used to regenerate the subsets only,
       # so openapi.yaml — the file the SDK repos actually pull — was never checked
       # against source by anything: openapi-composed above compares it to the
       # subsets, and both are derived. That is how plugin/ingress lost eight paths
       # with every gate green.
-      make -f mk/fleet.mk openapi-check
+      make -f mk/fleet.mk surface-check
   - name: go-unit
     run: |
       set -e
