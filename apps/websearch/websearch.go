@@ -44,6 +44,28 @@
 // An unset key 503s and any missing/mismatched key 401s on the key path; a request
 // with a validated principal never needs the key. So neither surface is ever an
 // open proxy, and the signed-in console user reaches search without the shared key.
+//
+// WHY NOTHING HERE IS A TYPED OP (zip v1.18.11), so the next sweep does not
+// re-litigate it. Both surfaces exist to be BYTE-COMPATIBLE with a client this repo
+// does not own — LibreChat's frozen searxng and firecrawl contracts — and each is
+// compatible in a way a typed op structurally cannot be:
+//
+//   - /v1/websearch/search is registered with All (Mount, below), so it answers
+//     every method in the router's set — today delete, get, options, patch, post,
+//     put and trace. zip has no typed `All`, and declaring the five named verbs
+//     instead would DROP options and trace from the path: a routing change, not a
+//     description. The POST/PUT/PATCH arms also read their query string and IGNORE
+//     the body entirely, while a typed op 400s on any unparseable non-empty body
+//     (typed.go op.invoke) — so those arms cannot be typed even one at a time.
+//   - /v1/scrape deliberately answers 200 {"success":false,"error":"missing url"} to
+//     a malformed or oversized body (scrapeScoped, below): firecrawl clients read
+//     data.success, not the status line, and it caps the read at 1 MiB with an
+//     io.LimitReader rather than refusing. A typed op cannot express either — the
+//     400 is raised before the handler runs, and the cap is invisible to it.
+//
+// The route that unblocks the first is a typed `All` in zip; the second needs a
+// body-TOLERANT op. Until then this subsystem is honestly untyped: eight operations,
+// no prose, no MCP tool, no SDK method.
 package websearch
 
 import (

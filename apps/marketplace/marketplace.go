@@ -73,19 +73,78 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// reach per-call dispatch enforcement without tools importing marketplace.
 	tools.SetPricer(&pricer{store: store})
 
-	// Surface root stays flat: Group("/v1/marketplace").Get("") would register
-	// "/v1/marketplace/", not the bare surface path.
-	app.Get("/v1/marketplace", cloud.Handle(s, discover))
+	// cloud.Bridge FIRST, ahead of every leaf: a typed op receives a context.Context
+	// and its decoded In and nothing else, so the validated org — and the request the
+	// project scope and the audit actor are read off — cross on the context. Serve
+	// installs the same middleware binary-wide; nesting is harmless (the inner one is
+	// the one the handler sees) and declaring it here is what makes the subsystem
+	// self-sufficient when a test or a non-Serve composition root mounts it bare.
+	app.Use(cloud.Bridge())
 
-	g := app.Group("/v1/marketplace")
-	g.Get("/listings", cloud.Handle(s, listListings))
-	g.Post("/listings", cloud.Handle(s, publish))
-	g.Delete("/listings/:id", cloud.Handle(s, unpublish))
-	g.Post("/install", cloud.Handle(s, install))
-	g.Post("/uninstall", cloud.Handle(s, uninstall))
+	// Registered on the App with WHOLE paths, not on a group: the surface root IS
+	// /v1/marketplace, and Group("/v1/marketplace") composed with an empty leaf yields
+	// "/v1/marketplace/" — a different address. One registrar for all six keeps every
+	// op's published path exactly the path the router matches.
+	za := cloud.ZipApp(app)
+	if za == nil {
+		return fmt.Errorf("marketplace.Mount: router exposes no op registry")
+	}
+	o := marketOps{s: s}
+	zip.Get(za, "/v1/marketplace", o.discover)
+	zip.Get(za, "/v1/marketplace/listings", o.listListings)
+	zip.Post(za, "/v1/marketplace/listings", o.publish, zip.WithStatus(http.StatusCreated))
+	zip.Delete(za, "/v1/marketplace/listings/:id", o.unpublish)
+	zip.Post(za, "/v1/marketplace/install", o.install)
+	zip.Post(za, "/v1/marketplace/uninstall", o.uninstall)
 
 	s.Log.Info("marketplace mounted", "prefix", "/v1/marketplace", "brand", deps.Brand)
 	return nil
+}
+
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document,
+// the MCP tool list and the generated SDK — Go drops comments at compile time.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// marketOps binds the service to marketplace's typed ops. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value, which is also the only bound
+// form cmd/zipdoc can lift prose from.
+type marketOps struct{ s *cloud.Service[state] }
+
+// noInput is the In of an op addressed entirely by the caller's principal: it takes
+// nothing off the wire. ONE of these for the whole package.
+type noInput struct{}
+
+// noContent is the Out of an op that answers 204 with an empty body. It is an ALIAS
+// for the unnamed empty struct, not a definition: zip keys the response on 204 only
+// when the Out type has no name, so a defined type here would publish "200 with a
+// body" about a route that answers 204 with none.
+type noContent = struct{}
+
+// tenantOf is the validated org for a typed op — the one the gateway asserted and
+// cloud.Bridge parked on the context, never a field of In. An In field is
+// caller-supplied, so a tenant key read from one is a cross-tenant read the caller
+// asserted for itself. It IS the principal.Org gate, refusing with the same 403 and
+// the same message.
+func tenantOf(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("a validated principal is required")
+	}
+	return org, nil
+}
+
+// projectOf is the caller's project sub-scope. It lives in a header rather than in
+// the tenant key, so it needs the request; off the HTTP path there is none, and the
+// caller lands in the org's default project exactly as an absent header does.
+func projectOf(ctx context.Context) string {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return principal.DefaultProject
+	}
+	return principal.Project(c)
 }
 
 // Shutdown closes the store. Idempotent.
@@ -112,16 +171,26 @@ type marketItem struct {
 	Installed bool   `json:"installed"`
 }
 
-func discover(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	project := principal.Project(c)
-	catalog := tools.Default().List(c.Context(), tools.Scope{Org: org, Project: project})
-	byTool, err := s.State.store.PublicByTool(c.Context())
+// marketCatalog is one discovery read.
+type marketCatalog struct {
+	// Items is every capability the caller can see in their own (org, project),
+	// each carrying any public listing's shop metadata and whether it is installed.
+	Items []marketItem `json:"items"`
+}
+
+// Discover lists every tool and agent the caller can reach in their own org and
+// project, enriched with any public listing's title, category and price, and with
+// installed=true on the ones already activated for that scope. It is the shop
+// window: one read that answers what exists, what it costs and what is already on.
+func (o marketOps) discover(ctx context.Context, _ *noInput) (*marketCatalog, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "listings: %v", err)
+		return nil, err
+	}
+	catalog := tools.Default().List(ctx, tools.Scope{Org: org, Project: projectOf(ctx)})
+	byTool, err := o.s.State.store.PublicByTool(ctx)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "listings: %v", err)
 	}
 	out := make([]marketItem, 0, len(catalog))
 	for _, t := range catalog {
@@ -135,150 +204,200 @@ func discover(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		out = append(out, item)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"items": out})
+	return &marketCatalog{Items: out}, nil
 }
 
 // ── listings (publish / unpublish) ──────────────────────────────────────────────
 
-func listListings(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	rows, err := s.State.store.ListByOrg(c.Context(), org)
+// listingPage is the caller org's own published listings.
+type listingPage struct {
+	// Listings is every listing this org has published, private ones included
+	// (Public says which are discoverable by others).
+	Listings []Listing `json:"listings"`
+}
+
+// ListListings returns the listings the caller's own org has published — what this
+// org is offering, not what it can buy. A publisher only ever sees its own rows.
+func (o marketOps) listListings(ctx context.Context, _ *noInput) (*listingPage, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
+	}
+	rows, err := o.s.State.store.ListByOrg(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	if rows == nil {
 		rows = []Listing{}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"listings": rows})
+	return &listingPage{Listings: rows}, nil
 }
 
+// publishReq offers one tool on the marketplace.
 type publishReq struct {
-	Tool        string `json:"tool"`
-	Title       string `json:"title"`
+	// Tool is the registry name of the capability being offered. It must already
+	// resolve in the publisher's own scope — there are no phantom listings.
+	Tool string `json:"tool"`
+	// Title is the shop-window name, 1-200 characters. Required.
+	Title string `json:"title"`
+	// Description is the long copy, clipped at 4096 characters.
 	Description string `json:"description"`
-	Category    string `json:"category"`
-	PriceCents  int64  `json:"priceCents"`
-	Currency    string `json:"currency"`
-	Recipient   string `json:"recipient"`
-	Public      bool   `json:"public"`
+	// Category groups the listing in the shop window.
+	Category string `json:"category"`
+	// PriceCents is the per-call price. 0 (the default) publishes it free; any
+	// positive price makes the listing monetized and requires Recipient.
+	PriceCents int64 `json:"priceCents"`
+	// Currency denominates PriceCents.
+	Currency string `json:"currency"`
+	// Recipient is the seller's payout wallet — the x402 payee. Required for a
+	// monetized listing.
+	Recipient string `json:"recipient"`
+	// Public makes the listing discoverable by other orgs. Private otherwise.
+	Public bool `json:"public"`
 }
 
-// publish records a listing for a tool the publisher can actually offer (it must
-// resolve in the publisher's scope). A monetized listing (PriceCents>0) MUST name a
-// recipient wallet — the x402 payout target. Ownership policy (who may monetize a
-// platform-owned tool) is a follow-on; existence is enforced here.
-func publish(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// Publish offers one tool on the marketplace, optionally monetized. The tool must
+// already resolve in the publisher's own scope, so a listing can never advertise a
+// capability that does not exist; a listing with a price must name the payout wallet
+// the x402 seam settles to, so a monetized offer is never unpayable. The listing is
+// owned by the publishing org and answers 201 with the created row.
+//
+// Example: {"tool": "summarize", "title": "Summarize", "priceCents": 25, "recipient": "0xabc", "public": true}
+func (o marketOps) publish(ctx context.Context, in *publishReq) (*Listing, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body publishReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
 	body.Tool = strings.TrimSpace(body.Tool)
 	body.Title = strings.TrimSpace(body.Title)
 	if body.Tool == "" || len(body.Tool) > maxName {
-		return zip.ErrBadRequest("tool is required")
+		return nil, zip.ErrBadRequest("tool is required")
 	}
 	if body.Title == "" || len(body.Title) > maxTitle {
-		return zip.ErrBadRequest("title is required (<=200 chars)")
+		return nil, zip.ErrBadRequest("title is required (<=200 chars)")
 	}
 	if len(body.Description) > maxText {
-		return zip.ErrBadRequest("description too long")
+		return nil, zip.ErrBadRequest("description too long")
 	}
 	if body.PriceCents < 0 {
-		return zip.ErrBadRequest("priceCents must be >= 0")
+		return nil, zip.ErrBadRequest("priceCents must be >= 0")
 	}
 	if body.PriceCents > 0 && strings.TrimSpace(body.Recipient) == "" {
-		return zip.ErrBadRequest("a monetized listing requires a recipient wallet")
+		return nil, zip.ErrBadRequest("a monetized listing requires a recipient wallet")
 	}
 	// The tool must exist in the publisher's scope — no phantom listings.
-	if !tools.Default().Exists(c.Context(), tools.Scope{Org: org, Project: principal.Project(c)}, body.Tool) {
-		return zip.Errorf(http.StatusUnprocessableEntity, "unknown tool: %s", body.Tool)
+	if !tools.Default().Exists(ctx, tools.Scope{Org: org, Project: projectOf(ctx)}, body.Tool) {
+		return nil, zip.Errorf(http.StatusUnprocessableEntity, "unknown tool: %s", body.Tool)
 	}
-	created, err := s.State.store.Create(c.Context(), Listing{
+	created, err := o.s.State.store.Create(ctx, Listing{
 		PublisherOrg: org, Tool: body.Tool, Title: body.Title, Description: clip(body.Description),
 		Category: clip(body.Category), PriceCents: body.PriceCents, Currency: strings.TrimSpace(body.Currency),
 		Recipient: strings.TrimSpace(body.Recipient), Public: body.Public,
 	})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "publish: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "publish: %v", err)
 	}
-	record(s, c, org, "listing:"+created.ID, "published", http.StatusCreated)
-	return c.JSON(http.StatusCreated, created)
+	record(ctx, o.s, org, "listing:"+created.ID, "published", http.StatusCreated)
+	return &created, nil
 }
 
-func unpublish(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	id := strings.TrimSpace(c.Param("id"))
-	removed, err := s.State.store.Delete(c.Context(), org, id)
+// listingRef addresses one listing. The id is the path segment: the URL is the
+// addressing authority, so it binds from there whatever else arrives.
+type listingRef struct {
+	// ID is the listing to unpublish, from the path.
+	ID string `json:"id"`
+}
+
+// Unpublish withdraws one of the caller org's listings from the marketplace and
+// answers 204. Only the publishing org can remove its own listing; an id that is
+// unknown, or belongs to another org, is the same 404, so a probe learns nothing
+// about what exists. Removing a listing removes its price from per-call enforcement;
+// it does not uninstall the tool for anyone who already installed it.
+//
+// Example: {"id": "lst_1"}
+func (o marketOps) unpublish(ctx context.Context, in *listingRef) (*noContent, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "unpublish: %v", err)
+		return nil, err
+	}
+	id := strings.TrimSpace(in.ID)
+	removed, err := o.s.State.store.Delete(ctx, org, id)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "unpublish: %v", err)
 	}
 	if !removed {
-		return zip.ErrNotFound("listing not found")
+		return nil, zip.ErrNotFound("listing not found")
 	}
-	record(s, c, org, "listing:"+id, "unpublished", http.StatusOK)
-	return c.NoContent(http.StatusNoContent)
+	record(ctx, o.s, org, "listing:"+id, "unpublished", http.StatusOK)
+	return nil, nil
 }
 
 // ── install / uninstall (== tool activation) ────────────────────────────────────
 
+// installReq names the tool to install or uninstall.
 type installReq struct {
+	// Tool is the registry name of the capability to activate (or deactivate) for
+	// the caller's own org and project. Required.
 	Tool string `json:"tool"`
 }
 
-// install activates a tool for the caller's (org, project) — the marketplace
-// "install" IS the tool-plane activation write, so the two never drift.
-func install(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	var body installReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	body.Tool = strings.TrimSpace(body.Tool)
-	if body.Tool == "" || len(body.Tool) > maxName {
-		return zip.ErrBadRequest("tool is required")
-	}
-	project := principal.Project(c)
-	if !tools.Default().Exists(c.Context(), tools.Scope{Org: org, Project: project}, body.Tool) {
-		return zip.Errorf(http.StatusUnprocessableEntity, "unknown tool: %s", body.Tool)
-	}
-	if err := tools.Default().Activate(c.Context(), org, project, body.Tool, c.User()); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "install: %v", err)
-	}
-	record(s, c, org, "install:"+body.Tool, "installed", http.StatusOK)
-	return c.JSON(http.StatusOK, map[string]any{"tool": body.Tool, "installed": true})
+// installState reports a tool's activation for the caller's (org, project).
+type installState struct {
+	// Tool is the capability the write applied to.
+	Tool string `json:"tool"`
+	// Installed is its activation after the write.
+	Installed bool `json:"installed"`
 }
 
-func uninstall(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// Install activates one tool for the caller's own org and project. A marketplace
+// install IS the tool plane's activation write — one store, one truth — so an
+// installed capability is immediately dispatchable and a monetized one is priced
+// from its listing at every call. The tool must resolve in the caller's scope, so
+// installing something that does not exist is refused rather than recorded.
+//
+// Example: {"tool": "summarize"}
+func (o marketOps) install(ctx context.Context, in *installReq) (*installState, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body installReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	tool := strings.TrimSpace(in.Tool)
+	if tool == "" || len(tool) > maxName {
+		return nil, zip.ErrBadRequest("tool is required")
 	}
-	body.Tool = strings.TrimSpace(body.Tool)
-	if body.Tool == "" {
-		return zip.ErrBadRequest("tool is required")
+	project := projectOf(ctx)
+	if !tools.Default().Exists(ctx, tools.Scope{Org: org, Project: project}, tool) {
+		return nil, zip.Errorf(http.StatusUnprocessableEntity, "unknown tool: %s", tool)
 	}
-	if err := tools.Default().Deactivate(c.Context(), org, principal.Project(c), body.Tool); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "uninstall: %v", err)
+	if err := tools.Default().Activate(ctx, org, project, tool, callerOf(ctx)); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "install: %v", err)
 	}
-	record(s, c, org, "install:"+body.Tool, "uninstalled", http.StatusOK)
-	return c.JSON(http.StatusOK, map[string]any{"tool": body.Tool, "installed": false})
+	record(ctx, o.s, org, "install:"+tool, "installed", http.StatusOK)
+	return &installState{Tool: tool, Installed: true}, nil
+}
+
+// Uninstall deactivates one tool for the caller's own org and project, so it stops
+// being dispatchable there. It is the exact inverse of install and touches the same
+// activation record; deactivating something that was never active is not an error.
+// The listing itself is untouched — this withdraws the caller's use of a capability,
+// not anyone's offer of it.
+//
+// Example: {"tool": "summarize"}
+func (o marketOps) uninstall(ctx context.Context, in *installReq) (*installState, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tool := strings.TrimSpace(in.Tool)
+	if tool == "" {
+		return nil, zip.ErrBadRequest("tool is required")
+	}
+	if err := tools.Default().Deactivate(ctx, org, projectOf(ctx), tool); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "uninstall: %v", err)
+	}
+	record(ctx, o.s, org, "install:"+tool, "uninstalled", http.StatusOK)
+	return &installState{Tool: tool, Installed: false}, nil
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────────
@@ -290,8 +409,25 @@ func clip(s string) string {
 	return strings.TrimSpace(s)
 }
 
-func record(s *cloud.Service[state], c *zip.Ctx, org, resourceID, result string, status int) {
+// callerOf is the validated principal behind the request — the actor an activation
+// is recorded under. Empty off the HTTP path, where there is no caller to name.
+func callerOf(ctx context.Context) string {
+	if c, ok := cloud.Request(ctx); ok {
+		return c.User()
+	}
+	return ""
+}
+
+// record appends one audit row. It takes the CONTEXT rather than the request because
+// its callers are typed ops, and it reaches the request through the same seam they
+// do; off the HTTP path there is no actor and no path to attribute, so it records
+// nothing rather than an anonymous half-row.
+func record(ctx context.Context, s *cloud.Service[state], org, resourceID, result string, status int) {
 	if s.State.audit == nil {
+		return
+	}
+	c, ok := cloud.Request(ctx)
+	if !ok {
 		return
 	}
 	rec := audit.Record{
@@ -305,7 +441,7 @@ func record(s *cloud.Service[state], c *zip.Ctx, org, resourceID, result string,
 		SourceIP:  cloud.ClientIP(c),
 		RequestID: c.RequestID(),
 	}
-	if _, err := s.State.audit.Append(c.Context(), rec); err != nil {
+	if _, err := s.State.audit.Append(ctx, rec); err != nil {
 		s.Log.Warn("audit append failed", "err", err)
 	}
 }

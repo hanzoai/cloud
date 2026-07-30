@@ -19,20 +19,67 @@
     "/v1/sync": {
       "get": {
         "operationId": "get_v1_sync",
+        "summary": "List returns every sync link the caller's org has, each with its two endpoints, its direction and trigger policy, and the time it last reconciled.",
+        "description": "List returns every sync link the caller's org has, each with its two endpoints, its\ndirection and trigger policy, and the time it last reconciled. Scoped to the\ncaller's own org — another tenant's links are structurally unreachable.",
         "tags": [
           "sync"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/syncList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_sync",
+        "summary": "Create declares a sync between two endpoints and returns it.",
+        "description": "Create declares a sync between two endpoints and returns it. It is an UPSERT:\nre-declaring the same source and target updates that link rather than piling up\nduplicates, so a console that re-submits is safe. The org comes from the validated\nprincipal, never from the request, so a sync can only ever bind endpoints inside\nthe caller's own org. A git source must be an https clone URL on the provider's own\nhost with no embedded credentials; a target left empty is derived as a native\nrepository named after the source. With run=true the first reconcile is queued in\nthe background, so a large initial import never blocks this response.",
         "tags": [
           "sync"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "run": true,
+                "source": {
+                  "locator": "https://github.com/acme/site",
+                  "provider": "github"
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/syncReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/syncView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/sync/{id}": {
       "delete": {
-        "operationId": "delete_v1_sync_by_id",
+        "operationId": "delete_v1_sync_id",
+        "summary": "Delete removes one sync and tears down the outbound mirror it derived, answering 204.",
+        "description": "Delete removes one sync and tears down the outbound mirror it derived, answering\n204. The teardown is the point: without it an unsynced repository would keep\nforce-pushing to the upstream it is no longer linked to. Org-scoped, so another\ntenant's id is the same 404 an unknown id gives.",
         "tags": [
           "sync"
         ],
@@ -41,14 +88,23 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the sync to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sync_1"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_sync_by_id",
+        "operationId": "get_v1_sync_id",
+        "summary": "Get returns one sync by id.",
+        "description": "Get returns one sync by id. It is org-scoped: an id belonging to another tenant is\nthe same 404 an unknown id gives, so a probe learns nothing about what exists.",
         "tags": [
           "sync"
         ],
@@ -57,14 +113,30 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the sync to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sync_1"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/syncView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "patch": {
-        "operationId": "patch_v1_sync_by_id",
+        "operationId": "patch_v1_sync_id",
+        "summary": "Patch updates one sync's mutable policy — direction, trigger and actor — in place.",
+        "description": "Patch updates one sync's mutable policy — direction, trigger and actor — in place.\nThe endpoints and the kind are immutable: re-pointing a sync is a delete and a\ncreate, so a link can never silently start syncing somewhere else. A field the\nrequest omits is left as it was. Changing the direction immediately reconciles the\nderived outbound mirror, so turning push off stops the upstream being written to\nrather than merely recording the intent.",
         "tags": [
           "sync"
         ],
@@ -73,16 +145,46 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the sync to update, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sync_1"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "direction": "pull",
+                "id": "sync_1"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/patchSyncIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/syncView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/sync/{id}/run": {
       "post": {
-        "operationId": "post_v1_sync_by_id_run",
+        "operationId": "post_v1_sync_id_run",
+        "summary": "Run reconciles one sync now — the manual re-sync, and the initial import for a link created without run=true.",
+        "description": "Run reconciles one sync now — the manual re-sync, and the initial import for a link\ncreated without run=true. The work is handed to a bounded background worker and the\ncall answers 202 immediately, so a large mirror-in never holds the request open;\nqueued=true means accepted, not finished.",
         "tags": [
           "sync"
         ],
@@ -91,11 +193,172 @@
             "name": "id",
             "in": "path",
             "required": true,
+            "description": "ID is the sync to act on, from the path.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sync_1"
           }
-        ]
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/syncQueued"
+                }
+              }
+            },
+            "description": "accepted"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "endpointReq": {
+        "properties": {
+          "connector": {
+            "description": "Connector names the stored credential to reach this endpoint with.",
+            "type": "string"
+          },
+          "locator": {
+            "description": "Locator addresses the resource. For a git source it is the https clone URL on\nthe provider's own host, with no embedded credentials; for a native target it\nis the repository name.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Provider is the platform: github or gitlab for a source; a target defaults to\nthe native Hanzo Git plane.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "endpointView": {
+        "properties": {
+          "connector": {
+            "type": "string"
+          },
+          "locator": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "patchSyncIn": {
+        "properties": {
+          "actor": {
+            "description": "Actor is the loop-guard identity the sync writes as. Omitted, the stored actor\nstands.",
+            "type": "string"
+          },
+          "direction": {
+            "description": "Direction is both, pull, push or off. Omitted, the stored direction stands.",
+            "type": "string"
+          },
+          "id": {
+            "description": "ID is the sync to update, from the path.",
+            "type": "string"
+          },
+          "trigger": {
+            "description": "Trigger is webhook, poll or manual. Omitted, the stored trigger stands.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "syncList": {
+        "properties": {
+          "data": {
+            "description": "Data is the org's syncs, each with its endpoints, policy and last-synced time.",
+            "items": {
+              "$ref": "#/components/schemas/syncView"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "syncQueued": {
+        "properties": {
+          "id": {
+            "description": "ID is the sync the reconcile was queued for.",
+            "type": "string"
+          },
+          "queued": {
+            "description": "Queued is true when the reconcile was accepted; it has not run yet.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "syncReq": {
+        "properties": {
+          "actor": {
+            "description": "Actor is the identity the sync writes as, used as the loop guard so its own\nwrites do not re-trigger it. Defaults to the deployment's GIT_SYNC_ACTOR.",
+            "type": "string"
+          },
+          "direction": {
+            "description": "Direction is both (the default), pull, push or off.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Kind is what is being synced. Only \"git\" today, which is also the default.",
+            "type": "string"
+          },
+          "run": {
+            "description": "Run reconciles once immediately after the upsert, in the background.",
+            "type": "boolean"
+          },
+          "source": {
+            "$ref": "#/components/schemas/endpointReq",
+            "description": "Source is the upstream end. Required."
+          },
+          "target": {
+            "$ref": "#/components/schemas/endpointReq",
+            "description": "Target is the downstream end. Optional for git: a native repository named\nafter the source is derived when it is omitted."
+          },
+          "trigger": {
+            "description": "Trigger is what starts a reconcile: webhook (the default), poll or manual.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "syncView": {
+        "properties": {
+          "actor": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/endpointView"
+          },
+          "target": {
+            "$ref": "#/components/schemas/endpointView"
+          },
+          "trigger": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "bumped on every reconcile — the last-synced time",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }
