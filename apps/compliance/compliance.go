@@ -13,14 +13,20 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/apps/idv"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
 
 // maxBody bounds a compliance request body — records are small structured values.
 const maxBody = 1 << 20 // 1 MiB
+
+// routePrefix is the ONE address this app answers on. The group composes every
+// op's path from it, and bodyCap matches the full paths it produces, so the
+// prefix is written once and the two can never disagree about where a route
+// lives.
+const routePrefix = "/v1/compliance"
 
 // auditActionPrefix scopes the compliance-relevant slice of the shared audit plane.
 const auditActionPrefix = "compliance."
@@ -112,7 +118,7 @@ func kmsGetter(deps cloud.Deps) idv.SecretFn {
 // parse — a typed op decodes its In first, which would both reorder that check and
 // split its two 200 shapes (reconciled check vs benign unknown-reference no-op).
 func routes(app cloud.Router, s *cloud.Service[state]) {
-	g := app.Group("/v1/compliance")
+	g := app.Group(routePrefix)
 	// Bridge FIRST: a typed op receives only a context, so the validated org
 	// reaches it by being parked there — never as an In field, which is
 	// caller-supplied and would be a cross-tenant read the caller asserted for
@@ -137,6 +143,19 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// client assertion: a SIGNATURE-authenticated provider webhook (push), an internal
 	// provider RECONCILE (pull), or a role-gated, attributed reviewer DECISION. The
 	// webhook route is static, registered before :id (Fiber first-match).
+	//
+	// This is the ONE untyped route on this surface, and it stays untyped on two
+	// wire facts, each verified against the dependency's own source rather than
+	// taken from prose (zip v1.18.6): the HMAC is computed over the EXACT received
+	// bytes (apps/idv/webhook.go Verify: mac.Write(body)) while zip's invoke
+	// json.Unmarshals the body into In BEFORE the handler runs (typed.go:234), so a
+	// re-encoded In is not the signed value and the signature would never match;
+	// and the route answers TWO 200 shapes — the reconciled check, or
+	// {"ignored": …} for an unknown reference — where an op declares exactly one
+	// Out, so unioning them would add zero-valued fields to the no-op body. It is
+	// NAMED in untypedByDesign (typed_wire_test.go), which is a GATE:
+	// TestEveryRouteIsTypedOrNamed fails on any compliance route that is neither
+	// typed nor named there, so the next route added here is typed by default.
 	g.Post("/verifications/webhook", cloud.Handle(s, verificationWebhook))
 	zip.Get(g, "/verifications/:id", o.getVerification)
 	zip.Post(g, "/verifications/:id/refresh", o.refreshVerification)
@@ -198,9 +217,9 @@ func bodyCap() zip.Handler {
 	return func(c *zip.Ctx) error {
 		if c.Method() == http.MethodPost && len(c.Fiber().Body()) > maxBody {
 			switch p := strings.TrimSuffix(c.Path(), "/"); {
-			case p == "/v1/compliance/subjects",
-				p == "/v1/compliance/verifications",
-				p == "/v1/compliance/accreditation",
+			case p == routePrefix+"/subjects",
+				p == routePrefix+"/verifications",
+				p == routePrefix+"/accreditation",
 				strings.HasSuffix(p, "/decision"):
 				return zip.Errorf(http.StatusRequestEntityTooLarge, "request body too large")
 			}
