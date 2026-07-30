@@ -78,3 +78,24 @@ func TestObsPlaneGetsFirstRefusalOnTheCanonicalDoor(t *testing.T) {
 		t.Fatalf("anonymous lane consulted the claim %d times, want 0", len(calls))
 	}
 }
+
+// TestTeamWireRidesTheCanonicalDoor pins the fold of /v1/event/collect: the
+// team SPA's bare snake_case array, POSTed to the CANONICAL door, decodes via
+// the team mapping (kind named, events survive admission) — and the canonical
+// array wire still decodes as itself (positive-signal dispatch only).
+func TestTeamWireRidesTheCanonicalDoor(t *testing.T) {
+	team := `[{"event":"navigation","properties":{"path":"/x"},"timestamp":1753900000000,"distinct_id":"acct-1"}]`
+	evs, err := decodeIngest([]byte(team))
+	if err != nil || len(evs) != 1 {
+		t.Fatalf("decodeIngest(team array) = %d events, %v; want 1, nil", len(evs), err)
+	}
+	if evs[0].Type != "pageview" || evs[0].DistinctID != "acct-1" || evs[0].Timestamp == "" {
+		t.Fatalf("team element decoded as %+v — the team mapping (kind, snake id, ms time) must apply", evs[0])
+	}
+
+	canonical := `[{"event":"$pageview","distinctId":"d","time":"2026-01-01T00:00:00Z"}]`
+	evs, err = decodeIngest([]byte(canonical))
+	if err != nil || len(evs) != 1 || evs[0].DistinctID != "d" {
+		t.Fatalf("canonical array must still decode canonically, got %+v (%v)", evs, err)
+	}
+}

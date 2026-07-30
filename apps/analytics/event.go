@@ -252,6 +252,9 @@ func decodeIngest(body []byte) ([]CaptureEvent, error) {
 			return batch.events(), nil
 		}
 	}
+	if isTeamArray(body, i) {
+		return decodeTeam(body)
+	}
 	evs, err := decodeEvents(body)
 	if err != nil {
 		return nil, err
@@ -261,6 +264,28 @@ func decodeIngest(body []byte) ([]CaptureEvent, error) {
 		caps[j] = e.toCapture()
 	}
 	return caps, nil
+}
+
+// isTeamArray reports whether a bare-array body speaks the team SPA's wire, so
+// the ONE canonical decode can carry it: its elements spell snake_case
+// `distinct_id` and a NUMERIC epoch-millis `timestamp`, keys the canonical
+// Event wire (`distinctId`, `time`) never uses. Probing only element 0's
+// top-level keys keeps the dispatch positive-signal-only: a canonical array can
+// never be mis-read as team, and a probe miss just falls through to the
+// canonical decode exactly as before.
+func isTeamArray(body []byte, i int) bool {
+	if i >= len(body) || body[i] != '[' {
+		return false
+	}
+	var probe []map[string]json.RawMessage
+	if err := json.Unmarshal(body, &probe); err != nil || len(probe) == 0 {
+		return false
+	}
+	if _, ok := probe[0]["distinct_id"]; ok {
+		return true
+	}
+	ts, ok := probe[0]["timestamp"]
+	return ok && len(ts) > 0 && ts[0] >= '0' && ts[0] <= '9'
 }
 
 // decode is a WIRE's decoder: raw request bytes → the canonical []CaptureEvent the ONE
@@ -407,11 +432,12 @@ type door struct {
 // TWO WIRES, and no more — the canonical one and PostHog's:
 //
 //   - /v1/event — the canonical door and the canonical wire (Event | [Event] |
-//     {batch:[…]}), which every current Hanzo client emits. The SAME door also
+//     {batch:[…]} | the team SPA's bare snake_case array, dispatched by shape —
+//     isTeamArray), which every current Hanzo client emits. The SAME door also
 //     carries LLM-observability ingestion batches: handle offers each
 //     authenticated body to the o11y plane's claim first (cloud.ObsEventIngest),
-//     which takes only {"batch":[{"type":"trace-create"|…}]} shapes — not a
-//     third wire here, a second CONSUMER behind the one door.
+//     which takes only {"batch":[{"type":"trace-create"|…}]} shapes — consumers
+//     and shapes behind ONE door, not more doors.
 //
 //   - /v1/insights/e — the PostHog wire. A second WIRE, not a second name for the
 //     first: PostHog SDKs emit this shape and no canonical-wire door can serve them.
@@ -455,13 +481,13 @@ var doors = []door{
 	{path: "/v1/analytics", decode: decodeIngest, source: sourceCapture},
 	{path: "/v1/analytics/batch", decode: decodeIngest, source: sourceCapture},
 	{path: "/v1/tracker", decode: decodeIngest, source: sourceCapture},
-	// The Hanzo Team SPA's wire. A THIRD wire, in the same sense /v1/insights/e is a
-	// second one: the SPA is a published bundle that POSTs a bare array of
-	// {event, properties, timestamp(ms), distinct_id}, which decodeIngest ACCEPTS and
-	// then drops whole (canonicalType("") is "event", not in publicKinds). The
-	// /collect suffix is the caller's — it appends it to ANALYTICS_COLLECTOR_URL.
-	// This retired the standalone team-analytics pod.
-	{path: "/v1/event/collect", decode: decodeTeam, source: sourceTeam},
+	// SUNSETTING like the three above: the Team SPA is a published bundle that
+	// appends /collect to its collector URL, so the PATH is the caller's — but
+	// the WIRE is no longer door-distinct: decodeIngest dispatches the team
+	// array by shape (isTeamArray), so a rebuilt SPA pointed at /v1/event needs
+	// nothing else and this row is deleted when properties.$source='team'
+	// arriving via THIS path reads zero.
+	{path: "/v1/event/collect", decode: decodeIngest, source: sourceTeam},
 }
 
 // ingest is the door's API-host handler: admission (handle) over the door's wire.
