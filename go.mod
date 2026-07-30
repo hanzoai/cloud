@@ -78,7 +78,6 @@ require (
 	github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 // indirect
 	github.com/docker/cli v29.5.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.5 // indirect
-	github.com/evanphx/json-patch v5.9.11+incompatible // indirect
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fatih/camelcase v1.0.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
@@ -757,8 +756,18 @@ require (
 // Pin EVERY staging module to cloud's k8s line (0.35.3) so embedding the engine
 // does NOT move the money binary's k8s stack. Proven to build at 0.35.3.
 replace (
+	k8s.io/api => k8s.io/api v0.35.3
+	// api/apimachinery/client-go join the same v0.35.3 set as every pin
+	// above. Without them, helm v3.21 floated k8s.io/api to v0.36 — where
+	// the alpha scheduling/autoscaling groups no longer exist — while the
+	// gitops-engine's kubectl v0.35.3 scheme still imports them, and the
+	// module graph fails before a single test can run. One k8s version,
+	// stated once, for the whole staging tree.
+	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.35.3
+	k8s.io/apimachinery => k8s.io/apimachinery v0.35.3
 	k8s.io/apiserver => k8s.io/apiserver v0.35.3
 	k8s.io/cli-runtime => k8s.io/cli-runtime v0.35.3
+	k8s.io/client-go => k8s.io/client-go v0.35.3
 	k8s.io/cloud-provider => k8s.io/cloud-provider v0.35.3
 	k8s.io/cluster-bootstrap => k8s.io/cluster-bootstrap v0.35.3
 	k8s.io/code-generator => k8s.io/code-generator v0.35.3
@@ -786,4 +795,5 @@ replace (
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.35.3
 	k8s.io/sample-cli-plugin => k8s.io/sample-cli-plugin v0.35.3
 	k8s.io/sample-controller => k8s.io/sample-controller v0.35.3
+	k8s.io/streaming => k8s.io/streaming v0.35.3
 )
