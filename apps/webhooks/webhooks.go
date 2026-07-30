@@ -28,10 +28,12 @@ package webhooks
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/hanzoai/cloud/apps/analytics"
 
 	"github.com/hanzoai/cloud"
+	"github.com/zap-proto/zip"
 )
 
 // state is the subsystem's own data: the per-org registry stores (shared by the CRUD
@@ -71,7 +73,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	mounted = st
 
 	svc := &cloud.Service[*state]{Base: b, State: st}
-	routes(app, svc)
+	if err := routes(app, svc); err != nil {
+		return err
+	}
 
 	// Dispatcher last: registry is already wired, so a bus that is down (or absent)
 	// leaves /v1/webhooks fully serving while the consumer retries in the background.
@@ -104,15 +108,57 @@ func Shutdown(_ context.Context) error {
 	return nil
 }
 
-// routes registers the /v1/webhooks CRUD surface via the express-style group.
-func routes(app cloud.Router, s *cloud.Service[*state]) {
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by
+// `make -C apps/webhooks openapi`.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// routes registers the /v1/webhooks CRUD surface as TYPED ops: one registry
+// entry each, which is what the OpenAPI operation, the MCP tool, the CLI command
+// and every generated SDK method are all projected from. All eight are typed.
+//
+// The COLLECTION ROOT is declared on the app with its absolute path, not as the
+// group's empty leaf: joinPath normalises an empty leaf to "/", so `zip.Get(g,
+// "", …)` names /v1/webhooks/ — with a trailing slash — and op.Path is the
+// identity every projection keys on. That is what the untyped registration did,
+// and the published subset carried /v1/webhooks/ for a collection every caller
+// addresses without the slash. The router is non-strict either way, so this
+// moves the artifact and not the wire.
+func routes(app cloud.Router, s *cloud.Service[*state]) error {
+	// The typed registrars take the App behind the Router: a typed op is a route
+	// PLUS a registry entry, and the registry lives on the App. A subsystem that
+	// cannot reach it must fail its mount rather than serve routes no projection
+	// knows about.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("webhooks.Mount: router exposes no zip.App, so no typed op could be registered")
+	}
 	g := app.Group("/v1/webhooks")
-	g.Get("", cloud.Handle(s, listEndpoints))
-	g.Post("", cloud.Handle(s, createEndpoint))
-	g.Get("/:id", cloud.Handle(s, getEndpoint))
-	g.Put("/:id", cloud.Handle(s, updateEndpoint))
-	g.Delete("/:id", cloud.Handle(s, deleteEndpoint))
-	g.Get("/:id/deliveries", cloud.Handle(s, listDeliveries))
-	g.Post("/:id/test", cloud.Handle(s, testEndpoint))
-	g.Post("/:id/rotate-secret", cloud.Handle(s, rotateSecret))
+	// The Bridge FIRST, bounded to the subtree webhooks owns: a typed op receives
+	// only a context, so the validated org has to be parked there, and fiber runs
+	// middleware in registration order — one installed after these leaves would
+	// never run. cloud.Serve installs one app-wide too; nesting is harmless (the
+	// inner one is what the handler sees), and having it here is what makes this
+	// package's own tests — which mount on a bare app — exercise the same tenancy
+	// the binary does.
+	g.Use(cloud.Bridge())
+
+	o := ops{s: s}
+	zip.Get(zapp, "/v1/webhooks", o.listEndpoints)
+	zip.Post(zapp, "/v1/webhooks", o.createEndpoint, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/:id", o.getEndpoint)
+	zip.Put(g, "/:id", o.updateEndpoint)
+	zip.Delete(g, "/:id", o.deleteEndpoint)
+	zip.Get(g, "/:id/deliveries", o.listDeliveries)
+	zip.Post(g, "/:id/test", o.testEndpoint)
+	zip.Post(g, "/:id/rotate-secret", o.rotateSecret)
+	return nil
 }
+
+// ops binds the per-org stores and the dispatcher to the typed webhook ops. A
+// TypedHandler is func(context.Context, *In) (*Out, error) — no parameter for the
+// service — so it arrives as a RECEIVER and every op is a method value, which is
+// also the only bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[*state] }

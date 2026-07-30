@@ -51,7 +51,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// Publish state BEFORE registering the ingress consumer so the first
 	// emitted event finds a mounted service.
 	mounted.Store(s)
-	routes(app, s)
+	if err := routes(app, s); err != nil {
+		return err
+	}
 	integrations.RegisterIngress(ingest)
 	b.Log.Info("channels mounted", "transports", len(transports))
 	return nil

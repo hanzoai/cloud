@@ -5,7 +5,7 @@
 // the twins), NOT a proxy to a standalone ads pod (there is none — ads.hanzo.ai is
 // net-new).
 //
-// The Campaign entity is the root of the ad hierarchy (campaign → ad sets → ads):
+// The AdCampaign entity is the root of the ad hierarchy (campaign → ad sets → ads):
 // a named campaign on an ad Platform (meta/google/tiktok/x), a lifecycle Status
 // (draft/active/paused/completed), an Objective, and Budget/Spend in minor units
 // (cents). The ad-set and ad legs of the hierarchy are follow-ups that hang off
@@ -20,9 +20,9 @@
 //
 //	GET    /v1/ads/summary            per-org roll-up (total/active/budget/spend)
 //	GET    /v1/ads/campaigns          list campaigns (?status=)      -> {data:[…]}
-//	POST   /v1/ads/campaigns          create a campaign              -> Campaign (201)
-//	GET    /v1/ads/campaigns/:id      campaign detail                -> Campaign
-//	PUT    /v1/ads/campaigns/:id      update a campaign              -> Campaign
+//	POST   /v1/ads/campaigns          create a campaign              -> AdCampaign (201)
+//	GET    /v1/ads/campaigns/:id      campaign detail                -> AdCampaign
+//	PUT    /v1/ads/campaigns/:id      update a campaign              -> AdCampaign
 //	DELETE /v1/ads/campaigns/:id      delete a campaign
 //
 // serve.go auto-registers GET /v1/ads/health (this subsystem does not set
@@ -30,6 +30,7 @@
 package ads
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -37,7 +38,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -48,7 +48,7 @@ import (
 
 const (
 	// maxField caps a single text field so an unbounded body can't amplify the
-	// shared DB or a list response. Campaign fields are short labels.
+	// shared DB or a list response. AdCampaign fields are short labels.
 	maxField = 1024
 	// defaultLimit / maxLimit bound list responses.
 	defaultLimit = 200
@@ -105,18 +105,64 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by
+// `make -C apps/ads openapi`.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // routes registers the ads surface: the campaign CRUD + the summary roll-up.
+//
+// Every route but one is a TYPED op — one registry entry, which is what the
+// OpenAPI operation, the MCP tool, the CLI command and every generated SDK
+// method are projected from. The exception is named at its registration below.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/ads")
-	g.Get("/summary", cloud.Handle(s, summary))
+	// The Bridge FIRST, on the subtree ads owns: a typed op receives only a
+	// context, so the validated org has to be parked there, and fiber runs
+	// middleware in registration order — one installed after these leaves would
+	// never run. cloud.Serve installs one app-wide too; nesting is harmless (the
+	// inner one is what the handler sees), and having it here is what makes this
+	// package's own tests — which mount on a bare app — exercise the same
+	// tenancy the binary does.
+	g.Use(cloud.Bridge())
 
-	g.Get("/campaigns", cloud.Handle(s, listCampaigns))
-	g.Post("/campaigns", cloud.Handle(s, createCampaign))
-	g.Get("/campaigns/:id", cloud.Handle(s, getCampaign))
-	g.Put("/campaigns/:id", cloud.Handle(s, updateCampaign))
-	g.Delete("/campaigns/:id", cloud.Handle(s, deleteCampaign))
-	g.Post("/campaigns/:id/launch", cloud.Handle(s, launchCampaignHandler))
+	// Ops are declared ON THE GROUP: every zip.Router is an OpTarget, and the op's
+	// path is the group's prefix composed with the leaf — the identity every
+	// projection keys on, resolved the same way by zipdoc.
+	o := ops{s: s}
+
+	zip.Get(g, "/summary", o.summary)
+
+	zip.Get(g, "/campaigns", o.listCampaigns)
+	zip.Post(g, "/campaigns", o.createCampaign, zip.WithStatus(http.StatusCreated))
+	zip.Get(g, "/campaigns/:id", o.getCampaign)
+	zip.Put(g, "/campaigns/:id", o.updateCampaign)
+	zip.Delete(g, "/campaigns/:id", o.deleteCampaign)
+
+	// UNTYPED BY DESIGN — launch is deliberately BODY-TOLERANT. Its optional
+	// {account} body is read with the Bind error DISCARDED
+	// (`_ = c.Bind(&body)`, launchCampaign below), so a malformed or non-JSON
+	// body launches the campaign on the stored account and answers 200 today. A
+	// typed op cannot express that: zip v1.18.11's op.invoke unconditionally
+	// jsonenc.Unmarshals any non-empty body and returns ErrBadRequest on failure
+	// (zip/typed.go:239-243), turning that 200 into a 400. It converts when zip
+	// can declare a body-tolerant op; until then this route publishes its address
+	// and nothing else. apps/ads/typed_wire_test.go holds it as a CLOSED list.
+	g.Post("/campaigns/:id/launch", cloud.Handle(s, launchCampaign))
 }
+
+// ops binds the store to the typed ads ops. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value, which is also the only
+// bound form cmd/zipdoc can lift prose from.
+type ops struct{ s *cloud.Service[state] }
+
+// noContent is the Out of an op that answers 204 with an empty body. It is an
+// ALIAS for the unnamed empty struct, not a definition: zip keys the response on
+// 204 only when the Out type has no name.
+type noContent = struct{}
 
 // ---- shared helpers (mirror clients/crm) ----
 
@@ -124,6 +170,18 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // principal.Org EXACTLY as SanitizeIdentity minted it from the validated IAM
 // owner claim (HIP-0026): never lowercased, stripped, or truncated.
 func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
+
+// tenantOf is tenant for a TYPED op — the same validated org, read from the
+// context cloud.Bridge parked it on. It is never an In field: an In field is
+// caller-supplied, so a tenant key read from one is a cross-tenant read the
+// caller asserted for itself. Fails closed off the HTTP path.
+func tenantOf(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("X-Org-Id required")
+	}
+	return org, nil
+}
 
 func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
 
@@ -145,9 +203,12 @@ func clip(s string) string {
 	return s
 }
 
-func limitOf(c *zip.Ctx) int {
-	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if err != nil || n <= 0 {
+// clampLimit bounds a requested page size to (0, maxLimit], defaulting anything
+// that is not a positive integer. A query value zip could not parse as an int
+// arrives here as 0, which is exactly the "absent or unusable" case the untyped
+// strconv.Atoi branch answered with the default — so the wire is unchanged.
+func clampLimit(n int) int {
+	if n <= 0 {
 		return defaultLimit
 	}
 	if n > maxLimit {
@@ -199,120 +260,231 @@ func mapErr(err error, notFoundMsg string) error {
 
 // ---- campaigns ----
 
-func createCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// campaignRef addresses one campaign. The id is the path segment: the URL is the
+// addressing authority, so it binds from there whatever a body says — which is
+// also what the untyped handlers did, reading c.Param("id") and ignoring any
+// body id. `json:"-"` keeps it out of the body entirely, so a request cannot
+// even name a second target.
+type campaignRef struct {
+	// ID is the campaign to act on, from the path.
+	ID string `json:"-" url:"id"`
+}
+
+// campaignInput is the user-owned half of a campaign — everything a create or an
+// update reads off the wire. The server owns the rest (id, org, externalId,
+// createdAt, updatedAt) and a request property the server always discards is one
+// a generated client should never offer, so they are absent here rather than
+// present-and-ignored the way binding the whole row made them.
+//
+// `url:"-"` on every field is what keeps this a BODY: zip's binder fills an In
+// field from the query string as well as the body, and these routes have never
+// taken a campaign's fields there — without the opt-out `?status=active` would
+// silently overwrite what the body asked for.
+type campaignInput struct {
+	// Name is the campaign's display label. Required; trimmed and bounded to 1024 bytes.
+	Name string `json:"name" url:"-"`
+	// Platform is the ad network: meta, google, tiktok or x. Empty defaults to meta.
+	Platform string `json:"platform" url:"-"`
+	// Account is the provider ad-account this campaign runs on (Meta act_<id>). Optional.
+	Account string `json:"account" url:"-"`
+	// Status is the lifecycle state: draft, active, paused or completed. Empty defaults to draft.
+	Status string `json:"status" url:"-"`
+	// Objective is the campaign goal as the provider names it. Optional, bounded to 1024 bytes.
+	Objective string `json:"objective" url:"-"`
+	// Budget is the campaign budget in MINOR units (cents). Negative values clamp to 0.
+	Budget int64 `json:"budget" url:"-"`
+	// Spend is the amount spent so far in MINOR units (cents). Negative values clamp to 0.
+	Spend int64 `json:"spend" url:"-"`
+}
+
+// updateCampaignIn is campaignInput addressed at one existing campaign.
+//
+// The fields are spelled out rather than embedded because zipdoc keys a field's
+// prose on the OUTER type's name, so an embedded carrier publishes its shape
+// with no prose on any field of it.
+type updateCampaignIn struct {
+	// ID is the campaign to update, from the path.
+	ID string `json:"-" url:"id"`
+	// Name is the campaign's display label. Required; trimmed and bounded to 1024 bytes.
+	Name string `json:"name" url:"-"`
+	// Platform is the ad network: meta, google, tiktok or x. Empty defaults to meta.
+	Platform string `json:"platform" url:"-"`
+	// Account is the provider ad-account this campaign runs on (Meta act_<id>). Optional.
+	Account string `json:"account" url:"-"`
+	// Status is the lifecycle state: draft, active, paused or completed. Empty defaults to draft.
+	Status string `json:"status" url:"-"`
+	// Objective is the campaign goal as the provider names it. Optional, bounded to 1024 bytes.
+	Objective string `json:"objective" url:"-"`
+	// Budget is the campaign budget in MINOR units (cents). Negative values clamp to 0.
+	Budget int64 `json:"budget" url:"-"`
+	// Spend is the amount spent so far in MINOR units (cents). Negative values clamp to 0.
+	Spend int64 `json:"spend" url:"-"`
+}
+
+// listCampaignsIn narrows the org's campaign listing. Both fields come from the
+// query string.
+type listCampaignsIn struct {
+	// Status filters to one lifecycle state (draft, active, paused, completed).
+	// Empty returns every campaign the org has.
+	Status string `json:"status"`
+	// Limit caps how many campaigns come back: default 200, maximum 1000. A
+	// value that is not a positive integer reads as the default.
+	Limit int `json:"limit"`
+}
+
+// campaignList is the org's campaigns as one listing answers them.
+type campaignList struct {
+	// Data is the matching campaigns, newest-updated first.
+	Data []AdCampaign `json:"data"`
+}
+
+// adSummary is the org's ad spend at a glance. Amounts are MINOR units (cents).
+type adSummary struct {
+	// Active is how many of those campaigns are in the active state.
+	Active int `json:"active"`
+	// Budget is the summed budget of every campaign in the org, in cents.
+	Budget int64 `json:"budget"`
+	// Campaigns is how many campaigns the org has, in every state.
+	Campaigns int `json:"campaigns"`
+	// Spend is the summed spend of every campaign in the org, in cents.
+	Spend int64 `json:"spend"`
+}
+
+// createCampaign registers a new ad campaign for the caller's org and answers
+// 201 with the stored row. It only records the campaign — nothing is sent to the
+// ad network until POST /v1/ads/campaigns/{id}/launch runs it. The org is
+// stamped by the server from the validated principal, so a body can never place
+// a campaign in another tenant.
+//
+// Example: {"name": "Spring Launch", "platform": "meta", "objective": "conversions", "budget": 50000}
+func (o ops) createCampaign(ctx context.Context, in *campaignInput) (*AdCampaign, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body Campaign
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name := clip(body.Name)
+	name := clip(in.Name)
 	if name == "" {
-		return zip.ErrBadRequest("name is required")
+		return nil, zip.ErrBadRequest("name is required")
 	}
-	platform, okPl := normPlatform(body.Platform)
+	platform, okPl := normPlatform(in.Platform)
 	if !okPl {
-		return zip.ErrBadRequest("platform must be one of meta, google, tiktok, x")
+		return nil, zip.ErrBadRequest("platform must be one of meta, google, tiktok, x")
 	}
-	status, okSt := normStatus(body.Status)
+	status, okSt := normStatus(in.Status)
 	if !okSt {
-		return zip.ErrBadRequest("status must be one of draft, active, paused, completed")
+		return nil, zip.ErrBadRequest("status must be one of draft, active, paused, completed")
 	}
 	id, err := genID("camp")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
-	camp := Campaign{
-		ID: id, Org: org, Name: name, Platform: platform, Account: clip(body.Account), Status: status,
-		Objective: clip(body.Objective), Budget: nonNeg(body.Budget), Spend: nonNeg(body.Spend),
+	camp := AdCampaign{
+		ID: id, Org: org, Name: name, Platform: platform, Account: clip(in.Account), Status: status,
+		Objective: clip(in.Objective), Budget: nonNeg(in.Budget), Spend: nonNeg(in.Spend),
 		CreatedAt: now, UpdatedAt: now,
 	}
-	saved, err := s.State.store.CreateCampaign(c.Context(), camp)
+	saved, err := o.s.State.store.CreateCampaign(ctx, camp)
 	if err != nil {
-		return mapErr(err, "")
+		return nil, mapErr(err, "")
 	}
-	return c.JSON(http.StatusCreated, saved)
+	return &saved, nil
 }
 
-func listCampaigns(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
-	rows, err := s.State.store.ListCampaigns(c.Context(), org, status, limitOf(c))
+// listCampaigns returns the caller org's ad campaigns, most recently updated
+// first, optionally narrowed to one lifecycle status. The listing is bounded by
+// the org: another tenant's campaigns are not reachable from here at all.
+//
+// Example: {"status": "active", "limit": 50}
+func (o ops) listCampaigns(ctx context.Context, in *listCampaignsIn) (*campaignList, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": rows})
+	status := strings.ToLower(strings.TrimSpace(in.Status))
+	rows, err := o.s.State.store.ListCampaigns(ctx, org, status, clampLimit(in.Limit))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+	}
+	return &campaignList{Data: rows}, nil
 }
 
-func getCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	camp, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
+// getCampaign returns one of the caller org's campaigns. An id another org owns
+// reads as not found, so the response cannot confirm that it exists.
+//
+// Example: {"id": "camp_2f9c1d"}
+func (o ops) getCampaign(ctx context.Context, in *campaignRef) (*AdCampaign, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return mapErr(err, "campaign not found")
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, camp)
+	camp, err := o.s.State.store.GetCampaign(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, mapErr(err, "campaign not found")
+	}
+	return &camp, nil
 }
 
-func updateCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// updateCampaign replaces the user-owned fields of one of the caller org's
+// campaigns and answers the stored row. It is a full replace, not a patch: every
+// field is written from the request, so an omitted one is cleared. externalId is
+// launch-owned and is never touched here, so editing a campaign cannot break its
+// link to a live provider execution.
+//
+// Example: {"id": "camp_2f9c1d", "name": "Spring Launch", "platform": "meta", "status": "paused", "budget": 75000}
+func (o ops) updateCampaign(ctx context.Context, in *updateCampaignIn) (*AdCampaign, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body Campaign
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	name := clip(body.Name)
+	name := clip(in.Name)
 	if name == "" {
-		return zip.ErrBadRequest("name is required")
+		return nil, zip.ErrBadRequest("name is required")
 	}
-	platform, okPl := normPlatform(body.Platform)
+	platform, okPl := normPlatform(in.Platform)
 	if !okPl {
-		return zip.ErrBadRequest("platform must be one of meta, google, tiktok, x")
+		return nil, zip.ErrBadRequest("platform must be one of meta, google, tiktok, x")
 	}
-	status, okSt := normStatus(body.Status)
+	status, okSt := normStatus(in.Status)
 	if !okSt {
-		return zip.ErrBadRequest("status must be one of draft, active, paused, completed")
+		return nil, zip.ErrBadRequest("status must be one of draft, active, paused, completed")
 	}
-	camp := Campaign{
-		ID: idParam(c), Org: org, Name: name, Platform: platform, Account: clip(body.Account), Status: status,
-		Objective: clip(body.Objective), Budget: nonNeg(body.Budget), Spend: nonNeg(body.Spend),
+	camp := AdCampaign{
+		ID: strings.TrimSpace(in.ID), Org: org, Name: name, Platform: platform, Account: clip(in.Account), Status: status,
+		Objective: clip(in.Objective), Budget: nonNeg(in.Budget), Spend: nonNeg(in.Spend),
 		UpdatedAt: time.Now().Unix(),
 	}
-	saved, err := s.State.store.UpdateCampaign(c.Context(), camp)
+	saved, err := o.s.State.store.UpdateCampaign(ctx, camp)
 	if err != nil {
-		return mapErr(err, "campaign not found")
+		return nil, mapErr(err, "campaign not found")
 	}
-	return c.JSON(http.StatusOK, saved)
+	return &saved, nil
 }
 
-func deleteCampaign(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	deleted, err := s.State.store.DeleteCampaign(c.Context(), org, idParam(c))
+// deleteCampaign removes one of the caller org's campaigns and answers 204 with
+// no body. It deletes the stored record only: a campaign already launched keeps
+// running on the ad network, which must be stopped there. An id another org owns
+// reads as not found.
+//
+// Example: {"id": "camp_2f9c1d"}
+func (o ops) deleteCampaign(ctx context.Context, in *campaignRef) (*noContent, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
+		return nil, err
+	}
+	deleted, err := o.s.State.store.DeleteCampaign(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
-		return zip.ErrNotFound("campaign not found")
+		return nil, zip.ErrNotFound("campaign not found")
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
 // ---- launch (consumes the connector plane) ----
 
-// launchCampaignHandler runs a stored ad campaign on its provider using the ORG'S
+// launchCampaign runs a stored ad campaign on its provider using the ORG'S
 // connected ad-account token. It is the standalone proof that /v1/ads consumes the
 // connector plane: no token is held here — LaunchPaid (provider.go) resolves it
 // from KMS through integrations.TokenFor and FAILS CLOSED when the org has not
@@ -320,7 +492,7 @@ func deleteCampaign(s *cloud.Service[state], c *zip.Ctx) error {
 // org did not make. On success the provider campaign id is recorded (MarkLaunched)
 // and the campaign goes active. An optional body {account} sets/overrides the
 // target ad account when the stored campaign has none.
-func launchCampaignHandler(s *cloud.Service[state], c *zip.Ctx) error {
+func launchCampaign(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -369,18 +541,24 @@ func mapProviderErr(err error) error {
 
 // ---- summary ----
 
-func summary(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	total, active, budget, spend, err := s.State.store.Counts(c.Context(), org)
+// noInput is the In of an op addressed entirely by the caller's own validated
+// principal: it takes nothing off the wire.
+type noInput struct{}
+
+// summary rolls the caller org's ad campaigns up into four numbers: how many
+// campaigns exist, how many are active, and the summed budget and spend across
+// all of them. Budget and spend are MINOR units (cents), the same units the
+// campaign rows carry. It counts only this org's campaigns.
+func (o ops) summary(ctx context.Context, _ *noInput) (*adSummary, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "summary: %v", err)
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"campaigns": total, "active": active, "budget": budget, "spend": spend,
-	})
+	total, active, budget, spend, err := o.s.State.store.Counts(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "summary: %v", err)
+	}
+	return &adSummary{Campaigns: total, Active: active, Budget: budget, Spend: spend}, nil
 }
 
 // Shutdown closes the ads store. Idempotent.
