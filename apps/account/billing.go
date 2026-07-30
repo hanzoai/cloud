@@ -327,7 +327,19 @@ func billingData(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable: %v", err)
 	}
 	// A per-tenant money response must NEVER be cached (a stale balance after a
-	// completion/top-up); commerce answers JSON, so pin JSON + no-store.
+	// completion/top-up), so pin no-store.
+	//
+	// The Content-Type pin is a KNOWN DEFECT, left as-is rather than repaired here.
+	// Ten of the eleven forwardable GETs answer JSON, but `invoices/{}/pdf` does not:
+	// commerce renders a PDF and sets `Content-Type: application/pdf` +
+	// `Content-Disposition: attachment` (commerce api/billing/invoice_pdf.go). This
+	// line overwrites that type with application/json and commerceDo never returns
+	// the upstream headers, so the attachment name is dropped too — the browser
+	// receives PDF bytes labelled JSON. Repairing it means teaching commerceDo to
+	// return the response headers (three call sites, one of them the top-up money
+	// path) and deciding which are safe to relay; that is its own change with its
+	// own test, not a side effect of a doc pass. Whoever does it must keep
+	// Cache-Control: no-store, which is a tenancy property, not a content one.
 	c.SetHeader("Content-Type", "application/json")
 	c.SetHeader("Cache-Control", "no-store, must-revalidate")
 	return c.Bytes(status, raw)
