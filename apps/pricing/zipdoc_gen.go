@@ -163,6 +163,13 @@ func init() {
 			"pricingToolList.tools": "Tools are the metered tools, each an opaque object exactly as the pricing\nsource emits it — typically name, billing unit and price.",
 		},
 	})
+	zip.Describe("PATCH /v1/admin/catalog/providers/:name", zip.Doc{
+		Description: "PatchProvider sets one provider's availability overlay.\n\nThe overlay decides whether a provider is off, in beta for named orgs, or\ngenerally available, and carries the price overrides applied on top of the\ncatalog. Only the fields the patch names change; every other field keeps the\nvalue it had, and an absent overlay starts from the catalog default (enabled).\nAnswers the new effective overlay, so a console needs no second read.\n\nSuperAdmin only.",
+		Fields: map[string]string{
+			"patchBody.state":      "State is the high-level tri-state setter (\"off\"|\"beta\"|\"ga\") that sets\nenabled+beta coherently; the low-level Enabled/Beta pointers (applied after)\noverride it for fine control.",
+			"providerPatchIn.name": "Name is the provider the overlay belongs to, from the URL.",
+		},
+	})
 	zip.Describe("POST /v1/enablement/optin", zip.Doc{
 		Description: "OptIntoBeta opts the caller's OWN org into a beta item. The org is the\ncaller's validated one, so this can never target another org, and the registry\nrefuses anything not in beta — so it can neither re-open an item an operator\nturned off nor touch one that is already generally available. Requires a\nsigned-in caller with an org.",
 		Fields: map[string]string{
