@@ -51,7 +51,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/accountsView"
+                  "$ref": "#/components/schemas/cloudAccountsView"
                 }
               }
             },
@@ -193,7 +193,7 @@
       "accountFoldView": {
         "properties": {
           "account": {
-            "$ref": "#/components/schemas/accountView",
+            "$ref": "#/components/schemas/cloudAccountView",
             "description": "Account is the account as it is now recorded."
           },
           "clusters": {
@@ -206,7 +206,7 @@
         },
         "type": "object"
       },
-      "accountView": {
+      "cloudAccountView": {
         "properties": {
           "account": {
             "description": "Account is the provider's human label for it, e.g. the DigitalOcean team\nemail.",
@@ -246,12 +246,12 @@
         },
         "type": "object"
       },
-      "accountsView": {
+      "cloudAccountsView": {
         "properties": {
           "accounts": {
             "description": "Accounts is every account this org has linked, across all providers. Empty\nwhen it has linked none.",
             "items": {
-              "$ref": "#/components/schemas/accountView"
+              "$ref": "#/components/schemas/cloudAccountView"
             },
             "type": "array"
           }

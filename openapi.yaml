@@ -2706,7 +2706,6 @@ components:
             DraftInto arg (default "brief").
           type: string
       type: object
-<<<<<<< HEAD
     KindTotal:
       properties:
         cost_usd:
@@ -2715,7 +2714,7 @@ components:
           type: integer
         kind:
           type: string
-=======
+      type: object
     LLM:
       properties:
         available:
@@ -2745,7 +2744,6 @@ components:
         tokens:
           description: Tokens is the total tokens those completions consumed.
           type: integer
->>>>>>> 49ce9f09 (type: 27 addresses that published nothing — 19 now describe themselves)
       type: object
     LLMOverview:
       properties:
@@ -6102,7 +6100,20 @@ components:
           description: UpdatedAt is the unix second the record last changed.
           type: integer
       type: object
-<<<<<<< HEAD
+    accountFoldView:
+      properties:
+        account:
+          $ref: '#/components/schemas/cloudAccountView'
+          description: Account is the account as it is now recorded.
+        clusters:
+          description: |-
+            Clusters is one entry per cluster discovered in the account. It is empty
+            when discovery itself failed, which leaves the previously folded set
+            untouched rather than mass-detaching it.
+          items:
+            $ref: '#/components/schemas/clusterResult'
+          type: array
+      type: object
     accountView:
       properties:
         address:
@@ -6127,75 +6138,6 @@ components:
           description: Tenant is the org whose accounts these are (empty for the house
             scope's own rows).
           type: string
-=======
-    accountFoldView:
-      properties:
-        account:
-          $ref: '#/components/schemas/accountView'
-          description: Account is the account as it is now recorded.
-        clusters:
-          description: |-
-            Clusters is one entry per cluster discovered in the account. It is empty
-            when discovery itself failed, which leaves the previously folded set
-            untouched rather than mass-detaching it.
-          items:
-            $ref: '#/components/schemas/clusterResult'
-          type: array
-      type: object
-    accountView:
-      properties:
-        account:
-          description: |-
-            Account is the provider's human label for it, e.g. the DigitalOcean team
-            email.
-          type: string
-        clusters:
-          description: |-
-            Clusters is the fleet names this account currently owns. Unlinking detaches
-            exactly these and nothing else.
-          items:
-            type: string
-          type: array
-        externalId:
-          description: |-
-            ExternalID is the provider's own identifier for the account — a
-            DigitalOcean account uuid, an AWS account id, a GCP project.
-          type: string
-        label:
-          description: |-
-            Label is the org-chosen name for this account within the provider, which is
-            how a second account at the same provider is addressed. Defaults to
-            "default".
-          type: string
-        linkedAt:
-          description: |-
-            LinkedAt is when the account was first linked, RFC3339 UTC. Re-linking the
-            same label keeps the original.
-          type: string
-        project:
-          description: |-
-            Project is the fleet shard the account's clusters were folded into,
-            recorded at link time so a later sync or unlink acts on the same shard.
-          type: string
-        provider:
-          description: |-
-            Provider is the cloud the account belongs to: digitalocean, aws, gcp or
-            azure.
-          type: string
-        syncedAt:
-          description: SyncedAt is when it was last discovered, RFC3339 UTC.
-          type: string
-      type: object
-    accountsView:
-      properties:
-        accounts:
-          description: |-
-            Accounts is every account this org has linked, across all providers. Empty
-            when it has linked none.
-          items:
-            $ref: '#/components/schemas/accountView'
-          type: array
->>>>>>> 49ce9f09 (type: 27 addresses that published nothing — 19 now describe themselves)
       type: object
     accreditationDecision:
       properties:
@@ -6472,7 +6414,7 @@ components:
           type: string
         status:
           description: |-
-            Status is the referral's lifecycle state: "signed_up", "qualified" or
+            Status is the referral's lifecycle state: "signup", "qualified" or
             "credited".
           type: string
       type: object
@@ -6517,8 +6459,8 @@ components:
         qualified:
           description: Qualified is how many have qualified but are not yet credited.
           type: integer
-        signedUp:
-          description: SignedUp is how many are recorded but not yet qualified.
+        signup:
+          description: Signup is how many are recorded but not yet qualified.
           type: integer
         total:
           description: Total is every referral in the ledger.
@@ -9126,9 +9068,63 @@ components:
           type: string
         status:
           description: |-
-            Status is the referral's lifecycle state: "signed_up" until the referee
+            Status is the referral's lifecycle state: "signup" until the referee
             makes metered spend, then "qualified", then "credited".
           type: string
+      type: object
+    cloudAccountView:
+      properties:
+        account:
+          description: |-
+            Account is the provider's human label for it, e.g. the DigitalOcean team
+            email.
+          type: string
+        clusters:
+          description: |-
+            Clusters is the fleet names this account currently owns. Unlinking detaches
+            exactly these and nothing else.
+          items:
+            type: string
+          type: array
+        externalId:
+          description: |-
+            ExternalID is the provider's own identifier for the account — a
+            DigitalOcean account uuid, an AWS account id, a GCP project.
+          type: string
+        label:
+          description: |-
+            Label is the org-chosen name for this account within the provider, which is
+            how a second account at the same provider is addressed. Defaults to
+            "default".
+          type: string
+        linkedAt:
+          description: |-
+            LinkedAt is when the account was first linked, RFC3339 UTC. Re-linking the
+            same label keeps the original.
+          type: string
+        project:
+          description: |-
+            Project is the fleet shard the account's clusters were folded into,
+            recorded at link time so a later sync or unlink acts on the same shard.
+          type: string
+        provider:
+          description: |-
+            Provider is the cloud the account belongs to: digitalocean, aws, gcp or
+            azure.
+          type: string
+        syncedAt:
+          description: SyncedAt is when it was last discovered, RFC3339 UTC.
+          type: string
+      type: object
+    cloudAccountsView:
+      properties:
+        accounts:
+          description: |-
+            Accounts is every account this org has linked, across all providers. Empty
+            when it has linked none.
+          items:
+            $ref: '#/components/schemas/cloudAccountView'
+          type: array
       type: object
     clusterAttach:
       properties:
@@ -11202,23 +11198,6 @@ components:
           description: Status is "ok" when the subsystem is live.
           type: string
       type: object
-<<<<<<< HEAD
-    hit:
-      properties:
-        doctype:
-          type: string
-        name:
-          type: string
-        project:
-          type: string
-        provider:
-          type: string
-        score:
-          type: number
-        title:
-          type: string
-        url:
-=======
     helpArticle:
       properties:
         body:
@@ -11337,7 +11316,23 @@ components:
           description: |-
             Subject is the one-line summary of the problem. Required; longer than 300
             characters is clipped rather than refused.
->>>>>>> 49ce9f09 (type: 27 addresses that published nothing — 19 now describe themselves)
+          type: string
+      type: object
+    hit:
+      properties:
+        doctype:
+          type: string
+        name:
+          type: string
+        project:
+          type: string
+        provider:
+          type: string
+        score:
+          type: number
+        title:
+          type: string
+        url:
           type: string
       type: object
     iamRowsOut:
@@ -11832,7 +11827,6 @@ components:
         seq:
           type: integer
       type: object
-<<<<<<< HEAD
     lbList:
       properties:
         loadBalancers:
@@ -11855,7 +11849,8 @@ components:
         targets:
           type: integer
         type:
-=======
+          type: string
+      type: object
     limitsBlock:
       properties:
         apiRateLimit:
@@ -11892,7 +11887,6 @@ components:
           type: string
         unit:
           description: 'Unit names what the two rate numbers are counted in: requests/minute.'
->>>>>>> 49ce9f09 (type: 27 addresses that published nothing — 19 now describe themselves)
           type: string
       type: object
     listMeta:
@@ -12471,7 +12465,7 @@ components:
           type: string
         status:
           description: |-
-            Status is the referral's lifecycle state: "signed_up" until the referee
+            Status is the referral's lifecycle state: "signup" until the referee
             makes metered spend, then "qualified", then "credited".
           type: string
       type: object
@@ -12516,7 +12510,6 @@ components:
             id.
           type: string
       type: object
-<<<<<<< HEAD
     networkList:
       properties:
         networks:
@@ -12546,7 +12539,6 @@ components:
             online, else "provisioning" (routers exist but none has dialed home).
           type: string
       type: object
-=======
     newsResponse:
       properties:
         items:
@@ -12558,7 +12550,6 @@ components:
             $ref: '#/components/schemas/NewsItem'
           type: array
       type: object
->>>>>>> 49ce9f09 (type: 27 addresses that published nothing — 19 now describe themselves)
     noContent:
       properties: {}
       type: object
@@ -12589,18 +12580,6 @@ components:
         size:
           type: string
       type: object
-<<<<<<< HEAD
-    notifyHealth:
-      properties:
-        service:
-          description: Service names the subsystem answering — always "notify".
-          type: string
-        status:
-          description: Status is "ok"; the route answers 200 whenever the subsystem
-            is mounted.
-          type: string
-      type: object
-=======
     nodeView:
       properties:
         caps:
@@ -12648,7 +12627,16 @@ components:
             $ref: '#/components/schemas/nodeView'
           type: array
       type: object
->>>>>>> 49ce9f09 (type: 27 addresses that published nothing — 19 now describe themselves)
+    notifyHealth:
+      properties:
+        service:
+          description: Service names the subsystem answering — always "notify".
+          type: string
+        status:
+          description: Status is "ok"; the route answers 200 whenever the subsystem
+            is mounted.
+          type: string
+      type: object
     o11yGlobal:
       properties:
         end:
@@ -15773,8 +15761,8 @@ components:
         qualified:
           description: Qualified is how many referees have spent but are not yet credited.
           type: integer
-        signedUp:
-          description: SignedUp is how many referees have signed up but not yet spent.
+        signup:
+          description: Signup is how many referees have signed up but not yet spent.
           type: integer
         total:
           description: Total is every referral this org has made.
@@ -24894,7 +24882,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/accountsView'
+                $ref: '#/components/schemas/cloudAccountsView'
           description: ok
       summary: 'listAccounts lists the caller org''s linked cloud accounts across
         every provider: which account each one is at the provider, which fleet clusters
