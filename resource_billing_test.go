@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/apps/metering"
+	"github.com/hanzoai/cloud/apps/money"
 	"github.com/hanzoai/cloud/apps/principal"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -427,5 +428,41 @@ func TestDenyResource(t *testing.T) {
 		if !containsSub(string(body), tc.body) {
 			t.Fatalf("%s body %q missing %q", tc.path, body, tc.body)
 		}
+	}
+}
+
+// A usage priced ONLY as a typed money.Amount must be billed.
+//
+// metering.Usage carries three amount sources with a documented precedence — the
+// typed Amount wins, then micro-USD, then whole cents — and Usage.Money resolves
+// them. MeterUsage used to ask its own version of the question, reading two of the
+// three (`AmountCents <= 0 && AmountMicros <= 0`), and returned early on a Usage
+// whose cost was exact. That is the shape a per-token 18-dp caller sends, so the
+// money was dropped before Record could bill it: no error, no log, no row, and a
+// status-code test would see nothing wrong because there is no request to fail.
+//
+// $0.0025 is deliberately sub-cent: it survives only because the amount is exact,
+// which is the whole reason the typed field exists.
+func TestResourceMeter_MeterUsageBillsAnExactAmount(t *testing.T) {
+	fc := &recCommerce{balanceAvailable: 5000}
+	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
+
+	exact, err := money.ParseUSD("0.0025") // sub-cent: survives only because it is exact.
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	rm.MeterUsage("acme", "zen", metering.Usage{
+		User:   "acme",
+		Amount: exact, // no cents, no micros set.
+		Model:  "zen-1",
+	})
+
+	if !waitFor(func() bool { return fc.usages() == 1 }, time.Second) {
+		t.Fatalf("usage records = %d, want 1 — a Usage priced only as a typed "+
+			"money.Amount was dropped before Record saw it", fc.usages())
+	}
+	org, _ := fc.lastUsage()
+	if org != "acme" {
+		t.Fatalf("usage billed org %q, want %q", org, "acme")
 	}
 }
