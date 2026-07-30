@@ -214,7 +214,7 @@
             "type": "string"
           },
           "status": {
-            "description": "Status is the referral's lifecycle state: \"signed_up\", \"qualified\" or\n\"credited\".",
+            "description": "Status is the referral's lifecycle state: \"signup\", \"qualified\" or\n\"credited\".",
             "type": "string"
           }
         },
@@ -234,8 +234,8 @@
             "description": "Qualified is how many have qualified but are not yet credited.",
             "type": "integer"
           },
-          "signedUp": {
-            "description": "SignedUp is how many are recorded but not yet qualified.",
+          "signup": {
+            "description": "Signup is how many are recorded but not yet qualified.",
             "type": "integer"
           },
           "total": {
@@ -273,7 +273,7 @@
             "type": "string"
           },
           "status": {
-            "description": "Status is the referral's lifecycle state: \"signed_up\" until the referee\nmakes metered spend, then \"qualified\", then \"credited\".",
+            "description": "Status is the referral's lifecycle state: \"signup\" until the referee\nmakes metered spend, then \"qualified\", then \"credited\".",
             "type": "string"
           }
         },
@@ -306,7 +306,7 @@
             "type": "string"
           },
           "status": {
-            "description": "Status is the referral's lifecycle state: \"signed_up\" until the referee\nmakes metered spend, then \"qualified\", then \"credited\".",
+            "description": "Status is the referral's lifecycle state: \"signup\" until the referee\nmakes metered spend, then \"qualified\", then \"credited\".",
             "type": "string"
           }
         },
@@ -358,8 +358,8 @@
             "description": "Qualified is how many referees have spent but are not yet credited.",
             "type": "integer"
           },
-          "signedUp": {
-            "description": "SignedUp is how many referees have signed up but not yet spent.",
+          "signup": {
+            "description": "Signup is how many referees have signed up but not yet spent.",
             "type": "integer"
           },
           "total": {

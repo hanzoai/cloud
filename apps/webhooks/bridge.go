@@ -16,7 +16,7 @@
 // event without an org is delivered to nobody. The SAME dispatcher that fans
 // commerce.> to org webhooks consumes event.> too, so "subscribe my endpoint
 // to signups and errors" is one Endpoint row with patterns like
-// ["event.error", "event.signed_up"] — no second delivery system, no second
+// ["event.error", "event.signup_completed"] — no second delivery system, no second
 // bus, no second envelope.
 //
 // FAIL-SOFT both ways: the sink runs detached (forward.go), and a bus that is
