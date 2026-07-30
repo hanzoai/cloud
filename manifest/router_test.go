@@ -104,8 +104,6 @@ var unreachable = []string{
 	"git /{org}/{repo}/info/refs -> nothing",
 	"git /{org}/{repo}/tree/{wildcard1} -> nothing",
 	"iam /.well-known/{wildcard1} -> nothing",
-	"provisioning /v1/s3 -> storage",
-	"provisioning /v1/s3/{name} -> storage",
 }
 
 // oracle is the transport the probe mounts every app on. A mounted app is
@@ -129,6 +127,12 @@ func router(t *testing.T) *zip.App {
 	zip.RegisterTransport("oracle", zip.Transport{Dial: func(addr string) zip.Client { return oracle(addr) }})
 	app := zip.New(zip.Config{AppName: "router-oracle", DisableStartupMessage: true})
 	for _, a := range Apps {
+		// The oracle must be the router the HOST builds, and the host skips a
+		// co-resident app (cmd/cloud mount): it claims no prefix, so including it
+		// here would ask the oracle about a route the fleet does not have.
+		if a.Coresident {
+			continue
+		}
 		if err := app.Add(zip.Load(zip.Plugin{Name: a.Name, Addr: "oracle://" + a.Name}, a.Prefixes...)); err != nil {
 			t.Fatalf("%s: %v", a.Name, err)
 		}

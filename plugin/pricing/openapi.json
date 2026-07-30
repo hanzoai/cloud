@@ -67,7 +67,9 @@
     },
     "/v1/admin/catalog/providers/{name}": {
       "patch": {
-        "operationId": "patch_v1_admin_catalog_providers_by_name",
+        "operationId": "patch_v1_admin_catalog_providers_name",
+        "summary": "PatchProvider sets one provider's availability overlay.",
+        "description": "PatchProvider sets one provider's availability overlay.\n\nThe overlay decides whether a provider is off, in beta for named orgs, or\ngenerally available, and carries the price overrides applied on top of the\ncatalog. Only the fields the patch names change; every other field keeps the\nvalue it had, and an absent overlay starts from the catalog default (enabled).\nAnswers the new effective overlay, so a console needs no second read.\n\nSuperAdmin only.",
         "tags": [
           "admin"
         ],
@@ -76,11 +78,34 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the provider the overlay belongs to, from the URL.",
             "schema": {
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/providerPatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Overlay"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/admin/enablement": {
@@ -808,6 +833,33 @@
   },
   "components": {
     "schemas": {
+      "Overlay": {
+        "properties": {
+          "beta": {
+            "type": "boolean"
+          },
+          "betaOrgs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "overrides": {},
+          "updatedAt": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "adminCatalogOut": {
         "properties": {
           "models": {
@@ -1042,6 +1094,31 @@
               "type": "object"
             },
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "providerPatchIn": {
+        "properties": {
+          "beta": {
+            "type": "boolean"
+          },
+          "betaOrgs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Name is the provider the overlay belongs to, from the URL.",
+            "type": "string"
+          },
+          "overrides": {},
+          "state": {
+            "type": "string"
           }
         },
         "type": "object"

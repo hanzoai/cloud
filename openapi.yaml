@@ -1996,14 +1996,34 @@ components:
       type: object
     MetricsData:
       properties:
-        SaaSMetrics:
-          $ref: '#/components/schemas/SaaSMetrics'
+        asOf:
+          type: string
+        currency:
+          type: string
+        customers:
+          items:
+            $ref: '#/components/schemas/SaaSCustomer'
+          type: array
+        gaps:
+          items:
+            type: string
+          type: array
         generatedAt:
           type: string
+        orgs:
+          type: integer
+        revenue:
+          $ref: '#/components/schemas/SaaSRevenue'
         sources:
           items:
             $ref: '#/components/schemas/SourceStatus'
           type: array
+        subscriptions:
+          $ref: '#/components/schemas/SaaSSubs'
+        usage:
+          $ref: '#/components/schemas/SaaSUsage'
+        window:
+          type: string
       type: object
     MetricsOut:
       properties:
@@ -2264,6 +2284,24 @@ components:
           type: string
         updatedAt:
           description: UpdatedAt is the unix second of the last write. Server-owned.
+          type: integer
+      type: object
+    Overlay:
+      properties:
+        beta:
+          type: boolean
+        betaOrgs:
+          items:
+            type: string
+          type: array
+        enabled:
+          type: boolean
+        id:
+          type: string
+        kind:
+          type: string
+        overrides: {}
+        updatedAt:
           type: integer
       type: object
     PagesBuildConfig:
@@ -2908,31 +2946,6 @@ components:
         type:
           type: string
       type: object
-    SaaSMetrics:
-      properties:
-        asOf:
-          type: string
-        currency:
-          type: string
-        customers:
-          items:
-            $ref: '#/components/schemas/SaaSCustomer'
-          type: array
-        gaps:
-          items:
-            type: string
-          type: array
-        orgs:
-          type: integer
-        revenue:
-          $ref: '#/components/schemas/SaaSRevenue'
-        subscriptions:
-          $ref: '#/components/schemas/SaaSSubs'
-        usage:
-          $ref: '#/components/schemas/SaaSUsage'
-        window:
-          type: string
-      type: object
     SaaSPlan:
       properties:
         active:
@@ -3187,7 +3200,7 @@ components:
         waitlistMode:
           type: boolean
       type: object
-    ServiceRow:
+    ServiceView:
       properties:
         createdAt:
           type: integer
@@ -3205,11 +3218,6 @@ components:
           type: integer
         updatedBy:
           type: string
-      type: object
-    ServiceView:
-      properties:
-        ServiceRow:
-          $ref: '#/components/schemas/ServiceRow'
         waitlistMode:
           type: boolean
       type: object
@@ -4328,12 +4336,40 @@ components:
       type: object
     agentDetail:
       properties:
+        computeRef:
+          type: string
+        createdAt:
+          type: string
+        description:
+          type: string
+        executionMode:
+          type: string
+        id:
+          type: string
         instructions:
+          type: string
+        model:
+          type: string
+        name:
           type: string
         recentRuns:
           items:
             $ref: '#/components/schemas/agentRunView'
           type: array
+        runs:
+          type: integer
+        schedule:
+          type: string
+        serviceAccountId:
+          type: string
+        status:
+          type: string
+        tools:
+          items:
+            type: string
+          type: array
+        updatedAt:
+          type: string
       type: object
     agentList:
       properties:
@@ -5108,6 +5144,34 @@ components:
           type: string
         binding:
           $ref: '#/components/schemas/agentBinding'
+        createdTime:
+          type: string
+        gpu:
+          type: string
+        id:
+          type: string
+        image:
+          type: string
+        mem:
+          type: string
+        name:
+          type: string
+        os:
+          type: string
+        privateIp:
+          type: string
+        provider:
+          type: string
+        publicIp:
+          type: string
+        region:
+          type: string
+        status:
+          type: string
+        type:
+          type: string
+        vcpu:
+          type: integer
       type: object
     bucketCreateIn:
       properties:
@@ -6114,10 +6178,36 @@ components:
       type: object
     clusterDetailView:
       properties:
+        amdGpu:
+          type: integer
+        createdAt:
+          type: string
+        doClusterId:
+          type: string
+        doksClusterId:
+          type: string
+        kind:
+          type: string
+        name:
+          type: string
+        nodeCount:
+          type: integer
+        nodePools:
+          items:
+            $ref: '#/components/schemas/nodePoolView'
+          type: array
+        nodeSize:
+          type: string
         nodes:
           items:
             $ref: '#/components/schemas/machineView'
           type: array
+        nvidiaGpu:
+          type: integer
+        region:
+          type: string
+        status:
+          type: string
       type: object
     clusterList:
       properties:
@@ -9093,6 +9183,23 @@ components:
           description: Start is when the offer opens (RFC3339).
           type: string
       type: object
+    providerPatchIn:
+      properties:
+        beta:
+          type: boolean
+        betaOrgs:
+          items:
+            type: string
+          type: array
+        enabled:
+          type: boolean
+        name:
+          description: Name is the provider the overlay belongs to, from the URL.
+          type: string
+        overrides: {}
+        state:
+          type: string
+      type: object
     providerView:
       properties:
         available:
@@ -9891,14 +9998,64 @@ components:
       type: object
     sessionDetail:
       properties:
+        account:
+          type: string
+        actor:
+          type: string
+        agent:
+          type: string
         childSessions:
           items:
             $ref: '#/components/schemas/sessionView'
           type: array
+        children:
+          type: integer
+        createdAt:
+          type: string
+        cwd:
+          type: string
+        endedAt:
+          type: string
+        events:
+          type: integer
+        host:
+          type: string
+        id:
+          type: string
+        lastEvent:
+          $ref: '#/components/schemas/lastEventView'
+        org:
+          type: string
+        parentSessionId:
+          type: string
+        project:
+          type: string
+        provider:
+          type: string
+        published:
+          type: boolean
         recentEvents:
           items:
             $ref: '#/components/schemas/eventView'
           type: array
+        repo:
+          type: string
+        rootSessionId:
+          type: string
+        startedAt:
+          type: string
+        status:
+          type: string
+        target:
+          type: string
+        taskRunId:
+          type: string
+        taskWorkflowId:
+          type: string
+        title:
+          type: string
+        updatedAt:
+          type: string
       type: object
     sessionList:
       properties:
@@ -12047,13 +12204,38 @@ paths:
       - admin
   /v1/admin/catalog/providers/{name}:
     patch:
-      operationId: patch_v1_admin_catalog_providers_by_name
+      description: |-
+        PatchProvider sets one provider's availability overlay.
+
+        The overlay decides whether a provider is off, in beta for named orgs, or
+        generally available, and carries the price overrides applied on top of the
+        catalog. Only the fields the patch names change; every other field keeps the
+        value it had, and an absent overlay starts from the catalog default (enabled).
+        Answers the new effective overlay, so a console needs no second read.
+
+        SuperAdmin only.
+      operationId: patch_v1_admin_catalog_providers_name
       parameters:
-      - in: path
+      - description: Name is the provider the overlay belongs to, from the URL.
+        in: path
         name: name
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/providerPatchIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Overlay'
+          description: ok
+      summary: PatchProvider sets one provider's availability overlay.
       tags:
       - admin
   /v1/admin/compute:

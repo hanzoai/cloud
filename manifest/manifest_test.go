@@ -27,6 +27,15 @@ func TestAppsMountWithoutConflict(t *testing.T) {
 		}
 	}()
 	for _, a := range Apps {
+		// A co-resident app answers no prefix by design (App.Coresident) — the host
+		// never Loads it. Asserting it has one would demand the duplicate claim this
+		// field replaced.
+		if a.Coresident {
+			if len(a.Prefixes) > 0 {
+				t.Errorf("%s: co-resident but names prefixes %v; it routes none", a.Name, a.Prefixes)
+			}
+			continue
+		}
 		if len(a.Prefixes) == 0 {
 			t.Errorf("%s: no prefixes; zip.Load refuses a plugin with nothing to answer", a.Name)
 			continue

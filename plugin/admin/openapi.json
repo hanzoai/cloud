@@ -3789,17 +3789,47 @@
       },
       "MetricsData": {
         "properties": {
-          "SaaSMetrics": {
-            "$ref": "#/components/schemas/SaaSMetrics"
+          "asOf": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "customers": {
+            "items": {
+              "$ref": "#/components/schemas/SaaSCustomer"
+            },
+            "type": "array"
+          },
+          "gaps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "generatedAt": {
             "type": "string"
+          },
+          "orgs": {
+            "type": "integer"
+          },
+          "revenue": {
+            "$ref": "#/components/schemas/SaaSRevenue"
           },
           "sources": {
             "items": {
               "$ref": "#/components/schemas/SourceStatus"
             },
             "type": "array"
+          },
+          "subscriptions": {
+            "$ref": "#/components/schemas/SaaSSubs"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/SaaSUsage"
+          },
+          "window": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -4175,44 +4205,6 @@
         },
         "type": "object"
       },
-      "SaaSMetrics": {
-        "properties": {
-          "asOf": {
-            "type": "string"
-          },
-          "currency": {
-            "type": "string"
-          },
-          "customers": {
-            "items": {
-              "$ref": "#/components/schemas/SaaSCustomer"
-            },
-            "type": "array"
-          },
-          "gaps": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "orgs": {
-            "type": "integer"
-          },
-          "revenue": {
-            "$ref": "#/components/schemas/SaaSRevenue"
-          },
-          "subscriptions": {
-            "$ref": "#/components/schemas/SaaSSubs"
-          },
-          "usage": {
-            "$ref": "#/components/schemas/SaaSUsage"
-          },
-          "window": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "SaaSPlan": {
         "properties": {
           "active": {
@@ -4365,7 +4357,7 @@
         },
         "type": "object"
       },
-      "ServiceRow": {
+      "ServiceView": {
         "properties": {
           "createdAt": {
             "type": "integer"
@@ -4390,14 +4382,6 @@
           },
           "updatedBy": {
             "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "ServiceView": {
-        "properties": {
-          "ServiceRow": {
-            "$ref": "#/components/schemas/ServiceRow"
           },
           "waitlistMode": {
             "type": "boolean"
