@@ -636,6 +636,53 @@ func (o readOps) top(ctx context.Context, in *topQuery) (*Top, error) {
 
 // ── /v1/analytics/health ────────────────────────────────────────────────────
 
+// healthReport is the probe's answer, and it is the SAME object at 200 and at 503 —
+// which is precisely why this route cannot be a typed op: the STATUS is the signal
+// and the report is the detail, and zip can declare only one of the two. Stating it
+// as a struct rather than building a map is what lets openapi.Register (event.go)
+// derive the shape from the code that produces it, instead of a hand-written schema
+// beside it that drifts.
+type healthReport struct {
+	// Service names the subsystem answering, so a probe aggregating several health
+	// endpoints can attribute a degraded one.
+	Service string `json:"service"`
+	// Status is ok or degraded. Degraded is the 503 and means the warehouse is
+	// unreachable — not that a lens table is missing, which is honest-empty.
+	Status string `json:"status"`
+	// Datastore reports whether the shared warehouse client has a live connection.
+	// It is the load-bearing signal: false is what makes this answer 503.
+	Datastore bool `json:"datastore"`
+	// Warehouse names the datastore database every lens reads.
+	Warehouse string `json:"warehouse"`
+	// Reason is the human-readable cause, present only on a degraded report.
+	Reason string `json:"reason,omitempty"`
+	// Lenses is per-lens table availability, probed only when connected — so it is
+	// absent from a degraded report, which has nothing to say about tables it could
+	// not reach.
+	Lenses *healthLenses `json:"lenses,omitempty"`
+}
+
+// healthLenses is the two read lenses this subsystem serves, named rather than
+// keyed: the pair is closed (llm and events are the whole surface), so a struct
+// says more than a map and says it in the document too.
+type healthLenses struct {
+	// LLM is the live per-org usage ledger lens (hanzo.cloud_usage).
+	LLM healthLens `json:"llm"`
+	// Events is the web/commerce lens (hanzo.events), honest-empty until the
+	// collector emits.
+	Events healthLens `json:"events"`
+}
+
+// healthLens is one lens's provisioning state: the table it reads and whether that
+// table exists yet. An unavailable lens is not a failure — the read endpoints answer
+// honest-empty — so it never moves the status.
+type healthLens struct {
+	// Table is the fully-qualified warehouse table the lens reads.
+	Table string `json:"table"`
+	// Available reports whether that table exists in the warehouse right now.
+	Available bool `json:"available"`
+}
+
 // health is a REAL probe: it reports datastore connectivity (the load-bearing
 // signal) and, when connected, the availability of each lens table. Not
 // JWT-gated (liveness must be probe-able) and it NEVER reads tenant data — only
@@ -644,22 +691,17 @@ func (o readOps) top(ctx context.Context, in *topQuery) (*Top, error) {
 // honest-empty, not a failure).
 func health(s *cloud.Service[state], c *zip.Ctx) error {
 	connected := datastore.Ready()
-	res := map[string]any{
-		"service":   "analytics",
-		"status":    "ok",
-		"datastore": connected,
-		"warehouse": "hanzo",
-	}
+	res := healthReport{Service: "analytics", Status: "ok", Datastore: connected, Warehouse: "hanzo"}
 	if !connected {
-		res["status"] = "degraded"
-		res["reason"] = "datastore (datastore) not connected"
+		res.Status = "degraded"
+		res.Reason = "datastore (datastore) not connected"
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
 	ctx, cancel := context.WithTimeout(c.Context(), probeTimeout)
 	defer cancel()
-	res["lenses"] = map[string]any{
-		"llm":    map[string]any{"table": llmTable, "available": tableExists(ctx, llmTable)},
-		"events": map[string]any{"table": eventsTable, "available": tableExists(ctx, eventsTable)},
+	res.Lenses = &healthLenses{
+		LLM:    healthLens{Table: llmTable, Available: tableExists(ctx, llmTable)},
+		Events: healthLens{Table: eventsTable, Available: tableExists(ctx, eventsTable)},
 	}
 	return c.JSON(http.StatusOK, res)
 }

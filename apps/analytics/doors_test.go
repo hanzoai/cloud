@@ -9,12 +9,15 @@ package analytics
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/datastore"
+	"github.com/hanzoai/cloud/openapi"
 )
 
 // doors_test.go — the ingest SURFACE is one set, and these are its proofs.
@@ -666,6 +669,123 @@ func TestEveryDoorAdmitsAResolvedKey(t *testing.T) {
 			if code := postKeyed(t, app, d.path, "", commerceFor(t, d), hdr); code != http.StatusServiceUnavailable {
 				t.Errorf("door %s with resolvable %v = %d, want 503 (admitted at full capability)", d.path, hdr, code)
 			}
+		}
+	}
+}
+
+// TestEveryUntypedRouteDeclaresItsBodies is the projection half of the untyped
+// ledger. A route that cannot be a typed op still owes the document its SHAPE: an
+// untyped route with no declaration publishes an operationId and nothing else, which
+// no SDK generator can tell apart from a route that takes no body and returns none —
+// so `POST /v1/event`, the door every Hanzo product beacons to, shipped in every
+// generated SDK as a call with nowhere to put the event.
+//
+// It quantifies over untypedByDesign, not over doors, because that ledger IS the set
+// of operations zip's registry cannot describe — so a refusal added there tomorrow
+// owes its bodies by construction rather than by someone remembering. And it reads
+// the DOCUMENT, not the registry, because the document is what ships.
+func TestEveryUntypedRouteDeclaresItsBodies(t *testing.T) {
+	published := publishedOps(t)
+	for key := range untypedByDesign {
+		method, path, _ := strings.Cut(key, " ")
+		op, ok := published[key]
+		if !ok {
+			t.Errorf("%s is not in the published document at all", key)
+			continue
+		}
+		if method == http.MethodPost && op.RequestBody == nil {
+			t.Errorf("%s publishes no requestBody — an SDK generated from this offers a write "+
+				"with nowhere to put the payload", key)
+		}
+		if relayed[key] {
+			if op.Responses != nil {
+				t.Errorf("%s declares a response, but it relays another plane's handler verbatim "+
+					"— publishing a shape here would be inventing one", key)
+			}
+			continue
+		}
+		resp, ok := op.Responses["2XX"]
+		if !ok || len(resp.Content["application/json"].Schema) == 0 {
+			t.Errorf("%s publishes no 2XX body schema", key)
+		}
+		_ = path
+	}
+}
+
+// relayed names the untyped operations whose RESPONSE this package cannot state
+// because it does not produce one: both Sentry doors hand the request to whatever
+// cloud.ObsErrorIngest installed and copy that handler's answer back verbatim. Their
+// REQUEST is still declarable — an opaque envelope stream, openapi.Binary — so the
+// silence is exactly one half, and it is named rather than left to look like an
+// oversight.
+var relayed = map[string]bool{
+	"POST /v1/event/{project}/envelope": true,
+	"POST /v1/event/{project}/store":    true,
+}
+
+// publishedOp is the sliver of an operation the declaration gates read.
+type publishedOp struct {
+	RequestBody *struct {
+		Content map[string]struct {
+			Schema map[string]any `json:"schema"`
+		} `json:"content"`
+	} `json:"requestBody"`
+	Responses map[string]struct {
+		Content map[string]struct {
+			Schema map[string]any `json:"schema"`
+		} `json:"content"`
+	} `json:"responses"`
+}
+
+// publishedOps projects the live router the way every consumer reads it — through
+// JSON, keyed "METHOD /path" exactly as untypedByDesign writes an address.
+func publishedOps(t *testing.T) map[string]publishedOp {
+	t.Helper()
+	doc, err := openapi.Spec(mountApp(t), openapi.Info{Title: "analytics", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal doc: %v", err)
+	}
+	var published struct {
+		Paths map[string]map[string]publishedOp `json:"paths"`
+	}
+	if err := json.Unmarshal(raw, &published); err != nil {
+		t.Fatalf("unmarshal doc: %v", err)
+	}
+	ops := map[string]publishedOp{}
+	for path, item := range published.Paths {
+		for method, op := range item {
+			ops[strings.ToUpper(method)+" "+path] = op
+		}
+	}
+	return ops
+}
+
+// TestEveryDoorDeclaresItsPolymorphicWire is the doors-specific half: the canonical
+// four accept three shapes on one path, and naming ONE of them would publish an
+// ingest API that cannot batch — which is most of what @hanzo/event does.
+func TestEveryDoorDeclaresItsPolymorphicWire(t *testing.T) {
+	published := publishedOps(t)
+	for _, d := range doors {
+		op := published["POST "+d.path]
+		if op.RequestBody == nil {
+			t.Errorf("POST %s publishes no requestBody", d.path)
+			continue
+		}
+		schema := op.RequestBody.Content["application/json"].Schema
+		if _, poly := d.wire.(openapi.OneOf); !poly {
+			if len(schema) == 0 {
+				t.Errorf("POST %s declares an empty request schema", d.path)
+			}
+			continue
+		}
+		alts, _ := schema["oneOf"].([]any)
+		if len(alts) != 3 {
+			t.Errorf("POST %s declares %d alternatives, want the 3 decodeIngest accepts "+
+				"(Event, []Event, CaptureBatch)", d.path, len(alts))
 		}
 	}
 }

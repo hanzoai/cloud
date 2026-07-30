@@ -33,7 +33,41 @@
         "operationId": "post_v1_analytics",
         "tags": [
           "analytics"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Event"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Event"
+                    }
+                  },
+                  {
+                    "$ref": "#/components/schemas/CaptureBatch"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureResult"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/analytics/batch": {
@@ -41,7 +75,41 @@
         "operationId": "post_v1_analytics_batch",
         "tags": [
           "analytics"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Event"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Event"
+                    }
+                  },
+                  {
+                    "$ref": "#/components/schemas/CaptureBatch"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureResult"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/analytics/health": {
@@ -49,7 +117,19 @@
         "operationId": "get_v1_analytics_health",
         "tags": [
           "analytics"
-        ]
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/healthReport"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/analytics/overview": {
@@ -257,7 +337,41 @@
         "operationId": "post_v1_event",
         "tags": [
           "event"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Event"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Event"
+                    }
+                  },
+                  {
+                    "$ref": "#/components/schemas/CaptureBatch"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureResult"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/event/{project}/envelope": {
@@ -275,7 +389,17 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        }
       }
     },
     "/v1/event/{project}/store": {
@@ -293,7 +417,17 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        }
       }
     },
     "/v1/insights/e": {
@@ -301,7 +435,28 @@
         "operationId": "post_v1_insights_e",
         "tags": [
           "insights"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/insightsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureResult"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/insights/events": {
@@ -365,7 +520,41 @@
         "operationId": "post_v1_tracker",
         "tags": [
           "tracker"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Event"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Event"
+                    }
+                  },
+                  {
+                    "$ref": "#/components/schemas/CaptureBatch"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureResult"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -416,6 +605,115 @@
         },
         "type": "object"
       },
+      "CaptureBatch": {
+        "type": "object",
+        "properties": {
+          "batch": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CaptureEvent"
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CaptureEvent"
+            }
+          }
+        }
+      },
+      "CaptureEvent": {
+        "type": "object",
+        "properties": {
+          "anonymousId": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "distinctId": {
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/components/schemas/Exception"
+          },
+          "event": {
+            "type": "string"
+          },
+          "groupId": {
+            "type": "string"
+          },
+          "library": {
+            "type": "string"
+          },
+          "libraryVersion": {
+            "type": "string"
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "personId": {
+            "type": "string"
+          },
+          "product": {
+            "type": "string"
+          },
+          "productId": {
+            "type": "string"
+          },
+          "properties": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "refCode": {
+            "type": "string"
+          },
+          "referrer": {
+            "type": "string"
+          },
+          "revenue": {
+            "type": "number"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "signupWeek": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "utm": {
+            "$ref": "#/components/schemas/UTM"
+          }
+        }
+      },
+      "CaptureResult": {
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "type": "integer"
+          },
+          "dropped": {
+            "type": "integer"
+          }
+        }
+      },
       "CommerceOverview": {
         "properties": {
           "aov": {
@@ -444,6 +742,41 @@
           }
         },
         "type": "object"
+      },
+      "Event": {
+        "type": "object",
+        "properties": {
+          "distinctId": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "properties": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "time": {
+            "type": "string"
+          }
+        }
+      },
+      "Exception": {
+        "type": "object",
+        "properties": {
+          "handled": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "stack": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        }
       },
       "LLMOverview": {
         "properties": {
@@ -711,6 +1044,26 @@
         },
         "type": "object"
       },
+      "UTM": {
+        "type": "object",
+        "properties": {
+          "campaign": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "medium": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "term": {
+            "type": "string"
+          }
+        }
+      },
       "UsagePoint": {
         "properties": {
           "requests": {
@@ -835,6 +1188,99 @@
           }
         },
         "type": "object"
+      },
+      "healthLens": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "table": {
+            "type": "string"
+          }
+        }
+      },
+      "healthLenses": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "$ref": "#/components/schemas/healthLens"
+          },
+          "llm": {
+            "$ref": "#/components/schemas/healthLens"
+          }
+        }
+      },
+      "healthReport": {
+        "type": "object",
+        "properties": {
+          "datastore": {
+            "type": "boolean"
+          },
+          "lenses": {
+            "$ref": "#/components/schemas/healthLenses"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "warehouse": {
+            "type": "string"
+          }
+        }
+      },
+      "insightsBody": {
+        "type": "object",
+        "properties": {
+          "batch": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/insightsEvent"
+            }
+          },
+          "distinct_id": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "properties": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "uuid": {
+            "type": "string"
+          }
+        }
+      },
+      "insightsEvent": {
+        "type": "object",
+        "properties": {
+          "distinct_id": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "properties": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "uuid": {
+            "type": "string"
+          }
+        }
       },
       "insightsStatus": {
         "properties": {

@@ -700,6 +700,78 @@ components:
             $ref: '#/components/schemas/Campaign'
           type: array
       type: object
+    CaptureBatch:
+      properties:
+        batch:
+          items:
+            $ref: '#/components/schemas/CaptureEvent'
+          type: array
+        events:
+          items:
+            $ref: '#/components/schemas/CaptureEvent'
+          type: array
+      type: object
+    CaptureEvent:
+      properties:
+        anonymousId:
+          type: string
+        channel:
+          type: string
+        currency:
+          type: string
+        distinctId:
+          type: string
+        error:
+          $ref: '#/components/schemas/Exception'
+        event:
+          type: string
+        groupId:
+          type: string
+        library:
+          type: string
+        libraryVersion:
+          type: string
+        messageId:
+          type: string
+        path:
+          type: string
+        personId:
+          type: string
+        product:
+          type: string
+        productId:
+          type: string
+        properties:
+          additionalProperties: {}
+          type: object
+        quantity:
+          type: integer
+        refCode:
+          type: string
+        referrer:
+          type: string
+        revenue:
+          type: number
+        sessionId:
+          type: string
+        signupWeek:
+          type: string
+        timestamp:
+          type: string
+        type:
+          type: string
+        url:
+          type: string
+        utm:
+          $ref: '#/components/schemas/UTM'
+      type: object
+    CaptureResult:
+      properties:
+        accepted:
+          type: integer
+        dropped:
+          type: integer
+      type: object
     Catalog:
       properties:
         connectorCount:
@@ -1430,6 +1502,29 @@ components:
         secret:
           type: boolean
         value:
+          type: string
+      type: object
+    Event:
+      properties:
+        distinctId:
+          type: string
+        event:
+          type: string
+        properties:
+          additionalProperties: {}
+          type: object
+        time:
+          type: string
+      type: object
+    Exception:
+      properties:
+        handled:
+          type: boolean
+        message:
+          type: string
+        stack:
+          type: string
+        type:
           type: string
       type: object
     Extracted:
@@ -4548,6 +4643,19 @@ components:
           type: string
         voucherId:
           type: integer
+      type: object
+    UTM:
+      properties:
+        campaign:
+          type: string
+        content:
+          type: string
+        medium:
+          type: string
+        source:
+          type: string
+        term:
+          type: string
       type: object
     Unsubscribed:
       properties:
@@ -8754,6 +8862,35 @@ components:
         status:
           type: string
       type: object
+    healthLens:
+      properties:
+        available:
+          type: boolean
+        table:
+          type: string
+      type: object
+    healthLenses:
+      properties:
+        events:
+          $ref: '#/components/schemas/healthLens'
+        llm:
+          $ref: '#/components/schemas/healthLens'
+      type: object
+    healthReport:
+      properties:
+        datastore:
+          type: boolean
+        lenses:
+          $ref: '#/components/schemas/healthLenses'
+        reason:
+          type: string
+        service:
+          type: string
+        status:
+          type: string
+        warehouse:
+          type: string
+      type: object
     healthView:
       properties:
         provider:
@@ -8922,6 +9059,38 @@ components:
         role:
           description: Role is "edge" when this instance binds the listeners, else
             "app".
+          type: string
+      type: object
+    insightsBody:
+      properties:
+        batch:
+          items:
+            $ref: '#/components/schemas/insightsEvent'
+          type: array
+        distinct_id:
+          type: string
+        event:
+          type: string
+        properties:
+          additionalProperties: {}
+          type: object
+        timestamp:
+          type: string
+        uuid:
+          type: string
+      type: object
+    insightsEvent:
+      properties:
+        distinct_id:
+          type: string
+        event:
+          type: string
+        properties:
+          additionalProperties: {}
+          type: object
+        timestamp:
+          type: string
+        uuid:
           type: string
       type: object
     insightsStatus:
@@ -17609,16 +17778,57 @@ paths:
   /v1/analytics:
     post:
       operationId: post_v1_analytics
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+              - $ref: '#/components/schemas/Event'
+              - items:
+                  $ref: '#/components/schemas/Event'
+                type: array
+              - $ref: '#/components/schemas/CaptureBatch'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaptureResult'
+          description: Success
       tags:
       - analytics
   /v1/analytics/batch:
     post:
       operationId: post_v1_analytics_batch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+              - $ref: '#/components/schemas/Event'
+              - items:
+                  $ref: '#/components/schemas/Event'
+                type: array
+              - $ref: '#/components/schemas/CaptureBatch'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaptureResult'
+          description: Success
       tags:
       - analytics
   /v1/analytics/health:
     get:
       operationId: get_v1_analytics_health
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/healthReport'
+          description: Success
       tags:
       - analytics
   /v1/analytics/overview:
@@ -24925,6 +25135,23 @@ paths:
   /v1/event:
     post:
       operationId: post_v1_event
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+              - $ref: '#/components/schemas/Event'
+              - items:
+                  $ref: '#/components/schemas/Event'
+                type: array
+              - $ref: '#/components/schemas/CaptureBatch'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaptureResult'
+          description: Success
       tags:
       - event
   /v1/event/{project}/envelope:
@@ -24936,6 +25163,12 @@ paths:
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              format: binary
+              type: string
       tags:
       - event
   /v1/event/{project}/store:
@@ -24947,6 +25180,12 @@ paths:
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              format: binary
+              type: string
       tags:
       - event
   /v1/exec:
@@ -28472,6 +28711,18 @@ paths:
   /v1/insights/e:
     post:
       operationId: post_v1_insights_e
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/insightsBody'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaptureResult'
+          description: Success
       tags:
       - insights
   /v1/insights/events:
@@ -36021,6 +36272,23 @@ paths:
   /v1/tracker:
     post:
       operationId: post_v1_tracker
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+              - $ref: '#/components/schemas/Event'
+              - items:
+                  $ref: '#/components/schemas/Event'
+                type: array
+              - $ref: '#/components/schemas/CaptureBatch'
+      responses:
+        2XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaptureResult'
+          description: Success
       tags:
       - tracker
   /v1/tracker/projects:
