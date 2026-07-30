@@ -59,6 +59,12 @@ var allowedRequestUses = map[string]string{
 		"plane. Ownership needs X-User-Id and org-admin-ness (X-User-IsOrgAdmin), neither of which " +
 		"principal.OrgFrom carries. Both fail closed off the HTTP path: no request, no attested caller, " +
 		"no management rights.",
+	"apps/agents/routing_http.go": "claimKeyOf — the route-work plane authenticates a MACHINE with a " +
+		"claim key that rides in its own header (X-Agent-Claim-Key), which is the second of that plane's two " +
+		"independent proofs alongside the validated org. principal.OrgFrom carries the org and nothing else, " +
+		"and the key is a credential rather than an addressing value, so it must not become an In field a " +
+		"caller can also put in the body. Fails closed off the HTTP path: no request, no key, and " +
+		"verifyClaimKey refuses an empty one.",
 	"apps/company/register.go": "reviewer — the Hanzo platform gate on the formation register and on a " +
 		"founder KYC decision. Hanzo forms the entity and carries the KYC/AML obligation, so the decision is " +
 		"a SuperAdmin one and is ATTRIBUTED: it needs X-User-IsAdmin and X-User-Id, neither of which " +
@@ -70,6 +76,16 @@ var allowedRequestUses = map[string]string{
 	"apps/visor/visor.go": "A tenant-scoped PROXY: client.go forwards the caller's own identity headers " +
 		"(and their bearer where no service credential is configured) upstream, so an op without the request " +
 		"drops the caller's identity on the far side of the hop.",
+	"apps/tools/typed.go": "projectOf / callerOf / audit — the tool plane is scoped to (org, PROJECT), and " +
+		"the project is a server-minted header (X-Project-Id) that principal.OrgFrom does not carry, so " +
+		"resolving it needs the REQUEST; principal.Project is still the one function that reads it. An " +
+		"activation write is also ATTRIBUTED — the store records the validated user id (X-User-Id) who turned " +
+		"a tool on — and every fact an audit record carries beyond the org (the user, the email, admin-ness, " +
+		"the method, the path, the source IP, the request id) rides on the request too. The TENANT itself is " +
+		"resolved with principal.OrgFrom (tenantOf, in this same file), never through the request. THREE " +
+		"functions in ONE file, so fourteen typed ops share one seam; all fail closed off the HTTP path — no " +
+		"request means the default project, no actor, and no audit record, since an unattributable record is " +
+		"worse than none, and tenantOf refuses before any of them is reached.",
 	"apps/team/typed.go": "tokenOf / sessionOf / admin / noStore / cookie — team authenticates its billing, " +
 		"files and collaborator planes with its OWN HS256 session token, which rides in Authorization or the " +
 		"HttpOnly account-token cookie; principal.OrgFrom carries neither (nor the WORKSPACE claim the " +

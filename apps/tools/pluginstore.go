@@ -17,13 +17,23 @@ import (
 // KMS custody — so a generated plugin is safe to read, diff, and re-bundle, and
 // rotating a key never means editing code.
 type AuthoredPlugin struct {
-	ID        string `json:"id"`
-	Org       string `json:"org"`
-	Name      string `json:"name"`
-	Provider  string `json:"provider,omitempty"` // connectors provider whose credential this plugin uses
-	Source    string `json:"source"`             // TypeScript as authored
-	Bundled   string `json:"-"`                  // CommonJS from Bundle; never rendered to a client
-	CreatedAt int64  `json:"createdAt"`
+	// ID is the plugin's id within the org, and the id a delete addresses.
+	ID string `json:"id"`
+	// Org is the org that built the plugin — the validated caller's.
+	Org string `json:"org"`
+	// Name is the plugin's name: one lowercase path segment, the id it runs by.
+	Name string `json:"name"`
+	// Provider is the connectors provider whose credential this plugin uses at
+	// run time. Absent for a plugin that needs none. The credential itself is
+	// never here — it stays under KMS custody in the connectors plane.
+	Provider string `json:"provider,omitempty"`
+	// Source is the TypeScript as authored (or as generated from a spec).
+	Source string `json:"source"`
+	// Bundled is the CommonJS the bundler produced, which the runtime executes.
+	// Never rendered to a client.
+	Bundled string `json:"-"`
+	// CreatedAt is when the plugin was last built, Unix seconds.
+	CreatedAt int64 `json:"createdAt"`
 }
 
 // AuthoredStore is the per-org registry of authored plugins (one SQLite file,
