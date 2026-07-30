@@ -1384,14 +1384,33 @@ be worse than the route-only entries these two carry.
 
 `apps/account` (11 of 18) is the catch-all refusal in its purest form: its seven
 untyped routes are two routes' worth of shape — GET|POST `/v1/billing/*` and the
-five-method `/v1/commerce/*` — each a verbatim forwarder whose path is a wildcard
-remainder no named In field can bind, whose body is forwarded as received (any
-content type; zip's `invoke` json.Unmarshals first, typed.go:227), and whose
-answer is the upstream's own bytes AND status (`c.Bytes(status, raw)`, including
-a PDF at `invoices/{}/pdf`), where a typed dispatch answers one declared status
-in JSON. Opaque by construction, not by omission; what they may reach is bounded
-by allowlists instead of types (`billingForwardable` in billing.go,
+five-method `/v1/commerce/*` — each a forwarder whose path is a wildcard remainder
+no named In field can bind, whose request body is never JSON-validated (zip's
+`invoke` json.Unmarshals first and answers `ErrBadRequest`, typed.go:231), and
+whose answer carries the upstream's own status AND body bytes (`c.Bytes(status,
+raw)` — a 402 spend cap, a PDF at `invoices/{}/pdf`), where a typed dispatch
+answers one declared 2xx in JSON and `WithStatus` panics on anything else.
+Opaque by construction, not by omission; what they may reach is bounded by
+allowlists instead of types (`billingForwardable` in billing.go,
 `commerceStoreHeads` in commerce.go).
+
+Both decisive facts are now a TEST, not a paragraph —
+`TestUntypedByDesignForwardsVerbatim` (apps/account/typed_wire_test.go) drives the
+live bridge against a stub upstream and asserts the 402 and the byte-identical
+`%PDF-` body, so the refusal goes red if a handler stops behaving that way. The
+audit that produced it also refuted "forwarded as received, at any content type":
+`commerceDo` (topup.go) is a JSON transport, not a transparent proxy, and the
+bridges inherit three rewrites from it — the request Content-Type is SET to
+application/json whenever there is a body, no response header is returned at all
+(so billing.go pins application/json over commerce's own type and drops
+Content-Disposition), and the response body is truncated at 1 MiB under the
+upstream's own 200. The live consequence: `GET /v1/billing/invoices/{id}/pdf`,
+the one non-JSON entry in `billingForwardable`, delivers PDF bytes labelled JSON
+with no filename, against a commerce that sets `application/pdf` + `attachment`
+(commerce api/billing/invoice_pdf.go). Unfixed on purpose — the repair is
+commerceDo returning response headers, three call sites including the top-up
+money path, keeping `Cache-Control: no-store` (a tenancy property, not a content
+one) — and recorded at the lines that cause it.
 
 **What compensates today, and how it dies.** hanzoai/openapi carries an AUTHORED
 master, `hanzo.yaml`, which is the only source of request-body and query-parameter
