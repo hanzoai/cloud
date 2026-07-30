@@ -30,9 +30,23 @@
     "/v1/ml/models": {
       "get": {
         "operationId": "get_v1_ml_models",
+        "summary": "ListModels lists the inference models deployed in the caller's org.",
+        "description": "ListModels lists the inference models deployed in the caller's org. Each entry\ncarries the model's name, when Kubernetes admitted it, and kserve's live status\n— the spec is on the single-model read. An org that has deployed nothing gets\nan empty list.",
         "tags": [
           "ml"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlResourceList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_ml_models",
@@ -43,7 +57,9 @@
     },
     "/v1/ml/models/{name}": {
       "delete": {
-        "operationId": "delete_v1_ml_models_by_name",
+        "operationId": "delete_v1_ml_models_name",
+        "summary": "DeleteModel deletes a deployed inference model.",
+        "description": "DeleteModel deletes a deployed inference model. kserve owns the teardown: the\nInferenceService goes away and the serving deployment behind it follows, so the\nmodel stops answering predict calls. Answers 204, or 404 for a name the\ncaller's org does not own.",
         "tags": [
           "ml"
         ],
@@ -52,14 +68,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sentiment"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_ml_models_by_name",
+        "operationId": "get_v1_ml_models_name",
+        "summary": "GetModel returns one deployed inference model.",
+        "description": "GetModel returns one deployed inference model. Its spec comes with it, and\nkserve's live status, which is where readiness and the serving address appear.\nA name the caller's org does not own answers 404, exactly as an unknown name\ndoes, so a probe learns nothing about another tenant's models.",
         "tags": [
           "ml"
         ],
@@ -68,11 +93,25 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sentiment"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlResource"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "patch": {
         "operationId": "patch_v1_ml_models_by_name",
@@ -112,9 +151,23 @@
     "/v1/train/experiments": {
       "get": {
         "operationId": "get_v1_train_experiments",
+        "summary": "ListExperiments lists the caller org's tuning experiments.",
+        "description": "ListExperiments lists the caller org's tuning experiments. Each entry carries\nthe experiment's name, when Kubernetes admitted it, and katib's live status —\nthe spec is on the single-experiment read.",
         "tags": [
           "train"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlResourceList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_train_experiments",
@@ -125,7 +178,9 @@
     },
     "/v1/train/experiments/{name}": {
       "delete": {
-        "operationId": "delete_v1_train_experiments_by_name",
+        "operationId": "delete_v1_train_experiments_name",
+        "summary": "DeleteExperiment deletes a hyperparameter-tuning experiment.",
+        "description": "DeleteExperiment deletes a hyperparameter-tuning experiment. Kubernetes\ngarbage-collects the Trials katib created under it, because they carry the\nExperiment as their owner. Answers 204, or 404 for a name the caller's org does\nnot own.",
         "tags": [
           "train"
         ],
@@ -134,14 +189,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sweep-1"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_train_experiments_by_name",
+        "operationId": "get_v1_train_experiments_name",
+        "summary": "GetExperiment returns one hyperparameter-tuning experiment.",
+        "description": "GetExperiment returns one hyperparameter-tuning experiment. Its spec comes with\nit, and katib's live status, which is where the best trial found so far is\nreported.",
         "tags": [
           "train"
         ],
@@ -150,16 +214,32 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sweep-1"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlResource"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/train/experiments/{name}/trials": {
       "get": {
-        "operationId": "get_v1_train_experiments_by_name_trials",
+        "operationId": "get_v1_train_experiments_name_trials",
+        "summary": "ListTrials lists the katib Trials one experiment owns.",
+        "description": "ListTrials lists the katib Trials one experiment owns. The experiment is read\nFIRST, so a name the caller's org does not own is a clean 404 rather than an\nempty list; the Trials themselves are selected by katib's own\nkatib.kubeflow.org/experiment label within the caller's tenant namespace.",
         "tags": [
           "train"
         ],
@@ -168,11 +248,25 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "sweep-1"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlTrials"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/train/health": {
@@ -186,9 +280,23 @@
     "/v1/train/jobs": {
       "get": {
         "operationId": "get_v1_train_jobs",
+        "summary": "ListJobs lists the training jobs in the caller's org.",
+        "description": "ListJobs lists the training jobs in the caller's org. Each entry carries the\njob's name, when Kubernetes admitted it, and the trainer operator's live status\n— the spec is on the single-job read.",
         "tags": [
           "train"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlResourceList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "post": {
         "operationId": "post_v1_train_jobs",
@@ -199,7 +307,9 @@
     },
     "/v1/train/jobs/{name}": {
       "delete": {
-        "operationId": "delete_v1_train_jobs_by_name",
+        "operationId": "delete_v1_train_jobs_name",
+        "summary": "DeleteJob deletes a training job.",
+        "description": "DeleteJob deletes a training job. Kubernetes garbage-collects the pods the\ntrainer operator created under it, because they carry the TrainJob as their\nowner — so deleting the job is how a run is stopped. Answers 204, or 404 for a\nname the caller's org does not own.",
         "tags": [
           "train"
         ],
@@ -208,14 +318,23 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "finetune-1"
           }
-        ]
+        ],
+        "responses": {
+          "204": {
+            "description": "no content"
+          }
+        }
       },
       "get": {
-        "operationId": "get_v1_train_jobs_by_name",
+        "operationId": "get_v1_train_jobs_name",
+        "summary": "GetJob returns one training job.",
+        "description": "GetJob returns one training job. Its spec comes with it, and the trainer\noperator's live status, which is where a run's phase and its conditions are\nreported.",
         "tags": [
           "train"
         ],
@@ -224,11 +343,84 @@
             "name": "name",
             "in": "path",
             "required": true,
+            "description": "Name is the resource to act on, taken from the path. Lower-cased and\ntrimmed to the DNS-1123 label a CustomResource's metadata.name must be.",
             "schema": {
               "type": "string"
-            }
+            },
+            "example": "finetune-1"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/mlResource"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "mlResource": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when Kubernetes admitted the object, RFC 3339 in UTC.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name is the object's metadata.name, unique within the caller's namespace.",
+            "type": "string"
+          },
+          "spec": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "description": "Spec is the resource spec, verbatim as Kubernetes stores it. Present on a\nsingle-object read, absent from a list.",
+            "type": "object"
+          },
+          "status": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "description": "Status is the live status its operator owns (kserve, trainer or katib),\nverbatim. Absent until that operator has written one.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "mlResourceList": {
+        "properties": {
+          "items": {
+            "description": "Items is one entry per object, newest LAST (the Kubernetes list order).",
+            "items": {
+              "$ref": "#/components/schemas/mlResource"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "mlTrials": {
+        "properties": {
+          "experiment": {
+            "description": "Experiment is the experiment the trials belong to, echoed from the path.",
+            "type": "string"
+          },
+          "items": {
+            "description": "Items is one entry per Trial, in the list shape (no spec).",
+            "items": {
+              "$ref": "#/components/schemas/mlResource"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
       }
     }
   }
