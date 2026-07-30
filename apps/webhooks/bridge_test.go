@@ -20,15 +20,16 @@ import (
 // wildcard or an unbounded token.
 func TestSubjectForFoldsNamesToTokens(t *testing.T) {
 	cases := map[string]string{
-		"$pageview":       "event.pageview",
-		"$error":          "event.error",
-		"$identify":       "event.identify",
-		"Signed Up":       "event.signed_up",
-		"order.completed": "event.order_completed",
-		"a>b*c":           "event.a_b_c",
-		"$":               "event.custom",
-		"":                "event.custom",
-		"...":             "event.custom",
+		"$pageview":        "event.pageview",
+		"$error":           "event.error",
+		"$identify":        "event.identify",
+		"signup_completed": "event.signup_completed",
+		"order_completed":  "event.order_completed",
+		"Custom Thing!":    "event.custom_thing",
+		"a>b*c":            "event.a_b_c",
+		"$":                "event.custom",
+		"":                 "event.custom",
+		"...":              "event.custom",
 	}
 	for name, want := range cases {
 		if got := subjectFor(name); got != want {

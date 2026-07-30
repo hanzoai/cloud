@@ -8,7 +8,8 @@
 //
 //	event.<kind>        kind = the event's canonical name as a NATS-safe token
 //	                    ($pageview → event.pageview, $error → event.error,
-//	                    "Signed Up" → event.signed_up)
+//	                    signup_completed → event.signup_completed — the
+//	                    @hanzo/event grammar: <object>_<verb-past>)
 //
 // carrying the Envelope below — organization_id first, because the delivery
 // engine (dispatch.go orgOf) resolves the tenant from the envelope and an
