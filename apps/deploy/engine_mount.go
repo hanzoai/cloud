@@ -70,10 +70,18 @@ func envOr(k, d string) string {
 	return d
 }
 
-// registerEngineRoutes adds the engine (write) routes alongside the existing
+// registerEngineRoutes adds the engine (write) route alongside the existing
 // read/visualize routes. Called from routes() in deploy.go.
+//
+// It stays a RAW handler for the same measured reason the other POSTs on this
+// plane do: zip decodes the request body BEFORE the handler runs and 400s any
+// body it cannot parse (typed.go:243-247), while this route reads no body at all.
+// Typing it would answer a malformed body with 400 where the route answers 503
+// (engine disabled) or 403 (not a SuperAdmin) today — and would put the parse
+// error AHEAD of the authorization refusal. zip has no body-tolerant op and no
+// bodyless POST to declare (hasBody, openapi.go:270, is method-only).
 func registerEngineRoutes(app cloud.Router, s *cloud.Service[state]) {
-	app.Post("/v1/deploy/reconcile", guard(s, cloud.Handle(s, engineReconcile)))
+	app.Post(dashPrefix+"/reconcile", guard(s, cloud.Handle(s, engineReconcile)))
 }
 
 // engineReconcile is POST /v1/deploy/reconcile — a SuperAdmin-gated, one-shot
