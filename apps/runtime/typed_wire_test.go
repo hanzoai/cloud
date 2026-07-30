@@ -36,7 +36,7 @@ var untypedByDesign = map[string]string{
 
 // reasonProxy is the one reason all seven share, because all seven ARE one
 // registration: `app.All("/v1/bot/*", s.proxy)` (ops.go). Three wire facts each
-// independently forbid a typed op, all three verified against zip v1.18.11:
+// independently forbid a typed op, all three verified against zip v1.18.12:
 //
 //   - ONE registration, EVERY method. zip's typed registrars are per-method and
 //     there is no All[In, Out].
@@ -46,12 +46,12 @@ var untypedByDesign = map[string]string{
 //     (typed.go setScalar) can set on an In field.
 //   - a VERBATIM response. proxy answers c.Bytes(resp.StatusCode, rb) under the
 //     runtime's own Content-Type, which is frequently not JSON at all. A typed op
-//     can only answer c.JSON(out) under the status it DECLARED (zip v1.18.11
+//     can only answer c.JSON(out) under the status it DECLARED (zip v1.18.12
 //     typed.go:302-311), so both move.
 const reasonProxy = "proxy. One All() registration for every method, over a greedy wildcard the proxy " +
 	"re-mounts on the runtime, relaying the runtime's own status code and Content-Type verbatim. zip has " +
 	"no All[In, Out], no In field can bind a whole sub-path, and a typed op can only answer c.JSON(out) " +
-	"under its declared status (zip v1.18.11 typed.go:302-311) — method, path and response all move."
+	"under its declared status (zip v1.18.12 typed.go:302-311) — method, path and response all move."
 
 // TestEveryRouteIsTypedOrNamed fails when a /v1/bot operation is neither a typed
 // op nor named above, so the next route added here is typed BY DEFAULT. It also
