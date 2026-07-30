@@ -39,9 +39,9 @@ func TestPrincipalGateForbidden(t *testing.T) {
 		body         any
 	}{
 		{http.MethodGet, "/v1/code/search?q=x", nil},
-		{http.MethodPost, "/v1/code/context", contextReq{Query: "x"}},
+		{http.MethodPost, "/v1/code/context", contextIn{Query: "x"}},
 		{http.MethodGet, "/v1/code/ask?q=x", nil},
-		{http.MethodPost, "/v1/code/index", indexReq{Repo: "r", Files: []fileInput{{Path: "a.go", Content: "package a"}}}},
+		{http.MethodPost, "/v1/code/index", indexIn{Repo: "r", Files: []fileInput{{Path: "a.go", Content: "package a"}}}},
 	}
 	for _, c := range cases {
 		if got := forged(c.method, c.path, c.body); got != http.StatusForbidden {
@@ -102,7 +102,7 @@ func TestIndexSearchContextAsk(t *testing.T) {
 
 	// context bundle
 	status, b := doAuth(t, app, http.MethodPost, "/v1/code/context", "acme",
-		contextReq{Query: "how does Hello greet", BudgetTokens: 2000, Repo: "svc"})
+		contextIn{Query: "how does Hello greet", BudgetTokens: 2000, Repo: "svc"})
 	if status != http.StatusOK {
 		t.Fatalf("context status=%d body=%s", status, b)
 	}
@@ -236,7 +236,7 @@ func TestIncrementalAndPrune(t *testing.T) {
 	}
 
 	// A pruning re-index with only one file removes the two absent files.
-	body := indexReq{Repo: "svc", Prune: true, Files: []fileInput{{Path: "greeter.go", Content: goFixture}}}
+	body := indexIn{Repo: "svc", Prune: true, Files: []fileInput{{Path: "greeter.go", Content: goFixture}}}
 	status, b := doAuth(t, app, http.MethodPost, "/v1/code/index", "acme", body)
 	if status != http.StatusOK {
 		t.Fatalf("prune status=%d body=%s", status, b)
