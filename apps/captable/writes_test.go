@@ -31,11 +31,17 @@ package captable
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/goja"
+	luxlog "github.com/luxfi/log"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -418,5 +424,142 @@ func TestScalarCarriesEveryJSONToken(t *testing.T) {
 	v, found := obj["nulled"]
 	if !found || v != nil {
 		t.Fatalf("an explicit null must survive as a present, nil key: %v (found=%v)", v, found)
+	}
+}
+
+// newAppMCP mounts captable the way the SERVER does: one cloud.Bridge at the app
+// ROOT. zip's own projections of the typed-op registry — the MCP endpoint at /mcp
+// and the call plane at /.well-known/zip/op/ — are ordinary routes on the app
+// itself, so they sit OUTSIDE the /v1/captable group and the group's own Bridge
+// never runs for them. cloud.Serve installs the root one, which is what gives them
+// a validated org in production.
+func newAppMCP(t *testing.T) *zip.App {
+	t.Helper()
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	app.Use(cloud.Bridge())
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	// zip installs /mcp in prepare(), which Listen would call; a Fiber().Test app
+	// never listens. Once-guarded, so calling it here is safe.
+	app.Prepare()
+	t.Cleanup(func() { _ = Shutdown(context.Background()) })
+	return app
+}
+
+// toolsCall invokes op through zip's MCP endpoint with args as the tools/call
+// arguments object — the WHOLE input over this transport — and returns the result
+// text and whether MCP reported an error.
+func toolsCall(t *testing.T, app *zip.App, org, op, args string) (string, bool) {
+	t.Helper()
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + op + `","arguments":` + args + `}}`
+	rq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	rq.Header.Set("Content-Type", "application/json")
+	if org != "" {
+		rq.Header.Set("X-Org-Id", org)
+		rq.Header.Set("X-User-Id", "u_"+org)
+	}
+	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("tools/call %s: %v", op, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(resp.Body)
+	var env struct {
+		Result struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+			IsError bool `json:"isError"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(raw, &env); err != nil {
+		t.Fatalf("tools/call %s: %v (%s)", op, err, raw)
+	}
+	if len(env.Result.Content) == 0 {
+		t.Fatalf("tools/call %s returned no content: %s", op, raw)
+	}
+	return env.Result.Content[0].Text, env.Result.IsError
+}
+
+// toolNamed finds the tool zip derived for one op, by the segments of its path.
+func toolNamed(t *testing.T, app *zip.App, want ...string) string {
+	t.Helper()
+	for _, tool := range app.MCPTools() {
+		n, _ := tool["name"].(string)
+		if n == "" {
+			continue
+		}
+		all := true
+		for _, w := range want {
+			if !strings.Contains(n, w) {
+				all = false
+				break
+			}
+		}
+		if all {
+			return n
+		}
+	}
+	t.Fatalf("no derived tool matching %v — the op is not in the registry", want)
+	return ""
+}
+
+// TestTypedWritesAddressThroughArgumentsAlone pins the rule a typed op must obey:
+// it has to be addressable through its In ALONE. Over MCP and the ZAP call plane
+// there is no URL — the arguments object IS the whole input, and zip passes it as
+// the body with a NIL path map — so an op whose address reaches it only from the
+// path is addressable over REST and nowhere else.
+//
+// This is the failure a REST test cannot see, and these two ops are exactly the
+// shape that risks it: a struct In carrying an id field beside a body, decoded by
+// an UnmarshalJSON of its own. The id survives because it is a field of the type
+// that UnmarshalJSON decodes, so `"id"` in the arguments binds it; over REST
+// bindURL then overwrites it from the path, which is the authority there. Were the
+// id ever moved out of the decoded set, every REST test above would stay green and
+// both tools would answer not-found.
+func TestTypedWritesAddressThroughArgumentsAlone(t *testing.T) {
+	app := newAppMCP(t)
+	holder := addHolder(t, app, "acme", "ada@example.com")
+	round := addOpenRound(t, app, "acme", "R-mcp")
+
+	patch := toolNamed(t, app, "captable_stakeholders", "patch")
+	closer := toolNamed(t, app, "captable_rounds", "close")
+
+	// The stakeholder the arguments name must reach the handler.
+	text, isErr := toolsCall(t, app, "acme", patch, `{"id":"`+holder+`","city":"Paris"}`)
+	if isErr {
+		t.Fatalf("%s cannot address a stakeholder over MCP: its In does not receive id from the "+
+			"arguments object, so the REST wire survived and this projection did not (%s)", patch, text)
+	}
+	if !strings.Contains(text, `"success":true`) {
+		t.Fatalf("%s must apply the patch over MCP, got %s", patch, text)
+	}
+	// Without the address the SAME tool cannot find it — so "found" above discriminates.
+	if _, isErr := toolsCall(t, app, "acme", patch, `{"city":"Lyon"}`); !isErr {
+		t.Fatalf("%s with no id must not resolve a stakeholder — the discriminator is dead", patch)
+	}
+
+	// And the round.
+	text, isErr = toolsCall(t, app, "acme", closer, `{"id":"`+round+`","closeDate":"2026-06-15"}`)
+	if isErr {
+		t.Fatalf("%s cannot address a round over MCP: %s", closer, text)
+	}
+	if !strings.Contains(text, `"success":true`) {
+		t.Fatalf("%s must close the round over MCP, got %s", closer, text)
+	}
+	if _, isErr := toolsCall(t, app, "acme", closer, `{"closeDate":"2026-06-15"}`); !isErr {
+		t.Fatalf("%s with no id must not resolve a round — the discriminator is dead", closer)
+	}
+
+	// The body reached the bundle too, not just the address: the patch above set
+	// Paris through the arguments object alone.
+	_, body := req(t, app, http.MethodGet, "/v1/captable/stakeholders", "acme", nil)
+	var rows []captableStakeholder
+	if err := json.Unmarshal(body, &rows); err != nil || len(rows) != 1 {
+		t.Fatalf("read back stakeholders: %v (%s)", err, body)
+	}
+	if rows[0].City == nil || *rows[0].City != "Paris" {
+		t.Fatalf("the MCP patch must carry its body: want city Paris, got %v", rows[0].City)
 	}
 }
