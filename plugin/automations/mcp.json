@@ -1,0 +1,403 @@
+[
+  {
+    "description": "DeleteFlow deletes one automation, its versions and its run history. It answers\nno content, and a flow of another org answers not-found.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the flow to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_automations_flows_id"
+  },
+  {
+    "description": "Connectors returns the connector catalogue. Each entry is an external service a\nflow step can invoke, carrying its auth descriptor and the input properties of its\nactions and triggers. The catalogue is the same for every tenant, so the gate is a\nvalidated principal rather than a per-org view.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_automations_connectors"
+  },
+  {
+    "description": "ListFlows returns the caller org's automations, most-recently-updated first. The\noptional `limit` query bounds the page.",
+    "inputSchema": {
+      "properties": {
+        "limit": {
+          "description": "Limit bounds the page (default 200, maximum 1000).",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_automations_flows"
+  },
+  {
+    "description": "GetFlow returns one automation and its latest version. That is the flow record\nplus the step tree the builder edits; a flow of another org answers not-found.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the flow to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_automations_flows_id"
+  },
+  {
+    "description": "ListVersions returns one flow's versions, newest first. The optional `limit`\nquery bounds the page.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the flow whose versions to list, from the path.",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Limit bounds the page (default 200, maximum 1000).",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_automations_flows_id_versions"
+  },
+  {
+    "description": "Pieces is the retired-name alias of the connector catalogue. It serves exactly\nwhat GET /v1/automations/connectors serves, under the name this surface used\nbefore \"piece\" (the ActivePieces term) became \"connector\", and stays valid for\nclients pinned to the old path. Prefer /connectors.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_automations_pieces"
+  },
+  {
+    "description": "ListRuns returns the caller org's run history, newest first. The optional\n`flowId` query narrows it to one flow and `limit` bounds the page.",
+    "inputSchema": {
+      "properties": {
+        "flowId": {
+          "description": "FlowID narrows the history to one flow. Omit it for the whole org's runs.",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Limit bounds the page (default 200, maximum 1000).",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_automations_runs"
+  },
+  {
+    "description": "GetRun returns one run. A run that has not reached a terminal status is refreshed\nfrom the durable engine first — scoped to the org's own namespace — so the caller\nsees live progress rather than the last status that happened to be persisted.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the run to read, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_automations_runs_id"
+  },
+  {
+    "description": "UpdateFlow updates one automation's metadata in place. Every field is optional; a\nfield the request omits is left alone. Publishing a version pins which one runs,\nand is refused unless that version belongs to this flow.",
+    "inputSchema": {
+      "properties": {
+        "externalId": {
+          "description": "ExternalID sets the caller's own id for this flow.",
+          "type": "string"
+        },
+        "folderId": {
+          "description": "FolderID moves the flow in the builder's tree.",
+          "type": "string"
+        },
+        "id": {
+          "description": "ID is the flow to update, from the path.",
+          "type": "string"
+        },
+        "metadata": {
+          "description": "Metadata replaces the caller's opaque JSON."
+        },
+        "publishedVersionId": {
+          "description": "PublishedVersionID pins the version runs execute. It must name a version OF\nTHIS FLOW; empty clears the pin, so runs take the latest version again.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "patch_v1_automations_flows_id"
+  },
+  {
+    "description": "Run executes one connector action in-process and answers the outcome. The\ncaller's resolved credential travels in `auth`, delivered to the action\nverbatim — the runtime resolves no credential itself. An action that ran and\nfailed (or an action name the connector does not have) answers ok:false with\nthe failure message, not an HTTP error; an unknown connector is 404 and a\nmissing action 422.",
+    "inputSchema": {
+      "properties": {
+        "action": {
+          "description": "Action is the name of the connector action to invoke.",
+          "type": "string"
+        },
+        "auth": {
+          "description": "Auth is the caller's resolved credential for the connector, handed to the\naction verbatim. Its shape is whatever the connector's auth descriptor\ndeclares (a token string, an object), so it is opaque here.",
+          "type": "object"
+        },
+        "id": {
+          "description": "ID is the connector to run, from the path.",
+          "type": "string"
+        },
+        "props": {
+          "additionalProperties": {
+            "type": "object"
+          },
+          "description": "Props are the action's input properties, keyed by property name.",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_automations_connectors_id_run"
+  },
+  {
+    "description": "CreateFlow creates an automation and its initial DRAFT version in one call. The\nnew flow is DISABLED — creating it does not arm its trigger; POST\n/v1/automations/flows/{id}/enable does that.",
+    "inputSchema": {
+      "$defs": {
+        "FlowAction": {
+          "properties": {
+            "displayName": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "nextAction": {
+              "$ref": "#/$defs/FlowAction"
+            },
+            "settings": {
+              "$ref": "#/$defs/StepSettings"
+            },
+            "skip": {
+              "type": "boolean"
+            },
+            "type": {
+              "description": "PIECE | CODE | ROUTER | LOOP_ON_ITEMS",
+              "type": "string"
+            },
+            "valid": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "FlowTrigger": {
+          "properties": {
+            "displayName": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "nextAction": {
+              "$ref": "#/$defs/FlowAction"
+            },
+            "settings": {
+              "$ref": "#/$defs/StepSettings"
+            },
+            "strategy": {
+              "type": "string"
+            },
+            "type": {
+              "description": "PIECE_TRIGGER | EMPTY",
+              "type": "string"
+            },
+            "valid": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "StepSettings": {
+          "properties": {
+            "actionName": {
+              "type": "string"
+            },
+            "input": {
+              "additionalProperties": {
+                "type": "object"
+              },
+              "type": "object"
+            },
+            "pieceName": {
+              "type": "string"
+            },
+            "pieceVersion": {
+              "type": "string"
+            },
+            "triggerName": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "displayName": {
+          "description": "DisplayName names the flow's initial draft version.",
+          "type": "string"
+        },
+        "externalId": {
+          "description": "ExternalID is the caller's own id for this flow. Optional.",
+          "type": "string"
+        },
+        "folderId": {
+          "description": "FolderID groups the flow in the builder's tree. Optional.",
+          "type": "string"
+        },
+        "trigger": {
+          "$ref": "#/$defs/FlowTrigger",
+          "description": "Trigger is the root of the step tree — how the flow starts, and the action\nchain that follows. Optional: a flow may be created empty and edited later."
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_automations_flows"
+  },
+  {
+    "description": "DisableFlow disarms a flow's trigger and marks it DISABLED. Its schedule and its\nevent subscriptions are dropped, so a disabled flow is never a live target; runs\nalready in flight are unaffected, and it can still be started on demand.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the flow to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_automations_flows_id_disable"
+  },
+  {
+    "description": "EnableFlow arms a flow's trigger and marks it ENABLED. A POLLING trigger gets a\ncron schedule on the durable engine; a WEBHOOK trigger gets a subscription in the\nrouting index, so an inbound event starts it; a MANUAL trigger arms nothing and\nstill runs on demand.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the flow to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_automations_flows_id_enable"
+  },
+  {
+    "description": "RunFlow starts one durable run of a flow now. It runs the flow's published\nversion if one is pinned, else its latest, and answers the run record it created.\nThe run is bounded by the org's per-minute run-start budget and its in-flight\nconcurrency ceiling; over either, or with the engine not ready, no run is started\nand no run id is burned.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the flow to act on, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_automations_flows_id_run"
+  },
+  {
+    "description": "CreateVersion adds a new DRAFT version to a flow. The version is created invalid\nunless it carries a trigger, and it does not become the running version until it\nis published (PATCH the flow's publishedVersionId) or becomes the latest.",
+    "inputSchema": {
+      "$defs": {
+        "FlowAction": {
+          "properties": {
+            "displayName": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "nextAction": {
+              "$ref": "#/$defs/FlowAction"
+            },
+            "settings": {
+              "$ref": "#/$defs/StepSettings"
+            },
+            "skip": {
+              "type": "boolean"
+            },
+            "type": {
+              "description": "PIECE | CODE | ROUTER | LOOP_ON_ITEMS",
+              "type": "string"
+            },
+            "valid": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "FlowTrigger": {
+          "properties": {
+            "displayName": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "nextAction": {
+              "$ref": "#/$defs/FlowAction"
+            },
+            "settings": {
+              "$ref": "#/$defs/StepSettings"
+            },
+            "strategy": {
+              "type": "string"
+            },
+            "type": {
+              "description": "PIECE_TRIGGER | EMPTY",
+              "type": "string"
+            },
+            "valid": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "StepSettings": {
+          "properties": {
+            "actionName": {
+              "type": "string"
+            },
+            "input": {
+              "additionalProperties": {
+                "type": "object"
+              },
+              "type": "object"
+            },
+            "pieceName": {
+              "type": "string"
+            },
+            "pieceVersion": {
+              "type": "string"
+            },
+            "triggerName": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "displayName": {
+          "description": "DisplayName names the new version.",
+          "type": "string"
+        },
+        "id": {
+          "description": "ID is the flow to add a version to, from the path.",
+          "type": "string"
+        },
+        "trigger": {
+          "$ref": "#/$defs/FlowTrigger",
+          "description": "Trigger is the root of the version's step tree. Optional: a version with no\ntrigger is created invalid, and cannot run until one is set."
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_automations_flows_id_versions"
+  }
+]

@@ -2,13 +2,13 @@
 # which is otherwise just the app's name.
 #
 # Why one file instead of a target per app: `build` is the same command for every
-# app, and so are `test`, `vet`, `openapi` and `clean`. A target written once per
+# app, and so are `test`, `vet`, `describe` and `clean`. A target written once per
 # app is one place per app for them to disagree — and they would, because nobody
 # edits a hundred files at once. Here the contract has ONE definition and each app
 # supplies the ONE thing that actually varies: its name.
 #
-# It works from the repo root (`make -C apps/tasks openapi`) and from inside
-# the app (`cd apps/tasks && make openapi`), because everything below is
+# It works from the repo root (`make -C apps/tasks describe`) and from inside
+# the app (`cd apps/tasks && make describe`), because everything below is
 # absolute and derived from the including Makefile's own location — never from
 # the caller's cwd. That is not a convenience: task #49 extracts apps into their
 # own repos, and an extracted apps/<app> + plugin/<app> + mk/ keeps these paths
@@ -35,7 +35,7 @@ include $(ROOT)/mk/go.mk
 BIN := $(ROOT)/bin
 
 .DEFAULT_GOAL := help
-.PHONY: help generate build test vet openapi clean
+.PHONY: help generate build test vet describe clean
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\n%s: make <target>\n\n", "$(APPS)"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -49,7 +49,7 @@ help: ## Show this help.
 # /v1/openapi.json is missing every description. `make test` runs zipdoc -check,
 # so a lift that drifts from its source turns CI red instead of shipping stale.
 #
-# It is a prerequisite of `build`, not of `openapi`, because the generated file
+# It is a prerequisite of `build`, not of `describe`, because the generated file
 # is compiled INTO the binary — running it after the build would be too late.
 #
 # An external app's source is another module: nothing here to lift, and nothing
@@ -74,30 +74,34 @@ test: ## Run this app's tests.
 vet: ## go vet this app and its entrypoint(s).
 	@CGO_ENABLED=$(CGO_ENABLED) $(GO) vet $(APPDIR)/... $(foreach a,$(APPS),$(ROOT)/plugin/$(a))
 
-# The app's OWN subset of the API document, from the app's OWN live router: the
-# binary mounts one subsystem and projects it through the same
-# openapi.FleetSpec the whole-fleet golden is projected through (openapi_dump.go).
-# It is never sliced out of the fleet spec by prefix — that would make the fleet
-# the source and the app a derivative, which is backwards and is exactly how a
-# catch-all silently swallows a neighbour's routes.
+# The app's OWN projections, from the app's OWN live router: the binary mounts one
+# subsystem and projects it through the same openapi.FleetSpec the whole-fleet
+# golden is projected through AND the same zip MCPTools the host's agent door is
+# composed from (describe.go). Never sliced out of the fleet spec by prefix — that
+# would make the fleet the source and the app a derivative, which is backwards and
+# is exactly how a catch-all silently swallows a neighbour's routes.
 #
-# `build` first, because a spec generated from a stale binary is a lie.
+# ONE invocation writes BOTH openapi.json and mcp.json, from one mount at one
+# instant over one registry, so the document and the tool catalogue cannot be
+# generated apart and therefore cannot disagree.
+#
+# `build` first, because a projection taken from a stale binary is a lie.
 #
 # GIT_SSH_ADDR: mounting is not free of side effects — apps/git opens a real
-# SSH listener on a fixed :2222 — and a document is a projection of routes, not a
+# SSH listener on a fixed :2222 — and a projection is a function of routes, not a
 # reason to contend for a port with a cloud already running on the box. The same
-# ephemeral-port convention the shared openapi_dump spec harness uses.
+# ephemeral-port convention the shared describe.go spec harness uses.
 #
-# The binary is handed the PATH, never a redirect: a subsystem's dependencies
+# The binary is handed the DIRECTORY, never a redirect: a subsystem's dependencies
 # write to stdout at mount (hanzoai/commerce prints a sqlite-vec warning and GORM
 # debug lines), and `> file` splices those into the front of the document.
-openapi: build ## Emit this app's own subset of the API document into plugin/<app>/openapi.json.
+describe: build ## Emit this app's own OpenAPI subset + MCP tool catalogue into plugin/<app>/.
 	@for a in $(APPS); do \
-	  echo ">> openapi $$a"; \
-	  GIT_SSH_ADDR=127.0.0.1:0 $(BIN)/$$a openapi $(ROOT)/plugin/$$a/openapi.json || exit 1; \
+	  echo ">> describe $$a"; \
+	  GIT_SSH_ADDR=127.0.0.1:0 $(BIN)/$$a describe $(ROOT)/plugin/$$a || exit 1; \
 	done
 
-# Binaries only. plugin/<app>/openapi.json is a committed artifact, like the fleet's
-# openapi.yaml — `clean` removes what a build wrote, not what a build publishes.
+# Binaries only. plugin/<app>/{openapi,mcp}.json are committed artifacts, like the
+# fleet's openapi.yaml — `clean` removes what a build wrote, not what it publishes.
 clean: ## Remove this app's built binary.
 	@rm -f $(foreach a,$(APPS),$(BIN)/$(a))

@@ -35,7 +35,6 @@
 //	✓ GET    /v1/automations/runs/:id               run detail (refreshed from engine)
 //	  POST   /v1/automations/runs/:id/resume        resume a paused run — arbitrary JSON in
 //	  POST   /v1/automations/hooks/:source/:event   inbound event sink — raw-byte dedupe
-//	  POST   /v1/automations/mcp                    MCP JSON-RPC — 200 on an unparseable body
 package automations
 
 import (
@@ -155,8 +154,9 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	routes(app, s)
 
-	// Register every connector action into the unified tool plane. The /v1/automations/mcp
-	// endpoint stays (connector-scoped MCP view); the plane surfaces the SAME tools org-wide.
+	// Register every connector action into the unified tool plane. This is the ONLY
+	// projection of them: discovery is GET /v1/tools, dispatch is POST /v1/tools/call,
+	// and through that registry every action is a tool on the fleet's one agent door.
 	tools.Register(connectorToolProvider{})
 
 	b.Log.Info("automations mounted", "connectors", catalog.ConnectorCount, "runtime", len(registry), "brand", deps.Brand)
@@ -261,11 +261,6 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// see the resume note above — it costs the MCP and call-plane projections, which is
 	// what typing is FOR. See inboundHook.
 	g.Post("/hooks/:source/:event", cloud.Handle(s, inboundHook))
-
-	// UNTYPED — JSON-RPC answers a body it cannot parse with HTTP 200 and a -32700
-	// error object; zip unmarshals BEFORE the handler, so typing it would turn that
-	// 200 into a 400. See mcp.
-	g.Post("/mcp", cloud.Handle(s, mcp))
 }
 
 // Shutdown closes the store. Idempotent — safe when nothing is mounted.
