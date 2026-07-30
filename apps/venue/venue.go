@@ -378,9 +378,9 @@ func countForProvider(list []Account, provider string) int {
 
 // ── views ───────────────────────────────────────────────────────────────────
 
-// accountView is one linked cloud account as an operator sees it. It carries only
+// cloudAccountView is one linked cloud account as an operator sees it. It carries only
 // metadata: the sealed credential is never in a response, an index, or a log line.
-type accountView struct {
+type cloudAccountView struct {
 	// Provider is the cloud the account belongs to: digitalocean, aws, gcp or
 	// azure.
 	Provider string `json:"provider"`
@@ -407,8 +407,8 @@ type accountView struct {
 	SyncedAt string `json:"syncedAt,omitempty"`
 }
 
-func viewOf(a Account) accountView {
-	return accountView{
+func viewOf(a Account) cloudAccountView {
+	return cloudAccountView{
 		Provider: a.Provider, Label: a.Label, ExternalID: a.ExternalID,
 		Account: a.Display, Project: a.Project, Clusters: nonNil(a.Clusters),
 		LinkedAt: a.LinkedAt, SyncedAt: a.SyncedAt,
@@ -462,18 +462,18 @@ type providersView struct {
 	Providers []providerCard `json:"providers"`
 }
 
-// accountsView is an org's linked cloud accounts.
-type accountsView struct {
+// cloudAccountsView is an org's linked cloud accounts.
+type cloudAccountsView struct {
 	// Accounts is every account this org has linked, across all providers. Empty
 	// when it has linked none.
-	Accounts []accountView `json:"accounts"`
+	Accounts []cloudAccountView `json:"accounts"`
 }
 
 // accountFoldView is the answer to a link or a sync: the account as stored, and
 // what happened to each cluster discovered in it.
 type accountFoldView struct {
 	// Account is the account as it is now recorded.
-	Account accountView `json:"account"`
+	Account cloudAccountView `json:"account"`
 	// Clusters is one entry per cluster discovered in the account. It is empty
 	// when discovery itself failed, which leaves the previously folded set
 	// untouched rather than mass-detaching it.
@@ -548,7 +548,7 @@ func (o ops) listProviders(ctx context.Context, _ *venueNoInput) (*providersView
 // which account each one is at the provider, which fleet clusters it folded, and
 // when it was last discovered. Metadata only — a sealed credential never appears in
 // a response. Another org's accounts are not visible and not countable.
-func (o ops) listAccounts(ctx context.Context, _ *venueNoInput) (*accountsView, error) {
+func (o ops) listAccounts(ctx context.Context, _ *venueNoInput) (*cloudAccountsView, error) {
 	org, err := tenant(ctx)
 	if err != nil {
 		return nil, err
@@ -560,11 +560,11 @@ func (o ops) listAccounts(ctx context.Context, _ *venueNoInput) (*accountsView, 
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
-	out := make([]accountView, 0, len(list))
+	out := make([]cloudAccountView, 0, len(list))
 	for _, a := range list {
 		out = append(out, viewOf(a))
 	}
-	return &accountsView{Accounts: out}, nil
+	return &cloudAccountsView{Accounts: out}, nil
 }
 
 // venueLinkRequest is a link: the org-chosen label plus the provider's credential.
