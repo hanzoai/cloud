@@ -357,6 +357,21 @@ func handle(c *zip.Ctx, dec decode, source string) error {
 			// principal does not name the person; its token does.
 			return publicIngest(c, dec, a.org, source, a.subject)
 		}
+		// ONE door, every event kind: the observability plane gets first refusal
+		// on the canonical door's authenticated bodies (cloud.ObsEventIngest —
+		// the o11y subsystem claims LLM-obs ingestion batches and declines all
+		// else). Only the FULL lane offers: obs events are tenant data, so the
+		// anonymous and reduced projections never reach that plane.
+		if source == sourceEvent {
+			if obs := cloud.ObsEventIngest(); obs != nil {
+				if accepted, dropped, claimed, err := obs(c.Context(), a.org, c.Body()); claimed {
+					if err != nil {
+						return zip.ErrInternal("event ingest failed")
+					}
+					return c.JSON(http.StatusOK, CaptureResult{Accepted: accepted, Dropped: dropped})
+				}
+			}
+		}
 		evs, err := dec(c.Body())
 		if err != nil {
 			return zip.ErrBadRequest("malformed event payload")
@@ -392,7 +407,11 @@ type door struct {
 // TWO WIRES, and no more — the canonical one and PostHog's:
 //
 //   - /v1/event — the canonical door and the canonical wire (Event | [Event] |
-//     {batch:[…]}), which every current Hanzo client emits.
+//     {batch:[…]}), which every current Hanzo client emits. The SAME door also
+//     carries LLM-observability ingestion batches: handle offers each
+//     authenticated body to the o11y plane's claim first (cloud.ObsEventIngest),
+//     which takes only {"batch":[{"type":"trace-create"|…}]} shapes — not a
+//     third wire here, a second CONSUMER behind the one door.
 //
 //   - /v1/insights/e — the PostHog wire. A second WIRE, not a second name for the
 //     first: PostHog SDKs emit this shape and no canonical-wire door can serve them.

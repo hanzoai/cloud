@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+
+	luxlog "github.com/luxfi/log"
 )
 
 // fakeSink captures Insert calls so tests assert routing/batching without a
@@ -231,5 +233,59 @@ func TestBlobThreshold(t *testing.T) {
 	t.Setenv(o11yBlobThresholdEnv, "garbage")
 	if got := blobThreshold(); got != defaultBlobThreshold {
 		t.Errorf("garbage falls back to default = %d, want %d", got, defaultBlobThreshold)
+	}
+}
+
+// TestObsBatchOfClaimsStrictly pins the claim boundary on the ONE event door:
+// only a batch whose EVERY element carries a recognised LLM-obs type is
+// claimed; product-event shapes — including a product CaptureBatch that also
+// spells {"batch":[…]} — are declined and walk the analytics wire untouched.
+func TestObsBatchOfClaimsStrictly(t *testing.T) {
+	claims := func(body string) bool {
+		_, ok := obsBatchOf([]byte(body))
+		return ok
+	}
+	if !claims(`{"batch":[{"id":"e1","type":"trace-create","timestamp":"t","body":{}}]}`) {
+		t.Error("a trace-create batch must be claimed")
+	}
+	if !claims(`{"batch":[{"type":"generation-update"},{"type":"score-create"}]}`) {
+		t.Error("an all-known-types batch must be claimed")
+	}
+	for name, body := range map[string]string{
+		"product event":        `{"event":"$pageview","distinctId":"d"}`,
+		"product batch":        `{"batch":[{"event":"$pageview"}]}`,
+		"mixed batch":          `{"batch":[{"type":"trace-create"},{"event":"$pageview"}]}`,
+		"unknown type":         `{"batch":[{"type":"mystery"}]}`,
+		"empty batch":          `{"batch":[]}`,
+		"array wire":           `[{"event":"x"}]`,
+		"empty body":           ``,
+		"not json":             `hello`,
+	} {
+		if claims(body) {
+			t.Errorf("%s must be declined, was claimed", name)
+		}
+	}
+}
+
+// TestClaimProcessesAndReceipts drives the installed claim end to end against a
+// fake sink: claimed batches persist per-table and report an honest receipt;
+// non-obs bodies decline without touching the sink.
+func TestClaimProcessesAndReceipts(t *testing.T) {
+	sink := &fakeSink{}
+	o := ingestOps{sink: sink, threshold: 1 << 20, log: luxlog.New("test")}
+	accepted, dropped, claimed, err := o.claim(context.Background(), "org1",
+		[]byte(`{"batch":[{"id":"a","type":"trace-create","timestamp":"t","body":{}},{"id":"b","type":"span-create","timestamp":"t","body":{}}]}`))
+	if err != nil || !claimed || accepted != 2 || dropped != 0 {
+		t.Fatalf("claim = (%d,%d,%v,%v), want (2,0,true,nil)", accepted, dropped, claimed, err)
+	}
+	if len(sink.inserts) != 2 {
+		t.Fatalf("expected 2 table inserts (traces+observations), got %d", len(sink.inserts))
+	}
+	before := len(sink.inserts)
+	if _, _, claimed, _ := o.claim(context.Background(), "org1", []byte(`{"event":"$pageview"}`)); claimed {
+		t.Fatal("product event must not be claimed")
+	}
+	if len(sink.inserts) != before {
+		t.Fatal("declined body must not touch the sink")
 	}
 }
