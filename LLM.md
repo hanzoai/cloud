@@ -1055,6 +1055,41 @@ zip is getting multi-status `responses`, and these convert when it lands.
    the same move, or the document splits one resource across two keys.
    Grep for it: `grep -rn 'zip\.[A-Za-z]*([a-z]*, "",' --include='*.go' apps/`.
 
+10. **A first sentence that WRAPS ships its line break into the `summary`.**
+    `firstSentence` (zip/openapi.go:606) returns the text up to the first `". "`
+    VERBATIM — no whitespace collapse — so a doc comment whose opening sentence
+    spans two source lines publishes a `summary` with a raw `\n` in it. The
+    summary is a one-line field by construction: it is the OpenAPI operation
+    summary, the CLI command summary (clispec.go:41, cli.go:133) and the first
+    docstring line of every generated SDK method. Measured on the committed
+    subsets: **215 of the 387 described operations, across 18 packages** —
+    admin 34, git 20, integrations 17, visor 17, company 14, pricing 13,
+    cloudflare 12, marketing 12, books 10, compliance 10, guide 10, framework 9,
+    ingress 9, o11y 9, account 8, team 8, plugins 2, agents 1. Note this is a
+    LARGER share than any other class here (56%), and it was uncounted because
+    nothing reads the summary looking for a newline:
+
+        python3 - <<'EOF'
+        import json,glob,os,collections
+        n=collections.Counter(); tot=0
+        for f in sorted(glob.glob('plugin/*/openapi.json')):
+            a=os.path.basename(os.path.dirname(f))
+            for p,ops in json.load(open(f)).get('paths',{}).items():
+                for m,op in ops.items():
+                    s=isinstance(op,dict) and op.get('summary') or ''
+                    if '\n' in s: n[a]+=1; tot+=1
+        print(tot, n.most_common())
+        EOF
+
+    Unlike #7 and #78, the wire is not involved at all — this is prose quality
+    on the surface SDK users and models read. **Fix it in `firstSentence`, with
+    one whitespace collapse.** Do NOT reflow 215 doc comments so sentence one
+    fits a 100-column line: that is the easy fix, it leaves the class alive for
+    the next op anybody writes, and it makes cloud a special case of a general
+    bug. (Playbook step 6's "keep sentence one on one line" is the WORKAROUND for
+    this, not the rule — it was written when zip's fallback could cut a summary
+    mid-sentence, which v1.18.6 no longer does.)
+
 ### Partitioning the remaining work
 
 986 untyped routes across 101 packages, 76 typed. Take a whole `apps/<app>/`
@@ -1154,7 +1189,13 @@ wire families named in apps/git/LLM.md — a raw-byte HMAC webhook, the smart-HT
 pack protocol (6), server-rendered HTML (12), and the ZAP envelope adapters (5);
 its two `cloud.Plane()` ops are typed with NAMED handlers because a closure
 gives zipdoc nothing to lift (the closure form shipped once and left `zipdoc
--check` red on main).
+-check` red on main). Its partition is now a GATE like team's, not prose:
+`untypedByDesign` + `TestEveryRouteIsTypedOrNamed`
+(apps/git/typed_wire_test.go) fails three ways — a served operation neither
+typed nor named, a name git no longer serves, and a name that IS a typed op —
+so a "COMPLETE" claim can no longer survive the route that falsifies it. Copy
+that form; prose cannot fail, which is why both git's and team's counts moved
+into a test.
 The list moves every few merges: RE-MEASURE per app rather than trusting it, and
 note the count is a heuristic that reads `r.Header.Get("X-...")` as a route, so
 read the hits before believing a non-zero remainder (ingress's last "1" is one).
