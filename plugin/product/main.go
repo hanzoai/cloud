@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/product"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the product app.
@@ -20,6 +21,16 @@ func main() {
 		Name:  "product",
 		Price: cloud.Free,
 		Mount: product.Mount,
+		// This subsystem is named "product" and serves NEITHER "/v1/product" nor
+		// anything under it — its four routes are /v1/search-docs/{indexes,stats}
+		// and /v1/vector/{collections,stats}. The /v1/<Name> convention
+		// MountPrefixes assumes therefore covered NOTHING it registers: every
+		// request here was attributed to no subsystem by the tracing and price
+		// index cloud.Declare builds from this, and any middleware the subsystem
+		// installed through the scoped Router landed on "/v1/product" and never
+		// ran. The apps/plan defect, one app over. The list comes from the manifest
+		// so it cannot drift from the prefixes the host routes here.
+		Prefixes: manifest.PrefixesFor("product"),
 	}}, []string{"product"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
