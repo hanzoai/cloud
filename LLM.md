@@ -1121,7 +1121,28 @@ body), the tolerant cookie PUT (a body it cannot parse falls back to the bearer
 where a typed In answers 400), two OAuth 302 redirects, the wallet page's
 bytes, and the multipart upload / raw-bytes download — and
 `TestEveryRouteIsTypedOrNamed` fails on any route that is neither typed nor
-named there, so the next team route is typed by default.
+named there, so the next team route is typed by default. All ten were RE-VERIFIED
+against zip v1.18.6's own source rather than against the comment that claimed
+them — `op.invoke` json.Unmarshals any non-empty body BEFORE the handler
+(typed.go:227, which is what turns the RPC's and the cookie PUT's tolerated
+garbage into a 400), the REST arm ends in `c.JSON(out)` with no raw-bytes or
+upgrade path (typed.go:303, the wallet bytes, the blob download and the two
+WebSockets), and `WithStatus` panics on a non-2xx (the two 302s). v1.18.7 is
+byte-identical to v1.18.6, so the floor for this package is 9 until zip gains
+raw-body binding, a bytes Out, or a non-2xx status; a fleet count that keeps
+listing team as 19 untyped is what sends the next agent to redo the work.
+What typing this package DID surface is one route away from the ops: team's
+second plane is app-level (`/collaborator` — the Team front derives both the
+Y.js WebSocket and the markup-snapshot RPC from `COLLABORATOR_URL`, not from the
+`/v1/team` base), and `manifest.Apps` named only `/v1/team`, so in the plugin
+fleet both fell past every prefix to the console at `/`: the collaborative
+editor got the HTML shell, and the TYPED collaborator RPC — published in
+`openapi.yaml` and therefore in every generated SDK and the MCP tool list —
+reached no app at all. team's row names `/collaborator` now and the two entries
+are gone from the router oracle's `unreachable` ledger. The general lesson: a
+route's typed-ness is invisible to the manifest, so an app whose surface is not
+wholly under one `/v1/<name>` prefix can publish a perfect op the fleet never
+delivers, and only `manifest/router_test.go` asks the router.
 `apps/admin/core/typed.go` states the rule for that surface: every `/v1/admin/*`
 route is a typed op. Five carry NO untyped route at all — `admin`, `marketing`,
 `plugin`, `search` and now `ingress` (18 ops, converted whole in one pass).

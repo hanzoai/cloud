@@ -58,9 +58,14 @@ import (
 //     storage's. (The webhook + auto-recharge + catalog + plans + tenant
 //     families that used to sit here are routed now: commerce's row names each
 //     one deeper than the sibling that was swallowing it.)
-//   - NO APP AT ALL (11). git's /:org/:repo tree, team's /collaborator and iam's
-//     /.well-known/* are claimed by nobody, so they fall past every prefix to the
-//     console the host serves at "/" — an SDK call gets the HTML shell.
+//   - NO APP AT ALL (9). git's /:org/:repo tree and iam's /.well-known/* are
+//     claimed by nobody, so they fall past every prefix to the console the host
+//     serves at "/" — an SDK call gets the HTML shell. (team's /collaborator pair
+//     used to sit here: the Team front derives BOTH the Y.js WebSocket and the
+//     markup-snapshot RPC from COLLABORATOR_URL, so neither is under /v1/team, and
+//     unnamed in Apps the collaborative editor got the console shell while the
+//     typed RPC — published in openapi.yaml, in every generated SDK and in the MCP
+//     tool list — reached no app at all. team's row names /collaborator now.)
 //   - ONE NAME, TWO OWNERS (1). /v1/tracker, below.
 //
 // Regenerating it is mechanical: the failure below prints the current list, in
@@ -101,8 +106,6 @@ var unreachable = []string{
 	"iam /.well-known/{wildcard1} -> nothing",
 	"provisioning /v1/s3 -> storage",
 	"provisioning /v1/s3/{name} -> storage",
-	"team /collaborator -> nothing",
-	"team /collaborator/rpc/{documentId} -> nothing",
 }
 
 // oracle is the transport the probe mounts every app on. A mounted app is
