@@ -1,0 +1,348 @@
+// Copyright 2023-2026 Hanzo AI Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// typed_wire_test.go — the projection gate. Six of this package's thirteen
+// operations are TYPED ops; the other seven are not, and each of those has a WIRE
+// FACT that keeps it out. Both halves are MEASURED here rather than asserted in
+// prose, because prose cannot go red: a route added untyped goes red without anyone
+// remembering to name it, a reason naming a route this package no longer serves goes
+// red too, and every refusal's wire is re-proved against the live router.
+package analytics
+
+import (
+	"encoding/json"
+	"net/http"
+	"sort"
+	"strings"
+	"testing"
+
+	"github.com/hanzoai/cloud/openapi"
+)
+
+// untypedByDesign is the CLOSED list of analytics operations that are NOT typed ops,
+// each with the wire fact that keeps it out. A typed op is a route PLUS a registry
+// entry — the one value the OpenAPI operation, the MCP tool, the CLI command and the
+// generated SDK method all come from — so an operation missing from that registry is
+// invisible to all four. These are missing on purpose: every one would answer a
+// DIFFERENT wire as a typed op, and typing is a description task. Addresses are
+// written the way the DOCUMENT writes them, which is the identity every projection
+// keys on.
+var untypedByDesign = map[string]string{
+	"GET /v1/analytics/health": "answers 503 CARRYING the degraded report as its body " +
+		"(status/datastore/reason), and 200 with the per-lens table availability otherwise. zip stamps " +
+		"a non-nil Out with cmp.Or(op.Status, 200) and WithStatus refuses a non-2xx, so a typed op " +
+		"would turn the 503 into a 200; returning an error instead renders zip's flat " +
+		"{status,code,error} and drops the report. Writing the body from inside the op does not escape " +
+		"it either — a nil Out is stamped cmp.Or(op.Status, 204) over whatever was written.",
+
+	"POST /v1/event":           canonWireReason,
+	"POST /v1/analytics":       canonWireReason,
+	"POST /v1/analytics/batch": canonWireReason,
+	"POST /v1/tracker":         canonWireReason,
+	"POST /v1/event/collect": "the Hanzo Team SPA's wire is a bare JSON ARRAY, unconditionally " +
+		"(decodeTeam, team.go). Same blocker as the canonical doors and then some: there is no " +
+		"non-array shape to type it as at all. " + admissionReason,
+	"POST /v1/insights/e": "the PostHog wire (decodeInsights, insights.go) — an object, so the array " +
+		"blocker does not apply here, but admission does. " + admissionReason,
+}
+
+const (
+	canonWireReason = "the canonical wire is POLYMORPHIC: decodeIngest (event.go) accepts a bare Event " +
+		"OBJECT, a bare Event ARRAY, and the {batch:[…]}/{events:[…]} envelope, all on one path. A " +
+		"typed In is a struct, and zip's op.invoke jsonenc.Unmarshals every non-empty body into it, so " +
+		"an array body — which every @hanzo/event batch and sendBeacon drain sends — would turn today's " +
+		"200 receipt into a 400. " + admissionReason
+
+	admissionReason = "Admission (handle, event.go) is also decided from facts that live ONLY on the " +
+		"request and never reach a typed op: the presented credential (Authorization / " +
+		"x-hanzo-ingest-key / ?ingest_key=, publishable.go), the client IP and socket peer the anonymous " +
+		"rate caps key on, the DNT/Sec-GPC headers, and the RAW body length that is the anonymous lane's " +
+		"64 KiB -> 413 bound (public.go maxPublicBytes) — invisible to a typed op, and far below the " +
+		"fleet's global zip BodyLimit. Reading a tenant off an In field is not the alternative: an In " +
+		"field is caller-supplied, so that is a cross-tenant write the caller asserted for itself."
+)
+
+// analyticsOps reads BOTH projections of the live router at their one shared address
+// form: what the document says is served, and which of those carry a typed registry
+// entry. Reading the router — the REAL Mount, not a reconstruction of it — is what
+// makes this a gate rather than prose.
+func analyticsOps(t *testing.T) (served map[string]bool, typed map[string]string) {
+	t.Helper()
+	app := mountApp(t)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "analytics", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	reg, err := openapi.Typed(app)
+	if err != nil {
+		t.Fatalf("typed registry: %v", err)
+	}
+	served, typed = map[string]bool{}, map[string]string{}
+	for path, item := range doc.Paths {
+		for method := range item {
+			served[strings.ToUpper(method)+" "+path] = true
+		}
+	}
+	for key, op := range reg.Ops {
+		typed[key] = op.Description
+	}
+	return served, typed
+}
+
+// TestEveryRouteIsTypedOrNamed fails when an analytics operation is neither a typed
+// op nor one named above — so the next route added here is typed by default, and
+// dropping one out of the registry takes a deliberate edit with a reason.
+func TestEveryRouteIsTypedOrNamed(t *testing.T) {
+	served, typed := analyticsOps(t)
+
+	var untyped []string
+	for key := range served {
+		if _, ok := typed[key]; ok {
+			continue
+		}
+		if _, named := untypedByDesign[key]; named {
+			continue
+		}
+		untyped = append(untyped, key)
+	}
+	if len(untyped) > 0 {
+		sort.Strings(untyped)
+		t.Errorf("operation(s) with no registry entry and no reason: %s\n"+
+			"A route that is not a typed op has no schema, no prose, no MCP tool, no CLI command and no "+
+			"SDK method. Convert it (zip.Get/Post/... on the group), or add it to untypedByDesign with "+
+			"the wire fact that typing it would move.", strings.Join(untyped, ", "))
+	}
+	// The reasons must describe operations that exist, or the list is stale prose.
+	for key := range untypedByDesign {
+		if !served[key] {
+			t.Errorf("untypedByDesign names %q, which analytics no longer serves", key)
+		}
+	}
+	// The two ledgers must SUM to the served surface: neither may quietly shrink.
+	if got, want := len(typed)+len(untypedByDesign), len(served); got != want {
+		t.Errorf("typed(%d) + named(%d) = %d, served = %d — the ledgers must partition the surface",
+			len(typed), len(untypedByDesign), got, want)
+	}
+}
+
+// TestEveryTypedOpIsDescribed holds the prose to the same bar as the schema, because
+// that prose IS the product surface: it becomes the OpenAPI description AND the MCP
+// tool description a model reads to pick the tool. zipdoc_gen.go is what carries it
+// into the binary, so an op added without regenerating shows up here as a nameless
+// tool.
+func TestEveryTypedOpIsDescribed(t *testing.T) {
+	_, typed := analyticsOps(t)
+	if len(typed) == 0 {
+		t.Fatal("no typed analytics ops in the registry at all")
+	}
+	for key, desc := range typed {
+		if strings.TrimSpace(desc) == "" {
+			t.Errorf("%s has no description — run: go generate -run zipdoc ./apps/analytics/...", key)
+		}
+	}
+}
+
+// TestEveryPublishedFieldIsDescribed covers the RESPONSE side the op-level gate
+// cannot see. A typed op publishes its Out's whole schema, and a property that
+// reaches openapi.yaml with no description reaches every generated SDK and every MCP
+// inputSchema without one too — `errorRate` as a bare number nowhere documented as a
+// ratio, `pct` nowhere documented as a share of the WINDOW rather than of the rows
+// returned.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	app := mountApp(t)
+	doc, err := openapi.Spec(app, openapi.Info{Title: "analytics", Version: "v1"})
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	// Through JSON, because that is the artifact: Components.Schemas is open-typed
+	// (Register contributes *Schema, the typed fold contributes zip's map) and only
+	// the marshalled form is what an SDK generator actually reads.
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal doc: %v", err)
+	}
+	var published struct {
+		Components struct {
+			Schemas map[string]struct {
+				Properties map[string]struct {
+					Description string `json:"description"`
+				} `json:"properties"`
+			} `json:"schemas"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(raw, &published); err != nil {
+		t.Fatalf("unmarshal doc: %v", err)
+	}
+	if len(published.Components.Schemas) == 0 {
+		t.Fatal("no published schemas at all — a typed op must publish its In/Out")
+	}
+	var bare []string
+	for name, schema := range published.Components.Schemas {
+		for field, prop := range schema.Properties {
+			if strings.TrimSpace(prop.Description) == "" {
+				bare = append(bare, name+"."+field)
+			}
+		}
+	}
+	if len(bare) > 0 {
+		sort.Strings(bare)
+		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
+			"Write the field's doc comment and run: go generate -run zipdoc ./apps/analytics/...",
+			len(bare), strings.Join(bare, ", "))
+	}
+}
+
+// ── the typed reads keep the wire they always had ───────────────────────────
+
+// orgGatedReads is every typed read that requires a validated principal. /v1/errors
+// and /v1/insights/events are here for the first time — nothing pinned their 403
+// before, because nothing read them back.
+var orgGatedReads = []string{
+	"/v1/analytics/overview", "/v1/analytics/timeseries", "/v1/analytics/top",
+	"/v1/errors", "/v1/insights/events",
+}
+
+// TestTypedReadsRefuseWithoutAValidatedPrincipal is the cross-tenant-forge proof for
+// the typed lane. A typed op receives only a context, so the org it reads is the one
+// cloud.Bridge parked from the VALIDATED principal — never an In field and never a
+// raw header. A caller reaching the pod directly with a forged X-Org-Id and no
+// X-User-Id is refused 403 on every one of them.
+func TestTypedReadsRefuseWithoutAValidatedPrincipal(t *testing.T) {
+	app := mountApp(t)
+	for _, p := range orgGatedReads {
+		if code, body := do(t, app, http.MethodGet, p, "", ""); code != http.StatusForbidden {
+			t.Errorf("no-principal GET %s = %d (%s), want 403", p, code, body)
+		}
+		if code, body := do(t, app, http.MethodGet, p+"?limit=5", "", "maxpower"); code != http.StatusForbidden {
+			t.Errorf("forged-org-no-bearer GET %s = %d (%s), want 403", p, code, body)
+		}
+	}
+}
+
+// TestTypedReadsSurviveTheirOwnQueryString proves the ONE thing making these ops
+// typable did not change: bindURL fills the In from the query string, and an
+// unparseable value leaves the field at its zero rather than failing the request.
+// `?limit=abc` was a caller typo about one field before (strconv.Atoi's error was
+// discarded) and still is — the alternative, a 400, would make every typed GET
+// brittler than the untyped handler it replaced.
+func TestTypedReadsSurviveTheirOwnQueryString(t *testing.T) {
+	app := mountApp(t)
+	// The three window reads reach the datastore gate (503 here) rather than 400 —
+	// so a junk ?limit= never turned into a refusal.
+	for _, p := range []string{"/v1/analytics/overview", "/v1/analytics/timeseries", "/v1/analytics/top"} {
+		if code, body := do(t, app, http.MethodGet, p+"?limit=abc&utm_source=x", "u", "acme"); code != http.StatusServiceUnavailable {
+			t.Errorf("GET %s?limit=abc = %d (%s), want 503 — a junk query value must not refuse the call", p, code, body)
+		}
+	}
+	// A bad ?range= is still the 400 it has always been, and still BEFORE the
+	// datastore is consulted.
+	for _, p := range []string{"/v1/analytics/overview", "/v1/analytics/timeseries", "/v1/analytics/top"} {
+		if code, body := do(t, app, http.MethodGet, p+"?range=bogus", "u", "acme"); code != http.StatusBadRequest {
+			t.Errorf("GET %s?range=bogus = %d (%s), want 400", p, code, body)
+		}
+	}
+}
+
+// TestLimitClampsAreUnchanged pins the two clamps the typed Ins now carry against the
+// exact behaviour the untyped strconv.Atoi readers had, including the case that used
+// to be an ERROR and is now a zero: bindURL leaves an unparseable field at its zero
+// value, and zero takes the default, which is what Atoi's discarded error did too.
+func TestLimitClampsAreUnchanged(t *testing.T) {
+	for _, tc := range []struct{ in, want int }{
+		{0, defaultTop}, {-5, defaultTop}, {1, 1}, {maxTop, maxTop}, {maxTop + 1, maxTop}, {10_000, maxTop},
+	} {
+		if got := (topQuery{Limit: tc.in}).limit(); got != tc.want {
+			t.Errorf("topQuery{%d}.limit() = %d, want %d", tc.in, got, tc.want)
+		}
+	}
+	for _, tc := range []struct{ in, want int }{
+		{0, defaultRecent}, {-5, defaultRecent}, {1, 1}, {maxRecent, maxRecent}, {maxRecent + 1, maxRecent},
+	} {
+		if got := (limitQuery{Limit: tc.in}).rows(); got != tc.want {
+			t.Errorf("limitQuery{%d}.rows() = %d, want %d", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestInsightsHealthIsUnconditional pins the one typed op that needs no principal:
+// liveness must be probe-able, so it answers 200 with the same three fields it always
+// did, whether or not a bearer was presented.
+func TestInsightsHealthIsUnconditional(t *testing.T) {
+	app := mountApp(t)
+	for _, user := range []string{"", "user-dave"} {
+		code, body := do(t, app, http.MethodGet, "/v1/insights/health", user, "")
+		if code != http.StatusOK {
+			t.Fatalf("GET /v1/insights/health (user=%q) = %d (%s), want 200", user, code, body)
+		}
+		var got map[string]any
+		if err := json.Unmarshal(body, &got); err != nil {
+			t.Fatalf("health json: %v (%s)", err, body)
+		}
+		if got["ok"] != true || got["engine"] != "hanzo-analytics" || got["surface"] != "/v1/insights" {
+			t.Errorf("GET /v1/insights/health = %v, want {ok:true, engine:hanzo-analytics, surface:/v1/insights}", got)
+		}
+	}
+}
+
+// ── the refusals are MEASURED, not asserted ─────────────────────────────────
+
+// TestArrayBodiedDoorsStillAnswer200 is the measurement behind canonWireReason: the
+// four doors on an array-tolerant wire accept a BARE JSON ARRAY body today. That is
+// exactly the request a typed In would turn into a 400 (zip's op.invoke unmarshals
+// every non-empty body into the struct), so this is the refusal's evidence rather
+// than its restatement. If a later zip can declare a polymorphic body, this test is
+// what tells you the conversion is safe.
+func TestArrayBodiedDoorsStillAnswer200(t *testing.T) {
+	tightenPublicRate(t, 1_000_000, 1_000_000)
+	for _, d := range doors {
+		var body string
+		switch {
+		case sameWire(d.decode, decodeIngest):
+			body = `[{"event":"$pageview","distinctId":"anon-1"}]`
+		case sameWire(d.decode, decodeTeam):
+			body = teamPageview
+		default:
+			continue // decodeInsights is object-only; its blocker is admission, not shape.
+		}
+		evs, err := d.decode([]byte(body))
+		if err != nil {
+			t.Fatalf("door %s cannot decode its own array wire: %v", d.path, err)
+		}
+		if len(evs) != 1 {
+			t.Fatalf("door %s decoded %d events from an array body, want 1", d.path, len(evs))
+		}
+		fakeWarehouse(t)
+		app := mountApp(t)
+		if code, got := doHost(t, app, d.path, "", "", "api.hanzo.ai", body); code != http.StatusOK {
+			t.Errorf("door %s with a bare ARRAY body = %d (%s), want 200 — this is the 400 a typed In "+
+				"would produce, and the reason the door stays untyped", d.path, code, got)
+		}
+	}
+}
+
+// TestHealthStillCarriesItsReportAt503 is the measurement behind the /v1/analytics/health
+// refusal: the status and the body are ONE answer. A typed op can carry the body or
+// the status, never both, and this is the pair it would have to break.
+func TestHealthStillCarriesItsReportAt503(t *testing.T) {
+	app := mountApp(t)
+	code, body := do(t, app, http.MethodGet, "/v1/analytics/health", "", "")
+	if code != http.StatusServiceUnavailable {
+		t.Fatalf("GET /v1/analytics/health = %d (%s), want 503", code, body)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("health json: %v (%s)", err, body)
+	}
+	for k, want := range map[string]any{"service": "analytics", "status": "degraded", "datastore": false} {
+		if got[k] != want {
+			t.Errorf("503 body[%q] = %v, want %v — the report IS the answer, not a side note", k, got[k], want)
+		}
+	}
+	if s, _ := got["reason"].(string); strings.TrimSpace(s) == "" {
+		t.Error("503 body carries no reason — the degraded report is what a typed op would drop")
+	}
+}
