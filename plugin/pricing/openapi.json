@@ -265,73 +265,211 @@
     "/v1/pricing-policy": {
       "get": {
         "operationId": "get_v1_pricing-policy",
+        "summary": "GetPricingPolicyAlias returns the pricing policy document at its top-level\naddress.",
+        "description": "GetPricingPolicyAlias returns the pricing policy document at its top-level\naddress. It is the same document GET /v1/pricing/policy returns, byte for\nbyte, at the shorter address the marketing surface links to.",
         "tags": [
           "pricing-policy"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "object"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/base": {
       "get": {
         "operationId": "get_v1_pricing_base",
+        "summary": "ListBasePlans returns the Hanzo Base plans — the managed-instance tiers,",
+        "description": "ListBasePlans returns the Hanzo Base plans — the managed-instance tiers,\neach with its monthly and annual price, storage and request allowances and\nfeature list.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pricingPlanList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/blockchain": {
       "get": {
         "operationId": "get_v1_pricing_blockchain",
+        "summary": "ListBlockchainPlans returns the blockchain access plans — the RPC and node",
+        "description": "ListBlockchainPlans returns the blockchain access plans — the RPC and node\ntiers, each with its monthly price, compute-unit allowance and feature list.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pricingPlanList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/cloud": {
       "get": {
         "operationId": "get_v1_pricing_cloud",
+        "summary": "GetCloudPricing returns the public cloud section of the catalog in one\ndocument: its instance plans, its regions and its block-storage prices.",
+        "description": "GetCloudPricing returns the public cloud section of the catalog in one\ndocument: its instance plans, its regions and its block-storage prices. The\nsection's internal half — the provider costs Hanzo pays and the plan-to-\nprovider routing table — is stripped before it is served, so this is what a\ncustomer may see and nothing more.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "object"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/cloud/plans": {
       "get": {
         "operationId": "get_v1_pricing_cloud_plans",
+        "summary": "GetCloudPlans returns just the cloud instance plans — each with its vCPU,\nmemory, disk, CPU type, VM allowance, feature list and monthly and hourly\nprice.",
+        "description": "GetCloudPlans returns just the cloud instance plans — each with its vCPU,\nmemory, disk, CPU type, VM allowance, feature list and monthly and hourly\nprice. It is the plans of the cloud section on their own.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pricingPlanList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/cloud/regions": {
       "get": {
         "operationId": "get_v1_pricing_cloud_regions",
+        "summary": "GetCloudRegions returns the regions a cloud instance can be placed in, each\nwith its id, display name and physical location.",
+        "description": "GetCloudRegions returns the regions a cloud instance can be placed in, each\nwith its id, display name and physical location. It is the regions of the\ncloud section on their own.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pricingRegionList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/cloud/storage": {
       "get": {
         "operationId": "get_v1_pricing_cloud_storage",
+        "summary": "GetCloudStoragePricing returns the block-storage prices of the cloud",
+        "description": "GetCloudStoragePricing returns the block-storage prices of the cloud\nsection: the per-GB monthly rate and the volume size bounds a caller may ask\nfor.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "object"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/compute": {
       "get": {
         "operationId": "get_v1_pricing_compute",
+        "summary": "GetComputePricing returns the compute section of the catalog: the cloud\nprovider and region the prices are quoted for, the monthly markup applied to\nthem, the full instance-size tier list and the named presets.",
+        "description": "GetComputePricing returns the compute section of the catalog: the cloud\nprovider and region the prices are quoted for, the monthly markup applied to\nthem, the full instance-size tier list and the named presets. It is the\nwhole section as the pricing source records it, un-gated — no model or\nprovider identity appears in it.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "object"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/compute/presets": {
       "get": {
         "operationId": "get_v1_pricing_compute_presets",
+        "summary": "GetComputePresets returns just the named compute sizes — the short,\nhuman-labelled list (\"Starter\", \"Pro\") a size picker renders, each carrying\nits provider slug, vCPU, memory, disk and price.",
+        "description": "GetComputePresets returns just the named compute sizes — the short,\nhuman-labelled list (\"Starter\", \"Pro\") a size picker renders, each carrying\nits provider slug, vCPU, memory, disk and price. It is the presets of the\ncompute section on their own, for a caller that does not need the full tier\ntable.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pricingPresetList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/featured": {
@@ -381,9 +519,23 @@
     "/v1/pricing/gpu": {
       "get": {
         "operationId": "get_v1_pricing_gpu",
+        "summary": "ListGPUTiers returns the rentable GPU configurations, each with its",
+        "description": "ListGPUTiers returns the rentable GPU configurations, each with its\naccelerator count and model, VRAM, vCPU, host memory and hourly price.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pricingTierList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/health": {
@@ -415,9 +567,23 @@
     "/v1/pricing/iam": {
       "get": {
         "operationId": "get_v1_pricing_iam",
+        "summary": "ListIAMPlans returns the identity plans — the Hanzo IAM tiers, each with its",
+        "description": "ListIAMPlans returns the identity plans — the Hanzo IAM tiers, each with its\nmonthly and annual price, monthly-active-user allowance and feature list.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pricingPlanList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/model/{name}": {
@@ -482,17 +648,48 @@
     "/v1/pricing/paas": {
       "get": {
         "operationId": "get_v1_pricing_paas",
+        "summary": "ListPaaSPlans returns the application-hosting plans — the deploy-and-host",
+        "description": "ListPaaSPlans returns the application-hosting plans — the deploy-and-host\ntiers, each with its monthly and annual price, app and memory allowances and\nfeature list.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pricingPlanList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/policy": {
       "get": {
         "operationId": "get_v1_pricing_policy",
+        "summary": "GetPricingPolicy returns the pricing policy document: the revenue-sharing",
+        "description": "GetPricingPolicy returns the pricing policy document: the revenue-sharing\nterms (the idle-resale share and the open-source share, each with its\npercentage and who is eligible) and the commitments Hanzo makes about how it\nbills — no hidden fees, no egress charges, no surprise bills.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "object"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/providers": {
@@ -520,9 +717,23 @@
     "/v1/pricing/subscriptions": {
       "get": {
         "operationId": "get_v1_pricing_subscriptions",
+        "summary": "ListSubscriptionPlans returns the API subscription plans — the account-level",
+        "description": "ListSubscriptionPlans returns the API subscription plans — the account-level\ntiers a customer subscribes to, each with its monthly and annual price,\nincluded credit, rate limits and feature list.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pricingPlanList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/pricing/summary": {
@@ -585,9 +796,23 @@
     "/v1/pricing/tools": {
       "get": {
         "operationId": "get_v1_pricing_tools",
+        "summary": "ListToolPrices returns the per-use tool prices — web search, code",
+        "description": "ListToolPrices returns the per-use tool prices — web search, code\ninterpreter, file storage, image generation, speech-to-text and\ntext-to-speech — each with the unit it is billed by and its price in that\nunit.",
         "tags": [
           "pricing"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pricingToolList"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     }
   },
@@ -731,6 +956,36 @@
         "properties": {},
         "type": "object"
       },
+      "pricingPlanList": {
+        "properties": {
+          "plans": {
+            "description": "Plans are the plans in this section, each an opaque object exactly as the\npricing source emits it — typically id, name, description, price and a\nfeature list.",
+            "items": {
+              "additionalProperties": {
+                "type": "object"
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "pricingPresetList": {
+        "properties": {
+          "presets": {
+            "description": "Presets are the named compute sizes, each an opaque object exactly as the\npricing source emits it — typically id, name, provider slug, vCPU, memory,\ndisk and price.",
+            "items": {
+              "additionalProperties": {
+                "type": "object"
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "pricingProviderList": {
         "properties": {
           "providers": {
@@ -747,6 +1002,21 @@
         },
         "type": "object"
       },
+      "pricingRegionList": {
+        "properties": {
+          "regions": {
+            "description": "Regions are the regions cloud instances can be placed in, each an opaque\nobject exactly as the pricing source emits it — typically id, name and\nlocation.",
+            "items": {
+              "additionalProperties": {
+                "type": "object"
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "pricingSyncOut": {
         "properties": {
           "status": {
@@ -756,6 +1026,36 @@
           "updated": {
             "description": "Updated is the RFC 3339 time the refreshed catalog was stamped with.",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "pricingTierList": {
+        "properties": {
+          "tiers": {
+            "description": "Tiers are the rentable GPU configurations, each an opaque object exactly\nas the pricing source emits it — typically id, name, accelerator count and\nmodel, VRAM, vCPU, memory and hourly price.",
+            "items": {
+              "additionalProperties": {
+                "type": "object"
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "pricingToolList": {
+        "properties": {
+          "tools": {
+            "description": "Tools are the metered tools, each an opaque object exactly as the pricing\nsource emits it — typically name, billing unit and price.",
+            "items": {
+              "additionalProperties": {
+                "type": "object"
+              },
+              "type": "object"
+            },
+            "type": "array"
           }
         },
         "type": "object"
