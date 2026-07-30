@@ -34,13 +34,24 @@ const maxMCPResponse = 4 << 20 // 4 MiB
 // MCPServer is one org-registered external MCP server. AuthHeader/HasSecret record
 // how to authenticate; the secret itself is in KMS at authRef(org, id).
 type MCPServer struct {
-	ID         string `json:"id"`
-	Org        string `json:"org"`
-	Name       string `json:"name"`
-	URL        string `json:"url"`
-	AuthHeader string `json:"authHeader,omitempty"` // header to inject the KMS secret into (e.g. "Authorization").
-	HasSecret  bool   `json:"hasSecret"`
-	CreatedAt  int64  `json:"createdAt"`
+	// ID is the server's id within the org. It also PREFIXES every tool name the
+	// server contributes, which is what keeps two servers' "search" apart.
+	ID string `json:"id"`
+	// Org is the org that registered the server — the validated caller's.
+	Org string `json:"org"`
+	// Name is the org's label for the server.
+	Name string `json:"name"`
+	// URL is the server's JSON-RPC endpoint. Always a public http(s) host: the
+	// registration boundary and the dialer both refuse anything else.
+	URL string `json:"url"`
+	// AuthHeader is the request header the KMS-held credential is injected into,
+	// e.g. "Authorization". Absent when the server needs no credential.
+	AuthHeader string `json:"authHeader,omitempty"`
+	// HasSecret is whether a credential is sealed in KMS for this server. The
+	// VALUE is never returned by any route.
+	HasSecret bool `json:"hasSecret"`
+	// CreatedAt is when the server was registered, Unix seconds.
+	CreatedAt int64 `json:"createdAt"`
 }
 
 // MCPServerStore is the per-org registry of external MCP servers (one SQLite file,

@@ -27,12 +27,20 @@ import (
 // SKILL.md body. Like the brand's skills it is NOT dispatchable — a skill is
 // attached to an agent, not called.
 type Skill struct {
-	ID          string `json:"id"`
-	Org         string `json:"org"`
-	Name        string `json:"name"`
+	// ID is the skill's id within the org. It is DERIVED from Name, so writing
+	// the same name again revises that skill rather than adding another.
+	ID string `json:"id"`
+	// Org is the org that authored the skill — the validated caller's, never a
+	// value the body supplied.
+	Org string `json:"org"`
+	// Name is the skill's name: one lowercase path segment (a-z0-9, _ or -).
+	Name string `json:"name"`
+	// Description is the one-line summary discovery shows for the skill.
 	Description string `json:"description"`
-	Content     string `json:"content"` // SKILL.md markdown
-	CreatedAt   int64  `json:"createdAt"`
+	// Content is the SKILL.md body, markdown.
+	Content string `json:"content"`
+	// CreatedAt is when the skill was last written, Unix seconds.
+	CreatedAt int64 `json:"createdAt"`
 }
 
 // SkillStore is the per-org registry of authored skills (one SQLite file, org

@@ -25,6 +25,14 @@ func newApp(t *testing.T, extra func(*zip.App)) *zip.App {
 	t.Cleanup(func() { std = old })
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	// Mount the plane the way the SERVER does. A typed op receives only a context,
+	// so the validated org reaches it ONLY through cloud.Bridge — which Serve
+	// installs once for the whole binary, after the identity boundary and before
+	// MountAll. This harness had no Bridge, which was invisible while every route
+	// was untyped (an untyped handler reads the header itself) and would have made
+	// every typed op here answer 403 on a request that carries a valid X-Org-Id.
+	// It must precede the leaves: fiber runs middleware in registration order.
+	app.Use(cloud.Bridge())
 	if extra != nil {
 		extra(app)
 	}
