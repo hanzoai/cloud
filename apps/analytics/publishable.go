@@ -54,9 +54,9 @@
 package analytics
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -135,50 +135,76 @@ func foldException(e CaptureEvent) CaptureEvent {
 
 // ── handlers ─────────────────────────────────────────────────────────────────
 
-// errorsLens answers GET /v1/errors — the error-tracking read view: recent
-// type:'error' events for the org, newest first. Tenant-scoped server-side and
-// gated on a VALIDATED principal (tenant()), NOT the publishable key — reads
-// require real auth, reinforcing that pk- is write-only. The captured exception
-// is surfaced straight from properties.$exception. limit defaults 50, caps 200.
-func errorsLens(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer required")
+// capturedError is one captured browser/runtime error as the error lens returns it. The
+// columns are the first-class ones the capture path promotes; exception is the folded
+// $exception object lifted out of the property bag so a reader does not have to dig
+// for it.
+type capturedError struct {
+	// ID is the row's stable event id — the client's own idempotency id when it sent
+	// one, else the server-minted one.
+	ID string `json:"id"`
+	// Timestamp is when the error was captured, RFC3339 UTC.
+	Timestamp string `json:"timestamp"`
+	// Event is the event name the error was stored under, e.g. $error.
+	Event string `json:"event"`
+	// DistinctID is the person/visitor the error is attributed to. Omitted when the
+	// row carries none.
+	DistinctID string `json:"distinctId,omitempty"`
+	// SessionID groups the events of one visit. Omitted when the client sent none.
+	SessionID string `json:"sessionId,omitempty"`
+	// Product is the surface that emitted the error. Omitted when absent.
+	Product string `json:"product,omitempty"`
+	// URL is the full page address the error fired on. Omitted when absent.
+	URL string `json:"url,omitempty"`
+	// Path is the URL's path component. Omitted when absent.
+	Path string `json:"path,omitempty"`
+	// Library is the client SDK that reported the error. Omitted when absent.
+	Library string `json:"library,omitempty"`
+	// LibraryVer is that SDK's version. Omitted when absent.
+	LibraryVer string `json:"libraryVersion,omitempty"`
+	// Exception is the captured error itself — the {type, message, stack, handled}
+	// object, already redacted at the fold point. Omitted when the row has none.
+	Exception json.RawMessage `json:"exception,omitempty"`
+	// Properties is the row's whole property bag, returned verbatim as stored — any
+	// JSON object, $exception included. Omitted when the row carries none or it did
+	// not parse.
+	Properties json.RawMessage `json:"properties,omitempty"`
+}
+
+// errorList is a page of captured errors, newest first.
+type errorList struct {
+	// Data is the errors, newest first. Empty rather than absent when there are none.
+	Data []capturedError `json:"data"`
+}
+
+// Errors returns the caller org's most recently captured errors, newest first. The
+// error-tracking read view over the same table the capture doors write: only rows
+// stored as type 'error', each with its captured exception lifted out of the property
+// bag as a first-class field.
+//
+// The org is the validated principal's — never a parameter — and this read requires a
+// real bearer, NEVER the write-only publishable key: pk- can attribute a write and can
+// read nothing. 403 without a validated bearer, 503 when the warehouse is unreachable.
+//
+// Example: {"limit": 100}
+func (o readOps) errors(ctx context.Context, in *limitQuery) (*errorList, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	limit, _ := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 200 {
-		limit = 200
-	}
-	rows, err := datastore.Query(c.Context(), `
+	rows, err := datastore.Query(ctx, `
 		SELECT id, timestamp, event, distinct_id, session_id, product, url, path,
 		       library, library_version, properties
 		FROM hanzo.events
 		WHERE tenant_id = ? AND event_type = 'error'
 		ORDER BY timestamp DESC
-		LIMIT ?`, org, limit)
+		LIMIT ?`, org, in.rows())
 	if err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}
-	type errEvent struct {
-		ID         string          `json:"id"`
-		Timestamp  string          `json:"timestamp"`
-		Event      string          `json:"event"`
-		DistinctID string          `json:"distinctId,omitempty"`
-		SessionID  string          `json:"sessionId,omitempty"`
-		Product    string          `json:"product,omitempty"`
-		URL        string          `json:"url,omitempty"`
-		Path       string          `json:"path,omitempty"`
-		Library    string          `json:"library,omitempty"`
-		LibraryVer string          `json:"libraryVersion,omitempty"`
-		Exception  json.RawMessage `json:"exception,omitempty"`
-		Properties json.RawMessage `json:"properties,omitempty"`
-	}
-	out := make([]errEvent, 0, len(rows))
+	out := make([]capturedError, 0, len(rows))
 	for _, r := range rows {
-		e := errEvent{
+		e := capturedError{
 			ID: asStr(r["id"]), Timestamp: asStr(r["timestamp"]), Event: asStr(r["event"]),
 			DistinctID: asStr(r["distinct_id"]), SessionID: asStr(r["session_id"]),
 			Product: asStr(r["product"]), URL: asStr(r["url"]), Path: asStr(r["path"]),
@@ -190,7 +216,7 @@ func errorsLens(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		out = append(out, e)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &errorList{Data: out}, nil
 }
 
 // extractException pulls the $exception object out of a properties JSON blob so

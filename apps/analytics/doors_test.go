@@ -487,7 +487,13 @@ func TestApiHostAnonymousLaneWritesThePublicTenant(t *testing.T) {
 func TestRoutedPostSetIsExactlyTheDoors(t *testing.T) {
 	app := mountApp(t)
 	var posts []string
-	for _, r := range app.Fiber().GetRoutes() {
+	// GetRoutes(true) drops the `use` entries — middleware, which fiber keeps in the
+	// same stack as routes and reports under every method at the prefix it gates.
+	// cloud.Bridge is one of those (routes installs it so a typed op can read the
+	// validated org), and so is every middleware Serve installs app-wide, so an
+	// unfiltered read has never been "the POST surface" in the real binary either. A
+	// middleware is a passthrough, not a door: it dispatches nothing.
+	for _, r := range app.Fiber().GetRoutes(true) {
 		if r.Method == http.MethodPost {
 			posts = append(posts, r.Path)
 		}

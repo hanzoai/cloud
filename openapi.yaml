@@ -517,6 +517,45 @@ components:
           description: ScanID echoes the scan that was booked.
           type: string
       type: object
+    Breakdown:
+      properties:
+        available:
+          description: Available is false when the product-event table could not be
+            read.
+          type: boolean
+        items:
+          description: Items is the ranked buckets, most pageviews first. Empty rather
+            than absent.
+          items:
+            $ref: '#/components/schemas/BreakdownRow'
+          type: array
+        reason:
+          description: Reason says why the lens is unavailable. Omitted when it is
+            available.
+          type: string
+        source:
+          description: Source is the warehouse table the lens read.
+          type: string
+      type: object
+    BreakdownRow:
+      properties:
+        key:
+          description: |-
+            Key is the bucket: a requested path, a referrer domain ("(direct)" for none or
+            a same-origin one), or a utm_source ("(none)" when absent).
+          type: string
+        pageviews:
+          description: Pageviews is how many $pageview events fell in this bucket.
+          type: integer
+        pct:
+          description: |-
+            Pct is this bucket's share of ALL in-window pageviews, 0..100, one decimal —
+            not of the returned rows, so a top-N shows the long tail honestly.
+          type: number
+        visitors:
+          description: Visitors is how many distinct people they came from.
+          type: integer
+      type: object
     CalendarPost:
       properties:
         body:
@@ -648,6 +687,33 @@ components:
         status:
           type: string
         version:
+          type: string
+      type: object
+    CommerceOverview:
+      properties:
+        aov:
+          description: |-
+            AOV is average order value — Revenue/Orders, rounded to two places. Zero when
+            there were no orders.
+          type: number
+        available:
+          description: |-
+            Available is false when the product-event table could not be read — the lens is
+            reported missing rather than as zeros that look like no sales.
+          type: boolean
+        orders:
+          description: Orders is how many order_completed events landed in the window.
+          type: integer
+        reason:
+          description: Reason says why the lens is unavailable. Omitted when it is
+            available.
+          type: string
+        revenue:
+          description: Revenue is the total those orders carried, in the events' own
+            currency unit.
+          type: number
+        source:
+          description: Source is the warehouse table the lens read.
           type: string
       type: object
     Company:
@@ -1930,6 +1996,46 @@ components:
             DraftInto arg (default "brief").
           type: string
       type: object
+    LLMOverview:
+      properties:
+        available:
+          description: |-
+            Available is true whenever the ledger answered — including with no usage in the
+            window, which is honest zeros rather than a missing lens.
+          type: boolean
+        completionTokens:
+          description: CompletionTokens is the output half of Tokens.
+          type: integer
+        errorRate:
+          description: |-
+            ErrorRate is Errors/Requests, 0..1, rounded to three places. Zero when there
+            were no requests.
+          type: number
+        errors:
+          description: Errors is how many of Requests failed.
+          type: integer
+        models:
+          description: Models is how many distinct models the org called.
+          type: integer
+        promptTokens:
+          description: PromptTokens is the input half of Tokens.
+          type: integer
+        providers:
+          description: Providers is how many distinct providers served them.
+          type: integer
+        requests:
+          description: Requests is how many LLM calls the org made in the window.
+          type: integer
+        source:
+          description: Source is the warehouse table the lens read.
+          type: string
+        spendCents:
+          description: SpendCents is what those calls cost, in cents.
+          type: integer
+        tokens:
+          description: Tokens is prompt plus completion tokens over those calls.
+          type: integer
+      type: object
     Leg:
       properties:
         account:
@@ -2179,6 +2285,28 @@ components:
             or headers.'
           type: string
       type: object
+    ModelRow:
+      properties:
+        model:
+          description: Model is the model id, e.g. claude-opus-4.
+          type: string
+        pct:
+          description: Pct is this model's share of the window's returned spend, 0..100,
+            one decimal.
+          type: number
+        provider:
+          description: Provider is who served it.
+          type: string
+        requests:
+          description: Requests is how many calls went to this model.
+          type: integer
+        spendCents:
+          description: SpendCents is what they cost, in cents.
+          type: integer
+        tokens:
+          description: Tokens is prompt plus completion tokens over those calls.
+          type: integer
+      type: object
     ModuleInfo:
       properties:
         doctypes:
@@ -2362,6 +2490,34 @@ components:
         updatedAt:
           type: integer
       type: object
+    Overview:
+      properties:
+        commerce:
+          $ref: '#/components/schemas/CommerceOverview'
+          description: Commerce is the orders/revenue lens over product events.
+        end:
+          description: End is the window's exclusive upper bound, RFC3339 UTC.
+          type: string
+        interval:
+          description: 'Interval is the bucket width the window implies: hour or day.'
+          type: string
+        llm:
+          $ref: '#/components/schemas/LLMOverview'
+          description: LLM is the LLM usage lens — real per-org data.
+        range:
+          description: 'Range is the window that was actually applied: 24h, 7d, 30d
+            or custom.'
+          type: string
+        scope:
+          $ref: '#/components/schemas/Scope'
+          description: Scope names the tenant these numbers belong to.
+        start:
+          description: Start is the window's inclusive lower bound, RFC3339 UTC.
+          type: string
+        web:
+          $ref: '#/components/schemas/WebOverview'
+          description: Web is the web-traffic lens over product events.
+      type: object
     PagesBuildConfig:
       properties:
         build_command:
@@ -2521,6 +2677,22 @@ components:
         sunTzu:
           description: the Art of War teaching
           type: string
+      type: object
+    ProductRow:
+      properties:
+        orders:
+          description: Orders is how many order_completed events carried it.
+          type: integer
+        productId:
+          description: ProductID is the product the order events named.
+          type: string
+        revenue:
+          description: Revenue is the total they carried, in the events' own currency
+            unit.
+          type: number
+        units:
+          description: Units is the summed quantity sold.
+          type: integer
       type: object
     Promo:
       properties:
@@ -3126,6 +3298,14 @@ components:
         scheduledAt:
           description: ScheduledAt is the unix send time. 0 clears the schedule.
           type: integer
+      type: object
+    Scope:
+      properties:
+        org:
+          description: |-
+            Org is the IAM org slug the rows were read under: the validated principal's,
+            resolved server-side.
+          type: string
       type: object
     ScreenResult:
       properties:
@@ -3742,6 +3922,34 @@ components:
         title:
           type: string
       type: object
+    Timeseries:
+      properties:
+        end:
+          description: End is the window's exclusive upper bound, RFC3339 UTC.
+          type: string
+        interval:
+          description: 'Interval is the bucket width: hour or day.'
+          type: string
+        range:
+          description: 'Range is the window that was actually applied: 24h, 7d, 30d
+            or custom.'
+          type: string
+        scope:
+          $ref: '#/components/schemas/Scope'
+          description: Scope names the tenant these numbers belong to.
+        series:
+          description: Series is one point per bucket, oldest first, with empty buckets
+            zero-filled.
+          items:
+            $ref: '#/components/schemas/UsagePoint'
+          type: array
+        source:
+          description: Source is the warehouse table the series read.
+          type: string
+        start:
+          description: Start is the window's inclusive lower bound, RFC3339 UTC.
+          type: string
+      type: object
     Tool:
       properties:
         activated:
@@ -3778,6 +3986,75 @@ components:
           description: |-
             Source is where the tool comes from: builtin, connector, function,
             zap-service, agent, skill or mcp.
+          type: string
+      type: object
+    Top:
+      properties:
+        end:
+          description: End is the window's exclusive upper bound, RFC3339 UTC.
+          type: string
+        models:
+          $ref: '#/components/schemas/TopModels'
+          description: Models ranks the window's LLM models by spend — real per-org
+            data.
+        products:
+          $ref: '#/components/schemas/TopProducts'
+          description: Products ranks the window's products by revenue.
+        range:
+          description: 'Range is the window that was actually applied: 24h, 7d, 30d
+            or custom.'
+          type: string
+        scope:
+          $ref: '#/components/schemas/Scope'
+          description: Scope names the tenant these rankings belong to.
+        start:
+          description: Start is the window's inclusive lower bound, RFC3339 UTC.
+          type: string
+        topPages:
+          $ref: '#/components/schemas/Breakdown'
+          description: Pages ranks the paths visitors requested, by pageviews.
+        topReferrers:
+          $ref: '#/components/schemas/Breakdown'
+          description: Referrers ranks the external domains visitors arrived from,
+            by pageviews.
+        topSources:
+          $ref: '#/components/schemas/Breakdown'
+          description: Sources ranks the utm_source campaigns visitors arrived on,
+            by pageviews.
+      type: object
+    TopModels:
+      properties:
+        available:
+          description: Available is true whenever the ledger answered, including with
+            no rows.
+          type: boolean
+        items:
+          description: Items is the ranked models, highest spend first.
+          items:
+            $ref: '#/components/schemas/ModelRow'
+          type: array
+        source:
+          description: Source is the warehouse table the lens read.
+          type: string
+      type: object
+    TopProducts:
+      properties:
+        available:
+          description: Available is false when the product-event table could not be
+            read.
+          type: boolean
+        items:
+          description: Items is the ranked products, highest revenue first. Empty
+            rather than absent.
+          items:
+            $ref: '#/components/schemas/ProductRow'
+          type: array
+        reason:
+          description: Reason says why the lens is unavailable. Omitted when it is
+            available.
+          type: string
+        source:
+          description: Source is the warehouse table the lens read.
           type: string
       type: object
     Totals:
@@ -3941,6 +4218,21 @@ components:
         requests:
           type: integer
         tokens:
+          type: integer
+      type: object
+    UsagePoint:
+      properties:
+        requests:
+          description: Requests is how many LLM calls fell in this bucket.
+          type: integer
+        spendCents:
+          description: SpendCents is what they cost, in cents.
+          type: integer
+        t:
+          description: T is the bucket's start, RFC3339 UTC, aligned to the interval.
+          type: string
+        tokens:
+          description: Tokens is prompt plus completion tokens over those calls.
           type: integer
       type: object
     Vendor:
@@ -4143,6 +4435,30 @@ components:
           description: SourceKind is the idempotency namespace naming what booked
             this, e.g. "scan".
           type: string
+      type: object
+    WebOverview:
+      properties:
+        available:
+          description: |-
+            Available is false when the product-event table could not be read — the lens is
+            reported missing rather than as zeros that look like real traffic.
+          type: boolean
+        pageviews:
+          description: Pageviews is how many $pageview events landed in the window.
+          type: integer
+        reason:
+          description: Reason says why the lens is unavailable. Omitted when it is
+            available.
+          type: string
+        sessions:
+          description: Sessions is how many distinct visits they span.
+          type: integer
+        source:
+          description: Source is the warehouse table the lens read.
+          type: string
+        visitors:
+          description: Visitors is how many distinct people those pageviews came from.
+          type: integer
       type: object
     Wire:
       properties:
@@ -6238,6 +6554,56 @@ components:
           description: Success is true when the update was applied.
           type: boolean
       type: object
+    capturedError:
+      properties:
+        distinctId:
+          description: |-
+            DistinctID is the person/visitor the error is attributed to. Omitted when the
+            row carries none.
+          type: string
+        event:
+          description: Event is the event name the error was stored under, e.g. $error.
+          type: string
+        exception:
+          description: |-
+            Exception is the captured error itself — the {type, message, stack, handled}
+            object, already redacted at the fold point. Omitted when the row has none.
+        id:
+          description: |-
+            ID is the row's stable event id — the client's own idempotency id when it sent
+            one, else the server-minted one.
+          type: string
+        library:
+          description: Library is the client SDK that reported the error. Omitted
+            when absent.
+          type: string
+        libraryVersion:
+          description: LibraryVer is that SDK's version. Omitted when absent.
+          type: string
+        path:
+          description: Path is the URL's path component. Omitted when absent.
+          type: string
+        product:
+          description: Product is the surface that emitted the error. Omitted when
+            absent.
+          type: string
+        properties:
+          description: |-
+            Properties is the row's whole property bag, returned verbatim as stored — any
+            JSON object, $exception included. Omitted when the row carries none or it did
+            not parse.
+        sessionId:
+          description: SessionID groups the events of one visit. Omitted when the
+            client sent none.
+          type: string
+        timestamp:
+          description: Timestamp is when the error was captured, RFC3339 UTC.
+          type: string
+        url:
+          description: URL is the full page address the error fired on. Omitted when
+            absent.
+          type: string
+      type: object
     chatRequest:
       properties:
         message:
@@ -7308,6 +7674,15 @@ components:
         url:
           type: string
       type: object
+    errorList:
+      properties:
+        data:
+          description: Data is the errors, newest first. Empty rather than absent
+            when there are none.
+          items:
+            $ref: '#/components/schemas/capturedError'
+          type: array
+      type: object
     esignCompleteIn:
       properties:
         signed:
@@ -7328,6 +7703,15 @@ components:
         provider:
           description: Provider is the wired e-signature provider's name.
           type: string
+      type: object
+    eventList:
+      properties:
+        data:
+          description: Data is the events, newest first. Empty rather than absent
+            when there are none.
+          items:
+            $ref: '#/components/schemas/productEvent'
+          type: array
       type: object
     eventView:
       properties:
@@ -7980,6 +8364,19 @@ components:
         role:
           description: Role is "edge" when this instance binds the listeners, else
             "app".
+          type: string
+      type: object
+    insightsStatus:
+      properties:
+        engine:
+          description: 'Engine names the engine serving the surface: hanzo-analytics.'
+          type: string
+        ok:
+          description: OK is always true — reaching this route is the liveness fact
+            it reports.
+          type: boolean
+        surface:
+          description: 'Surface is the path prefix this status covers: /v1/insights.'
           type: string
       type: object
     itemInput:
@@ -9418,6 +9815,47 @@ components:
               type: object
             type: object
           type: array
+      type: object
+    productEvent:
+      properties:
+        distinctId:
+          description: DistinctID is the person/visitor the event is attributed to.
+          type: string
+        event:
+          description: Event is the event name, e.g. $pageview.
+          type: string
+        id:
+          description: |-
+            ID is the row's stable event id — the client's own idempotency id when it sent
+            one, else the server-minted one.
+          type: string
+        path:
+          description: Path is the URL's path component, the key the topPages lens
+            groups by.
+          type: string
+        product:
+          description: Product is the surface that emitted the event. Omitted when
+            absent.
+          type: string
+        properties:
+          description: |-
+            Properties is the caller's own property bag, returned verbatim as stored — any
+            JSON object. Omitted when the row carries none or it did not parse.
+        sessionId:
+          description: SessionID groups the events of one visit. Omitted when the
+            client sent none.
+          type: string
+        timestamp:
+          description: Timestamp is when the event happened, RFC3339 UTC.
+          type: string
+        type:
+          description: 'Type is the canonical kind: pageview, error, identify, group
+            or event.'
+          type: string
+        url:
+          description: URL is the full page address the event fired on. Omitted when
+            absent.
+          type: string
       type: object
     productRow:
       properties:
@@ -16116,17 +16554,154 @@ paths:
       - analytics
   /v1/analytics/overview:
     get:
+      description: |-
+        Overview returns the caller org's analytics KPIs for one time window. Three lenses
+        over one warehouse: llm is the live per-org LLM usage ledger (requests, tokens,
+        spend, models, providers, errors) and is always real; web (pageviews, visitors,
+        sessions) and commerce (orders, revenue, AOV) read the product-event table and
+        report available=false rather than fabricating zeros when it holds nothing yet.
+
+        The org is the validated principal's — never a parameter — so a caller can only
+        ever read its own tenant. 403 without a validated bearer, 400 on an unknown range,
+        503 when the warehouse is unreachable.
       operationId: get_v1_analytics_overview
+      parameters:
+      - description: |-
+          Range is a relative window: 24h, 7d or 30d. Default 24h. Ignored when both
+          start and end are given. An unknown value is a 400.
+        example: 7d
+        in: query
+        name: range
+        required: false
+        schema:
+          type: string
+      - description: Start is the inclusive lower bound of a custom window, RFC3339.
+          Requires end.
+        in: query
+        name: start
+        required: false
+        schema:
+          type: string
+      - description: End is the exclusive upper bound of a custom window, RFC3339.
+          Requires start.
+        in: query
+        name: end
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Overview'
+          description: ok
+      summary: Overview returns the caller org's analytics KPIs for one time window.
       tags:
       - analytics
   /v1/analytics/timeseries:
     get:
+      description: |-
+        Timeseries returns the caller org's LLM usage over time as an evenly-spaced series.
+        One point per hour or per day — the bucket the window implies, 24h giving hours and
+        7d/30d giving days — carrying requests, total tokens and spend in cents. Empty
+        buckets are filled with zeros so a client charts a continuous line.
+
+        The org is the validated principal's — never a parameter. 403 without a validated
+        bearer, 400 on an unknown range, 503 when the warehouse is unreachable.
       operationId: get_v1_analytics_timeseries
+      parameters:
+      - description: |-
+          Range is a relative window: 24h, 7d or 30d. Default 24h. Ignored when both
+          start and end are given. An unknown value is a 400.
+        example: 30d
+        in: query
+        name: range
+        required: false
+        schema:
+          type: string
+      - description: Start is the inclusive lower bound of a custom window, RFC3339.
+          Requires end.
+        in: query
+        name: start
+        required: false
+        schema:
+          type: string
+      - description: End is the exclusive upper bound of a custom window, RFC3339.
+          Requires start.
+        in: query
+        name: end
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Timeseries'
+          description: ok
+      summary: Timeseries returns the caller org's LLM usage over time as an evenly-spaced
+        series.
       tags:
       - analytics
   /v1/analytics/top:
     get:
+      description: |-
+        Top returns the caller org's ranked lenses for one window, five of them at once.
+        models ranks LLM models by spend and is always real; products ranks commerce orders
+        by revenue; topPages ranks requested paths, topReferrers the external referrer
+        domains ("(direct)" for a missing or same-origin one) and topSources the utm_source
+        campaigns ("(none)" when absent), each by pageviews. Every lens carries each row's
+        share of the in-window total, so a top-N honestly shows the long tail.
+
+        The four event lenses report available=false rather than fabricating zeros when the
+        product-event table holds nothing yet. The org is the validated principal's — never
+        a parameter. 403 without a validated bearer, 400 on an unknown range, 503 when the
+        warehouse is unreachable.
       operationId: get_v1_analytics_top
+      parameters:
+      - description: |-
+          Range is a relative window: 24h, 7d or 30d. Default 24h. Ignored when both
+          start and end are given. An unknown value is a 400.
+        example: 7d
+        in: query
+        name: range
+        required: false
+        schema:
+          type: string
+      - description: Start is the inclusive lower bound of a custom window, RFC3339.
+          Requires end.
+        in: query
+        name: start
+        required: false
+        schema:
+          type: string
+      - description: End is the exclusive upper bound of a custom window, RFC3339.
+          Requires start.
+        in: query
+        name: end
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit bounds every ranked lens in the response. Default 10, maximum 100; a
+          value at or below zero, or one that is not a number, takes the default.
+        example: 25
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Top'
+          description: ok
+      summary: Top returns the caller org's ranked lenses for one window, five of
+        them at once.
       tags:
       - analytics
   /v1/ask:
@@ -22800,7 +23375,35 @@ paths:
       - environments
   /v1/errors:
     get:
+      description: |-
+        Errors returns the caller org's most recently captured errors, newest first. The
+        error-tracking read view over the same table the capture doors write: only rows
+        stored as type 'error', each with its captured exception lifted out of the property
+        bag as a first-class field.
+
+        The org is the validated principal's — never a parameter — and this read requires a
+        real bearer, NEVER the write-only publishable key: pk- can attribute a write and can
+        read nothing. 403 without a validated bearer, 503 when the warehouse is unreachable.
       operationId: get_v1_errors
+      parameters:
+      - description: |-
+          Limit is how many rows to return, newest first. Default 50, maximum 200; a
+          value at or below zero, or one that is not a number, takes the default.
+        example: 100
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/errorList'
+          description: ok
+      summary: Errors returns the caller org's most recently captured errors, newest
+        first.
       tags:
       - errors
   /v1/esign/documents:
@@ -26645,12 +27248,52 @@ paths:
       - insights
   /v1/insights/events:
     get:
+      description: |-
+        InsightsEvents returns the caller org's most recent product events, newest first.
+        The console's raw-event view over the same table the capture doors write: one row
+        per stored event, with the caller's own property bag returned verbatim.
+
+        The org is the validated principal's — never a parameter — and a read requires a
+        real bearer, never the write-only publishable key. 403 without a validated bearer,
+        503 when the warehouse is unreachable.
       operationId: get_v1_insights_events
+      parameters:
+      - description: |-
+          Limit is how many rows to return, newest first. Default 50, maximum 200; a
+          value at or below zero, or one that is not a number, takes the default.
+        example: 100
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/eventList'
+          description: ok
+      summary: InsightsEvents returns the caller org's most recent product events,
+        newest first.
       tags:
       - insights
   /v1/insights/health:
     get:
+      description: |-
+        InsightsHealth reports that the unified insights surface is serving. It reads no
+        tenant data and consults no dependency, so it answers 200 unconditionally and needs
+        no principal — liveness must be probe-able. The warehouse-connectivity probe is a
+        different question and lives at GET /v1/analytics/health.
       operationId: get_v1_insights_health
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/insightsStatus'
+          description: ok
+      summary: InsightsHealth reports that the unified insights surface is serving.
       tags:
       - insights
   /v1/integrations:
