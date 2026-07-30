@@ -55,7 +55,7 @@ func init() {
 		Fields: map[string]string{
 			"statsIn.token":                "Token is the workspace token minted by selectWorkspace.",
 			"statsOut.admin":               "Admin is the upstream service's server-panel flag, always false here.",
-			"statsOut.metrics":             "Metrics is the upstream service's metrics block, which this server does\nnot populate.",
+			"statsOut.metrics":             "Metrics is the upstream transactor's metrics block. This server does not\npopulate it, so it is always the empty object — the front reads the key,\nnot its contents.",
 			"statsOut.statistics":          "Statistics carries the live sessions.",
 			"statsSessions.activeSessions": "ActiveSessions maps a workspace uuid to its connected sessions. It carries\nonly the token's OWN workspace, and is empty for a token that names none.",
 			"statsUser.userId":             "UserID is the account the session is authenticated as.",
@@ -67,7 +67,7 @@ func init() {
 		Fields: map[string]string{
 			"statsIn.token":                "Token is the workspace token minted by selectWorkspace.",
 			"statsOut.admin":               "Admin is the upstream service's server-panel flag, always false here.",
-			"statsOut.metrics":             "Metrics is the upstream service's metrics block, which this server does\nnot populate.",
+			"statsOut.metrics":             "Metrics is the upstream transactor's metrics block. This server does not\npopulate it, so it is always the empty object — the front reads the key,\nnot its contents.",
 			"statsOut.statistics":          "Statistics carries the live sessions.",
 			"statsSessions.activeSessions": "ActiveSessions maps a workspace uuid to its connected sessions. It carries\nonly the token's OWN workspace, and is empty for a token that names none.",
 			"statsUser.userId":             "UserID is the account the session is authenticated as.",
