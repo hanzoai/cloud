@@ -207,6 +207,34 @@ var allowedRequestUses = map[string]string{
 		"nothing else — it is not identity, and modeling it as a second In field would let a caller set " +
 		"the fallback, which is the one thing a fallback must not be. Empty off the HTTP path, which " +
 		"resolves to known=false: the same fail-open answer an unregistered host gets.",
+	"apps/gateway/gateway.go": "caller / target — the edge config plane's identity seam. The PLATFORM " +
+		"scope (CORS allowlist, pre-auth per-IP cap) is SuperAdmin-only, which is X-User-IsAdmin, and every " +
+		"write is stamped with the validated user id (X-User-Id) — neither is what principal.OrgFrom carries. " +
+		"The ?org=<slug> a SuperAdmin targets another tenant with is read off the URL rather than modelled as " +
+		"an In field, because zip binds an In field from the BODY too and the PUT has never accepted an org " +
+		"there — and a tenant key taken from an input is a cross-tenant write the caller asserted for itself. " +
+		"The caller's OWN org is read with principal.OrgFrom, never through the request. Fails closed off the " +
+		"HTTP path: no request, no attested admin, no edge config.",
+	"apps/sbom/sbom.go": "ingest's SuperAdmin gate. The SBOM store is GLOBAL by design (an SBOM belongs to " +
+		"an image DIGEST, not a tenant), so there is no org predicate here at all — the one identity fact this " +
+		"surface reads is X-User-IsAdmin, which the build fleet / CI carries and principal.OrgFrom does not. " +
+		"Fails closed off the HTTP path: no request, no attested admin, no ingest.",
+	"apps/entitlements/entitlements.go": "resolveOrg — the ONE trust decision both enablement ops share. It " +
+		"needs two facts beyond the parked org: SuperAdmin-ness (X-User-IsAdmin, which lets an operator " +
+		"comp a product to ANY org) and the VALIDATED owner claim to compare the :org path segment against, " +
+		"which is what makes that segment an address the gate re-checks rather than an assertion it believes. " +
+		"It also hands back the request so a write is ATTRIBUTED to the validated user id. Fails closed off " +
+		"the HTTP path: no request, no attested principal, no access.",
+	"apps/entitlements/projection.go": "the platform-sudo bit on the console's paywall read. \"admin\" is " +
+		"not a commerce product — it is X-User-IsAdmin, resolved from the unforgeable claim rather than " +
+		"through CheckEntitlement — and principal.OrgFrom does not carry it. The org itself is read with " +
+		"principal.OrgFrom, right above. Off the HTTP path it is simply false, which is this read's " +
+		"fail-safe-to-LOCKED direction.",
+	"apps/translate/translate.go": "reviewer — a review-lane write is ATTRIBUTED to the human who made it, " +
+		"and the validated user id lives in X-User-Id, which principal.OrgFrom does not carry (the org says " +
+		"which tenant, not which person). It is an attribution and never an authority: the org gate above it " +
+		"already ran. Empty off the HTTP path, where the entry records no actor rather than inventing one — " +
+		"exactly how a pre-attribution row already reads.",
 	"apps/destinations/destinations.go": "orgAdmin — the gate every destination MUTATION keeps " +
 		"(disconnect and test both forget or spend a credential). It reads org-admin-ness, which is " +
 		"X-User-IsOrgAdmin, a claim principal.OrgFrom does not carry. The tenant itself is read with " +
