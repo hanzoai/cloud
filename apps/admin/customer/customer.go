@@ -88,13 +88,13 @@ type CustomerDetailData struct {
 	Transactions []CustomerTxn  `json:"transactions"`
 }
 
-// CustomersOut is the GET /v1/admin/customers envelope. data2 == len(data): the list is
+// CustomersOut is the GET /v1/admin/customers envelope. total == len(data): the list is
 // every customer, unpaginated.
 type CustomersOut struct {
 	Status string        `json:"status"`
 	Msg    string        `json:"msg"`
 	Data   []CustomerRow `json:"data"`
-	Data2  *int          `json:"data2,omitempty"`
+	Total  *int          `json:"total,omitempty"`
 }
 
 // ── GET /v1/admin/customers — the fleet customer list ────────────────────────
@@ -110,7 +110,7 @@ type CustomersOut struct {
 // Response: {"status":"ok","msg":"","data":[{"org":"acme","display":"Acme",
 // "ownerEmail":"ada@acme.com","plan":"pro","status":"active","users":7,"balanceCents":5000,
 // "spendCents":12500,"mrrCents":9900,"created":"2026-01-04T00:00:00Z",
-// "lastActive":"2026-07-26T18:00:00Z"}],"data2":1}
+// "lastActive":"2026-07-26T18:00:00Z"}],"total":1}
 func (o ops) Customers(ctx context.Context, _ *core.None) (*CustomersOut, error) {
 	c, err := core.Admit(ctx)
 	if err != nil {
@@ -138,7 +138,7 @@ func (o ops) Customers(ctx context.Context, _ *core.None) (*CustomersOut, error)
 	wg.Wait()
 
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Org < rows[j].Org })
-	return &CustomersOut{Status: core.OK, Data: rows, Data2: core.Total(len(rows))}, nil
+	return &CustomersOut{Status: core.OK, Data: rows, Total: core.Total(len(rows))}, nil
 }
 
 // enrichCustomer folds one org's real IAM + commerce reads into a customer row. Each read

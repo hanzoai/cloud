@@ -37,7 +37,7 @@ func newScopeIAM() *scopeIAM {
 			io.WriteString(w, `{"status":"ok","msg":"","data":[
 				{"owner":"admin","name":"hanzo","displayName":"Hanzo","createdTime":"2020-01-01T00:00:00Z"},
 				{"owner":"admin","name":"maxpower","displayName":"MaxPower","createdTime":"2021-02-02T00:00:00Z"}
-			],"data2":2}`)
+			],"total":2}`)
 		case strings.HasSuffix(r.URL.Path, "/organizations/get"):
 			id := r.URL.Query().Get("id") // owner/name
 			name := id
@@ -51,7 +51,7 @@ func newScopeIAM() *scopeIAM {
 			f.mu.Unlock()
 			io.WriteString(w, `{"status":"ok","msg":"","data":[
 				{"owner":"maxpower","name":"dave","email":"dave@maxpower.test","displayName":"Dave","isAdmin":true}
-			],"data2":3}`)
+			],"total":3}`)
 		default:
 			w.WriteHeader(404)
 			io.WriteString(w, `{"status":"error","msg":"not found"}`)

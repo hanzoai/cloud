@@ -70,7 +70,7 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 // Filters (all optional, applied on top of the pinned org): sub (a user in the
 // org), action, resource (type), resourceId, result (success|deny|error), since,
 // until (RFC3339), pageSize (default 100, cap 1000), p (1-based page). Response is
-// the /v1 list envelope { data:[audit.Wire], data2:total } the console decodes —
+// the /v1 list envelope { data:[audit.Wire], total } the console decodes —
 // the SAME shape /v1/admin/audit returns, so ONE console adapter reads either.
 func list(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
@@ -104,7 +104,7 @@ func list(s *cloud.Service[state], c *zip.Ctx) error {
 		"status": "ok",
 		"msg":    "",
 		"data":   out,
-		"data2":  total,
+		"total":  total,
 	})
 }
 

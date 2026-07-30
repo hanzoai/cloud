@@ -167,9 +167,9 @@
                       "owner": "admin"
                     }
                   ],
-                  "data2": 1,
                   "msg": "",
-                  "status": "ok"
+                  "status": "ok",
+                  "total": 1
                 },
                 "schema": {
                   "$ref": "#/components/schemas/iamRowsOut"
@@ -301,7 +301,6 @@
                       "ts": "2026-07-26T18:00:00Z"
                     }
                   ],
-                  "data2": 1,
                   "integrity": {
                     "brokenAt": -1,
                     "count": 42,
@@ -309,7 +308,8 @@
                     "ok": true
                   },
                   "msg": "",
-                  "status": "ok"
+                  "status": "ok",
+                  "total": 1
                 },
                 "schema": {
                   "$ref": "#/components/schemas/RecordsOut"
@@ -377,9 +377,9 @@
                       "url": "https://acme.base.hanzo.ai"
                     }
                   ],
-                  "data2": 1,
                   "msg": "",
-                  "status": "ok"
+                  "status": "ok",
+                  "total": 1
                 },
                 "schema": {
                   "$ref": "#/components/schemas/basesOut"
@@ -503,9 +503,9 @@
                       "spendCents": 900
                     }
                   ],
-                  "data2": 1,
                   "msg": "",
-                  "status": "ok"
+                  "status": "ok",
+                  "total": 1
                 },
                 "schema": {
                   "$ref": "#/components/schemas/computeOut"
@@ -596,9 +596,9 @@
                       "users": 7
                     }
                   ],
-                  "data2": 1,
                   "msg": "",
-                  "status": "ok"
+                  "status": "ok",
+                  "total": 1
                 },
                 "schema": {
                   "$ref": "#/components/schemas/CustomersOut"
@@ -1029,9 +1029,9 @@
                       "transactionId": "tx_01J"
                     }
                   ],
-                  "data2": 1,
                   "msg": "",
-                  "status": "ok"
+                  "status": "ok",
+                  "total": 1
                 },
                 "schema": {
                   "$ref": "#/components/schemas/GrantsOut"
@@ -1630,7 +1630,7 @@
             "name": "limit",
             "in": "query",
             "required": false,
-            "description": "Limit caps the rows returned. data2 still reports the full match count.",
+            "description": "Limit caps the rows returned. total still reports the full match count.",
             "schema": {
               "type": "string"
             }
@@ -1831,9 +1831,9 @@
                       "users": 7
                     }
                   ],
-                  "data2": 1,
                   "msg": "",
-                  "status": "ok"
+                  "status": "ok",
+                  "total": 1
                 },
                 "schema": {
                   "$ref": "#/components/schemas/orgsOut"
@@ -1954,9 +1954,9 @@
                       "updated": ""
                     }
                   ],
-                  "data2": 1,
                   "msg": "",
-                  "status": "ok"
+                  "status": "ok",
+                  "total": 1
                 },
                 "schema": {
                   "$ref": "#/components/schemas/productsOut"
@@ -1990,9 +1990,9 @@
                     ],
                     "start": "2026-07-01T00:00:00Z"
                   },
-                  "data2": 0,
                   "msg": "",
-                  "status": "ok"
+                  "status": "ok",
+                  "total": 0
                 },
                 "schema": {
                   "$ref": "#/components/schemas/rawOut"
@@ -2043,9 +2043,9 @@
                     ],
                     "start": "2026-07-01T00:00:00Z"
                   },
-                  "data2": 0,
                   "msg": "",
-                  "status": "ok"
+                  "status": "ok",
+                  "total": 0
                 },
                 "schema": {
                   "$ref": "#/components/schemas/rawOut"
@@ -2176,9 +2176,9 @@
                       "owner": "admin"
                     }
                   ],
-                  "data2": 1,
                   "msg": "",
-                  "status": "ok"
+                  "status": "ok",
+                  "total": 1
                 },
                 "schema": {
                   "$ref": "#/components/schemas/iamRowsOut"
@@ -2389,9 +2389,9 @@
                       "warn": false
                     }
                   ],
-                  "data2": 0,
                   "msg": "",
-                  "status": "ok"
+                  "status": "ok",
+                  "total": 0
                 },
                 "schema": {
                   "$ref": "#/components/schemas/rawOut"
@@ -2434,9 +2434,9 @@
                     "id": "cap_1",
                     "limitCents": 100000
                   },
-                  "data2": 0,
                   "msg": "",
-                  "status": "ok"
+                  "status": "ok",
+                  "total": 0
                 },
                 "schema": {
                   "$ref": "#/components/schemas/rawOut"
@@ -2541,9 +2541,9 @@
                     "id": "cap_1",
                     "limitCents": 250000
                   },
-                  "data2": 0,
                   "msg": "",
-                  "status": "ok"
+                  "status": "ok",
+                  "total": 0
                 },
                 "schema": {
                   "$ref": "#/components/schemas/rawOut"
@@ -2586,7 +2586,7 @@
             "name": "limit",
             "in": "query",
             "required": false,
-            "description": "Limit caps the rows returned. data2 still reports the full match count.",
+            "description": "Limit caps the rows returned. total still reports the full match count.",
             "schema": {
               "type": "string"
             }
@@ -2777,7 +2777,7 @@
       "get": {
         "operationId": "adminUsers",
         "summary": "users lists the user directory across the caller's tenant window, one page at a time.",
-        "description": "users lists the user directory across the caller's tenant window, one page at a time.\ndata2 is IAM's REAL total, so the console can page through it.\n\nA SuperAdmin may aim the read at one tenant with org; a white-label admin cannot — for\nthem the owner is hard-pinned to their own org and org is ignored, which is what keeps\nthe directory from becoming a cross-tenant read.",
+        "description": "users lists the user directory across the caller's tenant window, one page at a time.\ntotal is IAM's REAL total, so the console can page through it.\n\nA SuperAdmin may aim the read at one tenant with org; a white-label admin cannot — for\nthem the owner is hard-pinned to their own org and org is ignored, which is what keeps\nthe directory from becoming a cross-tenant read.",
         "tags": [
           "admin"
         ],
@@ -2842,9 +2842,9 @@
                       "tag": ""
                     }
                   ],
-                  "data2": 222,
                   "msg": "",
-                  "status": "ok"
+                  "status": "ok",
+                  "total": 222
                 },
                 "schema": {
                   "$ref": "#/components/schemas/usersOut"
@@ -3330,14 +3330,14 @@
             },
             "type": "array"
           },
-          "data2": {
-            "type": "integer"
-          },
           "msg": {
             "type": "string"
           },
           "status": {
             "type": "string"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -3657,14 +3657,14 @@
             },
             "type": "array"
           },
-          "data2": {
-            "type": "integer"
-          },
           "msg": {
             "type": "string"
           },
           "status": {
             "type": "string"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -3733,14 +3733,14 @@
             },
             "type": "array"
           },
-          "data2": {
-            "type": "integer"
-          },
           "msg": {
             "type": "string"
           },
           "status": {
             "type": "string"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -4043,9 +4043,6 @@
           "data": {
             "type": "object"
           },
-          "data2": {
-            "type": "integer"
-          },
           "integrity": {
             "$ref": "#/components/schemas/Integrity"
           },
@@ -4054,6 +4051,9 @@
           },
           "status": {
             "type": "string"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -4505,14 +4505,14 @@
             },
             "type": "array"
           },
-          "data2": {
-            "type": "integer"
-          },
           "msg": {
             "type": "string"
           },
           "status": {
             "type": "string"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -5268,14 +5268,14 @@
             },
             "type": "array"
           },
-          "data2": {
-            "type": "integer"
-          },
           "msg": {
             "type": "string"
           },
           "status": {
             "type": "string"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -5344,14 +5344,14 @@
             },
             "type": "array"
           },
-          "data2": {
-            "type": "integer"
-          },
           "msg": {
             "type": "string"
           },
           "status": {
             "type": "string"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -5409,14 +5409,14 @@
           "data": {
             "type": "object"
           },
-          "data2": {
-            "type": "integer"
-          },
           "msg": {
             "type": "string"
           },
           "status": {
             "type": "string"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -5875,14 +5875,14 @@
             },
             "type": "array"
           },
-          "data2": {
-            "type": "integer"
-          },
           "msg": {
             "type": "string"
           },
           "status": {
             "type": "string"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -6014,14 +6014,14 @@
             },
             "type": "array"
           },
-          "data2": {
-            "type": "integer"
-          },
           "msg": {
             "type": "string"
           },
           "status": {
             "type": "string"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -6059,14 +6059,14 @@
           "data": {
             "type": "object"
           },
-          "data2": {
-            "type": "integer"
-          },
           "msg": {
             "type": "string"
           },
           "status": {
             "type": "string"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -6487,14 +6487,14 @@
             },
             "type": "array"
           },
-          "data2": {
-            "type": "integer"
-          },
           "msg": {
             "type": "string"
           },
           "status": {
             "type": "string"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "type": "object"

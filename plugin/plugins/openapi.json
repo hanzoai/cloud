@@ -333,9 +333,6 @@
             },
             "type": "array"
           },
-          "data2": {
-            "type": "integer"
-          },
           "drift": {
             "items": {
               "$ref": "#/components/schemas/Drift"
@@ -347,6 +344,9 @@
           },
           "status": {
             "type": "string"
+          },
+          "total": {
+            "type": "integer"
           }
         },
         "type": "object"

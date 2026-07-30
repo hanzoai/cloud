@@ -14,7 +14,7 @@ import "github.com/hanzoai/cloud/apps/admin/core"
 //	status — core.OK, or core.Err with msg set (still HTTP 200; see core.Err)
 //	msg    — the failure reason, or an advisory note on a successful read
 //	data   — the payload, null when the read failed
-//	data2  — the total row count of a LIST read; absent on a single-value read
+//	total  — the row count of a LIST read; absent on a single-value read
 //
 // The cross-cutting SourceStatus (freshness of one upstream) lives in clients/admin/core
 // (core.SourceStatus) because revenue/finance/analytics share it; overview embeds it.
@@ -82,13 +82,13 @@ type orgRow struct {
 	Created      string `json:"created"`
 }
 
-// orgsOut is the GET /v1/admin/orgs envelope. data2 == len(data): the directory is the
+// orgsOut is the GET /v1/admin/orgs envelope. total == len(data): the directory is the
 // caller's whole tenant window, unpaginated.
 type orgsOut struct {
 	Status string   `json:"status"`
 	Msg    string   `json:"msg"`
 	Data   []orgRow `json:"data"`
-	Data2  *int     `json:"data2,omitempty"`
+	Total  *int     `json:"total,omitempty"`
 }
 
 // usersIn is the GET /v1/admin/users query.
@@ -105,13 +105,13 @@ type usersIn struct {
 	PageSize string `json:"pageSize"`
 }
 
-// usersOut is the GET /v1/admin/users envelope. data2 is IAM's REAL total across all
+// usersOut is the GET /v1/admin/users envelope. total is IAM's REAL total across all
 // pages, not len(data) — it is what the console pages against.
 type usersOut struct {
 	Status string         `json:"status"`
 	Msg    string         `json:"msg"`
 	Data   []operatorUser `json:"data"`
-	Data2  *int           `json:"data2,omitempty"`
+	Total  *int           `json:"total,omitempty"`
 }
 
 // iamPageIn is the query shared by the verbatim IAM reads (roles, applications).
@@ -133,7 +133,7 @@ type iamRowsOut struct {
 	Status string `json:"status"`
 	Msg    string `json:"msg"`
 	Data   any    `json:"data"`
-	Data2  *int   `json:"data2,omitempty"`
+	Total  *int   `json:"total,omitempty"`
 }
 
 // operatorUser is one user in the cross-org directory (OperatorUser / GET
@@ -215,13 +215,13 @@ type productsIn struct {
 	Env string `json:"env"`
 }
 
-// productsOut is the GET /v1/admin/products envelope. data2 == len(data): the registry is
+// productsOut is the GET /v1/admin/products envelope. total == len(data): the registry is
 // the whole observed fleet after filtering, unpaginated.
 type productsOut struct {
 	Status string       `json:"status"`
 	Msg    string       `json:"msg"`
 	Data   []productRow `json:"data"`
-	Data2  *int         `json:"data2,omitempty"`
+	Total  *int         `json:"total,omitempty"`
 }
 
 // rangeIn is the time window shared by the warehouse-backed boards (o11y, aimetrics,
@@ -237,13 +237,13 @@ type rangeIn struct {
 // `data` is the upstream's own payload, declared opaque for the same reason as
 // iamRowsOut: re-describing someone else's schema here would be a second copy of it.
 //
-// data2 is a POINTER because these reads differ on it — a passthrough list carries the
+// total is a POINTER because these reads differ on it — a passthrough list carries the
 // upstream's total, a passthrough object carries none — and an added key is a wire change.
 type rawOut struct {
 	Status string `json:"status"`
 	Msg    string `json:"msg"`
 	Data   any    `json:"data"`
-	Data2  *int   `json:"data2,omitempty"`
+	Total  *int   `json:"total,omitempty"`
 }
 
 // productRow is one product/workload row (ProductRow / GET /v1/admin/products) — the

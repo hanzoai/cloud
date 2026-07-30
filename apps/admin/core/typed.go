@@ -35,7 +35,7 @@ import (
 )
 
 // The two states of the /v1 envelope every admin op answers with
-// ({ status, msg, data, data2 } — the operator transport's get<T>/getList<T> shape).
+// ({ status, msg, data, total } — the operator transport's get<T>/getList<T> shape).
 // The transport surfaces anything that is not OK as an error, never a value, so a
 // failed read is a 200 carrying Err — NOT an HTTP error status.
 const (
@@ -48,7 +48,7 @@ const (
 // document — the ops that DO take input each declare their own named In.
 type None struct{}
 
-// Total is the row count of a LIST read, as the pointer the envelope's optional data2
+// Total is the row count of a LIST read, as the pointer the envelope's optional total
 // field takes. Present — even at zero — on a success; left nil on a failure, because a
 // failed read has no count and adding the key would change the wire.
 func Total(n int) *int { return &n }

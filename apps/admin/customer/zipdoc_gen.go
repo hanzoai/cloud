@@ -14,7 +14,7 @@ func init() {
 		Fields: map[string]string{
 			"CustomerRow.status": "\"active\" | \"suspended\"",
 		},
-		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"org":"acme","display":"Acme","ownerEmail":"ada@acme.com","plan":"pro","status":"active","users":7,"balanceCents":5000,"spendCents":12500,"mrrCents":9900,"created":"2026-01-04T00:00:00Z","lastActive":"2026-07-26T18:00:00Z"}],"data2":1}`),
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"org":"acme","display":"Acme","ownerEmail":"ada@acme.com","plan":"pro","status":"active","users":7,"balanceCents":5000,"spendCents":12500,"mrrCents":9900,"created":"2026-01-04T00:00:00Z","lastActive":"2026-07-26T18:00:00Z"}],"total":1}`),
 	})
 	zip.Describe("GET /v1/admin/customers/:org", zip.Doc{
 		Description: "CustomerDetail answers GET /v1/admin/customers/:org.",
@@ -34,7 +34,7 @@ func init() {
 			"GrantsIn.result": "Result filters by outcome: \"success\" or \"error\". Empty returns both, which is\nthe point of this view — a refused grant is as interesting as a granted one.",
 		},
 		Example:  json.RawMessage(`{"result":"success","limit":"50"}`),
-		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"org":"acme","amountCents":5000,"currency":"usd","source":"trial","reason":"launch comp","actor":"z@hanzo.ai","createdAt":"2026-07-26T18:00:00Z","transactionId":"tx_01J","result":"success"}],"data2":1}`),
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"org":"acme","amountCents":5000,"currency":"usd","source":"trial","reason":"launch comp","actor":"z@hanzo.ai","createdAt":"2026-07-26T18:00:00Z","transactionId":"tx_01J","result":"success"}],"total":1}`),
 	})
 	zip.Describe("POST /v1/admin/customers/:org/credit", zip.Doc{
 		Description: "GrantCredit issues a staff credit grant to the org named in the path — a comp, refund\nor promo — through the ONE credit-write path core.ApplyGrant, which validates the\namount against the per-grant cap, checks the org exists, moves the money and records\nthe tamper-evident audit row.\n\nThe credit lands on the account account.Payer resolves, NOT necessarily the org: name\na member of a pooled org and the pool is credited. The receipt echoes the subject so\nthe caller can see which.",
