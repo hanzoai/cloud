@@ -235,6 +235,30 @@ var allowedRequestUses = map[string]string{
 		"which tenant, not which person). It is an attribution and never an authority: the org gate above it " +
 		"already ran. Empty off the HTTP path, where the entry records no actor rather than inventing one — " +
 		"exactly how a pre-attribution row already reads.",
+	"apps/usage/account.go": "caller / noStore — the usage plane is scoped to (org, SUBJECT): the " +
+		"account board carries the caller's OWN linked provider accounts, so it needs the validated user id " +
+		"(c.User()) as well as the tenant, and principal.OrgFrom carries only the tenant. noStore is the " +
+		"other half of the same request — per-tenant MONEY must never be cached by a browser or an " +
+		"intermediary, and Cache-Control is a RESPONSE header only the request reaches. TWO functions in " +
+		"ONE file, so all five ops share one seam; the tenant-only read (orgOf, right beside them) goes " +
+		"through principal.OrgFrom and never through the request. Both fail closed off the HTTP path: no " +
+		"request, no subject, and no response to mark.",
+	"apps/venue/venue.go": "writer — the org-admin gate every cloud-account MUTATION keeps, and the " +
+		"request the fold then rides on. Linking, syncing or unlinking a customer's cloud account requires " +
+		"admin of the caller's OWN org (X-User-IsOrgAdmin), and the fold that follows needs four more facts " +
+		"principal.OrgFrom does not carry: the project the discovered clusters are recorded in and whether " +
+		"that project was validated, the ledger the new folds are billed to, and the request id and client " +
+		"IP the meter attributes them by. ONE function, so the three writes share one seam; the tenant " +
+		"itself is read with principal.OrgFrom (tenant, right beside it) and the two READS never reach the " +
+		"request at all. Fails closed off the HTTP path: no request, no attested admin, no mutation.",
+	"apps/world/news.go": "scopeOf — world is scoped to (org, PROJECT) and every store statement carries " +
+		"both. The project is a server-minted claim (X-Project-Id) that principal.OrgFrom does not carry, " +
+		"and it is a TENANT key, so it must not become an In field a caller supplies for itself. The " +
+		"?project query beside it is only ever cross-CHECKED against that claim and cannot be an In field " +
+		"either: zip binds an In field from the BODY as well as the URL, so PUT /v1/world/pipeline would " +
+		"start rejecting a body that named a project — a wire the route has never had. ONE function, which " +
+		"all four scoped ops ask, delegating to the same scope() the SSE handler beside them uses; fails " +
+		"closed off the HTTP path, where there is no principal and therefore no tenant.",
 	"apps/destinations/destinations.go": "orgAdmin — the gate every destination MUTATION keeps " +
 		"(disconnect and test both forget or spend a credential). It reads org-admin-ness, which is " +
 		"X-User-IsOrgAdmin, a claim principal.OrgFrom does not carry. The tenant itself is read with " +

@@ -19,31 +19,108 @@
     "/v1/world/limits": {
       "get": {
         "operationId": "get_v1_world_limits",
+        "summary": "limits echoes a World plan's rate limits, alert quota and model-API grant, read straight from the live @hanzo/plans catalog, so agents and dashboards configure themselves against the catalog instead of hardcoding tier numbers.",
+        "description": "limits echoes a World plan's rate limits, alert quota and model-API grant, read\nstraight from the live @hanzo/plans catalog, so agents and dashboards configure\nthemselves against the catalog instead of hardcoding tier numbers.\n\nAn empty or unknown plan resolves world-free, and a catalog failure serves that\nsame free floor rather than erroring — so this always answers 200, and it can only\never under-grant. It reports the contract; it does not enforce it.",
         "tags": [
           "world"
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "plan",
+            "in": "query",
+            "required": false,
+            "description": "Plan is a World plan id from the live @hanzo/plans catalog, e.g. world-pro.\nEmpty means world-free, and so does an id the catalog does not know — this\nnever fails on an unknown plan.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/limitsView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/world/news": {
       "get": {
         "operationId": "get_v1_world_news",
+        "summary": "news returns the caller's merged world-news feed: every source their project's pipeline names — GDELT once per keyword, plus each allowlisted RSS or Atom feed — fetched concurrently, narrowed by the pipeline's keyword/region/source filters, deduplicated by link and sorted freshest first, capped at 50 items.",
+        "description": "news returns the caller's merged world-news feed: every source their project's\npipeline names — GDELT once per keyword, plus each allowlisted RSS or Atom feed —\nfetched concurrently, narrowed by the pipeline's keyword/region/source filters,\ndeduplicated by link and sorted freshest first, capped at 50 items.\n\nA project with no stored pipeline gets a sensible default set of world feeds\nrather than an empty answer. A source that fails or times out is SKIPPED: the feed\ndegrades to honest partial results and never 5xxs because one outlet was down.\nReading also publishes the result to the /v1/world/stream subscribers of the same\n(org, project), so a dashboard's own refresh updates every open tab.",
         "tags": [
           "world"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/newsResponse"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/world/pipeline": {
       "get": {
         "operationId": "get_v1_world_pipeline",
+        "summary": "pipeline returns the caller project's news pipeline: which feeds it reads and how the merged result is filtered.",
+        "description": "pipeline returns the caller project's news pipeline: which feeds it reads and how\nthe merged result is filtered. A project that has never written one is answered\nwith the built-in world feeds and `default: true`, so a fresh project sees the\nsame feed /v1/world/news would actually serve rather than an empty configuration.",
         "tags": [
           "world"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pipelineView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       },
       "put": {
         "operationId": "put_v1_world_pipeline",
+        "summary": "setPipeline replaces the caller project's news pipeline and returns what was stored.",
+        "description": "setPipeline replaces the caller project's news pipeline and returns what was\nstored. It is a WHOLE replacement, not a patch: a field the request leaves out is\nstored empty, so sending only feeds clears the filters.\n\nEvery feed URL is validated HERE, at the write boundary — http(s) only, and the\nhost must be on the server's allowlist — so a stored pipeline can never name a\nhost the fetcher would later refuse, and the allowlist is one decision in one\nplace rather than a check at each fetch.",
         "tags": [
           "world"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pipelineReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/pipelineView"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/world/stream": {
@@ -52,6 +129,171 @@
         "tags": [
           "world"
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Filters": {
+        "properties": {
+          "keywords": {
+            "description": "Keywords keeps only items whose TITLE contains one of these,\ncase-insensitively. They are also the GDELT queries the feed fans out to,\none per keyword of three characters or more — so a keyword both widens what\nis fetched and narrows what is kept.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "regions": {
+            "description": "Regions keeps only items whose TITLE contains one of these, matched\ncase-insensitively as a substring. Empty keeps every region.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sources": {
+            "description": "Sources keeps only items whose outlet name contains one of these,\ncase-insensitively. Empty keeps every outlet.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "NewsItem": {
+        "properties": {
+          "image": {
+            "description": "Image is a lead-image URL when the upstream carried one.",
+            "type": "string"
+          },
+          "lang": {
+            "description": "Lang is the article's language code when the upstream reported one.",
+            "type": "string"
+          },
+          "link": {
+            "description": "Link is the article's URL at the outlet.",
+            "type": "string"
+          },
+          "pubDate": {
+            "description": "PubDate is when the outlet published it, RFC3339 UTC. Empty when the\nupstream gave no date this could parse — items with no date sort last.",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source is the outlet the item came from, as the upstream named it.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title is the headline.",
+            "type": "string"
+          },
+          "tone": {
+            "description": "Tone is GDELT's own sentiment score for the article, as text. Only GDELT\nitems carry it.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "limitsBlock": {
+        "properties": {
+          "apiRateLimit": {
+            "description": "APIRateLimit is requests per minute allowed against the REST /v1/world\nsurface. -1 means unlimited.",
+            "type": "integer"
+          },
+          "maxAlerts": {
+            "description": "MaxAlerts is how many saved OSINT alert rules the plan allows. -1 means\nunlimited.",
+            "type": "integer"
+          },
+          "mcpRateLimit": {
+            "description": "MCPRateLimit is requests per minute allowed against the MCP surface. -1\nmeans unlimited.",
+            "type": "integer"
+          },
+          "modelApi": {
+            "description": "ModelAPI is whether the plan reaches the World model endpoint and the SSE\nstream. The free floor is false, and that is what a catalog outage\nresolves to.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "limitsView": {
+        "properties": {
+          "limits": {
+            "$ref": "#/components/schemas/limitsBlock",
+            "description": "Limits is the plan's decision."
+          },
+          "plan": {
+            "description": "Plan echoes the plan id the limits were resolved for, after the empty-means-\nworld-free default.",
+            "type": "string"
+          },
+          "unit": {
+            "description": "Unit names what the two rate numbers are counted in: requests/minute.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "newsResponse": {
+        "properties": {
+          "items": {
+            "description": "Items is the merged, filtered, deduped feed, freshest first and capped at\n50. A source that failed is skipped rather than failing the read, so this\ncan be shorter than the pipeline's reach — it is never an error.",
+            "items": {
+              "$ref": "#/components/schemas/NewsItem"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "pipelineReq": {
+        "properties": {
+          "feeds": {
+            "description": "Feeds is the RSS/Atom feed URLs to read, at most 64. Each must be an\nhttp(s) URL whose host is on the server's allowlist — the SSRF guard is\napplied here, at the write, so a stored pipeline can never name a host the\nfetcher would refuse. Blank entries are dropped and duplicates collapse.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/Filters",
+            "description": "Filters narrows the merged feed. Terms are trimmed, de-duplicated\ncase-insensitively, and capped at 64 per axis."
+          }
+        },
+        "type": "object"
+      },
+      "pipelineView": {
+        "properties": {
+          "createdAt": {
+            "description": "CreatedAt is when the pipeline was first stored, RFC3339 UTC. Absent on the\ndefault.",
+            "type": "string"
+          },
+          "default": {
+            "description": "Default is true when no pipeline is stored for this project and these are\nthe built-in world feeds. Writing one turns it false.",
+            "type": "boolean"
+          },
+          "feeds": {
+            "description": "Feeds is the RSS/Atom feed URLs the pipeline reads. Every host is on the\nserver's allowlist — a URL that is not cannot be stored.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/Filters",
+            "description": "Filters narrows the merged feed."
+          },
+          "org": {
+            "description": "Org is the tenant the pipeline belongs to, resolved server-side from the\nvalidated principal.",
+            "type": "string"
+          },
+          "project": {
+            "description": "Project is the org sub-scope the pipeline belongs to.",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "UpdatedAt is when it was last written, RFC3339 UTC. Absent on the default.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

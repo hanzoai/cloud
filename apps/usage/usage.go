@@ -57,7 +57,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/commerce/transport"
 	"github.com/hanzoai/cloud/apps/datastore"
-	"github.com/hanzoai/cloud/apps/principal"
 	"github.com/hanzoai/types"
 	"github.com/zap-proto/zip"
 )
@@ -93,6 +92,19 @@ func build(b cloud.Base) (state, error) {
 	return state{commerce: cr, warehouse: &warehouse{}}, nil
 }
 
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by
+// `make -C apps/usage openapi` and by the Dockerfile before every build.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// ops binds the mounted Service so each op can be a method value — the only bound
+// form cmd/zipdoc can lift prose from. It carries STATE and no logic: every op
+// resolves its own scope through caller() and then reads the same sources the
+// helpers below read.
+type ops struct{ s *cloud.Service[state] }
+
 // routes registers the ONE usage surface — the read faces plus the account-usage
 // data plane (moved here from clients/link so usage owns ALL usage).
 //   - POST /usage          record account-usage samples (the collector).
@@ -107,117 +119,200 @@ func build(b cloud.Base) (state, error) {
 // /v1/usage/health liveness route (OwnsHealth=false) is a distinct path and never
 // shadows these.
 func routes(app cloud.Router, s *cloud.Service[state]) {
+	// Bridge FIRST: a typed op receives only a context, so the validated org — and
+	// the request the caller's SUBJECT and the no-store header ride on — reach it by
+	// being parked there. fiber runs middleware in registration order, so one
+	// installed after its leaves never runs. Installed through the scope's Use, once
+	// per declared prefix, which covers the flat POST /v1/usage as well as the
+	// group's leaves; Serve installs the same bridge for the whole binary and
+	// nesting is harmless, so this keeps the ops scoped wherever they are mounted —
+	// including a test app that never calls Serve.
+	app.Use(cloud.Bridge())
+
+	o := ops{s: s}
 	// Collection root (/v1/usage) stays flat — Group(p).Post("") yields "p/".
-	app.Post("/v1/usage", cloud.Handle(s, record))
+	zip.Post(cloud.ZipApp(app), "/v1/usage", o.record, zip.WithStatus(http.StatusAccepted))
+
+	// Declared on the GROUP: the op's path is the prefix composed with the leaf,
+	// which is the identity every projection keys on, and cmd/zipdoc resolves the
+	// prefix the same way, so the prose below reaches the document and the tool list.
 	g := app.Group("/v1/usage")
-	g.Get("/samples", cloud.Handle(s, samples))
-	g.Get("/summary", cloud.Handle(s, summary))
-	g.Get("/analytics/access", cloud.Handle(s, analyticsAccess))
-	g.Get("/analytics", cloud.Handle(s, analytics))
+	zip.Get(g, "/samples", o.samples)
+	zip.Get(g, "/summary", o.summary)
+	zip.Get(g, "/analytics/access", o.analyticsAccess)
+	zip.Get(g, "/analytics", o.analytics)
 }
 
-// summary answers GET /v1/usage/summary. ?range=24h|7d|30d|custom (+ ?start/?end
-// for custom) bounds the window — the SAME grammar as /v1/analytics/* (one window
-// grammar, no drift). Composes commerce spend + warehouse LLM totals, each
-// degrading independently to honest zeros.
-func summary(s *cloud.Service[state], c *zip.Ctx) error {
+// usageWindowQuery is the window every money read shares: the SAME grammar
+// /v1/analytics/* uses, so the two surfaces cannot drift.
+type usageWindowQuery struct {
+	// Range is the window: 24h, 7d, 30d, or custom. Empty means 24h. A label this
+	// surface does not know is refused rather than silently replaced.
+	Range string `json:"range"`
+	// Start is the inclusive window start, RFC3339. Read only when Range is
+	// custom.
+	Start string `json:"start"`
+	// End is the exclusive window end, RFC3339. Read only when Range is custom.
+	End string `json:"end"`
+}
+
+// summary answers GET /v1/usage/summary: the caller's own usage footprint over one
+// window — the categorized spend roll-up from the commerce ledger, the org's LLM
+// usage totals from the warehouse, and the caller's OWN linked provider accounts
+// beside the org's Hanzo-routed usage.
+//
+// Every source degrades INDEPENDENTLY to honest zeros and says so in `sources` and
+// in its own `available` flag, so a partial deploy reports "no data" rather than
+// fabricating spend. The account rows and the Hanzo rows are concatenated and never
+// summed: a plan's percent is not money.
+//
+// The response is org-scoped from the validated principal and marked no-store — a
+// signed-out caller is refused.
+func (o ops) summary(ctx context.Context, in *usageWindowQuery) (*usageSummary, error) {
 	// caller composes principal.Org (a VALIDATED principal — c.User() set only for a
 	// verified bearer — returning the trusted, minted X-Org-Id, refusing a forged
 	// header) with the subject. This is the "org from validated bearer ONLY" contract;
 	// user scopes the account board to the caller's OWN linked accounts.
-	org, user, ok := caller(c)
+	org, user, ok := caller(ctx)
 	if !ok {
-		return zip.ErrUnauthorized("sign in to view usage")
+		return nil, zip.ErrUnauthorized("sign in to view usage")
 	}
-	w, err := types.ParseWindow(c.Query("range"), c.Query("start"), c.Query("end"), time.Now())
+	w, err := types.ParseWindow(in.Range, in.Start, in.End, time.Now())
 	if err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 	rangeLabel, start, end, interval := w.Label, w.Start, w.End, string(w.Interval)
-	ctx := c.Context()
 
 	// ── Spend (commerce) ── best-effort; unconfigured/unreachable → honest zeros.
-	spend := buildSpendBlock(s, ctx, org, start, end, interval)
+	spend := buildSpendBlock(o.s, ctx, org, start, end, interval)
 
 	// ── LLM totals (warehouse) ── honest-empty when the datastore is not connected.
-	llm, warehouseOK := buildLLMBlock(s, ctx, org, start, end)
+	llm, warehouseOK := buildLLMBlock(o.s, ctx, org, start, end)
 
 	// ── Account board ── the caller's own linked provider accounts beside the org's
 	// Hanzo-routed usage, over the SAME window; each side degrades independently.
-	accounts := buildAccountsBlock(s, ctx, org, user, start, end)
+	accounts := buildAccountsBlock(o.s, ctx, org, user, start, end)
 
 	// Per-tenant money must never be cached by the browser or an intermediary.
-	c.SetHeader("Cache-Control", "no-store")
-	return c.JSON(http.StatusOK, Summary{
+	noStore(ctx)
+	return &usageSummary{
 		Range:    rangeLabel,
 		Start:    start.UTC().Format(time.RFC3339),
 		End:      end.UTC().Format(time.RFC3339),
 		Interval: interval,
-		Scope:    Scope{Org: org, User: user},
+		Scope:    usageScope{Org: org, User: user},
 		Spend:    spend,
 		LLM:      llm,
 		Accounts: accounts,
 		Sources:  Sources{Commerce: spend.Available, Warehouse: warehouseOK},
-	})
+	}, nil
 }
 
-// analyticsAccess serves GET /v1/usage/analytics/access?plan=<id> — the
-// machine-readable entitlement echo. It returns the resolved AnalyticsAccess for the
-// requested plan (empty plan → free floor) so the console self-configures which
-// analytics controls to show against the LIVE catalog instead of hardcoding tiers.
-// Always 200 with the fail-closed floor on a resolution error, so a catalog blip
-// never breaks the client. Read-only public contract — no tenant data here.
-func analyticsAccess(s *cloud.Service[state], c *zip.Ctx) error {
-	planID := strings.TrimSpace(c.Query("plan"))
-	access, err := ResolveAnalyticsAccess(c.Context(), planID)
+// usagePlanQuery names the plan whose analytics entitlement to resolve.
+type usagePlanQuery struct {
+	// Plan is a plan id from the live @hanzo/plans catalog. Empty resolves the
+	// free floor, and so does an id the catalog does not know — this never fails
+	// on an unknown plan.
+	Plan string `json:"plan"`
+}
+
+// usageAnalyticsAccess is a plan's resolved analytics entitlement.
+type usageAnalyticsAccess struct {
+	// Plan echoes the plan id that was resolved, exactly as it was asked for.
+	Plan string `json:"plan"`
+	// Access is what that plan grants.
+	Access usageAnalyticsGrant `json:"access"`
+}
+
+// usageAnalyticsGrant is the analytics decision a plan carries.
+type usageAnalyticsGrant struct {
+	// Datastore is whether the plan may read GET /v1/usage/analytics at all. The
+	// free floor is false, and that is what a catalog outage resolves to.
+	Datastore bool `json:"datastore"`
+	// RetentionDays is how far back the plan may read. GET /v1/usage/analytics
+	// clamps a custom window's start to this, so an older `start` returns the
+	// clamped window rather than an error.
+	RetentionDays int `json:"retentionDays"`
+	// Export is whether the plan may export the analytics it can read.
+	Export bool `json:"export"`
+}
+
+// analyticsAccess echoes a plan's resolved analytics entitlement so a dashboard can
+// configure itself against the LIVE catalog instead of hardcoding tier numbers. An
+// empty plan resolves the free floor, and a catalog resolution failure serves that
+// same floor rather than erroring — so this always answers 200. It is a read-only
+// contract echo and carries no tenant data.
+func (o ops) analyticsAccess(ctx context.Context, in *usagePlanQuery) (*usageAnalyticsAccess, error) {
+	planID := strings.TrimSpace(in.Plan)
+	access, err := ResolveAnalyticsAccess(ctx, planID)
 	if err != nil {
-		s.Log.Warn("analytics access resolve failed; serving free floor", "plan", planID, "err", err)
+		o.s.Log.Warn("analytics access resolve failed; serving free floor", "plan", planID, "err", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"plan": planID,
-		"access": map[string]any{
-			"datastore":     access.Datastore,
-			"retentionDays": access.RetentionDays,
-			"export":        access.Export,
+	return &usageAnalyticsAccess{
+		Plan: planID,
+		Access: usageAnalyticsGrant{
+			Datastore:     access.Datastore,
+			RetentionDays: access.RetentionDays,
+			Export:        access.Export,
 		},
-	})
+	}, nil
 }
 
-// analytics answers GET /v1/usage/analytics — the entitlement-GATED rich per-org
-// lens (per-provider breakdown; BYO/fee once those columns land) over the SAME
-// hanzo.cloud_usage ledger /v1/usage/summary and /v1/analytics/* read. This is the
-// PAID surface; basic own-org usage stays UNGATED at /v1/usage/summary.
+// usageAnalyticsQuery is the gated analytics read's window plus the plan the gate
+// resolves against.
+type usageAnalyticsQuery struct {
+	// End is the exclusive window end, RFC3339. Read only when Range is custom.
+	End string `json:"end"`
+	// Plan is the plan id whose entitlement decides access and retention. INTERIM:
+	// cloud has no org-to-plan resolver yet, so the caller names the plan; when
+	// that resolver lands this becomes the caller org's own plan.
+	Plan string `json:"plan"`
+	// Range is the window: 24h, 7d, 30d, or custom. Empty means 24h.
+	Range string `json:"range"`
+	// Start is the inclusive window start, RFC3339. Read only when Range is
+	// custom, and clamped forward to the plan's retention floor.
+	Start string `json:"start"`
+}
+
+// analytics is the entitlement-GATED per-provider breakdown of the caller org's LLM
+// usage — the paid lens over the same warehouse ledger GET /v1/usage/summary reads
+// its totals from. Basic own-org usage stays ungated at /v1/usage/summary.
 //
-// INTERIM (mirrors clients/world/entitlement.go): no org→plan resolver exists in
-// cloud yet — the subscription lookup is owned by the billing plane and the gateway
-// principal carries no plan claim — so the caller passes ?plan=<id> and the gate
-// resolves THAT plan's access. When the org→plan resolver lands, swap the ?plan=
-// line below for the resolved caller-org plan; the gate + clamp logic is unchanged.
-func analytics(s *cloud.Service[state], c *zip.Ctx) error {
+// A plan that does not grant the analytics datastore is refused with 402, and an
+// unresolvable plan fails closed to the free floor, which does not grant it. The
+// window is clamped forward to the plan's retention entitlement, so a tenant can
+// never read older than its plan allows even with a custom start. The response is
+// marked no-store.
+//
+// INTERIM (mirrors apps/world's limits echo): no org→plan resolver exists in cloud
+// yet — the subscription lookup is owned by the billing plane and the gateway
+// principal carries no plan claim — so the caller passes the plan and the gate
+// resolves THAT plan's access.
+func (o ops) analytics(ctx context.Context, in *usageAnalyticsQuery) (*usageAnalyticsView, error) {
 	// Org from the VALIDATED bearer owner claim ONLY (never a client header). A caller
 	// can only ever read its OWN org; no principal → 401 (fail closed).
-	org, ok := principal.Org(c)
+	org, ok := orgOf(ctx)
 	if !ok {
-		return zip.ErrUnauthorized("sign in to view analytics")
+		return nil, zip.ErrUnauthorized("sign in to view analytics")
 	}
 
-	planID := strings.TrimSpace(c.Query("plan")) // INTERIM: org→plan resolver replaces this line.
-	access, err := ResolveAnalyticsAccess(c.Context(), planID)
+	planID := strings.TrimSpace(in.Plan) // INTERIM: org→plan resolver replaces this line.
+	access, err := ResolveAnalyticsAccess(ctx, planID)
 	if err != nil {
 		// Fail closed to the free floor (Datastore=false) while logging the degradation.
-		s.Log.Warn("analytics access resolve failed; failing closed to free floor", "org", org, "plan", planID, "err", err)
+		o.s.Log.Warn("analytics access resolve failed; failing closed to free floor", "org", org, "plan", planID, "err", err)
 	}
 
 	// GATE: the rich analytics/datastore surface is a paid entitlement. Unknown plan
 	// / catalog blip → free floor → Datastore=false → 402, never above.
 	if !access.Datastore {
-		return zip.Errorf(http.StatusPaymentRequired, "analytics datastore is a paid feature — upgrade at console.hanzo.ai")
+		return nil, zip.Errorf(http.StatusPaymentRequired, "analytics datastore is a paid feature — upgrade at console.hanzo.ai")
 	}
 
 	now := time.Now()
-	w, werr := types.ParseWindow(c.Query("range"), c.Query("start"), c.Query("end"), now)
+	w, werr := types.ParseWindow(in.Range, in.Start, in.End, now)
 	if werr != nil {
-		return zip.ErrBadRequest(werr.Error())
+		return nil, zip.ErrBadRequest(werr.Error())
 	}
 	rangeLabel, start, end := w.Label, w.Start, w.End
 	// Clamp the window to the plan's retention entitlement: a tenant may never read
@@ -226,12 +321,12 @@ func analytics(s *cloud.Service[state], c *zip.Ctx) error {
 		start = floor
 	}
 
-	providers := buildAnalyticsBlock(s, c.Context(), org, start, end)
+	providers := buildAnalyticsBlock(o.s, ctx, org, start, end)
 
 	// Per-tenant analytics must never be cached by the browser or an intermediary.
-	c.SetHeader("Cache-Control", "no-store")
-	return c.JSON(http.StatusOK, AnalyticsView{
-		Scope:         Scope{Org: org},
+	noStore(ctx)
+	return &usageAnalyticsView{
+		Scope:         usageScope{Org: org},
 		Plan:          planID,
 		Range:         rangeLabel,
 		Start:         start.UTC().Format(time.RFC3339),
@@ -239,40 +334,58 @@ func analytics(s *cloud.Service[state], c *zip.Ctx) error {
 		RetentionDays: access.RetentionDays,
 		Export:        access.Export,
 		Providers:     providers,
-	})
+	}, nil
 }
 
-// AnalyticsView is the entitlement-gated rich read: the per-provider breakdown of
-// the org's LLM usage over the retention-clamped window, plus the plan's retention
-// + export decision so the console renders the right controls.
-type AnalyticsView struct {
-	Scope         Scope             `json:"scope"`
-	Plan          string            `json:"plan"`
-	Range         string            `json:"range"`
-	Start         string            `json:"start"`
-	End           string            `json:"end"`
-	RetentionDays int               `json:"retentionDays"`
-	Export        bool              `json:"export"`
-	Providers     ProviderBreakdown `json:"providers"`
+// usageAnalyticsView is the entitlement-gated rich read: the per-provider breakdown
+// of the org's LLM usage over the retention-clamped window, plus the plan's
+// retention + export decision so the console renders the right controls.
+type usageAnalyticsView struct {
+	// Scope is the tenant the rows were read under — the validated principal's org.
+	Scope usageScope `json:"scope"`
+	// Plan echoes the plan id the entitlement was resolved from.
+	Plan string `json:"plan"`
+	// Range is the window label that was served, which is what was asked for.
+	Range string `json:"range"`
+	// Start is the window's inclusive start, RFC3339 UTC, AFTER the retention
+	// clamp — so it may be later than the start that was asked for.
+	Start string `json:"start"`
+	// End is the window's exclusive end, RFC3339 UTC.
+	End string `json:"end"`
+	// RetentionDays is how far back the resolved plan allows reading.
+	RetentionDays int `json:"retentionDays"`
+	// Export is whether the resolved plan allows exporting these rows.
+	Export bool `json:"export"`
+	// Providers is the per-provider roll-up over the window.
+	Providers ProviderBreakdown `json:"providers"`
 }
 
 // ProviderBreakdown is the per-provider roll-up. Available=false is honest-empty
 // (the datastore is not connected) — never fabricated, exactly like the summary's
 // LLM block.
 type ProviderBreakdown struct {
-	Available bool          `json:"available"`
-	Items     []ProviderRow `json:"items"`
-	Source    string        `json:"source"`
+	// Available is false when the warehouse could not be read, which means "no
+	// answer" and NOT "no usage" — Items is then empty for a reason.
+	Available bool `json:"available"`
+	// Items is one row per provider, most tokens first.
+	Items []ProviderRow `json:"items"`
+	// Source names the warehouse table the rows came from.
+	Source string `json:"source"`
 }
 
 // ProviderRow is one provider's windowed totals. BYO/fee/account columns land with
 // the hanzoai/ai metering-write branch; see buildAnalyticsBlock for the one-line
 // projection extension.
 type ProviderRow struct {
-	Provider  string `json:"provider"`
-	Requests  int64  `json:"requests"`
-	Tokens    int64  `json:"tokens"`
-	CostCents int64  `json:"costCents"`
+	// Provider is the upstream the requests were routed to, e.g. anthropic.
+	Provider string `json:"provider"`
+	// Requests is how many completions the org made against that provider.
+	Requests int64 `json:"requests"`
+	// Tokens is the total tokens those completions consumed, prompt plus
+	// completion.
+	Tokens int64 `json:"tokens"`
+	// CostCents is what they cost the org, in US cents.
+	CostCents int64 `json:"costCents"`
 }
 
 // buildAnalyticsBlock reads the org's per-provider warehouse totals over [start,end).
