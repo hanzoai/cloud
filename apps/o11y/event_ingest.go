@@ -15,7 +15,9 @@
 //	NO LLM-observability ingestion surface (no traces/observations/scores writer) —
 //	that data is a DIFFERENT product (the console-worker's Datastore tables). So this
 //	file adds the MISSING write path as a cloud-native specific route,
-//	POST /v1/o11y/ingestion.
+//	POST /v1/event/ingestion — the LLM-obs leaf of the one /v1/event ingest
+//	family (the root is the analytics product-event door; the Sentry wire is
+//	/v1/event/error — see o11y.go mountEventFamily).
 //
 //	Fiber matches routes in REGISTRATION ORDER, so a specific /v1/o11y/* route only
 //	binds ahead of the order-70 wildcard when it registers BEFORE it — exactly the
@@ -23,7 +25,7 @@
 //	This subsystem therefore mounts at order 68 (before the wildcard). A route at the
 //	OTLP-ingest order (72) would be SWALLOWED by the proxy and never reached.
 //
-// PIPELINE — POST /v1/o11y/ingestion (validated tenant) → parse the event batch →
+// PIPELINE — POST /v1/event/ingestion (validated tenant) → parse the event batch →
 // group by target Datastore table → batch-insert via the branded
 // github.com/hanzo-ds/go client → oversized event bodies overflow to
 // object storage, only the blob ref is stored inline. The store is the Datastore;
@@ -34,7 +36,7 @@
 //   - Always mounted as a normal o11y subsystem — NO on/off feature flag. The write
 //     path is live wherever O11Y_DATASTORE_DSN is set (the SAME knob embed.go reads);
 //     the Datastore is a required DEPENDENCY, not a gate. Inert in prod until the
-//     console producer repoints to /v1/o11y/ingestion (nothing calls it yet).
+//     console producer repoints to /v1/event (nothing calls it yet).
 //   - Fail-soft: a missing DSN or a construction error logs and returns nil — never
 //     blocks cloud boot (mirrors ingest.go / tracesink.go).
 //   - Durable hand-off: the flush runs INLINE today (always works, mirroring ai's
@@ -63,13 +65,13 @@ import (
 )
 
 const (
-	// o11yIngestLeaf is the cloud-native LLM-obs ingestion endpoint's leaf under
-	// the o11y prefix — /v1/ only (never an api-prefixed path); the retired
-	// console-worker producer repoints here at cutover. The full public path is
-	// o11yPrefix + this, composed in exactly one place (o11yIngestRoute) so the
-	// route, the op's identity and the log line can never disagree.
-	o11yIngestLeaf  = "/ingestion"
-	o11yIngestRoute = o11yPrefix + o11yIngestLeaf
+	// eventIngestRoute: all ingest lives under the ONE /v1/event family. The
+	// root POST /v1/event is the analytics product-event door (apps/analytics
+	// `doors`); this leaf is the LLM-obs batch (traces/observations/scores) the
+	// retired console-worker producer repoints to at cutover; the Sentry wire
+	// rides /v1/event/error (o11y.go mountEventFamily). One constant so the
+	// route, the op's identity and the log line cannot disagree.
+	eventIngestRoute = "/v1/event/ingestion"
 
 	// o11yBlobThresholdEnv overrides the inline-body size cap (bytes). A body larger
 	// than this overflows to object storage; the row keeps only the blob ref.
@@ -216,10 +218,9 @@ func blobThreshold() int {
 // flush/close it, mirroring embed.go's embeddedRuntime and ingest.go's embeddedIngest.
 var eventIngestSink eventSink
 
-// mountEventIngest registers POST /v1/o11y/ingestion. Called by mountO11y (o11y.go)
-// inside the one order-69 `o11y` mount, so this specific POST binds BEFORE the
-// hanzoai/o11y wildcard (app.All("/v1/o11y/*"), order 70) — the SAME constraint the
-// scoped reads use. No feature flag: it mounts whenever its Datastore dependency is
+// mountEventIngest registers POST /v1/event/ingestion — the LLM-obs leaf of the
+// /v1/event family. Called by mountO11y (o11y.go) inside the one order-69 `o11y`
+// mount. No feature flag: it mounts whenever its Datastore dependency is
 // available. Fail-soft at every branch — a missing DSN or a Datastore construction
 // error logs and returns nil, leaving the write path unmounted (the retired
 // console-worker is already gone, so "unmounted" is inert — no double-write).
@@ -244,14 +245,16 @@ func mountEventIngest(a cloud.Router, deps cloud.Deps) error {
 	// arrives as a method value on a RECEIVER because that is the only bound form
 	// cmd/zipdoc can lift prose from — a closure returned by a helper is a call
 	// expression with nothing to read.
-	g := a.Group(o11yPrefix)
+	// The typed op needs an OpTarget scope; the root-level group with an empty
+	// prefix IS the root — the leaf is the full canonical path.
+	g := a.Group("")
 	o := ingestOps{sink: sink, threshold: blobThreshold(), log: log}
-	zip.Post(g, o11yIngestLeaf, o.ingest)
+	zip.Post(g, eventIngestRoute, o.ingest)
 
 	if cloud.EmbeddedTasks() != nil {
 		log.Info("o11y event ingest: durable engine present; flush runs inline, durable Activity hand-off is the next reviewed step")
 	}
-	log.Info("o11y event ingest live", "route", o11yIngestRoute, "sink", "datastore:traces/observations/scores", "blobBytes", blobThreshold())
+	log.Info("o11y event ingest live", "route", eventIngestRoute, "sink", "datastore:traces/observations/scores", "blobBytes", blobThreshold())
 	return nil
 }
 

@@ -33,7 +33,7 @@ const sentryPrefix = "/v1/sentry"
 // openapi` takes (mk/plugin.mk runs it with GIT_SSH_ADDR and nothing else):
 // with no Datastore DSN the runtime installs its reverse-proxy fallback instead
 // of the in-process engine, and mountEventIngest returns before registering
-// POST /v1/o11y/ingestion. Probes are off because they knock on in-cluster
+// POST /v1/event/ingestion. Probes are off because they knock on in-cluster
 // Services a test has no business reaching.
 func surfaceApp(t *testing.T) *zip.App {
 	t.Helper()
@@ -198,7 +198,7 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 // TestIngestOpIsTypedButUnreachableWithoutADSN measures the one gap in this
 // package's projection, so it is red-able instead of prose.
 //
-// POST /v1/o11y/ingestion IS a typed op — the assertion below constructs it and
+// POST /v1/event/ingestion IS a typed op — the assertion below constructs it and
 // reads it out of zip's registry, which is the whole proof — but mountEventIngest
 // returns before registering it when there is no Datastore DSN, and
 // `bin/o11y openapi` (mk/plugin.mk) runs with GIT_SSH_ADDR and nothing else. So
@@ -214,13 +214,13 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 // that; it fails the moment somebody does, so the decision cannot land as a
 // silent side effect and apps/o11y/LLM.md gets updated with it.
 func TestIngestOpIsTypedButUnreachableWithoutADSN(t *testing.T) {
-	const key = "POST " + o11yIngestRoute
+	const key = "POST " + eventIngestRoute
 
 	// Half one: the op types cleanly and carries its prose. Registered on a
 	// throwaway app exactly as mountEventIngest does, sink and all left zero —
 	// nothing is served, only declared.
 	decl := zip.New(zip.Config{Logger: luxlog.New("test")})
-	zip.Post(decl.Group(o11yPrefix), o11yIngestLeaf, ingestOps{}.ingest)
+	zip.Post(decl.Group(""), eventIngestRoute, ingestOps{}.ingest)
 	reg, err := openapi.Typed(decl)
 	if err != nil {
 		t.Fatalf("typed registry: %v", err)
