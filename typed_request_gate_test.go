@@ -260,6 +260,33 @@ var allowedRequestUses = map[string]string{
 		"which tenant, not which person). It is an attribution and never an authority: the org gate above it " +
 		"already ran. Empty off the HTTP path, where the entry records no actor rather than inventing one — " +
 		"exactly how a pre-attribution row already reads.",
+	"apps/flags/routes.go": "callerOf — the flag plane's ONE identity seam. A flag is scoped to (org, " +
+		"PROJECT) and an audited write records the ACTOR, so it needs two facts beyond the tenant: the " +
+		"project scope (X-Project-Id, principal.ProjectScope) and the validated user id, neither of " +
+		"which principal.OrgFrom carries. All three are request facts and none may be an In field — an " +
+		"In field is caller-supplied, so a scope key read from one is a cross-scope read the caller " +
+		"asserted for itself. ONE function, so every typed op shares one seam; it fails closed off the " +
+		"HTTP path, where there is no principal and therefore no scope and no actor.",
+	"apps/do/do.go": "org — the DigitalOcean plane's ONE tenant-resolution point, and it fails closed " +
+		"in the same place it decides. It reads the request because tenant() turns on two facts the org " +
+		"key alone does not carry: whether the principal was VALIDATED at all, and whether it is a " +
+		"SuperAdmin, whose empty org falls back to the \"admin\" namespace — which principal.OrgFrom " +
+		"cannot express, since it refuses an empty org outright. Off the HTTP path there is no request, " +
+		"and the answer is a refusal rather than an invented identity.",
+	"apps/treasury/treasury.go": "admin / myAccounts — the ledger's tenant boundary and the one way " +
+		"across it. Every ordinary caller sees only accounts under its own \"org:<tenant>:\" prefix; a " +
+		"SuperAdmin may widen to the house scope or to another tenant, and platform-sudo is " +
+		"X-User-IsAdmin, a claim principal.OrgFrom does not carry. The ?org=<tenant> that names the " +
+		"crossed-to tenant is read off the URL rather than modelled as an In field, because a tenant key " +
+		"taken from an input is a cross-tenant read the caller asserted for itself. Both fail closed off " +
+		"the HTTP path: no request, no attested admin, no widening.",
+	"apps/research/research.go": "project — the caller's project SUB-SCOPE, a column inside the org " +
+		"rather than a tenant key. It is the server-minted X-Project-Id claim, which principal.OrgFrom " +
+		"does not carry, and it must not become an In field either: a caller could then name a project " +
+		"it was not scoped to. ONE function beside orgStore, which resolves the TENANT with " +
+		"principal.OrgFrom and never through the request. Off the HTTP path it answers " +
+		"principal.DefaultProject — the whole-org view, which is the honest answer where there is no " +
+		"request rather than a refusal.",
 	"apps/usage/account.go": "caller / noStore — the usage plane is scoped to (org, SUBJECT): the " +
 		"account board carries the caller's OWN linked provider accounts, so it needs the validated user id " +
 		"(c.User()) as well as the tenant, and principal.OrgFrom carries only the tenant. noStore is the " +
