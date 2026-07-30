@@ -22,9 +22,23 @@
     "/v1/base/health": {
       "get": {
         "operationId": "get_v1_base_health",
+        "summary": "BaseHealth reports that the base subsystem is serving.",
+        "description": "BaseHealth reports that the base subsystem is serving.\n\nIt is deliberately INDEPENDENT of whether this deployment actually embeds the\nBase engine: the route answers before the CLOUD_BASE_EMBED gate and before the\n/v1/base/* wildcard, so a liveness probe measures the process rather than an\noptional feature, and the wildcard can never shadow it. It reads no tenant, so a\nprober that sends no principal is answered rather than refused.",
         "tags": [
           "base"
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/baseHealth"
+                }
+              }
+            },
+            "description": "ok"
+          }
+        }
       }
     },
     "/v1/collections": {
@@ -183,6 +197,23 @@
             }
           }
         ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "baseHealth": {
+        "properties": {
+          "service": {
+            "description": "Service is \"base\" — which subsystem answered.",
+            "type": "string"
+          },
+          "status": {
+            "description": "Status is \"ok\" when the subsystem is serving.",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     }
   }

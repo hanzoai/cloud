@@ -110,13 +110,20 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	log := deps.Logger.New("subsystem", "base")
 
+	// A typed op is a route PLUS a registry entry, and the registry lives on the
+	// App. A router that cannot reach it would serve the health route with no
+	// schema, no prose, no MCP tool and no SDK method — so the mount FAILS rather
+	// than quietly publishing a surface no projection knows about.
+	zapp := cloud.ZipApp(app)
+	if zapp == nil {
+		return fmt.Errorf("base.Mount: router is not a zip app, so the typed ops have no registry")
+	}
+
 	// Native /v1/base/health — always answers (OwnsHealth), no auth, BEFORE the
 	// embed gate AND before the /v1/base/* wildcard, so the liveness probe never
 	// depends on CLOUD_BASE_EMBED and the wildcard never shadows it (same pattern
 	// as clients/plan + clients/pricing).
-	app.Get("/v1/base/health", func(c *zip.Ctx) error {
-		return c.JSON(200, map[string]string{"service": "base", "status": "ok"})
-	})
+	zip.Get(zapp, "/v1/base/health", health)
 
 	// Base data-plane forward /v1/collections[/*] → the managed Base orchestrator
 	// (collections.go). Always on, BEFORE the embed gate: the console's Base product
@@ -304,4 +311,32 @@ func Shutdown(context.Context) error {
 		}
 	}
 	return firstErr
+}
+
+// zipdoc lifts the doc comment off each typed op and each In/Out field into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by `make openapi`.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// noInput is the In of an op that takes nothing off the wire.
+type noInput struct{}
+
+// baseHealth is the base subsystem's own liveness answer.
+type baseHealth struct {
+	// Service is "base" — which subsystem answered.
+	Service string `json:"service"`
+	// Status is "ok" when the subsystem is serving.
+	Status string `json:"status"`
+}
+
+// BaseHealth reports that the base subsystem is serving.
+//
+// It is deliberately INDEPENDENT of whether this deployment actually embeds the
+// Base engine: the route answers before the CLOUD_BASE_EMBED gate and before the
+// /v1/base/* wildcard, so a liveness probe measures the process rather than an
+// optional feature, and the wildcard can never shadow it. It reads no tenant, so a
+// prober that sends no principal is answered rather than refused.
+func health(context.Context, *noInput) (*baseHealth, error) {
+	return &baseHealth{Service: "base", Status: "ok"}, nil
 }
