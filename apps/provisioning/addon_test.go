@@ -105,7 +105,7 @@ func TestDedicated_SQLEngineAssemblesDSN(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 201", resp.StatusCode, body)
 	}
-	var cr createResp
+	var cr provisionResult
 	_ = json.NewDecoder(resp.Body).Decode(&cr)
 
 	inst := instanceName("sql", "acme", "orders")
@@ -154,7 +154,7 @@ func TestDedicated_KVEngineAssemblesDSN(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 201", resp.StatusCode, body)
 	}
-	var cr createResp
+	var cr provisionResult
 	_ = json.NewDecoder(resp.Body).Decode(&cr)
 
 	inst := instanceName("kv", "acme", "sessions")
@@ -209,7 +209,7 @@ func TestDedicated_InstanceBindingInjectsURL(t *testing.T) {
 		body, _ := io.ReadAll(r1.Body)
 		t.Fatalf("datastore create = %d body=%s", r1.StatusCode, body)
 	}
-	var cr1 createResp
+	var cr1 provisionResult
 	_ = json.NewDecoder(r1.Body).Decode(&cr1)
 
 	addons := orch.addons["tenant-acme/commerce-addons"]
@@ -223,7 +223,7 @@ func TestDedicated_InstanceBindingInjectsURL(t *testing.T) {
 		body, _ := io.ReadAll(r2.Body)
 		t.Fatalf("kv create = %d body=%s", r2.StatusCode, body)
 	}
-	var cr2 createResp
+	var cr2 provisionResult
 	_ = json.NewDecoder(r2.Body).Decode(&cr2)
 
 	addons = orch.addons["tenant-acme/commerce-addons"]
@@ -263,7 +263,7 @@ func TestDedicated_DropRemovesURLBeforeTeardown(t *testing.T) {
 		t.Fatalf("precondition: DATASTORE_URL should be injected")
 	}
 
-	resp := doReq(t, drop(s, "datastore"), http.MethodDelete, "/v1/datastore/:name", "/v1/datastore/warehouse", "acme", "")
+	resp := doReq(t, mountDelete("/v1/datastore/:name", ops{s}.dropDatastore), http.MethodDelete, "/v1/datastore/warehouse", "acme", "")
 	if resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("drop = %d body=%s, want 204", resp.StatusCode, body)

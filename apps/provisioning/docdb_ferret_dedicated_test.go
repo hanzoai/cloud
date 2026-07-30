@@ -29,7 +29,7 @@ func TestDedicated_DocdbIsFerretOnSQL(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 201", resp.StatusCode, body)
 	}
-	var cr createResp
+	var cr provisionResult
 	_ = json.NewDecoder(resp.Body).Decode(&cr)
 
 	ns := "tenant-acme"
