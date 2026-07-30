@@ -84,6 +84,21 @@ components:
         tokens:
           type: integer
       type: object
+    ActivityRow:
+      properties:
+        action:
+          type: string
+        actor:
+          type: string
+        at:
+          type: string
+        detail:
+          type: string
+        id:
+          type: integer
+        key:
+          type: string
+      type: object
     ActivityTotals:
       properties:
         activeDays:
@@ -202,6 +217,38 @@ components:
           description: Website is the applicant's website as submitted.
           type: string
       type: object
+    Artifact:
+      properties:
+        content:
+          description: base64 bytes on write; the server hashes + stores them (never
+            returned)
+          type: string
+        git_branch:
+          type: string
+        git_dirty:
+          type: boolean
+        git_sha:
+          type: string
+        kind:
+          type: string
+        lib_versions: {}
+        project:
+          type: string
+        ref:
+          description: server-derived content address (sha256:<hash>)
+          type: string
+        retention_class:
+          type: string
+        run_id:
+          type: string
+        sha256:
+          description: SERVER-derived on write; the identity
+          type: string
+        ts:
+          type: integer
+        visibility:
+          type: string
+      type: object
     AskRequest:
       properties:
         from:
@@ -245,6 +292,31 @@ components:
           items:
             type: string
           type: array
+      type: object
+    Attempt:
+      properties:
+        answer:
+          type: string
+        benchmark:
+          type: string
+        correct:
+          type: boolean
+        gold:
+          type: string
+        item:
+          type: string
+        model:
+          type: string
+        response:
+          type: string
+        revision:
+          type: string
+        source:
+          type: string
+        status:
+          type: string
+        ts:
+          type: integer
       type: object
     Audience:
       properties:
@@ -1254,6 +1326,18 @@ components:
         sql:
           type: string
       type: object
+    DefRow:
+      properties:
+        definition: {}
+        key:
+          type: string
+        updated_at:
+          type: string
+        updated_by:
+          type: string
+        version:
+          type: integer
+      type: object
     DestinationField:
       properties:
         example:
@@ -1646,6 +1730,55 @@ components:
         stack:
           type: string
         type:
+          type: string
+      type: object
+    Experiment:
+      properties:
+        canonical:
+          type: boolean
+        cost_usd:
+          type: number
+        endpoint:
+          type: string
+        git_branch:
+          type: string
+        git_dirty:
+          type: boolean
+        git_sha:
+          type: string
+        id:
+          type: string
+        kind:
+          type: string
+        lib_versions: {}
+        meta: {}
+        metric:
+          type: string
+        "n":
+          type: integer
+        n_total:
+          type: integer
+        project:
+          type: string
+        publishable:
+          type: boolean
+        revision:
+          description: original | corrected | retracted
+          type: string
+        status:
+          description: planning | running | complete | faulted
+          type: string
+        subject:
+          type: string
+        task:
+          type: string
+        trainable:
+          type: boolean
+        ts:
+          type: integer
+        value:
+          type: number
+        visibility:
           type: string
       type: object
     Extracted:
@@ -2229,6 +2362,23 @@ components:
         status:
           type: string
       type: object
+    GrantRequest:
+      properties:
+        id:
+          description: an experiment (run) stable id
+          type: string
+        project:
+          type: string
+        publishable:
+          type: boolean
+        sha256:
+          description: OR an artifact content hash
+          type: string
+        trainable:
+          type: boolean
+        visibility:
+          type: string
+      type: object
     GrantResult:
       properties:
         balanceCents:
@@ -2345,6 +2495,17 @@ components:
         vendor:
           type: string
       type: object
+    IngestRequest:
+      properties:
+        attempts:
+          items:
+            $ref: '#/components/schemas/Attempt'
+          type: array
+        experiments:
+          items:
+            $ref: '#/components/schemas/Experiment'
+          type: array
+      type: object
     Install:
       properties:
         created:
@@ -2417,6 +2578,29 @@ components:
         total:
           type: integer
       type: object
+    JournalEntry:
+      properties:
+        amount:
+          description: the entry's magnitude (display; postings hold the signed truth)
+        createdAt:
+          type: integer
+        id:
+          type: string
+        kind:
+          type: string
+        memo:
+          type: string
+        postings:
+          items:
+            $ref: '#/components/schemas/Posting'
+          type: array
+        program:
+          description: referral|affiliate|author for payouts; "" otherwise
+          type: string
+        ref:
+          description: idempotency ref (unique within Kind+Program)
+          type: string
+      type: object
     JourneyStep:
       properties:
         args:
@@ -2462,6 +2646,15 @@ components:
             Tool, when set, is the MCP tool the Business AI runs for "do it for me". Args
             are its default arguments; Draft is an optional AI prompt whose output fills the
             DraftInto arg (default "brief").
+          type: string
+      type: object
+    KindTotal:
+      properties:
+        cost_usd:
+          type: number
+        experiments:
+          type: integer
+        kind:
           type: string
       type: object
     LLMOverview:
@@ -3288,6 +3481,13 @@ components:
             $ref: '#/components/schemas/CalendarPost'
           type: array
       type: object
+    Posting:
+      properties:
+        account:
+          type: string
+        amount:
+          description: signed 18-decimal USD (1e-18); Σ over an entry == 0
+      type: object
     Price:
       properties:
         amountCents:
@@ -3343,6 +3543,31 @@ components:
         units:
           description: Units is the summed quantity sold.
           type: integer
+      type: object
+    ProjectSummary:
+      properties:
+        attempts:
+          description: canonical
+          type: integer
+        attempts_retained:
+          type: integer
+        benchmarks:
+          type: integer
+        cost_usd:
+          type: number
+        experiments:
+          description: canonical
+          type: integer
+        experiments_retained:
+          type: integer
+        kinds:
+          items:
+            type: string
+          type: array
+        models:
+          type: integer
+        project:
+          type: string
       type: object
     Promo:
       properties:
@@ -3716,6 +3941,33 @@ components:
             origin's binaries.json index — the same index CI publishes, so there is
             no second table mapping versions to digests.
           type: string
+      type: object
+    ResearchTotals:
+      properties:
+        attempts:
+          description: canonical
+          type: integer
+        attempts_retained:
+          type: integer
+        benchmarks:
+          type: integer
+        by_kind:
+          items:
+            $ref: '#/components/schemas/KindTotal'
+          type: array
+        cost_usd:
+          type: number
+        experiments:
+          description: canonical
+          type: integer
+        experiments_retained:
+          type: integer
+        models:
+          type: integer
+        project:
+          type: string
+        projects:
+          type: integer
       type: object
     Result:
       properties:
@@ -4314,6 +4566,13 @@ components:
           type: string
         waitlistMode:
           type: boolean
+      type: object
+    SharePolicy:
+      properties:
+        revenueShareBps:
+          type: integer
+        updatedAt:
+          type: integer
       type: object
     Signer:
       properties:
@@ -5027,6 +5286,29 @@ components:
         to:
           type: string
       type: object
+    TreasuryReport:
+      properties:
+        accruedCents:
+          description: lifetime revenue-share into the fund
+          type: integer
+        byProgramCents:
+          additionalProperties:
+            type: integer
+          description: program → lifetime paid
+          type: object
+        paidCents:
+          description: lifetime backed payouts out of the fund
+          type: integer
+        policy:
+          $ref: '#/components/schemas/SharePolicy'
+          description: current revenue-share policy
+        reserveCents:
+          description: fund:reserve balance (available now)
+          type: integer
+        solventForPayout:
+          description: 'reserve > 0: at least some payout is backable'
+          type: boolean
+      type: object
     TrialBalance:
       properties:
         balanced:
@@ -5537,6 +5819,31 @@ components:
           description: UpdatedAt is the unix second the record last changed.
           type: integer
       type: object
+    accountView:
+      properties:
+        address:
+          description: Address is the ledger account address ("org:acme:wallet", "fund:reserve",
+            …).
+          type: string
+        balanceCents:
+          description: BalanceCents is that account's signed balance in minor units.
+          type: integer
+      type: object
+    accountsOut:
+      properties:
+        accounts:
+          description: Accounts are the ledger accounts in scope with their balances.
+          items:
+            $ref: '#/components/schemas/accountView'
+          type: array
+        scope:
+          description: 'Scope is the scope actually served: "org" or "house".'
+          type: string
+        tenant:
+          description: Tenant is the org whose accounts these are (empty for the house
+            scope's own rows).
+          type: string
+      type: object
     accreditationDecision:
       properties:
         id:
@@ -5619,6 +5926,15 @@ components:
             capped at 50.
           items:
             $ref: '#/components/schemas/activityView'
+          type: array
+      type: object
+    activityOut:
+      properties:
+        data:
+          description: 'Data is the change log newest-first: who created, updated
+            or deleted which key, when.'
+          items:
+            $ref: '#/components/schemas/ActivityRow'
           type: array
       type: object
     activityView:
@@ -5805,6 +6121,34 @@ components:
           description: |-
             Status is the referral's lifecycle state: "signed_up", "qualified" or
             "credited".
+          type: string
+      type: object
+    adminReportData:
+      properties:
+        anchor:
+          $ref: '#/components/schemas/anchorStatus'
+          description: Anchor is the Hanzo L1 anchoring status of the ledger root.
+        journal:
+          description: Journal is the recent double-entry entries, newest first.
+          items:
+            $ref: '#/components/schemas/JournalEntry'
+          type: array
+        report:
+          $ref: '#/components/schemas/TreasuryReport'
+          description: Report is the reserve-fund snapshot — available, accrued, paid,
+            per-program, policy.
+      type: object
+    adminReportOut:
+      properties:
+        data:
+          $ref: '#/components/schemas/adminReportData'
+          description: Data is the treasury board.
+        msg:
+          description: Msg carries an operator-facing note; empty on success.
+          type: string
+        status:
+          description: Status is "ok" on success; the transport maps a non-ok envelope
+            to an error.
           type: string
       type: object
     adminSummary:
@@ -6216,6 +6560,61 @@ components:
           items:
             type: string
           type: array
+      type: object
+    anchorData:
+      properties:
+        anchor:
+          $ref: '#/components/schemas/anchorStatus'
+          description: Anchor is the Hanzo L1 anchoring status of the ledger root
+            after this call.
+      type: object
+    anchorOut:
+      properties:
+        data:
+          $ref: '#/components/schemas/anchorData'
+          description: Data is the anchoring status.
+        msg:
+          description: Msg carries an operator-facing note; empty on success.
+          type: string
+        status:
+          description: |-
+            Status is "ok" on success. A submit that failed still answers ok with the
+            anchor's own status set to "error" — the attempt is the product.
+          type: string
+      type: object
+    anchorStatus:
+      properties:
+        chainId:
+          type: integer
+        contract:
+          type: string
+        currentRoot:
+          description: 0x… root of the journal as it stands now
+          type: string
+        entryCount:
+          type: integer
+        lastAt:
+          type: integer
+        lastBlock:
+          type: integer
+        lastRoot:
+          description: The last committed on-chain anchor (nil-fields until the first
+            successful submit).
+          type: string
+        lastTxHash:
+          type: string
+        note:
+          type: string
+        rpcConfigured:
+          type: boolean
+        signerConfigured:
+          type: boolean
+        status:
+          description: pending | anchored | error
+          type: string
+        synced:
+          description: true when the last anchored root == the current root
+          type: boolean
       type: object
     annItemList:
       properties:
@@ -6756,6 +7155,35 @@ components:
             $ref: '#/components/schemas/argoNode'
           type: array
       type: object
+    artifactOut:
+      properties:
+        created:
+          description: Created is false when these exact bytes were already recorded
+            — the write is a no-op.
+          type: boolean
+        ref:
+          description: Ref is the content address, "sha256:<hash>".
+          type: string
+        rolled_up:
+          description: RolledUp is false when the OLAP roll-up was skipped; the SQLite
+            write still stands.
+          type: boolean
+        sha256:
+          description: SHA256 is the SERVER's hash of the bytes — the artifact's identity.
+          type: string
+      type: object
+    artifactsOut:
+      properties:
+        data:
+          description: Data are the artifacts, newest first. Content bytes are never
+            returned here.
+          items:
+            $ref: '#/components/schemas/Artifact'
+          type: array
+        total:
+          description: Total is len(data).
+          type: integer
+      type: object
     askRequest:
       properties:
         followUps:
@@ -6909,6 +7337,31 @@ components:
           type: string
         id:
           description: ID is the machine to bind, from the URL path.
+          type: string
+      type: object
+    bindData:
+      properties:
+        boundAnchorSigner:
+          description: BoundAnchorSigner is the EVM address now signing anchors. Fund
+            it for gas.
+          type: string
+        chainId:
+          description: ChainID is the EVM chain the signer is bound for.
+          type: integer
+        org:
+          description: Org is the org whose treasury wallet was resolved.
+          type: string
+      type: object
+    bindOut:
+      properties:
+        data:
+          $ref: '#/components/schemas/bindData'
+          description: Data is the bound signer.
+        msg:
+          description: Msg carries an operator-facing note; empty on success.
+          type: string
+        status:
+          description: Status is "ok" on success.
           type: string
       type: object
     bindingList:
@@ -8117,6 +8570,20 @@ components:
             absent.
           type: string
       type: object
+    catalogEntry:
+      properties:
+        configured:
+          type: boolean
+        description:
+          type: string
+        displayName:
+          type: string
+        kind:
+          description: '"native" | "piece"'
+          type: string
+        provider:
+          type: string
+      type: object
     catalogList:
       properties:
         data:
@@ -8124,6 +8591,14 @@ components:
             /v1/prompts.
           items:
             $ref: '#/components/schemas/CatalogEntry'
+          type: array
+      type: object
+    catalogOut:
+      properties:
+        connectors:
+          description: Connectors is every connectable source, sorted by provider.
+          items:
+            $ref: '#/components/schemas/catalogEntry'
           type: array
       type: object
     catalogPage:
@@ -8652,6 +9127,19 @@ components:
             type: string
           type: array
       type: object
+    connectionOut:
+      properties:
+        account:
+          description: Account names the connected external account, when the provider
+            reports one.
+          type: string
+        provider:
+          description: Provider is the connector this answer is about.
+          type: string
+        status:
+          description: 'Status is the connection state: connected or disconnected.'
+          type: string
+      type: object
     connectionView:
       properties:
         account:
@@ -8728,6 +9216,39 @@ components:
         token:
           description: Token is the access token, rotated first if it was within the
             refresh window.
+          type: string
+      type: object
+    connectorView:
+      properties:
+        account:
+          description: Account names the connected external account. Absent until
+            the org connects.
+          type: string
+        configured:
+          description: Configured is true when this deployment holds OAuth credentials
+            for the provider.
+          type: boolean
+        docCount:
+          description: DocCount is the live count of this provider's documents in
+            the org's store.
+          type: integer
+        error:
+          description: Error is the last sync failure, if any. Absent until the org
+            connects.
+          type: string
+        kind:
+          description: Kind is "native" for a first-party Go connector, "piece" for
+            a long-tail one.
+          type: string
+        lastSync:
+          description: LastSync is when the last pull finished. Absent until the org
+            connects.
+          type: string
+        provider:
+          description: Provider is the connector's id.
+          type: string
+        status:
+          description: Status is connected, disconnected, syncing or error.
           type: string
       type: object
     connectorsOut:
@@ -9052,6 +9573,31 @@ components:
             Trigger is the root of the step tree — how the flow starts, and the action
             chain that follows. Optional: a flow may be created empty and edited later.
       type: object
+    createLBReq:
+      properties:
+        forwarding_rules:
+          description: |-
+            ForwardingRules are the listen→backend port mappings. Empty defaults to
+            plain HTTP 80→80, the same default DigitalOcean's own console applies.
+          items:
+            $ref: '#/components/schemas/fwdRule'
+          type: array
+        name:
+          description: |-
+            Name is the FRIENDLY name, a DNS-safe slug of at most 40 characters. The
+            physical DigitalOcean name is derived from it and the caller's org.
+          type: string
+        region:
+          description: Region is the DigitalOcean region slug (nyc3, sfo3, …). Required.
+          type: string
+        size:
+          description: Size is the DigitalOcean size slug. Empty takes DO's default.
+          type: string
+        type:
+          description: Type is the DigitalOcean load-balancer type. Empty takes DO's
+            default (REGIONAL).
+          type: string
+      type: object
     createQueueReq:
       properties:
         description:
@@ -9110,6 +9656,21 @@ components:
             URL is the server's JSON-RPC endpoint. It must be an http(s) URL naming a
             PUBLIC host: loopback, link-local, private and cloud-metadata addresses are
             refused here and again when the dialer connects.
+          type: string
+      type: object
+    createVPCReq:
+      properties:
+        ip_range:
+          description: IPRange is the VPC's private CIDR. Empty lets DigitalOcean
+            assign one.
+          type: string
+        name:
+          description: |-
+            Name is the FRIENDLY name, a DNS-safe slug of at most 40 characters. The
+            physical DigitalOcean name is derived from it and the caller's org.
+          type: string
+        region:
+          description: Region is the DigitalOcean region slug (nyc3, sfo3, …). Required.
           type: string
       type: object
     createVersionIn:
@@ -9238,6 +9799,21 @@ components:
     deckOut:
       properties:
         documentId:
+          type: string
+      type: object
+    defsOut:
+      properties:
+        data:
+          description: Data is every definition in the caller's (org, project) store,
+            by key.
+          items:
+            $ref: '#/components/schemas/DefRow'
+          type: array
+      type: object
+    deletedOut:
+      properties:
+        deleted:
+          description: Deleted is the key that no longer exists.
           type: string
       type: object
     deployEmpty:
@@ -9561,6 +10137,18 @@ components:
           description: Provider is the wired e-signature provider's name.
           type: string
       type: object
+    evaluateIn:
+      properties:
+        distinct_id:
+          description: DistinctID is the identity the flags are evaluated for. Required.
+          type: string
+        groups:
+          description: Groups are the group-level properties, keyed by group type
+            index.
+        person_properties:
+          description: PersonProperties are the person-level properties conditions
+            match against.
+      type: object
     eventList:
       properties:
         data:
@@ -9585,6 +10173,18 @@ components:
           type: integer
         sessionId:
           type: string
+      type: object
+    experimentsOut:
+      properties:
+        data:
+          description: Data are the canonical experiment versions.
+          items:
+            $ref: '#/components/schemas/Experiment'
+          type: array
+        total:
+          description: Total is len(data) — the rows in this answer, not the store's
+            history.
+          type: integer
       type: object
     fileJSON:
       properties:
@@ -9727,6 +10327,22 @@ components:
           items:
             $ref: '#/components/schemas/Founder'
           type: array
+      type: object
+    fwdRule:
+      properties:
+        entry_port:
+          description: EntryPort is the port the load balancer listens on.
+          type: integer
+        entry_protocol:
+          description: EntryProtocol is the protocol the load balancer listens with
+            (http, https, tcp).
+          type: string
+        target_port:
+          description: TargetPort is the backend port traffic is forwarded to.
+          type: integer
+        target_protocol:
+          description: TargetProtocol is the protocol used to reach the backend droplets.
+          type: string
       type: object
     gcOut:
       properties:
@@ -10053,6 +10669,60 @@ components:
         status:
           type: string
       type: object
+    grantOut:
+      properties:
+        updated:
+          description: Updated is the number of records the grant applied to. Zero
+            is a 404, never a silent no-op.
+          type: integer
+      type: object
+    graphEdge:
+      properties:
+        from:
+          type: string
+        kind:
+          description: parent | link | provenance
+          type: string
+        to:
+          type: string
+      type: object
+    graphNode:
+      properties:
+        id:
+          description: '"<doctype>:<name>" — globally unique, click-to-open key'
+          type: string
+        name:
+          description: the document name (empty for synthetic nodes)
+          type: string
+        project:
+          type: string
+        title:
+          description: display label
+          type: string
+        type:
+          description: kb-page | kb-memory | kb-source | kb-connector | unresolved
+          type: string
+      type: object
+    graphOut:
+      properties:
+        degraded:
+          description: |-
+            Degraded is true when the store was unreachable and this graph is honestly
+            empty rather than wrong. Absent on a normal answer.
+          type: boolean
+        edges:
+          description: Edges are the parent tree, the resolved wikilinks and the connector
+            provenance.
+          items:
+            $ref: '#/components/schemas/graphEdge'
+          type: array
+        nodes:
+          description: Nodes are the pages, memories, sources, connectors and unresolved
+            link targets.
+          items:
+            $ref: '#/components/schemas/graphNode'
+          type: array
+      type: object
     healthLens:
       properties:
         available:
@@ -10066,6 +10736,15 @@ components:
           $ref: '#/components/schemas/healthLens'
         llm:
           $ref: '#/components/schemas/healthLens'
+      type: object
+    healthOut:
+      properties:
+        engine:
+          description: Engine names the evaluator this deployment runs.
+          type: string
+        ok:
+          description: OK is true whenever the flag engine is serving.
+          type: boolean
       type: object
     healthReport:
       properties:
@@ -10090,6 +10769,23 @@ components:
           type: string
         status:
           description: Status is "ok" when the subsystem is live.
+          type: string
+      type: object
+    hit:
+      properties:
+        doctype:
+          type: string
+        name:
+          type: string
+        project:
+          type: string
+        provider:
+          type: string
+        score:
+          type: number
+        title:
+          type: string
+        url:
           type: string
       type: object
     iamRowsOut:
@@ -10200,6 +10896,40 @@ components:
           items:
             $ref: '#/components/schemas/indexerView'
           type: array
+      type: object
+    ingestOut:
+      properties:
+        attempts_ingested:
+          description: AttemptsIngested is how many attempt versions this call appended.
+          type: integer
+        attempts_retained:
+          description: AttemptsRetained is the full versioned attempt history the
+            store now holds.
+          type: integer
+        canonical_attempts:
+          description: CanonicalAttempts is the deduped attempt count the store now
+            holds.
+          type: integer
+        canonical_experiments:
+          description: CanonicalExperiments is the deduped experiment count the store
+            now holds.
+          type: integer
+        experiments_ingested:
+          description: ExperimentsIngested is how many experiment versions this call
+            appended.
+          type: integer
+        experiments_retained:
+          description: ExperimentsRetained is the full versioned experiment history
+            the store now holds.
+          type: integer
+        project:
+          description: Project is the project the batch was filed under — the SERVER's
+            value, never the body's.
+          type: string
+        rolled_up:
+          description: RolledUp is false when the OLAP roll-up was skipped; the SQLite
+            write still stands.
+          type: boolean
       type: object
     ingressMiddlewares:
       properties:
@@ -10420,6 +11150,32 @@ components:
             $ref: '#/components/schemas/gpuJob'
           type: array
       type: object
+    kbAuthorizeOut:
+      properties:
+        authorizeUrl:
+          description: AuthorizeURL is the provider's authorize endpoint with an org-bound
+            signed state.
+          type: string
+      type: object
+    kbConnectorsOut:
+      properties:
+        connectors:
+          description: Connectors is every supported provider with this org's connection
+            state.
+          items:
+            $ref: '#/components/schemas/connectorView'
+          type: array
+      type: object
+    kbSyncOut:
+      properties:
+        ingested:
+          description: Ingested is how many documents landed in the org's knowledge
+            store.
+          type: integer
+        provider:
+          description: Provider is the connector that was pulled.
+          type: string
+      type: object
     keyList:
       properties:
         data:
@@ -10523,6 +11279,30 @@ components:
           type: string
         seq:
           type: integer
+      type: object
+    lbList:
+      properties:
+        loadBalancers:
+          description: LoadBalancers are the caller org's load balancers under their
+            friendly names.
+          items:
+            $ref: '#/components/schemas/lbView'
+          type: array
+      type: object
+    lbView:
+      properties:
+        id:
+          type: string
+        ip:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        targets:
+          type: integer
+        type:
+          type: string
       type: object
     listMeta:
       properties:
@@ -11912,6 +12692,32 @@ components:
           description: V is the bucket's value.
           type: number
       type: object
+    policyData:
+      properties:
+        policy:
+          $ref: '#/components/schemas/SharePolicy'
+          description: Policy is the revenue-share configuration as stored.
+      type: object
+    policyOut:
+      properties:
+        data:
+          $ref: '#/components/schemas/policyData'
+          description: Data is the stored policy.
+        msg:
+          description: Msg carries an operator-facing note; empty on success.
+          type: string
+        status:
+          description: Status is "ok" on success.
+          type: string
+      type: object
+    policyRequest:
+      properties:
+        revenueShareBps:
+          description: |-
+            RevenueShareBps is the share of net platform revenue a sweep accrues into the
+            reserve fund, in basis points. 0–10000; 2000 (20%) is the platform default.
+          type: integer
+      type: object
     poolCreate:
       properties:
         autoScale:
@@ -12300,6 +13106,17 @@ components:
             Tier is the plan slug commerce resolved for the org, or "" when the org has no
             active licensing subscription — which the console treats as its free default.
           type: string
+      type: object
+    projectsOut:
+      properties:
+        data:
+          description: Data are the org's projects with canonical + retained counts.
+          items:
+            $ref: '#/components/schemas/ProjectSummary'
+          type: array
+        total:
+          description: Total is len(data).
+          type: integer
       type: object
     promoIn:
       properties:
@@ -13397,6 +14214,25 @@ components:
         unit:
           type: string
       type: object
+    searchIn:
+      properties:
+        doctypes:
+          description: |-
+            DocTypes restricts retrieval to a subset of the indexed knowledge doctypes
+            (kb-page, kb-memory, kb-source). An empty or foreign list reads all of them.
+          items:
+            type: string
+          type: array
+        limit:
+          description: Limit bounds the hits returned. Default 10, maximum 50.
+          type: integer
+        project:
+          description: Project narrows retrieval to one project scope.
+          type: string
+        query:
+          description: Query is the natural-language question. Required.
+          type: string
+      type: object
     searchIndex:
       properties:
         createdAt:
@@ -13426,6 +14262,20 @@ components:
             $ref: '#/components/schemas/searchIndex'
           type: array
       type: object
+    searchOut:
+      properties:
+        degraded:
+          description: |-
+            Degraded is true when the index was unreachable and this answer is honestly
+            empty rather than wrong — a RAG caller continues with no context instead of
+            failing the turn. Absent on a normal answer.
+          type: boolean
+        hits:
+          description: Hits are the matching passages, most relevant first.
+          items:
+            $ref: '#/components/schemas/hit'
+          type: array
+      type: object
     searchStats:
       properties:
         searchesPerDay:
@@ -13444,6 +14294,46 @@ components:
         totalSessions:
           description: TotalSessions is always 0, for the same reason as totalSearches.
           type: integer
+      type: object
+    seedData:
+      properties:
+        created:
+          description: Created is false when this ref had already been seeded — the
+            injection is at-most-once.
+          type: boolean
+        entry:
+          $ref: '#/components/schemas/JournalEntry'
+          description: Entry is the journal entry the injection wrote.
+        reserveCents:
+          description: ReserveCents is the fund balance after the injection.
+          type: integer
+      type: object
+    seedOut:
+      properties:
+        data:
+          $ref: '#/components/schemas/seedData'
+          description: Data is the injection result.
+        msg:
+          description: Msg carries an operator-facing note; empty on success.
+          type: string
+        status:
+          description: Status is "ok" on success.
+          type: string
+      type: object
+    seedRequest:
+      properties:
+        amountCents:
+          description: AmountCents is the capital to inject, in minor units. Must
+            be > 0.
+          type: integer
+        memo:
+          description: Memo is the operator's note on the entry. Empty takes "reserve
+            capital injection".
+          type: string
+        ref:
+          description: Ref is an idempotency key. Without one each seed is a distinct
+            injection.
+          type: string
       type: object
     seriesLine:
       properties:
@@ -14373,6 +15263,25 @@ components:
           description: Documents is how many documents exist across them.
           type: integer
       type: object
+    sweepData:
+      properties:
+        accruedCents:
+          description: AccruedCents is the amount moved into the reserve fund.
+          type: integer
+        created:
+          description: Created is false when this period had already been swept —
+            the accrual is idempotent.
+          type: boolean
+        period:
+          description: Period is the period actually accrued.
+          type: string
+        reserveCents:
+          description: ReserveCents is the fund balance after the accrual.
+          type: integer
+        revenueCents:
+          description: RevenueCents is the revenue the share was computed from.
+          type: integer
+      type: object
     sweepEnvelope:
       properties:
         data:
@@ -14385,6 +15294,29 @@ components:
         status:
           description: Status is "ok" on success.
           type: string
+      type: object
+    sweepOut:
+      properties:
+        data:
+          $ref: '#/components/schemas/sweepData'
+          description: Data is the accrual result.
+        msg:
+          description: Msg carries an operator-facing note; empty on success.
+          type: string
+        status:
+          description: Status is "ok" on success.
+          type: string
+      type: object
+    sweepRequest:
+      properties:
+        period:
+          description: Period is the accrual period as YYYY-MM. Empty takes the current
+            UTC month.
+          type: string
+        revenueCents:
+          description: RevenueCents is the net platform revenue measured for the period,
+            in minor units. Must be >= 0.
+          type: integer
       type: object
     sweepResult:
       properties:
@@ -15068,6 +16000,31 @@ components:
           type: string
         version:
           type: integer
+      type: object
+    vpcList:
+      properties:
+        vpcs:
+          description: VPCs are the caller org's VPCs under their friendly names.
+          items:
+            $ref: '#/components/schemas/vpcView'
+          type: array
+      type: object
+    vpcView:
+      properties:
+        cidr:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        region:
+          type: string
+        status:
+          type: string
+        subnets:
+          items:
+            type: string
+          type: array
       type: object
     waiting:
       properties:
@@ -18428,32 +19385,158 @@ paths:
       - admin
   /v1/admin/treasury:
     get:
+      description: |-
+        GetAdminTreasury returns the whole treasury board for a SuperAdmin: the reserve
+        fund report, the recent double-entry journal, and the Hanzo L1 anchor status of
+        the ledger root. ?limit= bounds the journal page.
       operationId: get_v1_admin_treasury
+      parameters:
+      - description: Limit caps the journal entries returned. Out of range or unparseable
+          takes the default.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/adminReportOut'
+          description: ok
+      summary: 'GetAdminTreasury returns the whole treasury board for a SuperAdmin:
+        the reserve fund report, the recent double-entry journal, and the Hanzo L1
+        anchor status of the ledger root.'
       tags:
       - admin
   /v1/admin/treasury/anchor:
     post:
+      description: |-
+        AnchorTreasury commits the current ledger root to Hanzo L1, making the books
+        tamper-evident on chain, and returns the anchoring status. When the chain path
+        is wired it signs and submits the anchor transaction and records it; when it is
+        not, it returns the root that WOULD be committed plus the exact remaining
+        wiring step and records nothing false. A submit that fails still answers 200
+        with the anchor's own status set to "error" — the attempt is the product.
+        SuperAdmin only.
       operationId: post_v1_admin_treasury_anchor
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/anchorOut'
+          description: ok
+      summary: AnchorTreasury commits the current ledger root to Hanzo L1, making
+        the books tamper-evident on chain, and returns the anchoring status.
       tags:
       - admin
   /v1/admin/treasury/bind-anchor:
     post:
+      description: |-
+        BindTreasuryAnchorSigner makes the reserve's threshold MPC wallet the signer
+        for on-chain anchors, and returns its EVM address so an operator can fund it
+        for gas. It provisions-or-resolves the caller org's treasury wallet on the
+        deployed MPC ring and installs it, so every later anchor commits the ledger
+        root SIGNED BY THE QUORUM WALLET instead of a lone KMS key. Idempotent: a
+        repeat resolves the same wallet. SuperAdmin only.
       operationId: post_v1_admin_treasury_bind-anchor
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/bindOut'
+          description: ok
+      summary: BindTreasuryAnchorSigner makes the reserve's threshold MPC wallet the
+        signer for on-chain anchors, and returns its EVM address so an operator can
+        fund it for gas.
       tags:
       - admin
   /v1/admin/treasury/policy:
     post:
+      description: |-
+        SetTreasuryPolicy sets the revenue-share basis points a sweep accrues into the
+        reserve fund and returns the stored policy. 0–10000; the change is audited.
+        SuperAdmin only.
       operationId: post_v1_admin_treasury_policy
+      requestBody:
+        content:
+          application/json:
+            example:
+              revenueShareBps: 2000
+            schema:
+              $ref: '#/components/schemas/policyRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/policyOut'
+          description: ok
+      summary: SetTreasuryPolicy sets the revenue-share basis points a sweep accrues
+        into the reserve fund and returns the stored policy.
       tags:
       - admin
   /v1/admin/treasury/seed:
     post:
+      description: |-
+        SeedTreasury injects bootstrap capital into the reserve fund so backed payouts
+        can begin before the first revenue-share sweep, and returns the journal entry
+        it wrote. A repeat of the same ref is at-most-once and reports created=false.
+        SuperAdmin only.
       operationId: post_v1_admin_treasury_seed
+      requestBody:
+        content:
+          application/json:
+            example:
+              amountCents: 500000
+              memo: founding capital
+              ref: seed:2026-q3
+            schema:
+              $ref: '#/components/schemas/seedRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/seedOut'
+          description: ok
+      summary: SeedTreasury injects bootstrap capital into the reserve fund so backed
+        payouts can begin before the first revenue-share sweep, and returns the journal
+        entry it wrote.
       tags:
       - admin
   /v1/admin/treasury/sweep:
     post:
+      description: |-
+        SweepTreasury posts the revenue-share accrual for one period — revenue into the
+        reserve fund, at the current policy's basis points — and returns what it moved.
+        It is idempotent per period: a re-run of a period already swept accrues nothing
+        and reports created=false. SuperAdmin only.
       operationId: post_v1_admin_treasury_sweep
+      requestBody:
+        content:
+          application/json:
+            example:
+              period: 2026-07
+              revenueCents: 100000
+            schema:
+              $ref: '#/components/schemas/sweepRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/sweepOut'
+          description: ok
+      summary: SweepTreasury posts the revenue-share accrual for one period — revenue
+        into the reserve fund, at the current policy's basis points — and returns
+        what it moved.
       tags:
       - admin
   /v1/admin/usage:
@@ -27909,7 +28992,39 @@ paths:
       - files
   /v1/finance/accounts:
     get:
+      description: |-
+        ListFinanceAccounts returns the ledger accounts the caller may see, with their
+        balances. It is tenant-isolated SERVER-SIDE: an ordinary caller sees ONLY
+        accounts under its own "org:<tenant>:" prefix, never house accounts and never
+        another tenant's. A SuperAdmin may widen with ?scope=house (the reserve,
+        revenue and payout house accounts) or ?org=<tenant> — the only way to cross the
+        tenant boundary, and only for platform sudo. The answer is honestly empty until
+        a tenant has ledger postings.
       operationId: get_v1_finance_accounts
+      parameters:
+      - description: Scope is "house" to read the reserve/revenue/payout house accounts.
+          SuperAdmin only.
+        in: query
+        name: scope
+        required: false
+        schema:
+          type: string
+      - description: Org names another tenant to read. SuperAdmin only; ignored when
+          scope=house.
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/accountsOut'
+          description: ok
+      summary: ListFinanceAccounts returns the ledger accounts the caller may see,
+        with their balances.
       tags:
       - finance
   /v1/finance/balance:
@@ -27939,7 +29054,22 @@ paths:
       - finance
   /v1/finance/treasury:
     get:
+      description: |-
+        GetTreasury returns the reserve fund's health and the current revenue-share
+        policy for any validated caller. It is a TRANSPARENCY view — a partner or
+        author can see that the pool backing their payouts is solvent — and NOT per-org
+        money, which is the customer's own commerce balance at /v1/billing/balance. The
+        policy is read-only here; only a SuperAdmin sets it.
       operationId: get_v1_finance_treasury
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreasuryReport'
+          description: ok
+      summary: GetTreasury returns the reserve fund's health and the current revenue-share
+        policy for any validated caller.
       tags:
       - finance
   /v1/finance/usage:
@@ -27949,58 +29079,225 @@ paths:
       - finance
   /v1/flags:
     post:
+      description: |-
+        Evaluate runs the caller's flag definitions for one identity and returns the
+        PostHog-shaped verdict: which flags are on (or which variant), their payloads,
+        and whether any definition failed to compute. Evaluation is in-process over the
+        caller's own (org, project) definitions — no network hop, no shared KV — so a
+        tenant can only ever evaluate its own flags.
       operationId: post_v1_flags
+      requestBody:
+        content:
+          application/json:
+            example:
+              distinct_id: u1
+              groups:
+                "0":
+                  key: acme
+              person_properties:
+                plan: pro
+            schema:
+              $ref: '#/components/schemas/evaluateIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                errorsWhileComputingFlags: false
+                featureFlagPayloads: {}
+                featureFlags:
+                  new-editor: true
+              schema: {}
+          description: ok
+      summary: 'Evaluate runs the caller''s flag definitions for one identity and
+        returns the PostHog-shaped verdict: which flags are on (or which variant),
+        their payloads, and whether any definition failed to compute.'
       tags:
       - flags
   /v1/flags/activity:
     get:
+      description: |-
+        ListFlagActivity returns the caller's flag change log newest-first: every
+        create, update and delete, with the actor and the time.
       operationId: get_v1_flags_activity
+      parameters:
+      - description: Limit caps the rows returned. 1–500; anything else takes the
+          default 100.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/activityOut'
+          description: ok
+      summary: 'ListFlagActivity returns the caller''s flag change log newest-first:
+        every create, update and delete, with the actor and the time.'
       tags:
       - flags
   /v1/flags/decide:
     post:
+      description: |-
+        Evaluate runs the caller's flag definitions for one identity and returns the
+        PostHog-shaped verdict: which flags are on (or which variant), their payloads,
+        and whether any definition failed to compute. Evaluation is in-process over the
+        caller's own (org, project) definitions — no network hop, no shared KV — so a
+        tenant can only ever evaluate its own flags.
       operationId: post_v1_flags_decide
+      requestBody:
+        content:
+          application/json:
+            example:
+              distinct_id: u1
+              groups:
+                "0":
+                  key: acme
+              person_properties:
+                plan: pro
+            schema:
+              $ref: '#/components/schemas/evaluateIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                errorsWhileComputingFlags: false
+                featureFlagPayloads: {}
+                featureFlags:
+                  new-editor: true
+              schema: {}
+          description: ok
+      summary: 'Evaluate runs the caller''s flag definitions for one identity and
+        returns the PostHog-shaped verdict: which flags are on (or which variant),
+        their payloads, and whether any definition failed to compute.'
       tags:
       - flags
   /v1/flags/defs:
     get:
+      description: |-
+        ListFlagDefinitions returns every flag definition in the caller's (org,
+        project) store, by key, with its version and who last changed it.
       operationId: get_v1_flags_defs
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/defsOut'
+          description: ok
+      summary: ListFlagDefinitions returns every flag definition in the caller's (org,
+        project) store, by key, with its version and who last changed it.
       tags:
       - flags
   /v1/flags/defs/{key}:
     delete:
-      operationId: delete_v1_flags_defs_by_key
+      description: |-
+        DeleteFlagDefinition removes one flag definition by key and records the
+        deletion in the change log. A key the caller's store does not hold is a 404.
+      operationId: delete_v1_flags_defs_key
       parameters:
-      - in: path
+      - description: Key is the flag key to act on, from the path.
+        in: path
         name: key
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/deletedOut'
+          description: ok
+      summary: DeleteFlagDefinition removes one flag definition by key and records
+        the deletion in the change log.
       tags:
       - flags
     get:
-      operationId: get_v1_flags_defs_by_key
+      description: |-
+        GetFlagDefinition returns one flag definition by key, or 404 when the caller's
+        store has none under that key.
+      operationId: get_v1_flags_defs_key
       parameters:
-      - in: path
+      - description: Key is the flag key to act on, from the path.
+        in: path
         name: key
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefRow'
+          description: ok
+      summary: GetFlagDefinition returns one flag definition by key, or 404 when the
+        caller's store has none under that key.
       tags:
       - flags
     put:
-      operationId: put_v1_flags_defs_by_key
+      description: |-
+        PutFlagDefinition creates or replaces the flag definition at the path's key and
+        returns the stored row. The BODY IS THE DEFINITION DOCUMENT — the PostHog-shaped
+        JSON object the evaluator consumes — and it is stored verbatim except that its
+        "key" is forced to the key in the URL, so a document can never be filed under a
+        name other than the one it was addressed by. Every write bumps the version and
+        appends to the change log under the caller's identity.
+      operationId: put_v1_flags_defs_key
       parameters:
-      - in: path
+      - description: Key is the flag key to write, from the path.
+        example: new-editor
+        in: path
         name: key
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              active: true
+              filters:
+                groups:
+                - rollout_percentage: 25
+              key: new-editor
+            schema: {}
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefRow'
+          description: ok
+      summary: PutFlagDefinition creates or replaces the flag definition at the path's
+        key and returns the stored row.
       tags:
       - flags
   /v1/flags/health:
     get:
+      description: |-
+        Health reports that the flag engine is serving. It is not gated: liveness must
+        be probe-able without a token.
       operationId: get_v1_flags_health
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                engine: hanzo-flags
+                ok: true
+              schema:
+                $ref: '#/components/schemas/healthOut'
+          description: ok
+      summary: Health reports that the flag engine is serving.
       tags:
       - flags
   /v1/flags/waitlist:
@@ -32083,61 +33380,220 @@ paths:
       - k8s
   /v1/kb/connectors:
     get:
+      description: |-
+        ListConnectors returns every supported knowledge connector with THIS org's
+        connection state and the REAL number of documents each has ingested into the
+        org's store. A provider that is configured for the deployment but not yet
+        connected appears as disconnected, so the console can offer a Connect button.
+        No secret is ever returned.
       operationId: get_v1_kb_connectors
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kbConnectorsOut'
+          description: ok
+      summary: ListConnectors returns every supported knowledge connector with THIS
+        org's connection state and the REAL number of documents each has ingested
+        into the org's store.
       tags:
       - kb
   /v1/kb/connectors/{provider}:
     delete:
-      operationId: delete_v1_kb_connectors_by_provider
+      description: |-
+        DisconnectConnector revokes a connection: it tombstones the stored credential
+        so a later sync cannot reuse it, purges this provider's points from the org's
+        vector namespace, and marks the connector disconnected. The documents already
+        ingested stay in the org's store — they are the org's own data — but stop being
+        retrievable by search; a caller deletes them through the document surface.
+      operationId: delete_v1_kb_connectors_provider
       parameters:
-      - in: path
+      - description: 'Provider is the connector to act on: github, slack, google or
+          notion.'
+        in: path
         name: provider
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/connectionOut'
+          description: ok
+      summary: 'DisconnectConnector revokes a connection: it tombstones the stored
+        credential so a later sync cannot reuse it, purges this provider''s points
+        from the org''s vector namespace, and marks the connector disconnected.'
       tags:
       - kb
   /v1/kb/connectors/{provider}/callback:
     get:
-      operationId: get_v1_kb_connectors_by_provider_callback
+      description: |-
+        CompleteConnectorOAuth finishes an OAuth connection: it exchanges the
+        provider's code for a token, seals that token in KMS, and records the
+        connection. THE ORG COMES FROM THE SIGNED STATE, not from a header and not from
+        the provider, so an attacker cannot bind their own account to someone else's
+        org — a tampered, expired or foreign-provider state is refused outright. The
+        token itself is never returned, never written into the document, and never
+        logged; the document holds only its KMS path.
+      operationId: get_v1_kb_connectors_provider_callback
       parameters:
-      - in: path
+      - description: Provider is the connector completing its flow, from the path.
+        in: path
         name: provider
         required: true
         schema:
           type: string
+      - description: Code is the provider's authorization code, exchanged for a token.
+        in: query
+        name: code
+        required: false
+        schema:
+          type: string
+      - description: State is the org-bound value this server signed at connect time.
+        in: query
+        name: state
+        required: false
+        schema:
+          type: string
+      - description: Error is the provider's denial reason when the user refused consent.
+        in: query
+        name: error
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/connectionOut'
+          description: ok
+      summary: 'CompleteConnectorOAuth finishes an OAuth connection: it exchanges
+        the provider''s code for a token, seals that token in KMS, and records the
+        connection.'
       tags:
       - kb
   /v1/kb/connectors/{provider}/connect:
     get:
-      operationId: get_v1_kb_connectors_by_provider_connect
+      description: |-
+        StartConnectorOAuth returns the provider authorize URL the console opens to
+        connect this org's account. There is no server-side redirect — the console
+        stays in control of the navigation. The URL carries a state this server SIGNED
+        over the caller's validated org, so the connection the callback completes can
+        only ever land in that org.
+      operationId: get_v1_kb_connectors_provider_connect
       parameters:
-      - in: path
+      - description: 'Provider is the connector to act on: github, slack, google or
+          notion.'
+        in: path
         name: provider
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kbAuthorizeOut'
+          description: ok
+      summary: StartConnectorOAuth returns the provider authorize URL the console
+        opens to connect this org's account.
       tags:
       - kb
   /v1/kb/connectors/{provider}/sync:
     post:
-      operationId: post_v1_kb_connectors_by_provider_sync
+      description: |-
+        SyncConnector pulls the provider's documents for the caller's org and files
+        them as knowledge sources, which the store's own hook then indexes — so a
+        synced document is retrievable exactly like a hand-written page. The org is the
+        validated tenant and the credential is read from KMS, so an org can only ever
+        sync its own connection. A provider failure is reported honestly (502) and
+        recorded on the connector rather than silently swallowed.
+      operationId: post_v1_kb_connectors_provider_sync
       parameters:
-      - in: path
+      - description: 'Provider is the connector to act on: github, slack, google or
+          notion.'
+        in: path
         name: provider
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/kbSyncOut'
+          description: ok
+      summary: SyncConnector pulls the provider's documents for the caller's org and
+        files them as knowledge sources, which the store's own hook then indexes —
+        so a synced document is retrievable exactly like a hand-written page.
       tags:
       - kb
   /v1/kb/connectors/catalog:
     get:
+      description: |-
+        ListConnectorCatalog returns the ONE catalog of everything a caller can
+        connect: every first-party connector and every long-tail one, in a single list
+        sorted by provider. `configured` reports whether this deployment holds OAuth
+        credentials for a source, so the console can show Connect rather than a dead
+        button, and `kind` is a badge only — the connect and sync lifecycle is
+        identical for both. The catalog itself is org-independent; a validated
+        principal is still required. It is metadata only: no secret is ever returned.
       operationId: get_v1_kb_connectors_catalog
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                connectors:
+                - configured: true
+                  description: Repositories, READMEs, and issues.
+                  displayName: GitHub
+                  kind: native
+                  provider: github
+              schema:
+                $ref: '#/components/schemas/catalogOut'
+          description: ok
+      summary: 'ListConnectorCatalog returns the ONE catalog of everything a caller
+        can connect: every first-party connector and every long-tail one, in a single
+        list sorted by provider.'
       tags:
       - kb
   /v1/kb/graph:
     get:
+      description: |-
+        GetKnowledgeGraph returns the caller org's knowledge as a node/edge graph
+        shaped for a force-directed renderer: pages, memories and synced sources as
+        nodes; the page parent tree, the wikilinks between pages, and each source's
+        connector provenance as edges. Wikilink targets are resolved HERE by title or
+        slug, so a rename never needs an edge rewrite and a link that matches no page
+        renders as its own "unresolved" node instead of vanishing. ?project= narrows
+        it. A store outage degrades to an honest empty graph, never a 5xx.
       operationId: get_v1_kb_graph
+      parameters:
+      - description: Project narrows the graph to one project scope. Empty reads the
+          whole org.
+        in: query
+        name: project
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/graphOut'
+          description: ok
+      summary: 'GetKnowledgeGraph returns the caller org''s knowledge as a node/edge
+        graph shaped for a force-directed renderer: pages, memories and synced sources
+        as nodes; the page parent tree, the wikilinks between pages, and each source''s
+        connector provenance as edges.'
       tags:
       - kb
   /v1/kb/import:
@@ -32147,7 +33603,35 @@ paths:
       - kb
   /v1/kb/search:
     post:
+      description: |-
+        SearchKnowledge runs a semantic search over the caller org's own knowledge —
+        its wiki pages, its agent memories and everything its connectors have synced —
+        and returns the matching passages. This is the RAG entry point: an agent asks
+        "what does this org know about X" and the org's OWN vector namespace answers.
+        The org comes from the validated principal, and both the collection and the
+        payload filter are pinned to it, so cross-tenant retrieval is impossible. An
+        unreachable index returns an honest empty result set with degraded=true, never
+        a 5xx.
       operationId: post_v1_kb_search
+      requestBody:
+        content:
+          application/json:
+            example:
+              limit: 5
+              query: how do we rotate the signing key
+            schema:
+              $ref: '#/components/schemas/searchIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchOut'
+          description: ok
+      summary: SearchKnowledge runs a semantic search over the caller org's own knowledge
+        — its wiki pages, its agent memories and everything its connectors have synced
+        — and returns the matching passages.
       tags:
       - kb
   /v1/keys:
@@ -32600,32 +34084,106 @@ paths:
       - links
   /v1/load-balancers:
     get:
+      description: |-
+        ListLoadBalancers returns every load balancer the caller's org owns, under the
+        friendly names the org created them with. Same account-wide filter as the VPC
+        listing: a load balancer outside the caller's "o"<orgHash>- namespace is never
+        in the answer.
       operationId: get_v1_load-balancers
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                loadBalancers:
+                - id: lb-1
+                  ip: 10.0.0.1
+                  name: edge
+                  status: active
+                  targets: 3
+                  type: REGIONAL
+              schema:
+                $ref: '#/components/schemas/lbList'
+          description: ok
+      summary: ListLoadBalancers returns every load balancer the caller's org owns,
+        under the friendly names the org created them with.
       tags:
       - load-balancers
     post:
+      description: |-
+        CreateLoadBalancer creates a load balancer in the caller's org namespace and
+        answers 201 with it. The physical DigitalOcean name is derived server-side from
+        the validated org; a name that already exists there is a 409. Omitting
+        forwarding rules yields a usable HTTP 80→80 load balancer rather than a 422.
       operationId: post_v1_load-balancers
+      requestBody:
+        content:
+          application/json:
+            example:
+              forwarding_rules:
+              - entry_port: 443
+                entry_protocol: https
+                target_port: 8080
+                target_protocol: http
+              name: edge
+              region: nyc3
+            schema:
+              $ref: '#/components/schemas/createLBReq'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/lbView'
+          description: created
+      summary: CreateLoadBalancer creates a load balancer in the caller's org namespace
+        and answers 201 with it.
       tags:
       - load-balancers
   /v1/load-balancers/{id}:
     delete:
-      operationId: delete_v1_load-balancers_by_id
+      description: |-
+        DeleteLoadBalancer removes one of the caller org's load balancers and answers
+        204. Ownership is confirmed by re-fetching the resource before anything is
+        deleted, so a cross-tenant id is a 404 rather than a delete of another org's
+        load balancer.
+      operationId: delete_v1_load-balancers_id
       parameters:
-      - in: path
+      - description: ID is the DigitalOcean resource id (a UUID), from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: DeleteLoadBalancer removes one of the caller org's load balancers and
+        answers 204.
       tags:
       - load-balancers
     get:
-      operationId: get_v1_load-balancers_by_id
+      description: |-
+        GetLoadBalancer returns one of the caller org's load balancers by id. One that
+        exists in another org's namespace is reported 404, never 403 — the same
+        existence-oracle guard the VPC read applies.
+      operationId: get_v1_load-balancers_id
       parameters:
-      - in: path
+      - description: ID is the DigitalOcean resource id (a UUID), from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/lbView'
+          description: ok
+      summary: GetLoadBalancer returns one of the caller org's load balancers by id.
       tags:
       - load-balancers
   /v1/logs/health:
@@ -36954,11 +38512,74 @@ paths:
       - releases
   /v1/research/artifacts:
     get:
+      description: |-
+        ListResearchArtifacts returns the caller org's research-diary feed newest-first —
+        the snapshots and reports tied to its runs, as metadata and content addresses;
+        the bytes themselves are fetched by hash. ?run= narrows to one run, ?project=
+        to one project (default the caller's project scope), and ?since= to a unix second.
       operationId: get_v1_research_artifacts
+      parameters:
+      - description: Project narrows to one project. Empty takes the caller's project
+          scope.
+        in: query
+        name: project
+        required: false
+        schema:
+          type: string
+      - description: Run narrows to one run's artifacts by its stable id.
+        in: query
+        name: run
+        required: false
+        schema:
+          type: string
+      - description: Since bounds the feed to artifacts recorded at or after this
+          unix second.
+        in: query
+        name: since
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/artifactsOut'
+          description: ok
+      summary: ListResearchArtifacts returns the caller org's research-diary feed
+        newest-first — the snapshots and reports tied to its runs, as metadata and
+        content addresses; the bytes themselves are fetched by hash.
       tags:
       - research
     post:
+      description: |-
+        RecordResearchArtifact records one research-diary artifact — a board snapshot or a
+        generated report — CONTENT-ADDRESSED inside the trust boundary. The caller submits
+        the bytes as base64 `content`; the SERVER hashes them and THAT hash is the identity
+        and the ref, so the address can never be poisoned by a client-asserted one. A
+        client-supplied sha256, if present, must match the bytes. The project is the
+        SERVER's value and visibility is forced private. Re-posting the same bytes is a
+        no-op that reports created=false.
       operationId: post_v1_research_artifacts
+      requestBody:
+        content:
+          application/json:
+            example:
+              content: iVBORw0KGgo=
+              kind: snapshot
+              run_id: benchmark:zen-1:mmlu
+            schema:
+              $ref: '#/components/schemas/Artifact'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/artifactOut'
+          description: ok
+      summary: RecordResearchArtifact records one research-diary artifact — a board
+        snapshot or a generated report — CONTENT-ADDRESSED inside the trust boundary.
       tags:
       - research
   /v1/research/artifacts/{sha256}:
@@ -36974,26 +38595,153 @@ paths:
       - research
   /v1/research/experiments:
     get:
+      description: |-
+        ListExperiments returns the caller org's CANONICAL experiments — the deterministic
+        deduped view over the versioned history. With no ?project= it reads the org's
+        whole set across projects (the ops board's cross-project view, since a project is
+        a sub-scope of the one tenant); ?project= narrows to one and ?kind= to one
+        discriminator.
       operationId: get_v1_research_experiments
+      parameters:
+      - description: Project narrows to one project. Empty reads the org's whole set
+          across projects.
+        in: query
+        name: project
+        required: false
+        schema:
+          type: string
+      - description: 'Kind narrows to one discriminator: benchmark, kernel-perf, training,
+          ablation or policy-eval.'
+        in: query
+        name: kind
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/experimentsOut'
+          description: ok
+      summary: ListExperiments returns the caller org's CANONICAL experiments — the
+        deterministic deduped view over the versioned history.
       tags:
       - research
     post:
+      description: |-
+        IngestExperiments appends one batch of experiment and attempt versions to the
+        caller org's evidence store, idempotently by content, then rolls it up to the
+        analytics plane best-effort. The project is the SERVER's value and visibility is
+        forced private — an upload grants no training or publication right, which is a
+        separate call. A run carrying a BYO endpoint is SSRF-checked before the store is
+        touched. The answer carries BOTH the canonical (deduped) and retained (full
+        history) counts, so a caller sees the versioned truth rather than a dedup that
+        reads as loss.
       operationId: post_v1_research_experiments
+      requestBody:
+        content:
+          application/json:
+            example:
+              attempts: []
+              experiments:
+              - id: benchmark:zen-1:mmlu
+                kind: benchmark
+                metric: accuracy
+                subject: zen-1
+                ts: 1750000000
+                value: 0.81
+            schema:
+              $ref: '#/components/schemas/IngestRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ingestOut'
+          description: ok
+      summary: IngestExperiments appends one batch of experiment and attempt versions
+        to the caller org's evidence store, idempotently by content, then rolls it
+        up to the analytics plane best-effort.
       tags:
       - research
   /v1/research/grants:
     post:
+      description: |-
+        GrantResearchVisibility records the SEPARATE authorization an upload never
+        implies: a record's visibility (private, org or public) and, for a run, its
+        training and commons-publication consent. Address a run by its stable id or an
+        artifact by its sha256; an artifact grant sets visibility only. The ORG is the
+        tenant boundary and comes from the validated principal, so a caller can only ever
+        grant within its own org; `project` locates WHICH record inside it and defaults to
+        the caller's project scope.
       operationId: post_v1_research_grants
+      requestBody:
+        content:
+          application/json:
+            example:
+              id: benchmark:zen-1:mmlu
+              trainable: true
+              visibility: public
+            schema:
+              $ref: '#/components/schemas/GrantRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/grantOut'
+          description: ok
+      summary: 'GrantResearchVisibility records the SEPARATE authorization an upload
+        never implies: a record''s visibility (private, org or public) and, for a
+        run, its training and commons-publication consent.'
       tags:
       - research
   /v1/research/projects:
     get:
+      description: |-
+        ListResearchProjects returns every research project in the caller's org with its
+        real totals — canonical and retained side by side — which is the ops board's
+        "every project + real totals" view.
       operationId: get_v1_research_projects
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/projectsOut'
+          description: ok
+      summary: ListResearchProjects returns every research project in the caller's
+        org with its real totals — canonical and retained side by side — which is
+        the ops board's "every project + real totals" view.
       tags:
       - research
   /v1/research/totals:
     get:
+      description: |-
+        GetResearchTotals returns the caller org's headline aggregate plus a per-kind
+        breakdown — the observatory's poll target. Canonical and retained counts travel
+        together, so a deduped view never reads as loss. ?project= narrows to one project.
       operationId: get_v1_research_totals
+      parameters:
+      - description: Project narrows the aggregate to one project. Empty aggregates
+          the whole org.
+        in: query
+        name: project
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResearchTotals'
+          description: ok
+      summary: GetResearchTotals returns the caller org's headline aggregate plus
+        a per-kind breakdown — the observatory's poll target.
       tags:
       - research
   /v1/run:
@@ -40187,32 +41935,102 @@ paths:
       - vector
   /v1/vpcs:
     get:
+      description: |-
+        ListVpcs returns every VPC the caller's org owns, under the friendly names the
+        org created them with. DigitalOcean is one account for the whole deployment, so
+        the account-wide inventory is filtered to the caller's own "o"<orgHash>- name
+        prefix and the prefix is stripped — another org's VPC is not merely hidden, it
+        is never in the answer.
       operationId: get_v1_vpcs
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                vpcs:
+                - cidr: 10.10.0.0/16
+                  id: vpc-1
+                  name: web
+                  region: nyc3
+                  status: active
+                  subnets: []
+              schema:
+                $ref: '#/components/schemas/vpcList'
+          description: ok
+      summary: ListVpcs returns every VPC the caller's org owns, under the friendly
+        names the org created them with.
       tags:
       - vpcs
     post:
+      description: |-
+        CreateVpc creates a VPC in the caller's org namespace and answers 201 with it.
+        The physical DigitalOcean name is derived server-side from the validated org,
+        so a tenant can only ever create inside its own namespace; a name that already
+        exists there is a 409.
       operationId: post_v1_vpcs
+      requestBody:
+        content:
+          application/json:
+            example:
+              ip_range: 10.10.0.0/16
+              name: web
+              region: nyc3
+            schema:
+              $ref: '#/components/schemas/createVPCReq'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/vpcView'
+          description: created
+      summary: CreateVpc creates a VPC in the caller's org namespace and answers 201
+        with it.
       tags:
       - vpcs
   /v1/vpcs/{id}:
     delete:
-      operationId: delete_v1_vpcs_by_id
+      description: |-
+        DeleteVpc removes one of the caller org's VPCs and answers 204. Ownership is
+        confirmed by re-fetching the resource and checking its physical name carries
+        the caller's org prefix BEFORE anything is deleted, so a cross-tenant id is a
+        404 rather than a delete of another org's VPC.
+      operationId: delete_v1_vpcs_id
       parameters:
-      - in: path
+      - description: ID is the DigitalOcean resource id (a UUID), from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: DeleteVpc removes one of the caller org's VPCs and answers 204.
       tags:
       - vpcs
     get:
-      operationId: get_v1_vpcs_by_id
+      description: |-
+        GetVpc returns one of the caller org's VPCs by id. A VPC that exists but sits
+        in another org's namespace is reported 404, never 403 — the answer must not
+        tell one tenant that another tenant's resource exists.
+      operationId: get_v1_vpcs_id
       parameters:
-      - in: path
+      - description: ID is the DigitalOcean resource id (a UUID), from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/vpcView'
+          description: ok
+      summary: GetVpc returns one of the caller org's VPCs by id.
       tags:
       - vpcs
   /v1/wallets:

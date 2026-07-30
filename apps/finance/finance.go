@@ -176,7 +176,7 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 				return nil // idempotent replay — already credited once
 			}
 		}
-		e := ledger.Entry{
+		e := ledger.JournalEntry{
 			ID:        id,
 			Kind:      kindDeposit,
 			Ref:       ref,
@@ -258,7 +258,7 @@ func (f *ledgerFinance) RecordUsage(ctx context.Context, in types.UsageInput) er
 		if ref == "" {
 			ref = id // no request id → fresh ref (non-idempotent, still a single debit)
 		}
-		e := ledger.Entry{
+		e := ledger.JournalEntry{
 			ID:        id,
 			Kind:      kindUsage,
 			Ref:       ref,

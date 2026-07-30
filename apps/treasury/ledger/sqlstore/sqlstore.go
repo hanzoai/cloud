@@ -300,7 +300,7 @@ func (s *Store) BalancesWithPrefix(ctx context.Context, prefix string) (map[stri
 	return out, rows.Err()
 }
 
-func (s *Store) Entries(ctx context.Context, limit int) ([]ledger.Entry, error) {
+func (s *Store) Entries(ctx context.Context, limit int) ([]ledger.JournalEntry, error) {
 	// limit <= 0 means EVERY entry (the ledger.Root full scan); a positive limit
 	// bounds the admin journal read.
 	q := `SELECT id,kind,program,ref,memo,amount,created_at
@@ -315,9 +315,9 @@ func (s *Store) Entries(ctx context.Context, limit int) ([]ledger.Entry, error) 
 		return nil, fmt.Errorf("list entries: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	var out []ledger.Entry
+	var out []ledger.JournalEntry
 	for rows.Next() {
-		var e ledger.Entry
+		var e ledger.JournalEntry
 		var amt string
 		if err := rows.Scan(&e.ID, &e.Kind, &e.Program, &e.Ref, &e.Memo, &amt, &e.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan entry: %w", err)
@@ -390,23 +390,23 @@ func (s *Store) postingsOf(ctx context.Context, entryID string) ([]ledger.Postin
 	return out, rows.Err()
 }
 
-func (s *Store) Policy(ctx context.Context) (ledger.Policy, error) {
-	var p ledger.Policy
+func (s *Store) Policy(ctx context.Context) (ledger.SharePolicy, error) {
+	var p ledger.SharePolicy
 	err := s.db.QueryRowContext(ctx,
 		`SELECT revenue_share_bps, updated_at FROM treasury_policy WHERE id=1`).Scan(&p.RevenueShareBps, &p.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		// Unset → the canonical 20% default (not 0%): a fresh treasury sweeps the same
 		// creator/revenue share the rest of the platform uses. A SuperAdmin who wants a
 		// different rate (including 0) writes an explicit policy row via SetPolicy.
-		return ledger.Policy{RevenueShareBps: ledger.DefaultRevenueShareBps}, nil
+		return ledger.SharePolicy{RevenueShareBps: ledger.DefaultRevenueShareBps}, nil
 	}
 	if err != nil {
-		return ledger.Policy{}, fmt.Errorf("read policy: %w", err)
+		return ledger.SharePolicy{}, fmt.Errorf("read policy: %w", err)
 	}
 	return p, nil
 }
 
-func (s *Store) SetPolicy(ctx context.Context, p ledger.Policy) error {
+func (s *Store) SetPolicy(ctx context.Context, p ledger.SharePolicy) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO treasury_policy (id, revenue_share_bps, updated_at) VALUES (1,?,?)
 		 ON CONFLICT(id) DO UPDATE SET revenue_share_bps=excluded.revenue_share_bps, updated_at=excluded.updated_at`,
@@ -440,21 +440,21 @@ type txAdapter struct {
 	tx  *sql.Tx
 }
 
-func (t *txAdapter) EntryByRef(kind, program, ref string) (ledger.Entry, bool, error) {
-	var e ledger.Entry
+func (t *txAdapter) EntryByRef(kind, program, ref string) (ledger.JournalEntry, bool, error) {
+	var e ledger.JournalEntry
 	var amt string
 	err := t.tx.QueryRowContext(t.ctx,
 		`SELECT id,kind,program,ref,memo,amount,created_at
 		   FROM treasury_entries WHERE kind=? AND program=? AND ref=?`, kind, program, ref).
 		Scan(&e.ID, &e.Kind, &e.Program, &e.Ref, &e.Memo, &amt, &e.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return ledger.Entry{}, false, nil
+		return ledger.JournalEntry{}, false, nil
 	}
 	if err != nil {
-		return ledger.Entry{}, false, fmt.Errorf("entry by ref: %w", err)
+		return ledger.JournalEntry{}, false, fmt.Errorf("entry by ref: %w", err)
 	}
 	if e.Amount, err = money.ParseInt(amt); err != nil {
-		return ledger.Entry{}, false, fmt.Errorf("parse entry amount: %w", err)
+		return ledger.JournalEntry{}, false, fmt.Errorf("parse entry amount: %w", err)
 	}
 	return e, true, nil
 }
@@ -464,7 +464,7 @@ func (t *txAdapter) Balance(account string) (money.Amount, error) {
 		`SELECT balance FROM treasury_accounts WHERE id=?`, account), account)
 }
 
-func (t *txAdapter) Insert(e ledger.Entry, postings []ledger.Posting) error {
+func (t *txAdapter) Insert(e ledger.JournalEntry, postings []ledger.Posting) error {
 	for _, p := range postings {
 		if _, err := t.tx.ExecContext(t.ctx,
 			`INSERT OR IGNORE INTO treasury_accounts (id, kind, balance, created_at) VALUES (?,?, '0', ?)`,
