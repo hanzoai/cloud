@@ -21,12 +21,31 @@ import (
 // `invalid body:` 400 when that fails. So an In can only describe a body whose shape
 // is CLOSED and known. Reading raw bytes from cloud.Request(ctx) does NOT recover
 // these routes — the 400 is returned before the handler is ever called.
+//
+// The obvious next move is to drop the struct: an In of map[string]any or any takes
+// an open or arbitrary body without complaint. That is the ESCAPE HATCH these pins
+// have to close, because it trades one break for a quieter one. bindURL
+// (typed.go) returns early unless the In's kind is Struct, so a NON-struct In
+// receives no path param at all — and hooks and resume are both addressed by the
+// URL. An In can describe an open body, or it can be addressed by the URL. Not both.
+// So the pins below assert ADDRESSING as well as acceptance: that the run resumed is
+// the run the path named, and that the event reached the flow subscribed to that
+// (source,event). Acceptance alone passes under a non-struct In — every payload
+// 404s or matches nothing, uniformly, which a test comparing the answers to each
+// OTHER cannot see.
 
 // TestMCPAnswersUnparseableBody200 pins the JSON-RPC contract on POST
 // /v1/automations/mcp: a body that is not JSON is a PROTOCOL result, not a transport
 // failure, so it answers HTTP 200 carrying a -32700 (parse error) object. A typed op
 // would answer 400 with no JSON-RPC envelope at all, which every conforming client
 // reads as a transport failure instead of the parse error it is.
+//
+// This one is closed at a layer BELOW zip, which is why no In type reaches it: the
+// decoder is encoding/json (zip's internal/jsonenc, stdlib only), and Unmarshal
+// validates the WHOLE input before it dispatches to any UnmarshalJSON. So neither an
+// In of json.RawMessage nor an In whose UnmarshalJSON never fails sees the bytes —
+// both answer the same `invalid body: unexpected end of JSON input` 400. A syntax
+// error is unreachable from Go, so it cannot be re-answered as -32700 from a handler.
 func TestMCPAnswersUnparseableBody200(t *testing.T) {
 	app := newApp(t)
 
@@ -56,6 +75,12 @@ func TestMCPAnswersUnparseableBody200(t *testing.T) {
 // No engine is wired in this harness, so every accepted payload lands on the same
 // engine error. That is exactly the discriminator: the payload's SHAPE must not
 // change the answer, and must never produce 400.
+//
+// It also pins ADDRESSING, which acceptance alone does not. An In of `any` DOES take
+// every payload below — and silently gives up the path param, because bindURL only
+// walks a struct. The run id would be "", every resume would 404, and a test that
+// only compares the payloads to each other would still pass because they would fail
+// UNIFORMLY. So the seeded run and an unknown one must answer DIFFERENTLY.
 func TestResumeAcceptsAnyJSONValue(t *testing.T) {
 	app := newApp(t)
 
@@ -72,6 +97,16 @@ func TestResumeAcceptsAnyJSONValue(t *testing.T) {
 	control := reqRaw(t, app, "/v1/automations/runs/run_arb/resume", "acme", `{"a":1}`)
 	if control.Code == http.StatusBadRequest {
 		t.Fatalf("object resume payload must not 400, got %d: %s", control.Code, control.Body)
+	}
+
+	// The run the PATH names is the run resumed: the seeded run reaches the engine
+	// (not-ready here) while an unknown id is not-found. An In that cannot receive the
+	// path param collapses these two into one 404.
+	if control.Code == http.StatusNotFound {
+		t.Fatalf("the seeded run must be FOUND — the path param has to reach the handler, got 404: %s", control.Body)
+	}
+	if unknown := reqRaw(t, app, "/v1/automations/runs/run_absent/resume", "acme", `{"a":1}`); unknown.Code != http.StatusNotFound {
+		t.Fatalf("an unknown run id must answer 404, got %d: %s", unknown.Code, unknown.Body)
 	}
 
 	// Every one of these is a legal resume payload today and a 400 under a struct In.
@@ -99,18 +134,34 @@ func TestResumeAcceptsAnyJSONValue(t *testing.T) {
 // it), so a typed In MUST carry fields named source and event. Unmarshalling
 // {"source": 42} into that In fails, and zip answers 400 before the handler runs —
 // where today the event is accepted and delivered.
+//
+// The test asserts DELIVERY, not just acceptance, because acceptance alone leaks past
+// both retypings a reader would reach for:
+//
+//   - a STRUCT In makes the collision a loud 400 — but a payload key it has no field
+//     for is not an error at all, it is DISCARDED. {"msg":"hello"} would answer the
+//     same 200 with the same matched:1 and deliver {{trigger.msg}} EMPTY. Every
+//     webhook keeps working and every payload arrives blank; nothing 400s, nothing
+//     logs. That is the quietest break available here, so the payload the flow
+//     receives is what gets pinned.
+//   - a map[string]any In takes the open body — and gives up :source and :event,
+//     because bindURL only walks a struct. The event would match no subscription and
+//     answer matched:0, which a test that reads the body without asserting the count
+//     cannot tell from a delivery.
 func TestInboundHookAcceptsPayloadKeysCollidingWithPathParams(t *testing.T) {
 	app := newApp(t)
-	captureStarter(t)
+	starts := captureStarter(t)
 	seedWebhookFlow(t, mounted.State.store, "acme", "github", "push")
 
 	// Each body carries a key that a typed In would have to own, holding a type that
-	// cannot bind to the string field the path param needs.
+	// cannot bind to the string field the path param needs. msg is the payload the
+	// seeded flow threads as {{trigger.msg}} — an ordinary open key, and the one a
+	// struct In would drop without a word.
 	for _, raw := range []string{
-		`{"source":42}`,
-		`{"source":{"nested":true}}`,
-		`{"event":[1,2]}`,
-		`{"source":null,"event":99}`,
+		`{"msg":"a","source":42}`,
+		`{"msg":"b","source":{"nested":true}}`,
+		`{"msg":"c","event":[1,2]}`,
+		`{"msg":"d","source":null,"event":99}`,
 	} {
 		got := reqRaw(t, app, "/v1/automations/hooks/github/push", "acme", raw)
 		if got.Code != http.StatusOK {
@@ -121,6 +172,29 @@ func TestInboundHookAcceptsPayloadKeysCollidingWithPathParams(t *testing.T) {
 		}
 		if err := json.Unmarshal(got.Body, &resp); err != nil {
 			t.Fatalf("hook body for %s: %v (%s)", raw, err, got.Body)
+		}
+		// The (source,event) the PATH named has to reach the subscription index, or
+		// nothing matches.
+		if resp.Matched != 1 {
+			t.Fatalf("event payload %s must match the subscribed flow (matched 1), got %d: %s",
+				raw, resp.Matched, got.Body)
+		}
+	}
+
+	// The open-keyed payload reaches the flow VERBATIM — every key, including the one
+	// that collides with a path param. This is what a struct In would silently empty.
+	if len(*starts) != 4 {
+		t.Fatalf("want 4 starts (one per distinct body), got %d", len(*starts))
+	}
+	for i, want := range []string{"a", "b", "c", "d"} {
+		trigger := (*starts)[i].Trigger
+		if got, _ := trigger["msg"].(string); got != want {
+			t.Fatalf("start %d must carry the payload verbatim: want msg=%q, got %#v", i, want, trigger)
+		}
+		if _, ok := trigger["source"]; !ok {
+			if _, ok := trigger["event"]; !ok {
+				t.Fatalf("start %d dropped the colliding key entirely: %#v", i, trigger)
+			}
 		}
 	}
 }
