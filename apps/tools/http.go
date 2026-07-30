@@ -1,14 +1,15 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
 
@@ -20,14 +21,44 @@ const (
 
 // ── GET /v1/tools — discovery (all sources, activated flags) ────────────────────
 
-func listTools(s *cloud.Service[state], c *zip.Ctx) error {
-	p, ok := PrincipalFrom(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// toolQuery narrows the discovery listing. Both fields are query parameters and
+// both are optional.
+//
+// Activated is a STRING and not a bool on purpose: this route has always tested
+// the raw query value against the literal "true", so `?activated=1` and a bare
+// `?activated` have always meant "no filter". A bool field would make zip's
+// binder read both as true, which is a different set of tools for the same URL.
+type toolQuery struct {
+	// Source keeps only tools from one source — builtin, connector, function,
+	// zap-service, agent, skill or mcp. Empty keeps every source.
+	Source string `json:"source"`
+	// Activated keeps only the tools activated for the caller's org and project,
+	// and only when it is exactly the string "true".
+	Activated string `json:"activated"`
+}
+
+// toolList is a page of tools. It is never null: a caller with no tools gets an
+// empty array.
+type toolList struct {
+	// Tools is every tool the caller may see, deduplicated by name with source
+	// precedence applied.
+	Tools []Tool `json:"tools"`
+}
+
+// ListTools lists every tool the caller's org and project can reach, from every
+// source, each flagged with whether it is activated. This is the discovery
+// surface: one flat set of names spanning builtin cloud controls, connector
+// actions, user functions, zap-service routes, agents, skills and the org's own
+// external MCP servers, deduplicated by name so the highest-precedence source
+// wins a collision. It lists; it does not call — dispatch is the MCP endpoint.
+func (o toolOps) listTools(ctx context.Context, in *toolQuery) (*toolList, error) {
+	scope, err := scopeOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	tools := Default().List(c.Context(), Scope{Org: p.Org, Project: p.Project})
-	srcFilter := Source(strings.TrimSpace(c.Query("source")))
-	activatedOnly := c.Query("activated") == "true"
+	tools := Default().List(ctx, scope)
+	srcFilter := Source(strings.TrimSpace(in.Source))
+	activatedOnly := in.Activated == "true"
 	out := make([]Tool, 0, len(tools))
 	for _, t := range tools {
 		if srcFilter != "" && t.Source != srcFilter {
@@ -38,10 +69,25 @@ func listTools(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		out = append(out, t)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"tools": out})
+	return &toolList{Tools: out}, nil
 }
 
 // ── POST /v1/tools/mcp — the unified MCP JSON-RPC surface ───────────────────────
+//
+// UNTYPED BY DESIGN, and it is the wire that says so — twice over. See
+// untypedByDesign in typed_wire_test.go, which holds this route as a closed list
+// entry so a later reader cannot mistake it for an oversight.
+//
+//  1. It is deliberately BODY-TOLERANT: a body that is not JSON answers HTTP 200
+//     carrying the JSON-RPC parse error (-32700), the MCP convention. A typed op
+//     cannot express that — zip's op.invoke unconditionally 400s on any
+//     unparseable non-empty body (zip@v1.18.11/typed.go:243) before the handler
+//     runs, so typing this route turns every one of those 200s into a 400.
+//  2. Its request and its response are JSON-RPC ENVELOPES whose shape depends on
+//     `method`: params is `any` (tools/call reads name+arguments, initialize and
+//     ping read nothing), and the result is a different object per method. One In
+//     and one Out cannot describe that without publishing a shape the wire does
+//     not carry.
 
 type mcpRequest struct {
 	JSONRPC string `json:"jsonrpc"`
@@ -146,148 +192,198 @@ func mcpToolCall(s *cloud.Service[state], c *zip.Ctx, p Principal, req mcpReques
 
 // ── activation API (task 5) ─────────────────────────────────────────────────────
 
-func getActivation(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	enabled, err := s.State.activation.List(c.Context(), org, principal.Project(c))
+// activationSet is the activated-tool set for one (org, project). It is never
+// null: a scope with nothing activated gets an empty array.
+type activationSet struct {
+	// Enabled is every tool name activated for the caller's org and project.
+	Enabled []string `json:"enabled"`
+}
+
+// GetActivation reports which tools are switched on for the caller's org and
+// project. Activation is what makes a tool dispatchable and what makes it visible
+// to an agent, so this is the set the MCP tool list is drawn from — every other
+// tool in the registry is discoverable but refused at call time.
+func (o toolOps) getActivation(ctx context.Context, _ *noInput) (*activationSet, error) {
+	scope, err := scopeOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list activation: %v", err)
+		return nil, err
+	}
+	enabled, err := o.s.State.activation.List(ctx, scope.Org, scope.Project)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list activation: %v", err)
 	}
 	if enabled == nil {
 		enabled = []string{}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"enabled": enabled})
+	return &activationSet{Enabled: enabled}, nil
 }
 
+// activationReq is a batch of activation toggles. Activate is applied first, so a
+// name in both lists ends up deactivated.
 type activationReq struct {
-	Activate   []string `json:"activate"`
+	// Activate switches these tool names on for the caller's org and project.
+	Activate []string `json:"activate"`
+	// Deactivate switches these tool names off.
 	Deactivate []string `json:"deactivate"`
 }
 
-// putActivation applies a batch of toggles for (org, project) — the ONE write path
-// hanzo.chat / hanzo.app calls to turn skills/plugins/connectors on and off.
-func putActivation(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	project := principal.Project(c)
-	var body activationReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	if len(body.Activate)+len(body.Deactivate) > maxBatch {
-		return zip.Errorf(http.StatusRequestEntityTooLarge, "too many toggles (max %d)", maxBatch)
-	}
-	for _, name := range body.Activate {
-		if !validToolName(name) {
-			return zip.ErrBadRequest("invalid tool name: " + name)
-		}
-		if err := s.State.activation.Activate(c.Context(), org, project, name, "", c.User()); err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "activate: %v", err)
-		}
-	}
-	for _, name := range body.Deactivate {
-		if err := s.State.activation.Deactivate(c.Context(), org, project, name); err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "deactivate: %v", err)
-		}
-	}
-	enabled, err := s.State.activation.List(c.Context(), org, project)
+// PutActivation switches tools on and off for the caller's org and project, and
+// answers with the resulting activated set. It is the ONE write path that turns
+// skills, plugins and connectors into callable tools — an unactivated tool is
+// listed by discovery but refused 403 at dispatch. Activate is applied before
+// Deactivate, so a name in both lists ends up off. More than 256 toggles in one
+// request is refused 413.
+//
+// Example: {"activate": ["cloud_get_ping"], "deactivate": []}
+func (o toolOps) putActivation(ctx context.Context, in *activationReq) (*activationSet, error) {
+	scope, err := scopeOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list activation: %v", err)
+		return nil, err
+	}
+	if len(in.Activate)+len(in.Deactivate) > maxBatch {
+		return nil, zip.Errorf(http.StatusRequestEntityTooLarge, "too many toggles (max %d)", maxBatch)
+	}
+	actor := callerOf(ctx)
+	for _, name := range in.Activate {
+		if !validToolName(name) {
+			return nil, zip.ErrBadRequest("invalid tool name: " + name)
+		}
+		if err := o.s.State.activation.Activate(ctx, scope.Org, scope.Project, name, "", actor); err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "activate: %v", err)
+		}
+	}
+	for _, name := range in.Deactivate {
+		if err := o.s.State.activation.Deactivate(ctx, scope.Org, scope.Project, name); err != nil {
+			return nil, zip.Errorf(http.StatusInternalServerError, "deactivate: %v", err)
+		}
+	}
+	enabled, err := o.s.State.activation.List(ctx, scope.Org, scope.Project)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list activation: %v", err)
 	}
 	if enabled == nil {
 		enabled = []string{}
 	}
-	audrecord(s, c, org, "activation", "ok", http.StatusOK)
-	return c.JSON(http.StatusOK, map[string]any{"enabled": enabled})
+	o.audit(ctx, "tools.call", scope.Org, "activation", "ok", http.StatusOK)
+	return &activationSet{Enabled: enabled}, nil
 }
 
 // ── external MCP servers (task 2) ───────────────────────────────────────────────
 
-func listServers(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	servers, err := s.State.servers.List(c.Context(), org)
+// mcpServerList is the caller org's registered external MCP servers. It is never
+// null: an org with none gets an empty array.
+type mcpServerList struct {
+	// Servers is every external MCP server this org has registered. No secret
+	// VALUE is ever included — only whether one is set.
+	Servers []MCPServer `json:"servers"`
+}
+
+// ListServers lists the external MCP servers the caller's org has registered.
+// Each record carries the URL and the name of the header its credential is
+// injected into; the credential VALUE lives only in KMS and is never returned,
+// so hasSecret is the whole of what this surface says about it.
+func (o toolOps) listServers(ctx context.Context, _ *noInput) (*mcpServerList, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list servers: %v", err)
+		return nil, err
+	}
+	servers, err := o.s.State.servers.List(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "list servers: %v", err)
 	}
 	if servers == nil {
 		servers = []MCPServer{}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"servers": servers})
+	return &mcpServerList{Servers: servers}, nil
 }
 
+// createServerReq registers one external MCP server.
 type createServerReq struct {
-	Name       string `json:"name"`
-	URL        string `json:"url"`
+	// Name labels the server for the org. Required, at most 128 characters.
+	Name string `json:"name"`
+	// URL is the server's JSON-RPC endpoint. It must be an http(s) URL naming a
+	// PUBLIC host: loopback, link-local, private and cloud-metadata addresses are
+	// refused here and again when the dialer connects.
+	URL string `json:"url"`
+	// AuthHeader is the request header the credential is injected into, e.g.
+	// "Authorization". Empty means the server needs no credential.
 	AuthHeader string `json:"authHeader"`
-	Secret     string `json:"secret"`
+	// Secret is the credential VALUE. It is sealed into KMS under a per-org ref
+	// and never stored in SQLite, never listed, and never returned.
+	Secret string `json:"secret"`
 }
 
-// createServer registers an org's external MCP server. The auth secret VALUE is
-// sealed in KMS (per-org ref); SQLite keeps only the URL + header name + a
-// has-secret flag. The URL is SSRF-validated at the boundary; the dialer re-checks
-// at connect time (DNS-rebinding defense).
-func createServer(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// CreateServer registers one of the caller org's own external MCP servers, so its
+// tools join the unified registry and become activatable. The credential VALUE is
+// sealed in KMS under a per-org ref; the row keeps only the URL, the header name
+// to inject it into, and a has-secret flag — so a secret with no KMS configured
+// is refused 503 rather than stored in the clear. The URL is SSRF-validated here
+// and re-checked by the dialer at connect time, which is the DNS-rebinding
+// defense. Answers 201 with the stored record.
+//
+// Example: {"name": "myserver", "url": "https://mcp.example.com/rpc", "authHeader": "Authorization", "secret": "Bearer …"}
+func (o toolOps) createServer(ctx context.Context, in *createServerReq) (*MCPServer, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body createServerReq
-	if err := c.Bind(&body); err != nil {
-		return err
+	name := strings.TrimSpace(in.Name)
+	url := strings.TrimSpace(in.URL)
+	if name == "" || len(name) > maxName {
+		return nil, zip.ErrBadRequest("name is required (<=128 chars)")
 	}
-	body.Name = strings.TrimSpace(body.Name)
-	body.URL = strings.TrimSpace(body.URL)
-	if body.Name == "" || len(body.Name) > maxName {
-		return zip.ErrBadRequest("name is required (<=128 chars)")
+	if len(url) > maxURL {
+		return nil, zip.ErrBadRequest("url too long")
 	}
-	if len(body.URL) > maxURL {
-		return zip.ErrBadRequest("url too long")
+	if err := validateServerURL(url); err != nil {
+		return nil, zip.ErrBadRequest(err.Error())
 	}
-	if err := validateServerURL(body.URL); err != nil {
-		return zip.ErrBadRequest(err.Error())
+	hasSecret := in.Secret != ""
+	if hasSecret && o.s.State.kms == nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "KMS not configured; refusing to store an MCP server secret")
 	}
-	hasSecret := body.Secret != ""
-	if hasSecret && s.State.kms == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "KMS not configured; refusing to store an MCP server secret")
-	}
-	created, err := s.State.servers.Create(c.Context(), MCPServer{
-		Org: org, Name: body.Name, URL: body.URL, AuthHeader: strings.TrimSpace(body.AuthHeader), HasSecret: hasSecret,
+	created, err := o.s.State.servers.Create(ctx, MCPServer{
+		Org: org, Name: name, URL: url, AuthHeader: strings.TrimSpace(in.AuthHeader), HasSecret: hasSecret,
 	})
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "create server: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "create server: %v", err)
 	}
 	if hasSecret {
-		if err := s.State.kms.PutSecret(c.Context(), authRef(org, created.ID), []byte(body.Secret)); err != nil {
-			_, _ = s.State.servers.Delete(c.Context(), org, created.ID)
-			return zip.Errorf(http.StatusInternalServerError, "seal server secret: %v", err)
+		if err := o.s.State.kms.PutSecret(ctx, authRef(org, created.ID), []byte(in.Secret)); err != nil {
+			_, _ = o.s.State.servers.Delete(ctx, org, created.ID)
+			return nil, zip.Errorf(http.StatusInternalServerError, "seal server secret: %v", err)
 		}
 	}
-	audrecord(s, c, org, "server:"+created.ID, "created", http.StatusCreated)
-	return c.JSON(http.StatusCreated, created)
+	o.audit(ctx, "tools.call", org, "server:"+created.ID, "created", http.StatusCreated)
+	return &created, nil
 }
 
-func deleteServer(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	id := strings.TrimSpace(c.Param("id"))
-	removed, err := s.State.servers.Delete(c.Context(), org, id)
+// serverRef addresses one external MCP server. The id is the path segment: the
+// URL is the addressing authority.
+type serverRef struct {
+	// ID is the server to deregister, from the path.
+	ID string `json:"id"`
+}
+
+// DeleteServer deregisters one of the caller org's external MCP servers, so its
+// tools leave the registry. Scoped to the caller's org, so an id belonging to
+// another tenant is a 404 and not a delete. Answers 204 with no body; a server
+// this org does not have is 404.
+func (o toolOps) deleteServer(ctx context.Context, in *serverRef) (*noContent, error) {
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete server: %v", err)
+		return nil, err
+	}
+	id := strings.TrimSpace(in.ID)
+	removed, err := o.s.State.servers.Delete(ctx, org, id)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "delete server: %v", err)
 	}
 	if !removed {
-		return zip.ErrNotFound("server not found")
+		return nil, zip.ErrNotFound("server not found")
 	}
-	audrecord(s, c, org, "server:"+id, "deleted", http.StatusOK)
-	return c.NoContent(http.StatusNoContent)
+	o.audit(ctx, "tools.call", org, "server:"+id, "deleted", http.StatusOK)
+	return nil, nil
 }
 
 // ── shared helpers ──────────────────────────────────────────────────────────────

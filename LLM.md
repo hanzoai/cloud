@@ -1017,14 +1017,16 @@ zip is getting multi-status `responses`, and these convert when it lands.
    `/v1/authz/{health,readyz,check}` — three operations no binary serves, in
    `openapi.yaml`, in every generated SDK, in the MCP tool list, and with
    `manifest/apps.go:38` still routing that prefix to a plugin that 404s it. The
-   other is `plugin/tools/openapi.json`, whose committed copy tags `/v1/mcp*`,
-   `/v1/plugins*` and `/v1/skills*` as `tools` and escapes the info block's em dash,
-   where the current generator derives four tags and writes it literal — a golden
-   emitted by an older generator, i.e. failure mode 2 one artifact over. NOT fixed
-   here, because regenerating another package's subset inside an unrelated change is
-   how a concurrent agent's work gets clobbered; whoever owns authz/tools next runs
-   `make openapi` and commits both. Verify the authz half yourself, it is one
-   command:
+   other WAS `plugin/tools/openapi.json` — **CLOSED** at the tools typing pass, which
+   regenerated it from the live router. What the regeneration actually found is worth
+   recording, because it is not what the note above predicted: the committed copy
+   already carried the four derived tags and the literal em dash (someone had fixed
+   that half), and all sixteen paths matched the router. The drift that remained was
+   PROSE — sixteen operations, every one of them publishing no summary and no
+   description. So a stale-golden note can go stale in the safe direction too, and the
+   only way to know which is to run `make -C apps/<app> openapi` and read the diff.
+   The authz half is still open; whoever owns authz next runs `make openapi` and
+   commits it. Verify it yourself, it is one command:
 
        grep -rE '\.(Get|Post|Put|Delete)\("' \
          "$(go env GOMODCACHE)/github.com/hanzoai/authz@v1.10.15/serve/"
@@ -1079,7 +1081,16 @@ zip is getting multi-status `responses`, and these convert when it lands.
    `..._targets_by_id_claim`). Take the rename; do NOT pin it back with
    `WithOperationID`, which would make one app's ids a special case.
 
-7. **zip cannot declare a bodyless POST.** `hasBody("POST")` is unconditional, so
+7. **zip cannot declare a bodyless POST — CLOSED in zip v1.18.11.** `hasRequestBody`
+   now publishes a body only when the In has at least one field the URL does not
+   already carry, so the class the count below chased is gone for TYPED ops. Re-run
+   the check against the committed subsets and it reports **9**, all of them
+   `openapi.Register` declarations of a binary/no-schema body (books' 3 uploads,
+   company's deck, admin's credit-grants, git's 4 pack endpoints) — not phantom SDK
+   arguments. The history is kept because the LESSON survives the fix: count the
+   class from the published subsets, never tally it in prose. What follows is what
+   the class looked like at v1.18.6.
+   `hasBody("POST")` is unconditional, so
    a typed POST whose entire input is the URL still publishes
    `requestBody: {required: true}` over its In: guide's `/steps/{id}/skip|reset`
    now say they require `{"id": …}` for a body they have never read, and
@@ -1150,7 +1161,11 @@ zip is getting multi-status `responses`, and these convert when it lands.
    the same move, or the document splits one resource across two keys.
    Grep for it: `grep -rn 'zip\.[A-Za-z]*([a-z]*, "",' --include='*.go' apps/`.
 
-10. **A first sentence that WRAPS ships its line break into the `summary`.**
+10. **A first sentence that WRAPS ships its line break into the `summary` — CLOSED
+    in zip v1.18.11**, which collapses whitespace in `firstSentence` exactly as the
+    fix below prescribed. Re-measured over the committed subsets at the tools typing
+    pass: **0 of the 466 described operations**, down from 215. The class is recorded
+    intact because it is the best example in this file of a defect nothing reads for.
     `firstSentence` (zip/openapi.go:606) returns the text up to the first `". "`
     VERBATIM — no whitespace collapse — so a doc comment whose opening sentence
     spans two source lines publishes a `summary` with a raw `\n` in it. The
@@ -1201,7 +1216,7 @@ three DELETEs answering 204 from a `*struct{}` Out, and `TestSurfaceIsRegistered
 gates the whole surface as an EXACT set — live router == `app.Commands()` == the
 18 — so a route added untyped goes red without anyone remembering to name it), ~~framework 19~~ (done: 17 typed, 2 refused — the document writes; see "apps/framework (17 of 19)" below), ~~account 19~~ (done, and the 19 was 18: **11 typed, 7 refused** — re-verified; the seven are two routes' worth of shape, GET|POST `/v1/billing/*` and the five-method `/v1/commerce/*`, and `apps/account/typed_wire_test.go` holds them as a CLOSED list so an eighth goes red. See "apps/account (11 of 18)" below) | 117 |
 | D | ~~pricing 18~~ (done: 30 typed, 2 refused — both admin overlay PATCHes: one addresses a slashed model id through a greedy wildcard fiber calls `*1` and the document calls `{wildcard1}`, so the bound field and the published parameter cannot agree; the other carries an RFC 7386 merge patch stored and echoed VERBATIM, which `json.RawMessage` publishes as an array of integers and `map[string]any` reorders. The 15 "verbatim byte proxy" refusals came OFF the list: apps/goja already re-marshals the bundle's answer through Go's encoding/json, so a typed op re-marshalling the same value is byte-identical — apps/pricing/sections_wire_test.go proves it route by route), ~~ml 18~~ (done, and the 18 was 17: **10 typed, 7 refused**, every refusal wire-bound and GATED rather than asserted — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` in apps/ml/typed_wire_test.go, whose two ledgers must SUM to the served surface. The seven: the three creates (`POST /v1/ml/models`, `/v1/train/jobs`, `/v1/train/experiments`) answer 402/503 IN BAND through `cloud.DenyResource` with the fleet's nested `{"error":{"code","message"}}` contract, and a typed op can only refuse by RETURNING an error, which zip renders as the flat `{"status","code","error"}` HTTPError — a NEW refusal class, distinct from multi-status #78: a non-2xx with a DOMAIN body. Moving the gate to middleware does not rescue them either, because it would run before the body decode and turn today's 400-on-a-bad-name into a 402. `PATCH /v1/ml/models/{name}` relays an opaque RFC 7386 merge patch VERBATIM to the Kubernetes API (`map[string]any` turns `{"replicas":1000000}` into `1e+06` and patches a float over an int). `POST …/predict` returns the predictor's own status, bytes and Content-Type. The two `/health` probes answer 503 carrying the degraded REPORT as their body. One `view()` now returns the published `mlResource` for BOTH the typed reads and the untyped create/patch, so the shape cannot depend on which route served it; `TestView` asserts the marshalled BYTES, which is what proves the map→struct swap did not move the wire, and mlResource's field order is ALPHABETICAL for exactly that reason), ~~automations 18~~ (done: 14 typed, 4 refused), index 17, dataroom 17, ~~compliance 17~~ (done: 16 typed, 1 refused — the HMAC webhook: the signature is computed over the RAW body bytes and verified before any parse, and an unknown reference answers a second 200 shape; the refusal is now GATED, not prose — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` in typed_wire_test.go), affiliates 17 | 104 |
-| E | eval 16, social 13, esign 13, link 12, functions 12, commerce 12, billing 12 | 90 |
+| E | ~~tools 16~~ (done: **14 typed, 2 refused**, both wire-bound and GATED rather than asserted — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` in apps/tools/typed_wire_test.go, whose two ledgers must SUM to the served surface and whose counts are pinned at 16/14 so the prose here cannot drift from the binary. Its 16 ops published NO summary and NO description at all before this — the whole subset was invisible to prose, MCP, the CLI and every typed SDK method. The two refusals: `POST /v1/tools/mcp` is deliberately BODY-TOLERANT (a malformed body is HTTP 200 carrying JSON-RPC -32700, the MCP convention, which `op.invoke`'s unconditional 400 on an unparseable body cannot express) *and* its request/response are JSON-RPC envelopes whose shape depends on `method`; `POST /v1/plugins/build` answers 422 carrying the build DIAGNOSTICS (detail, source, generated) as a domain body, the ml refusal class — a typed op's only refusal is a returned error, which zip renders as the flat HTTPError with nowhere to put them. Three query filters stayed STRINGS rather than becoming bools, deliberately: these routes compare the raw value to the literal `"true"`, and zip's `setScalar` reads a bare `?activated` and `?activated=1` as true, so a bool In would return a different set of tools for the same URL — `TestActivatedFilterIsTheLiteralTrue` pins it. The pass also closed the response-side hole the op gate cannot see: Tool, Skill, MCPServer, AuthoredPlugin and Price are store rows, so all 29 of their published properties would have reached openapi.yaml, every SDK and every MCP inputSchema bare; `TestEveryPublishedFieldIsDescribed` gates them now — and it covers all 52 properties the subset publishes, not only the row types), eval 16, social 13, esign 13, link 12, functions 12, commerce 12, billing 12 | 90 |
 | F | the ~70 remaining packages, 1–11 routes each | ~358 |
 | — | ~~iam 25~~ (done: **0 typed, 25 refused** — the whole product is five `app.All` wildcards relaying a nested app; see "apps/iam (0 of 25, and why)" above. The refusal is gated, and the pass fixed a live fail-closed hole) | 0 |
 

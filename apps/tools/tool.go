@@ -76,23 +76,39 @@ func rank(s Source) int {
 // the x402 Charger seam (registry.go) — this is only the DECLARATION a marketplace
 // listing carries. A nil Price means the tool is free (no x402 settlement).
 type Price struct {
-	AmountCents int64  `json:"amountCents"`
-	Currency    string `json:"currency"`  // ISO 4217, e.g. "USD"; empty ⇒ "USD".
-	Recipient   string `json:"recipient"` // payout wallet ref for the marketplace seller.
+	// AmountCents is what ONE call costs, in minor units of Currency.
+	AmountCents int64 `json:"amountCents"`
+	// Currency is the ISO 4217 code, e.g. "USD". Empty means USD.
+	Currency string `json:"currency"`
+	// Recipient is the payout wallet ref the marketplace seller is paid at.
+	Recipient string `json:"recipient"`
 }
 
 // Tool is the ONE description of a callable capability, uniform across sources.
 // Schema is the JSON-Schema of the call arguments (MCP inputSchema); Dispatchable
 // is false for a listing-only entry (a skill is activated + attached, not called).
 type Tool struct {
-	Name         string          `json:"name"`
-	Source       Source          `json:"source"`
-	Description  string          `json:"description"`
-	Schema       json.RawMessage `json:"inputSchema,omitempty"`
-	Price        *Price          `json:"price,omitempty"`
-	Dispatchable bool            `json:"dispatchable"`
+	// Name is the tool's id in the flat, fleet-wide tool namespace — the value a
+	// tools/call passes. Unique across sources: a collision is resolved by source
+	// precedence before the caller ever sees it.
+	Name string `json:"name"`
+	// Source is where the tool comes from: builtin, connector, function,
+	// zap-service, agent, skill or mcp.
+	Source Source `json:"source"`
+	// Description is the prose a model reads to decide whether to call the tool.
+	Description string `json:"description"`
+	// Schema is the JSON Schema of the call arguments — the MCP inputSchema.
+	// Absent for a tool that takes none.
+	Schema json.RawMessage `json:"inputSchema,omitempty"`
+	// Price is what a call costs and who is paid, absent for a free tool.
+	// Enforcement is the x402 settlement seam; this is the declaration.
+	Price *Price `json:"price,omitempty"`
+	// Dispatchable is whether the tool can be CALLED. False for a listing-only
+	// entry: a skill is activated and attached to an agent, never called.
+	Dispatchable bool `json:"dispatchable"`
 	// Activated is filled by the registry from the activation store for the
-	// requesting (org,project); providers leave it zero.
+	// requesting (org,project); providers leave it zero. An unactivated tool is
+	// discoverable but refused 403 at dispatch.
 	Activated bool `json:"activated"`
 }
 

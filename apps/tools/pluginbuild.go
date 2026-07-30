@@ -63,6 +63,17 @@ type buildRequest struct {
 }
 
 // buildPlugin builds, validates and stores one plugin for the caller's org.
+//
+// UNTYPED BY DESIGN — see untypedByDesign in typed_wire_test.go, which holds this
+// route as a closed-list entry. A failed build answers 422 carrying the BUILD
+// DIAGNOSTICS as a domain body (the bundler's error, the source that failed, and
+// whether the model wrote it), which is the only reason a caller can fix the
+// plugin. A typed op can refuse only by RETURNING an error, and zip renders that
+// as the flat HTTPError {status, code, error} — there is nowhere in it for the
+// source or the generated flag. Writing the body from inside the op does not
+// escape it either: a nil Out makes zip stamp cmp.Or(op.Status, 204) over the 422
+// (zip@v1.18.11/typed.go:308). So this route is a 201-or-422 pair of DIFFERENT
+// shapes, and zip has one Out and one declared status per op.
 func buildPlugin(s *cloud.Service[state], c *zip.Ctx) error {
 	p, ok := PrincipalFrom(c)
 	if !ok {
@@ -206,43 +217,69 @@ func stripFences(s string) string {
 	return strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(s), "```"))
 }
 
-// listAuthored — GET /v1/plugins/authored: the org's own built plugins,
-// distinct from GET /v1/plugins, which is the deployment's mounted subsystems.
-func listAuthored(s *cloud.Service[state], c *zip.Ctx) error {
-	p, ok := PrincipalFrom(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	if s.State.authored == nil {
-		return c.JSON(http.StatusOK, map[string]any{"plugins": []AuthoredPlugin{}})
-	}
-	out, err := s.State.authored.List(c.Context(), p.Org)
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusOK, map[string]any{"plugins": out})
+// authoredPluginList is the caller org's own built plugins. Never null.
+type authoredPluginList struct {
+	// Plugins is every plugin this org built, newest first, each carrying the
+	// TypeScript as authored. The bundled artifact is never rendered.
+	Plugins []AuthoredPlugin `json:"plugins"`
 }
 
-// deleteAuthored — DELETE /v1/plugins/authored/:id.
-func deleteAuthored(s *cloud.Service[state], c *zip.Ctx) error {
-	p, ok := PrincipalFrom(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+// ListAuthoredPlugins lists the plugins the caller's org BUILT, newest first,
+// each with the TypeScript as authored. That is a different set with a different
+// lifecycle from GET /v1/plugins, which reports the subsystems this deployment
+// mounted. The bundled CommonJS the runtime executes is never included, and
+// neither is any credential — a plugin names the connectors provider it needs and
+// reads the credential from ctx.auth at run time.
+func (o toolOps) listAuthoredPlugins(ctx context.Context, _ *noInput) (*authoredPluginList, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if s.State.authored == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "the plugin store is not open")
+	if o.s.State.authored == nil {
+		return &authoredPluginList{Plugins: []AuthoredPlugin{}}, nil
 	}
-	id := strings.TrimSpace(c.Param("id"))
+	out, err := o.s.State.authored.List(ctx, org)
+	if err != nil {
+		return nil, err
+	}
+	return &authoredPluginList{Plugins: out}, nil
+}
+
+// pluginRef addresses one authored plugin. The id is the path segment: the URL is
+// the addressing authority.
+type pluginRef struct {
+	// ID is the plugin to remove, from the path.
+	ID string `json:"id"`
+}
+
+// pluginDeleted acknowledges a plugin removal.
+type pluginDeleted struct {
+	// Deleted is the plugin id that is now gone.
+	Deleted string `json:"deleted"`
+}
+
+// DeleteAuthoredPlugin removes one of the caller org's built plugins, so the
+// runtime can no longer load it. Scoped to the caller's org, so an id belonging
+// to another tenant answers 404 and is not deleted.
+func (o toolOps) deleteAuthoredPlugin(ctx context.Context, in *pluginRef) (*pluginDeleted, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if o.s.State.authored == nil {
+		return nil, zip.Errorf(http.StatusServiceUnavailable, "the plugin store is not open")
+	}
+	id := strings.TrimSpace(in.ID)
 	if id == "" {
-		return zip.ErrBadRequest("missing plugin id")
+		return nil, zip.ErrBadRequest("missing plugin id")
 	}
-	if _, err := s.State.authored.Get(c.Context(), p.Org, id); err == sql.ErrNoRows {
-		return zip.ErrNotFound("no such plugin")
+	if _, err := o.s.State.authored.Get(ctx, org, id); err == sql.ErrNoRows {
+		return nil, zip.ErrNotFound("no such plugin")
 	}
-	if err := s.State.authored.Delete(c.Context(), p.Org, id); err != nil {
-		return err
+	if err := o.s.State.authored.Delete(ctx, org, id); err != nil {
+		return nil, err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"deleted": id})
+	return &pluginDeleted{Deleted: id}, nil
 }
 
 func min(a, b int) int {
