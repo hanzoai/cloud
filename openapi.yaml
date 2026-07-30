@@ -961,6 +961,22 @@ components:
           description: '"x" | "instagram" | "tiktok" | ...'
           type: string
       type: object
+    ChannelMetric:
+      properties:
+        externalId:
+          type: string
+        kind:
+          type: string
+        platform:
+          type: string
+        spendCents:
+          type: integer
+        spendError:
+          description: 'honest: connector spend read failed'
+          type: string
+        status:
+          type: string
+      type: object
     ChannelResult:
       properties:
         channel:
@@ -977,6 +993,26 @@ components:
           type: string
         status:
           description: '"distributed" | "scheduled" | "failed"'
+          type: string
+      type: object
+    ChannelSpec:
+      properties:
+        account:
+          description: provider account ref (ad-account/page/list id)
+          type: string
+        detail:
+          description: honest last-outcome detail (never a secret)
+          type: string
+        externalId:
+          type: string
+        kind:
+          description: paid | organic | email
+          type: string
+        platform:
+          description: meta | google | x | instagram | (email provider)
+          type: string
+        status:
+          description: pending | live | paused | failed | unavailable
           type: string
       type: object
     Cluster:
@@ -1835,6 +1871,13 @@ components:
           type: integer
         totalCents:
           type: integer
+      type: object
+    Field:
+      properties:
+        key:
+          type: string
+        label:
+          type: string
       type: object
     Figure:
       properties:
@@ -6261,6 +6304,37 @@ components:
             $ref: '#/components/schemas/itemInput'
           type: array
       type: object
+    adminAuthorView:
+      properties:
+        accruedCents:
+          type: integer
+        approvedAt:
+          type: integer
+        createdAt:
+          type: integer
+        deployCount:
+          type: integer
+        githubLogin:
+          type: string
+        id:
+          type: string
+        org:
+          type: string
+        paidCents:
+          type: integer
+        pendingCents:
+          type: integer
+        repoCount:
+          type: integer
+        shareBps:
+          type: integer
+        status:
+          type: string
+        suspendedAt:
+          type: integer
+        verified:
+          type: boolean
+      type: object
     adminBonusDirectory:
       properties:
         referrals:
@@ -6284,6 +6358,32 @@ components:
         status:
           description: Status is "ok" on success.
           type: string
+      type: object
+    adminBook:
+      properties:
+        data:
+          $ref: '#/components/schemas/adminBookData'
+          description: Data is the book.
+        msg:
+          description: Msg is the envelope's message slot, empty on success.
+          type: string
+        status:
+          description: Status is "ok" — the operator console's envelope discriminator.
+          type: string
+      type: object
+    adminBookData:
+      properties:
+        authors:
+          description: Authors are the author records, with each one's repository
+            and deploy counts.
+          items:
+            $ref: '#/components/schemas/adminAuthorView'
+          type: array
+        summary:
+          $ref: '#/components/schemas/authorProgramSummary'
+          description: |-
+            Summary is the fleet roll-up: how many authors at each status and the money
+            accrued, pending and paid across all of them.
       type: object
     adminCatalogOut:
       properties:
@@ -7137,6 +7237,18 @@ components:
             $ref: '#/components/schemas/Application'
           type: array
       type: object
+    approveRequest:
+      properties:
+        id:
+          description: ID is the author to approve, from the path.
+          type: string
+        shareBps:
+          description: |-
+            ShareBps overrides this author's royalty share, in basis points (0–10000).
+            0 keeps the platform default. A share change never rewrites history: existing
+            ledger rows keep the share that was applied when they were written.
+          type: integer
+      type: object
     argoApp:
       properties:
         apiVersion:
@@ -7519,6 +7631,70 @@ components:
             platform assertion of legal or regulatory compliance.
           type: string
       type: object
+    authorData:
+      properties:
+        author:
+          $ref: '#/components/schemas/adminAuthorView'
+          description: |-
+            Author is the author record after the change. Its repository and deploy counts
+            are 0 here — this is the mutated row, not a re-listing.
+      type: object
+    authorProgramSummary:
+      properties:
+        accruedCents:
+          type: integer
+        approved:
+          type: integer
+        connected:
+          type: integer
+        paidCents:
+          type: integer
+        pendingCents:
+          type: integer
+        suspended:
+          type: integer
+        total:
+          type: integer
+      type: object
+    authorRepo:
+      properties:
+        badgeMarkdown:
+          type: string
+        createdAt:
+          type: integer
+        method:
+          type: string
+        repoUrl:
+          type: string
+        verified:
+          type: boolean
+        verifiedAt:
+          type: integer
+      type: object
+    authorResult:
+      properties:
+        data:
+          $ref: '#/components/schemas/authorData'
+          description: Data carries the author.
+        msg:
+          description: Msg is the envelope's message slot, empty on success.
+          type: string
+        status:
+          description: Status is "ok".
+          type: string
+      type: object
+    authorSweepResult:
+      properties:
+        data:
+          $ref: '#/components/schemas/sweepCounts'
+          description: Data is the sweep's counts.
+        msg:
+          description: Msg is the envelope's message slot, empty on success.
+          type: string
+        status:
+          description: Status is "ok".
+          type: string
+      type: object
     authoredPluginList:
       properties:
         plugins:
@@ -7573,6 +7749,15 @@ components:
             instead.
           type: string
       type: object
+    baseHealth:
+      properties:
+        service:
+          description: Service is "base" — which subsystem answered.
+          type: string
+        status:
+          description: Status is "ok" when the subsystem is serving.
+          type: string
+      type: object
     baseInstance:
       properties:
         created:
@@ -7602,6 +7787,20 @@ components:
           type: string
         total:
           type: integer
+      type: object
+    basisResult:
+      properties:
+        data:
+          additionalProperties:
+            type: object
+          description: Data is the royalty basis.
+          type: object
+        msg:
+          description: Msg is the envelope's message slot, empty on success.
+          type: string
+        status:
+          description: Status is "ok".
+          type: string
       type: object
     beginIn:
       properties:
@@ -8087,6 +8286,162 @@ components:
           type: string
         version:
           type: string
+      type: object
+    campaignPage:
+      properties:
+        data:
+          description: Data are the campaigns on this page.
+          items:
+            $ref: '#/components/schemas/campaignRecord'
+          type: array
+      type: object
+    campaignRecord:
+      properties:
+        audience:
+          type: string
+        budget:
+          type: integer
+        channels:
+          items:
+            $ref: '#/components/schemas/ChannelSpec'
+          type: array
+        content:
+          items:
+            type: string
+          type: array
+        createdAt:
+          type: integer
+        id:
+          type: string
+        name:
+          type: string
+        scheduleAt:
+          type: integer
+        status:
+          type: string
+        updatedAt:
+          type: integer
+      type: object
+    campaignResults:
+      properties:
+        abTest: {}
+        available:
+          type: boolean
+        cac:
+          type: number
+        campaignId:
+          type: string
+        channels:
+          items:
+            $ref: '#/components/schemas/ChannelMetric'
+          type: array
+        clicks:
+          type: integer
+        conversions:
+          type: integer
+        ctr:
+          type: number
+        cvr:
+          type: number
+        end:
+          type: string
+        impressions:
+          type: integer
+        name:
+          type: string
+        range:
+          type: string
+        revenue:
+          type: number
+        roas:
+          type: number
+        source:
+          type: string
+        spendCents:
+          type: integer
+        start:
+          type: string
+        status:
+          type: string
+        visitors:
+          type: integer
+      type: object
+    campaignSummary:
+      properties:
+        budget:
+          description: Budget is the sum of every campaign's budget, in CENTS.
+          type: integer
+        campaigns:
+          description: Campaigns is how many campaigns the org has, in any state.
+          type: integer
+        channels:
+          description: |-
+            Channels are the channel kinds this deployment has an executor wired for.
+            A kind absent here is a kind a launch will honestly record as unavailable.
+          items:
+            type: string
+          type: array
+        live:
+          description: Live is how many of them are currently live.
+          type: integer
+      type: object
+    campaignUpdate:
+      properties:
+        audience:
+          type: string
+        budget:
+          type: integer
+        channels:
+          items:
+            $ref: '#/components/schemas/ChannelSpec'
+          type: array
+        content:
+          items:
+            type: string
+          type: array
+        id:
+          description: ID is the campaign to update, from the path.
+          type: string
+        name:
+          type: string
+        scheduleAt:
+          type: integer
+      type: object
+    campaignWrite:
+      properties:
+        audience:
+          description: Audience is the segment or audience selector this campaign
+            targets.
+          type: string
+        budget:
+          description: Budget is the campaign's total budget in CENTS. Negative reads
+            as 0.
+          type: integer
+        channels:
+          description: |-
+            Channels are the fan-out targets, at most one per kind (paid, organic,
+            email) and at most 12. A channel's status and provider id are server-owned:
+            whatever the caller sends for them is replaced with "pending".
+          items:
+            $ref: '#/components/schemas/ChannelSpec'
+          type: array
+        content:
+          description: |-
+            Content is the ordered creative set. Content[0] is the active creative and
+            the rest are A/B variants; at most 32, empty entries dropped.
+          items:
+            type: string
+          type: array
+        name:
+          description: |-
+            Name is the campaign's display name. Required; trimmed and capped at 2048
+            characters.
+          type: string
+        scheduleAt:
+          description: |-
+            ScheduleAt is when the campaign should run, in unix seconds. Negative reads
+            as 0 (immediately).
+          type: integer
       type: object
     capIn:
       properties:
@@ -8942,6 +9297,27 @@ components:
           description: TTLSeconds is the challenge lifetime in seconds.
           type: integer
       type: object
+    channelAdd:
+      properties:
+        account:
+          description: |-
+            Account is the provider account this channel runs under: an ad-account, a
+            page, or a mailing-list id.
+          type: string
+        id:
+          description: ID is the campaign to add the channel to, from the path.
+          type: string
+        kind:
+          description: |-
+            Kind is the channel kind and the identity a campaign holds at most one of:
+            paid, organic or email.
+          type: string
+        platform:
+          description: |-
+            Platform is the provider within the kind — meta, google, x, instagram, or
+            the email provider.
+          type: string
+      type: object
     channelList:
       properties:
         data:
@@ -9029,6 +9405,23 @@ components:
           description: VerifyURL is the provider's hosted verification flow for the
             subject, when one exists.
           type: string
+      type: object
+    claim:
+      properties:
+        created:
+          description: |-
+            Created reports whether this call recorded a new claim (201) or found an
+            existing one (200).
+          type: boolean
+        org:
+          $ref: '#/components/schemas/orgView'
+          description: |-
+            Org is the verified owner-wide claim, present when an owner was claimed. It
+            covers every repository the author publishes under that owner.
+        repo:
+          $ref: '#/components/schemas/authorRepo'
+          description: Repo is the verified repository claim, present when a repository
+            was claimed.
       type: object
     claimKeyOut:
       properties:
@@ -9509,6 +9902,23 @@ components:
           items:
             type: string
           type: array
+      type: object
+    connectRequest:
+      properties:
+        githubLogin:
+          description: |-
+            GithubLogin is the account to link. Used only when IAM holds no linked
+            account for the provider — a linked account is stronger proof and always wins.
+          type: string
+        login:
+          description: |-
+            Login is the provider-neutral alias for GithubLogin, preferred when both are
+            sent.
+          type: string
+        provider:
+          description: 'Provider is the forge to enrol with: github (the default)
+            or gitlab.'
+          type: string
       type: object
     connectionOut:
       properties:
@@ -10246,6 +10656,51 @@ components:
     deployEmpty:
       properties: {}
       type: object
+    deployRecord:
+      properties:
+        created:
+          description: |-
+            Created reports whether this call recorded a new attribution edge (201) or
+            found an existing one (200). Absent when nothing was recorded.
+          type: boolean
+        createdAt:
+          description: |-
+            CreatedAt is when the edge was first recorded, in unix seconds. Absent when
+            nothing was recorded.
+          type: integer
+        deployId:
+          description: DeployID is the attribution edge's handle. Absent when nothing
+            was recorded.
+          type: string
+        reason:
+          description: Reason says why nothing was attributed. Present only when recorded
+            is false.
+          type: string
+        recorded:
+          description: |-
+            Recorded reports whether the deploy was attributed to an author at all. False
+            is the ordinary answer for a project built from no repository, or from one no
+            author has verified — never an error, so a deploy path can fire this
+            unconditionally.
+          type: boolean
+        self:
+          description: |-
+            Self reports that the deploying org IS the author's org. Such a deploy is
+            recorded for provenance but excluded from accrual. Absent when nothing was
+            recorded.
+          type: boolean
+      type: object
+    deployRequest:
+      properties:
+        project:
+          description: Project is the deployed project's id. Required.
+          type: string
+        repoUrl:
+          description: |-
+            RepoURL is the source repository the project was built from. Empty means a
+            hand-built project with nothing to attribute — an honest no-op, not an error.
+          type: string
+      type: object
     deployment:
       properties:
         instance:
@@ -10365,6 +10820,102 @@ components:
               type: object
             type: object
           type: array
+      type: object
+    documentPage:
+      properties:
+        data:
+          description: Data are the documents, WITHOUT their rendered content — fetch
+            one to read it.
+          items:
+            $ref: '#/components/schemas/documentSummary'
+          type: array
+        disclaimer:
+          description: Disclaimer is the boundary made visible on the wire.
+          type: string
+      type: object
+    documentReply:
+      properties:
+        disclaimer:
+          description: Disclaimer is the boundary made visible on the wire.
+          type: string
+        document:
+          $ref: '#/components/schemas/documentView'
+          description: Document is the document, rendered content included.
+      type: object
+    documentSummary:
+      properties:
+        category:
+          description: 'Category is the template''s category: formation, equity, ops
+            or sales.'
+          type: string
+        createdAt:
+          description: CreatedAt is when the document was generated, in unix seconds.
+          type: integer
+        esignProvider:
+          description: |-
+            EsignProvider names the e-signature provider handling it, absent until a
+            signature has been requested.
+          type: string
+        id:
+          description: ID is the document's server-minted handle, "doc_"-prefixed.
+          type: string
+        signedAt:
+          description: |-
+            SignedAt is when the provider reported completion, in unix seconds. Absent
+            until then.
+          type: integer
+        status:
+          description: |-
+            Status is the lifecycle state: draft, out_for_signature, signed or voided.
+            There is deliberately no "legally valid" state — that is counsel's
+            determination, not the platform's.
+          type: string
+        templateId:
+          description: TemplateID is the template it was rendered from.
+          type: string
+        templateVersion:
+          description: |-
+            TemplateVersion is WHICH version of that template rendered it, so the
+            document is reproducible and auditable.
+          type: integer
+        title:
+          description: Title is the document's title, inherited from the template.
+          type: string
+        updatedAt:
+          description: UpdatedAt is when it last changed, in unix seconds.
+          type: integer
+      type: object
+    documentView:
+      properties:
+        body:
+          description: |-
+            Body is the rendered document. It is sealed at rest and returned only to the
+            owning org. When the template is counsel-review it opens with the counsel
+            notice, which the engine prepends and no caller can suppress.
+          type: string
+        category:
+          type: string
+        contentType:
+          description: ContentType is the rendered body's media type — text/markdown.
+          type: string
+        createdAt:
+          type: integer
+        esignProvider:
+          type: string
+        id:
+          type: string
+        signedAt:
+          type: integer
+        status:
+          type: string
+        templateId:
+          type: string
+        templateVersion:
+          type: integer
+        title:
+          type: string
+        updatedAt:
+          type: integer
       type: object
     domainAddIn:
       properties:
@@ -10525,6 +11076,45 @@ components:
         url:
           type: string
       type: object
+    enrolment:
+      properties:
+        created:
+          description: |-
+            Created reports whether this call enrolled the org (201) or found an existing
+            enrolment (200).
+          type: boolean
+        githubLogin:
+          description: GithubLogin is the linked forge account.
+          type: string
+        id:
+          description: ID is the author record's server-minted handle, "aut_"-prefixed.
+          type: string
+        shareBps:
+          description: |-
+            ShareBps is this author's royalty share in basis points of the spend their
+            deployed work generates.
+          type: integer
+        status:
+          description: Status is connected, approved or suspended. Only an approved
+            author earns.
+          type: string
+        verified:
+          description: Verified reports whether any repository or owner claim has
+            been proven yet.
+          type: boolean
+        verifyCode:
+          description: |-
+            VerifyCode is this author's stable proof token — the value a repository's
+            verify file must carry.
+          type: string
+        verifyFile:
+          description: VerifyFile is the repo-root file the file method reads, on
+            the default branch.
+          type: string
+        verifySnippet:
+          description: VerifySnippet is that file's exact contents, ready to commit.
+          type: string
+      type: object
     entitlementsView:
       properties:
         enabled:
@@ -10645,6 +11235,40 @@ components:
         rev:
           description: Rev is the full revision the ref resolved to — pin follow-up
             reads to it.
+          type: string
+      type: object
+    filingPage:
+      properties:
+        data:
+          description: Data are the filing records.
+          items:
+            $ref: '#/components/schemas/legalFiling'
+          type: array
+        disclaimer:
+          description: Disclaimer is the boundary made visible on the wire.
+          type: string
+      type: object
+    filingReply:
+      properties:
+        disclaimer:
+          description: Disclaimer is the boundary made visible on the wire.
+          type: string
+        filing:
+          $ref: '#/components/schemas/legalFiling'
+          description: Filing is the tracking record.
+      type: object
+    filingRequest:
+      properties:
+        documentIds:
+          description: |-
+            DocumentIDs are the documents to file. At least one is required, and every
+            one must belong to the caller's org — a filing can never reach across orgs.
+          items:
+            type: string
+          type: array
+        jurisdiction:
+          description: Jurisdiction is the state or agency the filing is for, e.g.
+            "DE".
           type: string
       type: object
     flagsOut:
@@ -10785,6 +11409,22 @@ components:
             SizeBytes is the size measured AFTER the repack — usually smaller, since
             repacking drops the packs it supersedes.
           type: integer
+      type: object
+    generateRequest:
+      properties:
+        data:
+          additionalProperties:
+            type: string
+          description: |-
+            Data supplies every merge field the template declares, keyed by field key.
+            Every declared field is REQUIRED: a missing one is refused with 400 rather
+            than rendered as a blank into a contract.
+          type: object
+        templateId:
+          description: |-
+            TemplateID is the template to render. Required; resolved for the caller's
+            org, so an override wins over the built-in.
+          type: string
       type: object
     gitSource:
       properties:
@@ -11634,6 +12274,85 @@ components:
           description: Tool is the capability the write applied to.
           type: string
       type: object
+    issuePatch:
+      properties:
+        assignee:
+          description: Assignee is who owns the issue, at most 256 characters. Empty
+            unassigns it.
+          type: string
+        description:
+          description: Description is the issue body, at most 32768 characters.
+          type: string
+        key:
+          description: Key is the issue's project, from the path.
+          type: string
+        labels:
+          description: |-
+            Labels REPLACES the issue's labels with exactly this set. Each label is at
+            most 48 characters and may not contain a comma (the storage separator);
+            empty entries are dropped.
+          items:
+            type: string
+          type: array
+        num:
+          description: Num is the issue's number within that project, from the path.
+          type: integer
+        priority:
+          description: Priority is none, urgent, high, medium or low. Empty resets
+            it to none.
+          type: string
+        status:
+          description: |-
+            Status moves the issue between board columns: backlog, todo, in_progress,
+            done or canceled. Empty resets it to backlog.
+          type: string
+        title:
+          description: Title is the issue's one-line summary. Non-empty, at most 512
+            characters.
+          type: string
+      type: object
+    issueView:
+      properties:
+        assignee:
+          type: string
+        createdAt:
+          type: integer
+        description:
+          type: string
+        extRef:
+          description: external anchor
+          type: string
+        id:
+          type: string
+        identifier:
+          description: KEY-<number>, the human handle
+          type: string
+        kind:
+          description: issue | pr | epic
+          type: string
+        labels:
+          items:
+            type: string
+          type: array
+        number:
+          type: integer
+        priority:
+          type: string
+        projectKey:
+          type: string
+        repo:
+          description: git repo binding
+          type: string
+        source:
+          description: team | git | crm | helpdesk | cms | agent
+          type: string
+        status:
+          type: string
+        title:
+          type: string
+        updatedAt:
+          type: integer
+      type: object
     itemInput:
       properties:
         assignee:
@@ -11850,6 +12569,66 @@ components:
           type: integer
         type:
           type: string
+      type: object
+    legalFiling:
+      properties:
+        createdAt:
+          type: integer
+        documentIds:
+          items:
+            type: string
+          type: array
+        id:
+          type: string
+        jurisdiction:
+          type: string
+        note:
+          type: string
+        org:
+          type: string
+        provider:
+          type: string
+        status:
+          type: string
+        updatedAt:
+          type: integer
+      type: object
+    legalHealth:
+      properties:
+        status:
+          description: Status is "ok" when the subsystem is serving.
+          type: string
+        templates:
+          description: Templates is how many built-in templates the catalog carries.
+          type: integer
+      type: object
+    legalSigner:
+      properties:
+        email:
+          type: string
+        name:
+          type: string
+      type: object
+    legalTemplate:
+      properties:
+        body:
+          type: string
+        category:
+          type: string
+        counselReview:
+          type: boolean
+        fields:
+          items:
+            $ref: '#/components/schemas/Field'
+          type: array
+        id:
+          type: string
+        origin:
+          type: string
+        title:
+          type: string
+        version:
+          type: integer
       type: object
     limitsBlock:
       properties:
@@ -12969,6 +13748,21 @@ components:
         users:
           type: integer
       type: object
+    orgView:
+      properties:
+        badgeMarkdown:
+          type: string
+        createdAt:
+          type: integer
+        method:
+          type: string
+        ownerUrl:
+          type: string
+        verified:
+          type: boolean
+        verifiedAt:
+          type: integer
+      type: object
     orgsOut:
       properties:
         data:
@@ -13142,6 +13936,70 @@ components:
         spec:
           $ref: '#/components/schemas/Spec'
         status:
+          type: string
+      type: object
+    payoutData:
+      properties:
+        author:
+          $ref: '#/components/schemas/adminAuthorView'
+          description: Author is the author record after the payout, with the balances
+            updated.
+        payout:
+          $ref: '#/components/schemas/payoutView'
+          description: Payout is the recorded payout, including where it settled.
+      type: object
+    payoutRequest:
+      properties:
+        amountCents:
+          description: |-
+            AmountCents is how much to pay, in cents. Must be positive and can never
+            exceed the author's pending royalty (accrued minus paid).
+          type: integer
+        id:
+          description: ID is the author to pay, from the path.
+          type: string
+        method:
+          description: |-
+            Method is how it settles: "credits" issues a grant into the author's wallet;
+            wire, paypal and the like are record-only. Required.
+          type: string
+        reference:
+          description: |-
+            Reference is the operator's external reference for a cash settlement — a wire
+            confirmation, a PayPal transaction id.
+          type: string
+      type: object
+    payoutResult:
+      properties:
+        data:
+          $ref: '#/components/schemas/payoutData'
+          description: Data carries the payout and the author.
+        msg:
+          description: Msg is the envelope's message slot, empty on success.
+          type: string
+        status:
+          description: Status is "ok".
+          type: string
+      type: object
+    payoutView:
+      properties:
+        amountCents:
+          type: integer
+        createdAt:
+          type: integer
+        id:
+          type: string
+        method:
+          type: string
+        reference:
+          type: string
+        settlement:
+          description: |-
+            Settlement discloses treasury-vs-wallet-vs-cash on every payout, to the author
+            and to the admin mirror alike — the disclosure that keeps a first-party
+            settlement legible as internal accounting.
+          type: string
+        txn:
           type: string
       type: object
     pipelineReq:
@@ -13768,6 +14626,19 @@ components:
           type: integer
         total:
           type: integer
+      type: object
+    projectPatch:
+      properties:
+        description:
+          description: Description is the board's free-form blurb, at most 32768 characters.
+          type: string
+        key:
+          description: Key is the project to update, from the path.
+          type: string
+        name:
+          description: Name is the project's display name. Non-empty, at most 256
+            characters.
+          type: string
       type: object
     projectView:
       properties:
@@ -15613,6 +16484,37 @@ components:
             $ref: '#/components/schemas/shareView'
           type: array
       type: object
+    signReply:
+      properties:
+        document:
+          $ref: '#/components/schemas/documentSummary'
+          description: |-
+            Document is the document, now out for signature. Its rendered body is not
+            repeated here.
+        esignRef:
+          description: |-
+            EsignRef is the provider's own reference for the request — what a webhook or
+            a status poll quotes.
+          type: string
+        provider:
+          description: |-
+            Provider names the e-signature provider that took the request. "manual" means
+            no provider is wired on this deployment and the org fulfils it out of band.
+          type: string
+      type: object
+    signRequest:
+      properties:
+        id:
+          description: ID is the document to send for signature, from the path.
+          type: string
+        signers:
+          description: |-
+            Signers are the people who must sign, by name and email. At least one is
+            required.
+          items:
+            $ref: '#/components/schemas/legalSigner'
+          type: array
+      type: object
     skillDeleted:
       properties:
         deleted:
@@ -16176,6 +17078,15 @@ components:
           description: Documents is how many documents exist across them.
           type: integer
       type: object
+    sweepCounts:
+      properties:
+        accrued:
+          description: Accrued is how many new royalty accruals it latched.
+          type: integer
+        swept:
+          description: Swept is how many (author, deploying org) pairs the sweep examined.
+          type: integer
+      type: object
     sweepData:
       properties:
         accruedCents:
@@ -16399,6 +17310,87 @@ components:
         updatedAt:
           type: string
       type: object
+    templateCatalog:
+      properties:
+        data:
+          description: |-
+            Data is the catalog, metadata and merge fields only — never the template
+            bodies, which are fetched one at a time.
+          items:
+            $ref: '#/components/schemas/templateView'
+          type: array
+        disclaimer:
+          description: |-
+            Disclaimer is the boundary made visible on the wire: Hanzo Legal is document
+            tooling, not legal advice.
+          type: string
+      type: object
+    templateOverride:
+      properties:
+        body:
+          description: |-
+            Body is the text/template source. Required. Every {{.key}} it references must
+            be declared in Fields, or the save is refused rather than rendering a blank
+            into a contract later.
+          type: string
+        category:
+          description: |-
+            Category groups the template: formation, equity, ops or sales. Optional when
+            overriding a built-in, which supplies its own.
+          type: string
+        counselReview:
+          description: |-
+            CounselReview marks a template whose documents must carry the counsel notice.
+            It can be raised but never lowered: a formation or equity template is always
+            counsel-review, and an override of a counsel-review built-in stays one.
+          type: boolean
+        fields:
+          description: |-
+            Fields declares the merge fields the body consumes. Every declared field is
+            REQUIRED at generation — the engine fails closed on a missing one.
+          items:
+            $ref: '#/components/schemas/Field'
+          type: array
+        id:
+          description: |-
+            ID is the template to override, from the path. Overriding a built-in id
+            inherits that built-in's category, title and counsel-review posture.
+          type: string
+        title:
+          description: Title is the template's display name. Required unless a built-in
+            supplies it.
+          type: string
+      type: object
+    templateReply:
+      properties:
+        disclaimer:
+          description: Disclaimer is the boundary made visible on the wire.
+          type: string
+        template:
+          $ref: '#/components/schemas/legalTemplate'
+          description: |-
+            Template is the resolved template — the org's override if it has one, else
+            the built-in.
+      type: object
+    templateView:
+      properties:
+        category:
+          type: string
+        counselReview:
+          type: boolean
+        fields:
+          items:
+            $ref: '#/components/schemas/Field'
+          type: array
+        id:
+          type: string
+        origin:
+          type: string
+        title:
+          type: string
+        version:
+          type: integer
+      type: object
     toolList:
       properties:
         tools:
@@ -16408,6 +17400,23 @@ components:
           items:
             $ref: '#/components/schemas/Tool'
           type: array
+      type: object
+    trackerProject:
+      properties:
+        createdAt:
+          type: integer
+        description:
+          type: string
+        id:
+          type: string
+        key:
+          type: string
+        name:
+          type: string
+        org:
+          type: string
+        updatedAt:
+          type: integer
       type: object
     trailPage:
       properties:
@@ -17132,6 +18141,14 @@ components:
           items:
             type: string
           type: array
+      type: object
+    verifyRequest:
+      properties:
+        repoUrl:
+          description: |-
+            RepoURL is what to claim: a repository (github.com/owner/name) or a whole
+            OWNER (github.com/owner, no repository segment). gitlab.com is accepted too.
+          type: string
       type: object
     versionMessage:
       properties:
@@ -18211,56 +19228,216 @@ paths:
       - admin
   /v1/admin/authors:
     get:
+      description: |-
+        ListAuthors returns the platform's whole author program — every org's author
+        record, not the caller's — with each one's repository and deploy counts and a
+        fleet roll-up of the money accrued, pending and paid.
+
+        It is a Hanzo platform operation: a caller who is not a SuperAdmin gets 403. It
+        exposes the owning org of each author, which no tenant-facing read ever does.
       operationId: get_v1_admin_authors
+      parameters:
+      - description: |-
+          Limit bounds the page. 0 or less means the default of 500; anything above
+          1000 is clamped to 1000.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/adminBook'
+          description: ok
+      summary: ListAuthors returns the platform's whole author program — every org's
+        author record, not the caller's — with each one's repository and deploy counts
+        and a fleet roll-up of the money accrued, pending and paid.
       tags:
       - admin
   /v1/admin/authors/{id}/approve:
     post:
-      operationId: post_v1_admin_authors_by_id_approve
+      description: |-
+        ApproveAuthor admits one author to EARNING, optionally on a negotiated royalty
+        share. Until this runs, a connected author accrues nothing however many verified
+        repositories they have.
+
+        A share override applies from here forward only — existing ledger rows keep the
+        share that was applied when they were written, because a rate change must never
+        rewrite what was already owed.
+
+        A Hanzo platform operation: a caller who is not a SuperAdmin gets 403.
+      operationId: post_v1_admin_authors_id_approve
       parameters:
-      - in: path
+      - description: ID is the author to approve, from the path.
+        example: aut_1f…
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              id: aut_1f…
+              shareBps: 2500
+            schema:
+              $ref: '#/components/schemas/approveRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/authorResult'
+          description: ok
+      summary: ApproveAuthor admits one author to EARNING, optionally on a negotiated
+        royalty share.
       tags:
       - admin
   /v1/admin/authors/{id}/basis:
     get:
-      operationId: get_v1_admin_authors_by_id_basis
+      description: |-
+        AuthorRoyaltyBasis returns the audit trail behind ONE author's royalty — the same
+        payload the author reads at /v1/authors/basis, from the same builder, so support
+        sees exactly what the author sees rather than a parallel view free to drift.
+
+        The data object carries: id, status, asOf, shareBps, platformShareBps,
+        defaultShareBps, shareSource, settlesTo, method (the formula, the rate card and the
+        sizing), ledger (every row with its spend, the share applied then, the platform's
+        matching half, whether it satisfies the formula and the attribution edges that
+        explain it), reconciliation (does the ledger foot to the balance) and window (what
+        slice was actually returned) — plus period when one was requested.
+
+        A Hanzo platform operation: a caller who is not a SuperAdmin gets 403.
+      operationId: get_v1_admin_authors_id_basis
       parameters:
-      - in: path
+      - description: ID is the author record's handle, from the path.
+        example: aut_1f…
+        in: path
         name: id
         required: true
         schema:
           type: string
+      - description: |-
+          Period is the UTC accrual month, YYYY-MM. Empty means every period; any other
+          shape is refused with 400.
+        example: 2026-07
+        in: query
+        name: period
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/basisResult'
+          description: ok
+      summary: AuthorRoyaltyBasis returns the audit trail behind ONE author's royalty
+        — the same payload the author reads at /v1/authors/basis, from the same builder,
+        so support sees exactly what the author sees rather than a parallel view free
+        to drift.
       tags:
       - admin
   /v1/admin/authors/{id}/payout:
     post:
-      operationId: post_v1_admin_authors_by_id_payout
+      description: |-
+        PayAuthor records a payout of accrued royalty and settles it.
+
+        The amount is RESERVED against the author's pending royalty atomically before
+        anything is paid, so a payout can never exceed what is owed even under concurrent
+        calls. An external author's payout is then BACKED against the platform reserve
+        fund — a second, independent guard — and refused with 402 if the reserve cannot
+        cover it, with the reservation voided. A "credits" method issues the actual wallet
+        grant after both guards; a cash method is record-only. A first-party (treasury)
+        author's royalty is realized into Hanzo's own reserve instead of an external
+        wallet, and every payout row discloses which of the three it was.
+
+        A Hanzo platform operation: a caller who is not a SuperAdmin gets 403.
+      operationId: post_v1_admin_authors_id_payout
       parameters:
-      - in: path
+      - description: ID is the author to pay, from the path.
+        example: aut_1f…
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              amountCents: 25000
+              id: aut_1f…
+              method: credits
+            schema:
+              $ref: '#/components/schemas/payoutRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/payoutResult'
+          description: ok
+      summary: PayAuthor records a payout of accrued royalty and settles it.
       tags:
       - admin
   /v1/admin/authors/{id}/suspend:
     post:
-      operationId: post_v1_admin_authors_by_id_suspend
+      description: |-
+        SuspendAuthor stops one author earning. Their record, verified claims and ledger
+        are untouched — suspension halts future accrual, it does not erase what was already
+        owed, and it does not delete the evidence behind it.
+
+        A Hanzo platform operation: a caller who is not a SuperAdmin gets 403.
+      operationId: post_v1_admin_authors_id_suspend
       parameters:
-      - in: path
+      - description: ID is the author record's handle, "aut_"-prefixed.
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/authorResult'
+          description: ok
+      summary: SuspendAuthor stops one author earning.
       tags:
       - admin
   /v1/admin/authors/sweep:
     post:
+      description: |-
+        SweepAuthorRoyalty runs the accrual sweep across every approved author: for each of
+        their deploying orgs it computes this period's royalty from that org's metered
+        spend and latches it at most once per period.
+
+        It is an OVERRIDE, not the mechanism: a background scheduler runs the same sweep on
+        its own, and every author's dashboard read sweeps their own accruals lazily. This
+        is the manual trigger for an operator who needs the numbers now. It is idempotent —
+        the per-period latch means running it twice accrues nothing the second time.
+
+        A Hanzo platform operation: a caller who is not a SuperAdmin gets 403.
       operationId: post_v1_admin_authors_sweep
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/authorSweepResult'
+          description: ok
+      summary: 'SweepAuthorRoyalty runs the accrual sweep across every approved author:
+        for each of their deploying orgs it computes this period''s royalty from that
+        org''s metered spend and latches it at most once per period.'
       tags:
       - admin
   /v1/admin/bases:
@@ -22228,27 +23405,192 @@ paths:
       - audit
   /v1/authors:
     get:
+      description: |-
+        MyAuthorProgram returns the caller's author-program dashboard: enrolment status,
+        linked forge login, verified repositories and owner-wide claims, recorded deploys,
+        accrued / pending / paid royalty, and the payout history.
+
+        It answers ONE OF TWO SHAPES from this address. An org that has never connected
+        gets {"isAuthor": false, "defaultShareBps", "badgeBase"} — an honest "not enrolled"
+        rather than a 404, so the console can render the connect form. An enrolled org gets
+        the dashboard: isAuthor, id, status, githubLogin, verified, verifyCode, verifyFile,
+        verifySnippet, shareBps, badgeBase, repos, orgs, deploys, accruedCents,
+        pendingCents, paidCents, payouts and ledger.
+
+        For an APPROVED author this read ALSO runs the accrual sweep opportunistically, so
+        the dashboard is self-updating. That is why the royalty AUDIT lives at its own
+        address: an audit must not move the money it is auditing.
       operationId: get_v1_authors
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: object
+                type: object
+          description: ok
+      summary: 'MyAuthorProgram returns the caller''s author-program dashboard: enrolment
+        status, linked forge login, verified repositories and owner-wide claims, recorded
+        deploys, accrued / pending / paid royalty, and the payout history.'
       tags:
       - authors
   /v1/authors/basis:
     get:
+      description: |-
+        MyRoyaltyBasis returns the AUDIT TRAIL behind the caller's own royalty: every
+        ledger row with the spend it was computed from, the share applied at the time, the
+        platform's matching half, whether each row satisfies the formula, and the
+        attribution edges that already existed when the row was written.
+
+        It answers ONE OF TWO SHAPES. An org that has never connected gets
+        {"isAuthor": false, "defaultShareBps"} — never a 404, which would answer "is this
+        org an author?" for anyone who asked. An enrolled org gets the basis: isAuthor, id,
+        status, asOf, shareBps, platformShareBps, defaultShareBps, shareSource, settlesTo,
+        method (the formula, the rate card and the sizing), ledger, reconciliation, window,
+        and period when one was requested.
+
+        This read NEVER sweeps, and that is the point of it being a separate address from
+        the dashboard: an audit must not move the money it is auditing, so calling it N
+        times leaves the balances and the ledger byte-identical.
       operationId: get_v1_authors_basis
+      parameters:
+      - description: |-
+          Period is the UTC accrual month, YYYY-MM. Empty means every period; any other
+          shape is refused with 400, because the period is echoed back and used as a SQL
+          filter and is only ever accepted in the one form the accrual latch mints.
+        example: 2026-07
+        in: query
+        name: period
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: object
+                type: object
+          description: ok
+      summary: 'MyRoyaltyBasis returns the AUDIT TRAIL behind the caller''s own royalty:
+        every ledger row with the spend it was computed from, the share applied at
+        the time, the platform''s matching half, whether each row satisfies the formula,
+        and the attribution edges that already existed when the row was written.'
       tags:
       - authors
   /v1/authors/connect:
     post:
+      description: |-
+        ConnectAuthor enrols the caller's org in the author program at status "connected"
+        and returns its enrolment, including the verify code the file method needs. It is
+        IDEMPOTENT: a second call returns the same enrolment rather than a conflict.
+
+        The forge login is taken from IAM's LINKED account for the provider when there is
+        one — that is identity proof, not a claim — and only otherwise from the login in
+        the body, which then has to be proven per repository. Connecting does not admit an
+        org to earning: a platform reviewer approves that separately.
+
+        Answers 201 when it enrolled the org and 200 when it found an existing enrolment.
       operationId: post_v1_authors_connect
+      requestBody:
+        content:
+          application/json:
+            example:
+              login: octocat
+              provider: github
+            schema:
+              $ref: '#/components/schemas/connectRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/enrolment'
+          description: ok
+      summary: ConnectAuthor enrols the caller's org in the author program at status
+        "connected" and returns its enrolment, including the verify code the file
+        method needs.
       tags:
       - authors
   /v1/authors/deploys/record:
     post:
+      description: |-
+        RecordAuthorDeploy records that the caller's org deployed a project built from a
+        source repository, which is the edge that makes an author's work earn royalty.
+
+        It is deliberately NOT an error for a deploy to attribute to nobody: a project
+        built from no repository, or from one no author has verified, answers
+        {"recorded": false, "reason"} so a deploy pipeline can fire this on every deploy
+        without branching. Attribution resolves per-repository first, then owner-wide, so a
+        repository with its own claim always earns for its own author.
+
+        A deploy of a Hanzo-maintained template attributes to the platform treasury, and a
+        self-deploy (the author's own org deploying its own repository) is recorded for
+        provenance but excluded from accrual. The edge is idempotent per
+        repository+project+org.
+
+        Answers 201 when it recorded a new edge and 200 otherwise.
       operationId: post_v1_authors_deploys_record
+      requestBody:
+        content:
+          application/json:
+            example:
+              project: prj_1f…
+              repoUrl: github.com/octocat/hello-world
+            schema:
+              $ref: '#/components/schemas/deployRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/deployRecord'
+          description: ok
+      summary: RecordAuthorDeploy records that the caller's org deployed a project
+        built from a source repository, which is the edge that makes an author's work
+        earn royalty.
       tags:
       - authors
   /v1/authors/repos/verify:
     post:
+      description: |-
+        VerifyAuthorRepo proves that the caller owns a repository — or a whole OWNER — and
+        records the claim, which is what makes deploys of that code earn royalty.
+
+        Ownership is proven the SAME two ways in both cases, tried in order: an IAM-linked
+        forge token with admin or push permission, or a hanzo.json on the default branch
+        carrying the author's verify code. Claiming an OWNER proves it against that
+        owner's ".github" control repository, and is exactly as strong as a per-repository
+        claim — an owner the caller cannot prove is refused with 422, never assumed.
+
+        A per-repository claim wins over an owner-wide one, so a specifically-claimed
+        repository always earns for its own author. A repository another author has
+        already verified is a 409. The org must have connected first.
+
+        Answers 201 when it recorded a new claim and 200 when the claim already existed.
       operationId: post_v1_authors_repos_verify
+      requestBody:
+        content:
+          application/json:
+            example:
+              repoUrl: github.com/octocat/hello-world
+            schema:
+              $ref: '#/components/schemas/verifyRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/claim'
+          description: ok
+      summary: VerifyAuthorRepo proves that the caller owns a repository — or a whole
+        OWNER — and records the claim, which is what makes deploys of that code earn
+        royalty.
       tags:
       - authors
   /v1/authz/check:
@@ -22716,7 +24058,23 @@ paths:
       - automations
   /v1/base/health:
     get:
+      description: |-
+        BaseHealth reports that the base subsystem is serving.
+
+        It is deliberately INDEPENDENT of whether this deployment actually embeds the
+        Base engine: the route answers before the CLOUD_BASE_EMBED gate and before the
+        /v1/base/* wildcard, so a liveness probe measures the process rather than an
+        optional feature, and the wildcard can never shadow it. It reads no tenant, so a
+        prober that sends no principal is answered rather than refused.
       operationId: get_v1_base_health
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/baseHealth'
+          description: ok
+      summary: BaseHealth reports that the base subsystem is serving.
       tags:
       - base
   /v1/benchmark/catalog:
@@ -23919,69 +25277,237 @@ paths:
       - builds
   /v1/campaign:
     get:
+      description: |-
+        ListCampaigns returns the org's campaigns, newest first, optionally narrowed to
+        one status.
+
+        A campaign is the top-level go-to-market object: a value that SPANS channels
+        (paid, organic, email) and fans out to the executor for each. The listing is
+        org-scoped server-side, so one org can never see another's campaigns.
       operationId: get_v1_campaign
+      parameters:
+      - description: |-
+          Status keeps only campaigns in that state: draft, live, paused or failed.
+          Empty means any.
+        example: live
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit bounds the page. 0 or less means the default of 200; anything above
+          1000 is clamped to 1000.
+        example: 50
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/campaignPage'
+          description: ok
+      summary: ListCampaigns returns the org's campaigns, newest first, optionally
+        narrowed to one status.
       tags:
       - campaign
     post:
+      description: |-
+        CreateCampaign creates a campaign as a DRAFT and returns it.
+
+        A draft is inert: nothing is sent, no connector is touched and no budget is
+        committed until the campaign is launched. The channels named here are validated
+        and de-duplicated by kind (one executor per kind), and every channel starts
+        "pending" whatever the caller claims — a client can never assert a launched
+        state.
       operationId: post_v1_campaign
+      requestBody:
+        content:
+          application/json:
+            example:
+              budget: 250000
+              channels:
+              - kind: paid
+                platform: meta
+              content:
+              - Ship faster
+              name: Spring launch
+            schema:
+              $ref: '#/components/schemas/campaignWrite'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/campaignRecord'
+          description: created
+      summary: CreateCampaign creates a campaign as a DRAFT and returns it.
       tags:
       - campaign
   /v1/campaign/{id}:
     delete:
-      operationId: delete_v1_campaign_by_id
+      description: |-
+        DeleteCampaign removes one campaign of the caller's org and answers 204 with no
+        body. 404 when the org has no campaign with that id.
+
+        It deletes the RECORD, not the executions: a campaign whose channels are live
+        on a provider should be paused first, or those executions keep running with
+        nothing here to report them.
+      operationId: delete_v1_campaign_id
       parameters:
-      - in: path
+      - description: ID is the campaign's server-minted handle, "cmp_"-prefixed.
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: DeleteCampaign removes one campaign of the caller's org and answers
+        204 with no body.
       tags:
       - campaign
     get:
-      operationId: get_v1_campaign_by_id
+      description: |-
+        GetCampaign returns one campaign of the caller's org — its name, audience,
+        creatives, channels with their per-channel launch state, schedule, budget and
+        status. 404 when the org has no campaign with that id.
+      operationId: get_v1_campaign_id
       parameters:
-      - in: path
+      - description: ID is the campaign's server-minted handle, "cmp_"-prefixed.
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/campaignRecord'
+          description: ok
+      summary: GetCampaign returns one campaign of the caller's org — its name, audience,
+        creatives, channels with their per-channel launch state, schedule, budget
+        and status.
       tags:
       - campaign
     put:
-      operationId: put_v1_campaign_by_id
+      description: |-
+        UpdateCampaign rewrites a campaign's core fields — name, audience, creatives,
+        schedule and budget — and returns the updated campaign.
+
+        Channels are replaced ONLY while the campaign is still a draft. Once it is
+        launched its channels carry provider state (an external id, a live status), so
+        they are added and removed explicitly through the channels sub-resource
+        instead; a whole-object write would silently orphan a running execution.
+      operationId: put_v1_campaign_id
       parameters:
-      - in: path
+      - description: ID is the campaign to update, from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              budget: 500000
+              name: Spring launch
+            schema:
+              $ref: '#/components/schemas/campaignUpdate'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/campaignRecord'
+          description: ok
+      summary: UpdateCampaign rewrites a campaign's core fields — name, audience,
+        creatives, schedule and budget — and returns the updated campaign.
       tags:
       - campaign
   /v1/campaign/{id}/channels:
     post:
-      operationId: post_v1_campaign_by_id_channels
+      description: |-
+        AddCampaignChannel adds a channel to a campaign, or REPLACES the one it already
+        has of that kind, and returns the updated campaign.
+
+        A campaign carries at most one channel per kind, because the kind IS the
+        executor: adding a second "paid" channel would mean two ad accounts running one
+        campaign with no way to tell their results apart. The new channel starts
+        "pending" — adding it does not launch it.
+      operationId: post_v1_campaign_id_channels
       parameters:
-      - in: path
+      - description: ID is the campaign to add the channel to, from the path.
+        example: cmp_1f…
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              account: list_42
+              id: cmp_1f…
+              kind: email
+              platform: sendgrid
+            schema:
+              $ref: '#/components/schemas/channelAdd'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/campaignRecord'
+          description: ok
+      summary: AddCampaignChannel adds a channel to a campaign, or REPLACES the one
+        it already has of that kind, and returns the updated campaign.
       tags:
       - campaign
   /v1/campaign/{id}/channels/{kind}:
     delete:
-      operationId: delete_v1_campaign_by_id_channels_by_kind
+      description: |-
+        RemoveCampaignChannel drops one channel from a campaign and returns the updated
+        campaign. 404 when the campaign carries no channel of that kind.
+
+        It removes the channel from the PLAN. A channel that is live at its provider
+        should be paused first — dropping the row here leaves nothing to pause it with
+        afterwards.
+      operationId: delete_v1_campaign_id_channels_kind
       parameters:
-      - in: path
+      - description: ID is the campaign, from the path.
+        in: path
         name: id
         required: true
         schema:
           type: string
-      - in: path
+      - description: 'Kind is the channel to remove: paid, organic or email.'
+        in: path
         name: kind
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/campaignRecord'
+          description: ok
+      summary: RemoveCampaignChannel drops one channel from a campaign and returns
+        the updated campaign.
       tags:
       - campaign
   /v1/campaign/{id}/launch:
@@ -23997,13 +25523,61 @@ paths:
       - campaign
   /v1/campaign/{id}/metrics:
     get:
-      operationId: get_v1_campaign_by_id_metrics
+      description: |-
+        CampaignMetrics returns a campaign's results over a window: the analytics
+        funnel (impressions, clicks, conversions, revenue, visitors), the spend each
+        channel's connector reports, and the derived growth KPIs — CTR, CVR, CAC and
+        ROAS.
+
+        There is exactly ONE metrics plane and nothing is stored here: the funnel is an
+        analytics query over the campaign's utm_campaign-tagged events, and the spend is
+        each provider's own number read through the org's connector. A warehouse that is
+        not emitting yet degrades to available:false with zeroes — honest-empty, never a
+        500 and never a fabricated number. When the campaign runs more than one creative
+        and an experiment is wired, abTest carries the A/B analysis.
+      operationId: get_v1_campaign_id_metrics
       parameters:
-      - in: path
+      - description: ID is the campaign to report on, from the path.
+        example: cmp_1f…
+        in: path
         name: id
         required: true
         schema:
           type: string
+      - description: |-
+          Range is the lookback window: 24h, 7d, 30d or 90d. Anything else, including
+          empty, reads as 30d.
+        example: 7d
+        in: query
+        name: range
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Start is an explicit RFC3339 window start. Honored only together with End,
+          and only when End is after it.
+        in: query
+        name: start
+        required: false
+        schema:
+          type: string
+      - description: End is an explicit RFC3339 window end.
+        in: query
+        name: end
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/campaignResults'
+          description: ok
+      summary: 'CampaignMetrics returns a campaign''s results over a window: the analytics
+        funnel (impressions, clicks, conversions, revenue, visitors), the spend each
+        channel''s connector reports, and the derived growth KPIs — CTR, CVR, CAC
+        and ROAS.'
       tags:
       - campaign
   /v1/campaign/{id}/pause:
@@ -24019,7 +25593,25 @@ paths:
       - campaign
   /v1/campaign/summary:
     get:
+      description: |-
+        SummarizeCampaigns returns the org's go-to-market roll-up: how many campaigns
+        exist, how many are live, their total budget in cents, and which channel
+        executors this deployment can actually reach.
+
+        The channel list is the deployment's honest capability, not a wish: a kind
+        missing from it is one a launch will record as "unavailable" rather than fail
+        on.
       operationId: get_v1_campaign_summary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/campaignSummary'
+          description: ok
+      summary: 'SummarizeCampaigns returns the org''s go-to-market roll-up: how many
+        campaigns exist, how many are live, their total budget in cents, and which
+        channel executors this deployment can actually reach.'
       tags:
       - campaign
   /v1/captable/company:
@@ -35253,33 +36845,137 @@ paths:
       - kv
   /v1/legal/documents:
     get:
+      description: |-
+        ListLegalDocuments returns the org's generated documents, newest first, WITHOUT
+        their rendered content — fetch one document to read its body.
+
+        The response is marked no-store: these records name the counterparties an org is
+        contracting with, and must not sit in a shared cache.
       operationId: get_v1_legal_documents
+      parameters:
+      - description: Limit bounds the page. Absent or unparseable means the store's
+          own default.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/documentPage'
+          description: ok
+      summary: ListLegalDocuments returns the org's generated documents, newest first,
+        WITHOUT their rendered content — fetch one document to read its body.
       tags:
       - legal
     post:
+      description: |-
+        GenerateLegalDocument renders a document from a template and the caller's own
+        merge data, seals it in the org's store, and returns it with its rendered body.
+
+        The render is PURE and deterministic — no clock, no I/O — so the same template
+        version and the same data always produce identical bytes, which is what makes a
+        generated contract reproducible. It fails CLOSED on a missing merge field: there
+        is no blank-filled contract, only a 400 naming the fields that were absent. When
+        the template is counsel-review the rendered body opens with the counsel notice,
+        which no caller can suppress.
+
+        The document is a DRAFT. Hanzo Legal manages documents; it does not give legal
+        advice and does not determine that a document is valid or sufficient.
       operationId: post_v1_legal_documents
+      requestBody:
+        content:
+          application/json:
+            example:
+              data:
+                counterparty: Acme, Inc.
+                date: "2026-07-30"
+              templateId: nda
+            schema:
+              $ref: '#/components/schemas/generateRequest'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/documentReply'
+          description: created
+      summary: GenerateLegalDocument renders a document from a template and the caller's
+        own merge data, seals it in the org's store, and returns it with its rendered
+        body.
       tags:
       - legal
   /v1/legal/documents/{id}:
     get:
-      operationId: get_v1_legal_documents_by_id
+      description: |-
+        GetLegalDocument returns one of the org's documents WITH its rendered body. 404
+        when the org has no document with that id — a document is never readable across
+        orgs.
+
+        The response is marked no-store: the body is contract text, sealed at rest and
+        returned only to the owning org, and must not sit in a shared cache.
+      operationId: get_v1_legal_documents_id
       parameters:
-      - in: path
+      - description: ID is the document's server-minted handle, "doc_"-prefixed.
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/documentReply'
+          description: ok
+      summary: GetLegalDocument returns one of the org's documents WITH its rendered
+        body.
       tags:
       - legal
   /v1/legal/documents/{id}/sign:
     post:
-      operationId: post_v1_legal_documents_by_id_sign
+      description: |-
+        RequestLegalSignature opens an e-signature request over one document and moves it
+        to out_for_signature, returning the provider's reference for the request.
+
+        The provider is whatever this deployment has wired. The honest default is
+        "manual": the request is recorded and the org fulfils it out of band — nothing
+        here fabricates a signature, and the stub never reports itself complete.
+      operationId: post_v1_legal_documents_id_sign
       parameters:
-      - in: path
+      - description: ID is the document to send for signature, from the path.
+        example: doc_1f…
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              id: doc_1f…
+              signers:
+              - email: ada@acme.com
+                name: Ada
+            schema:
+              $ref: '#/components/schemas/signRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/signReply'
+          description: ok
+      summary: RequestLegalSignature opens an e-signature request over one document
+        and moves it to out_for_signature, returning the provider's reference for
+        the request.
       tags:
       - legal
   /v1/legal/documents/{id}/sign/complete:
@@ -35295,42 +36991,179 @@ paths:
       - legal
   /v1/legal/filings:
     get:
+      description: |-
+        ListLegalFilings returns the org's filing records, newest first — which documents
+        were filed where, through which provider, and what the filing's honest status is.
       operationId: get_v1_legal_filings
+      parameters:
+      - description: Limit bounds the page. Absent or unparseable means the store's
+          own default.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/filingPage'
+          description: ok
+      summary: ListLegalFilings returns the org's filing records, newest first — which
+        documents were filed where, through which provider, and what the filing's
+        honest status is.
       tags:
       - legal
     post:
+      description: |-
+        CreateLegalFiling records a filing of one or more of the org's documents with a
+        state or agency, and returns the tracking record.
+
+        It is a TRACKING record, not an autonomous filing. With no filing partner wired
+        the honest status is "manual" and the note says so: the documents were generated
+        for signature, and the org files them through its registered agent. Nothing here
+        invents a filing id it does not have.
+
+        Every document id must belong to the caller's org; one that does not is a 404
+        naming it, so a filing can never reach across tenants.
       operationId: post_v1_legal_filings
+      requestBody:
+        content:
+          application/json:
+            example:
+              documentIds:
+              - doc_1f…
+              jurisdiction: DE
+            schema:
+              $ref: '#/components/schemas/filingRequest'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/filingReply'
+          description: created
+      summary: CreateLegalFiling records a filing of one or more of the org's documents
+        with a state or agency, and returns the tracking record.
       tags:
       - legal
   /v1/legal/health:
     get:
+      description: |-
+        LegalHealth reports that the legal subsystem is serving and how many built-in
+        templates its catalog carries. It reads no tenant, so a liveness prober that
+        sends no principal is answered rather than refused.
       operationId: get_v1_legal_health
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/legalHealth'
+          description: ok
+      summary: LegalHealth reports that the legal subsystem is serving and how many
+        built-in templates its catalog carries.
       tags:
       - legal
   /v1/legal/templates:
     get:
+      description: |-
+        ListLegalTemplates returns the org's effective template catalog: every built-in
+        template, with any the org has overridden replaced by its own latest version.
+
+        The listing carries each template's metadata and its declared MERGE FIELDS — the
+        keys a document generation must supply — but never the template bodies; fetch one
+        template to get its body. Templates in the formation and equity categories are
+        marked counselReview: every document rendered from them carries a counsel notice,
+        and that posture cannot be dropped by an override.
       operationId: get_v1_legal_templates
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/templateCatalog'
+          description: ok
+      summary: 'ListLegalTemplates returns the org''s effective template catalog:
+        every built-in template, with any the org has overridden replaced by its own
+        latest version.'
       tags:
       - legal
   /v1/legal/templates/{id}:
     get:
-      operationId: get_v1_legal_templates_by_id
+      description: |-
+        GetLegalTemplate returns one template resolved for the caller's org — the org's
+        own override if it has saved one, else the built-in — with its full text/template
+        body and its declared merge fields. 404 when neither exists.
+      operationId: get_v1_legal_templates_id
       parameters:
-      - in: path
+      - description: ID is the template's stable id, e.g. "nda" or "safe".
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/templateReply'
+          description: ok
+      summary: GetLegalTemplate returns one template resolved for the caller's org
+        — the org's own override if it has saved one, else the built-in — with its
+        full text/template body and its declared merge fields.
       tags:
       - legal
     put:
-      operationId: put_v1_legal_templates_by_id
+      description: |-
+        SaveLegalTemplateOverride saves the org's own version of a template — a custom
+        NDA, a house MSA — and returns it with its new version number. It takes effect
+        for that org only; other orgs keep the built-in.
+
+        Two boundaries cannot be crossed here. Overriding a built-in INHERITS its
+        category and its counsel-review posture, which can be raised but never dropped;
+        and a formation or equity template is counsel-review whatever the caller sends,
+        so no org can generate a securities-class document without the notice.
+
+        The body is validated on save, not at generation: a template that references an
+        UNDECLARED merge field is refused with 400 rather than stored and rendered blank
+        into a contract months later.
+      operationId: put_v1_legal_templates_id
       parameters:
-      - in: path
+      - description: |-
+          ID is the template to override, from the path. Overriding a built-in id
+          inherits that built-in's category, title and counsel-review posture.
+        example: nda
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              body: …{{.counterparty}}…
+              fields:
+              - key: counterparty
+                label: Counterparty
+              id: nda
+              title: Acme Mutual NDA
+            schema:
+              $ref: '#/components/schemas/templateOverride'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/templateReply'
+          description: ok
+      summary: SaveLegalTemplateOverride saves the org's own version of a template
+        — a custom NDA, a house MSA — and returns it with its new version number.
       tags:
       - legal
   /v1/licensing/{wildcard1}:
@@ -42358,7 +44191,25 @@ paths:
       - tracker
   /v1/tracker/projects:
     get:
+      description: |-
+        ListProjects returns every tracker project in the caller's org, newest first.
+
+        A project is the board: it owns a KEY (the uppercase handle that prefixes every
+        issue identifier, "ENG-14") and the issues filed under it. The listing is
+        org-scoped server-side — the org is the validated bearer claim, never a
+        client-supplied header — so one org can never see another's boards.
       operationId: get_v1_tracker_projects
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/trackerProject'
+                type: array
+          description: ok
+      summary: ListProjects returns every tracker project in the caller's org, newest
+        first.
       tags:
       - tracker
     post:
@@ -42367,44 +44218,156 @@ paths:
       - tracker
   /v1/tracker/projects/{key}:
     delete:
-      operationId: delete_v1_tracker_projects_by_key
+      description: |-
+        DeleteProject removes one tracker project of the caller's org AND every issue
+        filed under it, and answers 204 with no body. 404 when the org has no project
+        under that key.
+
+        The cascade is the point: an issue has no meaning without the board whose key
+        names it, so deleting the board deletes them together rather than leaving
+        orphans addressable by an identifier that no longer resolves.
+      operationId: delete_v1_tracker_projects_key
       parameters:
-      - in: path
+      - description: |-
+          Key is the project's org-unique handle: 2-8 uppercase alphanumerics starting
+          with a letter ("ENG", "OPS2"). Matched case-insensitively.
+        in: path
         name: key
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: DeleteProject removes one tracker project of the caller's org AND every
+        issue filed under it, and answers 204 with no body.
       tags:
       - tracker
     get:
-      operationId: get_v1_tracker_projects_by_key
+      description: |-
+        GetProject returns one tracker project of the caller's org by its key —
+        its name, description and timestamps. 404 when the org has no project
+        under that key.
+      operationId: get_v1_tracker_projects_key
       parameters:
-      - in: path
+      - description: |-
+          Key is the project's org-unique handle: 2-8 uppercase alphanumerics starting
+          with a letter ("ENG", "OPS2"). Matched case-insensitively.
+        in: path
         name: key
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trackerProject'
+          description: ok
+      summary: GetProject returns one tracker project of the caller's org by its key
+        — its name, description and timestamps.
       tags:
       - tracker
     patch:
-      operationId: patch_v1_tracker_projects_by_key
+      description: |-
+        UpdateProject renames a tracker project or rewrites its description, and
+        returns the updated project. Both fields are optional: one the caller omits
+        keeps its stored value.
+
+        The project KEY is never editable — it prefixes every issue identifier already
+        filed under the board, so changing it would rewrite the human handle of every
+        issue in it.
+      operationId: patch_v1_tracker_projects_key
       parameters:
-      - in: path
+      - description: Key is the project to update, from the path.
+        in: path
         name: key
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              name: Platform Engineering
+            schema:
+              $ref: '#/components/schemas/projectPatch'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/trackerProject'
+          description: ok
+      summary: UpdateProject renames a tracker project or rewrites its description,
+        and returns the updated project.
       tags:
       - tracker
   /v1/tracker/projects/{key}/issues:
     get:
-      operationId: get_v1_tracker_projects_by_key_issues
+      description: |-
+        ListIssues returns the issues of one tracker project, optionally filtered by
+        status, kind, repo and source.
+
+        This is the ONE place a surface takes its slice of the shared issue table:
+        hanzo.team passes no filter or a status, a git repository's Issues tab passes
+        kind=issue&repo=<r> and its Pull Requests tab kind=pr&repo=<r>. A filter value
+        outside its closed set is refused with 400 rather than silently returning an
+        empty board.
+      operationId: get_v1_tracker_projects_key_issues
       parameters:
-      - in: path
+      - description: Key is the project whose issues to list, from the path.
+        example: ENG
+        in: path
         name: key
         required: true
         schema:
           type: string
+      - description: |-
+          Status keeps only issues in that board column: backlog, todo, in_progress,
+          done or canceled. An unknown value is refused with 400.
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Kind keeps only work items of that shape: issue, pr or epic. An unknown
+          value is refused with 400.
+        example: pr
+        in: query
+        name: kind
+        required: false
+        schema:
+          type: string
+      - description: Repo keeps only issues bound to that git repository.
+        example: hanzoai/cloud
+        in: query
+        name: repo
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Source keeps only issues opened from that surface: team, git, crm,
+          helpdesk, cms or agent. An unknown value is refused with 400.
+        in: query
+        name: source
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/issueView'
+                type: array
+          description: ok
+      summary: ListIssues returns the issues of one tracker project, optionally filtered
+        by status, kind, repo and source.
       tags:
       - tracker
     post:
@@ -42419,48 +44382,117 @@ paths:
       - tracker
   /v1/tracker/projects/{key}/issues/{num}:
     delete:
-      operationId: delete_v1_tracker_projects_by_key_issues_by_num
+      description: |-
+        DeleteIssue removes one issue from a tracker project and answers 204 with no
+        body. 404 when the project or the issue does not exist in the caller's org.
+
+        The issue's number is NOT reused: the next issue on the board takes the next
+        number, so a deleted identifier stays retired rather than silently pointing at
+        different work.
+      operationId: delete_v1_tracker_projects_key_issues_num
       parameters:
-      - in: path
+      - description: Key is the issue's project, from the path.
+        in: path
         name: key
         required: true
         schema:
           type: string
-      - in: path
+      - description: |-
+          Num is the issue's number within that project — the digits of KEY-14.
+          Positive; anything else is refused with 400.
+        in: path
         name: num
         required: true
         schema:
-          type: string
+          type: integer
+      responses:
+        "204":
+          description: no content
+      summary: DeleteIssue removes one issue from a tracker project and answers 204
+        with no body.
       tags:
       - tracker
     get:
-      operationId: get_v1_tracker_projects_by_key_issues_by_num
+      description: |-
+        GetIssue returns one issue of one tracker project by its per-project number —
+        title, description, status, priority, assignee, labels, kind, source and its
+        git bindings. 404 when the project or the issue does not exist in the caller's
+        org.
+      operationId: get_v1_tracker_projects_key_issues_num
       parameters:
-      - in: path
+      - description: Key is the issue's project, from the path.
+        in: path
         name: key
         required: true
         schema:
           type: string
-      - in: path
+      - description: |-
+          Num is the issue's number within that project — the digits of KEY-14.
+          Positive; anything else is refused with 400.
+        in: path
         name: num
         required: true
         schema:
-          type: string
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/issueView'
+          description: ok
+      summary: GetIssue returns one issue of one tracker project by its per-project
+        number — title, description, status, priority, assignee, labels, kind, source
+        and its git bindings.
       tags:
       - tracker
     patch:
-      operationId: patch_v1_tracker_projects_by_key_issues_by_num
+      description: |-
+        UpdateIssue edits one issue in place and returns it — retitle it, rewrite its
+        body, move it between board columns, reprioritize, reassign, or replace its
+        labels. Every field is optional: one the caller omits keeps its stored value,
+        and `labels` REPLACES the set rather than adding to it.
+
+        The issue's kind, source and git bindings are not editable here: they record
+        where the work item came FROM, which is a fact about its origin rather than
+        its current state.
+      operationId: patch_v1_tracker_projects_key_issues_num
       parameters:
-      - in: path
+      - description: Key is the issue's project, from the path.
+        example: ENG
+        in: path
         name: key
         required: true
         schema:
           type: string
-      - in: path
+      - description: Num is the issue's number within that project, from the path.
+        example: 14
+        in: path
         name: num
         required: true
         schema:
-          type: string
+          type: integer
+      requestBody:
+        content:
+          application/json:
+            example:
+              assignee: z
+              key: ENG
+              num: 14
+              status: in_progress
+            schema:
+              $ref: '#/components/schemas/issuePatch'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/issueView'
+          description: ok
+      summary: UpdateIssue edits one issue in place and returns it — retitle it, rewrite
+        its body, move it between board columns, reprioritize, reassign, or replace
+        its labels.
       tags:
       - tracker
   /v1/train/experiments:
