@@ -899,6 +899,27 @@ func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 		cmd = append(cmd, "--opt", "build-arg:VERSION="+tag)
 		cmd = append(cmd, "--opt", "build-arg:GIT_VERSION="+strings.TrimPrefix(tag, "v"))
 	}
+	// REGISTRY LAYER CACHE, both directions. Every build job is a fresh pod with an
+	// empty local cache, so without this each one re-resolves and re-downloads its
+	// whole dependency set from the network — for studio that is the entire torch
+	// stack plus requirements on every push, and it is why a build takes tens of
+	// minutes instead of a couple. The cache lives beside the image under a
+	// `buildcache` tag (the standard convention) so it is per-repo, needs no extra
+	// credentials, and is garbage-collected with the package.
+	//
+	// mode=max exports intermediate stages too, which is what makes a one-line code
+	// change reuse the dependency layers instead of rebuilding them. Both flags are
+	// ADVISORY in buildkit: a missing or unreadable cache ref is a cache miss, never
+	// a build failure, so a first build (or a registry hiccup) behaves exactly as it
+	// does today. Skipped for a digest-pinned ref, which names no tag to hang the
+	// cache off.
+	if repo, tag := splitImageRef(image); tag != "" && !strings.Contains(tag, ":") {
+		cacheRef := repo + ":buildcache"
+		cmd = append(cmd,
+			"--import-cache", "type=registry,ref="+cacheRef,
+			"--export-cache", "type=registry,ref="+cacheRef+",mode=max",
+		)
+	}
 	return append(cmd, "--output", "type=image,name="+image+",push=true")
 }
 
