@@ -93,3 +93,44 @@ func TestUsageHook_FiresAfterDebit(t *testing.T) {
 		t.Fatalf("hook got org=%q test=%v, want hook-org/true", gotOrg, gotTest)
 	}
 }
+
+// The usage a customer reads back must be the debit the ledger took — exactly.
+//
+// UsageRow carried only Cents, the half-away rounding of the ledger's own
+// 18-decimal value, while TxnRow beside it kept the exact Amount and said why:
+// "Flattening to cents here would round away everything below a cent, which is
+// most of what a per-token AI price IS." A thousand sub-cent calls read back as
+// a page of zeros that summed to zero. The row now carries both; the exact
+// value is the source, the cents its rendering.
+func TestListUsage_CarriesTheExactDebit(t *testing.T) {
+	t.Setenv("CLOUD_KMS_MASTER_KEY_REF", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+	f := New(t.TempDir())
+	ctx := context.Background()
+	const org = "exact-org"
+
+	sub, err := money.ParseUSD("0.0025") // rounds to ZERO cents
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if err := f.RecordUsage(ctx, types.UsageInput{Org: org, Subject: org, Amount: sub, Model: "zen-1", RequestID: "x1"}); err != nil {
+		t.Fatalf("RecordUsage: %v", err)
+	}
+
+	rows, err := f.ListUsage(ctx, org, 0)
+	if err != nil {
+		t.Fatalf("ListUsage: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows = %d, want 1", len(rows))
+	}
+	r := rows[0]
+	if r.Cents != 0 {
+		t.Fatalf("cents = %d — the fixture must be sub-cent for this test to prove anything", r.Cents)
+	}
+	if r.Amount.IsZero() {
+		t.Fatal("row.Amount is ZERO for a real debit — the read flattened; the money is invisible to every reader")
+	}
+	if r.Amount.Cmp(sub) != 0 {
+		t.Fatalf("row.Amount = %s, want %s", r.Amount, sub)
+	}
+}

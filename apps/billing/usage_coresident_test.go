@@ -3,9 +3,11 @@ package billing
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud/apps/finance"
+	"github.com/hanzoai/cloud/apps/money"
 )
 
 // TestCoResidentUsage proves usage() answers from the finance ledger (never the
@@ -85,5 +87,56 @@ func TestCoResidentUsageGroupBy(t *testing.T) {
 	}
 	if grouped.GroupBy != "product" || len(grouped.Groups) != 1 {
 		t.Fatalf("bad grouped envelope: %s", body)
+	}
+}
+
+// The envelope's `decimal` carries the exact debit; `amount` stays the cents the
+// console parses today. A sub-cent charge is the proof either way: amount says 0,
+// decimal says the money. Rows built without the exact value (these fixtures'
+// first two, and any builder that predates the field) omit `decimal` rather than
+// asserting a zero the cents deny.
+func TestCoResidentUsage_DecimalCarriesTheExactDebit(t *testing.T) {
+	sub, err := money.ParseUSD("0.0025")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	publishFinance(t, &fakeFinance{usageRows: []finance.UsageRow{
+		{ID: "old", Cents: 150, Model: "gpt-x", CreatedAt: 1_700_000_000},
+		{ID: "tiny", Cents: 0, Amount: sub, Model: "zen-1", CreatedAt: 1_700_000_100},
+	}})
+
+	body, _, err := coResidentUsage(context.Background(), "acme", "", "")
+	if err != nil {
+		t.Fatalf("coResidentUsage: %v", err)
+	}
+	var env struct {
+		Usage []struct {
+			TransactionID string `json:"transactionId"`
+			Amount        int64  `json:"amount"`
+			Decimal       string `json:"decimal"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		t.Fatalf("envelope not valid JSON: %v\n%s", err, body)
+	}
+	if len(env.Usage) != 2 {
+		t.Fatalf("rows = %d, want 2", len(env.Usage))
+	}
+	if env.Usage[0].Decimal != "" {
+		t.Errorf("row without an exact value published decimal=%q — a fabricated zero beside amount=%d", env.Usage[0].Decimal, env.Usage[0].Amount)
+	}
+	tiny := env.Usage[1]
+	if tiny.Amount != 0 {
+		t.Fatalf("tiny.amount = %d, want 0 — the fixture must be sub-cent", tiny.Amount)
+	}
+	if tiny.Decimal == "" {
+		t.Fatal("tiny.decimal is EMPTY — the exact debit never reached the envelope; the customer reads zero")
+	}
+	got, err := money.ParseUSD(strings.TrimSuffix(strings.TrimSpace(tiny.Decimal), " USD"))
+	if err != nil {
+		t.Fatalf("decimal %q does not parse as USD: %v", tiny.Decimal, err)
+	}
+	if got.Cmp(sub) != 0 {
+		t.Fatalf("decimal = %q (%s), want %s", tiny.Decimal, got, sub)
 	}
 }
