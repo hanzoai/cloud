@@ -33,9 +33,17 @@ var errNotFound = errors.New("world: pipeline not found")
 // Keywords ALSO seed the GDELT queries, so it is both a fetch input (fresh
 // keyword-matched articles) and a post-merge filter.
 type Filters struct {
-	Regions  []string `json:"regions"`
+	// Regions keeps only items whose TITLE contains one of these, matched
+	// case-insensitively as a substring. Empty keeps every region.
+	Regions []string `json:"regions"`
+	// Keywords keeps only items whose TITLE contains one of these,
+	// case-insensitively. They are also the GDELT queries the feed fans out to,
+	// one per keyword of three characters or more — so a keyword both widens what
+	// is fetched and narrows what is kept.
 	Keywords []string `json:"keywords"`
-	Sources  []string `json:"sources"`
+	// Sources keeps only items whose outlet name contains one of these,
+	// case-insensitively. Empty keeps every outlet.
+	Sources []string `json:"sources"`
 }
 
 // Pipeline is the persisted per-(org,project) news pipeline config. Feeds are

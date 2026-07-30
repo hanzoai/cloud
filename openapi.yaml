@@ -42,6 +42,23 @@ components:
         type:
           type: string
       type: object
+    Accounts:
+      properties:
+        account:
+          $ref: '#/components/schemas/SourceState'
+          description: Account is the state of the caller's own linked-account side.
+        hanzo:
+          $ref: '#/components/schemas/SourceState'
+          description: Hanzo is the state of the org's Hanzo-routed side.
+        rows:
+          description: |-
+            Rows is the two row sets CONCATENATED, never summed — each row says which
+            side it came from. A percent is not money and a provider's own spend is not
+            a Hanzo charge, so adding them would produce a number that means nothing.
+          items:
+            $ref: '#/components/schemas/TotalView'
+          type: array
+      type: object
     ActionOut:
       properties:
         data:
@@ -915,6 +932,21 @@ components:
           type: array
         type:
           type: string
+      type: object
+    CategorySpend:
+      properties:
+        category:
+          description: |-
+            Category is the bucket the ledger's own tag mapped to. An untagged or
+            unrecognised line gets its own honest bucket rather than being folded away.
+          type: string
+        cents:
+          description: Cents is what the org spent in that bucket over the window,
+            in US cents.
+          type: integer
+        count:
+          description: Count is how many ledger lines rolled up into it.
+          type: integer
       type: object
     Channel:
       properties:
@@ -1845,6 +1877,32 @@ components:
             accepted it) or rejected.
           type: string
       type: object
+    Filters:
+      properties:
+        keywords:
+          description: |-
+            Keywords keeps only items whose TITLE contains one of these,
+            case-insensitively. They are also the GDELT queries the feed fans out to,
+            one per keyword of three characters or more — so a keyword both widens what
+            is fetched and narrows what is kept.
+          items:
+            type: string
+          type: array
+        regions:
+          description: |-
+            Regions keeps only items whose TITLE contains one of these, matched
+            case-insensitively as a substring. Empty keeps every region.
+          items:
+            type: string
+          type: array
+        sources:
+          description: |-
+            Sources keeps only items whose outlet name contains one of these,
+            case-insensitively. Empty keeps every outlet.
+          items:
+            type: string
+          type: array
+      type: object
     FinanceCost:
       properties:
         configured:
@@ -2648,6 +2706,7 @@ components:
             DraftInto arg (default "brief").
           type: string
       type: object
+<<<<<<< HEAD
     KindTotal:
       properties:
         cost_usd:
@@ -2656,6 +2715,37 @@ components:
           type: integer
         kind:
           type: string
+=======
+    LLM:
+      properties:
+        available:
+          description: |-
+            Available is false when the warehouse was not connected or a query blipped.
+            The totals below are then honest zeros, NOT measured ones.
+          type: boolean
+        completionTokens:
+          description: CompletionTokens is the output half.
+          type: integer
+        costCents:
+          description: CostCents is what they cost the org, in US cents. This IS a
+            Hanzo charge.
+          type: integer
+        models:
+          description: Models is how many distinct models were used.
+          type: integer
+        promptTokens:
+          description: PromptTokens is the input half of that total.
+          type: integer
+        requests:
+          description: Requests is how many completions the org made in the window.
+          type: integer
+        source:
+          description: Source names the warehouse table the totals came from.
+          type: string
+        tokens:
+          description: Tokens is the total tokens those completions consumed.
+          type: integer
+>>>>>>> 49ce9f09 (type: 27 addresses that published nothing — 19 now describe themselves)
       type: object
     LLMOverview:
       properties:
@@ -3142,6 +3232,36 @@ components:
           type: string
         scope:
           description: Scope "host" applies here only; default "fleet" applies everywhere.
+          type: string
+      type: object
+    NewsItem:
+      properties:
+        image:
+          description: Image is a lead-image URL when the upstream carried one.
+          type: string
+        lang:
+          description: Lang is the article's language code when the upstream reported
+            one.
+          type: string
+        link:
+          description: Link is the article's URL at the outlet.
+          type: string
+        pubDate:
+          description: |-
+            PubDate is when the outlet published it, RFC3339 UTC. Empty when the
+            upstream gave no date this could parse — items with no date sort last.
+          type: string
+        source:
+          description: Source is the outlet the item came from, as the upstream named
+            it.
+          type: string
+        title:
+          description: Title is the headline.
+          type: string
+        tone:
+          description: |-
+            Tone is GDELT's own sentiment score for the article, as text. Only GDELT
+            items carry it.
           type: string
       type: object
     Node:
@@ -3635,6 +3755,22 @@ components:
           description: string|number|boolean|object|array
           type: string
       type: object
+    ProviderBreakdown:
+      properties:
+        available:
+          description: |-
+            Available is false when the warehouse could not be read, which means "no
+            answer" and NOT "no usage" — Items is then empty for a reason.
+          type: boolean
+        items:
+          description: Items is one row per provider, most tokens first.
+          items:
+            $ref: '#/components/schemas/ProviderRow'
+          type: array
+        source:
+          description: Source names the warehouse table the rows came from.
+          type: string
+      type: object
     ProviderCredit:
       properties:
         burn_cents:
@@ -3666,6 +3802,25 @@ components:
             start a login: GET /v1/team/account/auth/{provider}. This deployment
             surfaces exactly one, "openid" — the hanzo.id door.
           type: string
+      type: object
+    ProviderRow:
+      properties:
+        costCents:
+          description: CostCents is what they cost the org, in US cents.
+          type: integer
+        provider:
+          description: Provider is the upstream the requests were routed to, e.g.
+            anthropic.
+          type: string
+        requests:
+          description: Requests is how many completions the org made against that
+            provider.
+          type: integer
+        tokens:
+          description: |-
+            Tokens is the total tokens those completions consumed, prompt plus
+            completion.
+          type: integer
       type: object
     ProvidersCreditOut:
       properties:
@@ -4648,6 +4803,25 @@ components:
             $ref: '#/components/schemas/Volume'
           type: array
       type: object
+    SourceState:
+      properties:
+        available:
+          description: |-
+            Available is whether this side's ledger answered. False means its rows are
+            missing, not that there were none.
+          type: boolean
+        note:
+          description: |-
+            Note is the human sentence that says what this side's numbers mean, so a
+            board cannot present a plan percentage as a Hanzo charge.
+          type: string
+        scope:
+          description: 'Scope is whose rows this side carries: "user" or "org".'
+          type: string
+        source:
+          description: Source is the table of record the rows came from.
+          type: string
+      type: object
     SourceStatus:
       properties:
         at:
@@ -4660,6 +4834,15 @@ components:
           type: boolean
         rows:
           type: integer
+      type: object
+    Sources:
+      properties:
+        commerce:
+          description: Commerce is whether the billing ledger answered the spend block.
+          type: boolean
+        warehouse:
+          description: Warehouse is whether the usage warehouse answered the LLM block.
+          type: boolean
       type: object
     Spec:
       properties:
@@ -4678,6 +4861,61 @@ components:
           type: integer
         os:
           description: linux | darwin | windows
+          type: string
+      type: object
+    Spend:
+      properties:
+        available:
+          description: |-
+            Available is false when the commerce ledger was unconfigured or
+            unreachable. Every number below is then an honest zero, NOT a measured one.
+          type: boolean
+        availableCents:
+          description: AvailableCents is what of that balance is still spendable.
+          type: integer
+        balanceCents:
+          description: BalanceCents is the prepaid wallet's balance, in US cents.
+          type: integer
+        byCategory:
+          description: ByCategory is the window's spend split by ledger category,
+            largest first.
+          items:
+            $ref: '#/components/schemas/CategorySpend'
+          type: array
+        mtdCents:
+          description: |-
+            MTDCents is commerce's authoritative month-to-date consumed figure, which
+            is a different period from the window and is not derived from it.
+          type: integer
+        overageCents:
+          description: OverageCents is month-to-date consumption beyond the plan's
+            allowance.
+          type: integer
+        series:
+          description: |-
+            Series is the window's spend over time, gap-filled at the window's
+            interval.
+          items:
+            $ref: '#/components/schemas/SpendPoint'
+          type: array
+        source:
+          description: Source names where the roll-up came from.
+          type: string
+        totalCents:
+          description: |-
+            TotalCents is consumption over the requested window, in US cents. It is
+            self-consistent with ByCategory and Series.
+          type: integer
+      type: object
+    SpendPoint:
+      properties:
+        cents:
+          description: Cents is the consumption recorded in that bucket, in US cents.
+          type: integer
+        t:
+          description: |-
+            T is the bucket's start instant, RFC3339 UTC. Buckets are gap-filled, so a
+            window with no spend still has its points.
           type: string
       type: object
     StageEvent:
@@ -5224,6 +5462,51 @@ components:
         source:
           description: Source is the warehouse table the lens read.
           type: string
+      type: object
+    TotalView:
+      properties:
+        confidence:
+          description: |-
+            Confidence says how much the counters mean; a percentage-only meter leaves
+            them at zero.
+          type: string
+        costCents:
+          description: |-
+            CostCents is the row's cost in US cents. For an "account" row this is the
+            PROVIDER's own charge, not a Hanzo one.
+          type: integer
+        provider:
+          description: Provider is the upstream the usage was measured against.
+          type: string
+        requests:
+          description: Requests is how many requests the row covers.
+          type: integer
+        scope:
+          description: |-
+            Scope is whose row it is: "user" for the caller's own linked accounts,
+            "org" for the whole tenant's Hanzo-routed usage.
+          type: string
+        source:
+          description: |-
+            Source is where the row came from: "account" is the provider's own meter
+            on the caller's linked account, "hanzo" is Hanzo-routed inference. The two
+            are never summed.
+          type: string
+        tokens:
+          description: Tokens is the total tokens the row covers.
+          type: integer
+        usedPct:
+          description: |-
+            UsedPct is how much of a plan window the row consumed, 0–100. It is a
+            share, never money.
+          type: number
+        window:
+          description: Window is the meter window class the row rolls up, when it
+            has one.
+          type: string
+        windows:
+          description: Windows is how many window instances rolled up into the row.
+          type: integer
       type: object
     Totals:
       properties:
@@ -5819,6 +6102,7 @@ components:
           description: UpdatedAt is the unix second the record last changed.
           type: integer
       type: object
+<<<<<<< HEAD
     accountView:
       properties:
         address:
@@ -5843,6 +6127,75 @@ components:
           description: Tenant is the org whose accounts these are (empty for the house
             scope's own rows).
           type: string
+=======
+    accountFoldView:
+      properties:
+        account:
+          $ref: '#/components/schemas/accountView'
+          description: Account is the account as it is now recorded.
+        clusters:
+          description: |-
+            Clusters is one entry per cluster discovered in the account. It is empty
+            when discovery itself failed, which leaves the previously folded set
+            untouched rather than mass-detaching it.
+          items:
+            $ref: '#/components/schemas/clusterResult'
+          type: array
+      type: object
+    accountView:
+      properties:
+        account:
+          description: |-
+            Account is the provider's human label for it, e.g. the DigitalOcean team
+            email.
+          type: string
+        clusters:
+          description: |-
+            Clusters is the fleet names this account currently owns. Unlinking detaches
+            exactly these and nothing else.
+          items:
+            type: string
+          type: array
+        externalId:
+          description: |-
+            ExternalID is the provider's own identifier for the account — a
+            DigitalOcean account uuid, an AWS account id, a GCP project.
+          type: string
+        label:
+          description: |-
+            Label is the org-chosen name for this account within the provider, which is
+            how a second account at the same provider is addressed. Defaults to
+            "default".
+          type: string
+        linkedAt:
+          description: |-
+            LinkedAt is when the account was first linked, RFC3339 UTC. Re-linking the
+            same label keeps the original.
+          type: string
+        project:
+          description: |-
+            Project is the fleet shard the account's clusters were folded into,
+            recorded at link time so a later sync or unlink acts on the same shard.
+          type: string
+        provider:
+          description: |-
+            Provider is the cloud the account belongs to: digitalocean, aws, gcp or
+            azure.
+          type: string
+        syncedAt:
+          description: SyncedAt is when it was last discovered, RFC3339 UTC.
+          type: string
+      type: object
+    accountsView:
+      properties:
+        accounts:
+          description: |-
+            Accounts is every account this org has linked, across all providers. Empty
+            when it has linked none.
+          items:
+            $ref: '#/components/schemas/accountView'
+          type: array
+>>>>>>> 49ce9f09 (type: 27 addresses that published nothing — 19 now describe themselves)
       type: object
     accreditationDecision:
       properties:
@@ -8847,6 +9200,40 @@ components:
             $ref: '#/components/schemas/clusterView'
           type: array
       type: object
+    clusterResult:
+      properties:
+        amdGpu:
+          description: AmdGPU is how many AMD GPUs those nodes advertise.
+          type: integer
+        cluster:
+          description: |-
+            Cluster is the stable fleet name the cluster was folded under — the name
+            /v1/clusters shows and a workload targets.
+          type: string
+        error:
+          description: |-
+            Error is why this cluster did not fold — a billing denial, an unsafe
+            kubeconfig, or an unreachable apiserver. It never contains credential
+            material.
+          type: string
+        folded:
+          description: |-
+            Folded is whether it reached the fleet. False means Error says why, and
+            this cluster alone was skipped.
+          type: boolean
+        nodes:
+          description: Nodes is how many nodes the fleet counted in it.
+          type: integer
+        nvidiaGpu:
+          description: NvidiaGPU is how many NVIDIA GPUs those nodes advertise.
+          type: integer
+        region:
+          description: Region is the provider region it runs in.
+          type: string
+        source:
+          description: Source is the cluster's own name at the provider.
+          type: string
+      type: object
     clusterView:
       properties:
         amdGpu:
@@ -9757,6 +10144,50 @@ components:
             Custom is true when the org's OWN curriculum override is active; false when
             the journey comes from the brand blueprint or the embedded fixture.
           type: boolean
+      type: object
+    dashResp:
+      properties:
+        account:
+          description: Account is the linked account that was asked about, when one
+            was named.
+          type: string
+        available:
+          description: |-
+            Available is false when the warehouse could not be read. That means "no
+            answer", NOT "no usage" — the two lists below are then empty for a reason.
+          type: boolean
+        current:
+          description: Current is the newest window instance of each lane — the dash
+            headline.
+          items:
+            $ref: '#/components/schemas/usageWindowView'
+          type: array
+        from:
+          description: From is the inclusive start of that window, RFC3339 UTC.
+          type: string
+        provider:
+          description: Provider is the upstream that was asked about, echoed back.
+          type: string
+        range:
+          description: 'Range is the window that was served: 1h, 24h, 7d or 30d.'
+          type: string
+        scope:
+          description: 'Scope says whose rows these are: the caller''s own linked
+            accounts.'
+          type: string
+        source:
+          description: Source names the meter of record — the provider's own login,
+            not Hanzo.
+          type: string
+        to:
+          description: To is the exclusive end of that window, RFC3339 UTC.
+          type: string
+        windows:
+          description: Windows is every instance in range, newest first — the history
+            behind it.
+          items:
+            $ref: '#/components/schemas/usageWindowView'
+          type: array
       type: object
     databaseCreateIn:
       properties:
@@ -10771,6 +11202,7 @@ components:
           description: Status is "ok" when the subsystem is live.
           type: string
       type: object
+<<<<<<< HEAD
     hit:
       properties:
         doctype:
@@ -10786,6 +11218,126 @@ components:
         title:
           type: string
         url:
+=======
+    helpArticle:
+      properties:
+        body:
+          description: Body is the article's rich-text content as the author saved
+            it.
+          type: string
+        category:
+          description: |-
+            Category is the name of the knowledge-base section the article sits in, or
+            empty when it is filed under none.
+          type: string
+        excerpt:
+          description: Excerpt is the short summary the author wrote for listings,
+            or empty.
+          type: string
+        slug:
+          description: |-
+            Slug is the article's stable public identifier — the path segment it was
+            addressed by.
+          type: string
+        title:
+          description: Title is the article's headline.
+          type: string
+        updatedAt:
+          description: UpdatedAt is the unix second the article was last written.
+          type: integer
+      type: object
+    helpArticleCard:
+      properties:
+        category:
+          description: |-
+            Category is the name of the knowledge-base section the article sits in, or
+            empty when it is filed under none.
+          type: string
+        excerpt:
+          description: Excerpt is the short summary the author wrote for listings,
+            or empty.
+          type: string
+        slug:
+          description: |-
+            Slug is the article's stable public identifier and the path segment
+            /v1/help/articles/{slug} addresses it by.
+          type: string
+        title:
+          description: Title is the article's headline.
+          type: string
+        updatedAt:
+          description: |-
+            UpdatedAt is the unix second the article was last written, in the help
+            center's own store.
+          type: integer
+      type: object
+    helpArticleList:
+      properties:
+        data:
+          description: |-
+            Data is the matching Published, public articles, newest write order last —
+            the store's order, not a ranking. Empty when the center has none.
+          items:
+            $ref: '#/components/schemas/helpArticleCard'
+          type: array
+      type: object
+    helpCategory:
+      properties:
+        description:
+          description: Description is the section's blurb, or empty.
+          type: string
+        name:
+          description: Name is the section's name, and the value an article's category
+            matches.
+          type: string
+      type: object
+    helpCategoryList:
+      properties:
+        data:
+          description: |-
+            Data is the sections that front at least one public article. Empty when the
+            center publishes none.
+          items:
+            $ref: '#/components/schemas/helpCategory'
+          type: array
+      type: object
+    helpTicketFiled:
+      properties:
+        status:
+          description: Status is the lifecycle state the ticket was filed in — always
+            "Open".
+          type: string
+        ticket:
+          description: |-
+            Ticket is the opaque, random customer-facing reference ("tkt_" + 24 hex
+            characters). It is NOT the ticket's internal name: that name is sequential,
+            and handing it out would disclose the center's ticket volume.
+          type: string
+      type: object
+    helpTicketIntake:
+      properties:
+        description:
+          description: |-
+            Description is the customer's message. Optional; it becomes the ticket's
+            description AND the opening entry of its conversation thread. Clipped at
+            16 KiB.
+          type: string
+        email:
+          description: |-
+            Email is how the support team replies. Required; clipped at 320 characters
+            (the RFC 5321 maximum). It is recorded as the ticket's customer, and it is
+            not verified.
+          type: string
+        priority:
+          description: |-
+            Priority is Low, Medium, High or Urgent, case-insensitively. Anything else —
+            including omitting it — is recorded as Medium rather than refused.
+          type: string
+        subject:
+          description: |-
+            Subject is the one-line summary of the problem. Required; longer than 300
+            characters is clipped rather than refused.
+>>>>>>> 49ce9f09 (type: 27 addresses that published nothing — 19 now describe themselves)
           type: string
       type: object
     iamRowsOut:
@@ -11280,6 +11832,7 @@ components:
         seq:
           type: integer
       type: object
+<<<<<<< HEAD
     lbList:
       properties:
         loadBalancers:
@@ -11302,6 +11855,44 @@ components:
         targets:
           type: integer
         type:
+=======
+    limitsBlock:
+      properties:
+        apiRateLimit:
+          description: |-
+            APIRateLimit is requests per minute allowed against the REST /v1/world
+            surface. -1 means unlimited.
+          type: integer
+        maxAlerts:
+          description: |-
+            MaxAlerts is how many saved OSINT alert rules the plan allows. -1 means
+            unlimited.
+          type: integer
+        mcpRateLimit:
+          description: |-
+            MCPRateLimit is requests per minute allowed against the MCP surface. -1
+            means unlimited.
+          type: integer
+        modelApi:
+          description: |-
+            ModelAPI is whether the plan reaches the World model endpoint and the SSE
+            stream. The free floor is false, and that is what a catalog outage
+            resolves to.
+          type: boolean
+      type: object
+    limitsView:
+      properties:
+        limits:
+          $ref: '#/components/schemas/limitsBlock'
+          description: Limits is the plan's decision.
+        plan:
+          description: |-
+            Plan echoes the plan id the limits were resolved for, after the empty-means-
+            world-free default.
+          type: string
+        unit:
+          description: 'Unit names what the two rate numbers are counted in: requests/minute.'
+>>>>>>> 49ce9f09 (type: 27 addresses that published nothing — 19 now describe themselves)
           type: string
       type: object
     listMeta:
@@ -11925,6 +12516,7 @@ components:
             id.
           type: string
       type: object
+<<<<<<< HEAD
     networkList:
       properties:
         networks:
@@ -11954,6 +12546,19 @@ components:
             online, else "provisioning" (routers exist but none has dialed home).
           type: string
       type: object
+=======
+    newsResponse:
+      properties:
+        items:
+          description: |-
+            Items is the merged, filtered, deduped feed, freshest first and capped at
+            50. A source that failed is skipped rather than failing the read, so this
+            can be shorter than the pipeline's reach — it is never an error.
+          items:
+            $ref: '#/components/schemas/NewsItem'
+          type: array
+      type: object
+>>>>>>> 49ce9f09 (type: 27 addresses that published nothing — 19 now describe themselves)
     noContent:
       properties: {}
       type: object
@@ -11984,6 +12589,7 @@ components:
         size:
           type: string
       type: object
+<<<<<<< HEAD
     notifyHealth:
       properties:
         service:
@@ -11994,6 +12600,55 @@ components:
             is mounted.
           type: string
       type: object
+=======
+    nodeView:
+      properties:
+        caps:
+          description: |-
+            Caps is the capability list the node reported. It is a self-report, useful
+            to SHOW and never load-bearing: what a node may actually be asked to do is
+            decided at the socket by the deployment's allowlist.
+          items:
+            type: string
+          type: array
+        commands:
+          description: |-
+            Commands is the command list the node reported. Same standing as Caps: a
+            self-report, checked again at the socket before anything runs.
+          items:
+            type: string
+          type: array
+        connectedAt:
+          description: ConnectedAt is when this node's socket was established, RFC3339
+            UTC.
+          type: string
+        displayName:
+          description: DisplayName is the human name the node reported for itself.
+          type: string
+        id:
+          description: |-
+            ID is the node's own identifier within the org — the value
+            POST /v1/bot/nodes/{id}/invoke addresses it by.
+          type: string
+        platform:
+          description: Platform is the operating system and architecture the node
+            reported.
+          type: string
+        version:
+          description: Version is the node agent's own version string.
+          type: string
+      type: object
+    nodesView:
+      properties:
+        nodes:
+          description: |-
+            Nodes is every node of the caller's org with a live socket to THIS replica,
+            ordered by id. A node connected to a different replica is not in it.
+          items:
+            $ref: '#/components/schemas/nodeView'
+          type: array
+      type: object
+>>>>>>> 49ce9f09 (type: 27 addresses that published nothing — 19 now describe themselves)
     o11yGlobal:
       properties:
         end:
@@ -12499,6 +13154,58 @@ components:
         spec:
           $ref: '#/components/schemas/Spec'
         status:
+          type: string
+      type: object
+    pipelineReq:
+      properties:
+        feeds:
+          description: |-
+            Feeds is the RSS/Atom feed URLs to read, at most 64. Each must be an
+            http(s) URL whose host is on the server's allowlist — the SSRF guard is
+            applied here, at the write, so a stored pipeline can never name a host the
+            fetcher would refuse. Blank entries are dropped and duplicates collapse.
+          items:
+            type: string
+          type: array
+        filters:
+          $ref: '#/components/schemas/Filters'
+          description: |-
+            Filters narrows the merged feed. Terms are trimmed, de-duplicated
+            case-insensitively, and capped at 64 per axis.
+      type: object
+    pipelineView:
+      properties:
+        createdAt:
+          description: |-
+            CreatedAt is when the pipeline was first stored, RFC3339 UTC. Absent on the
+            default.
+          type: string
+        default:
+          description: |-
+            Default is true when no pipeline is stored for this project and these are
+            the built-in world feeds. Writing one turns it false.
+          type: boolean
+        feeds:
+          description: |-
+            Feeds is the RSS/Atom feed URLs the pipeline reads. Every host is on the
+            server's allowlist — a URL that is not cannot be stored.
+          items:
+            type: string
+          type: array
+        filters:
+          $ref: '#/components/schemas/Filters'
+          description: Filters narrows the merged feed.
+        org:
+          description: |-
+            Org is the tenant the pipeline belongs to, resolved server-side from the
+            validated principal.
+          type: string
+        project:
+          description: Project is the org sub-scope the pipeline belongs to.
+          type: string
+        updatedAt:
+          description: UpdatedAt is when it was last written, RFC3339 UTC. Absent
+            on the default.
           type: string
       type: object
     planEntitlements:
@@ -13225,6 +13932,29 @@ components:
           description: Type labels the template's kind; defaults to "text".
           type: string
       type: object
+    providerCard:
+      properties:
+        id:
+          description: 'ID is the provider slug used in the path: digitalocean, aws,
+            gcp, azure.'
+          type: string
+        keyless:
+          description: |-
+            Keyless is whether the provider can be linked WITHOUT storing a long-lived
+            secret — AWS by role assumption, GCP by workload identity federation, Azure
+            by federated credential. DigitalOcean is not: it needs a stored token.
+          type: boolean
+        name:
+          description: Name is the provider's display name.
+          type: string
+        requires:
+          description: |-
+            Requires names the credential fields a link body must carry for this
+            provider.
+          items:
+            type: string
+          type: array
+      type: object
     providerPatchIn:
       properties:
         beta:
@@ -13271,6 +14001,15 @@ components:
         name:
           description: Name is the provider's display name ("Slack").
           type: string
+      type: object
+    providersView:
+      properties:
+        providers:
+          description: Providers is every cloud this deployment can link, with what
+            each needs.
+          items:
+            $ref: '#/components/schemas/providerCard'
+          type: array
       type: object
     provisionRequest:
       properties:
@@ -13869,6 +14608,110 @@ components:
             is a clean no-op, not an error.
           type: boolean
       type: object
+    reportReq:
+      properties:
+        account:
+          description: Account is the linked account the window was metered from.
+          type: string
+        cachedInputTokens:
+          description: CachedInputTokens is the prompt tokens the provider served
+            from cache.
+          type: integer
+        confidence:
+          description: Confidence says how much the counters below mean.
+          type: string
+        costCents:
+          description: CostCents is what the window cost on the PROVIDER's own plan,
+            in US cents.
+          type: integer
+        costLimitCents:
+          description: CostLimitCents is the plan's spend ceiling for the window,
+            in US cents.
+          type: integer
+        currency:
+          description: Currency is the provider's currency when it is not US cents.
+          type: string
+        inputTokens:
+          description: InputTokens is prompt tokens consumed in the window.
+          type: integer
+        kind:
+          description: |-
+            Kind is subscription or apikey. Empty is accepted; anything else is
+            refused.
+          type: string
+        lane:
+          description: Lane is the meter lane within the account.
+          type: string
+        machine:
+          description: Machine is the host whose meter read the window. Required on
+            every sample.
+          type: string
+        outputTokens:
+          description: OutputTokens is completion tokens produced in the window.
+          type: integer
+        plan:
+          description: Plan is the provider plan the account is on, e.g. a Claude
+            Max plan.
+          type: string
+        provider:
+          description: |-
+            Provider is the upstream the account belongs to, e.g. anthropic. Required
+            on every sample.
+          type: string
+        requests:
+          description: Requests is how many requests the window covers.
+          type: integer
+        resetsAt:
+          description: ResetsAt is when the measured window rolls over, RFC3339.
+          type: string
+        samples:
+          description: |-
+            Samples is the batch form: every lane a poller measured, in one call. When
+            it is non-empty the top-level sample fields are ignored.
+          items:
+            $ref: '#/components/schemas/sampleReq'
+          type: array
+        synthetic:
+          description: Synthetic marks a window the meter inferred rather than read.
+          type: boolean
+        totalTokens:
+          description: TotalTokens is the window's total tokens.
+          type: integer
+        usedPct:
+          description: UsedPct is how much of the window's allowance is consumed,
+            0–100.
+          type: number
+        window:
+          description: |-
+            Window is the window class: 6h, day, week or month. Required, and a class
+            this surface does not know is refused rather than rewritten.
+          type: string
+        windowMinutes:
+          description: |-
+            WindowMinutes is the window's real length in minutes, as the meter reports
+            it.
+          type: integer
+        windowStart:
+          description: |-
+            WindowStart is when the measured window opened, RFC3339. This is how a
+            backfill states WHICH window it measured; the server always owns the
+            observation clock, so there is no timestamp field.
+          type: string
+      type: object
+    reportResp:
+      properties:
+        accepted:
+          description: |-
+            Accepted is how many samples passed validation. Every one of them was
+            accepted, or the whole report was refused — there is no partial success.
+          type: integer
+        stored:
+          description: |-
+            Stored is whether the warehouse actually persisted them. False means the
+            datastore was unavailable and the poll of history was lost; the request
+            still succeeded, so a device retries without being blocked.
+          type: boolean
+      type: object
     reportRunIn:
       properties:
         branch:
@@ -14178,6 +15021,88 @@ components:
           items:
             $ref: '#/components/schemas/sampleView'
           type: array
+      type: object
+    sampleReq:
+      properties:
+        account:
+          description: Account is the linked account the window was metered from.
+          type: string
+        cachedInputTokens:
+          description: CachedInputTokens is the prompt tokens the provider served
+            from cache.
+          type: integer
+        confidence:
+          description: Confidence says how much the counters below mean.
+          type: string
+        costCents:
+          description: CostCents is what the window cost on the PROVIDER's own plan,
+            in US cents.
+          type: integer
+        costLimitCents:
+          description: CostLimitCents is the plan's spend ceiling for the window,
+            in US cents.
+          type: integer
+        currency:
+          description: Currency is the provider's currency when it is not US cents.
+          type: string
+        inputTokens:
+          description: InputTokens is prompt tokens consumed in the window.
+          type: integer
+        kind:
+          description: |-
+            Kind is subscription or apikey. Empty is accepted; anything else is
+            refused.
+          type: string
+        lane:
+          description: Lane is the meter lane within the account.
+          type: string
+        machine:
+          description: Machine is the host whose meter read the window. Required.
+          type: string
+        outputTokens:
+          description: OutputTokens is completion tokens produced in the window.
+          type: integer
+        plan:
+          description: Plan is the provider plan the account is on, e.g. a Claude
+            Max plan.
+          type: string
+        provider:
+          description: Provider is the upstream the account belongs to, e.g. anthropic.
+            Required.
+          type: string
+        requests:
+          description: Requests is how many requests the window covers.
+          type: integer
+        resetsAt:
+          description: |-
+            ResetsAt is when the measured window rolls over, RFC3339. Empty is
+            allowed; anything else that is not RFC3339 is refused.
+          type: string
+        synthetic:
+          description: Synthetic marks a window the meter inferred rather than read.
+          type: boolean
+        totalTokens:
+          description: TotalTokens is the window's total tokens.
+          type: integer
+        usedPct:
+          description: UsedPct is how much of the window's allowance is consumed,
+            0–100.
+          type: number
+        window:
+          description: |-
+            Window is the window class: 6h, day, week or month. Required, and a class
+            this surface does not know is refused rather than rewritten.
+          type: string
+        windowMinutes:
+          description: |-
+            WindowMinutes is the window's real length in minutes, as the meter reports
+            it.
+          type: integer
+        windowStart:
+          description: |-
+            WindowStart is when the measured window opened, RFC3339. Empty is allowed;
+            anything else that is not RFC3339 is refused.
+          type: string
       type: object
     sampleView:
       properties:
@@ -15578,6 +16503,15 @@ components:
         session:
           $ref: '#/components/schemas/sessionView'
       type: object
+    unlinkedView:
+      properties:
+        unlinked:
+          description: |-
+            Unlinked is always true. Unlinking is idempotent: an account this org does
+            not hold answers the same, so a repeated call is not an error and is not an
+            existence oracle either.
+          type: boolean
+      type: object
     unreconciledOut:
       properties:
         questions:
@@ -15654,6 +16588,66 @@ components:
             type: string
           type: array
       type: object
+    usageAnalyticsAccess:
+      properties:
+        access:
+          $ref: '#/components/schemas/usageAnalyticsGrant'
+          description: Access is what that plan grants.
+        plan:
+          description: Plan echoes the plan id that was resolved, exactly as it was
+            asked for.
+          type: string
+      type: object
+    usageAnalyticsGrant:
+      properties:
+        datastore:
+          description: |-
+            Datastore is whether the plan may read GET /v1/usage/analytics at all. The
+            free floor is false, and that is what a catalog outage resolves to.
+          type: boolean
+        export:
+          description: Export is whether the plan may export the analytics it can
+            read.
+          type: boolean
+        retentionDays:
+          description: |-
+            RetentionDays is how far back the plan may read. GET /v1/usage/analytics
+            clamps a custom window's start to this, so an older `start` returns the
+            clamped window rather than an error.
+          type: integer
+      type: object
+    usageAnalyticsView:
+      properties:
+        end:
+          description: End is the window's exclusive end, RFC3339 UTC.
+          type: string
+        export:
+          description: Export is whether the resolved plan allows exporting these
+            rows.
+          type: boolean
+        plan:
+          description: Plan echoes the plan id the entitlement was resolved from.
+          type: string
+        providers:
+          $ref: '#/components/schemas/ProviderBreakdown'
+          description: Providers is the per-provider roll-up over the window.
+        range:
+          description: Range is the window label that was served, which is what was
+            asked for.
+          type: string
+        retentionDays:
+          description: RetentionDays is how far back the resolved plan allows reading.
+          type: integer
+        scope:
+          $ref: '#/components/schemas/usageScope'
+          description: Scope is the tenant the rows were read under — the validated
+            principal's org.
+        start:
+          description: |-
+            Start is the window's inclusive start, RFC3339 UTC, AFTER the retention
+            clamp — so it may be later than the start that was asked for.
+          type: string
+      type: object
     usageBucket:
       properties:
         calls:
@@ -15724,6 +16718,54 @@ components:
           description: SizeBytes is the repo's on-disk size at its last measurement.
           type: integer
       type: object
+    usageScope:
+      properties:
+        org:
+          description: |-
+            Org is the IAM org slug the rows were read under — the validated
+            principal's, never a client header.
+          type: string
+        user:
+          description: |-
+            User is the caller's own subject, whose linked-account rows the accounts
+            block carries. Absent on a read that is org-scoped only.
+          type: string
+      type: object
+    usageSummary:
+      properties:
+        accounts:
+          $ref: '#/components/schemas/Accounts'
+          description: |-
+            Accounts is the caller's own linked provider accounts beside the org's
+            Hanzo-routed usage, labelled row by row and never summed together.
+        end:
+          description: End is the window's exclusive end, RFC3339 UTC.
+          type: string
+        interval:
+          description: Interval is the bucket width the spend series is gap-filled
+            at.
+          type: string
+        llm:
+          $ref: '#/components/schemas/LLM'
+          description: LLM is the org's Hanzo-routed inference totals from the warehouse.
+        range:
+          description: Range is the window label that was served.
+          type: string
+        scope:
+          $ref: '#/components/schemas/usageScope'
+          description: Scope is the tenant and subject the roll-up was answered for.
+        sources:
+          $ref: '#/components/schemas/Sources'
+          description: |-
+            Sources says which upstreams actually answered, so a zero can be read as
+            "no data yet" rather than as a measurement.
+        spend:
+          $ref: '#/components/schemas/Spend'
+          description: Spend is the categorized cost roll-up from the billing ledger.
+        start:
+          description: Start is the window's inclusive start, RFC3339 UTC.
+          type: string
+      type: object
     usageTotals:
       properties:
         requests:
@@ -15746,6 +16788,88 @@ components:
         totalBytes:
           description: TotalBytes is the sum over Repos — the org's whole git footprint.
           type: integer
+      type: object
+    usageWindowView:
+      properties:
+        account:
+          description: Account is the linked provider account the window belongs to.
+          type: string
+        cachedInputTokens:
+          description: |-
+            CachedInputTokens is the prompt tokens served from the provider's cache;
+            omitted when unknown.
+          type: integer
+        confidence:
+          description: |-
+            Confidence says how much the counters beside it mean — a meter that
+            reported only a percentage leaves them at zero, and this is how a reader
+            tells that from a true zero.
+          type: string
+        costCents:
+          description: |-
+            CostCents is what the window cost on the PROVIDER's own plan, in US cents.
+            It is not a Hanzo charge.
+          type: integer
+        costLimitCents:
+          description: CostLimitCents is the plan's spend ceiling for the window,
+            in US cents.
+          type: integer
+        currency:
+          description: Currency is the provider's currency when it is not US cents.
+          type: string
+        inputTokens:
+          description: InputTokens is prompt tokens consumed in the window; omitted
+            when unknown.
+          type: integer
+        lane:
+          description: |-
+            Lane is the meter lane this instance belongs to, e.g. a provider's own
+            rolling-window meter.
+          type: string
+        machine:
+          description: Machine is the host whose meter reported the window.
+          type: string
+        outputTokens:
+          description: |-
+            OutputTokens is completion tokens produced in the window; omitted when
+            unknown.
+          type: integer
+        plan:
+          description: Plan is the provider plan the account is on, e.g. a Claude
+            Max plan.
+          type: string
+        requests:
+          description: |-
+            Requests is how many requests were made in the window; omitted when the
+            meter did not report it.
+          type: integer
+        resetsAt:
+          description: ResetsAt is when this window rolls over, RFC3339 UTC; omitted
+            when unknown.
+          type: string
+        synthetic:
+          description: Synthetic marks an instance the meter inferred rather than
+            read.
+          type: boolean
+        totalTokens:
+          description: TotalTokens is the window's total tokens; omitted when unknown.
+          type: integer
+        usedPct:
+          description: UsedPct is how much of the window's allowance is consumed,
+            0–100.
+          type: number
+        window:
+          description: 'Window is the window class: 6h, day, week or month.'
+          type: string
+        windowMinutes:
+          description: |-
+            WindowMinutes is the window's real length in minutes when the meter
+            reported one; omitted when it did not.
+          type: integer
+        windowStart:
+          description: WindowStart is when this window opened, RFC3339 UTC; omitted
+            when unknown.
+          type: string
       type: object
     userEnablementItem:
       properties:
@@ -15888,6 +17012,67 @@ components:
           items:
             $ref: '#/components/schemas/VendorRow'
           type: array
+      type: object
+    venueLinkRequest:
+      properties:
+        clientId:
+          description: ClientID is the Azure AD application id. Azure only.
+          type: string
+        clientSecret:
+          description: |-
+            ClientSecret selects the service-principal flow. LEAVING IT OUT selects
+            keyless workload identity federation instead, so omitting it is a choice
+            rather than an omission. Azure only.
+          type: string
+        credentialJson:
+          description: |-
+            CredentialJSON is a Google credentials document — an external_account
+            (workload identity federation, keyless) or a service-account key. GCP only.
+          type: string
+        externalId:
+          description: |-
+            ExternalID pins that role assumption to Hanzo, which is what closes the
+            confused-deputy hole. AWS only.
+          type: string
+        label:
+          description: |-
+            Label is the org-chosen name for this account within the provider, which is
+            how a second account at the same provider is addressed later. Empty means
+            "default"; anything outside 1–64 of [A-Za-z0-9._-] is refused.
+          type: string
+        projectIds:
+          description: ProjectIDs bounds the GKE cluster sweep. GCP only.
+          items:
+            type: string
+          type: array
+        provider:
+          description: |-
+            Provider is the cloud being linked, from the path: digitalocean, aws, gcp
+            or azure.
+          type: string
+        regions:
+          description: Regions bounds the AWS EKS cluster sweep. AWS only.
+          items:
+            type: string
+          type: array
+        roleArn:
+          description: |-
+            RoleARN is the AWS role Hanzo assumes into the account — the keyless path,
+            so no access key is ever stored.
+          type: string
+        subscriptionIds:
+          description: SubscriptionIDs bounds the AKS cluster sweep. Azure only.
+          items:
+            type: string
+          type: array
+        tenantId:
+          description: TenantID is the Azure AD tenant of the app. Azure only.
+          type: string
+        token:
+          description: |-
+            Token is the DigitalOcean personal access token. DigitalOcean only, and it
+            is the one provider that requires storing a secret.
+          type: string
       type: object
     verificationDecision:
       properties:
@@ -22639,7 +23824,28 @@ paths:
       - bot
   /v1/bot/nodes:
     get:
+      description: |-
+        listNodes returns the caller org's currently connected bot nodes: what each one
+        calls itself, the platform it runs on, its agent version, when its socket was
+        established, and the capabilities and commands it reported.
+
+        Only this org's nodes are listed — the org is half of every key in the table it
+        reads — and only nodes attached to THIS replica, because the list is of live
+        sockets rather than of registrations. The capability and command lists are the
+        node's own self-report: useful to show, never load-bearing, because what a node
+        may actually be asked to do is decided at the socket against the deployment's
+        allowlist.
       operationId: get_v1_bot_nodes
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/nodesView'
+          description: ok
+      summary: 'listNodes returns the caller org''s currently connected bot nodes:
+        what each one calls itself, the platform it runs on, its agent version, when
+        its socket was established, and the capabilities and commands it reported.'
       tags:
       - bot
   /v1/bot/nodes/{id}/invoke:
@@ -23526,55 +24732,173 @@ paths:
       - channels
   /v1/cloud:
     get:
+      description: |-
+        listProviders returns the clouds this deployment can link and what linking each
+        one needs — the DigitalOcean token, the AWS role and external id, the GCP
+        credential JSON, the Azure app — plus whether the provider can be linked without
+        storing any long-lived secret. It is the catalog a "connect a cloud" screen
+        renders; it reports no account and no credential.
       operationId: get_v1_cloud
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/providersView'
+          description: ok
+      summary: listProviders returns the clouds this deployment can link and what
+        linking each one needs — the DigitalOcean token, the AWS role and external
+        id, the GCP credential JSON, the Azure app — plus whether the provider can
+        be linked without storing any long-lived secret.
       tags:
       - cloud
   /v1/cloud/{provider}/accounts:
     post:
-      operationId: post_v1_cloud_by_provider_accounts
+      description: |-
+        linkAccount links one of the caller org's cloud accounts and folds the Kubernetes
+        clusters it finds there into the ONE Hanzo fleet, so they appear at /v1/clusters
+        and can run work like any managed or bring-your-own cluster. Answers 201.
+
+        The credential is verified LIVE against the provider BEFORE anything is stored,
+        so a bad one is refused and nothing is written; it is then sealed in the org's own
+        KMS namespace and never appears in a response, the account index, or a log line.
+        Discovery follows, and a cluster that fails to fold is reported as DATA in the
+        clusters list rather than failing the link.
+
+        Re-linking a label that already exists re-seals its credential and re-folds it, so
+        this is how a rotated token is replaced. Requires org admin.
+      operationId: post_v1_cloud_provider_accounts
       parameters:
-      - in: path
+      - description: |-
+          Provider is the cloud being linked, from the path: digitalocean, aws, gcp
+          or azure.
+        in: path
         name: provider
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/venueLinkRequest'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/accountFoldView'
+          description: created
+      summary: linkAccount links one of the caller org's cloud accounts and folds
+        the Kubernetes clusters it finds there into the ONE Hanzo fleet, so they appear
+        at /v1/clusters and can run work like any managed or bring-your-own cluster.
       tags:
       - cloud
   /v1/cloud/{provider}/accounts/{label}:
     delete:
-      operationId: delete_v1_cloud_by_provider_accounts_by_label
+      description: |-
+        unlinkAccount forgets one linked cloud account: it detaches every fleet cluster
+        THIS account folded (its own names, in its own shard — a neighbour's cluster of
+        the same name is untouched), deletes the sealed credential, and drops the index
+        row.
+
+        It is idempotent and deliberately not an existence oracle: an account this org
+        does not hold answers exactly the same as one it just removed. A cluster that
+        fails to detach is logged and the unlink continues, so a dead provider cannot
+        strand a credential. Requires org admin.
+      operationId: delete_v1_cloud_provider_accounts_label
       parameters:
-      - in: path
+      - description: |-
+          Provider is the cloud the account belongs to: digitalocean, aws, gcp or
+          azure. An unknown provider is not found.
+        in: path
         name: provider
         required: true
         schema:
           type: string
-      - in: path
+      - description: |-
+          Label is the org-chosen name of the account within that provider. Empty
+          means "default"; anything outside 1–64 of [A-Za-z0-9._-] is refused.
+        in: path
         name: label
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/unlinkedView'
+          description: ok
+      summary: 'unlinkAccount forgets one linked cloud account: it detaches every
+        fleet cluster THIS account folded (its own names, in its own shard — a neighbour''s
+        cluster of the same name is untouched), deletes the sealed credential, and
+        drops the index row.'
       tags:
       - cloud
   /v1/cloud/{provider}/accounts/{label}/sync:
     post:
-      operationId: post_v1_cloud_by_provider_accounts_by_label_sync
+      description: |-
+        syncAccount re-discovers one already-linked cloud account and reconciles what it
+        folded: kubeconfigs are refreshed, clusters that appeared since the last sync are
+        folded, and clusters this account folded that the provider no longer returns are
+        detached — only this account's own, in the fleet shard it was linked into.
+
+        It is idempotent, it reads the credential already sealed at link time, and a
+        discovery failure leaves the existing fold set alone rather than mass-detaching
+        it. An account this org has not linked is not found. Requires org admin.
+      operationId: post_v1_cloud_provider_accounts_label_sync
       parameters:
-      - in: path
+      - description: |-
+          Provider is the cloud the account belongs to: digitalocean, aws, gcp or
+          azure. An unknown provider is not found.
+        in: path
         name: provider
         required: true
         schema:
           type: string
-      - in: path
+      - description: |-
+          Label is the org-chosen name of the account within that provider. Empty
+          means "default"; anything outside 1–64 of [A-Za-z0-9._-] is refused.
+        in: path
         name: label
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/accountFoldView'
+          description: ok
+      summary: 'syncAccount re-discovers one already-linked cloud account and reconciles
+        what it folded: kubeconfigs are refreshed, clusters that appeared since the
+        last sync are folded, and clusters this account folded that the provider no
+        longer returns are detached — only this account''s own, in the fleet shard
+        it was linked into.'
       tags:
       - cloud
   /v1/cloud/accounts:
     get:
+      description: |-
+        listAccounts lists the caller org's linked cloud accounts across every provider:
+        which account each one is at the provider, which fleet clusters it folded, and
+        when it was last discovered. Metadata only — a sealed credential never appears in
+        a response. Another org's accounts are not visible and not countable.
       operationId: get_v1_cloud_accounts
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/accountsView'
+          description: ok
+      summary: 'listAccounts lists the caller org''s linked cloud accounts across
+        every provider: which account each one is at the provider, which fleet clusters
+        it folded, and when it was last discovered.'
       tags:
       - cloud
   /v1/cloudflare/ai/run/{wildcard1}:
@@ -31662,28 +32986,114 @@ paths:
       - guide
   /v1/help/articles:
     get:
+      description: |-
+        listArticles returns the public knowledge base: the help center's Published,
+        publicly-visible articles as cards. The org is server-fixed and the
+        status/is_public filter is server-set, so neither the tenant nor the visibility
+        can be widened by the caller. A deployment with no help center answers 404.
       operationId: get_v1_help_articles
+      parameters:
+      - description: |-
+          Category narrows the list to one knowledge-base section, matched against
+          the article's category by exact name. Empty lists every section.
+        in: query
+        name: category
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit caps how many articles are returned. Anything that is not a positive
+          integer uses 50, and values above 200 are clamped to 200.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/helpArticleList'
+          description: ok
+      summary: 'listArticles returns the public knowledge base: the help center''s
+        Published, publicly-visible articles as cards.'
       tags:
       - help
   /v1/help/articles/{slug}:
     get:
-      operationId: get_v1_help_articles_by_slug
+      description: |-
+        getArticle returns one public article by slug, with its body. A missing, Draft,
+        or internal (non-public) article is 404 — fail-closed, so this route is no
+        existence oracle for anything beyond "published and public".
+      operationId: get_v1_help_articles_slug
       parameters:
-      - in: path
+      - description: |-
+          Slug is the article's public identifier, from the path. It IS the document
+          name in the help center's store.
+        in: path
         name: slug
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/helpArticle'
+          description: ok
+      summary: getArticle returns one public article by slug, with its body.
       tags:
       - help
   /v1/help/categories:
     get:
+      description: |-
+        listCategories returns the knowledge-base sections for the public center's
+        navigation — but ONLY the sections that front at least one Published, public
+        article, so an internal (agent-only) category name or description never leaks. A
+        section with no public article is invisible; a center with no public articles has
+        no sections, which is an empty list rather than an error.
       operationId: get_v1_help_categories
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/helpCategoryList'
+          description: ok
+      summary: listCategories returns the knowledge-base sections for the public center's
+        navigation — but ONLY the sections that front at least one Published, public
+        article, so an internal (agent-only) category name or description never leaks.
       tags:
       - help
   /v1/help/tickets:
     post:
+      description: |-
+        fileTicket files a customer support ticket into the public help center. It
+        creates the ticket (status Open, source portal) with the customer's message on
+        the description, then records that same message as the opening entry of the
+        ticket's conversation thread; the description carries it regardless, so failing
+        to write that entry loses nothing. Answers 201 with an opaque reference.
+
+        A deployment with no help center answers 404, one whose center has not installed
+        the Help model answers 503, and a body over 64 KiB answers 413 — in that order,
+        which is the order the route has always decided them in.
       operationId: post_v1_help_tickets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/helpTicketIntake'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/helpTicketFiled'
+          description: created
+      summary: fileTicket files a customer support ticket into the public help center.
       tags:
       - help
   /v1/iam:
@@ -41425,7 +42835,39 @@ paths:
       - upload
   /v1/usage:
     post:
+      description: |-
+        record ingests a batch of account-usage samples — what a developer's OWN AI
+        accounts have consumed of their OWN plans, metered from each provider's own
+        login — and appends them to the warehouse series. Answers 202.
+
+        Send either a `samples` array or one sample's fields at the top level. Every
+        sample needs a provider, a machine and a known window class; an unknown window or
+        kind is refused rather than silently rewritten, because a dash filled with a class
+        nobody reported is worse than an error. There is no timestamp field: the server
+        owns the observation clock, and a sample says which window it measured with
+        windowStart or resetsAt.
+
+        It is FAIL-SOFT on storage: a warehouse outage costs a poll of history
+        (stored:false), never a failed request. It records usage ONLY — the link registry
+        is refreshed separately via POST /v1/links, so there is one and only one way to
+        update an account row.
       operationId: post_v1_usage
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/reportReq'
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/reportResp'
+          description: accepted
+      summary: record ingests a batch of account-usage samples — what a developer's
+        OWN AI accounts have consumed of their OWN plans, metered from each provider's
+        own login — and appends them to the warehouse series.
       tags:
       - usage
   /v1/usage/activity:
@@ -41489,12 +42931,94 @@ paths:
       - usage
   /v1/usage/analytics:
     get:
+      description: |-
+        analytics is the entitlement-GATED per-provider breakdown of the caller org's LLM
+        usage — the paid lens over the same warehouse ledger GET /v1/usage/summary reads
+        its totals from. Basic own-org usage stays ungated at /v1/usage/summary.
+
+        A plan that does not grant the analytics datastore is refused with 402, and an
+        unresolvable plan fails closed to the free floor, which does not grant it. The
+        window is clamped forward to the plan's retention entitlement, so a tenant can
+        never read older than its plan allows even with a custom start. The response is
+        marked no-store.
+
+        INTERIM (mirrors apps/world's limits echo): no org→plan resolver exists in cloud
+        yet — the subscription lookup is owned by the billing plane and the gateway
+        principal carries no plan claim — so the caller passes the plan and the gate
+        resolves THAT plan's access.
       operationId: get_v1_usage_analytics
+      parameters:
+      - description: End is the exclusive window end, RFC3339. Read only when Range
+          is custom.
+        in: query
+        name: end
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Plan is the plan id whose entitlement decides access and retention. INTERIM:
+          cloud has no org-to-plan resolver yet, so the caller names the plan; when
+          that resolver lands this becomes the caller org's own plan.
+        in: query
+        name: plan
+        required: false
+        schema:
+          type: string
+      - description: 'Range is the window: 24h, 7d, 30d, or custom. Empty means 24h.'
+        in: query
+        name: range
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Start is the inclusive window start, RFC3339. Read only when Range is
+          custom, and clamped forward to the plan's retention floor.
+        in: query
+        name: start
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/usageAnalyticsView'
+          description: ok
+      summary: analytics is the entitlement-GATED per-provider breakdown of the caller
+        org's LLM usage — the paid lens over the same warehouse ledger GET /v1/usage/summary
+        reads its totals from.
       tags:
       - usage
   /v1/usage/analytics/access:
     get:
+      description: |-
+        analyticsAccess echoes a plan's resolved analytics entitlement so a dashboard can
+        configure itself against the LIVE catalog instead of hardcoding tier numbers. An
+        empty plan resolves the free floor, and a catalog resolution failure serves that
+        same floor rather than erroring — so this always answers 200. It is a read-only
+        contract echo and carries no tenant data.
       operationId: get_v1_usage_analytics_access
+      parameters:
+      - description: |-
+          Plan is a plan id from the live @hanzo/plans catalog. Empty resolves the
+          free floor, and so does an id the catalog does not know — this never fails
+          on an unknown plan.
+        in: query
+        name: plan
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/usageAnalyticsAccess'
+          description: ok
+      summary: analyticsAccess echoes a plan's resolved analytics entitlement so a
+        dashboard can configure itself against the LIVE catalog instead of hardcoding
+        tier numbers.
       tags:
       - usage
   /v1/usage/leaderboard:
@@ -41658,12 +43182,109 @@ paths:
       - usage
   /v1/usage/samples:
     get:
+      description: |-
+        samples is the PER-PROVIDER view: one connected account's own consumption of its
+        own plan — "my Claude Max plan is 47% through its 6h window, resets at 14:20".
+
+        `current` is the newest instance of each lane (the headline); `windows` is the
+        history behind it. Both come from ONE deduped read, so they can never disagree.
+        The rows are the caller's OWN linked accounts, scoped to the validated principal
+        and its subject — never another user's, and never another org's.
       operationId: get_v1_usage_samples
+      parameters:
+      - description: |-
+          Account narrows to ONE linked account of that provider. Empty covers every
+          account the caller has linked there.
+        in: query
+        name: account
+        required: false
+        schema:
+          type: string
+      - description: Provider is the upstream to read, e.g. anthropic. Required.
+        in: query
+        name: provider
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Range is the window to read: 1h, 24h, 7d or 30d. Empty means 24h, and any
+          other label is refused rather than silently replaced.
+        in: query
+        name: range
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Window narrows to ONE window class: 6h, day, week or month. Empty covers
+          every class.
+        in: query
+        name: window
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dashResp'
+          description: ok
+      summary: 'samples is the PER-PROVIDER view: one connected account''s own consumption
+        of its own plan — "my Claude Max plan is 47% through its 6h window, resets
+        at 14:20".'
       tags:
       - usage
   /v1/usage/summary:
     get:
+      description: |-
+        summary answers GET /v1/usage/summary: the caller's own usage footprint over one
+        window — the categorized spend roll-up from the commerce ledger, the org's LLM
+        usage totals from the warehouse, and the caller's OWN linked provider accounts
+        beside the org's Hanzo-routed usage.
+
+        Every source degrades INDEPENDENTLY to honest zeros and says so in `sources` and
+        in its own `available` flag, so a partial deploy reports "no data" rather than
+        fabricating spend. The account rows and the Hanzo rows are concatenated and never
+        summed: a plan's percent is not money.
+
+        The response is org-scoped from the validated principal and marked no-store — a
+        signed-out caller is refused.
       operationId: get_v1_usage_summary
+      parameters:
+      - description: |-
+          Range is the window: 24h, 7d, 30d, or custom. Empty means 24h. A label this
+          surface does not know is refused rather than silently replaced.
+        in: query
+        name: range
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Start is the inclusive window start, RFC3339. Read only when Range is
+          custom.
+        in: query
+        name: start
+        required: false
+        schema:
+          type: string
+      - description: End is the exclusive window end, RFC3339. Read only when Range
+          is custom.
+        in: query
+        name: end
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/usageSummary'
+          description: ok
+      summary: 'summary answers GET /v1/usage/summary: the caller''s own usage footprint
+        over one window — the categorized spend roll-up from the commerce ledger,
+        the org''s LLM usage totals from the warehouse, and the caller''s OWN linked
+        provider accounts beside the org''s Hanzo-routed usage.'
       tags:
       - usage
   /v1/validators:
@@ -42199,21 +43820,109 @@ paths:
       - websearch
   /v1/world/limits:
     get:
+      description: |-
+        limits echoes a World plan's rate limits, alert quota and model-API grant, read
+        straight from the live @hanzo/plans catalog, so agents and dashboards configure
+        themselves against the catalog instead of hardcoding tier numbers.
+
+        An empty or unknown plan resolves world-free, and a catalog failure serves that
+        same free floor rather than erroring — so this always answers 200, and it can only
+        ever under-grant. It reports the contract; it does not enforce it.
       operationId: get_v1_world_limits
+      parameters:
+      - description: |-
+          Plan is a World plan id from the live @hanzo/plans catalog, e.g. world-pro.
+          Empty means world-free, and so does an id the catalog does not know — this
+          never fails on an unknown plan.
+        in: query
+        name: plan
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/limitsView'
+          description: ok
+      summary: limits echoes a World plan's rate limits, alert quota and model-API
+        grant, read straight from the live @hanzo/plans catalog, so agents and dashboards
+        configure themselves against the catalog instead of hardcoding tier numbers.
       tags:
       - world
   /v1/world/news:
     get:
+      description: |-
+        news returns the caller's merged world-news feed: every source their project's
+        pipeline names — GDELT once per keyword, plus each allowlisted RSS or Atom feed —
+        fetched concurrently, narrowed by the pipeline's keyword/region/source filters,
+        deduplicated by link and sorted freshest first, capped at 50 items.
+
+        A project with no stored pipeline gets a sensible default set of world feeds
+        rather than an empty answer. A source that fails or times out is SKIPPED: the feed
+        degrades to honest partial results and never 5xxs because one outlet was down.
+        Reading also publishes the result to the /v1/world/stream subscribers of the same
+        (org, project), so a dashboard's own refresh updates every open tab.
       operationId: get_v1_world_news
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/newsResponse'
+          description: ok
+      summary: 'news returns the caller''s merged world-news feed: every source their
+        project''s pipeline names — GDELT once per keyword, plus each allowlisted
+        RSS or Atom feed — fetched concurrently, narrowed by the pipeline''s keyword/region/source
+        filters, deduplicated by link and sorted freshest first, capped at 50 items.'
       tags:
       - world
   /v1/world/pipeline:
     get:
+      description: |-
+        pipeline returns the caller project's news pipeline: which feeds it reads and how
+        the merged result is filtered. A project that has never written one is answered
+        with the built-in world feeds and `default: true`, so a fresh project sees the
+        same feed /v1/world/news would actually serve rather than an empty configuration.
       operationId: get_v1_world_pipeline
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pipelineView'
+          description: ok
+      summary: 'pipeline returns the caller project''s news pipeline: which feeds
+        it reads and how the merged result is filtered.'
       tags:
       - world
     put:
+      description: |-
+        setPipeline replaces the caller project's news pipeline and returns what was
+        stored. It is a WHOLE replacement, not a patch: a field the request leaves out is
+        stored empty, so sending only feeds clears the filters.
+
+        Every feed URL is validated HERE, at the write boundary — http(s) only, and the
+        host must be on the server's allowlist — so a stored pipeline can never name a
+        host the fetcher would later refuse, and the allowlist is one decision in one
+        place rather than a check at each fetch.
       operationId: put_v1_world_pipeline
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/pipelineReq'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pipelineView'
+          description: ok
+      summary: setPipeline replaces the caller project's news pipeline and returns
+        what was stored.
       tags:
       - world
   /v1/world/stream:

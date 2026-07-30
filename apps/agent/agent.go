@@ -32,6 +32,34 @@ import (
 // broken upstream cannot balloon memory.
 const maxCompletionResponse = 8 << 20
 
+// UNTYPED BY DESIGN, and not fixable here. All four /v1/agent operations —
+// POST /v1/agent, GET /v1/agent/presets, GET /v1/agent/conversations,
+// GET /v1/agent/conversations/{id} — are registered by hz.Mount below, which is
+// github.com/hanzoai/agent's own router wiring (agent.go:166-169 in v0.1.3). This
+// package registers NO route of its own, so there is nothing in cloud to convert:
+// they become typeable in hanzoai/agent, which owns them, exactly as apps/tasks'
+// relayed operations become typeable in hanzoai/tasks.
+//
+// Two facts have to move upstream with them, and both are visible from here:
+//
+//   - Every operation resolves its caller through a `func(*zip.Ctx) (Principal,
+//     bool)` (Deps.Principal, supplied below), and POST /v1/agent additionally
+//     dispatches server-executed tools with the LIVE *zip.Ctx (toolPlane.Dispatch)
+//     and replays the caller's own credential HEADERS into the in-process
+//     completion (credential, below). A typed op receives only a context, and
+//     hanzoai/agent deliberately imports neither cloud nor ai, so it cannot use
+//     cloud.Bridge — it needs a per-request seam of its own before any of its four
+//     handlers can lose its *zip.Ctx.
+//   - POST /v1/agent passes an upstream 4xx through VERBATIM — the completion's own
+//     status AND body, so a 402 insufficient_balance reaches the caller as itself
+//     rather than as a gateway 502 (round.go:104-110 upstream). A typed op's only
+//     way to answer non-2xx is to return an error, which zip renders as its flat
+//     {status,code,error}; that route is the apps/ml refusal class and stays
+//     untyped even after the seam lands.
+//
+// Until then these four publish an address and nothing else: no prose, no MCP
+// tool, no CLI command, no typed SDK method.
+//
 // Mount wires POST /v1/agent (+ reads) into cloud, injecting the ai completion and
 // the tool plane. The caller identity comes from cloud's validated principal.
 func Mount(app *zip.App, deps cloud.Deps) error {

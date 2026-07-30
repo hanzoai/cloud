@@ -1,8 +1,8 @@
 package usage
 
 import (
+	"context"
 	"fmt"
-	"net/http"
 	"sort"
 	"time"
 
@@ -34,14 +34,40 @@ import (
 // caller resolves the (org, subject) scope for a request: the VALIDATED IAM owner
 // claim (principal.Org — the trusted minted X-Org-Id, never a client header) plus
 // c.User() (the owning subject, non-empty once principal.Org returns ok, since Org
-// composes Validated). Every account-usage handler and the summary's account block
-// gate on it — an off-gateway forge with no validated user is refused fail-closed.
-func caller(c *zip.Ctx) (org, user string, ok bool) {
+// composes Validated). Every account-usage op and the summary's account block gate
+// on it — an off-gateway forge with no validated user is refused fail-closed.
+//
+// It is the ONE identity seam in this package, and it reaches the request because
+// the SUBJECT is not the org: principal.OrgFrom carries the tenant and nothing
+// else, while the account board is scoped to the caller's OWN linked accounts and
+// therefore needs the validated user id too. Off the HTTP path there is no request
+// and no principal, so it fails closed and every op refuses — the handler's own
+// gate, with no second gate to keep in sync.
+func caller(ctx context.Context) (org, user string, ok bool) {
+	c, has := cloud.Request(ctx)
+	if !has {
+		return "", "", false
+	}
 	org, ok = principal.Org(c)
 	if !ok {
 		return "", "", false
 	}
 	return org, trim(c.User()), true
+}
+
+// orgOf is caller() for the reads that need the tenant and nothing else. It goes
+// through principal.OrgFrom — the org Bridge parked — so the tenant never depends
+// on reaching the request.
+func orgOf(ctx context.Context) (string, bool) { return principal.OrgFrom(ctx) }
+
+// noStore marks a per-tenant money response uncacheable by the browser and by any
+// intermediary. It is a RESPONSE header, which a typed op's signature drops, so it
+// is written on the request Bridge parked; off the HTTP path there is no response
+// to mark and nothing to do.
+func noStore(ctx context.Context) {
+	if c, ok := cloud.Request(ctx); ok {
+		c.SetHeader("Cache-Control", "no-store")
+	}
 }
 
 // Ranges — the closed allowlist for a sample-dash read window. This is the
@@ -76,37 +102,64 @@ func resolveRange(label string, now time.Time) (from, to time.Time, err error) {
 
 // ── views ────────────────────────────────────────────────────────────────────
 
-// sampleView is one window instance on the wire. Unknown values are OMITTED rather
-// than sent as zero, and `confidence` says whether the counters that remain mean
-// anything — so a console renders "—" where the meter knew nothing, and never a
-// fabricated 0.
-type sampleView struct {
-	Lane          string  `json:"lane"`
-	Window        string  `json:"window"`
-	WindowMinutes int32   `json:"windowMinutes,omitempty"`
-	WindowStart   string  `json:"windowStart,omitempty"`
-	ResetsAt      string  `json:"resetsAt,omitempty"`
-	UsedPct       float64 `json:"usedPct"`
-	Confidence    string  `json:"confidence"`
-	Synthetic     bool    `json:"synthetic,omitempty"`
+// usageWindowView is one window instance on the wire. Unknown values are OMITTED
+// rather than sent as zero, and `confidence` says whether the counters that remain
+// mean anything — so a console renders "—" where the meter knew nothing, and never
+// a fabricated 0.
+type usageWindowView struct {
+	// Lane is the meter lane this instance belongs to, e.g. a provider's own
+	// rolling-window meter.
+	Lane string `json:"lane"`
+	// Window is the window class: 6h, day, week or month.
+	Window string `json:"window"`
+	// WindowMinutes is the window's real length in minutes when the meter
+	// reported one; omitted when it did not.
+	WindowMinutes int32 `json:"windowMinutes,omitempty"`
+	// WindowStart is when this window opened, RFC3339 UTC; omitted when unknown.
+	WindowStart string `json:"windowStart,omitempty"`
+	// ResetsAt is when this window rolls over, RFC3339 UTC; omitted when unknown.
+	ResetsAt string `json:"resetsAt,omitempty"`
+	// UsedPct is how much of the window's allowance is consumed, 0–100.
+	UsedPct float64 `json:"usedPct"`
+	// Confidence says how much the counters beside it mean — a meter that
+	// reported only a percentage leaves them at zero, and this is how a reader
+	// tells that from a true zero.
+	Confidence string `json:"confidence"`
+	// Synthetic marks an instance the meter inferred rather than read.
+	Synthetic bool `json:"synthetic,omitempty"`
 
-	Requests          int64 `json:"requests,omitempty"`
-	InputTokens       int64 `json:"inputTokens,omitempty"`
-	OutputTokens      int64 `json:"outputTokens,omitempty"`
-	TotalTokens       int64 `json:"totalTokens,omitempty"`
+	// Requests is how many requests were made in the window; omitted when the
+	// meter did not report it.
+	Requests int64 `json:"requests,omitempty"`
+	// InputTokens is prompt tokens consumed in the window; omitted when unknown.
+	InputTokens int64 `json:"inputTokens,omitempty"`
+	// OutputTokens is completion tokens produced in the window; omitted when
+	// unknown.
+	OutputTokens int64 `json:"outputTokens,omitempty"`
+	// TotalTokens is the window's total tokens; omitted when unknown.
+	TotalTokens int64 `json:"totalTokens,omitempty"`
+	// CachedInputTokens is the prompt tokens served from the provider's cache;
+	// omitted when unknown.
 	CachedInputTokens int64 `json:"cachedInputTokens,omitempty"`
 
-	CostCents      int64  `json:"costCents,omitempty"`
-	CostLimitCents int64  `json:"costLimitCents,omitempty"`
-	Currency       string `json:"currency,omitempty"`
+	// CostCents is what the window cost on the PROVIDER's own plan, in US cents.
+	// It is not a Hanzo charge.
+	CostCents int64 `json:"costCents,omitempty"`
+	// CostLimitCents is the plan's spend ceiling for the window, in US cents.
+	CostLimitCents int64 `json:"costLimitCents,omitempty"`
+	// Currency is the provider's currency when it is not US cents.
+	Currency string `json:"currency,omitempty"`
 
+	// Account is the linked provider account the window belongs to.
 	Account string `json:"account,omitempty"`
-	Plan    string `json:"plan,omitempty"`
+	// Plan is the provider plan the account is on, e.g. a Claude Max plan.
+	Plan string `json:"plan,omitempty"`
+	// Machine is the host whose meter reported the window.
 	Machine string `json:"machine,omitempty"`
 }
 
-func toSampleView(x Sample) sampleView {
-	return sampleView{
+func toSampleView(x Sample) usageWindowView {
+	return usageWindowView{
 		Lane: x.Lane, Window: x.Window, WindowMinutes: x.WindowMinutes,
 		WindowStart: rfc3339Of(x.WindowStart), ResetsAt: rfc3339Of(x.ResetsAt),
 		UsedPct: x.UsedPct, Confidence: x.Confidence, Synthetic: x.Synthetic,
@@ -127,16 +180,32 @@ func rfc3339Of(t time.Time) string {
 // TotalView is one row of the account-usage board (the summary's `accounts.rows`).
 // Source and scope are what keep the board honest — see the Source/Scope consts.
 type TotalView struct {
-	Source     string  `json:"source"` // account | hanzo
-	Scope      string  `json:"scope"`  // user | org
-	Provider   string  `json:"provider"`
-	Window     string  `json:"window,omitempty"`
-	Requests   int64   `json:"requests,omitempty"`
-	Tokens     int64   `json:"tokens,omitempty"`
-	CostCents  int64   `json:"costCents,omitempty"`
-	UsedPct    float64 `json:"usedPct,omitempty"`
-	Confidence string  `json:"confidence"`
-	Windows    int64   `json:"windows,omitempty"`
+	// Source is where the row came from: "account" is the provider's own meter
+	// on the caller's linked account, "hanzo" is Hanzo-routed inference. The two
+	// are never summed.
+	Source string `json:"source"`
+	// Scope is whose row it is: "user" for the caller's own linked accounts,
+	// "org" for the whole tenant's Hanzo-routed usage.
+	Scope string `json:"scope"`
+	// Provider is the upstream the usage was measured against.
+	Provider string `json:"provider"`
+	// Window is the meter window class the row rolls up, when it has one.
+	Window string `json:"window,omitempty"`
+	// Requests is how many requests the row covers.
+	Requests int64 `json:"requests,omitempty"`
+	// Tokens is the total tokens the row covers.
+	Tokens int64 `json:"tokens,omitempty"`
+	// CostCents is the row's cost in US cents. For an "account" row this is the
+	// PROVIDER's own charge, not a Hanzo one.
+	CostCents int64 `json:"costCents,omitempty"`
+	// UsedPct is how much of a plan window the row consumed, 0–100. It is a
+	// share, never money.
+	UsedPct float64 `json:"usedPct,omitempty"`
+	// Confidence says how much the counters mean; a percentage-only meter leaves
+	// them at zero.
+	Confidence string `json:"confidence"`
+	// Windows is how many window instances rolled up into the row.
+	Windows int64 `json:"windows,omitempty"`
 }
 
 func toTotalView(t Total) TotalView {
@@ -163,37 +232,139 @@ func toTotalView(t Total) TotalView {
 // to state) and WHEN WE LEARNED IT (ours). A backfill of a real historical window
 // lands at the right instant with an honest observation time.
 type sampleReq struct {
+	// Provider is the upstream the account belongs to, e.g. anthropic. Required.
 	Provider string `json:"provider"`
-	Account  string `json:"account"`
-	Plan     string `json:"plan"`
-	Kind     string `json:"kind"`
-	Machine  string `json:"machine"`
+	// Account is the linked account the window was metered from.
+	Account string `json:"account"`
+	// Plan is the provider plan the account is on, e.g. a Claude Max plan.
+	Plan string `json:"plan"`
+	// Kind is subscription or apikey. Empty is accepted; anything else is
+	// refused.
+	Kind string `json:"kind"`
+	// Machine is the host whose meter read the window. Required.
+	Machine string `json:"machine"`
 
-	Lane          string `json:"lane"`
-	Window        string `json:"window"`
-	WindowMinutes int32  `json:"windowMinutes"`
-	WindowStart   string `json:"windowStart"` // RFC3339; bounded
-	ResetsAt      string `json:"resetsAt"`    // RFC3339; bounded
+	// Lane is the meter lane within the account.
+	Lane string `json:"lane"`
+	// Window is the window class: 6h, day, week or month. Required, and a class
+	// this surface does not know is refused rather than rewritten.
+	Window string `json:"window"`
+	// WindowMinutes is the window's real length in minutes, as the meter reports
+	// it.
+	WindowMinutes int32 `json:"windowMinutes"`
+	// WindowStart is when the measured window opened, RFC3339. Empty is allowed;
+	// anything else that is not RFC3339 is refused.
+	WindowStart string `json:"windowStart"`
+	// ResetsAt is when the measured window rolls over, RFC3339. Empty is
+	// allowed; anything else that is not RFC3339 is refused.
+	ResetsAt string `json:"resetsAt"`
 
-	UsedPct    float64 `json:"usedPct"`
-	Confidence string  `json:"confidence"`
-	Synthetic  bool    `json:"synthetic"`
+	// UsedPct is how much of the window's allowance is consumed, 0–100.
+	UsedPct float64 `json:"usedPct"`
+	// Confidence says how much the counters below mean.
+	Confidence string `json:"confidence"`
+	// Synthetic marks a window the meter inferred rather than read.
+	Synthetic bool `json:"synthetic"`
 
-	Requests          int64 `json:"requests"`
-	InputTokens       int64 `json:"inputTokens"`
-	OutputTokens      int64 `json:"outputTokens"`
-	TotalTokens       int64 `json:"totalTokens"`
+	// Requests is how many requests the window covers.
+	Requests int64 `json:"requests"`
+	// InputTokens is prompt tokens consumed in the window.
+	InputTokens int64 `json:"inputTokens"`
+	// OutputTokens is completion tokens produced in the window.
+	OutputTokens int64 `json:"outputTokens"`
+	// TotalTokens is the window's total tokens.
+	TotalTokens int64 `json:"totalTokens"`
+	// CachedInputTokens is the prompt tokens the provider served from cache.
 	CachedInputTokens int64 `json:"cachedInputTokens"`
 
-	CostCents      int64  `json:"costCents"`
-	CostLimitCents int64  `json:"costLimitCents"`
-	Currency       string `json:"currency"`
+	// CostCents is what the window cost on the PROVIDER's own plan, in US cents.
+	CostCents int64 `json:"costCents"`
+	// CostLimitCents is the plan's spend ceiling for the window, in US cents.
+	CostLimitCents int64 `json:"costLimitCents"`
+	// Currency is the provider's currency when it is not US cents.
+	Currency string `json:"currency"`
 }
 
 // reportReq accepts one sample or many: a poller reports its lanes in one call.
+// EITHER send `samples` with a batch, OR send one sample's fields at the top level
+// — the two shapes are the same wire the collector has always had.
+//
+// The single-sample fields are spelled out rather than embedded. encoding/json
+// PROMOTES an embedded struct's fields, so the wire would be identical either way,
+// but zip's schema walk skips an embedded unexported type — which would publish a
+// body of `samples` alone and document none of the twenty fields a single-sample
+// report actually sends.
 type reportReq struct {
+	// Samples is the batch form: every lane a poller measured, in one call. When
+	// it is non-empty the top-level sample fields are ignored.
 	Samples []sampleReq `json:"samples"`
-	sampleReq
+
+	// Provider is the upstream the account belongs to, e.g. anthropic. Required
+	// on every sample.
+	Provider string `json:"provider"`
+	// Account is the linked account the window was metered from.
+	Account string `json:"account"`
+	// Plan is the provider plan the account is on, e.g. a Claude Max plan.
+	Plan string `json:"plan"`
+	// Kind is subscription or apikey. Empty is accepted; anything else is
+	// refused.
+	Kind string `json:"kind"`
+	// Machine is the host whose meter read the window. Required on every sample.
+	Machine string `json:"machine"`
+
+	// Lane is the meter lane within the account.
+	Lane string `json:"lane"`
+	// Window is the window class: 6h, day, week or month. Required, and a class
+	// this surface does not know is refused rather than rewritten.
+	Window string `json:"window"`
+	// WindowMinutes is the window's real length in minutes, as the meter reports
+	// it.
+	WindowMinutes int32 `json:"windowMinutes"`
+	// WindowStart is when the measured window opened, RFC3339. This is how a
+	// backfill states WHICH window it measured; the server always owns the
+	// observation clock, so there is no timestamp field.
+	WindowStart string `json:"windowStart"`
+	// ResetsAt is when the measured window rolls over, RFC3339.
+	ResetsAt string `json:"resetsAt"`
+
+	// UsedPct is how much of the window's allowance is consumed, 0–100.
+	UsedPct float64 `json:"usedPct"`
+	// Confidence says how much the counters below mean.
+	Confidence string `json:"confidence"`
+	// Synthetic marks a window the meter inferred rather than read.
+	Synthetic bool `json:"synthetic"`
+
+	// Requests is how many requests the window covers.
+	Requests int64 `json:"requests"`
+	// InputTokens is prompt tokens consumed in the window.
+	InputTokens int64 `json:"inputTokens"`
+	// OutputTokens is completion tokens produced in the window.
+	OutputTokens int64 `json:"outputTokens"`
+	// TotalTokens is the window's total tokens.
+	TotalTokens int64 `json:"totalTokens"`
+	// CachedInputTokens is the prompt tokens the provider served from cache.
+	CachedInputTokens int64 `json:"cachedInputTokens"`
+
+	// CostCents is what the window cost on the PROVIDER's own plan, in US cents.
+	CostCents int64 `json:"costCents"`
+	// CostLimitCents is the plan's spend ceiling for the window, in US cents.
+	CostLimitCents int64 `json:"costLimitCents"`
+	// Currency is the provider's currency when it is not US cents.
+	Currency string `json:"currency"`
+}
+
+// single projects the top-level fields back into the one-sample form, so the batch
+// and the single shape reach parseSample through exactly one path.
+func (r reportReq) single() sampleReq {
+	return sampleReq{
+		Provider: r.Provider, Account: r.Account, Plan: r.Plan, Kind: r.Kind,
+		Machine: r.Machine, Lane: r.Lane, Window: r.Window,
+		WindowMinutes: r.WindowMinutes, WindowStart: r.WindowStart, ResetsAt: r.ResetsAt,
+		UsedPct: r.UsedPct, Confidence: r.Confidence, Synthetic: r.Synthetic,
+		Requests: r.Requests, InputTokens: r.InputTokens, OutputTokens: r.OutputTokens,
+		TotalTokens: r.TotalTokens, CachedInputTokens: r.CachedInputTokens,
+		CostCents: r.CostCents, CostLimitCents: r.CostLimitCents, Currency: r.Currency,
+	}
 }
 
 // samplesOf flattens the one-or-many body into the batch.
@@ -204,7 +375,7 @@ func (r reportReq) samplesOf() []sampleReq {
 	if r.Provider == "" && r.Window == "" {
 		return nil
 	}
-	return []sampleReq{r.sampleReq}
+	return []sampleReq{r.single()}
 }
 
 // parseSample validates a reported sample and turns it into a bounded value. The
@@ -257,36 +428,48 @@ func parseInstant(s string) (time.Time, error) {
 // unavailable; the samples were validated and accepted but not persisted, so a
 // device can retry without being blocked.
 type reportResp struct {
-	Accepted int  `json:"accepted"`
-	Stored   bool `json:"stored"`
+	// Accepted is how many samples passed validation. Every one of them was
+	// accepted, or the whole report was refused — there is no partial success.
+	Accepted int `json:"accepted"`
+	// Stored is whether the warehouse actually persisted them. False means the
+	// datastore was unavailable and the poll of history was lost; the request
+	// still succeeded, so a device retries without being blocked.
+	Stored bool `json:"stored"`
 }
 
-// record ingests a batch of samples and appends them to the warehouse series. It is
-// FAIL-SOFT: a datastore outage costs a poll of history (stored:false), never a
-// failed request. It records usage ONLY — the link registry is refreshed separately
-// via POST /v1/links, so there is one and only one way to update an account row.
-func record(s *cloud.Service[state], c *zip.Ctx) error {
-	org, user, ok := caller(c)
+// record ingests a batch of account-usage samples — what a developer's OWN AI
+// accounts have consumed of their OWN plans, metered from each provider's own
+// login — and appends them to the warehouse series. Answers 202.
+//
+// Send either a `samples` array or one sample's fields at the top level. Every
+// sample needs a provider, a machine and a known window class; an unknown window or
+// kind is refused rather than silently rewritten, because a dash filled with a class
+// nobody reported is worse than an error. There is no timestamp field: the server
+// owns the observation clock, and a sample says which window it measured with
+// windowStart or resetsAt.
+//
+// It is FAIL-SOFT on storage: a warehouse outage costs a poll of history
+// (stored:false), never a failed request. It records usage ONLY — the link registry
+// is refreshed separately via POST /v1/links, so there is one and only one way to
+// update an account row.
+func (o ops) record(ctx context.Context, in *reportReq) (*reportResp, error) {
+	org, user, ok := caller(ctx)
 	if !ok {
-		return zip.ErrUnauthorized("sign in to report usage")
+		return nil, zip.ErrUnauthorized("sign in to report usage")
 	}
-	var body reportReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	raw := body.samplesOf()
+	raw := in.samplesOf()
 	if len(raw) == 0 {
-		return zip.ErrBadRequest("at least one sample is required")
+		return nil, zip.ErrBadRequest("at least one sample is required")
 	}
 	if len(raw) > maxSamples {
-		return zip.ErrBadRequest(fmt.Sprintf("at most %d samples per report", maxSamples))
+		return nil, zip.ErrBadRequest(fmt.Sprintf("at most %d samples per report", maxSamples))
 	}
 	now := time.Now()
 	samples := make([]Sample, 0, len(raw))
-	for _, in := range raw {
-		x, err := parseSample(in, now)
+	for _, s := range raw {
+		x, err := parseSample(s, now)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		samples = append(samples, x)
 	}
@@ -294,57 +477,86 @@ func record(s *cloud.Service[state], c *zip.Ctx) error {
 	// History is fail-soft: a warehouse outage must never fail a report or block a
 	// device. `stored` tells the caller which happened — honestly.
 	stored := true
-	if err := s.State.warehouse.WriteSamples(c.Context(), org, user, samples, now); err != nil {
-		s.Log.Debug("account usage write skipped", "org", org, "err", err)
+	if err := o.s.State.warehouse.WriteSamples(ctx, org, user, samples, now); err != nil {
+		o.s.Log.Debug("account usage write skipped", "org", org, "err", err)
 		stored = false
 	}
-	return c.JSON(http.StatusAccepted, reportResp{Accepted: len(samples), Stored: stored})
+	return &reportResp{Accepted: len(samples), Stored: stored}, nil
 }
 
 // ── reads ────────────────────────────────────────────────────────────────────
 
+// dashResp is one linked account's own lane dash.
 type dashResp struct {
-	Provider  string       `json:"provider"`
-	Account   string       `json:"account,omitempty"`
-	Range     string       `json:"range"`
-	From      string       `json:"from"`
-	To        string       `json:"to"`
-	Source    string       `json:"source"`    // account — the provider's own meter
-	Scope     string       `json:"scope"`     // user
-	Available bool         `json:"available"` // false = warehouse unavailable, NOT "no usage"
-	Current   []sampleView `json:"current"`   // the live state of each lane: the dash headline
-	Windows   []sampleView `json:"windows"`   // every instance in range, newest first
+	// Provider is the upstream that was asked about, echoed back.
+	Provider string `json:"provider"`
+	// Account is the linked account that was asked about, when one was named.
+	Account string `json:"account,omitempty"`
+	// Range is the window that was served: 1h, 24h, 7d or 30d.
+	Range string `json:"range"`
+	// From is the inclusive start of that window, RFC3339 UTC.
+	From string `json:"from"`
+	// To is the exclusive end of that window, RFC3339 UTC.
+	To string `json:"to"`
+	// Source names the meter of record — the provider's own login, not Hanzo.
+	Source string `json:"source"`
+	// Scope says whose rows these are: the caller's own linked accounts.
+	Scope string `json:"scope"`
+	// Available is false when the warehouse could not be read. That means "no
+	// answer", NOT "no usage" — the two lists below are then empty for a reason.
+	Available bool `json:"available"`
+	// Current is the newest window instance of each lane — the dash headline.
+	Current []usageWindowView `json:"current"`
+	// Windows is every instance in range, newest first — the history behind it.
+	Windows []usageWindowView `json:"windows"`
+}
+
+// usageSamplesQuery selects which account's lane dash to read.
+type usageSamplesQuery struct {
+	// Account narrows to ONE linked account of that provider. Empty covers every
+	// account the caller has linked there.
+	Account string `json:"account"`
+	// Provider is the upstream to read, e.g. anthropic. Required.
+	Provider string `json:"provider"`
+	// Range is the window to read: 1h, 24h, 7d or 30d. Empty means 24h, and any
+	// other label is refused rather than silently replaced.
+	Range string `json:"range"`
+	// Window narrows to ONE window class: 6h, day, week or month. Empty covers
+	// every class.
+	Window string `json:"window"`
 }
 
 // samples is the PER-PROVIDER view: one connected account's own consumption of its
 // own plan — "my Claude Max plan is 47% through its 6h window, resets at 14:20".
 //
 // `current` is the newest instance of each lane (the headline); `windows` is the
-// history behind it. Both are computed from ONE deduped read — no second query.
-func samples(s *cloud.Service[state], c *zip.Ctx) error {
-	org, user, ok := caller(c)
+// history behind it. Both come from ONE deduped read, so they can never disagree.
+// The rows are the caller's OWN linked accounts, scoped to the validated principal
+// and its subject — never another user's, and never another org's.
+func (o ops) samples(ctx context.Context, in *usageSamplesQuery) (*dashResp, error) {
+	org, user, ok := caller(ctx)
 	if !ok {
-		return zip.ErrUnauthorized("sign in to view usage")
+		return nil, zip.ErrUnauthorized("sign in to view usage")
 	}
-	provider := trim(c.Query("provider"))
+	provider := trim(in.Provider)
 	if provider == "" {
-		return zip.ErrBadRequest("provider is required")
+		return nil, zip.ErrBadRequest("provider is required")
 	}
 	if len(provider) > maxProvider {
-		return zip.ErrBadRequest("provider too long")
+		return nil, zip.ErrBadRequest("provider too long")
 	}
-	acct := trim(c.Query("account"))
+	acct := trim(in.Account)
 	if len(acct) > maxAccount {
-		return zip.ErrBadRequest("account too long")
+		return nil, zip.ErrBadRequest("account too long")
 	}
-	window := trim(c.Query("window"))
+	window := trim(in.Window)
 	if window != "" && !validWindow(window) {
-		return zip.ErrBadRequest("window must be one of 6h, day, week, month")
+		return nil, zip.ErrBadRequest("window must be one of 6h, day, week, month")
 	}
-	rangeLabel := trim(c.Query("range"))
+	rangeLabel := trim(in.Range)
 	from, to, err := resolveRange(rangeLabel, time.Now())
 	if err != nil {
-		return zip.ErrBadRequest(err.Error())
+		return nil, zip.ErrBadRequest(err.Error())
 	}
 	if rangeLabel == "" {
 		rangeLabel = Range24h
@@ -353,11 +565,11 @@ func samples(s *cloud.Service[state], c *zip.Ctx) error {
 		Provider: provider, Account: acct, Range: rangeLabel,
 		From: rfc3339Of(from), To: rfc3339Of(to),
 		Source: SourceAccount, Scope: ScopeUser,
-		Current: []sampleView{}, Windows: []sampleView{},
+		Current: []usageWindowView{}, Windows: []usageWindowView{},
 	}
-	rows, ok := s.State.warehouse.Series(c.Context(), org, user, provider, acct, window, from, to)
+	rows, ok := o.s.State.warehouse.Series(ctx, org, user, provider, acct, window, from, to)
 	if !ok {
-		return c.JSON(http.StatusOK, out) // Available=false: honest "unavailable"
+		return &out, nil // Available=false: honest "unavailable"
 	}
 	out.Available = true
 	for _, x := range rows {
@@ -366,7 +578,7 @@ func samples(s *cloud.Service[state], c *zip.Ctx) error {
 	for _, x := range currentOf(rows) {
 		out.Current = append(out.Current, toSampleView(x))
 	}
-	return c.JSON(http.StatusOK, out)
+	return &out, nil
 }
 
 // currentOf picks the newest instance of each lane — the live state. Rows arrive
