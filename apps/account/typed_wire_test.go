@@ -65,7 +65,8 @@ import (
 // Opaque by construction, not by omission. Re-check when zip gains raw-body
 // binding and multi-status/passthrough responses (#78's family), and convert.
 const verbatimForward = "a verbatim forwarder: the path is a wildcard remainder bounded by an allowlist, " +
-	"the body is forwarded as received at any content type, and the answer is commerce's own bytes AND " +
+	"the request body's BYTES reach commerce as received whatever their content type (only their DECLARED " +
+	"type is rewritten, by commerceDo), and the answer is commerce's own bytes AND " +
 	"status — where a typed op json-decodes the body first and answers one declared status in JSON."
 
 // untypedByDesign is the CLOSED list of account operations that are NOT typed
@@ -231,7 +232,9 @@ func TestUntypedByDesignForwardsVerbatim(t *testing.T) {
 	// And the defect the leg above walks past, asserted so it cannot be "fixed"
 	// silently in one direction: commerceDo REWRITES the request Content-Type to
 	// application/json, so the bytes are forwarded as received but their type is
-	// not. That is why verbatimForward no longer claims "at any content type".
+	// not. That is why verbatimForward scopes "as received" to the BYTES and names
+	// the relabel — the claim it used to make, "forwarded as received at any content
+	// type", was refuted by exactly this assertion.
 	if gotType != "application/json" {
 		t.Fatalf("commerceDo rewrites the request Content-Type today; if that changed, "+
 			"update verbatimForward and billing.go's header note — got %q", gotType)
