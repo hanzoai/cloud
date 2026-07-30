@@ -76,6 +76,9 @@ type state struct {
 // mounted is the active service so Shutdown + the in-process seam reach it.
 var mounted *cloud.Service[state]
 
+// removeSink unregisters this subsystem's fan-out consumer on Shutdown.
+var removeSink func()
+
 // Mount wires /v1/destinations/* onto app. Complex flavour (a package global for the
 // seam + Shutdown, and it installs the analytics fan-out sink), so it constructs the
 // Service value directly.
@@ -117,7 +120,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 
 	// Install the fan-out sink onto the canonical event plane, unless disabled.
 	if fanoutEnabled() {
-		analytics.SetSink(func(org string, evs []analytics.SinkEvent) { consume(s, org, evs) })
+		removeSink = analytics.AddSink(func(org string, evs []analytics.SinkEvent) { consume(s, org, evs) })
 		b.Log.Info("destinations fan-out sink installed", "platforms", len(s.State.dests))
 	} else {
 		b.Log.Info("destinations fan-out disabled", "flag", publicFanoutEnv)
@@ -382,7 +385,10 @@ func (o ops) test(ctx context.Context, in *destinationRef) (*destinationTest, er
 
 // Shutdown closes the store and clears the sink. Idempotent.
 func Shutdown() error {
-	analytics.SetSink(nil)
+	if removeSink != nil {
+		removeSink()
+		removeSink = nil
+	}
 	if mounted == nil || mounted.State.store == nil {
 		mounted = nil
 		return nil

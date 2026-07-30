@@ -80,9 +80,11 @@ type streamSource struct {
 	subjects []string
 }
 
-// streams is the consumed set. COMMERCE (commerce.>) is live today.
+// streams is the consumed set: COMMERCE (commerce.>) and the canonical event
+// plane (EVENTS, event.>) the bridge publishes.
 var streams = []streamSource{
 	{stream: events.StreamName, subjects: events.StreamSubjects},
+	{stream: EventStream, subjects: EventSubjects},
 }
 
 // deliveryJob is a self-contained unit of work: the resolved subscriber + the exact
