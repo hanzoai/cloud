@@ -253,7 +253,29 @@
         "operationId": "post_v1_company_fundraise_deck",
         "tags": [
           "company"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deckOut"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/company/fundraise/round": {
@@ -544,7 +566,19 @@
         "operationId": "post_v1_company_payment",
         "tags": [
           "company"
-        ]
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/formationView"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/company/register": {
@@ -1027,6 +1061,14 @@
           }
         },
         "type": "object"
+      },
+      "deckOut": {
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string"
+          }
+        }
       },
       "esignCompleteIn": {
         "properties": {
