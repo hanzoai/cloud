@@ -1,10 +1,13 @@
-// Register is the seam through which a subsystem DECLARES the payload types the
-// router cannot derive. The projector (From) reads only two sources: the live
-// route table, which says WHICH operations exist, and this registry, which says
-// what a declared operation's bodies CONTAIN. The drift-proof property survives
-// because the registry cannot add an operation: a registration whose route is
-// not in the router simply never renders, so the document still cannot disagree
-// with the router — schemas are additive metadata on routes that exist.
+// Register and Describe are the seam through which a subsystem DECLARES what
+// the router cannot derive: the payload types an operation binds (Register)
+// and, for an operation whose handler the wire refuses to let become a typed
+// op, its prose (Describe). The projector (From) reads only two sources: the
+// live route table, which says WHICH operations exist, and this registry, which
+// says what a declared operation's bodies CONTAIN and what its refused handler
+// DOES. The drift-proof property survives because the registry cannot add an
+// operation: a declaration whose route is not in the router simply never
+// renders, so the document still cannot disagree with the router — schemas and
+// prose are additive metadata on routes that exist.
 //
 // The schema itself is derived by reflection from the very Go structs the
 // handler binds (json tags), stated once at the registration site next to the
@@ -36,14 +39,24 @@ type Response struct {
 	Content     map[string]Media `json:"content,omitempty"`
 }
 
-// registration is one declared operation body pair; nil means "not declared",
-// never "empty". alts is set only when req is [OneOf] — the alternative shapes in
-// declared order, kept as types because reflect.TypeOf on the OneOf slice itself
-// knows only that it is a slice of any.
+// registration is one operation's declared halves. The BODY half (Register):
+// req/resp types, nil meaning "not declared", never "empty"; alts is set only
+// when req is [OneOf] — the alternative shapes in declared order, kept as types
+// because reflect.TypeOf on the OneOf slice itself knows only that it is a
+// slice of any. The PROSE half (Describe): summary/description for an operation
+// whose handler cannot be a typed op. Each half carries its own presence flag
+// so the duplicate check guards the half actually being re-declared — one
+// package Registering the bodies and Describing the prose of one operation is
+// two halves of one declaration, not a clash.
 type registration struct {
-	req  reflect.Type
-	alts []reflect.Type
-	resp reflect.Type
+	req      reflect.Type
+	alts     []reflect.Type
+	resp     reflect.Type
+	declared bool // the body half is present (Register ran)
+
+	summary     string
+	description string
+	described   bool // the prose half is present (Describe ran)
 }
 
 // opKey addresses a registration the same way the router addresses a route:
@@ -112,21 +125,56 @@ var oneOfReq = reflect.TypeOf(OneOf{})
 // one operation.
 func Register(path, method string, req, resp any) {
 	key := opKey{method: strings.ToUpper(method), path: path}
-	reg := registration{req: reflect.TypeOf(req), resp: reflect.TypeOf(resp)}
+	half := registration{req: reflect.TypeOf(req), resp: reflect.TypeOf(resp), declared: true}
 	if alts, poly := req.(OneOf); poly {
 		if len(alts) == 0 {
 			panic(fmt.Sprintf("openapi: empty OneOf for %s %s — a polymorphic body has alternatives", key.method, path))
 		}
-		reg.alts = make([]reflect.Type, len(alts))
+		half.alts = make([]reflect.Type, len(alts))
 		for i, a := range alts {
-			reg.alts[i] = reflect.TypeOf(a)
+			half.alts[i] = reflect.TypeOf(a)
 		}
 	}
 	regMu.Lock()
 	defer regMu.Unlock()
-	if _, dup := registry[key]; dup {
+	reg := registry[key]
+	if reg.declared {
 		panic(fmt.Sprintf("openapi: duplicate Register for %s %s", key.method, key.path))
 	}
+	reg.req, reg.alts, reg.resp, reg.declared = half.req, half.alts, half.resp, true
+	registry[key] = reg
+}
+
+// Describe declares the PROSE for one route — the summary and description a
+// consumer reads — keyed by the fiber pattern exactly as the route is
+// registered, like [Register]. Called from the owning subsystem's init, next to
+// the wire fact that keeps the handler untyped.
+//
+// It exists for the operation a typed op cannot carry. A typed op's prose is
+// lifted from its doc comment by zipdoc, so the ONLY operations with nowhere to
+// state prose are the ones the wire refuses to let become typed ops — SSE
+// streams, raw proxies, redirects. Leaving those bare publishes an operationId
+// and NOTHING else: every SDK generated off the document offers a call it
+// cannot explain, and a spec-derived CLI a command with no help text. Describe
+// is that prose's seam, with the same drift-proof property Register has: a
+// description whose route is not in the router never renders, so prose is
+// additive metadata on routes that exist — the registry still cannot add an
+// operation.
+//
+// Empty prose is refused loudly: a Describe that states nothing is a
+// programming error, not a declaration.
+func Describe(path, method, summary, description string) {
+	key := opKey{method: strings.ToUpper(method), path: path}
+	if strings.TrimSpace(summary) == "" && strings.TrimSpace(description) == "" {
+		panic(fmt.Sprintf("openapi: empty Describe for %s %s — a declaration states something", key.method, key.path))
+	}
+	regMu.Lock()
+	defer regMu.Unlock()
+	reg := registry[key]
+	if reg.described {
+		panic(fmt.Sprintf("openapi: duplicate Describe for %s %s", key.method, key.path))
+	}
+	reg.summary, reg.description, reg.described = summary, description, true
 	registry[key] = reg
 }
 
@@ -152,11 +200,15 @@ func newComponents() *components {
 	return &components{schemas: map[string]any{}, types: map[string]reflect.Type{}}
 }
 
-// apply attaches the registration's bodies to op, emitting named schemas into c.
-// The success response is stated under the "2XX" range key: the handler's exact
-// status code is not derivable (201 vs 200 lives in the handler body), and the
-// range is what this generator can honestly assert — the success body's shape.
+// apply attaches the registration's declared halves to op — prose verbatim,
+// bodies emitting named schemas into c. The success response is stated under
+// the "2XX" range key: the handler's exact status code is not derivable (201 vs
+// 200 lives in the handler body), and the range is what this generator can
+// honestly assert — the success body's shape.
 func (r *registration) apply(op *Operation, c *components) error {
+	if r.described {
+		op.Summary, op.Description = r.summary, r.description
+	}
 	switch {
 	case r.req == binaryReq:
 		// Not JSON, and not a component: an opaque body has no fields to name, so
