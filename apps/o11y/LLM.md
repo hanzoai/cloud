@@ -88,6 +88,13 @@ comments at compile time.
 
       grep -rE '"/[^"]*ingest[^"]*"' \
         "$(go env GOMODCACHE)/github.com/hanzoai/o11y@v1.5.34" --include='*.go'
+
+  This gap is GATED too — `TestIngestOpIsTypedButUnreachableWithoutADSN` proves
+  BOTH halves on the real code: it registers the op on a throwaway app and reads
+  it out of zip's registry (so "it is a typed op, with prose" is measured, not
+  claimed), then asserts the DSN-less `MountO11y` router does not carry it. The
+  moment somebody closes it, that test goes red and names the wire change and this
+  paragraph, so the decision cannot land as a silent side effect.
 - **`cloud.Bridge()` is installed by `MountO11y` on the `/v1/o11y` group, first.**
   Not optional and not redundant with `cloud.Serve`: o11y runs as its OWN process
   (`plugin/o11y/main.go` builds a bare `zip.App`), and the host's context does not
@@ -100,7 +107,18 @@ comments at compile time.
   `cloud.Request` seam in this package, pinned in cloud's `allowedRequestUses`.
 
 The other 8 stay untyped because typing them would MOVE the wire, which typing is
-not allowed to do:
+not allowed to do. **The refusals are GATED, not prose** (`typed_wire_test.go`):
+`untypedByDesign` is the closed list, keyed the way the DOCUMENT writes each
+address, and `TestEveryRouteIsTypedOrNamed` reads the live router of the REAL
+`MountO11y` — so a route added anywhere in that mount is typed by default, and
+dropping one out of the registry takes a deliberate edit with a reason. The stale
+direction is gated too: a name for an operation o11y no longer serves is red.
+`TestEveryTypedOpIsDescribed` holds the prose to the same bar (an op added without
+regenerating `zipdoc_gen.go` is a nameless MCP tool), and
+`TestUntypedRoutesKeepTheirWire` measures the three wire facts the reasons below
+CLAIM — the `text/plain` receipt, the 200 over a body that is not JSON, and the
+`text/plain` replay — so the refusals are evidence, not assertion. Prose cannot go
+red; that is why this list was a promise until the gate existed.
 
 - `GET /v1/o11y/vm/{query,query_range}` — return VictoriaMetrics' own status code
   and its Prometheus envelope VERBATIM (`c.Bytes(status, body)`). A typed op
