@@ -79,7 +79,10 @@ func exposeBalance() {
 			if err != nil {
 				return nil, fmt.Errorf("balance: read %s/%s: %w", org, subject, err)
 			}
-			return &plane.Balance{Amount: plane.Amount(money.FromUSD(bal.Cents()))}, nil
+			// The ledger answered exactly; the plane carries exactly. Flattening to
+			// cents here was the console's understatement: every sub-cent tail of
+			// the true balance vanished between the one writer and every reader.
+			return &plane.Balance{Amount: plane.Amount(bal.Unwrap())}, nil
 		},
 		zip.WithOperationID(plane.FinanceBalance),
 		zip.WithSummary("Spendable prepaid balance"))
@@ -155,7 +158,11 @@ func exposeUsage() {
 			for _, r := range rows {
 				out = append(out, plane.UsageRow{
 					ID: r.ID, Model: r.Model,
-					Amount:    plane.Amount(money.FromUSD(r.Cents)),
+					// r.Amount is the ledger's own value; r.Cents is its rounding.
+					// Rebuilding an "exact" plane amount FROM the rounding was the
+					// sharpest form of the flatten: the wire type promised precision
+					// the value had already lost.
+					Amount:    plane.Amount(r.Amount.Unwrap()),
 					CreatedAt: r.CreatedAt,
 				})
 			}
