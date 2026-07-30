@@ -184,6 +184,7 @@
       "StarterKit": {
         "properties": {
           "category": {
+            "description": "groups the kit in the gallery browser (\"Portfolio\", \"SaaS\")",
             "type": "string"
           },
           "demo": {
@@ -191,15 +192,18 @@
             "type": "string"
           },
           "description": {
+            "description": "the browse-card blurb",
             "type": "string"
           },
           "features": {
+            "description": "the highlights the card lists, at most 32",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "framework": {
+            "description": "the stack the kit is built on (\"Next.js 14.2 + TS\")",
             "type": "string"
           },
           "org": {
@@ -207,24 +211,31 @@
             "type": "string"
           },
           "preview": {
+            "description": "the still image the browse card renders",
             "type": "string"
           },
           "rating": {
+            "description": "Rating is public-gallery curation, on the same terms as Tier: catalog-only,\nnever accepted from a request, absent on a customer's own kit.",
             "type": "number"
           },
           "slug": {
+            "description": "the kit's identity — lowercase alphanumeric with dashes, max 40",
             "type": "string"
           },
           "source": {
+            "description": "the repository the kit is forked from",
             "type": "string"
           },
           "tier": {
+            "description": "Tier is public-gallery curation, carried verbatim from the embedded catalog.\nNo request can set it — neither write body has the field and neither builds a\nkit carrying one — so it is absent on every customer-published kit.",
             "type": "integer"
           },
           "title": {
+            "description": "display name",
             "type": "string"
           },
           "useCase": {
+            "description": "what the kit is for, in a phrase",
             "type": "string"
           },
           "variants": {
@@ -256,6 +267,7 @@
             "type": "string"
           },
           "source": {
+            "description": "the repository this shape is forked from; the synthesized default shape carries the template's own",
             "type": "string"
           }
         },
