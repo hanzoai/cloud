@@ -230,3 +230,64 @@ func TestEmptyOneOfIsRefused(t *testing.T) {
 	}()
 	Register("/v1/poly/empty", "POST", OneOf{}, nil)
 }
+
+// The prose half. A described route renders its summary and description
+// verbatim; the same declaration on a route the router does not carry renders
+// NOTHING — Describe cannot add an operation any more than Register can. Both
+// halves on one operation compose: prose from Describe, bodies from Register,
+// one declaration in two statements.
+func TestDescribeRendersProseOnLiveRoutesOnly(t *testing.T) {
+	Describe("/v1/widgets/:id/events", "GET",
+		"Widget event stream.", "Holds the connection open as Server-Sent Events.")
+	Describe("/v1/ghost/events", "GET", "Never renders.", "")
+	Register("/v1/widgets/:id/events", "GET", nil, widgetView{})
+	t.Cleanup(func() {
+		unregister("/v1/widgets/:id/events", "GET")
+		unregister("/v1/ghost/events", "GET")
+	})
+
+	doc, err := From([]Route{{Method: "GET", Path: "/v1/widgets/:id/events"}}, Info{Title: "t", Version: "v1"})
+	if err != nil {
+		t.Fatalf("From: %v", err)
+	}
+	op := doc.Paths["/v1/widgets/{id}/events"]["get"]
+	if op == nil {
+		t.Fatal("missing operation")
+	}
+	if op.Summary != "Widget event stream." || op.Description != "Holds the connection open as Server-Sent Events." {
+		t.Errorf("prose = %q / %q, want the declared summary and description verbatim", op.Summary, op.Description)
+	}
+	responses, ok := op.Responses.(map[string]*Response)
+	if !ok || responses["2XX"] == nil {
+		t.Errorf("responses = %+v — a Describe must not displace the same op's Register", op.Responses)
+	}
+	if _, minted := doc.Paths["/v1/ghost/events"]; minted {
+		t.Error("orphan Describe minted a path — the registry must never add routes")
+	}
+}
+
+// A second Describe for one (method, path) is the same init-time programming
+// error a second Register is — and a Register plus a Describe is NOT one, which
+// is the other half of this contract: each half guards only itself.
+func TestDescribeRefusesDuplicateButComposesWithRegister(t *testing.T) {
+	Register("/v1/described", "GET", nil, widgetView{})
+	Describe("/v1/described", "GET", "Once.", "")
+	t.Cleanup(func() { unregister("/v1/described", "GET") })
+	defer func() {
+		if recover() == nil {
+			t.Fatal("second Describe for the same (method, path) must panic")
+		}
+	}()
+	Describe("/v1/described", "GET", "Twice.", "")
+}
+
+// A Describe with no summary and no description is a declaration that states
+// nothing while looking like one — refused at declaration time, like OneOf{}.
+func TestEmptyDescribeIsRefused(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal(`Describe(path, method, "", "  ") did not panic`)
+		}
+	}()
+	Describe("/v1/described/empty", "GET", "", "  ")
+}
