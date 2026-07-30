@@ -10,14 +10,18 @@ package framework
 // collection, which must serialise as [] and not null, and the summary body.
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
 
+	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -65,11 +69,77 @@ var typedOps = []string{
 // pass nil), so URL params could only travel as body keys — and a create body's
 // `name` IS the requested document name (engine ops.go, stringField(in, "name")),
 // so folding :name into the body collides with a field the document owns.
-// A partial fix converts nothing. Re-verified against zip v1.18.6 (the pin, and
-// the newest published version): none of the three shipped.
+// A partial fix converts nothing. Re-verified against zip v1.18.6 (the pin) and
+// v1.18.8 (the newest published tag): none of the three shipped.
 var rawRoutes = map[string]string{
 	"POST /v1/framework/:doctype":      "free-form document body: shape is metadata, not a Go type",
 	"PUT /v1/framework/:doctype/:name": "free-form document body: shape is metadata, not a Go type",
+}
+
+// TestOpenObjectRefusalStillHolds makes the refusal above EXPIRE on its own. The
+// reason cites two properties of zip and, until this test, nothing read either —
+// so the day zip gains the capability nothing here goes red and the refusal
+// outlives its cause, which is how a considered decision becomes stale prose.
+//
+// It pins shapes that are WRONG on purpose. Each assertion failing is the GOOD
+// news: the capability shipped, and POST /v1/framework/:doctype and PUT
+// /v1/framework/:doctype/:name can finally become typed ops. Do not "correct"
+// the expectations to keep it green — convert the two routes and delete it.
+//
+// The third property (bound params must ride outside the body namespace) is a
+// property of the MCP and call planes, which pass no path map at all (zip
+// mcp.go, `op.invoke(…, params.Arguments, nil, nil)`), and has no seam here to
+// read it through — it stays prose, cited above.
+func TestOpenObjectRefusalStillHolds(t *testing.T) {
+	// 1. zip cannot DECLARE an open object. A document IS map[string]any, and
+	// schemaOf has no reflect.Interface case, so the element type falls through
+	// to the default and every field VALUE is published as a JSON object. This is
+	// SHIPPED and FALSE: TestDocTypeAndDocumentRoundTrip reads a document back
+	// with a string and a number in it, neither of which this schema admits.
+	spec, err := json.Marshal(mountApp(t).OpenAPISpec())
+	if err != nil {
+		t.Fatalf("marshal spec: %v", err)
+	}
+	var doc struct {
+		Paths map[string]map[string]struct {
+			Responses map[string]struct {
+				Content map[string]struct {
+					Schema map[string]any `json:"schema"`
+				} `json:"content"`
+			} `json:"responses"`
+		} `json:"paths"`
+	}
+	if err := json.Unmarshal(spec, &doc); err != nil {
+		t.Fatalf("unmarshal spec: %v", err)
+	}
+	got := doc.Paths["/v1/framework/{doctype}/{name}"]["get"].Responses["200"].Content["application/json"].Schema
+	want := map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "object"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("GET one document publishes response schema %v, pinned as %v — if the value type is no longer\n"+
+			"constrained, zip can declare an open object: convert the two document writes and delete this test", got, want)
+	}
+
+	// 2. zip cannot BIND the URL onto one. bindURL returns early unless the In is
+	// a struct, so an open-object In never receives :doctype — checked on docView,
+	// the very type a typed document write would have to bind.
+	probe := zip.New(zip.Config{Logger: luxlog.New("test")})
+	var bound docView
+	zip.Post(probe, "/probe/:doctype", func(_ context.Context, in *docView) (*docView, error) {
+		bound = *in
+		return in, nil
+	})
+	req := httptest.NewRequest(http.MethodPost, "/probe/Task", bytes.NewReader([]byte(`{"subject":"x"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	if _, err := probe.Fiber().Test(req); err != nil {
+		t.Fatalf("probe request: %v", err)
+	}
+	if bound["subject"] != "x" {
+		t.Fatalf("probe never reached the handler (%v) — the probe is broken, not zip", bound)
+	}
+	if v, ok := bound["doctype"]; ok {
+		t.Errorf("zip bound :doctype=%v onto an open-object In — it can now carry the URL:\n"+
+			"convert the two document writes (and check the params ride outside the body namespace)", v)
+	}
 }
 
 // TestSurfaceIsRegistered checks that every op above is a live route and that the
