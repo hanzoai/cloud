@@ -62,7 +62,7 @@ func OrgHasUnsafeRune(s string) bool {
 }
 
 // cookieTokenNames are the session-cookie names that may carry an IAM access
-// token (mirrors iamauth.CookieToken). hanzo_iam_token is the cookie the ai
+// token (mirrors edge.Cookie). hanzo_iam_token is the cookie the ai
 // (casibase) layer SETS after login (ai/controllers/account.go iamTokenCookieName)
 // — it MUST be read here too, or the embedded console (whose browser holds only
 // that httpOnly cookie, no Authorization header) resolves to no principal and
@@ -177,7 +177,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 		// (admin org-switch input + Phase-1 data passthrough for the org; the app /
 		// billing-account attribution hints), then delete every authority header AND
 		// every sub-scope header, so nothing a client sent survives as identity OR
-		// scope. X-Project-Id is NOT captured: it is minted from the validated
+		// scope. X-Project-Id is NOT captured: it is written from the validated
 		// `project` claim below (claims.renderProject), never from a client value. A
 		// client org bearing a whitespace/control/format rune is refused here (not trimmed):
 		// trimming would collapse "acme " onto "acme", and the injective org
@@ -409,7 +409,7 @@ func sanitizeSubScopes(c *zip.Ctx, org, project, app, billingAccount string) {
 	if app != "" {
 		req.Header.Set(authz.HeaderApp, app)
 	}
-	// X-Billing-Account-Id names WHO PAYS, so it is minted from the validated
+	// X-Billing-Account-Id names WHO PAYS, so it is written from the validated
 	// `billing_account` claim (claims.renderBillingAccount) and never from a client
 	// value — the raw copy is deleted on ingress and not restored here. It used to
 	// be forwarded as-is, which was defensible only while it was a mere attribution
