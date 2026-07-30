@@ -39,7 +39,7 @@
       },
       "post": {
         "operationId": "post_v1_framework_doctypes",
-        "summary": "createDocType defines a DocType in the caller's org: the metadata that gives a\ndocument surface its fields, its naming rule, whether it has a submit/cancel\nlifecycle, and which role may do what to it.",
+        "summary": "createDocType defines a DocType in the caller's org: the metadata that gives a document surface its fields, its naming rule, whether it has a submit/cancel lifecycle, and which role may do what to it.",
         "description": "createDocType defines a DocType in the caller's org: the metadata that gives a\ndocument surface its fields, its naming rule, whether it has a submit/cancel\nlifecycle, and which role may do what to it. Manager-only — on a fresh org the\nfirst caller to administer it is seeded as its System Manager, after which\nonly a System Manager (or a platform admin) may define. Answers 201.",
         "tags": [
           "framework"
@@ -107,7 +107,7 @@
       },
       "get": {
         "operationId": "get_v1_framework_doctypes_name",
-        "summary": "getDocType returns one DocType definition — its fields, naming rule,\npermissions and lifecycle flags.",
+        "summary": "getDocType returns one DocType definition — its fields, naming rule, permissions and lifecycle flags.",
         "description": "getDocType returns one DocType definition — its fields, naming rule,\npermissions and lifecycle flags. Scoped to the caller's org, so another\ntenant's DocType of the same name is simply not found.",
         "tags": [
           "framework"
@@ -139,7 +139,7 @@
       },
       "put": {
         "operationId": "put_v1_framework_doctypes_name",
-        "summary": "replaceDocType replaces a DocType definition wholesale (PUT semantics): the\nstored definition becomes the body.",
+        "summary": "replaceDocType replaces a DocType definition wholesale (PUT semantics): the stored definition becomes the body.",
         "description": "replaceDocType replaces a DocType definition wholesale (PUT semantics): the\nstored definition becomes the body. The name in the URL is authoritative over\nthe body's, and documents already stored under the DocType are left intact.\nManager-only.",
         "tags": [
           "framework"
@@ -191,7 +191,7 @@
     "/v1/framework/modules": {
       "get": {
         "operationId": "get_v1_framework_modules",
-        "summary": "listModules returns every app lane compiled into this deployment and the\nDocTypes each one installs.",
+        "summary": "listModules returns every app lane compiled into this deployment and the DocTypes each one installs.",
         "description": "listModules returns every app lane compiled into this deployment and the\nDocTypes each one installs. It describes the BINARY, not the org: what a given\norg has actually installed is the per-module state below.",
         "tags": [
           "framework"
@@ -213,7 +213,7 @@
     "/v1/framework/modules/{module}": {
       "get": {
         "operationId": "get_v1_framework_modules_module",
-        "summary": "getModule returns one app lane's install state for the caller's org: the\nDocTypes the lane declares, and which of them already exist in the org.",
+        "summary": "getModule returns one app lane's install state for the caller's org: the DocTypes the lane declares, and which of them already exist in the org.",
         "description": "getModule returns one app lane's install state for the caller's org: the\nDocTypes the lane declares, and which of them already exist in the org. That\nis the honest \"set up\" versus \"installed\" answer a console renders.",
         "tags": [
           "framework"
@@ -264,19 +264,6 @@
             "example": "cms"
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "module": "cms"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/moduleRef"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
@@ -314,7 +301,7 @@
       },
       "post": {
         "operationId": "post_v1_framework_roles",
-        "summary": "assignRole grants one user one role in the caller's org — how a member gains\nrights on a DocType, since permissions name roles and never users.\nManager-only.",
+        "summary": "assignRole grants one user one role in the caller's org — how a member gains rights on a DocType, since permissions name roles and never users.",
         "description": "assignRole grants one user one role in the caller's org — how a member gains\nrights on a DocType, since permissions name roles and never users.\nManager-only. Answers 201.",
         "tags": [
           "framework"
@@ -387,7 +374,7 @@
     "/v1/framework/summary": {
       "get": {
         "operationId": "get_v1_framework_summary",
-        "summary": "summary reports how much of the DocType surface the caller's org uses: how",
+        "summary": "summary reports how much of the DocType surface the caller's org uses: how many DocTypes it has defined, and how many documents exist across them.",
         "description": "summary reports how much of the DocType surface the caller's org uses: how\nmany DocTypes it has defined, and how many documents exist across them.",
         "tags": [
           "framework"
@@ -409,7 +396,7 @@
     "/v1/framework/{doctype}": {
       "get": {
         "operationId": "get_v1_framework_doctype",
-        "summary": "listDocuments returns the caller org's documents of one DocType, filtered,\nordered and projected by the query.",
+        "summary": "listDocuments returns the caller org's documents of one DocType, filtered, ordered and projected by the query.",
         "description": "listDocuments returns the caller org's documents of one DocType, filtered,\nordered and projected by the query. The DocType is resolved FIRST — through\nthe same permission gate the list itself uses — because the query is validated\nagainst its schema: a filter, sort or field name the DocType does not declare\nis refused rather than reaching the store.",
         "tags": [
           "framework"
@@ -604,7 +591,7 @@
     "/v1/framework/{doctype}/{name}/cancel": {
       "post": {
         "operationId": "post_v1_framework_doctype_name_cancel",
-        "summary": "cancelDocument moves a submitted document to cancelled (docstatus 1 → 2) after\nits on_cancel hooks agree.",
+        "summary": "cancelDocument moves a submitted document to cancelled (docstatus 1 → 2) after its on_cancel hooks agree.",
         "description": "cancelDocument moves a submitted document to cancelled (docstatus 1 → 2) after\nits on_cancel hooks agree. Cancelling is terminal — a cancelled document\ncannot be re-submitted — but it CAN then be deleted.",
         "tags": [
           "framework"
@@ -631,20 +618,6 @@
             "example": "TASK-00001"
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "doctype": "Task",
-                "name": "TASK-00001"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/docRef"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
@@ -665,7 +638,7 @@
     "/v1/framework/{doctype}/{name}/submit": {
       "post": {
         "operationId": "post_v1_framework_doctype_name_submit",
-        "summary": "submitDocument moves a draft to submitted (docstatus 0 → 1) after its\non_submit hooks agree.",
+        "summary": "submitDocument moves a draft to submitted (docstatus 0 → 1) after its on_submit hooks agree.",
         "description": "submitDocument moves a draft to submitted (docstatus 0 → 1) after its\non_submit hooks agree. A submitted document is IMMUTABLE: further writes and\ndeletes are refused until it is cancelled. Only a submittable DocType has this\nlifecycle; any other docstatus is an illegal transition.",
         "tags": [
           "framework"
@@ -692,20 +665,6 @@
             "example": "TASK-00001"
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "doctype": "Task",
-                "name": "TASK-00001"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/docRef"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
@@ -896,19 +855,6 @@
         },
         "type": "object"
       },
-      "docRef": {
-        "properties": {
-          "doctype": {
-            "description": "DocType is the document's DocType, from the path.",
-            "type": "string"
-          },
-          "name": {
-            "description": "Name is the document's name — its key within the DocType — from the path.\nA name containing a space arrives percent-encoded and is decoded before it\nis matched against the stored one.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "docTypeList": {
         "properties": {
           "data": {
@@ -944,15 +890,6 @@
               "$ref": "#/components/schemas/ModuleInfo"
             },
             "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "moduleRef": {
-        "properties": {
-          "module": {
-            "description": "Module is the lane's registered name (\"cms\", \"erp\"), from the path.",
-            "type": "string"
           }
         },
         "type": "object"

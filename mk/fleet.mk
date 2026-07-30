@@ -44,8 +44,19 @@ OPENAPI_NEEDS_BROKER := kafka
 openapi-weave: ## Weave the per-app subsets into the fleet spec and prove it equals openapi.yaml. OUT=<path> to write it.
 	@$(GO) test -count=1 $(ROOT)/openapi $(if $(OUT),-weave="$(abspath $(OUT))")
 
+# OPENAPI_NEEDS_BROKER is honoured HERE as well as in the gate, because the gate's
+# own failure message says "fix: make openapi" — and that fix routed through this
+# loop, which mounted kafka, which fails closed without a live broker. So the one
+# command told to repair a red gate could not run at all. One exemption list, read
+# everywhere it applies.
 openapi-apps: ## Regenerate EVERY app's own spec subset (one binary per app; slow by construction).
-	@for d in $(APPDIRS); do $(MAKE) --no-print-directory -C $$d openapi || exit 1; done
+	@set -e; for d in $(APPDIRS); do \
+	  a=$$(basename $$d); \
+	  case " $(OPENAPI_NEEDS_BROKER) " in \
+	    *" $$a "*) echo ">> skip $$a — needs a live broker to mount (OPENAPI_NEEDS_BROKER)"; continue;; \
+	  esac; \
+	  $(MAKE) --no-print-directory -C $$d openapi; \
+	done
 	@for a in $(EXTERNAL); do $(MAKE) --no-print-directory -f $(ROOT)/mk/plugin.mk ROOT=$(ROOT) APPS=$$a openapi || exit 1; done
 	@echo ">> $$(ls $(ROOT)/plugin/*/openapi.json | wc -l) app subsets"
 

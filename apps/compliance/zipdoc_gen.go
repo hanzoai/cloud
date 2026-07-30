@@ -49,6 +49,7 @@ func init() {
 	zip.Describe("GET /v1/compliance/audit", zip.Doc{
 		Description: "AuditRead is the compliance-scoped read of the SHARED tamper-evident audit plane —\nthe SOC 2 posture surface (privileged actions: who started/decided what, when). The\norg is PINNED to the caller's validated org and the rows are narrowed to\ncompliance.* actions. Fail-closed: no principal is a 403, no configured audit\nstore a 501.",
 		Fields: map[string]string{
+			"Wire.home":            "Home is present ONLY on a cross-org action: the org the actor came FROM,\nwhile Org is the org they acted IN. A console row carrying `home` is a\nplatform-admin impersonation and should be rendered as one.",
 			"auditIn.result":       "Result filters rows by outcome result: success, deny, or error; empty means all.",
 			"auditList.data":       "Data is the org's compliance.* audit rows, newest first.",
 			"auditList.disclaimer": "Disclaimer states that statuses are provider-reported or tracked, never a\nplatform assertion of legal or regulatory compliance.",

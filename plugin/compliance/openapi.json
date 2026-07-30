@@ -19,7 +19,7 @@
     "/v1/compliance/accreditation": {
       "get": {
         "operationId": "get_v1_compliance_accreditation",
-        "summary": "ListAccreditation returns the org's tracked accreditation-state records, newest",
+        "summary": "ListAccreditation returns the org's tracked accreditation-state records, newest first — evidence entries the org keeps, never a platform certification.",
         "description": "ListAccreditation returns the org's tracked accreditation-state records, newest\nfirst — evidence entries the org keeps, never a platform certification.",
         "tags": [
           "compliance"
@@ -50,7 +50,7 @@
       },
       "post": {
         "operationId": "post_v1_compliance_accreditation",
-        "summary": "CreateAccreditation records an ASSERTED accreditation state for a subject — the\nsubject's own assertion, with no verifier.",
+        "summary": "CreateAccreditation records an ASSERTED accreditation state for a subject — the subject's own assertion, with no verifier.",
         "description": "CreateAccreditation records an ASSERTED accreditation state for a subject — the\nsubject's own assertion, with no verifier. Every CONFIRMED state\n(provider_verified, reviewer_confirmed) and every rejected/expired state is a\nDECISION recorded via the decision endpoint, attributed to the reviewer — a\ncreate can never stamp a confirmation. The underlying figures (income, net\nworth) are never stored; only the method, category, and state.",
         "tags": [
           "compliance"
@@ -121,7 +121,7 @@
     "/v1/compliance/accreditation/{id}/decision": {
       "post": {
         "operationId": "post_v1_compliance_accreditation_id_decision",
-        "summary": "DecideAccreditation records an org reviewer's decision on an accreditation\nrecord — a reviewer confirmation, a provider verification the reviewer has\nevidence of (a CPA/attorney letter, a verifier report), a rejection, or an\nexpiry.",
+        "summary": "DecideAccreditation records an org reviewer's decision on an accreditation record — a reviewer confirmation, a provider verification the reviewer has evidence of (a CPA/attorney letter, a verifier report), a rejection, or an expiry.",
         "description": "DecideAccreditation records an org reviewer's decision on an accreditation\nrecord — a reviewer confirmation, a provider verification the reviewer has\nevidence of (a CPA/attorney letter, a verifier report), a rejection, or an\nexpiry. ROLE-GATED (an org admin or platform reviewer) and ATTRIBUTED: the\nreviewer's identity is recorded as ReviewerSub and audited. Human-in-the-loop:\nthe platform never confirms on its own, and even a provider_verified state\ncarries the reviewer who recorded it.",
         "tags": [
           "compliance"
@@ -169,7 +169,7 @@
     "/v1/compliance/audit": {
       "get": {
         "operationId": "get_v1_compliance_audit",
-        "summary": "AuditRead is the compliance-scoped read of the SHARED tamper-evident audit plane —\nthe SOC 2 posture surface (privileged actions: who started/decided what, when).",
+        "summary": "AuditRead is the compliance-scoped read of the SHARED tamper-evident audit plane — the SOC 2 posture surface (privileged actions: who started/decided what, when).",
         "description": "AuditRead is the compliance-scoped read of the SHARED tamper-evident audit plane —\nthe SOC 2 posture surface (privileged actions: who started/decided what, when). The\norg is PINNED to the caller's validated org and the rows are narrowed to\ncompliance.* actions. Fail-closed: no principal is a 403, no configured audit\nstore a 501.",
         "tags": [
           "compliance"
@@ -224,7 +224,7 @@
     "/v1/compliance/records": {
       "get": {
         "operationId": "get_v1_compliance_records",
-        "summary": "ListRecords is the unified compliance-record view for the org: its verifications\nand accreditation records together, each provider-reported or tracked, never\nplatform-asserted.",
+        "summary": "ListRecords is the unified compliance-record view for the org: its verifications and accreditation records together, each provider-reported or tracked, never platform-asserted.",
         "description": "ListRecords is the unified compliance-record view for the org: its verifications\nand accreditation records together, each provider-reported or tracked, never\nplatform-asserted. PII stays in the subject store; records carry only opaque ids\nand statuses.",
         "tags": [
           "compliance"
@@ -257,7 +257,7 @@
     "/v1/compliance/status": {
       "get": {
         "operationId": "get_v1_compliance_status",
-        "summary": "Status is the org's honest posture read: the wired provider and the per-status\ntally of its verifications.",
+        "summary": "Status is the org's honest posture read: the wired provider and the per-status tally of its verifications.",
         "description": "Status is the org's honest posture read: the wired provider and the per-status\ntally of its verifications. It is deliberately NOT a boolean \"compliant\" — it\nreports counts of provider-reported states and carries the boundary disclaimer.",
         "tags": [
           "compliance"
@@ -279,7 +279,7 @@
     "/v1/compliance/subjects": {
       "get": {
         "operationId": "get_v1_compliance_subjects",
-        "summary": "ListSubjects returns the org's subjects as PII-MINIMIZED summaries — no name or\nemail, only whether an email is on file.",
+        "summary": "ListSubjects returns the org's subjects as PII-MINIMIZED summaries — no name or email, only whether an email is on file.",
         "description": "ListSubjects returns the org's subjects as PII-MINIMIZED summaries — no name or\nemail, only whether an email is on file. The full record is returned only by the\nexplicit single-subject read.",
         "tags": [
           "compliance"
@@ -310,7 +310,7 @@
       },
       "post": {
         "operationId": "post_v1_compliance_subjects",
-        "summary": "CreateSubject records a party the org is verifying as part of its own\nonboarding/compliance — a team member, vendor, customer, or counterparty.",
+        "summary": "CreateSubject records a party the org is verifying as part of its own onboarding/compliance — a team member, vendor, customer, or counterparty.",
         "description": "CreateSubject records a party the org is verifying as part of its own\nonboarding/compliance — a team member, vendor, customer, or counterparty. The\nsubject's contact PII (name/email) is sealed at rest and returned only to the\nowning org; downstream records reference the subject by opaque id.",
         "tags": [
           "compliance"
@@ -347,7 +347,7 @@
     "/v1/compliance/subjects/{id}": {
       "get": {
         "operationId": "get_v1_compliance_subjects_id",
-        "summary": "GetSubject returns one subject WITH its contact PII — the only surface that\nreturns it, and only to the owning org.",
+        "summary": "GetSubject returns one subject WITH its contact PII — the only surface that returns it, and only to the owning org.",
         "description": "GetSubject returns one subject WITH its contact PII — the only surface that\nreturns it, and only to the owning org. The response is never cached by any\nintermediary.",
         "tags": [
           "compliance"
@@ -381,7 +381,7 @@
     "/v1/compliance/verifications": {
       "get": {
         "operationId": "get_v1_compliance_verifications",
-        "summary": "ListVerifications returns the org's KYC/KYB verifications, newest first — opaque",
+        "summary": "ListVerifications returns the org's KYC/KYB verifications, newest first — opaque subject references and provider-reported statuses only, no subject PII.",
         "description": "ListVerifications returns the org's KYC/KYB verifications, newest first — opaque\nsubject references and provider-reported statuses only, no subject PII.",
         "tags": [
           "compliance"
@@ -412,7 +412,7 @@
       },
       "post": {
         "operationId": "post_v1_compliance_verifications",
-        "summary": "StartVerification begins a KYC/KYB verification of a subject through the wired",
+        "summary": "StartVerification begins a KYC/KYB verification of a subject through the wired provider — an existing subject by id, or one created inline from the request.",
         "description": "StartVerification begins a KYC/KYB verification of a subject through the wired\nprovider — an existing subject by id, or one created inline from the request.\nThe returned status is provider-reported and never terminal on a fresh start:\nstarting a verification can never yield a verified record, and a provider error\nis a 502, never a verification.",
         "tags": [
           "compliance"
@@ -455,7 +455,7 @@
     "/v1/compliance/verifications/{id}": {
       "get": {
         "operationId": "get_v1_compliance_verifications_id",
-        "summary": "GetVerification returns one verification — its opaque subject reference and",
+        "summary": "GetVerification returns one verification — its opaque subject reference and provider-reported status, no subject PII.",
         "description": "GetVerification returns one verification — its opaque subject reference and\nprovider-reported status, no subject PII.",
         "tags": [
           "compliance"
@@ -489,7 +489,7 @@
     "/v1/compliance/verifications/{id}/decision": {
       "post": {
         "operationId": "post_v1_compliance_verifications_id_decision",
-        "summary": "DecideVerification records a privileged reviewer's MANUAL decision on a\nverification — the human-in-the-loop path, and the ONLY route to a passing status\nwhen no real provider is wired.",
+        "summary": "DecideVerification records a privileged reviewer's MANUAL decision on a verification — the human-in-the-loop path, and the ONLY route to a passing status when no real provider is wired.",
         "description": "DecideVerification records a privileged reviewer's MANUAL decision on a\nverification — the human-in-the-loop path, and the ONLY route to a passing status\nwhen no real provider is wired. It produces a DISTINCT reviewer_confirmed, never\na provider_verified (a provider decision is the provider's to report, via the\nwebhook or a reconcile), and it is ROLE-GATED (an org admin or platform reviewer)\nAND ATTRIBUTED (the reviewer's user id is DecidedBy), so a manual pass is always\naccountable.",
         "tags": [
           "compliance"
@@ -537,7 +537,7 @@
     "/v1/compliance/verifications/{id}/refresh": {
       "post": {
         "operationId": "post_v1_compliance_verifications_id_refresh",
-        "summary": "RefreshVerification polls the wired provider for its current decision and\nrecords it, ATTRIBUTED to the provider — the internal PULL reconcile.",
+        "summary": "RefreshVerification polls the wired provider for its current decision and records it, ATTRIBUTED to the provider — the internal PULL reconcile.",
         "description": "RefreshVerification polls the wired provider for its current decision and\nrecords it, ATTRIBUTED to the provider — the internal PULL reconcile. For the\nManual provider the check stays pending; for a hosted provider it reflects the\nprovider's settled status. A poll error is a 502, never a verification.",
         "tags": [
           "compliance"
@@ -554,19 +554,6 @@
             "example": "chk_1"
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "example": {
-                "id": "chk_1"
-              },
-              "schema": {
-                "$ref": "#/components/schemas/verificationRef"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
@@ -629,6 +616,7 @@
             "type": "string"
           },
           "home": {
+            "description": "Home is present ONLY on a cross-org action: the org the actor came FROM,\nwhile Org is the org they acted IN. A console row carrying `home` is a\nplatform-admin impersonation and should be rendered as one.",
             "type": "string"
           },
           "isAdmin": {
@@ -989,15 +977,6 @@
           },
           "status": {
             "description": "Status is the reviewer's decision: \"reviewer_confirmed\" (a pass) or\n\"manual_review\" (withheld for review) — never a provider status.",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "verificationRef": {
-        "properties": {
-          "id": {
-            "description": "ID is the verification to act on, from the path.",
             "type": "string"
           }
         },
