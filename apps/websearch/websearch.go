@@ -45,7 +45,7 @@
 // with a validated principal never needs the key. So neither surface is ever an
 // open proxy, and the signed-in console user reaches search without the shared key.
 //
-// WHY NOTHING HERE IS A TYPED OP (zip v1.18.11), so the next sweep does not
+// WHY NOTHING HERE IS A TYPED OP (re-verified at zip v1.18.12), so the next sweep does not
 // re-litigate it. Both surfaces exist to be BYTE-COMPATIBLE with a client this repo
 // does not own — LibreChat's frozen searxng and firecrawl contracts — and each is
 // compatible in a way a typed op structurally cannot be:
