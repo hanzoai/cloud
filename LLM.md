@@ -1371,7 +1371,45 @@ prose.
 The typed packages are `apps/admin` and its eight sub-packages, plus `apps/account`,
 `apps/agents`, `apps/automations`, `apps/company`, `apps/compliance`, `apps/crm`, `apps/framework`,
 `apps/git`, `apps/guide`, `apps/ingress`, `apps/integrations`, `apps/marketing`,
-`apps/ml`, `apps/o11y`, `apps/plugin`, `apps/search`, `apps/team`, `apps/visor`.
+`apps/ml`, `apps/o11y`, `apps/plugin`, `apps/provisioning`, `apps/search`, `apps/team`, `apps/visor`.
+
+`provisioning` is **21 of 28** — and the 28 were the WHOLE surface, every one of
+them publishing nothing: seven kinds × four verbs, registered from a loop over
+`kinds` with a computed path (`app.Post("/v1/"+k, create(s, k))`). That shape is
+untypable twice over and it is the general lesson, not a provisioning quirk: a
+computed path is not a constant, so `cmd/zipdoc` refuses it outright ("route path
+is not a constant string, so the operation has no identity to document",
+extract.go:189), and a handler returned by a FACTORY is a call expression with no
+doc comment to lift. **A loop that registers N routes publishes prose for none of
+them, however well the handler is commented** — so the fix is one declaration per
+published operation (`apps/provisioning/typed.go`), which is what every projection
+keys on anyway. The 21 reads and deletes are typed ops; the 7 creates are refused
+for the `cloud.DenyResource` reason `apps/ml` and `apps/company` already carry (a
+402/503 whose body is the fleet's NESTED `{"error":{code,message}}`, which a typed
+op's error cannot be — `errorHandler` renders zip's flat `HTTPError`, and writing
+the nested body inside the op does not escape it because a nil Out makes zip stamp
+`cmp.Or(op.Status, 204)` over the 402). That refusal is GATED, not prose:
+`untypedByDesign` + `TestEveryRouteIsTypedOrNamed` + `TestEveryTypedOpIsDescribed`
+(apps/provisioning/typed_wire_test.go) read the router of the REAL `routes()` and
+require the two ledgers to SUM to the served surface. The seven still declare
+their bodies through `openapi.Register`, so `provisionRequest`/`provisionResult`
+reach the document and an SDK caller has somewhere to put the name.
+
+Two things this partition is worth reading for. **Tenancy could not go through
+`principal.OrgFrom`**, and the reason is a wire fact rather than a preference:
+`tenant()` folds the org through `sanitizeOrg` (the slug every physical name, S3
+bucket and `tenant-<org>` namespace is keyed on — a typed read that skipped the
+fold would look in a different bucket than the create wrote) and buckets an
+ORG-LESS SuperAdmin under the literal `"admin"` org, which `OrgFrom` refuses
+outright. So `tenantOf` reaches the request (`cloud.Request`, pinned) and asks the
+SAME `tenant()` the untyped create beside it uses — one function, so the two
+halves of one surface cannot key their tenancy differently. This is the `apps/ml`
+shape exactly, and it is the second package where the "admin bucket" is the thing
+`OrgFrom` cannot express; assume it before assuming `OrgFrom` will do. **And the
+listing's Out is a NAMED SLICE** (`provisionedList []provisionedSummary`), because
+the wire is a bare JSON array: wrapping it in an envelope struct would have been
+the natural typed shape and a silent wire break. `TestTypedReadsKeepTheirWire`
+asserts the empty listing's BYTES are `[]`, which is what proves it.
 `crm` is 19 of 20, and its partition is now a GATE rather than prose:
 `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` (apps/crm/typed_wire_test.go)
 fail the same three ways team's and git's do, so the count cannot outlive the

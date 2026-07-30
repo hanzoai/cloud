@@ -119,17 +119,18 @@ func newDedicatedService(t *testing.T, orch orchestrator) *cloud.Service[state] 
 	return &cloud.Service[state]{Base: cloud.Base{Log: log}, State: state{store: newTestStore(t), sec: openSecrets("hanzo", log), reg: newRegistry(), orch: orch}}
 }
 
-func doReq(t *testing.T, h zip.Handler, method, route, path, org, bodyStr string) *http.Response {
+// doReq serves ONE request against ONE route that mount registers. mount takes
+// the app rather than a handler because the reads and the delete are TYPED ops
+// (typed.go) — zip.Get/zip.Delete are package-level registrars, not values a
+// caller can hand over — and cloud.Bridge is installed first, exactly as Serve
+// installs it ahead of every mount: a typed op resolves its tenant off the
+// context Bridge parks, so an app without it would exercise a router the binary
+// never runs.
+func doReq(t *testing.T, mount func(*zip.App), method, path, org, bodyStr string) *http.Response {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	switch method {
-	case http.MethodGet:
-		app.Get(route, h)
-	case http.MethodDelete:
-		app.Delete(route, h)
-	default:
-		app.Post(route, h)
-	}
+	app.Use(cloud.Bridge())
+	mount(app)
 	var rdr io.Reader
 	if bodyStr != "" {
 		rdr = strings.NewReader(bodyStr)
@@ -161,7 +162,7 @@ func TestDedicated_CreateLaunchesInstance(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 201", resp.StatusCode, body)
 	}
-	var cr createResp
+	var cr provisionResult
 	_ = json.NewDecoder(resp.Body).Decode(&cr)
 
 	if cr.Status != statusProvisioning {
@@ -271,8 +272,8 @@ func TestDedicated_ReadyReconcile(t *testing.T) {
 
 	// Instance not up yet -> GET still reports provisioning.
 	orch.phase = "Creating"
-	resp := doReq(t, get(s, "datastore"), http.MethodGet, "/v1/datastore/:name", "/v1/datastore/warehouse", "acme", "")
-	var g getResp
+	resp := doReq(t, mountGet("/v1/datastore/:name", ops{s}.getDatastore), http.MethodGet, "/v1/datastore/warehouse", "acme", "")
+	var g provisionedResource
 	_ = json.NewDecoder(resp.Body).Decode(&g)
 	if g.Status != statusProvisioning {
 		t.Fatalf("status = %q, want provisioning while instance is Creating", g.Status)
@@ -280,7 +281,7 @@ func TestDedicated_ReadyReconcile(t *testing.T) {
 
 	// Operator reports Running -> GET reconciles to ready and persists it.
 	orch.phase = phaseRunning
-	resp = doReq(t, get(s, "datastore"), http.MethodGet, "/v1/datastore/:name", "/v1/datastore/warehouse", "acme", "")
+	resp = doReq(t, mountGet("/v1/datastore/:name", ops{s}.getDatastore), http.MethodGet, "/v1/datastore/warehouse", "acme", "")
 	_ = json.NewDecoder(resp.Body).Decode(&g)
 	if g.Status != statusReady {
 		t.Fatalf("status = %q, want ready once instance is Running", g.Status)
@@ -301,7 +302,7 @@ func TestDedicated_DropTearsDownInstance(t *testing.T) {
 	}
 	inst := instanceName("docdb", "acme", "sessions")
 
-	resp := doReq(t, drop(s, "docdb"), http.MethodDelete, "/v1/docdb/:name", "/v1/docdb/sessions", "acme", "")
+	resp := doReq(t, mountDelete("/v1/docdb/:name", ops{s}.dropDocDB), http.MethodDelete, "/v1/docdb/sessions", "acme", "")
 	if resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("drop = %d body=%s, want 204", resp.StatusCode, body)
