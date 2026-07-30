@@ -28799,6 +28799,26 @@ paths:
       operationId: get_v1_skills
       tags:
       - tools
+    post:
+      operationId: post_v1_skills
+      tags:
+      - tools
+  /v1/skills/{id}:
+    delete:
+      operationId: delete_v1_skills_by_id
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      tags:
+      - tools
+  /v1/skills/authored:
+    get:
+      operationId: get_v1_skills_authored
+      tags:
+      - tools
   /v1/social/accounts:
     get:
       operationId: get_v1_social_accounts
