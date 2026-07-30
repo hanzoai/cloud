@@ -495,6 +495,17 @@ func commerceBalanceCents(ctx context.Context, cfg topupConfig, cr caller) int64
 // body + status. Mirrors clients/admin/commerce.go's auth. Takes (base, token) rather
 // than the HUSD topupConfig so both the wallet top-up AND the /v1/billing/* data bridge
 // (billing.go) share this ONE S2S transport.
+//
+// It is a JSON transport, NOT a transparent proxy, and the two bridges that share it
+// inherit exactly that. Three facts, none of them accidental and none repaired here:
+// the request Content-Type is SET to application/json whenever there is a body (so a
+// form/multipart/binary body forwards its bytes under a JSON label), the response
+// headers are not returned at all (so an upstream Content-Type or
+// Content-Disposition cannot be relayed — see billing.go's header note), and the
+// response body is capped at 1 MiB by the LimitReader below, which TRUNCATES a
+// larger answer and reports it with the upstream's own 200. That cap is right for
+// the JSON callers it was written for and wrong for a PDF, which is the one
+// non-JSON payload in billingForwardable.
 func commerceDo(ctx context.Context, base, token, method, path string, q url.Values, org string, body []byte) ([]byte, int, error) {
 	if base == "" {
 		return nil, 0, fmt.Errorf("commerce not configured")
