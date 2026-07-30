@@ -21,7 +21,61 @@
         "operationId": "post_v1_ask",
         "tags": [
           "ask"
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/askRequest"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "askRequest": {
+        "type": "object",
+        "properties": {
+          "followUps": {
+            "type": "boolean"
+          },
+          "language": {
+            "type": "string"
+          },
+          "maxQueries": {
+            "type": "integer"
+          },
+          "maxSources": {
+            "type": "integer"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "q": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stream": {
+            "type": "boolean"
+          },
+          "system": {
+            "type": "string"
+          }
+        }
       }
     }
   }
