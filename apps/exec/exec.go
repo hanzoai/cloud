@@ -138,8 +138,19 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	h := zip.AdaptNetHTTP(guard(proxy))
 
 	// Own each prefix for every method (POST /exec, POST /upload, GET
-	// /download/{id}, GET /files/{sid}). Registered before ai (order 150), so
-	// these specific paths win over ai's bare /v1/* glob.
+	// /download/{id}, GET /files/{sid}). Registered before ai (manifest/apps.go
+	// row 142 vs ai's 182), so these specific paths win over ai's bare /v1/* glob.
+	//
+	// UNTYPED BY DESIGN — all 56 operations these 8 registrations publish. A typed
+	// op (zip.Get/Post/...) is the only thing that carries schema, prose, an MCP
+	// tool, a CLI command and an SDK method, and NONE of these can be one: the
+	// request shape, the response shape, the Content-Type and the status code all
+	// live in the executor, and zip's typed path answers its own declared status
+	// with a marshalled Go value. Typing any of them would move the wire, which a
+	// description task may not do. The refusal is a GATE, not a promise:
+	// typed_wire_test.go holds the closed ledger (untypedPaths x servedMethods)
+	// plus the eight measurements that prove each wire fact, so a route added here
+	// is typed by default and a stale reason goes red.
 	for _, p := range prefixes {
 		app.All(p, h)      // exact match, e.g. /v1/exec, /v1/upload
 		app.All(p+"/*", h) // subpaths, e.g. /v1/exec/programmatic, /v1/files/{sid}
