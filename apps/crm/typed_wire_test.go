@@ -25,21 +25,32 @@ var untypedByDesign = map[string]string{
 	// both are defeated by projection rather than by declaration — which is why
 	// the refusal is not "not looked at yet" but a named zip gap.
 	//
+	// The refusal is anchored to the NEWEST zip, not the pinned one: cloud is on
+	// v1.18.6 and every line below was re-read in v1.18.8, which is the latest
+	// published. v1.18.8 adds ask/declare/ops/peer/tenant and changes none of the
+	// five facts, so 19 is still this package's honest floor and the next agent
+	// here does not have to redo the reading.
+	//
 	// 1. THE RATE LIMIT IS A PROJECTION HOLE, NOT A DOCUMENTATION ONE. The limit
-	//    is fiber middleware (routes(), middleware.RateLimit keyed on client IP).
+	//    is fiber middleware (routes(), middleware.RateLimit — keyed on a value
+	//    that is not actually the client; see intakeRateLimit for that separate,
+	//    live defect, which weakens the meter but does not move this refusal,
+	//    since a projection bypasses the meter whatever it is keyed on).
 	//    zip's MCP arm dispatches a tools/call straight into op.invoke
-	//    (zip@v1.18.6 mcp.go:152) and the CLI's LocalInvoke does the same
+	//    (v1.18.8 mcp.go:152) and the CLI's LocalInvoke does the same
 	//    (cli.go:427) — neither runs the route's middleware chain, and zip has no
-	//    per-op way to decline a projection (the only OpOptions are WithSummary,
-	//    WithTags, WithOperationID and WithStatus; MCP.Disabled is app-wide).
+	//    per-op way to decline a projection (the only OpOptions are still
+	//    WithSummary, WithTags, WithOperationID and WithStatus, v1.18.8
+	//    typed.go:80/83/86/110; MCP.Disabled is app-wide, zip.go:131).
 	//    So typing this route publishes an UNMETERED alias of the one
 	//    deliberately metered public write in the surface. It is worse than
 	//    unmetered: apply() never calls tenant() — it writes into intakeOrg(s),
 	//    the deployment BRAND's pipeline — so the alias would let any caller
 	//    reaching /mcp inject unbounded rows into the brand's own CRM.
 	// 2. The 64 KiB cap (maxIntakeBody) is checked on the RAW body before any
-	//    parse. op.invoke json.Unmarshals before the handler runs, so a typed op
-	//    could only apply the cap after the parse it exists to prevent.
+	//    parse. op.invoke json.Unmarshals before the handler runs (v1.18.8
+	//    typed.go:234, ahead of fn at :259), so a typed op could only apply the
+	//    cap after the parse it exists to prevent.
 	//
 	// Its 200-vs-201 split (idempotent refresh vs create) is the ordinary
 	// conditional-status shape and would shim fine; the honeypot's third body

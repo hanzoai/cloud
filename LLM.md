@@ -1227,7 +1227,21 @@ exists to prevent). Its 200-vs-201 split would shim, and the honeypot's third
 body needs only `omitempty` — neither is what blocks it. **A route whose safety
 depends on HTTP middleware cannot be projected onto transports that skip
 middleware**; that wants either a per-op projection opt-out or middleware zip
-runs on every arm, and it is not closable inside cloud.
+runs on every arm, and it is not closable inside cloud. All five facts were
+RE-READ in zip **v1.18.8** (the newest published; cloud pins v1.18.6) — it adds
+ask/declare/ops/peer/tenant and changes none of them, so 19 is still this
+package's floor and the refusal now cites v1.18.8 line numbers so the next agent
+does not repeat the reading. Re-verifying it also surfaced a LIVE defect in the
+meter the refusal leans on: the limiter is keyed on `c.Fiber().IP()`, which is
+the TCP peer because zip's `fiber.Config` sets no `ProxyHeader` and no trusted
+proxy, so for proxied public traffic — the only traffic it exists to bound —
+every submission shares ONE 20/min bucket, together with the three staff
+application routes registered after it. The defect is stated once, at
+`intakeRateLimit` (apps/crm/applications.go), including why the one-line fix is
+wrong: `middleware.RateLimit`'s bucket map is only ever reset, never evicted, so
+keying it on real client IPs grows without bound — which is exactly why
+`EdgeRateLimit` carries its own eviction instead of reusing that primitive. It is
+a metering decision, not a typing one, so typing left it alone.
 crm is also the worked example of the half of the surface an op-level count does
 NOT measure. Typing a route documents its ADDRESS and its SHAPE, never the
 shape's FIELDS: those come from doc comments on the In/Out struct FIELDS, which
