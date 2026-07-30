@@ -44,6 +44,13 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by
+// `make -C apps/entitlements openapi` and by the Dockerfile before every build.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 const (
 	// maxProductsPerRequest bounds one add/remove batch, so a single POST cannot
 	// blow up the transaction or the commerce fan-out.
@@ -94,18 +101,50 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	s := &service{store: store, commerce: deps.Commerce, log: log}
 	mounted = s
-
-	app.Get("/v1/orgs/:org/entitlements", s.get)
-	app.Post("/v1/orgs/:org/entitlements", s.post)
-
-	// The ENTITLEMENT (commerce) projection the @hanzogui/shell reads — the READ
-	// side of the unified paywall (projection.go), distinct from the ENABLEMENT
-	// store above. ONE more app.Get on this existing subsystem: it does NOT add a
-	// Wire spec, so apps/wire_test.go TestWireOrderMatchesFrozen stays green.
-	app.Get("/v1/entitlements", s.projection)
+	routes(app, s)
 
 	log.Info("entitlements surface mounted", "prefix", "/v1/orgs/:org/entitlements", "brand", deps.Brand, "commerce", deps.Commerce != nil)
 	return nil
+}
+
+// ops binds the mounted service so each op can be a method value — the only bound
+// form cmd/zipdoc can lift prose from. It carries STATE and no logic: every method
+// resolves its org through resolveOrg and then calls the same store.
+type ops struct{ s *service }
+
+// routes registers the entitlements surface as TYPED ops — one registry entry per
+// route, from which the REST route, the OpenAPI operation, the MCP tool, the CLI
+// command and every generated SDK method follow. It is the ONE registration: Mount
+// calls it, and so do the package's tests, so a test can never exercise a router
+// this binary does not serve.
+func routes(app cloud.Router, s *service) {
+	// Bridge FIRST: a typed op receives only a context, so the validated org and the
+	// request its admin gates read reach it by being parked there. fiber runs
+	// middleware in registration order, so one installed after its leaves never runs.
+	// Installed through the SUBSYSTEM's own router, which scopes it to the prefixes
+	// this app declares — BOTH of them: this surface owns two top-level nouns
+	// (/v1/entitlements and /v1/orgs/:org/entitlements), and the /v1/<name> default
+	// MountPrefixes falls back to covers only the first, so plugin/entitlements/main.go
+	// passes manifest.PrefixesFor("entitlements") rather than relying on it.
+	app.Use(cloud.Bridge())
+
+	// Declared on GROUPS: the op's path is the prefix composed with the leaf, which
+	// is the identity every projection keys on, and cmd/zipdoc resolves the prefix
+	// the same way, so the prose reaches the document and the tool list.
+	o := ops{s: s}
+	og := app.Group("/v1/orgs")
+	zip.Get(og, "/:org/entitlements", o.get)
+	zip.Post(og, "/:org/entitlements", o.post)
+
+	// The ENTITLEMENT (commerce) projection the @hanzogui/shell reads — the READ
+	// side of the unified paywall (projection.go), distinct from the ENABLEMENT
+	// store above. ONE more op on this existing subsystem: it does NOT add a
+	// Wire spec, so apps/wire_test.go TestWireOrderMatchesFrozen stays green.
+	//
+	// Declared on the /v1 PARENT with a non-empty leaf: zip.Get(g, "") on a
+	// /v1/entitlements group would normalise to "/v1/entitlements/", and op.Path is
+	// the identity every projection keys on.
+	zip.Get(app.Group("/v1"), "/entitlements", o.projection)
 }
 
 // Shutdown releases the entitlements store. Idempotent.
@@ -123,33 +162,45 @@ func Shutdown(_ context.Context) error {
 
 // ── org gate ────────────────────────────────────────────────────────────────
 
-// resolveOrg validates the :org param and reconciles it with the caller's
-// validated principal. It returns the authoritative org key and whether the
-// caller is a super admin. It fails closed (caller answers the returned error)
-// for a malformed org, an unvalidated principal, or a cross-org attempt by a
-// non-super-admin. This is the ONE trust decision for both handlers.
-func (s *service) resolveOrg(c *zip.Ctx) (org string, superAdmin bool, err error) {
-	org = strings.TrimSpace(c.Param("org"))
+// resolveOrg validates the :org path segment and reconciles it with the caller's
+// validated principal. It returns the authoritative org key, whether the caller is a
+// super admin, and the request (for the actor a write is attributed to). It fails
+// closed (caller answers the returned error) for a malformed org, an unvalidated
+// principal, or a cross-org attempt by a non-super-admin. This is the ONE trust
+// decision for both ops.
+//
+// The org key it returns is the URL's, but it is never TRUSTED as one: the equality
+// below is against the VALIDATED principal, so the URL only ever names an org the
+// caller has already been proven to hold. That is why `org` may be an input field —
+// it is an ADDRESS the gate re-checks, not an assertion the gate believes.
+//
+// It reads the request rather than principal.OrgFrom because it needs two facts the
+// parked org does not carry: SuperAdmin-ness (X-User-IsAdmin, minted only by
+// SanitizeIdentity) and the validated owner claim to compare the URL against. Fails
+// closed off the HTTP path: no request, no attested principal, no access.
+func (s *service) resolveOrg(ctx context.Context, param string) (org string, superAdmin bool, c *zip.Ctx, err error) {
+	org = strings.TrimSpace(param)
 	if !orgRE.MatchString(org) {
-		return "", false, zip.ErrBadRequest("org must be a DNS-1123 label")
+		return "", false, nil, zip.ErrBadRequest("org must be a DNS-1123 label")
 	}
-	if !principal.Validated(c) {
+	c, ok := cloud.Request(ctx)
+	if !ok || !principal.Validated(c) {
 		// No validated principal. The identity middleware RESTORES a client
 		// X-Org-Id on the bearer-less path, so c.Org() could equal a forged :org
 		// and defeat the equality check below. Refuse here.
-		return "", false, zip.ErrForbidden("no validated principal")
+		return "", false, nil, zip.ErrForbidden("no validated principal")
 	}
 	if c.IsAdmin() {
 		// Super admin (owner==AdminOrg, minted only by SanitizeIdentity): may act
 		// on any org. The store key is the :org they targeted.
-		return org, true, nil
+		return org, true, c, nil
 	}
 	// Non-super-admin: may only touch its OWN org. c.Org() is the validated owner
 	// claim; a mismatch with :org is a cross-org attempt.
 	if strings.TrimSpace(c.Org()) != org {
-		return "", false, zip.ErrForbidden("caller may only access its own org's entitlements")
+		return "", false, nil, zip.ErrForbidden("caller may only access its own org's entitlements")
 	}
-	return org, false, nil
+	return org, false, c, nil
 }
 
 // ── GET ──────────────────────────────────────────────────────────────────────
@@ -158,47 +209,77 @@ func (s *service) resolveOrg(c *zip.Ctx) (org string, superAdmin bool, err error
 // sorted list of canonical product ids the org has turned on; it is ALWAYS a
 // (possibly empty) array, never null — the console can map over it unconditionally.
 type entitlementsView struct {
+	// Enabled is the org's turned-on product ids, sorted. Always an array, never null.
 	Enabled []string `json:"enabled"`
 }
 
-func (s *service) get(c *zip.Ctx) error {
-	org, _, err := s.resolveOrg(c)
+// orgRef addresses one org's enablement row. The org is URL-borne only: `json:"-"`
+// keeps it out of the published request body, and `url:"org"` binds it from the path
+// segment the router matched on.
+type orgRef struct {
+	// Org is the org whose entitlements are being read, from the path. It must be the
+	// caller's own validated org unless the caller is a platform super admin.
+	Org string `json:"-" url:"org"`
+}
+
+// Get lists the products an org has ENABLED — its own intent, which the console's
+// paid-product sidebar reads to decide what to show. It is distinct from what the
+// org's plan ENTITLES it to (that is GET /v1/entitlements, resolved from commerce).
+//
+// A caller may only read its OWN org's row; a platform super admin may read any.
+func (o ops) get(ctx context.Context, in *orgRef) (*entitlementsView, error) {
+	org, _, _, err := o.s.resolveOrg(ctx, in.Org)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	enabled, err := s.store.List(c.Context(), org)
+	enabled, err := o.s.store.List(ctx, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list entitlements: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "list entitlements: %v", err)
 	}
-	return c.JSON(http.StatusOK, entitlementsView{Enabled: enabled})
+	return &entitlementsView{Enabled: enabled}, nil
 }
 
 // ── POST ───────────────────────────────────────────────────────────────────────
 
+// mutateReq turns products on and off for one org. At least one of add or remove
+// must be non-empty; a batch is capped at 64 product ids.
 type mutateReq struct {
-	Add    []string `json:"add"`
+	// Org is the org being changed, from the path. It must be the caller's own
+	// validated org unless the caller is a platform super admin.
+	Org string `json:"-" url:"org"`
+	// Add is the product ids to turn ON. Each must already be an ACTIVE entitlement
+	// of the org's plan, unless the caller is a platform super admin.
+	Add []string `json:"add"`
+	// Remove is the product ids to turn OFF. Disabling is never gated.
 	Remove []string `json:"remove"`
 }
 
-func (s *service) post(c *zip.Ctx) error {
-	org, superAdmin, err := s.resolveOrg(c)
+// Post turns products on or off for an org and returns the enabled set afterwards.
+//
+// A product may only be ENABLED if the org's plan already ENTITLES it, so enabling
+// never spends new money — a product the plan does not grant answers 402 and the
+// console routes that to an upgrade prompt. DISABLING is never gated. A platform
+// super admin bypasses the plan check (operator comp/grant) and may target any org;
+// everyone else may only change their own. Commerce unreachable is a 503, never an
+// implicit yes.
+//
+// Example: {"add": ["chat"], "remove": ["engine"]}
+func (o ops) post(ctx context.Context, in *mutateReq) (*entitlementsView, error) {
+	org, superAdmin, c, err := o.s.resolveOrg(ctx, in.Org)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var body mutateReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	add, err := cleanProducts(body.Add)
+	add, err := cleanProducts(in.Add)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	remove, err := cleanProducts(body.Remove)
+	remove, err := cleanProducts(in.Remove)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	s := o.s
 	if len(add) == 0 && len(remove) == 0 {
-		return zip.ErrBadRequest("add or remove must be non-empty")
+		return nil, zip.ErrBadRequest("add or remove must be non-empty")
 	}
 
 	// ENTITLEMENT GATE — only for a non-super-admin ADD. Every product being
@@ -208,27 +289,31 @@ func (s *service) post(c *zip.Ctx) error {
 	// what cannot be verified) — never open.
 	if !superAdmin && len(add) > 0 {
 		if s.commerce == nil {
-			return zip.Errorf(http.StatusServiceUnavailable, "entitlement service unavailable; cannot verify plan")
+			return nil, zip.Errorf(http.StatusServiceUnavailable, "entitlement service unavailable; cannot verify plan")
 		}
 		for _, p := range add {
-			ent, cErr := s.commerce.CheckEntitlement(c.Context(), org, p)
+			ent, cErr := s.commerce.CheckEntitlement(ctx, org, p)
 			if cErr != nil {
-				return zip.Errorf(http.StatusServiceUnavailable, "check entitlement for %q: %v", p, cErr)
+				return nil, zip.Errorf(http.StatusServiceUnavailable, "check entitlement for %q: %v", p, cErr)
 			}
 			if ent == nil || !ent.Active {
 				// 402 Payment Required: the org's plan does not grant this product.
 				// The console routes this to an upgrade/purchase prompt.
-				return zip.Errorf(http.StatusPaymentRequired, "product %q is not in this org's plan; upgrade in commerce to enable it", p)
+				return nil, zip.Errorf(http.StatusPaymentRequired, "product %q is not in this org's plan; upgrade in commerce to enable it", p)
 			}
 		}
 	}
 
-	enabled, err := s.store.Apply(c.Context(), org, add, remove, strings.TrimSpace(c.User()), time.Now().Unix())
+	// The actor a change is ATTRIBUTED to is the validated user id (X-User-Id), which
+	// the parked org does not carry — resolveOrg hands back the request for exactly
+	// this. It is an attribution, never an authority: every gate above already ran.
+	actor := strings.TrimSpace(c.User())
+	enabled, err := s.store.Apply(ctx, org, add, remove, actor, time.Now().Unix())
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "apply entitlements: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "apply entitlements: %v", err)
 	}
-	s.log.Info("entitlements mutated", "org", org, "add", add, "remove", remove, "superAdmin", superAdmin, "by", strings.TrimSpace(c.User()))
-	return c.JSON(http.StatusOK, entitlementsView{Enabled: enabled})
+	s.log.Info("entitlements mutated", "org", org, "add", add, "remove", remove, "superAdmin", superAdmin, "by", actor)
+	return &entitlementsView{Enabled: enabled}, nil
 }
 
 // cleanProducts trims, drops empties, validates the slug shape, de-duplicates

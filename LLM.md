@@ -1326,6 +1326,50 @@ invisible to prose, MCP, the CLI and every typed SDK method. What it taught:
   emit the Makefile beside the main it already writes, then run `make -f
   mk/fleet.mk openapi-check` and commit whatever drift those three have been
   hiding.
+**The six-plugin pass (bots, entitlements, sbom, translate, agentskills, gateway):
+11 typed, 5 refused, out of 16 operations that published NOTHING.** Same work list
+rule as the pass below — every operation in `plugin/<name>/openapi.json` carrying
+neither `description` nor `summary`. All six subsets were 100% undescribed before;
+five of the six are now fully or mostly typed (`entitlements` 3/3, `gateway` 2/2,
+`bots` 2/3, `sbom` 2/3, `translate` 2/3), and `agentskills` is 0/2 by structure. Each
+package carries `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` reading the REAL
+mount, whose two ledgers must SUM to the served surface, so a route added untyped
+here goes red and a stale reason goes red too. What it taught, beyond the counts:
+
+- **`url:"-"` CLOSES the "path param equals body field" class.** zip v1.18.11 gives
+  a field its own URL name, so `Org string \`json:"-" url:"org"\`` binds the `:org`
+  segment, stays OUT of the published request body, and is invisible to the decoder
+  — measured: a body `{"org":"victim"}` on `POST /v1/orgs/acme/entitlements` writes
+  acme. Earlier passes recorded v1.18.6 as having no per-field opt-out; it does now.
+- **A greedy wildcard is still untypable, and the reason is three published facts,
+  not one.** `GET /v1/sbom/{wildcard1}`: fiber binds the capture as `*1`, a typed op
+  publishes `op.Path` VERBATIM (so the address becomes `/v1/sbom/*`), and the
+  parameter is then declared `in: query` rather than `in: path`. apps/pricing's
+  refusal, re-measured rather than inherited.
+- **Two more instances of the apps/plan prefix defect, and one of them is partial —
+  which is the harder shape to see.** `plugin/agentskills` declared no `Prefixes`,
+  so the `/v1/<name>` default covered NOTHING it serves (its routes are the root
+  `/.well-known/agent-skills/…` convention). `plugin/entitlements` declared none
+  either, and its default covered ONE of its two top-level nouns: `/v1/entitlements`
+  was gated, `/v1/orgs/:org/entitlements` was not. Both now pass
+  `manifest.PrefixesFor(...)`, and `apps/entitlements/typed_wire_test.go` gates the
+  cover relation itself — including an assertion that the default is still NOT
+  enough, so the explicit list cannot be dropped by someone who does not know why.
+- **NONE of the six installed `cloud.Bridge`.** Serve installs it binary-wide so
+  nothing was live-broken, but every one of these packages' own test harnesses runs
+  without Serve — so a typed op added here would have 403'd in its own tests with no
+  hint why. All six now install it through the SUBSYSTEM router (`app.Use`), which
+  scopes it to the declared prefixes rather than the whole binary.
+- **A section comment above a struct field becomes that FIELD's published prose.**
+  zipdoc lifts the doc comment directly above a field, and `edge.Policy` grouped
+  three fields under `// Platform-scope (admin-org row) …` — which shipped as the
+  description of `cors_origins` alone. Give every published field its own comment;
+  a header is not a description.
+- **Two generic names were qualified BEFORE they could collide** (failure mode #5 in
+  its cheap form): `bots.botView` → `BotRun` (apps/visor already publishes `botView`
+  for a bot MACHINE) and `translate.Entry` → `MemoryEntry` (six packages under
+  `apps/` declare a type called `Entry`). Neither was published yet, so both were
+  free; the weave is only the gate once one of them is.
 
 **The six-plugin pass (ai, destinations, dns, licensing, runtime, templates):
 9 typed, 29 refused, and the 29 are 4 registrations.** The work list came from the
