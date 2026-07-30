@@ -107,7 +107,7 @@ func TestSlugIsASingleCleanName(t *testing.T) {
 	}
 }
 
-func variantSources(tpl Template) []string {
+func variantSources(tpl StarterKit) []string {
 	out := make([]string, 0, len(tpl.Variants))
 	for _, v := range tpl.Variants {
 		out = append(out, v.Source)

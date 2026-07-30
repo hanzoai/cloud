@@ -59,10 +59,10 @@ const (
 	EventCustom        StandardEvent = "" // forwarded under the raw canonical name
 )
 
-// Field is one NON-SECRET config input a destination needs (a measurement or pixel
+// DestinationField is one NON-SECRET config input a destination needs (a measurement or pixel
 // id). It drives the connect contract and the console card. Key is the camelCase
 // key on both the connect body and the stored config.
-type Field struct {
+type DestinationField struct {
 	Key      string `json:"key"`
 	Label    string `json:"label"`
 	Required bool   `json:"required"`
@@ -75,9 +75,9 @@ type Field struct {
 // connect body key for a secret is the camelCase of its KMS name (api_secret →
 // apiSecret); both forms are accepted.
 type Spec struct {
-	Fields   []Field  `json:"fields"`
-	Secrets  []string `json:"secrets"`
-	Fallback string   `json:"fallback,omitempty"`
+	Fields   []DestinationField `json:"fields"`
+	Secrets  []string           `json:"secrets"`
+	Fallback string             `json:"fallback,omitempty"`
 }
 
 // Config is an org's non-secret destination configuration — the stored ids the
