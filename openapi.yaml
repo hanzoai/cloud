@@ -24044,80 +24044,26 @@ paths:
       operationId: post_v1_event
       tags:
       - event
-  /v1/event/api/{wildcard1}:
-    delete:
-      operationId: delete_v1_event_api_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      tags:
-      - event
-    get:
-      operationId: get_v1_event_api_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      tags:
-      - event
-    options:
-      operationId: options_v1_event_api_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      tags:
-      - event
-    patch:
-      operationId: patch_v1_event_api_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      tags:
-      - event
+  /v1/event/{project}/envelope:
     post:
-      operationId: post_v1_event_api_by_wildcard1
+      operationId: post_v1_event_by_project_envelope
       parameters:
       - in: path
-        name: wildcard1
+        name: project
         required: true
         schema:
           type: string
       tags:
       - event
-    put:
-      operationId: put_v1_event_api_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      tags:
-      - event
-    trace:
-      operationId: trace_v1_event_api_by_wildcard1
-      parameters:
-      - in: path
-        name: wildcard1
-        required: true
-        schema:
-          type: string
-      tags:
-      - event
-  /v1/event/collect:
+  /v1/event/{project}/store:
     post:
-      operationId: post_v1_event_collect
+      operationId: post_v1_event_by_project_store
+      parameters:
+      - in: path
+        name: project
+        required: true
+        schema:
+          type: string
       tags:
       - event
   /v1/exec:
