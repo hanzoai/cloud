@@ -20,7 +20,6 @@
 // so a dropped connection self-heals on the next tick — no watch state to wedge.
 package membership
 
-
 import (
 	"context"
 	"os"

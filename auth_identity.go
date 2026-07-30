@@ -1,63 +1,46 @@
 package cloud
 
-// In-binary IAM JWT validation — the trust anchor for SanitizeIdentity.
+// In-binary IAM identity — the trust anchor for SanitizeIdentity.
 //
-// This MIRRORS github.com/hanzoai/gateway/v2/iamauth, the canonical edge
-// validator, but cloud deliberately does NOT import that package: iamauth lives
-// in the heavyweight gateway module (KrakenD/gin/traefik) AND gateway/v2 already
-// imports github.com/hanzoai/cloud, so importing it back would braid a module
-// cycle and pull the gateway's whole dependency tree into cloud for ~150 lines
-// of validation. The gateway remains the PRIMARY edge authority — in production
-// it fronts cloud-api (universe routes.yaml). This validator is the in-binary
-// defense-in-depth layer for the in-cluster / direct path, kept tiny and
-// auditable on go-jose alone (already in cloud's module graph).
+// It no longer MIRRORS anything. This file used to say it mirrored the gateway's
+// validator and explain why cloud could not import it: the gateway is a heavyweight
+// module and already imports cloud, so importing it back would braid a cycle. Both
+// halves were true, and the conclusion — write our own — is what produced a third
+// independent reading of what an IAM token means.
 //
-// What it enforces, exactly like iamauth.ValidateToken: signature against the
-// IAM JWKS, issuer (strict), audience (allowlist, OR semantics), and expiry —
-// always. A token missing the issuer is rejected.
+// The reading is hanzoai/authz now, and the check is hanzoai/authz/edge. The leaf is
+// 148 packages with one non-stdlib dependency and imports nothing from cloud or the
+// gateway, so the cycle argument that justified the copy no longer applies to it.
+//
+// What is left here is what is genuinely CLOUD's: the trusted-issuer set (the brands
+// this binary fronts), the API-key resolver and the org it yields, the memo that keeps
+// a replayed ZAP credential from re-verifying per frame, and the policy that turns
+// verified claims into a home org.
+//
+// The copy was not free. It declared a `type` claim IAM emits nowhere and read it as
+// the machine discriminator, so every machine principal arrived as a human; and its
+// key selection fell back to trying every RSA key in the JWKS, so a token naming one
+// key was accepted on a signature from another.
 
 import (
-	"context"
-	"crypto/rsa"
 	"encoding/base64"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
-	gojose "github.com/go-jose/go-jose/v4"
-	"github.com/go-jose/go-jose/v4/jwt"
-
+	"github.com/hanzoai/authz"
+	"github.com/hanzoai/authz/edge"
 	"github.com/hanzoai/cloud/apps/principal"
-	model "github.com/hanzoai/iam/pkg/model"
 )
 
-// idClaims is the subset of Hanzo IAM JWT claims the identity sanitizer needs.
-// Shape mirrors iamauth.Claims so a token resolves identically at both layers.
+// idClaims is what a token proved, plus the one thing cloud resolves itself.
+//
+// The CLAIMS are authz.Claims — the definition IAM signs — embedded rather than
+// restated. This struct used to restate them, and the restatement is where the drift
+// lived: it declared a `type` claim IAM emits nowhere and read it as the machine
+// discriminator, so every machine principal arrived as a human.
 type idClaims struct {
-	jwt.Claims
-
-	Owner             string `json:"owner"`              // org slug (the org)
-	Project           string `json:"project"`            // org SUB-SCOPE within owner (empty ⟹ default project)
-	BillingAccount    string `json:"billing_account"`    // WHO PAYS, stated by IAM (empty ⟹ pre-claim token)
-	Name              string `json:"name"`               // display name (id fallback)
-	PreferredUsername string `json:"preferred_username"` // id fallback
-	Email             string `json:"email"`
-	IsAdmin           bool   `json:"isAdmin"`
-	// Type is IAM's account kind as the token carries it. It is NOT the machine
-	// discriminator: the IAM line this runs against stamps "application" nowhere —
-	// tokenType takes exactly "access-token" and "id-token" — so reading it as one
-	// admitted every machine as a human. Orgs is the discriminator; see
-	// isMachinePrincipal.
-	Type string `json:"type"`
-	// Orgs is the membership SET (home org first). Its ABSENCE is the machine signal:
-	// IAM signs no membership for a client_credentials token, and every user token
-	// carries at least the home org.
-	Orgs []model.OrgRef `json:"orgs"`
+	authz.Claims
 
 	// subjectOrg is the org resolved from the token SUBJECT rather than from any
 	// claim — set ONLY by the API-key resolver (iamKeys.lookup), from the IAM user
@@ -141,19 +124,16 @@ func (c *idClaims) userID() string {
 // best available answer. New tokens carry the username explicitly, so the fallback
 // stops being reached as they roll over rather than needing a flag day.
 func (c *idClaims) username() string {
-	if c.PreferredUsername != "" {
-		return c.PreferredUsername
+	// authz.Username is the estate rule and it NEVER falls back to the display name:
+	// addressing a wallet by one names a wallet nothing can fund.
+	if u := c.Claims.Username(); u != "" {
+		return u
 	}
+	// The named exception, kept deliberately: a token minted before IAM emitted
+	// preferred_username has only `name`, and for those it is the best available
+	// answer. It stops being reached as tokens roll over, rather than needing a flag
+	// day. This EXTENDS the one rule; it does not restate it.
 	return c.Name
-}
-
-// jwtSigAlgs is the accepted signature-algorithm allowlist passed to
-// jwt.ParseSigned (go-jose v4 requires it explicitly). RSA + ECDSA + PSS, the
-// set IAM may sign with — never "none".
-var jwtSigAlgs = []gojose.SignatureAlgorithm{
-	gojose.RS256, gojose.RS384, gojose.RS512,
-	gojose.ES256, gojose.ES384, gojose.ES512,
-	gojose.PS256, gojose.PS384, gojose.PS512,
 }
 
 // identityValidator validates an IAM JWT against a cached JWKS. Issuer (any of a
@@ -165,9 +145,12 @@ var jwtSigAlgs = []gojose.SignatureAlgorithm{
 // (cert-hanzo/cert-lux/cert-zoo/...), keyed by the token kid, so a single
 // jwksURL verifies all brands. Only the issuer-string comparison had to widen.
 type identityValidator struct {
-	issuers []string
-	cache   *jwksCache
-	keys    keyResolver // resolves an opaque API key to a principal; nil ⟹ keys stay anonymous
+	// verifier is the estate's ONE credential check (hanzoai/authz/edge): the JWKS
+	// reader, the algorithm allowlist, kid-bound key selection, the issuer allowlist
+	// and expiry. cloud used to hold its own of each, and each was a chance to differ
+	// from the edge about what a token proves.
+	verifier *edge.Verifier
+	keys     keyResolver // resolves an opaque API key to a principal; nil ⟹ keys stay anonymous
 	// claims memoizes token ⇒ verified claims so an already-authenticated caller
 	// (notably a ZAP socket, which replays its credential on every frame) is not
 	// signature-verified again per call. See identity_cache.go.
@@ -184,10 +167,9 @@ type identityValidator struct {
 // assign, not cloud's to mirror, so a new first-party app needs zero cloud change.
 func newIdentityValidator(issuer, jwksURL string, ttl time.Duration) *identityValidator {
 	return &identityValidator{
-		issuers: trustedIssuers(issuer),
-		cache:   newJWKSCache(jwksURL, ttl),
-		claims:  newIdentityCache(),
-		keys:    sharedKeys(), // ONE resolver+cache, shared with OrgForKey (analytics capture)
+		verifier: edge.NewVerifier(jwksURL, trustedIssuers(issuer), nil, ttl),
+		claims:   newIdentityCache(),
+		keys:     sharedKeys(), // ONE resolver+cache, shared with OrgForKey (analytics capture)
 	}
 }
 
@@ -390,7 +372,7 @@ func isHuman(claims *idClaims) bool {
 //
 // IAM's own money path already treats the two as one (billingAccountFor admits
 // {RoleOwner, RoleAdmin}); this is the authz half of that same fact.
-func isOrgAdmin(orgs []model.OrgRef, org string) bool {
+func isOrgAdmin(orgs []authz.Membership, org string) bool {
 	if org == "" {
 		return false
 	}
@@ -398,15 +380,15 @@ func isOrgAdmin(orgs []model.OrgRef, org string) bool {
 		if o.Org != org {
 			continue
 		}
-		switch strings.ToLower(strings.TrimSpace(o.Role)) {
-		case "owner", "admin":
-			return true
-		}
+		// Role.Admits folds owner into admin, in the one place that vocabulary is
+		// defined. This used to lower-case and trim the role string here, which is a
+		// second reading of the same enum.
+		return o.Role.Admits(authz.Write)
 	}
 	return false
 }
 
-func isMember(orgs []model.OrgRef, org string) bool {
+func isMember(orgs []authz.Membership, org string) bool {
 	if org == "" {
 		return false
 	}
@@ -421,187 +403,26 @@ func isMember(orgs []model.OrgRef, org string) bool {
 // validate parses raw, verifies its signature against the JWKS, and enforces
 // issuer/audience/expiry. Returns the claims on success, an error otherwise.
 func (v *identityValidator) validate(raw string) (*idClaims, error) {
-	tok, err := jwt.ParseSigned(raw, jwtSigAlgs)
+	// Everything a token has to prove is proved in ONE place. This function used to
+	// hold its own algorithm allowlist, its own key selection, its own issuer set
+	// comparison and its own expiry check — four opportunities to answer differently
+	// from the edge about the same token, and the key selection did: it fell back to
+	// trying every RSA key in the JWKS, so a token naming one key was accepted on a
+	// signature from another.
+	//
+	// Audience is deliberately NOT a gate here, which is why the verifier is built
+	// with no allowlist. A valid signature from a trusted issuer already proves IAM
+	// minted the token for one of ITS OWN registered apps; `aud` merely names which.
+	// Cloud kept no mirror of IAM's app registry because that mirror drifted and
+	// silently 401'd every new first-party app until someone hand-edited it.
+	claims, err := v.verifier.VerifyRaw(raw)
 	if err != nil {
-		return nil, fmt.Errorf("parse: %w", err)
-	}
-	keys, err := v.cache.get()
-	if err != nil {
-		return nil, fmt.Errorf("jwks: %w", err)
-	}
-
-	var claims idClaims
-	if err := verifyAgainstKeys(tok, keys, &claims); err != nil {
 		return nil, err
 	}
-
-	// Fail SECURE on a misconfigured (empty) trust set: with no trusted issuer every
-	// token must be REJECTED, never silently admitted. In production the set is always
-	// non-empty (the primary issuer + BrandIssuers, unioned in config.go so it is
-	// "never empty"), so this fires ONLY on an operator misconfiguration — and then it
-	// denies, it never admits (I2).
-	if len(v.issuers) == 0 {
-		return nil, fmt.Errorf("identity validator misconfigured: empty issuer set")
-	}
-
-	// Reject a missing issuer: an empty issuer must never pass the set check.
-	if claims.Issuer == "" {
-		return nil, fmt.Errorf("missing issuer")
-	}
-	// Reject a missing expiry: ValidateWithLeeway only enforces exp when present
-	// (it checks `if c.Expiry != nil`), so a token with NO exp would never expire.
-	// An IAM access token always carries exp; require it.
-	if claims.Expiry == nil {
-		return nil, fmt.Errorf("missing expiry")
-	}
-	// Issuer must be one of the trusted brand issuers. go-jose's jwt.Expected checks a
-	// SINGLE issuer, so the issuer is validated here against the set and left out of
-	// Expected (only expiry/not-before stay with Expected).
-	if !issuerAllowed(claims.Issuer, v.issuers) {
-		return nil, fmt.Errorf("untrusted issuer %q", claims.Issuer)
-	}
-	// Audience is NOT an access gate. A valid signature from a trusted issuer (both
-	// checked above) proves IAM minted this token for one of ITS OWN registered apps;
-	// the `aud` merely names which app. Cloud does not keep a per-app allowlist to
-	// mirror IAM's registry — that mirror drifted and silently 401'd every new
-	// first-party app until hand-edited. Org scope is the `owner` claim, enforced by
-	// every downstream guard; SuperAdmin is owner==adminOrg AND !isKMSMachinePrincipal
-	// (SanitizeIdentity). Expiry + not-before are STILL enforced here: Expected{} with a
-	// zero Time validates against time.Now(); an empty AnyAudience skips ONLY the
-	// audience match (go-jose/v4 jwt/validation.go).
-	if err := claims.Claims.ValidateWithLeeway(jwt.Expected{}, 2*time.Minute); err != nil {
-		return nil, fmt.Errorf("claims: %w", err)
-	}
-	return &claims, nil
+	return &idClaims{Claims: *claims}, nil
 }
 
-// verifyAgainstKeys tries the kid-matched key first, then any RSA signing key —
-// mirrors iamauth's selection so a token verifies the same way at both layers.
-func verifyAgainstKeys(tok *jwt.JSONWebToken, keys *gojose.JSONWebKeySet, claims *idClaims) error {
-	var lastErr error
-	for _, h := range tok.Headers {
-		if h.KeyID == "" {
-			continue
-		}
-		for _, k := range keys.Key(h.KeyID) {
-			if err := tok.Claims(k.Key, claims); err == nil {
-				return nil
-			} else {
-				lastErr = err
-			}
-		}
-	}
-	for _, k := range keys.Keys {
-		if k.Use != "sig" && k.Use != "" {
-			continue
-		}
-		if _, ok := k.Key.(*rsa.PublicKey); !ok {
-			continue
-		}
-		if err := tok.Claims(k.Key, claims); err == nil {
-			return nil
-		} else {
-			lastErr = err
-		}
-	}
-	if lastErr != nil {
-		return fmt.Errorf("no matching key: %w", lastErr)
-	}
-	return fmt.Errorf("no matching key in JWKS")
-}
-
-// ----------------------------------------------------------------------------
-// JWKS cache (TTL refresh, stale-on-error) — mirrors iamauth.JWKSCache.
-// ----------------------------------------------------------------------------
-
-type jwksCache struct {
-	mu        sync.RWMutex
-	keys      *gojose.JSONWebKeySet
-	fetchedAt time.Time
-	ttl       time.Duration
-	url       string
-	client    *http.Client
-}
-
-func newJWKSCache(url string, ttl time.Duration) *jwksCache {
-	if ttl <= 0 {
-		ttl = 15 * time.Minute
-	}
-	return &jwksCache{url: url, ttl: ttl, client: &http.Client{Timeout: 10 * time.Second}}
-}
-
-// get returns the cached key set, refreshing past TTL. On a fetch error with a
-// previously-cached set, the stale set is returned rather than failing — a
-// transient JWKS blip must not flap validation (and so admin auth) closed.
-func (c *jwksCache) get() (*gojose.JSONWebKeySet, error) {
-	c.mu.RLock()
-	if c.keys != nil && time.Since(c.fetchedAt) < c.ttl {
-		k := c.keys
-		c.mu.RUnlock()
-		return k, nil
-	}
-	c.mu.RUnlock()
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.keys != nil && time.Since(c.fetchedAt) < c.ttl {
-		return c.keys, nil
-	}
-	keys, err := c.fetch()
-	if err != nil {
-		if c.keys != nil {
-			return c.keys, nil
-		}
-		return nil, err
-	}
-	c.keys = keys
-	c.fetchedAt = time.Now()
-	return keys, nil
-}
-
-func (c *jwksCache) fetch() (*gojose.JSONWebKeySet, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("request: %w", err)
-	}
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("fetch: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status %d", resp.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil, fmt.Errorf("read: %w", err)
-	}
-	var set gojose.JSONWebKeySet
-	if err := json.Unmarshal(body, &set); err != nil {
-		return nil, fmt.Errorf("parse: %w", err)
-	}
-	return &set, nil
-}
-
-// ----------------------------------------------------------------------------
-// Token extraction — mirrors iamauth's Bearer / Basic / API-key helpers.
-// ----------------------------------------------------------------------------
-
-// APIKeyPrefixes are the Hanzo API key families. A published key (pk-) is
-// write-only and scoped, so it is safe in a public bundle; a secret key (sk-)
-// authenticates a server. Everything else is OAuth2, which is a JWT and not a key.
-//
-// hk- is sk- under an older name and is on its way out. It stays accepted here
-// because IAM mints it — cloud only validates (see account.go mintKey, which
-// delegates to iam.mintUserKey) — so dropping it here before IAM renames the
-// family would reject every key IAM hands out. Retire it in that order: IAM mints
-// sk-, holders re-key, then delete the entry below.
-//
-// fw_ and hz_ were listed here and never minted by anything: dead entries that
-// widened what counts as a credential for no reason. Gone.
-//
+// APIKeyPrefixes is every opaque-key spelling cloud recognizes at the door.
 // This is the ONE authority. Admission mirrors it rather than importing it (it
 // stays free of cloud-internal imports); if this list changes, that copy must too.
 var APIKeyPrefixes = []string{"pk-", "sk-", "hk-"}
@@ -610,18 +431,6 @@ var APIKeyPrefixes = []string{"pk-", "sk-", "hk-"}
 // in a browser bundle, sk- is the one you may not. Stripe's split, same reason.
 const PublishablePrefix = "pk-"
 
-// IsPublishableKey reports whether tok is a publishable key.
-//
-// A publishable key is NOT a credential: it identifies a tenant so a public
-// surface can WRITE (ingest events), and it must never mint a principal that can
-// READ. Cloud resolved any isAPIKey token — pk- included — into "the same
-// principal a JWT yields", which made a key documented as "safe to show" into a
-// full bearer for the org that owns it. IdentityFromRequest now refuses it, so
-// publishable means publishable.
-//
-// It stays in APIKeyPrefixes on purpose: OrgForKey must still resolve a pk- to
-// its owning org, because that is exactly how the ingest door learns which tenant
-// a browser beacon belongs to. Resolvable, not authenticating.
 func IsPublishableKey(tok string) bool {
 	return strings.HasPrefix(strings.TrimSpace(tok), PublishablePrefix)
 }

@@ -69,10 +69,10 @@ func (c *identityCache) get(token string, now time.Time) *idClaims {
 // no usable expiry are not cached: the boundary already refuses a token with no
 // exp, and caching one would invent a lifetime the token never had.
 func (c *identityCache) put(token string, claims *idClaims) {
-	if claims == nil || claims.Expiry == nil {
+	if claims == nil || claims.ExpiresAt == nil {
 		return
 	}
-	exp := claims.Expiry.Time()
+	exp := claims.ExpiresAt.Time
 	if !time.Now().Before(exp) {
 		return
 	}
