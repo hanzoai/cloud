@@ -2,9 +2,9 @@
 // document. The spec is not a description of the router — it IS the router,
 // read through app.Fiber().GetRoutes() at request time. There is no checked-in
 // spec file and no second route registry, so the document cannot drift: the only
-// way to change it is to change the routes it is read from. (Register adds a
-// registry of BODIES, never of routes: a declared schema renders only on a route
-// the router carries, so the paths remain the router's alone.)
+// way to change it is to change the routes it is read from. (Register/Describe
+// add a registry of BODIES and PROSE, never of routes: a declaration renders
+// only on a route the router carries, so the paths remain the router's alone.)
 //
 // This mirrors the rule zapface/wire.go states for transports — two transports,
 // ONE dispatch path. ZAP and OpenAPI are two PROJECTIONS of one route table.
@@ -220,9 +220,9 @@ type Parameter struct {
 // Everything past Parameters is omitempty and comes from exactly two seams, both
 // anchored in the handler's own Go types so neither can drift:
 //
-//   - Register (register.go): a subsystem declares its binding structs for a
-//     route it already serves — schema by reflection, attached only when the
-//     router carries the route.
+//   - Register/Describe (register.go): a subsystem declares its binding structs
+//     — schema by reflection — and, for a handler the wire refuses to let become
+//     a typed op, its prose; both attach only when the router carries the route.
 //   - zip's typed ops, folded in from the registry (Fold): Summary/Description
 //     from the lifted godoc, query parameters and bodies from the In/Out types.
 //
@@ -293,7 +293,8 @@ type PathItem map[string]*Operation
 //     runtime; not part of the match, so the router has never heard of them.
 //   - auth requirements — enforced by middleware and by guards wrapped around
 //     handlers (guard(s, cloud.Handle(s, listSecrets))), invisible as data.
-//   - summaries/descriptions — prose that exists only in Go comments.
+//   - summaries/descriptions — prose that exists only in Go comments (a typed
+//     op's zipdoc lift, or a refused route's Describe declaration).
 //   - wildcard semantics — a fiber `*` matches MULTIPLE segments greedily;
 //     OpenAPI's {param} matches one. The emitted {wildcardN} is the closest
 //     honest approximation and is NOT equivalent.
