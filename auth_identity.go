@@ -268,10 +268,11 @@ func (c *idClaims) homeOrg() string {
 	if isKMSMachinePrincipal(c) {
 		return c.Owner // machine JWT: the app IS the principal
 	}
-	if len(c.Orgs) == 0 {
-		return "" // human token with no membership set: fail closed
-	}
-	return c.Orgs[0].Org
+	// Everything else is the estate rule: the first entry of the signed membership
+	// set, or empty. Stated once, in the leaf; the two branches above are the facts
+	// only cloud has, because only cloud authenticated the credential that carries
+	// them.
+	return c.Claims.Home()
 }
 
 // isKMSMachinePrincipal reports whether a validated token is a per-org KMS-sync
