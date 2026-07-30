@@ -181,7 +181,7 @@ var untypedByDesign = map[string]string{
 // registry entry. Both team prefixes count — the collaborator plane is
 // app-level, because the front derives it from COLLABORATOR_URL, and a route
 // being outside /v1/team does not make it less of a product surface.
-func teamOps(t *testing.T) (served map[string]bool, typed map[string]string) {
+func teamOps(t *testing.T) (served map[string]bool, typed map[string]string, schemas map[string]any) {
 	t.Helper()
 	app := mountTeam(t)
 	doc, err := openapi.Spec(app, openapi.Info{Title: "team", Version: "v1"})
@@ -209,14 +209,16 @@ func teamOps(t *testing.T) (served map[string]bool, typed map[string]string) {
 			typed[key] = op.Description
 		}
 	}
-	return served, typed
+	// The app under test mounts team and nothing else, so every schema in the
+	// registry is one a team op publishes.
+	return served, typed, reg.Schemas
 }
 
 // TestEveryRouteIsTypedOrNamed fails when a team operation is neither a typed op
 // nor one of the ten above — so the next route added here is typed by default,
 // and dropping one out of the registry takes a deliberate edit with a reason.
 func TestEveryRouteIsTypedOrNamed(t *testing.T) {
-	served, typed := teamOps(t)
+	served, typed, _ := teamOps(t)
 
 	var untyped []string
 	for key := range served {
@@ -248,7 +250,7 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 // model reads to pick the tool. zipdoc_gen.go is what carries it into the
 // binary, so an op added without regenerating shows up here as a nameless tool.
 func TestEveryTypedOpIsDescribed(t *testing.T) {
-	_, typed := teamOps(t)
+	_, typed, _ := teamOps(t)
 	if len(typed) == 0 {
 		t.Fatal("no typed team ops in the registry at all")
 	}
@@ -256,5 +258,51 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 		if strings.TrimSpace(desc) == "" {
 			t.Errorf("%s has no description — run: go generate -run zipdoc ./apps/team/...", key)
 		}
+	}
+}
+
+// TestEveryPublishedFieldIsDescribed closes the half of the surface the op-level
+// gate above cannot see. Typing a route documents its ADDRESS and its SHAPE; it
+// does NOT document the shape's FIELDS, which come from a different place — doc
+// comments on the In/Out struct fields, which zipdoc lifts per field. So a package
+// can be at 100% of its typable routes and still publish bare properties: team
+// shipped three (ProviderInfo.name, ProviderInfo.displayName, botMember.active),
+// each reaching openapi.yaml, all four generated SDKs and the MCP inputSchema with
+// no description, because the two facts are counted in different places and only
+// the op-level one was counted.
+//
+// Every property of every schema a team op publishes must say what it is. Add a
+// field to a published type without prose and this fails.
+func TestEveryPublishedFieldIsDescribed(t *testing.T) {
+	_, _, schemas := teamOps(t)
+	if len(schemas) == 0 {
+		t.Fatal("no team schemas in the typed registry at all")
+	}
+	var bare []string
+	for name, raw := range schemas {
+		sch, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		props, ok := sch["properties"].(map[string]any)
+		if !ok {
+			continue // a scalar or an array schema has no properties to describe
+		}
+		for field, praw := range props {
+			p, ok := praw.(map[string]any)
+			if !ok {
+				continue
+			}
+			if desc, _ := p["description"].(string); strings.TrimSpace(desc) == "" {
+				bare = append(bare, name+"."+field)
+			}
+		}
+	}
+	if len(bare) > 0 {
+		sort.Strings(bare)
+		t.Errorf("published propert(ies) with no description: %s\n"+
+			"Every field of a published schema is read by SDK users and by a model choosing a tool. Write a "+
+			"doc comment on the struct field and run: go generate -run zipdoc ./apps/team/...",
+			strings.Join(bare, ", "))
 	}
 }

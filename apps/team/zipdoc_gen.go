@@ -26,7 +26,11 @@ func init() {
 	})
 	zip.Describe("GET /v1/team/account/providers", zip.Doc{
 		Description: "ListProviders returns the identity providers this deployment starts a login\nwith. It is always exactly one — hanzo.id. Which identities that door accepts\n(Google, GitHub, passkey, password) is IAM's question, answered on IAM's own\npage next to the identity check and the training-data consent that must\nprecede a first session; listing them here would be a second place holding\nthat answer, and the two drift the moment IAM gains or drops one.",
-		Response:    json.RawMessage(`[{"name":"openid","displayName":"Hanzo"}]`),
+		Fields: map[string]string{
+			"ProviderInfo.displayName": "DisplayName is the human label for the sign-in button; this deployment\nsends \"Hanzo\". Omitted from the body when empty.",
+			"ProviderInfo.name":        "Name is the provider id, and it is the value that goes back in the URL to\nstart a login: GET /v1/team/account/auth/{provider}. This deployment\nsurfaces exactly one, \"openid\" — the hanzo.id door.",
+		},
+		Response: json.RawMessage(`[{"name":"openid","displayName":"Hanzo"}]`),
 	})
 	zip.Describe("GET /v1/team/billing/plan", zip.Doc{
 		Description: "ReadPlan returns the plan and seat counts for the caller's OWN org, resolved\nfrom the VERIFIED team session token — never a client header. Seats and guests\nare the org's distinct active human members (a bot member is not a seat); the\nplan comes from the licensing entitlement and is empty when that read is\nunavailable, so the page shows an honest dash rather than a fabricated tier. A\ncaller with no verified session gets 401, and a real seat-read failure is a\n502 rather than a false \"0 members\".",
@@ -43,6 +47,7 @@ func init() {
 	zip.Describe("GET /v1/team/bots", zip.Doc{
 		Description: "ListBots returns the caller org's bot members — the org's agents projected as\nthe workspace Employees they become, each with the member account uuid and\nPerson reference the roster addresses it by. An agents subsystem that is not\nmounted answers an empty list, never an error.",
 		Fields: map[string]string{
+			"botMember.active":    "Active is whether the agent projects as a LIVE workspace member, derived\nfrom its registry status: empty, \"active\" and \"ready\" are live, anything\nelse (archived/retired) is not. An inactive bot drops out of the Team list\nwhile its past authorship survives.",
 			"botMember.id":        "the agent id",
 			"botMember.name":      "display name",
 			"botMember.personRef": "the projected Person _id",
