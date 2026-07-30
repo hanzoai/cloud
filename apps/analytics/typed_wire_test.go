@@ -43,11 +43,15 @@ var untypedByDesign = map[string]string{
 	"POST /v1/analytics":       canonWireReason,
 	"POST /v1/analytics/batch": canonWireReason,
 	"POST /v1/tracker":         canonWireReason,
-	"POST /v1/event/collect": "the Hanzo Team SPA's wire is a bare JSON ARRAY, unconditionally " +
-		"(decodeTeam, team.go). Same blocker as the canonical doors and then some: there is no " +
-		"non-array shape to type it as at all. " + admissionReason,
 	"POST /v1/insights/e": "the PostHog wire (decodeInsights, insights.go) — an object, so the array " +
 		"blocker does not apply here, but admission does. " + admissionReason,
+
+	"POST /v1/event/{project}/envelope": "the Sentry error wire on the one event door: the body is a " +
+		"raw Sentry envelope stream and the credential is a DSN key the o11y consumer verifies itself " +
+		"(cloud.ObsErrorIngest) — no principal, no struct In, nothing for a typed op to say.",
+	"POST /v1/event/{project}/store": "the Sentry error wire on the one event door: the body is a " +
+		"raw Sentry envelope stream and the credential is a DSN key the o11y consumer verifies itself " +
+		"(cloud.ObsErrorIngest) — no principal, no struct In, nothing for a typed op to say.",
 }
 
 const (
