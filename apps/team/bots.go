@@ -64,7 +64,11 @@ type botMember struct {
 	Name      string `json:"name"`      // display name
 	UserID    string `json:"userId"`    // derived member account uuid (personUuid)
 	PersonRef string `json:"personRef"` // the projected Person _id
-	Active    bool   `json:"active"`
+	// Active is whether the agent projects as a LIVE workspace member, derived
+	// from its registry status: empty, "active" and "ready" are live, anything
+	// else (archived/retired) is not. An inactive bot drops out of the Team list
+	// while its past authorship survives.
+	Active bool `json:"active"`
 }
 
 // ListBots returns the caller org's bot members — the org's agents projected as

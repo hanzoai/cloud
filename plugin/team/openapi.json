@@ -452,9 +452,11 @@
       "ProviderInfo": {
         "properties": {
           "displayName": {
+            "description": "DisplayName is the human label for the sign-in button; this deployment\nsends \"Hanzo\". Omitted from the body when empty.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the provider id, and it is the value that goes back in the URL to\nstart a login: GET /v1/team/account/auth/{provider}. This deployment\nsurfaces exactly one, \"openid\" — the hanzo.id door.",
             "type": "string"
           }
         },
@@ -463,6 +465,7 @@
       "botMember": {
         "properties": {
           "active": {
+            "description": "Active is whether the agent projects as a LIVE workspace member, derived\nfrom its registry status: empty, \"active\" and \"ready\" are live, anything\nelse (archived/retired) is not. An inactive bot drops out of the Team list\nwhile its past authorship survives.",
             "type": "boolean"
           },
           "id": {
