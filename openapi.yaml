@@ -4816,6 +4816,592 @@ components:
             target; ignored for a white-label admin, who always acts on their own org.
           type: string
       type: object
+    captableClassHolding:
+      properties:
+        authorized:
+          description: Authorized is how many shares of the class are authorized.
+          type: integer
+        classType:
+          description: ClassType is COMMON or PREFERRED.
+          type: string
+        issued:
+          description: Issued is how many shares of the class have been issued.
+          type: integer
+        name:
+          description: Name is the class name.
+          type: string
+        shareClassId:
+          description: ShareClassID is the share class.
+          type: string
+      type: object
+    captableCompany:
+      properties:
+        createdAt:
+          description: CreatedAt is when the company row was seeded, in unix milliseconds.
+          type: integer
+        id:
+          description: ID is the company id, which is the tenant's own org id.
+          type: string
+        incorporationCountry:
+          description: IncorporationCountry is the ISO country the entity is incorporated
+            in.
+          type: string
+        incorporationState:
+          description: IncorporationState is the state or province of incorporation.
+          type: string
+        incorporationType:
+          description: IncorporationType is the entity kind, e.g. LLC or C_CORP.
+          type: string
+        name:
+          description: Name is the company's legal name.
+          type: string
+        publicId:
+          description: PublicID is the company's shareable public identifier.
+          type: string
+        updatedAt:
+          description: UpdatedAt is when the company row last changed, in unix milliseconds.
+          type: integer
+      type: object
+    captableConvertibles:
+      properties:
+        notes:
+          $ref: '#/components/schemas/captableInstrumentTotal'
+          description: Notes is the convertible notes total.
+        safes:
+          $ref: '#/components/schemas/captableInstrumentTotal'
+          description: Safes is the SAFEs total.
+      type: object
+    captableEquityPlan:
+      properties:
+        boardApprovalDate:
+          description: BoardApprovalDate is the ISO date the board approved the plan.
+          type: string
+        comments:
+          description: Comments is free-form notes on the plan.
+          type: string
+        createdAt:
+          description: CreatedAt is when the plan was recorded, in unix milliseconds.
+          type: integer
+        defaultCancellatonBehavior:
+          description: |-
+            DefaultCancellatonBehavior is what happens to cancelled grants, RETIRE or
+            RETURN_TO_POOL. The key is spelled as the cap-table wire spells it.
+          type: string
+        id:
+          description: ID is the equity plan id.
+          type: string
+        initialSharesReserved:
+          description: InitialSharesReserved is how many shares the plan reserves.
+          type: integer
+        name:
+          description: Name is the plan name, e.g. "2026 Stock Option Plan".
+          type: string
+        planEffectiveDate:
+          description: PlanEffectiveDate is the ISO date the plan takes effect.
+          type: string
+        shareClassId:
+          description: ShareClassID is the class the reserved shares come from.
+          type: string
+      type: object
+    captableEquityPlans:
+      properties:
+        data:
+          description: Data is every equity plan on the caller org's cap table, newest
+            first.
+          items:
+            $ref: '#/components/schemas/captableEquityPlan'
+          type: array
+      type: object
+    captableHolding:
+      properties:
+        fullyDiluted:
+          description: FullyDiluted is shares plus options.
+          type: integer
+        name:
+          description: Name is the stakeholder's name.
+          type: string
+        options:
+          description: Options is the shares under this stakeholder's non-terminal
+            option grants.
+          type: integer
+        ownershipPct:
+          description: |-
+            OwnershipPct is fullyDiluted as a percentage of the company's
+            fullyDilutedShares, rounded to two decimals; 0 when nothing is issued.
+          type: number
+        shares:
+          description: Shares is the shares this stakeholder holds by certificate.
+          type: integer
+        stakeholderId:
+          description: StakeholderID is the stakeholder.
+          type: string
+      type: object
+    captableInstrumentTotal:
+      properties:
+        capital:
+          description: Capital is the total capital across those instruments.
+          type: number
+        count:
+          description: Count is how many instruments there are.
+          type: integer
+      type: object
+    captableInvestment:
+      properties:
+        amount:
+          description: Amount is the cash invested.
+          type: number
+        date:
+          description: Date is the ISO date of the investment.
+          type: string
+        id:
+          description: ID is the investment id.
+          type: string
+        roundId:
+          description: RoundID is the round the cheque went into.
+          type: string
+        shareClassId:
+          description: ShareClassID is the class shares were issued in, for a priced
+            round.
+          type: string
+        shares:
+          description: |-
+            Shares is how many shares the investment bought; 0 when the round issues
+            no equity at the time of investment.
+          type: integer
+        stakeholderId:
+          description: StakeholderID is the investor.
+          type: string
+        stakeholderName:
+          description: StakeholderName is that investor's name.
+          type: string
+      type: object
+    captableInvestments:
+      properties:
+        data:
+          description: Data is every investment across every round, newest first.
+          items:
+            $ref: '#/components/schemas/captableInvestment'
+          type: array
+      type: object
+    captableNote:
+      properties:
+        capital:
+          description: Capital is the principal the investor lent.
+          type: number
+        conversionCap:
+          description: ConversionCap is the valuation cap on conversion, if any.
+          type: number
+        discountRate:
+          description: DiscountRate is the discount to the next round's price, if
+            any.
+          type: number
+        id:
+          description: ID is the note id.
+          type: string
+        interestRate:
+          description: InterestRate is the annual interest rate, if any.
+          type: number
+        issueDate:
+          description: IssueDate is the ISO date the note was signed.
+          type: string
+        publicId:
+          description: PublicID is the note's shareable identifier, unique within
+            the company.
+          type: string
+        stakeholderId:
+          description: StakeholderID is the investor.
+          type: string
+        stakeholderName:
+          description: StakeholderName is that investor's name.
+          type: string
+        status:
+          description: Status is the note's state, e.g. DRAFT or ACTIVE.
+          type: string
+        type:
+          description: Type is the instrument kind, e.g. NOTE.
+          type: string
+      type: object
+    captableNotes:
+      properties:
+        data:
+          description: Data is every convertible note, newest first.
+          items:
+            $ref: '#/components/schemas/captableNote'
+          type: array
+      type: object
+    captableOption:
+      properties:
+        cliffYears:
+          description: CliffYears is how many years before any of the grant vests.
+          type: integer
+        equityPlanId:
+          description: EquityPlanID is the plan the grant draws from.
+          type: string
+        equityPlanName:
+          description: EquityPlanName is that plan's name.
+          type: string
+        exercisePrice:
+          description: ExercisePrice is the strike price per share.
+          type: number
+        expirationDate:
+          description: ExpirationDate is the ISO date the grant expires.
+          type: string
+        grantId:
+          description: GrantID is the grant number, unique within the company.
+          type: string
+        id:
+          description: ID is the option id.
+          type: string
+        issueDate:
+          description: IssueDate is the ISO date the grant was issued.
+          type: string
+        quantity:
+          description: Quantity is how many shares the grant covers.
+          type: integer
+        stakeholderId:
+          description: StakeholderID is the grantee.
+          type: string
+        stakeholderName:
+          description: StakeholderName is that grantee's name.
+          type: string
+        status:
+          description: |-
+            Status is the grant's state, e.g. DRAFT, ACTIVE, EXERCISED, EXPIRED or
+            CANCELLED. Only non-terminal grants dilute the cap table.
+          type: string
+        type:
+          description: Type is the grant kind, ISO or NSO.
+          type: string
+        vestingYears:
+          description: VestingYears is the total vesting period in years.
+          type: integer
+      type: object
+    captableOptions:
+      properties:
+        data:
+          description: Data is every option grant, newest first.
+          items:
+            $ref: '#/components/schemas/captableOption'
+          type: array
+      type: object
+    captableRound:
+      properties:
+        closeDate:
+          description: CloseDate is the ISO date the round closed, once it has.
+          type: string
+        createdAt:
+          description: CreatedAt is when the round was recorded, in unix milliseconds.
+          type: integer
+        id:
+          description: ID is the round id.
+          type: string
+        name:
+          description: Name is the round name, e.g. "Series A".
+          type: string
+        preMoneyValuation:
+          description: PreMoneyValuation is the pre-money valuation, for a priced
+            round.
+          type: number
+        pricePerShare:
+          description: PricePerShare is the price per share, for a priced round.
+          type: number
+        raisedAmount:
+          description: RaisedAmount is how much has been invested so far.
+          type: number
+        roundType:
+          description: RoundType is PRICED, SAFE or CONVERTIBLE_NOTE.
+          type: string
+        shareClassId:
+          description: ShareClassID is the class a priced round issues into.
+          type: string
+        status:
+          description: Status is OPEN or CLOSED.
+          type: string
+        targetAmount:
+          description: TargetAmount is how much the round set out to raise.
+          type: number
+      type: object
+    captableRoundTotals:
+      properties:
+        count:
+          description: Count is how many rounds the company has recorded.
+          type: integer
+        totalRaised:
+          description: TotalRaised is the sum of every round's raised amount.
+          type: number
+      type: object
+    captableRounds:
+      properties:
+        data:
+          description: Data is every round, newest first.
+          items:
+            $ref: '#/components/schemas/captableRound'
+          type: array
+      type: object
+    captableSafe:
+      properties:
+        capital:
+          description: Capital is the cash the investor put in.
+          type: number
+        discountRate:
+          description: DiscountRate is the discount to the next round's price, if
+            any.
+          type: number
+        id:
+          description: ID is the SAFE id.
+          type: string
+        issueDate:
+          description: IssueDate is the ISO date the SAFE was signed.
+          type: string
+        mfn:
+          description: MFN is true when the SAFE carries a most-favoured-nation clause.
+          type: boolean
+        proRata:
+          description: ProRata is true when the SAFE carries pro-rata rights.
+          type: boolean
+        publicId:
+          description: PublicID is the SAFE's shareable identifier, unique within
+            the company.
+          type: string
+        stakeholderId:
+          description: StakeholderID is the investor.
+          type: string
+        stakeholderName:
+          description: StakeholderName is that investor's name.
+          type: string
+        status:
+          description: Status is the SAFE's state, e.g. DRAFT or ACTIVE.
+          type: string
+        type:
+          description: Type is POST_MONEY or PRE_MONEY.
+          type: string
+        valuationCap:
+          description: ValuationCap is the valuation cap, if any.
+          type: number
+      type: object
+    captableSafes:
+      properties:
+        data:
+          description: Data is every SAFE, newest first.
+          items:
+            $ref: '#/components/schemas/captableSafe'
+          type: array
+      type: object
+    captableShare:
+      properties:
+        capitalContribution:
+          description: CapitalContribution is the cash paid for the certificate, if
+            recorded.
+          type: number
+        certificateId:
+          description: CertificateID is the certificate number, unique within the
+            company.
+          type: string
+        companyLegends:
+          description: CompanyLegends are the restrictive legends printed on the certificate.
+          items:
+            type: string
+          type: array
+        id:
+          description: ID is the share id.
+          type: string
+        issueDate:
+          description: IssueDate is the ISO date the certificate was issued.
+          type: string
+        pricePerShare:
+          description: PricePerShare is the price paid per share, if recorded.
+          type: number
+        quantity:
+          description: Quantity is how many shares the certificate covers.
+          type: integer
+        shareClassId:
+          description: ShareClassID is the class the shares belong to.
+          type: string
+        shareClassName:
+          description: ShareClassName is that class's name.
+          type: string
+        shareClassType:
+          description: ShareClassType is that class's type, COMMON or PREFERRED.
+          type: string
+        stakeholderId:
+          description: StakeholderID is the holder of the certificate.
+          type: string
+        stakeholderName:
+          description: StakeholderName is that holder's name.
+          type: string
+        status:
+          description: Status is ACTIVE or DRAFT.
+          type: string
+      type: object
+    captableShareClass:
+      properties:
+        classType:
+          description: ClassType is COMMON or PREFERRED.
+          type: string
+        companyName:
+          description: CompanyName is the name of the company whose cap table this
+            is.
+          type: string
+        conversionRights:
+          description: |-
+            ConversionRights describes what the class converts into, e.g.
+            CONVERTS_TO_FUTURE_ROUND.
+          type: string
+        id:
+          description: ID is the share class id.
+          type: string
+        idx:
+          description: Idx is the class's 1-based position within the company, in
+            creation order.
+          type: integer
+        initialSharesAuthorized:
+          description: InitialSharesAuthorized is how many shares of this class are
+            authorized.
+          type: integer
+        liquidationPreferenceMultiple:
+          description: LiquidationPreferenceMultiple is the preference multiple on
+            liquidation.
+          type: number
+        name:
+          description: Name is the class name, e.g. "Common" or "Series A Preferred".
+          type: string
+        parValue:
+          description: ParValue is the par value per share.
+          type: number
+        participationCapMultiple:
+          description: ParticipationCapMultiple caps participation on liquidation;
+            0 is uncapped.
+          type: number
+        prefix:
+          description: Prefix is the certificate prefix, CS for common and PS for
+            preferred.
+          type: string
+        pricePerShare:
+          description: PricePerShare is the issue price per share.
+          type: number
+        seniority:
+          description: Seniority orders classes in a liquidation waterfall; higher
+            is more senior.
+          type: integer
+        votesPerShare:
+          description: VotesPerShare is how many votes one share of this class carries.
+          type: integer
+      type: object
+    captableShares:
+      properties:
+        data:
+          description: Data is every issued share certificate, newest first.
+          items:
+            $ref: '#/components/schemas/captableShare'
+          type: array
+      type: object
+    captableStakeholder:
+      properties:
+        city:
+          description: City is the stakeholder's city, if recorded.
+          type: string
+        companyName:
+          description: CompanyName is the name of the company whose cap table this
+            is.
+          type: string
+        country:
+          description: Country is the stakeholder's two-letter country code.
+          type: string
+        createdAt:
+          description: CreatedAt is when the stakeholder was added, in unix milliseconds.
+          type: integer
+        currentRelationship:
+          description: |-
+            CurrentRelationship is how the stakeholder relates to the company, e.g.
+            FOUNDER, INVESTOR or EMPLOYEE.
+          type: string
+        email:
+          description: Email is the stakeholder's email, unique within the company.
+          type: string
+        id:
+          description: ID is the stakeholder id.
+          type: string
+        institutionName:
+          description: InstitutionName names the institution, when the stakeholder
+            is one.
+          type: string
+        name:
+          description: Name is the stakeholder's full name.
+          type: string
+        stakeholderType:
+          description: StakeholderType is INDIVIDUAL or INSTITUTION.
+          type: string
+        state:
+          description: State is the stakeholder's state or province, if recorded.
+          type: string
+        streetAddress:
+          description: StreetAddress is the stakeholder's street address, if recorded.
+          type: string
+        taxId:
+          description: TaxID is the stakeholder's tax identifier, if recorded.
+          type: string
+        zipcode:
+          description: Zipcode is the stakeholder's postal code, if recorded.
+          type: string
+      type: object
+    captableSummary:
+      properties:
+        byShareClass:
+          description: |-
+            ByShareClass is each share class's authorized-versus-issued position, in
+            class creation order.
+          items:
+            $ref: '#/components/schemas/captableClassHolding'
+          type: array
+        byStakeholder:
+          description: ByStakeholder is each stakeholder's position, largest holding
+            first.
+          items:
+            $ref: '#/components/schemas/captableHolding'
+          type: array
+        company:
+          $ref: '#/components/schemas/captableSummaryCompany'
+          description: Company names the company the cap table is computed for.
+        convertibles:
+          $ref: '#/components/schemas/captableConvertibles'
+          description: Convertibles is the capital on SAFEs and notes that have not
+            converted.
+        rounds:
+          $ref: '#/components/schemas/captableRoundTotals'
+          description: Rounds is the fundraising rollup.
+        totals:
+          $ref: '#/components/schemas/captableTotals'
+          description: Totals is the company-wide share count.
+      type: object
+    captableSummaryCompany:
+      properties:
+        id:
+          description: ID is the company id, which is the tenant's own org id.
+          type: string
+        name:
+          description: Name is the company's legal name.
+          type: string
+      type: object
+    captableTotals:
+      properties:
+        fullyDilutedShares:
+          description: FullyDilutedShares is outstandingShares plus grantedOptions.
+          type: integer
+        grantedOptions:
+          description: |-
+            GrantedOptions is the shares under non-terminal option grants — grants that
+            are EXERCISED, EXPIRED or CANCELLED are excluded, so nothing double-counts.
+          type: integer
+        outstandingShares:
+          description: OutstandingShares is the sum of every issued share certificate.
+          type: integer
+        shareClasses:
+          description: ShareClasses is how many share classes the company has authorized.
+          type: integer
+        stakeholders:
+          description: Stakeholders is how many stakeholders the company has.
+          type: integer
+      type: object
     cfResult:
       properties: {}
       type: object
@@ -15197,7 +15783,19 @@ paths:
       - campaign
   /v1/captable/company:
     get:
+      description: |-
+        GetCompany returns the caller org's cap-table company record. The row is
+        seeded when the tenant's store first opens, so it always exists; its name and
+        incorporation details are set with PUT /v1/captable/company.
       operationId: get_v1_captable_company
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/captableCompany'
+          description: ok
+      summary: GetCompany returns the caller org's cap-table company record.
       tags:
       - captable
     put:
@@ -15206,7 +15804,20 @@ paths:
       - captable
   /v1/captable/convertibles:
     get:
+      description: |-
+        ListConvertibles returns the caller org's convertible notes, newest first. A
+        note's principal sits OUTSIDE issued equity until it converts, so it is not
+        part of the share counts.
       operationId: get_v1_captable_convertibles
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/captableNotes'
+          description: ok
+      summary: ListConvertibles returns the caller org's convertible notes, newest
+        first.
       tags:
       - captable
     post:
@@ -15226,7 +15837,19 @@ paths:
       - captable
   /v1/captable/equity-plans:
     get:
+      description: |-
+        ListEquityPlans returns the caller org's equity plans, newest first. An equity
+        plan is an option pool: a reserve of shares, drawn from one share class, that
+        option grants are written against.
       operationId: get_v1_captable_equity-plans
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/captableEquityPlans'
+          description: ok
+      summary: ListEquityPlans returns the caller org's equity plans, newest first.
       tags:
       - captable
     post:
@@ -15235,12 +15858,36 @@ paths:
       - captable
   /v1/captable/investments:
     get:
+      description: |-
+        ListInvestments returns the caller org's investments, newest first. It spans
+        every round, so it is the flat ledger of cheques written into the company,
+        each naming its investor and the round it went into.
       operationId: get_v1_captable_investments
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/captableInvestments'
+          description: ok
+      summary: ListInvestments returns the caller org's investments, newest first.
       tags:
       - captable
   /v1/captable/options:
     get:
+      description: |-
+        ListOptions returns the caller org's option grants, newest first. Each row is
+        joined to its grantee and its equity plan. Grants that are EXERCISED, EXPIRED
+        or CANCELLED are listed here but do not dilute the cap table.
       operationId: get_v1_captable_options
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/captableOptions'
+          description: ok
+      summary: ListOptions returns the caller org's option grants, newest first.
       tags:
       - captable
     post:
@@ -15260,7 +15907,19 @@ paths:
       - captable
   /v1/captable/rounds:
     get:
+      description: |-
+        ListRounds returns the caller org's fundraising rounds, newest first. A round
+        groups a fundraising event; a PRICED round also carries the share class and
+        price per share it issues at.
       operationId: get_v1_captable_rounds
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/captableRounds'
+          description: ok
+      summary: ListRounds returns the caller org's fundraising rounds, newest first.
       tags:
       - captable
     post:
@@ -15302,7 +15961,19 @@ paths:
       - captable
   /v1/captable/safes:
     get:
+      description: |-
+        ListSafes returns the caller org's SAFEs, newest first. A SAFE is a simple
+        agreement for future equity: its capital sits OUTSIDE issued equity until it
+        converts, so it is not part of the share counts.
       operationId: get_v1_captable_safes
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/captableSafes'
+          description: ok
+      summary: ListSafes returns the caller org's SAFEs, newest first.
       tags:
       - captable
     post:
@@ -15322,7 +15993,22 @@ paths:
       - captable
   /v1/captable/share-classes:
     get:
+      description: |-
+        ListShareClasses returns the caller org's share classes, in creation order. A
+        share class is what a certificate is issued in, and every class the company
+        has authorized appears. The response is a bare JSON array, not an envelope.
       operationId: get_v1_captable_share-classes
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/captableShareClass'
+                type: array
+          description: ok
+      summary: ListShareClasses returns the caller org's share classes, in creation
+        order.
       tags:
       - captable
     post:
@@ -15342,7 +16028,19 @@ paths:
       - captable
   /v1/captable/shares:
     get:
+      description: |-
+        ListShares returns the caller org's share certificates, newest first. Each row
+        is joined to its holder and its share class, so a certificate names who holds
+        it and what class it is in without a second call.
       operationId: get_v1_captable_shares
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/captableShares'
+          description: ok
+      summary: ListShares returns the caller org's share certificates, newest first.
       tags:
       - captable
     post:
@@ -15367,7 +16065,21 @@ paths:
       - captable
   /v1/captable/stakeholders:
     get:
+      description: |-
+        ListStakeholders returns the caller org's stakeholders, newest first. The
+        response is a bare JSON array, not an envelope. Each row carries the holder's
+        contact and address fields alongside the company's name.
       operationId: get_v1_captable_stakeholders
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/captableStakeholder'
+                type: array
+          description: ok
+      summary: ListStakeholders returns the caller org's stakeholders, newest first.
       tags:
       - captable
     post:
@@ -15397,7 +16109,23 @@ paths:
       - captable
   /v1/captable/summary:
     get:
+      description: |-
+        GetSummary computes the caller org's cap table. It answers who owns what on a
+        fully-diluted basis: outstanding shares, granted options, per-stakeholder
+        ownership percentages, each share class's authorized versus issued position,
+        and the capital sitting on SAFEs and convertible notes that have not yet
+        converted. Only non-terminal option grants dilute — EXERCISED, EXPIRED and
+        CANCELLED grants are excluded, so equity issued through an exercised option is
+        never counted twice.
       operationId: get_v1_captable_summary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/captableSummary'
+          description: ok
+      summary: GetSummary computes the caller org's cap table.
       tags:
       - captable
   /v1/catalog:
