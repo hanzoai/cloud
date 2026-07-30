@@ -19,7 +19,7 @@
     "/v1/ingress/middlewares": {
       "get": {
         "operationId": "get_v1_ingress_middlewares",
-        "summary": "ListMiddlewares returns every edge transform the caller's org has configured,\nordered by id.",
+        "summary": "ListMiddlewares returns every edge transform the caller's org has configured, ordered by id.",
         "description": "ListMiddlewares returns every edge transform the caller's org has configured,\nordered by id. A route names the ones it wants, in order.",
         "tags": [
           "ingress"
@@ -78,7 +78,7 @@
     "/v1/ingress/middlewares/{id}": {
       "delete": {
         "operationId": "delete_v1_ingress_middlewares_id",
-        "summary": "DeleteMiddleware removes one of the caller org's edge transforms and hot-applies\nthe change.",
+        "summary": "DeleteMiddleware removes one of the caller org's edge transforms and hot-applies the change.",
         "description": "DeleteMiddleware removes one of the caller org's edge transforms and hot-applies\nthe change. Routes still naming it stop being served (they compile as skipped)\nuntil they name a transform that exists. Answers 204; an id this org does not\nhold is 404.",
         "tags": [
           "ingress"
@@ -186,7 +186,7 @@
     "/v1/ingress/routes": {
       "get": {
         "operationId": "get_v1_ingress_routes",
-        "summary": "ListRoutes returns every routing rule the caller's org has configured, ordered\nby id.",
+        "summary": "ListRoutes returns every routing rule the caller's org has configured, ordered by id.",
         "description": "ListRoutes returns every routing rule the caller's org has configured, ordered\nby id. A route maps an exact Host (and optional path prefix) to a service.",
         "tags": [
           "ingress"
@@ -206,7 +206,7 @@
       },
       "post": {
         "operationId": "post_v1_ingress_routes",
-        "summary": "PutRoute creates or replaces one routing rule and hot-applies the new table —\nthere is no config file and no restart.",
+        "summary": "PutRoute creates or replaces one routing rule and hot-applies the new table — there is no config file and no restart.",
         "description": "PutRoute creates or replaces one routing rule and hot-applies the new table —\nthere is no config file and no restart. POST mints an id when the body omits\none; PUT takes the id from the URL, which wins over any id in the body. A\nroute's host is a GLOBALLY unique DNS claim: a host another org's route already\nholds is refused 409, so no tenant can hijack another's hostname.",
         "tags": [
           "ingress"
@@ -244,7 +244,7 @@
     "/v1/ingress/routes/{id}": {
       "delete": {
         "operationId": "delete_v1_ingress_routes_id",
-        "summary": "DeleteRoute removes one of the caller org's routing rules and hot-applies the\nshrunken table, freeing its host for another claim.",
+        "summary": "DeleteRoute removes one of the caller org's routing rules and hot-applies the shrunken table, freeing its host for another claim.",
         "description": "DeleteRoute removes one of the caller org's routing rules and hot-applies the\nshrunken table, freeing its host for another claim. Answers 204; an id this org\ndoes not hold is 404.",
         "tags": [
           "ingress"
@@ -301,7 +301,7 @@
       },
       "put": {
         "operationId": "put_v1_ingress_routes_id",
-        "summary": "PutRoute creates or replaces one routing rule and hot-applies the new table —\nthere is no config file and no restart.",
+        "summary": "PutRoute creates or replaces one routing rule and hot-applies the new table — there is no config file and no restart.",
         "description": "PutRoute creates or replaces one routing rule and hot-applies the new table —\nthere is no config file and no restart. POST mints an id when the body omits\none; PUT takes the id from the URL, which wins over any id in the body. A\nroute's host is a GLOBALLY unique DNS claim: a host another org's route already\nholds is refused 409, so no tenant can hijack another's hostname.",
         "tags": [
           "ingress"
@@ -351,7 +351,7 @@
     "/v1/ingress/services": {
       "get": {
         "operationId": "get_v1_ingress_services",
-        "summary": "ListServices returns every backend pool the caller's org has configured,\nordered by id.",
+        "summary": "ListServices returns every backend pool the caller's org has configured, ordered by id.",
         "description": "ListServices returns every backend pool the caller's org has configured,\nordered by id. A service is the weighted round-robin target a route dispatches\nto.",
         "tags": [
           "ingress"
@@ -412,7 +412,7 @@
     "/v1/ingress/services/{id}": {
       "delete": {
         "operationId": "delete_v1_ingress_services_id",
-        "summary": "DeleteService removes one of the caller org's backend pools and hot-applies the\nchange.",
+        "summary": "DeleteService removes one of the caller org's backend pools and hot-applies the change.",
         "description": "DeleteService removes one of the caller org's backend pools and hot-applies the\nchange. Routes still pointing at it stop being served (they compile as skipped)\nuntil they name a pool that exists. Answers 204; an id this org does not hold\nis 404.",
         "tags": [
           "ingress"
@@ -522,7 +522,7 @@
     "/v1/ingress/status": {
       "get": {
         "operationId": "get_v1_ingress_status",
-        "summary": "Status reports the ingress edge's live posture: the role this instance runs in",
+        "summary": "Status reports the ingress edge's live posture: the role this instance runs in (app or edge), whether its listeners are bound and on which addresses, the ACME posture (staging flag and certificate cache directory), how many hosts the compiled route table currently serves, and how many the ACME HostPolicy will issue a certificate for.",
         "description": "Status reports the ingress edge's live posture: the role this instance runs in\n(app or edge), whether its listeners are bound and on which addresses, the ACME\nposture (staging flag and certificate cache directory), how many hosts the\ncompiled route table currently serves, and how many the ACME HostPolicy will\nissue a certificate for.",
         "tags": [
           "ingress"
@@ -544,7 +544,7 @@
     "/v1/ingress/tls": {
       "get": {
         "operationId": "get_v1_ingress_tls",
-        "summary": "GetTLS returns the caller org's ACME intent together with the edge-wide TLS",
+        "summary": "GetTLS returns the caller org's ACME intent together with the edge-wide TLS facts it lands in: which role this instance runs in, whether its listeners are bound, every host the ACME HostPolicy will issue a certificate for (the union across ALL orgs of TLS-marked routes and configured extraHosts, because one process holds one certificate cache), and the ACME directory and account email the process was started with.",
         "description": "GetTLS returns the caller org's ACME intent together with the edge-wide TLS\nfacts it lands in: which role this instance runs in, whether its listeners are\nbound, every host the ACME HostPolicy will issue a certificate for (the union\nacross ALL orgs of TLS-marked routes and configured extraHosts, because one\nprocess holds one certificate cache), and the ACME directory and account email\nthe process was started with.",
         "tags": [
           "ingress"
@@ -564,7 +564,7 @@
       },
       "put": {
         "operationId": "put_v1_ingress_tls",
-        "summary": "PutTLS replaces the caller org's ACME intent and hot-applies what can be\nhot-applied.",
+        "summary": "PutTLS replaces the caller org's ACME intent and hot-applies what can be hot-applied.",
         "description": "PutTLS replaces the caller org's ACME intent and hot-applies what can be\nhot-applied. extraHosts are normalized and validated, then feed the ACME\nHostPolicy on the reload this op performs, alongside the per-route tls flags.\nacmeEmail and staging bind an ACME account for the lifetime of an edge process,\nso they only take effect when the edge (re)starts — the returned note says so.",
         "tags": [
           "ingress"

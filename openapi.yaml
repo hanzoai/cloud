@@ -1154,17 +1154,6 @@ components:
             $ref: '#/components/schemas/Enrollment'
           type: array
       type: object
-    EnrollmentRef:
-      properties:
-        eid:
-          description: |-
-            EID is the enrollment id from the path, as returned by a single-address
-            enroll.
-          type: string
-        id:
-          description: ID is the sequence id from the path.
-          type: string
-      type: object
     EnvVarJSON:
       properties:
         key:
@@ -1351,10 +1340,7 @@ components:
           type: string
         id:
           type: string
-        metadata:
-          items:
-            type: integer
-          type: array
+        metadata: {}
         projectId:
           description: projectId == org (server-derived)
           type: string
@@ -1686,20 +1672,38 @@ components:
     GrantResult:
       properties:
         balanceCents:
+          description: BalanceCents is the account balance AFTER the grant, in whole
+            cents.
           type: integer
         balanceExact:
+          description: |-
+            BalanceExact is that same balance at full 18-decimal precision, so a sub-cent
+            debit is visible rather than rounded away.
           type: string
         currency:
+          description: Currency is the lower-cased ISO code the grant was denominated
+            in.
           type: string
         grantedCents:
+          description: GrantedCents is the amount actually credited.
           type: integer
         org:
+          description: Org is the tenant whose ledger was credited.
           type: string
         source:
+          description: 'Source is the money bucket: "trial" (non-cash comp) or "prepaid"
+            (real money).'
           type: string
         subject:
+          description: |-
+            Subject is the ACCOUNT the credit landed on inside that ledger: the org slug for
+            a pooled org, "<org>/<name>" for a member of a per-member one. It is echoed
+            because the operator does not choose it — account.Payer does — so naming a
+            member of a pooled org credits the pool and the receipt has to say so.
           type: string
         transactionId:
+          description: TransactionID is the ledger entry id, for reconciliation against
+            commerce.
           type: string
       type: object
     GrantRow:
@@ -1797,12 +1801,24 @@ components:
     Integrity:
       properties:
         brokenAt:
+          description: |-
+            BrokenAt is the seq of the FIRST record that failed verification, or -1 when
+            OK. Reason describes the break (recomputed-hash mismatch, prev-hash
+            discontinuity, or a seq gap).
           type: integer
         count:
+          description: Count is the number of records walked.
           type: integer
         headHash:
+          description: |-
+            HeadHash is the hash of the last record (or the genesis anchor for an empty
+            chain). Pin this externally over time to detect tail-truncation.
           type: string
         ok:
+          description: |-
+            OK is true iff every record's stored hash equals the recomputed hash AND the
+            chain links are continuous (each PrevHash == the prior record's Hash, seqs
+            gapless from 0).
           type: boolean
         reason:
           type: string
@@ -2206,9 +2222,6 @@ components:
         size:
           type: string
       type: object
-    None:
-      properties: {}
-      type: object
     Opportunity:
       properties:
         amount:
@@ -2252,12 +2265,6 @@ components:
         updatedAt:
           description: UpdatedAt is the unix second of the last write. Server-owned.
           type: integer
-      type: object
-    OrgIn:
-      properties:
-        org:
-          description: Org is the tenant slug from the path.
-          type: string
       type: object
     PagesBuildConfig:
       properties:
@@ -2378,12 +2385,6 @@ components:
           items:
             $ref: '#/components/schemas/CalendarPost'
           type: array
-      type: object
-    PostRef:
-      properties:
-        id:
-          description: ID is the post id from the path, as returned by create.
-          type: string
       type: object
     Principle:
       properties:
@@ -3316,32 +3317,67 @@ components:
     Status:
       properties:
         addr:
+          description: Addr is the socket or address serving it.
           type: string
         disabled:
+          description: |-
+            Disabled is true when Unload stopped it deliberately, as opposed to it
+            having crashed. Both answer 503, so without this an operator cannot tell
+            a maintenance window from an outage — and would page for the former.
           type: boolean
         name:
           type: string
         pid:
+          description: PID is the child process, or 0 when this host did not start
+            it.
           type: integer
         prefix:
+          description: |-
+            Prefix is the FIRST subtree this plugin answers — the one a log line
+            names it by. Prefixes is every subtree, and a plugin may own several.
+            Reporting only the first would understate the blast radius of taking
+            this plugin down, which is the question a fleet view exists to answer.
           type: string
         prefixes:
           items:
             type: string
           type: array
         reloads:
+          description: |-
+            Reloads counts successful swaps since Load. A climbing number on one
+            host and not its peers is the signal that a rollout is uneven.
           type: integer
         restarts:
+          description: |-
+            Restarts counts times the supervisor brought this plugin back after it
+            died on its own. Distinct from Reloads, which are deliberate: a nonzero
+            Restarts is a plugin crashing, and a climbing one is a crash loop.
           type: integer
         running:
+          description: |-
+            Running is false after Unload, or after a child exited and no Reload has
+            replaced it. Its routes stay registered and answer 503, so a false here
+            is the difference between "not deployed" and "deployed but down".
           type: boolean
         since:
-          $ref: '#/components/schemas/Time'
+          description: |-
+            Since is when the CURRENT instance started — it resets on Reload, so it
+            reports the age of what is running, not of the mount.
+          format: date-time
+          type: string
         source:
+          description: |-
+            Source is where the binary came from: "embedded", "path", "url", or
+            "remote" for an instance this host did not start.
           type: string
         usage:
           $ref: '#/components/schemas/Usage'
+          description: Usage is what this plugin costs right now, read from the kernel.
         version:
+          description: |-
+            Version is the artifact's SHA-256 when it was installed from a URL —
+            the only version identifier that cannot drift from the bits actually
+            running, since it IS the bits. Empty for the other sources.
           type: string
       type: object
     Step:
@@ -3600,9 +3636,6 @@ components:
         title:
           type: string
       type: object
-    Time:
-      properties: {}
-      type: object
     Totals:
       properties:
         attachedGiB:
@@ -3722,12 +3755,21 @@ components:
     Usage:
       properties:
         cpuNs:
+          description: |-
+            CPU is total user+system time this instance has consumed since it
+            started. It only ever climbs, so a rate is the interesting derivative.
           type: integer
         fds:
           type: integer
         rssBytes:
+          description: |-
+            RSS is resident memory in bytes — the honest number for "what does this
+            plugin cost", as opposed to virtual size.
           type: integer
         threads:
+          description: |-
+            Threads and FDs are the two limits a busy service hits first, and both
+            are leaks when they climb without bound.
           type: integer
       type: object
     UsageFundingOut:
@@ -3766,6 +3808,7 @@ components:
         service:
           type: string
         source:
+          description: '"actual" | "estimated"'
           type: string
         vendor:
           type: string
@@ -3968,6 +4011,10 @@ components:
         hash:
           type: string
         home:
+          description: |-
+            Home is present ONLY on a cross-org action: the org the actor came FROM,
+            while Org is the org they acted IN. A console row carrying `home` is a
+            platform-admin impersonation and should be rendered as one.
           type: string
         isAdmin:
           type: boolean
@@ -5287,25 +5334,21 @@ components:
             IncorporationCountry is the ISO country the entity is incorporated in.
             Optional; omitted, null or empty clears it. Any JSON scalar is accepted
             and stored as its text.
-          type: string
         incorporationState:
           description: |-
             IncorporationState is the state or province of incorporation. Optional;
             omitted, null or empty clears it. Any JSON scalar is accepted and stored
             as its text.
-          type: string
         incorporationType:
           description: |-
             IncorporationType is the entity kind, e.g. LLC or C_CORP. Optional;
             omitted, null or empty clears it. Any JSON scalar is accepted and stored
             as its text.
-          type: string
         name:
           description: |-
             Name is the company's legal name. Required, and it must be a non-empty
             string — anything else is refused with the cap table's own validation
             error.
-          type: string
       type: object
     captableConvertibles:
       properties:
@@ -5580,7 +5623,6 @@ components:
             null or empty records TODAY. Any JSON scalar is accepted and stored as its
             text, and the text is stored unparsed, so a caller that wants an ISO date
             sends one.
-          type: string
         id:
           description: |-
             ID is the round to close. It is the path segment: the URL is the
@@ -5852,18 +5894,15 @@ components:
       properties:
         city:
           description: City is the stakeholder's city.
-          type: string
         currentRelationship:
           description: |-
             CurrentRelationship is how the stakeholder relates to the company, e.g.
             FOUNDER, INVESTOR or EMPLOYEE. This route stores it as sent — unlike
             adding a stakeholder, it is not checked against the vocabulary.
-          type: string
         email:
           description: |-
             Email is the stakeholder's email. This route stores it as sent — unlike
             adding a stakeholder, it is not checked for shape or uniqueness.
-          type: string
         id:
           description: |-
             ID is the stakeholder to update. It is the path segment: the URL is the
@@ -5873,28 +5912,21 @@ components:
         institutionName:
           description: InstitutionName names the institution, when the stakeholder
             is one.
-          type: string
         name:
           description: Name is the stakeholder's full name.
-          type: string
         stakeholderType:
           description: |-
             StakeholderType is INDIVIDUAL or INSTITUTION. This route stores it as
             sent — unlike adding a stakeholder, it is not checked against the
             vocabulary.
-          type: string
         state:
           description: State is the stakeholder's state or province.
-          type: string
         streetAddress:
           description: StreetAddress is the stakeholder's street address.
-          type: string
         taxId:
           description: TaxID is the stakeholder's tax identifier.
-          type: string
         zipcode:
           description: Zipcode is the stakeholder's postal code.
-          type: string
       type: object
     captableSummary:
       properties:
@@ -5963,9 +5995,6 @@ components:
         success:
           description: Success is true when the update was applied.
           type: boolean
-      type: object
-    cfResult:
-      properties: {}
       type: object
     chatRequest:
       properties:
@@ -6441,14 +6470,6 @@ components:
             $ref: '#/components/schemas/connectorProviderView'
           type: array
       type: object
-    connectorRef:
-      properties:
-        id:
-          description: |-
-            ID is the connector id, provider + ":" + label ("openai:default") — the
-            auth-profile-id shape. Another user's id is simply no row, so 404.
-          type: string
-      type: object
     connectorTokenOut:
       properties:
         expiresAt:
@@ -6524,10 +6545,7 @@ components:
           type: string
         message:
           type: string
-        payload:
-          items:
-            type: integer
-          type: array
+        payload: {}
         seq:
           type: integer
       type: object
@@ -6838,18 +6856,6 @@ components:
         up:
           type: boolean
       type: object
-    devicePollIn:
-      properties:
-        flow:
-          description: |-
-            Flow is the id deviceStartOut returned. Expired or another user's flow is
-            indistinguishable from an unknown one: 404.
-          type: string
-        provider:
-          description: Provider is the user-scoped provider's registry id, from the
-            path.
-          type: string
-      type: object
     devicePollOut:
       properties:
         connector:
@@ -6910,18 +6916,6 @@ components:
           description: Disconnected is always true — the org's secrets and connection
             row are gone.
           type: boolean
-      type: object
-    docRef:
-      properties:
-        doctype:
-          description: DocType is the document's DocType, from the path.
-          type: string
-        name:
-          description: |-
-            Name is the document's name — its key within the DocType — from the path.
-            A name containing a space arrives percent-encoded and is decoded before it
-            is matched against the stored one.
-          type: string
       type: object
     docTypeList:
       properties:
@@ -7055,10 +7049,7 @@ components:
           type: string
         kind:
           type: string
-        payload:
-          items:
-            type: integer
-          type: array
+        payload: {}
         seq:
           type: integer
         sessionId:
@@ -7182,12 +7173,6 @@ components:
           items:
             $ref: '#/components/schemas/Flow'
           type: array
-      type: object
-    flowRef:
-      properties:
-        id:
-          description: ID is the flow to act on, from the path.
-          type: string
       type: object
     formationView:
       properties:
@@ -7419,15 +7404,6 @@ components:
           type: string
         url:
           description: URL is the live site (GitHub's html_url).
-          type: string
-      type: object
-    githubRepoRef:
-      properties:
-        repo:
-          description: |-
-            Repo is the repository's short name within the org's installation, with no
-            owner prefix (the owner is server-derived from the grant). A trailing ".git"
-            is stripped.
           type: string
       type: object
     githubRepoView:
@@ -8183,13 +8159,6 @@ components:
             $ref: '#/components/schemas/ModuleInfo'
           type: array
       type: object
-    moduleRef:
-      properties:
-        module:
-          description: Module is the lane's registered name ("cms", "erp"), from the
-            path.
-          type: string
-      type: object
     moneyBoard:
       properties:
         byOrg:
@@ -8300,13 +8269,7 @@ components:
             id.
           type: string
       type: object
-    noArgs:
-      properties: {}
-      type: object
     noContent:
-      properties: {}
-      type: object
-    noInput:
       properties: {}
       type: object
     nodeList:
@@ -8697,9 +8660,6 @@ components:
           type: string
         metadata:
           description: Metadata replaces the caller's opaque JSON.
-          items:
-            type: integer
-          type: array
         publishedVersionId:
           description: |-
             PublishedVersionID pins the version runs execute. It must name a version OF
@@ -8859,9 +8819,6 @@ components:
           type: string
         metadata:
           description: Metadata is the caller's opaque JSON, stored and returned verbatim.
-          items:
-            type: integer
-          type: array
         projectId:
           description: |-
             Org is the owning org, which this surface names projectId. Server-derived from
@@ -8915,9 +8872,6 @@ components:
             Updated is when the catalog was last refreshed, as the pricing source
             recorded it.
           type: object
-      type: object
-    pricingNoInput:
-      properties: {}
       type: object
     pricingPlanList:
       properties:
@@ -9137,15 +9091,6 @@ components:
           type: array
         start:
           description: Start is when the offer opens (RFC3339).
-          type: string
-      type: object
-    providerRef:
-      properties:
-        provider:
-          description: |-
-            Provider is the registry id of the connector — "slack", "github",
-            "cloudflare". Unknown ids are 404, as are the user-plane (/v1/connectors)
-            providers, which this surface never resolves.
           type: string
       type: object
     providerView:
@@ -9474,14 +9419,6 @@ components:
           items:
             $ref: '#/components/schemas/repoView'
           type: array
-      type: object
-    repoRef:
-      properties:
-        name:
-          description: |-
-            Name is the repo's org-unique handle, from the :name path segment. A
-            trailing ".git" is stripped.
-          type: string
       type: object
     repoView:
       properties:
@@ -10081,9 +10018,6 @@ components:
           description: |-
             Filters is the optional rollout/payload block of a VALUED switch, e.g.
             {"groups":[{"properties":[],"rollout_percentage":100}],"payloads":{"true":250}}.
-          items:
-            type: integer
-          type: array
         key:
           description: Key is the switch to write, taken from the path (e.g. "waitlist.chat").
           type: string
@@ -10154,12 +10088,6 @@ components:
           $ref: '#/components/schemas/verificationTally'
           description: Verifications tallies the org's verifications by provider-reported
             status.
-      type: object
-    stepRef:
-      properties:
-        id:
-          description: ID is the step's id, as it appears in the journey (e.g. "gsuite").
-          type: string
       type: object
     stepView:
       properties:
@@ -10537,9 +10465,6 @@ components:
           description: Documents is how many documents exist across them.
           type: integer
       type: object
-    syncIn:
-      properties: {}
-      type: object
     syncOut:
       properties:
         data:
@@ -10579,12 +10504,6 @@ components:
           items:
             $ref: '#/components/schemas/targetView'
           type: array
-      type: object
-    targetRef:
-      properties:
-        id:
-          description: ID is the target to act on, from the path.
-          type: string
       type: object
     targetReq:
       properties:
@@ -10894,12 +10813,6 @@ components:
           description: |-
             Status is the reviewer's decision: "reviewer_confirmed" (a pass) or
             "manual_review" (withheld for review) — never a provider status.
-          type: string
-      type: object
-    verificationRef:
-      properties:
-        id:
-          description: ID is the verification to act on, from the path.
           type: string
       type: object
     verificationReq:
@@ -11340,21 +11253,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/collabResult'
           description: ok
-      summary: |-
-        CollabRPC is the collaborative-markup snapshot plane the Team front's editor
-        speaks: createContent stores a document field's markup at a fresh, immutable
-        blob ref and returns it, updateContent stores a new snapshot and answers
-        nothing, and getContent reads back the exact snapshot a ref names.
-
-        createContent ALSO seeds the live-editing update log from the front-supplied
-        Y.js update, so a dialog-authored description is visible in the collaborative
-        editor — which replays that log — and not only in snapshot reads.
-        updateContent never touches that log: peers may be live-editing the document,
-        and their edits are not this call's to overwrite.
-
-        Every call is scoped to the caller's VERIFIED session or workspace token: the
-        documentId's workspace must be the token's workspace when the token names one,
-        and the caller must be a member of it.
+      summary: 'CollabRPC is the collaborative-markup snapshot plane the Team front''s
+        editor speaks: createContent stores a document field''s markup at a fresh,
+        immutable blob ref and returns it, updateContent stores a new snapshot and
+        answers nothing, and getContent reads back the exact snapshot a ref names.'
   /explore:
     get:
       operationId: get_explore
@@ -11726,13 +11628,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/aimetricsOut'
           description: ok
-      summary: |-
-        aimetrics is the fleet AI board: O11yAI generations (count, cost, avg/p95 latency,
-        per-model), per-model usage from the live cloud_usage ledger, and the eval plane
-        (traces, scores, score names, runs, and the average-score trend).
-
-        Every signal degrades INDEPENDENTLY — a table that is absent or errors contributes its
-        zero value and the read still succeeds.
+      summary: 'aimetrics is the fleet AI board: O11yAI generations (count, cost,
+        avg/p95 latency, per-model), per-model usage from the live cloud_usage ledger,
+        and the eval plane (traces, scores, score names, runs, and the average-score
+        trend).'
       tags:
       - admin
   /v1/admin/analytics:
@@ -11779,7 +11678,9 @@ paths:
                 $ref: '#/components/schemas/analyticsOut'
           description: ok
       summary: 'analytics is the SaaS product-analytics board over the caller''s tenant
-        window: active'
+        window: active customers, new and churned, retention, MRR, ARPU, the usage
+        trend and the top customers by spend — every number folded from the commerce
+        ledger, not sampled.'
       tags:
       - admin
   /v1/admin/applications:
@@ -11830,9 +11731,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/iamRowsOut'
           description: ok
-      summary: |-
-        applications lists IAM applications for one owner org, forwarded VERBATIM from IAM's
-        get-applications.
+      summary: applications lists IAM applications for one owner org, forwarded VERBATIM
+        from IAM's get-applications.
       tags:
       - admin
   /v1/admin/audit:
@@ -11938,13 +11838,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/RecordsOut'
           description: ok
-      summary: |-
-        Records reads cloud's tamper-evident audit trail, newest first, with the chain's live
-        integrity attached so a listing can be badged as verified.
-
-        When cloud has no local store configured it falls back to forwarding IAM's own
-        get-records trail verbatim — a DIFFERENT trail, federated so the endpoint never
-        regresses to an empty list.
+      summary: Records reads cloud's tamper-evident audit trail, newest first, with
+        the chain's live integrity attached so a listing can be badged as verified.
       tags:
       - admin
   /v1/admin/audit/verify:
@@ -11972,12 +11867,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/VerifyOut'
           description: ok
-      summary: |-
-        Verify walks the WHOLE hash chain and reports whether it is intact: how many records
-        were checked, the head hash to pin externally against tail-truncation, and — when the
-        chain is broken — the seq of the first bad record and why.
-
-        brokenAt is -1 exactly when ok is true.
+      summary: 'Verify walks the WHOLE hash chain and reports whether it is intact:
+        how many records were checked, the head hash to pin externally against tail-truncation,
+        and — when the chain is broken — the seq of the first bad record and why.'
       tags:
       - admin
   /v1/admin/authors:
@@ -12067,12 +11959,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/basesOut'
           description: ok
-      summary: |-
-        bases lists the tenant Base instances in the caller's window — a SuperAdmin sees every
-        tenant's, anyone else only their own subtree's.
-
-        The scope is enforced TWICE: the upstream is asked for the caller's org, AND every row
-        it returns is re-checked against the resolved scope.
+      summary: bases lists the tenant Base instances in the caller's window — a SuperAdmin
+        sees every tenant's, anyone else only their own subtree's.
       tags:
       - admin
   /v1/admin/block-storage:
@@ -12122,13 +12010,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/blockStorageOut'
           description: ok
-      summary: |-
-        blockStorage is the realtime block-storage board: the DigitalOcean volume fleet
-        (count, capacity, monthly list cost, per-volume region and attachment) plus the
-        analytics datastore's OWN fill, read from its system.disks.
-
-        A volume's usedGiB and pct are null, always: DO exposes capacity and attachment but no
-        fill, so the console renders "—" rather than a number nobody measured.
+      summary: 'blockStorage is the realtime block-storage board: the DigitalOcean
+        volume fleet (count, capacity, monthly list cost, per-volume region and attachment)
+        plus the analytics datastore''s OWN fill, read from its system.disks.'
       tags:
       - admin
   /v1/admin/catalog:
@@ -12146,9 +12030,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/adminCatalogOut'
           description: ok
-      summary: |-
-        GetAdminCatalog returns the full model and provider catalog annotated with
-        each entry's enablement state, for the operator console.
+      summary: GetAdminCatalog returns the full model and provider catalog annotated
+        with each entry's enablement state, for the operator console.
       tags:
       - admin
   /v1/admin/catalog/models/{wildcard1}:
@@ -12237,10 +12120,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/computeOut'
           description: ok
-      summary: |-
-        compute rolls the fleet's compute usage up to one row per (org, app, project, kind):
-        how many distinct machines ran in the window, how many are still active, what they
-        billed, and when each group last emitted an event.
+      summary: 'compute rolls the fleet''s compute usage up to one row per (org, app,
+        project, kind): how many distinct machines ran in the window, how many are
+        still active, what they billed, and when each group last emitted an event.'
       tags:
       - admin
   /v1/admin/credit-grants:
@@ -12326,12 +12208,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CustomersOut'
           description: ok
-      summary: |-
-        Customers lists every customer org at a glance, sorted by slug: owner email, plan,
-        suspend status, member count, balance, month-to-date spend and MRR.
-
-        Each row costs one IAM read plus the org's money reads, fanned out under a fixed
-        concurrency ceiling so a large fleet cannot stampede the upstreams.
+      summary: 'Customers lists every customer org at a glance, sorted by slug: owner
+        email, plan, suspend status, member count, balance, month-to-date spend and
+        MRR.'
       tags:
       - admin
   /v1/admin/customers/{org}:
@@ -12404,14 +12283,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/GrantOut'
           description: ok
-      summary: |-
-        GrantCredit issues a staff credit grant to the org named in the path — a comp, refund
-        or promo — through the ONE credit-write path core.ApplyGrant, which validates the
-        amount against the per-grant cap, checks the org exists, moves the money and records
-        the tamper-evident audit row.
-
-        The credit lands on the account account.Payer resolves, NOT necessarily the org: name
-        a member of a pooled org and the pool is credited.
+      summary: GrantCredit issues a staff credit grant to the org named in the path
+        — a comp, refund or promo — through the ONE credit-write path core.ApplyGrant,
+        which validates the amount against the per-grant cap, checks the org exists,
+        moves the money and records the tamper-evident audit row.
       tags:
       - admin
   /v1/admin/customers/{org}/reactivate:
@@ -12427,12 +12302,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OrgIn'
-        required: true
       responses:
         "200":
           content:
@@ -12471,12 +12340,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OrgIn'
-        required: true
       responses:
         "200":
           content:
@@ -12494,10 +12357,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/AccessOut'
           description: ok
-      summary: |-
-        SuspendCustomer cuts off every member of the org: IAM refuses a forbidden user at
-        login AND at token issuance, so a suspended customer can neither sign in nor mint a
-        fresh token.
+      summary: 'SuspendCustomer cuts off every member of the org: IAM refuses a forbidden
+        user at login AND at token issuance, so a suspended customer can neither sign
+        in nor mint a fresh token.'
       tags:
       - admin
   /v1/admin/enablement:
@@ -12516,9 +12378,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/adminEnablementBoard'
           description: ok
-      summary: |-
-        ListEnablement returns every item an operator has set an enablement state on —
-        its global state (off, beta or ga) and the orgs granted its beta.
+      summary: ListEnablement returns every item an operator has set an enablement
+        state on — its global state (off, beta or ga) and the orgs granted its beta.
       tags:
       - admin
     put:
@@ -12548,9 +12409,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/adminEnablementItem'
           description: ok
-      summary: |-
-        SetEnablement sets one item's global enablement state — off, beta or ga — and
-        optionally replaces the list of orgs granted its beta.
+      summary: SetEnablement sets one item's global enablement state — off, beta or
+        ga — and optionally replaces the list of orgs granted its beta.
       tags:
       - admin
   /v1/admin/finance:
@@ -12606,12 +12466,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/BackfillOut'
           description: ok
-      summary: |-
-        Backfill carries ONE org's current commerce prepaid balance into the native finance
-        wallet — the one-time cutover between the two ledgers.
-
-        It is IDEMPOTENT: the deposit uses the fixed ref "backfill:<org>", so re-running it
-        credits the wallet at most once.
+      summary: Backfill carries ONE org's current commerce prepaid balance into the
+        native finance wallet — the one-time cutover between the two ledgers.
       tags:
       - admin
   /v1/admin/flags:
@@ -12640,7 +12496,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/flagsOut'
           description: ok
-      summary: 'flagsBoard reads the platform control-plane board: every runtime launch/release'
+      summary: 'flagsBoard reads the platform control-plane board: every runtime launch/release
+        switch (waitlist, public signup, subsystem activation, gateway limits, network
+        ids) with its LIVE value and where that value came from — a stored definition
+        or the compiled-in default.'
       tags:
       - admin
   /v1/admin/flags/{key}:
@@ -12694,9 +12553,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/flagsOut'
           description: ok
-      summary: |-
-        setFlag stores or overwrites ONE platform switch's definition and answers with the
-        whole board as it now stands.
+      summary: setFlag stores or overwrites ONE platform switch's definition and answers
+        with the whole board as it now stands.
       tags:
       - admin
   /v1/admin/grants:
@@ -12759,7 +12617,7 @@ paths:
                 $ref: '#/components/schemas/GrantsOut'
           description: ok
       summary: Grants reads the credit-grant ledger across ALL orgs, newest first
-        — who granted what
+        — who granted what to whom, when, and from which money bucket.
       tags:
       - admin
     post:
@@ -12800,9 +12658,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/GrantOut'
           description: ok
-      summary: |-
-        IssueGrant issues a credit grant to any org from the operator Grants view, with the
-        target named in the body.
+      summary: IssueGrant issues a credit grant to any org from the operator Grants
+        view, with the target named in the body.
       tags:
       - admin
   /v1/admin/infra:
@@ -12851,13 +12708,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ReadOut'
           description: ok
-      summary: |-
-        read serves the whole DigitalOcean infrastructure board: droplets, volumes, DOKS
-        clusters and load balancers, each cross-referenced against every cluster's live
-        Kubernetes state so the board can say what is safe to destroy and what is not.
-
-        It is cached for up to a minute because one read is a fan-out over the DO API plus a
-        full pod/PV listing per cluster.
+      summary: 'read serves the whole DigitalOcean infrastructure board: droplets,
+        volumes, DOKS clusters and load balancers, each cross-referenced against every
+        cluster''s live Kubernetes state so the board can say what is safe to destroy
+        and what is not.'
       tags:
       - admin
   /v1/admin/infra/clusters/{id}/nodepools/{pool}/scale:
@@ -12907,12 +12761,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/MutationOut'
           description: ok
-      summary: |-
-        scaleNodePool sets a node pool's node count — the ONE correct way to change how many
-        nodes a DOKS cluster has.
-
-        The response states what the board could NOT prove: DOKS picks which nodes a shrink
-        removes, so no particular pod is shown to survive one.
+      summary: scaleNodePool sets a node pool's node count — the ONE correct way to
+        change how many nodes a DOKS cluster has.
       tags:
       - admin
   /v1/admin/infra/droplets/{id}:
@@ -13037,7 +12887,7 @@ paths:
                 $ref: '#/components/schemas/MutationOut'
           description: ok
       summary: deleteLoadBalancer destroys a load balancer the board has just proven
-        no live
+        no live type=LoadBalancer Service in any cluster targets.
       tags:
       - admin
   /v1/admin/infra/nodes/{id}/cordon:
@@ -13081,13 +12931,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/MutationOut'
           description: ok
-      summary: |-
-        cordonNode marks one cluster node unschedulable — or schedulable again — and can drain
-        the pods already on it.
-
-        It is the ONE infra change that does not go through the run discipline, because there
-        is no destructive verdict to check: cordoning is reversible and evicting respects the
-        cluster's own PodDisruptionBudgets.
+      summary: cordonNode marks one cluster node unschedulable — or schedulable again
+        — and can drain the pods already on it.
       tags:
       - admin
   /v1/admin/infra/volumes/{id}:
@@ -13145,9 +12990,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/MutationOut'
           description: ok
-      summary: |-
-        deleteVolume destroys a volume the board has just proven no PersistentVolume in any
-        cluster references.
+      summary: deleteVolume destroys a volume the board has just proven no PersistentVolume
+        in any cluster references.
       tags:
       - admin
   /v1/admin/infra/volumes/{id}/resize:
@@ -13226,7 +13070,8 @@ paths:
                 $ref: '#/components/schemas/VolumeSnapshotOut'
           description: ok
       summary: snapshotVolume takes a point-in-time snapshot of one volume — the undo
-        a delete relies
+        a delete relies on, available on its own so an operator can take one before
+        any risky change.
       tags:
       - admin
   /v1/admin/invoices:
@@ -13290,9 +13135,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/meOut'
           description: ok
-      summary: |-
-        me answers with the validated operator identity — who the console is signed in as,
-        which tier they are, and how wide their tenant window is.
+      summary: me answers with the validated operator identity — who the console is
+        signed in as, which tier they are, and how wide their tenant window is.
       tags:
       - admin
   /v1/admin/metrics:
@@ -13322,9 +13166,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/MetricsOut'
           description: ok
-      summary: |-
-        Metrics answers GET /v1/admin/metrics by aggregating commerce.events directly
-        (fleet-wide, no per-org fan-out).
+      summary: Metrics answers GET /v1/admin/metrics by aggregating commerce.events
+        directly (fleet-wide, no per-org fan-out).
       tags:
       - admin
   /v1/admin/money:
@@ -13392,13 +13235,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/o11yOut'
           description: ok
-      summary: |-
-        o11y is the fleet-wide observability board: LLM usage (requests, tokens, cost,
-        errors, top orgs, top models), trace RED metrics (count, p50/p95/p99 latency in ms,
-        error rate, top services), fleet log volume, and the O11yAI generation rollup — all
-        aggregated across EVERY tenant, with no org filter applied.
-
-        Every signal degrades INDEPENDENTLY.
+      summary: 'o11y is the fleet-wide observability board: LLM usage (requests, tokens,
+        cost, errors, top orgs, top models), trace RED metrics (count, p50/p95/p99
+        latency in ms, error rate, top services), fleet log volume, and the O11yAI
+        generation rollup — all aggregated across EVERY tenant, with no org filter
+        applied.'
       tags:
       - admin
   /v1/admin/orgs:
@@ -13432,12 +13273,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/orgsOut'
           description: ok
-      summary: |-
-        orgs lists the tenant directory one row per org, sorted by slug: member count and the
-        org's month-to-date spend and credit balance, read live from IAM and commerce.
-
-        The rows are the caller's tenant window, not the fleet: a SuperAdmin gets every org, a
-        white-label admin only their own subtree.
+      summary: 'orgs lists the tenant directory one row per org, sorted by slug: member
+        count and the org''s month-to-date spend and credit balance, read live from
+        IAM and commerce.'
       tags:
       - admin
   /v1/admin/overview:
@@ -13479,12 +13317,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/overviewOut'
           description: ok
-      summary: |-
-        overview is the Platform Overview tiles: how many orgs and users are in the caller's
-        tenant window, the fleet workload counts, and month-to-date spend and credits.
-
-        It ALWAYS answers 200 — a tile board that fails as a whole because one upstream is
-        down is useless.
+      summary: 'overview is the Platform Overview tiles: how many orgs and users are
+        in the caller''s tenant window, the fleet workload counts, and month-to-date
+        spend and credits.'
       tags:
       - admin
   /v1/admin/plugins:
@@ -13537,13 +13372,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ListOut'
           description: ok
-      summary: |-
-        list reports what each host is actually running: every loaded plugin with its
-        version, pid, uptime, reload and restart counts, and its measured CPU, RSS,
-        thread and fd cost — read from the kernel, which is only answerable at all
-        because a plugin is a process.
-
-        Reading this from deployment config would answer what was INTENDED.
+      summary: 'list reports what each host is actually running: every loaded plugin
+        with its version, pid, uptime, reload and restart counts, and its measured
+        CPU, RSS, thread and fd cost — read from the kernel, which is only answerable
+        at all because a plugin is a process.'
       tags:
       - admin
   /v1/admin/plugins/{name}/disable:
@@ -13627,10 +13459,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ActionOut'
           description: ok
-      summary: |-
-        enable brings a stopped or disabled plugin back on the artifact it already
-        has: the zero Plugin names no new artifact, so Reload reuses the loaded spec
-        and clears the disabled flag.
+      summary: 'enable brings a stopped or disabled plugin back on the artifact it
+        already has: the zero Plugin names no new artifact, so Reload reuses the loaded
+        spec and clears the disabled flag.'
       tags:
       - admin
   /v1/admin/plugins/{name}/reload:
@@ -13743,10 +13574,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/productsOut'
           description: ok
-      summary: |-
-        products lists the fleet workload registry: every operator App CR across the platform
-        namespaces with its declared vs running image tag, reconciled health/phase and drift
-        verdict.
+      summary: 'products lists the fleet workload registry: every operator App CR
+        across the platform namespaces with its declared vs running image tag, reconciled
+        health/phase and drift verdict.'
       tags:
       - admin
   /v1/admin/promos:
@@ -13775,9 +13605,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/rawOut'
           description: ok
-      summary: |-
-        getPromo reads the current platform plan promo — the singleton discount offer, e.g.
-        the 50%-off launch promo.
+      summary: getPromo reads the current platform plan promo — the singleton discount
+        offer, e.g.
       tags:
       - admin
     put:
@@ -13818,11 +13647,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/rawOut'
           description: ok
-      summary: |-
-        putPromo upserts the platform plan promo — the ONE place the offer is configured.
-
-        The body is commerce's own promo contract and is forwarded BYTE-FOR-BYTE, so no field
-        commerce accepts is dropped in transit.
+      summary: putPromo upserts the platform plan promo — the ONE place the offer
+        is configured.
       tags:
       - admin
   /v1/admin/providers/credit:
@@ -13838,9 +13664,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProvidersCreditOut'
           description: ok
-      summary: |-
-        ProvidersCredit serves GET /v1/admin/providers/credit — the per-provider upstream
-        credit ledger.
+      summary: ProvidersCredit serves GET /v1/admin/providers/credit — the per-provider
+        upstream credit ledger.
       tags:
       - admin
   /v1/admin/referrals:
@@ -13900,16 +13725,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/RevenueOut'
           description: ok
-      summary: |-
-        Revenue is the fleet money board: total prepaid balances held, total realized spend,
-        MRR, ARPU, a per-customer table sorted highest-revenue first, and a real 30-day spend
-        trend from the usage ledger.
-
-        ORTHOGONAL to /v1/admin/finance, which is the COGS/margin view of what WE pay vendors.
-        This is the customer side: what each customer holds, spends and subscribes to.
-
-        arpu divides realized spend by PAYING customers, not by all of them — a fleet of free
-        signups must not deflate the number.
+      summary: 'Revenue is the fleet money board: total prepaid balances held, total
+        realized spend, MRR, ARPU, a per-customer table sorted highest-revenue first,
+        and a real 30-day spend trend from the usage ledger.'
       tags:
       - admin
   /v1/admin/roles:
@@ -13987,9 +13805,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/servicesOut'
           description: ok
-      summary: |-
-        services reads the launch board: every hosted service in the registry with its LIVE
-        waitlist mode, evaluated through the flag engine.
+      summary: 'services reads the launch board: every hosted service in the registry
+        with its LIVE waitlist mode, evaluated through the flag engine.'
       tags:
       - admin
     post:
@@ -14030,9 +13847,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/serviceOut'
           description: ok
-      summary: |-
-        upsertService onboards a hosted service, or edits one, so a new host comes under the
-        launch gate WITHOUT a redeploy.
+      summary: upsertService onboards a hosted service, or edits one, so a new host
+        comes under the launch gate WITHOUT a redeploy.
       tags:
       - admin
   /v1/admin/services/{service}/mode:
@@ -14125,7 +13941,7 @@ paths:
                 $ref: '#/components/schemas/rawOut'
           description: ok
       summary: 'listSpendCaps reads one org''s usage caps: its spend alerts plus the
-        derived period'
+        derived period spend, over/warn state and reset time.'
       tags:
       - admin
     post:
@@ -14159,9 +13975,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/rawOut'
           description: ok
-      summary: |-
-        createSpendCap sets a usage cap on one org — a platform override of a customer budget,
-        written to the customer's own spend-alert rows.
+      summary: createSpendCap sets a usage cap on one org — a platform override of
+        a customer budget, written to the customer's own spend-alert rows.
       tags:
       - admin
   /v1/admin/spend-caps/{id}:
@@ -14311,12 +14126,6 @@ paths:
         aggregates LIVE on every read, so the button is just a re-read. It acknowledges
         honestly with started:true rather than pretending a batch job was queued.
       operationId: adminSync
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/None'
-        required: true
       responses:
         "200":
           content:
@@ -14400,11 +14209,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/usageOut'
           description: ok
-      summary: |-
-        usage returns the month-to-date money totals: one org's when org names one, else the
-        fleet sum across every org a SuperAdmin can see.
-
-        series and byProduct are ALWAYS empty.
+      summary: 'usage returns the month-to-date money totals: one org''s when org
+        names one, else the fleet sum across every org a SuperAdmin can see.'
       tags:
       - admin
   /v1/admin/usage/funding:
@@ -14457,14 +14263,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/UsageFundingOut'
           description: ok
-      summary: |-
-        UsageFunding splits our upstream AI usage by how it was FUNDED: one row per (provider,
-        model) over the window, tagged credit (provider grant still remaining), paid (grant
-        exhausted) or paid_only (no grant at all).
-
-        The class is resolved at the PROVIDER level from the credit ledger, not per call — the
-        per-call split, and the `byo` class, arrive when the metering write stamps a funding
-        column on cloud_usage and this can GROUP BY it directly.
+      summary: 'UsageFunding splits our upstream AI usage by how it was FUNDED: one
+        row per (provider, model) over the window, tagged credit (provider grant still
+        remaining), paid (grant exhausted) or paid_only (no grant at all).'
       tags:
       - admin
   /v1/admin/users:
@@ -14590,12 +14391,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/rawOut'
           description: ok
-      summary: |-
-        waitlist reads one waitlist's leaderboard from the Hanzo waitlist engine — position,
-        points and referral standing per entry — proxied server-authed with the engine secret,
-        never a client credential.
-
-        The engine's payload is forwarded VERBATIM as data; the console normalizes it.
+      summary: waitlist reads one waitlist's leaderboard from the Hanzo waitlist engine
+        — position, points and referral standing per entry — proxied server-authed
+        with the engine secret, never a client credential.
       tags:
       - admin
   /v1/admin/waitlist/boost:
@@ -14634,13 +14432,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/rawOut'
           description: ok
-      summary: |-
-        waitlistBoost grants a user waitlist points, moving them up toward the access cutoff.
-        This is the access lever: the cutoff itself does not move, the person does.
-
-        It funnels through the engine's verified grant seam (POST /v1/waitlist/award with
-        source="grant" — the ONE path that honours an explicit points amount) and writes a
-        tamper-evident audit row either way, so a FAILED grant is recorded too.
+      summary: waitlistBoost grants a user waitlist points, moving them up toward
+        the access cutoff.
       tags:
       - admin
   /v1/ads/campaigns:
@@ -14773,7 +14566,8 @@ paths:
                 $ref: '#/components/schemas/bindingList'
           description: ok
       summary: listAgentBindings returns every agent↔machine binding in the caller's
-        org — which
+        org — which machines are running which cloud Agent, with vm's own reconciled
+        status.
       tags:
       - agent-bindings
   /v1/agent/conversations:
@@ -14811,7 +14605,7 @@ paths:
                 $ref: '#/components/schemas/agentList'
           description: ok
       summary: ListAgents returns every agent defined in the caller's org, each with
-        the
+        the number of runs recorded against it.
       tags:
       - agents
     post:
@@ -14842,9 +14636,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/agentView'
           description: created
-      summary: |-
-        CreateAgent defines an agent in the caller's org: a model, a system prompt
-        (instructions) and a set of tool names.
+      summary: 'CreateAgent defines an agent in the caller''s org: a model, a system
+        prompt (instructions) and a set of tool names.'
       tags:
       - agents
   /v1/agents/{ref}:
@@ -14974,9 +14767,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/runList'
           description: ok
-      summary: |-
-        ListAgentRuns returns one agent's execution history, newest first — each run's
-        input, its output or its error, and how long it took.
+      summary: ListAgentRuns returns one agent's execution history, newest first —
+        each run's input, its output or its error, and how long it took.
       tags:
       - agents
   /v1/agents/activity:
@@ -15020,7 +14812,8 @@ paths:
                 $ref: '#/components/schemas/buildList'
           description: ok
       summary: ListBuilds returns the public index of every published build, most
-        recently
+        recently updated first, so a gallery can link straight to the story behind
+        each product.
       tags:
       - agents
   /v1/agents/builds/{org}/{project}:
@@ -15058,14 +14851,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/buildView'
           description: ok
-      summary: |-
-        ReadBuild returns the readable build of one product: the agent session that
-        produced it, turn by turn — the prompts, the reasoning, the commits each turn
-        produced — plus the exact `git log` that re-derives every commit binding from
-        git itself, so nothing here has to be taken on trust.
-
-        PUBLIC, no tenancy: it answers only for a session its author explicitly
-        published, which is what makes it safe to be anonymous.
+      summary: 'ReadBuild returns the readable build of one product: the agent session
+        that produced it, turn by turn — the prompts, the reasoning, the commits each
+        turn produced — plus the exact `git log` that re-derives every commit binding
+        from git itself, so nothing here has to be taken on trust.'
       tags:
       - agents
   /v1/agents/metrics:
@@ -15094,9 +14883,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/metricsView'
           description: ok
-      summary: |-
-        AgentMetrics serves the invocations-over-time histogram for the org's Agents
-        dashboard.
+      summary: AgentMetrics serves the invocations-over-time histogram for the org's
+        Agents dashboard.
       tags:
       - agents
   /v1/agents/sessions:
@@ -15149,10 +14937,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/sessionList'
           description: ok
-      summary: |-
-        ListSessions returns the caller org's live sessions, newest first — each with
-        its event count, its direct-child count and a one-line preview of its latest
-        event.
+      summary: ListSessions returns the caller org's live sessions, newest first —
+        each with its event count, its direct-child count and a one-line preview of
+        its latest event.
       tags:
       - agents
     post:
@@ -15181,10 +14968,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/sessionView'
           description: created
-      summary: |-
-        RegisterSession opens a live agent session in the caller's org — the row every
-        surface (the CLI's outer agent, hanzo.bot, the console, chat) hangs its
-        activity off.
+      summary: RegisterSession opens a live agent session in the caller's org — the
+        row every surface (the CLI's outer agent, hanzo.bot, the console, chat) hangs
+        its activity off.
       tags:
       - agents
   /v1/agents/sessions/{id}:
@@ -15209,7 +14995,7 @@ paths:
                 $ref: '#/components/schemas/sessionDetail'
           description: ok
       summary: GetSession returns one session with its direct child sessions and its
-        50 most
+        50 most recent events, oldest of those first.
       tags:
       - agents
     patch:
@@ -15245,10 +15031,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/sessionView'
           description: ok
-      summary: |-
-        PatchSession updates a session's surface-owned truth: its status, its title,
-        the run-target it is dispatched to, and the product it built plus whether that
-        build's story is public.
+      summary: 'PatchSession updates a session''s surface-owned truth: its status,
+        its title, the run-target it is dispatched to, and the product it built plus
+        whether that build''s story is public.'
       tags:
       - agents
   /v1/agents/sessions/{id}/control:
@@ -15287,8 +15072,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/controlDrain'
           description: ok
-      summary: |-
-        DrainSessionControl returns the steering commands (pause/resume/stop/message)
+      summary: DrainSessionControl returns the steering commands (pause/resume/stop/message)
         recorded against the caller's own session that are newer than the cursor,
         oldest first, with the cursor to poll from next.
       tags:
@@ -15371,9 +15155,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/treeNode'
           description: ok
-      summary: |-
-        SessionTree returns the subagent-flow graph rooted at this session: the session,
-        its children, their children, each node carrying its own event count.
+      summary: 'SessionTree returns the subagent-flow graph rooted at this session:
+        the session, its children, their children, each node carrying its own event
+        count.'
       tags:
       - agents
   /v1/agents/sessions/stream:
@@ -15395,6 +15179,7 @@ paths:
                 $ref: '#/components/schemas/targetList'
           description: ok
       summary: ListTargets returns every machine registered to the caller's org, newest
+        first, each with its live session load.
       tags:
       - agents
     post:
@@ -15421,9 +15206,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/targetView'
           description: ok
-      summary: |-
-        RegisterTarget registers a machine as an agent target, or re-links one that is
-        already registered.
+      summary: RegisterTarget registers a machine as an agent target, or re-links
+        one that is already registered.
       tags:
       - agents
   /v1/agents/targets/{id}:
@@ -15527,14 +15311,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              id: tgt_1
-            schema:
-              $ref: '#/components/schemas/targetRef'
-        required: true
       responses:
         "200":
           content:
@@ -15542,11 +15318,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/routedRunOut'
           description: ok
-      summary: |-
-        ClaimRoutedRun is the machine's long poll for work: it authenticates the
-        daemon, stamps the liveness the dispatch gate reads (the poll IS the proof a
-        runner is listening), and waits up to 25 seconds for the next run addressed to
-        THIS machine.
+      summary: 'ClaimRoutedRun is the machine''s long poll for work: it authenticates
+        the daemon, stamps the liveness the dispatch gate reads (the poll IS the proof
+        a runner is listening), and waits up to 25 seconds for the next run addressed
+        to THIS machine.'
       tags:
       - agents
   /v1/agents/targets/{id}/claim-key:
@@ -15566,14 +15341,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              id: tgt_1
-            schema:
-              $ref: '#/components/schemas/targetRef'
-        required: true
       responses:
         "200":
           content:
@@ -15581,10 +15348,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/claimKeyOut'
           description: ok
-      summary: |-
-        MintTargetClaimKey mints (or rotates) the claim key a `hanzo code --serve`
-        daemon presents to claim work for this machine, and returns it ONCE: only its
-        SHA-256 hash is stored.
+      summary: 'MintTargetClaimKey mints (or rotates) the claim key a `hanzo code
+        --serve` daemon presents to claim work for this machine, and returns it ONCE:
+        only its SHA-256 hash is stored.'
       tags:
       - agents
   /v1/agents/targets/{id}/runs/{runId}/report:
@@ -15631,9 +15397,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/reportOut'
           description: ok
-      summary: |-
-        ReportRoutedRun completes a claimed run: it delivers the terminal result to the
-        run's durable owner, which is what lets that workflow finish.
+      summary: 'ReportRoutedRun completes a claimed run: it delivers the terminal
+        result to the run''s durable owner, which is what lets that workflow finish.'
       tags:
       - agents
   /v1/analytics:
@@ -15709,19 +15474,6 @@ paths:
   /v1/authz/health:
     get:
       operationId: get_v1_authz_health
-      tags:
-      - authz
-  /v1/authz/policies:
-    delete:
-      operationId: delete_v1_authz_policies
-      tags:
-      - authz
-    get:
-      operationId: get_v1_authz_policies
-      tags:
-      - authz
-    post:
-      operationId: post_v1_authz_policies
       tags:
       - authz
   /v1/authz/readyz:
@@ -15935,14 +15687,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              id: flow_1
-            schema:
-              $ref: '#/components/schemas/flowRef'
-        required: true
       responses:
         "200":
           content:
@@ -15969,14 +15713,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              id: flow_1
-            schema:
-              $ref: '#/components/schemas/flowRef'
-        required: true
       responses:
         "200":
           content:
@@ -16015,14 +15751,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              id: flow_1
-            schema:
-              $ref: '#/components/schemas/flowRef'
-        required: true
       responses:
         "201":
           content:
@@ -16445,7 +16173,7 @@ paths:
                 type: array
           description: ok
       summary: ListAccounts returns the org's chart of accounts — the seeded fixed
-        chart every
+        chart every posting key in the ledger refers to.
       tags:
       - books
   /v1/books/ask:
@@ -16474,10 +16202,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/AskResponse'
           description: ok
-      summary: |-
-        AskBooks answers a plain-language question about the caller's own books — "what is my
-        MRR?", "how long is my runway?" — with figures taken from their ledger, never a guessed
-        number.
+      summary: AskBooks answers a plain-language question about the caller's own books
+        — "what is my MRR?", "how long is my runway?" — with figures taken from their
+        ledger, never a guessed number.
       tags:
       - books
   /v1/books/balance-sheet:
@@ -16509,7 +16236,7 @@ paths:
                 $ref: '#/components/schemas/BalanceSheet'
           description: ok
       summary: BalanceSheet returns the org's Balance Sheet as of `to` (empty = all
-        time), with the
+        time), with the Assets == Liabilities + Equity equation proof.
       tags:
       - books
   /v1/books/bank/exchange:
@@ -16552,12 +16279,6 @@ paths:
         transfers, and how many were already-processed no-ops. It is READ-ONLY against the
         bank — it ingests, it never sends money.
       operationId: post_v1_books_bank_sync
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/syncIn'
-        required: true
       responses:
         "200":
           content:
@@ -16565,10 +16286,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/BankTally'
           description: ok
-      summary: |-
-        SyncBank pulls every connected bank (Plaid/Teller) for the caller's org, maps each
-        fetched transaction to a posting and books it idempotently, then advances that
-        connector's cursor so the next sync resumes where this one stopped.
+      summary: SyncBank pulls every connected bank (Plaid/Teller) for the caller's
+        org, maps each fetched transaction to a posting and books it idempotently,
+        then advances that connector's cursor so the next sync resumes where this
+        one stopped.
       tags:
       - books
   /v1/books/bank/transactions:
@@ -16602,7 +16323,9 @@ paths:
                 type: array
           description: ok
       summary: ListBankTransactions returns the org's normalized bank transactions,
-        newest first —
+        newest first — every row the import and connector paths have ingested, with
+        its amount in exact cents, its direction, and whether it has been matched
+        to a voucher yet.
       tags:
       - books
   /v1/books/bank/unreconciled:
@@ -16630,7 +16353,8 @@ paths:
                 $ref: '#/components/schemas/unreconciledOut'
           description: ok
       summary: ListUnreconciled returns the org's unmatched bank inflows and their
-        open clarifying
+        open clarifying questions — the queue a human answers so an unexplained deposit
+        is never guessed into revenue.
       tags:
       - books
   /v1/books/export:
@@ -16687,8 +16411,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/FinancialPackage'
           description: ok
-      summary: ExportPackage returns the complete financial package for the caller's
-        org over
+      summary: 'ExportPackage returns the complete financial package for the caller''s
+        org over (from, to]: the trial balance, the P&L, the balance sheet, and the
+        GL detail behind them — the four statements a tax preparer or an investor
+        asks for, assembled from the one ledger in a single read so they cannot disagree
+        with each other.'
       tags:
       - books
   /v1/books/gl:
@@ -16748,10 +16475,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/inboxOut'
           description: ok
-      summary: |-
-        ListInbox returns the org's open document queue — everything uploaded but not yet
-        booked, newest first, each with its extracted summary and the confidence the scanner
-        resolved its category at.
+      summary: ListInbox returns the org's open document queue — everything uploaded
+        but not yet booked, newest first, each with its extracted summary and the
+        confidence the scanner resolved its category at.
       tags:
       - books
     post:
@@ -16810,11 +16536,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/MetricsResponse'
           description: ok
-      summary: |-
-        Metrics returns the org's deterministic SaaS-metrics snapshot over an optional
-        (from, to] window — MRR, ARR, revenue, COGS, burn, gross margin, net income, cash,
-        deferred revenue, monthly burn and runway — as raw int64-cent figures AND the same
-        figures already formatted.
+      summary: Metrics returns the org's deterministic SaaS-metrics snapshot over
+        an optional (from, to] window — MRR, ARR, revenue, COGS, burn, gross margin,
+        net income, cash, deferred revenue, monthly burn and runway — as raw int64-cent
+        figures AND the same figures already formatted.
       tags:
       - books
   /v1/books/pnl:
@@ -16853,8 +16578,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/PnL'
           description: ok
-      summary: ProfitAndLoss returns the org's accrual-basis Profit & Loss over an
-        optional (from, to]
+      summary: 'ProfitAndLoss returns the org''s accrual-basis Profit & Loss over
+        an optional (from, to] window of RFC3339 posting times: recognized revenue,
+        matched cost, and the net.'
       tags:
       - books
   /v1/books/questions:
@@ -16882,10 +16608,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/QuestionsResponse'
           description: ok
-      summary: |-
-        ListQuestions returns the clarifying questions the caller's own recent GL raises — the
-        unusual postings a founder should look at (outliers, reversals, round-offs, uncosted
-        revenue, an overdrawn wallet), sharpest first.
+      summary: ListQuestions returns the clarifying questions the caller's own recent
+        GL raises — the unusual postings a founder should look at (outliers, reversals,
+        round-offs, uncosted revenue, an overdrawn wallet), sharpest first.
       tags:
       - books
   /v1/books/rules:
@@ -16943,9 +16668,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Rule'
           description: ok
-      summary: |-
-        UpsertRule creates or updates one auto-categorization rule, keyed by its pattern —
-        writing a pattern that already exists REPLACES that row's category and priority.
+      summary: UpsertRule creates or updates one auto-categorization rule, keyed by
+        its pattern — writing a pattern that already exists REPLACES that row's category
+        and priority.
       tags:
       - books
   /v1/books/scan:
@@ -17011,12 +16736,6 @@ paths:
         it never mints a deposit, a credit or a payout, only the accounting twin of money that
         already moved.
       operationId: post_v1_books_sync
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/syncIn'
-        required: true
       responses:
         "200":
           content:
@@ -17024,9 +16743,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/syncTally'
           description: ok
-      summary: |-
-        Sync ingests the caller's OWN org from commerce into BOTH ledgers (live and sandbox)
-        and reports how many new vouchers posted to each.
+      summary: Sync ingests the caller's OWN org from commerce into BOTH ledgers (live
+        and sandbox) and reports how many new vouchers posted to each.
       tags:
       - books
   /v1/books/transactions:
@@ -17088,10 +16806,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/transactionsOut'
           description: ok
-      summary: |-
-        ListTransactions returns the org's booked ledger as a single-line register, newest
-        first: one row per voucher, with its date, description, vendor, category, source and
-        amount in exact cents.
+      summary: 'ListTransactions returns the org''s booked ledger as a single-line
+        register, newest first: one row per voucher, with its date, description, vendor,
+        category, source and amount in exact cents.'
       tags:
       - books
   /v1/books/trial-balance:
@@ -17132,7 +16849,8 @@ paths:
                 $ref: '#/components/schemas/TrialBalance'
           description: ok
       summary: TrialBalance returns the org's trial balance over an optional [from,
-        to] window of
+        to] window of RFC3339 posting times, including the opening/closing columns
+        and the TotalDebit == TotalCredit proof that the books balance.
       tags:
       - books
   /v1/books/vendors:
@@ -17159,9 +16877,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/vendorsOut'
           description: ok
-      summary: |-
-        ListVendors returns the org's vendor book: each canonical vendor, the alias spellings a
-        receipt may print it under, and the expense account new bills from it default to.
+      summary: 'ListVendors returns the org''s vendor book: each canonical vendor,
+        the alias spellings a receipt may print it under, and the expense account
+        new bills from it default to.'
       tags:
       - books
     post:
@@ -17192,10 +16910,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/VendorRow'
           description: ok
-      summary: |-
-        UpsertVendor creates or updates one vendor in the org's vendor book, keyed by its
-        canonical name — writing a canonical name that already exists REPLACES that row's
-        aliases and default category.
+      summary: UpsertVendor creates or updates one vendor in the org's vendor book,
+        keyed by its canonical name — writing a canonical name that already exists
+        REPLACES that row's aliases and default category.
       tags:
       - books
   /v1/bot/{wildcard1}:
@@ -17511,9 +17228,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/captableDeleted'
           description: ok
-      summary: |-
-        DeleteConvertible removes one of the caller org's convertible notes, taking its
-        principal out of the cap table's unconverted-instrument totals.
+      summary: DeleteConvertible removes one of the caller org's convertible notes,
+        taking its principal out of the cap table's unconverted-instrument totals.
       tags:
       - captable
   /v1/captable/equity-plans:
@@ -17596,9 +17312,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/captableDeleted'
           description: ok
-      summary: |-
-        DeleteOption removes one of the caller org's option grants, taking its shares
-        out of the cap table's granted-options and fully-diluted counts.
+      summary: DeleteOption removes one of the caller org's option grants, taking
+        its shares out of the cap table's granted-options and fully-diluted counts.
       tags:
       - captable
   /v1/captable/rounds:
@@ -17647,9 +17362,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/captableRoundDetail'
           description: ok
-      summary: |-
-        GetRound returns one of the caller org's fundraising rounds together with every
-        investment written into it, oldest first.
+      summary: GetRound returns one of the caller org's fundraising rounds together
+        with every investment written into it, oldest first.
       tags:
       - captable
   /v1/captable/rounds/{id}/close:
@@ -17683,9 +17397,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/captableUpdated'
           description: ok
-      summary: |-
-        CloseRound closes one of the caller org's fundraising rounds, recording the
-        close date and moving its status to CLOSED.
+      summary: CloseRound closes one of the caller org's fundraising rounds, recording
+        the close date and moving its status to CLOSED.
       tags:
       - captable
   /v1/captable/rounds/{id}/investments:
@@ -17741,9 +17454,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/captableDeleted'
           description: ok
-      summary: |-
-        DeleteSafe removes one of the caller org's SAFEs, taking its capital out of the
-        cap table's unconverted-instrument totals.
+      summary: DeleteSafe removes one of the caller org's SAFEs, taking its capital
+        out of the cap table's unconverted-instrument totals.
       tags:
       - captable
   /v1/captable/share-classes:
@@ -17823,9 +17535,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/captableDeleted'
           description: ok
-      summary: |-
-        DeleteShare removes one of the caller org's share certificates, taking its
-        shares out of the cap table's outstanding and fully-diluted counts.
+      summary: DeleteShare removes one of the caller org's share certificates, taking
+        its shares out of the cap table's outstanding and fully-diluted counts.
       tags:
       - captable
   /v1/captable/shares/transfer:
@@ -18122,8 +17833,7 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
       summary: D1DatabaseList lists the D1 databases on the org's Cloudflare account.
       tags:
@@ -18145,8 +17855,7 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
       summary: D1DatabaseCreate creates a D1 database on the org's Cloudflare account.
       tags:
@@ -18169,8 +17878,7 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
       summary: D1DatabaseDelete deletes a D1 database and everything stored in it.
       tags:
@@ -18232,11 +17940,9 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
-      summary: |-
-        KVNamespaceList lists the Workers KV namespaces on the org's Cloudflare
+      summary: KVNamespaceList lists the Workers KV namespaces on the org's Cloudflare
         account.
       tags:
       - cloudflare
@@ -18258,11 +17964,9 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
-      summary: |-
-        KVNamespaceCreate creates a Workers KV namespace on the org's Cloudflare
+      summary: KVNamespaceCreate creates a Workers KV namespace on the org's Cloudflare
         account.
       tags:
       - cloudflare
@@ -18284,8 +17988,7 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
       summary: KVNamespaceDelete deletes a Workers KV namespace and every key in it.
       tags:
@@ -18316,8 +18019,7 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
       summary: KVValueDelete removes one key from a Workers KV namespace.
       tags:
@@ -18361,8 +18063,7 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
       summary: PagesList lists the org's Cloudflare Pages projects.
       tags:
@@ -18386,8 +18087,7 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
       summary: PagesCreate creates a Cloudflare Pages project on the org's account.
       tags:
@@ -18410,12 +18110,10 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
-      summary: |-
-        PagesDelete deletes a Cloudflare Pages project, and with it every deployment it
-        has ever made.
+      summary: PagesDelete deletes a Cloudflare Pages project, and with it every deployment
+        it has ever made.
       tags:
       - cloudflare
     get:
@@ -18435,11 +18133,9 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
-      summary: |-
-        PagesGet reads one Cloudflare Pages project — its build config, deployment
+      summary: PagesGet reads one Cloudflare Pages project — its build config, deployment
         configs and latest deployment.
       tags:
       - cloudflare
@@ -18492,8 +18188,7 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
       summary: PagesDomainAdd attaches a custom domain to a Cloudflare Pages project.
       tags:
@@ -18523,8 +18218,7 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
       summary: PagesDomainDelete detaches a custom domain from a Cloudflare Pages
         project.
@@ -18571,8 +18265,7 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
       summary: R2BucketList lists the R2 buckets on the org's Cloudflare account.
       tags:
@@ -18594,8 +18287,7 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
       summary: R2BucketCreate creates an R2 bucket on the org's Cloudflare account.
       tags:
@@ -18618,8 +18310,7 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
       summary: R2BucketDelete deletes an R2 bucket.
       tags:
@@ -18634,8 +18325,7 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
       summary: WorkersScriptList lists the Worker scripts on the org's Cloudflare
         account.
@@ -18659,12 +18349,10 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
-      summary: |-
-        WorkersScriptDelete removes a Worker script from the org's Cloudflare account.
-        Requires org admin.
+      summary: WorkersScriptDelete removes a Worker script from the org's Cloudflare
+        account.
       tags:
       - cloudflare
     put:
@@ -18715,12 +18403,10 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
-      summary: |-
-        WorkersScriptSubdomainSet publishes or withdraws one Worker script on the
-        account's workers.dev subdomain.
+      summary: WorkersScriptSubdomainSet publishes or withdraws one Worker script
+        on the account's workers.dev subdomain.
       tags:
       - cloudflare
   /v1/cloudflare/workers/subdomain:
@@ -18733,12 +18419,10 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
-      summary: |-
-        WorkersSubdomainGet reads the org account's workers.dev subdomain — the name
-        under which every subdomain-enabled script is served.
+      summary: WorkersSubdomainGet reads the org account's workers.dev subdomain —
+        the name under which every subdomain-enabled script is served.
       tags:
       - cloudflare
   /v1/cloudflare/workers/zones/{zone}/routes:
@@ -18760,12 +18444,10 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
-      summary: |-
-        WorkersRouteList lists the Worker routes bound within one zone — the URL
-        patterns that dispatch to a script.
+      summary: WorkersRouteList lists the Worker routes bound within one zone — the
+        URL patterns that dispatch to a script.
       tags:
       - cloudflare
     post:
@@ -18795,8 +18477,7 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
       summary: WorkersRouteCreate binds a URL pattern in a zone to a Worker script.
       tags:
@@ -18826,12 +18507,10 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
-      summary: |-
-        WorkersRouteDelete unbinds a Worker route, so its pattern stops dispatching to a
-        script.
+      summary: WorkersRouteDelete unbinds a Worker route, so its pattern stops dispatching
+        to a script.
       tags:
       - cloudflare
   /v1/cloudflare/zones:
@@ -18887,12 +18566,10 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
-      summary: |-
-        ZonesList lists the Cloudflare zones the org's connected API token can see,
-        paged and filtered by the query parameters Cloudflare itself accepts.
+      summary: ZonesList lists the Cloudflare zones the org's connected API token
+        can see, paged and filtered by the query parameters Cloudflare itself accepts.
       tags:
       - cloudflare
   /v1/cloudflare/zones/{zone}:
@@ -18913,8 +18590,7 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
       summary: ZoneGet reads one Cloudflare zone the org's token can see.
       tags:
@@ -18961,12 +18637,10 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
-      summary: |-
-        ZoneAnalytics reads a zone's Cloudflare traffic dashboard — requests, bandwidth,
-        threats and pageviews over the since/until window.
+      summary: ZoneAnalytics reads a zone's Cloudflare traffic dashboard — requests,
+        bandwidth, threats and pageviews over the since/until window.
       tags:
       - cloudflare
   /v1/cloudflare/zones/{zone}/purge:
@@ -19007,11 +18681,9 @@ paths:
         "200":
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/cfResult'
+              schema: {}
           description: ok
-      summary: |-
-        ZonePurge drops a zone's Cloudflare edge cache — either the whole zone
+      summary: ZonePurge drops a zone's Cloudflare edge cache — either the whole zone
         (purge_everything) or exactly the listed file URLs.
       tags:
       - cloudflare
@@ -19044,10 +18716,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/clusterList'
           description: ok
-      summary: |-
-        listClusters returns the caller org's clusters from both sources: the managed
-        clusters projected from Visor's node pools, and the BYO clusters attached to the
-        caller's project.
+      summary: 'listClusters returns the caller org''s clusters from both sources:
+        the managed clusters projected from Visor''s node pools, and the BYO clusters
+        attached to the caller''s project.'
       tags:
       - clusters
     post:
@@ -19086,10 +18757,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/clusterView'
           description: ok
-      summary: |-
-        attachCluster attaches a BYO cluster to the caller's org — the kubeconfig is
-        validated, KMS-sealed and added to the fleet — and answers 201 with the cluster
-        as it now appears on GET /v1/clusters.
+      summary: attachCluster attaches a BYO cluster to the caller's org — the kubeconfig
+        is validated, KMS-sealed and added to the fleet — and answers 201 with the
+        cluster as it now appears on GET /v1/clusters.
       tags:
       - clusters
   /v1/clusters/{clusterId}/pools:
@@ -19130,9 +18800,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/nodePoolView'
           description: ok
-      summary: |-
-        createPool adds a node pool to one of the caller org's clusters and answers 201
-        with the created pool.
+      summary: createPool adds a node pool to one of the caller org's clusters and
+        answers 201 with the created pool.
       tags:
       - clusters
   /v1/clusters/{clusterId}/pools/{poolId}:
@@ -19207,7 +18876,7 @@ paths:
                 $ref: '#/components/schemas/nodePoolView'
           description: ok
       summary: scalePool resizes a node pool to an absolute node count and returns
-        the pool as
+        the pool as Visor reports it after the change.
       tags:
       - clusters
   /v1/clusters/{id}:
@@ -19493,12 +19162,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/railList'
           description: ok
-      summary: |-
-        TopupRails lists the accepted (chain, token, treasury) triples, so a browser can
-        render "send USDC here" without the addresses being baked into its bundle.
-
-        This exists because the console previously gated its top-up UI on
-        NEXT_PUBLIC_HANZO_HUSD_ADDRESS/_TREASURY — build-time constants.
+      summary: TopupRails lists the accepted (chain, token, treasury) triples, so
+        a browser can render "send USDC here" without the addresses being baked into
+        its bundle.
       tags:
       - commerce
   /v1/commerce/topup/wallet:
@@ -19532,9 +19198,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/walletTopupResp'
           description: ok
-      summary: |-
-        WalletTopup credits the caller's org for a stablecoin transfer they already sent
-        to the treasury.
+      summary: WalletTopup credits the caller's org for a stablecoin transfer they
+        already sent to the treasury.
       tags:
       - commerce
   /v1/commerce/webhooks/{provider}:
@@ -19562,7 +19227,7 @@ paths:
                 $ref: '#/components/schemas/formationView'
           description: ok
       summary: Get returns the caller org's formation and the stages reachable from
-        it, or 404
+        it, or 404 when the org has not begun one.
       tags:
       - company
     post:
@@ -19588,9 +19253,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/formationView'
           description: ok
-      summary: |-
-        Begin starts the org's one formation and returns it with the stages reachable
-        from it.
+      summary: Begin starts the org's one formation and returns it with the stages
+        reachable from it.
       tags:
       - company
   /v1/company/advance:
@@ -19632,12 +19296,6 @@ paths:
         With no filing partner wired the filing is recorded honestly as "manual" — no
         filing id is fabricated. Available only at the documents stage.
       operationId: post_v1_company_documents
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/noInput'
-        required: true
       responses:
         "200":
           content:
@@ -19645,13 +19303,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/formationView'
           description: ok
-      summary: |-
-        GenerateDocuments renders the formation documents for the chosen structure and
-        jurisdiction, ingests each into the org's data room, and submits the state
+      summary: GenerateDocuments renders the formation documents for the chosen structure
+        and jurisdiction, ingests each into the org's data room, and submits the state
         filing through the filing seam.
-
-        With no filing partner wired the filing is recorded honestly as "manual" — no
-        filing id is fabricated.
       tags:
       - company
   /v1/company/esign:
@@ -19661,12 +19315,6 @@ paths:
         founder and records the provider's reference on the formation. Available only
         at the esign stage.
       operationId: post_v1_company_esign
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/noInput'
-        required: true
       responses:
         "200":
           content:
@@ -19674,9 +19322,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/esignOut'
           description: ok
-      summary: |-
-        RequestEsign sends the generated formation documents for signature by every
-        founder and records the provider's reference on the formation.
+      summary: RequestEsign sends the generated formation documents for signature
+        by every founder and records the provider's reference on the formation.
       tags:
       - company
   /v1/company/esign/complete:
@@ -19808,7 +19455,8 @@ paths:
                 $ref: '#/components/schemas/safeOut'
           description: created
       summary: RequestSafe raises an e-signature request over documents already in
-        the org's
+        the org's data room — a SAFE, a convertible note, or any other fundraising
+        paper.
       tags:
       - company
   /v1/company/genesis:
@@ -19823,12 +19471,6 @@ paths:
         the on-chain submit fails, because the root is the tamper-evident witness and
         must not be recomputed on retry. Available only at the genesis stage.
       operationId: post_v1_company_genesis
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/noInput'
-        required: true
       responses:
         "200":
           content:
@@ -19836,13 +19478,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/formationView'
           description: ok
-      summary: |-
-        RecordGenesis seeds the canonical cap table with the founding allocation
-        (stakeholders, a common share class, issued shares) and anchors the
-        deterministic equity-genesis root on-chain.
-
-        It is idempotent: once a root is recorded the cap table is NOT re-seeded, which
-        would double-issue founder share certificates.
+      summary: RecordGenesis seeds the canonical cap table with the founding allocation
+        (stakeholders, a common share class, issued shares) and anchors the deterministic
+        equity-genesis root on-chain.
       tags:
       - company
   /v1/company/import/captable:
@@ -19872,12 +19510,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/importCapTableOut'
           description: ok
-      summary: |-
-        ImportCapTable reads an existing company's cap table from a Google Sheet and
-        adds its stakeholders to the canonical cap table.
-
-        The first row is a header and columns are matched by name (case-insensitive):
-        name and email are required, type/relationship/institution optional.
+      summary: ImportCapTable reads an existing company's cap table from a Google
+        Sheet and adds its stakeholders to the canonical cap table.
       tags:
       - company
   /v1/company/import/documents:
@@ -19902,9 +19536,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/importDocumentsOut'
           description: ok
-      summary: |-
-        ImportDocuments ingests an existing company's corporate documents from a Google
-        Drive folder into the org's data room.
+      summary: ImportDocuments ingests an existing company's corporate documents from
+        a Google Drive folder into the org's data room.
       tags:
       - company
   /v1/company/kyc:
@@ -19918,12 +19551,6 @@ paths:
         here. A terminal status arrives only from POST /v1/company/kyc/refresh (the
         provider) or POST /v1/company/kyc/decision (a Hanzo platform reviewer).
       operationId: post_v1_company_kyc
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/noInput'
-        required: true
       responses:
         "200":
           content:
@@ -19931,13 +19558,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/kycStartOut'
           description: ok
-      summary: |-
-        StartKYC opens an identity-verification session for every founder with the
-        wired provider and records each session's reference on the formation.
-
-        A start is never a decision: any terminal status the provider reports at
-        inquiry time is clamped back to pending, so the payment gate can never open
-        here.
+      summary: StartKYC opens an identity-verification session for every founder with
+        the wired provider and records each session's reference on the formation.
       tags:
       - company
   /v1/company/kyc/decision:
@@ -19968,10 +19590,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/formationView'
           description: ok
-      summary: |-
-        DecideKYC records a privileged reviewer's MANUAL decision on a founder's KYC —
-        the human-in-the-loop path, and the ONLY route to a pass when no real provider
-        is wired.
+      summary: DecideKYC records a privileged reviewer's MANUAL decision on a founder's
+        KYC — the human-in-the-loop path, and the ONLY route to a pass when no real
+        provider is wired.
       tags:
       - company
   /v1/company/kyc/refresh:
@@ -19986,12 +19607,6 @@ paths:
         seam — so a client cannot force a pass here, and an already-passing founder
         (e.g. a reviewer confirmation) is left untouched.
       operationId: post_v1_company_kyc_refresh
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/noInput'
-        required: true
       responses:
         "200":
           content:
@@ -19999,9 +19614,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/kycRefreshOut'
           description: ok
-      summary: |-
-        RefreshKYC reconciles each pending founder's KYC with the WIRED provider — the
-        PULL path to a provider-reported terminal status.
+      summary: RefreshKYC reconciles each pending founder's KYC with the WIRED provider
+        — the PULL path to a provider-reported terminal status.
       tags:
       - company
   /v1/company/payment:
@@ -20061,9 +19675,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/registerPage'
           description: ok
-      summary: |-
-        ListRegister returns the platform's whole formation register, newest activity
-        first — every org's formation, not the caller's.
+      summary: ListRegister returns the platform's whole formation register, newest
+        activity first — every org's formation, not the caller's.
       tags:
       - company
   /v1/company/register/summary:
@@ -20081,8 +19694,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/registerCounts'
           description: ok
-      summary: |-
-        SummarizeRegister counts the platform's formations by stage — the register's
+      summary: SummarizeRegister counts the platform's formations by stage — the register's
         shape in one read, so a queue that is growing is visible as a number rather
         than inferred by paging the list.
       tags:
@@ -20113,9 +19725,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/reviewQueue'
           description: ok
-      summary: |-
-        ReviewQueue reports the founders whose KYC is not yet settled, oldest formation
-        first, so the queue drains in the order founders have been waiting.
+      summary: ReviewQueue reports the founders whose KYC is not yet settled, oldest
+        formation first, so the queue drains in the order founders have been waiting.
       tags:
       - company
   /v1/company/skip:
@@ -20125,12 +19736,6 @@ paths:
         so an existing company brings its documents and cap table in instead of forming
         a new entity. Available only at the structure stage.
       operationId: post_v1_company_skip
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/noInput'
-        required: true
       responses:
         "200":
           content:
@@ -20138,10 +19743,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/formationView'
           description: ok
-      summary: |-
-        Skip marks the org as already incorporated and moves it onto the import path,
-        so an existing company brings its documents and cap table in instead of forming
-        a new entity.
+      summary: Skip marks the org as already incorporated and moves it onto the import
+        path, so an existing company brings its documents and cap table in instead
+        of forming a new entity.
       tags:
       - company
   /v1/company/structure:
@@ -20168,9 +19772,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/formationView'
           description: ok
-      summary: |-
-        SetStructure records the entity kind, the state of formation and the proposed
-        name.
+      summary: SetStructure records the entity kind, the state of formation and the
+        proposed name.
       tags:
       - company
   /v1/compliance/accreditation:
@@ -20194,7 +19797,7 @@ paths:
                 $ref: '#/components/schemas/accList'
           description: ok
       summary: ListAccreditation returns the org's tracked accreditation-state records,
-        newest
+        newest first — evidence entries the org keeps, never a platform certification.
       tags:
       - compliance
     post:
@@ -20223,9 +19826,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/accView'
           description: created
-      summary: |-
-        CreateAccreditation records an ASSERTED accreditation state for a subject — the
-        subject's own assertion, with no verifier.
+      summary: CreateAccreditation records an ASSERTED accreditation state for a subject
+        — the subject's own assertion, with no verifier.
       tags:
       - compliance
   /v1/compliance/accreditation/{id}:
@@ -20285,8 +19887,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/accView'
           description: ok
-      summary: |-
-        DecideAccreditation records an org reviewer's decision on an accreditation
+      summary: DecideAccreditation records an org reviewer's decision on an accreditation
         record — a reviewer confirmation, a provider verification the reviewer has
         evidence of (a CPA/attorney letter, a verifier report), a rejection, or an
         expiry.
@@ -20316,9 +19917,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/auditList'
           description: ok
-      summary: |-
-        AuditRead is the compliance-scoped read of the SHARED tamper-evident audit plane —
-        the SOC 2 posture surface (privileged actions: who started/decided what, when).
+      summary: 'AuditRead is the compliance-scoped read of the SHARED tamper-evident
+        audit plane — the SOC 2 posture surface (privileged actions: who started/decided
+        what, when).'
       tags:
       - compliance
   /v1/compliance/health:
@@ -20360,10 +19961,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/recordList'
           description: ok
-      summary: |-
-        ListRecords is the unified compliance-record view for the org: its verifications
-        and accreditation records together, each provider-reported or tracked, never
-        platform-asserted.
+      summary: 'ListRecords is the unified compliance-record view for the org: its
+        verifications and accreditation records together, each provider-reported or
+        tracked, never platform-asserted.'
       tags:
       - compliance
   /v1/compliance/status:
@@ -20380,9 +19980,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/statusView'
           description: ok
-      summary: |-
-        Status is the org's honest posture read: the wired provider and the per-status
-        tally of its verifications.
+      summary: 'Status is the org''s honest posture read: the wired provider and the
+        per-status tally of its verifications.'
       tags:
       - compliance
   /v1/compliance/subjects:
@@ -20406,9 +20005,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/subjectList'
           description: ok
-      summary: |-
-        ListSubjects returns the org's subjects as PII-MINIMIZED summaries — no name or
-        email, only whether an email is on file.
+      summary: ListSubjects returns the org's subjects as PII-MINIMIZED summaries
+        — no name or email, only whether an email is on file.
       tags:
       - compliance
     post:
@@ -20435,8 +20033,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Subject'
           description: created
-      summary: |-
-        CreateSubject records a party the org is verifying as part of its own
+      summary: CreateSubject records a party the org is verifying as part of its own
         onboarding/compliance — a team member, vendor, customer, or counterparty.
       tags:
       - compliance
@@ -20462,9 +20059,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Subject'
           description: ok
-      summary: |-
-        GetSubject returns one subject WITH its contact PII — the only surface that
-        returns it, and only to the owning org.
+      summary: GetSubject returns one subject WITH its contact PII — the only surface
+        that returns it, and only to the owning org.
       tags:
       - compliance
   /v1/compliance/verifications:
@@ -20488,7 +20084,8 @@ paths:
                 $ref: '#/components/schemas/checkList'
           description: ok
       summary: ListVerifications returns the org's KYC/KYB verifications, newest first
-        — opaque
+        — opaque subject references and provider-reported statuses only, no subject
+        PII.
       tags:
       - compliance
     post:
@@ -20515,7 +20112,8 @@ paths:
                 $ref: '#/components/schemas/checkView'
           description: created
       summary: StartVerification begins a KYC/KYB verification of a subject through
-        the wired
+        the wired provider — an existing subject by id, or one created inline from
+        the request.
       tags:
       - compliance
   /v1/compliance/verifications/{id}:
@@ -20540,7 +20138,7 @@ paths:
                 $ref: '#/components/schemas/checkView'
           description: ok
       summary: GetVerification returns one verification — its opaque subject reference
-        and
+        and provider-reported status, no subject PII.
       tags:
       - compliance
   /v1/compliance/verifications/{id}/decision:
@@ -20578,10 +20176,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/checkView'
           description: ok
-      summary: |-
-        DecideVerification records a privileged reviewer's MANUAL decision on a
-        verification — the human-in-the-loop path, and the ONLY route to a passing status
-        when no real provider is wired.
+      summary: DecideVerification records a privileged reviewer's MANUAL decision
+        on a verification — the human-in-the-loop path, and the ONLY route to a passing
+        status when no real provider is wired.
       tags:
       - compliance
   /v1/compliance/verifications/{id}/refresh:
@@ -20600,14 +20197,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              id: chk_1
-            schema:
-              $ref: '#/components/schemas/verificationRef'
-        required: true
       responses:
         "200":
           content:
@@ -20615,9 +20204,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/checkView'
           description: ok
-      summary: |-
-        RefreshVerification polls the wired provider for its current decision and
-        records it, ATTRIBUTED to the provider — the internal PULL reconcile.
+      summary: RefreshVerification polls the wired provider for its current decision
+        and records it, ATTRIBUTED to the provider — the internal PULL reconcile.
       tags:
       - compliance
   /v1/compliance/verifications/webhook:
@@ -20652,12 +20240,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/botList'
           description: ok
-      summary: |-
-        listBots returns the caller org's bot machines — the kind=bot machines — each
-        joined with the agent binding that says which cloud Agent it runs.
-
-        The bindings are read ONCE and joined by machine id, so the list is O(1) upstream
-        calls, not N+1.
+      summary: listBots returns the caller org's bot machines — the kind=bot machines
+        — each joined with the agent binding that says which cloud Agent it runs.
       tags:
       - compute
   /v1/compute/bots/{id}:
@@ -20678,9 +20262,8 @@ paths:
       responses:
         "204":
           description: no content
-      summary: |-
-        deleteBot tears down both halves of a bot: it unbinds the agent (best-effort — a
-        bot with no binding still deletes), then terminates the machine.
+      summary: 'deleteBot tears down both halves of a bot: it unbinds the agent (best-effort
+        — a bot with no binding still deletes), then terminates the machine.'
       tags:
       - compute
     get:
@@ -20717,12 +20300,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/botView'
           description: ok
-      summary: |-
-        getBot returns one of the caller org's bot machines with its agent binding.
-
-        A machine counts as a Bot if it carries the hanzo-kind:bot tag OR has an agent
-        binding — either signal is authoritative, so a bot resolves even before its
-        cloud-init has stamped every tag.
+      summary: getBot returns one of the caller org's bot machines with its agent
+        binding.
       tags:
       - compute
   /v1/compute/bots/{id}/{action}:
@@ -20786,9 +20365,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/connectorsOut'
           description: ok
-      summary: |-
-        connectors lists the caller's OWN connectors across every provider — the set
-        `hanzo connector ls` prints.
+      summary: connectors lists the caller's OWN connectors across every provider
+        — the set `hanzo connector ls` prints.
       tags:
       - connectors
   /v1/connectors/{id}:
@@ -20818,10 +20396,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/disconnectOut'
           description: ok
-      summary: |-
-        dropConn forgets a connector: every custodied secret, then the row.
-        Idempotent — dropping a never-connected id still answers {disconnected:true}
-        (disconnect() parity).
+      summary: 'dropConn forgets a connector: every custodied secret, then the row.'
       tags:
       - connectors
   /v1/connectors/{id}/refresh:
@@ -20841,14 +20416,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              id: openai:work
-            schema:
-              $ref: '#/components/schemas/connectorRef'
-        required: true
       responses:
         "200":
           content:
@@ -20868,9 +20435,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/refreshOut'
           description: ok
-      summary: |-
-        refreshConn forces a token rotation for a connected connector, ahead of the
-        automatic rotation a token read would do inside the expiry window.
+      summary: refreshConn forces a token rotation for a connected connector, ahead
+        of the automatic rotation a token read would do inside the expiry window.
       tags:
       - connectors
   /v1/connectors/{id}/token:
@@ -20904,8 +20470,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/connectorTokenOut'
           description: ok
-      summary: |-
-        tokenConn hands the custodied access token to its owner — the ONE place
+      summary: tokenConn hands the custodied access token to its owner — the ONE place
         custody exits.
       tags:
       - connectors
@@ -20955,10 +20520,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/credentialOut'
           description: ok
-      summary: |-
-        credential is the direct intake path: a customer-held token/setup-token
-        (Verify) or an externally obtained OAuth bundle from the CLI's local PKCE
-        (Adopt).
+      summary: 'credential is the direct intake path: a customer-held token/setup-token
+        (Verify) or an externally obtained OAuth bundle from the CLI''s local PKCE
+        (Adopt).'
       tags:
       - connectors
   /v1/connectors/{provider}/device:
@@ -21001,9 +20565,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/deviceStartOut'
           description: ok
-      summary: |-
-        startDevice begins a device sign-in and returns the code to show the user plus
-        how to poll for completion.
+      summary: startDevice begins a device sign-in and returns the code to show the
+        user plus how to poll for completion.
       tags:
       - connectors
   /v1/connectors/{provider}/device/{flow}/poll:
@@ -21032,15 +20595,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              flow: g_7f2c
-              provider: openai
-            schema:
-              $ref: '#/components/schemas/devicePollIn'
-        required: true
       responses:
         "200":
           content:
@@ -21088,9 +20642,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/connectorProvidersOut'
           description: ok
-      summary: |-
-        connectorProviders lists the user-scoped provider cards — the catalog of what a
-        user can connect, and how.
+      summary: connectorProviders lists the user-scoped provider cards — the catalog
+        of what a user can connect, and how.
       tags:
       - connectors
   /v1/content/{doctype}/{name}/transition:
@@ -21681,9 +21234,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/csrfResp'
           description: ok
-      summary: |-
-        IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token on
-        every money write (mint/revoke a key, top up, onboard, and the billing/commerce
+      summary: IssueCSRFToken mints the anti-CSRF token a browser echoes as X-CSRF-Token
+        on every money write (mint/revoke a key, top up, onboard, and the billing/commerce
         write verbs).
       tags:
       - csrf
@@ -22343,12 +21895,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/embedStatusResp'
           description: ok
-      summary: |-
-        EmbedStatus reports whether one of this brand's shared embedded apps (cms, erp,
-        help) may be framed by the caller and is actually running, so a console module
-        can choose between the embed and the provision panel.
-
-        It answers two questions the browser cannot answer for itself.
+      summary: EmbedStatus reports whether one of this brand's shared embedded apps
+        (cms, erp, help) may be framed by the caller and is actually running, so a
+        console module can choose between the embed and the provision panel.
       tags:
       - embed-status
   /v1/enablement:
@@ -22367,10 +21916,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/enablementBoard'
           description: ok
-      summary: |-
-        GetEnablement returns what the caller's org can actually use: every managed
-        item with its global state, whether it is effective here, whether this org is
-        already opted into its beta, and whether it may still opt in.
+      summary: 'GetEnablement returns what the caller''s org can actually use: every
+        managed item with its global state, whether it is effective here, whether
+        this org is already opted into its beta, and whether it may still opt in.'
       tags:
       - enablement
   /v1/enablement/optin:
@@ -22425,9 +21973,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/userEnablementItem'
           description: ok
-      summary: |-
-        OptOutOfBeta removes the caller's OWN org from a beta item's grant list, the
-        reverse of OptIntoBeta and idempotent.
+      summary: OptOutOfBeta removes the caller's OWN org from a beta item's grant
+        list, the reverse of OptIntoBeta and idempotent.
       tags:
       - enablement
   /v1/entitlements:
@@ -23088,15 +22635,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/fleetBoard'
           description: ok
-      summary: |-
-        listFleet returns every compute unit the caller's org has, from every source, each
-        carrying its latest utilization: agent run-targets, the BYO machines that dialed
-        in, attached BYO clusters and Visor-provisioned machines.
-
-        A unit with a live snapshot of its own keeps it; the rest are overlaid from the
-        utilization series, and only when the sample agrees about the SOURCE — two planes
-        could mint the same unit id, and a board must never show one machine's load on
-        another's row.
+      summary: 'listFleet returns every compute unit the caller''s org has, from every
+        source, each carrying its latest utilization: agent run-targets, the BYO machines
+        that dialed in, attached BYO clusters and Visor-provisioned machines.'
       tags:
       - fleet
   /v1/fleet/jobs:
@@ -23145,13 +22686,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/jobList'
           description: ok
-      summary: |-
-        listFleetJobs returns the caller org's gpu-jobs render queue, each row tagged with
-        the GPU it targets (empty = the shared any-GPU lane) and the node claiming it,
-        optionally narrowed to one GPU's queue and/or one status.
-
-        A job whose worker died — STARTED with an elapsed lease and not yet reclaimed —
-        reads "stalled", not "running".
+      summary: listFleetJobs returns the caller org's gpu-jobs render queue, each
+        row tagged with the GPU it targets (empty = the shared any-GPU lane) and the
+        node claiming it, optionally narrowed to one GPU's queue and/or one status.
       tags:
       - fleet
   /v1/fleet/jobs/{id}/cancel:
@@ -23239,13 +22776,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/sampleList'
           description: ok
-      summary: |-
-        listFleetSamples returns the caller org's utilization series, oldest first.
-
-        A rejected narrower is a 400 carrying its own reason (the vocabulary is ours and
-        safe to echo); a warehouse failure is logged and answered 503 "unavailable",
-        because a chart that silently reads "no load" when the truth is "we cannot tell"
-        is worse than one that says so.
+      summary: listFleetSamples returns the caller org's utilization series, oldest
+        first.
       tags:
       - fleet
     post:
@@ -23280,9 +22812,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/sampleAccepted'
           description: ok
-      summary: |-
-        ingestSample records a BYO worker's live GPU utilization into the SAME series the
-        fleet board overlays.
+      summary: ingestSample records a BYO worker's live GPU utilization into the SAME
+        series the fleet board overlays.
       tags:
       - fleet
   /v1/fleet/workers:
@@ -23312,9 +22843,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/workerList'
           description: ok
-      summary: |-
-        listFleetWorkers returns the caller org's BYO machines — the ones that dialed in
-        via `hanzo link` — with everything each host reported about itself.
+      summary: listFleetWorkers returns the caller org's BYO machines — the ones that
+        dialed in via `hanzo link` — with everything each host reported about itself.
       tags:
       - fleet
   /v1/framework/{doctype}:
@@ -23376,8 +22906,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/documentList'
           description: ok
-      summary: |-
-        listDocuments returns the caller org's documents of one DocType, filtered,
+      summary: listDocuments returns the caller org's documents of one DocType, filtered,
         ordered and projected by the query.
       tags:
       - framework
@@ -23495,15 +23024,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              doctype: Task
-              name: TASK-00001
-            schema:
-              $ref: '#/components/schemas/docRef'
-        required: true
       responses:
         "200":
           content:
@@ -23513,9 +23033,8 @@ paths:
                   type: object
                 type: object
           description: ok
-      summary: |-
-        cancelDocument moves a submitted document to cancelled (docstatus 1 → 2) after
-        its on_cancel hooks agree.
+      summary: cancelDocument moves a submitted document to cancelled (docstatus 1
+        → 2) after its on_cancel hooks agree.
       tags:
       - framework
   /v1/framework/{doctype}/{name}/submit:
@@ -23544,15 +23063,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              doctype: Task
-              name: TASK-00001
-            schema:
-              $ref: '#/components/schemas/docRef'
-        required: true
       responses:
         "200":
           content:
@@ -23562,8 +23072,7 @@ paths:
                   type: object
                 type: object
           description: ok
-      summary: |-
-        submitDocument moves a draft to submitted (docstatus 0 → 1) after its
+      summary: submitDocument moves a draft to submitted (docstatus 0 → 1) after its
         on_submit hooks agree.
       tags:
       - framework
@@ -23611,10 +23120,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/DocType'
           description: created
-      summary: |-
-        createDocType defines a DocType in the caller's org: the metadata that gives a
-        document surface its fields, its naming rule, whether it has a submit/cancel
-        lifecycle, and which role may do what to it.
+      summary: 'createDocType defines a DocType in the caller''s org: the metadata
+        that gives a document surface its fields, its naming rule, whether it has
+        a submit/cancel lifecycle, and which role may do what to it.'
       tags:
       - framework
   /v1/framework/doctypes/{name}:
@@ -23665,8 +23173,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/DocType'
           description: ok
-      summary: |-
-        getDocType returns one DocType definition — its fields, naming rule,
+      summary: getDocType returns one DocType definition — its fields, naming rule,
         permissions and lifecycle flags.
       tags:
       - framework
@@ -23702,9 +23209,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/DocType'
           description: ok
-      summary: |-
-        replaceDocType replaces a DocType definition wholesale (PUT semantics): the
-        stored definition becomes the body.
+      summary: 'replaceDocType replaces a DocType definition wholesale (PUT semantics):
+        the stored definition becomes the body.'
       tags:
       - framework
   /v1/framework/modules:
@@ -23721,9 +23227,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/moduleList'
           description: ok
-      summary: |-
-        listModules returns every app lane compiled into this deployment and the
-        DocTypes each one installs.
+      summary: listModules returns every app lane compiled into this deployment and
+        the DocTypes each one installs.
       tags:
       - framework
   /v1/framework/modules/{module}:
@@ -23749,9 +23254,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ModuleState'
           description: ok
-      summary: |-
-        getModule returns one app lane's install state for the caller's org: the
-        DocTypes the lane declares, and which of them already exist in the org.
+      summary: 'getModule returns one app lane''s install state for the caller''s
+        org: the DocTypes the lane declares, and which of them already exist in the
+        org.'
       tags:
       - framework
   /v1/framework/modules/{module}/install:
@@ -23771,14 +23276,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              module: cms
-            schema:
-              $ref: '#/components/schemas/moduleRef'
-        required: true
       responses:
         "200":
           content:
@@ -23828,10 +23325,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Role'
           description: created
-      summary: |-
-        assignRole grants one user one role in the caller's org — how a member gains
-        rights on a DocType, since permissions name roles and never users.
-        Manager-only.
+      summary: assignRole grants one user one role in the caller's org — how a member
+        gains rights on a DocType, since permissions name roles and never users.
       tags:
       - framework
   /v1/framework/roles/{user}/{role}:
@@ -23878,7 +23373,8 @@ paths:
                 $ref: '#/components/schemas/summaryView'
           description: ok
       summary: 'summary reports how much of the DocType surface the caller''s org
-        uses: how'
+        uses: how many DocTypes it has defined, and how many documents exist across
+        them.'
       tags:
       - framework
   /v1/functions:
@@ -24055,9 +23551,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/keyList'
           description: ok
-      summary: |-
-        listKeys returns the SSH public keys registered to the caller's org — the keys
-        that authenticate `git clone git@<host>:<org>/<repo>.git`.
+      summary: listKeys returns the SSH public keys registered to the caller's org
+        — the keys that authenticate `git clone git@<host>:<org>/<repo>.git`.
       tags:
       - git
     post:
@@ -24085,9 +23580,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/keyView'
           description: created
-      summary: |-
-        registerKey registers an SSH public key so it can authenticate `git clone
-        git@<host>:<org>/<repo>.git` for the caller's org.
+      summary: registerKey registers an SSH public key so it can authenticate `git
+        clone git@<host>:<org>/<repo>.git` for the caller's org.
       tags:
       - git
   /v1/git/keys/{id}:
@@ -24112,9 +23606,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/noContent'
           description: ok
-      summary: |-
-        deleteKey removes a registered SSH key, scoped to the caller's org: an org can
-        only delete its own, and a key id it does not own is not found.
+      summary: 'deleteKey removes a registered SSH key, scoped to the caller''s org:
+        an org can only delete its own, and a key id it does not own is not found.'
       tags:
       - git
   /v1/git/repos:
@@ -24143,8 +23636,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/repoList'
           description: ok
-      summary: |-
-        listRepos returns the repos in the caller's scope, most recently updated
+      summary: listRepos returns the repos in the caller's scope, most recently updated
         first.
       tags:
       - git
@@ -24172,9 +23664,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/repoView'
           description: created
-      summary: |-
-        createRepo provisions an empty bare repository in the caller's scope and
-        returns it with its clone URLs.
+      summary: createRepo provisions an empty bare repository in the caller's scope
+        and returns it with its clone URLs.
       tags:
       - git
   /v1/git/repos/{name}:
@@ -24229,9 +23720,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/repoView'
           description: ok
-      summary: |-
-        getRepo returns one repo with its live ref state: every branch name and the
-        resolved HEAD commit.
+      summary: 'getRepo returns one repo with its live ref state: every branch name
+        and the resolved HEAD commit.'
       tags:
       - git
     patch:
@@ -24264,10 +23754,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/repoView'
           description: ok
-      summary: |-
-        setVisibility flips a repo's public bit, the one mutable repo setting today.
-        Public grants ANONYMOUS fetch only; push and the whole control plane stay
-        org-authed.
+      summary: setVisibility flips a repo's public bit, the one mutable repo setting
+        today.
       tags:
       - git
   /v1/git/repos/{name}/blob:
@@ -24369,9 +23857,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/commitsJSON'
           description: ok
-      summary: |-
-        browseCommits walks a ref's history newest first, or one path's history when a
-        path is given.
+      summary: browseCommits walks a ref's history newest first, or one path's history
+        when a path is given.
       tags:
       - git
   /v1/git/repos/{name}/files:
@@ -24423,9 +23910,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/filesJSON'
           description: ok
-      summary: |-
-        browseFiles returns every file a glob selects at one revision, WITH its bytes
-        and the revision they came from.
+      summary: browseFiles returns every file a glob selects at one revision, WITH
+        its bytes and the revision they came from.
       tags:
       - git
   /v1/git/repos/{name}/gc:
@@ -24448,14 +23934,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              name: widgets
-            schema:
-              $ref: '#/components/schemas/repoRef'
-        required: true
       responses:
         "200":
           content:
@@ -24467,10 +23945,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/gcOut'
           description: ok
-      summary: |-
-        gc repacks a repo into one bitmapped pack and rewrites its commit-graph, so
-        the next clone reuses the bitmap instead of walking the whole object graph.
-        Idempotent, and safe to interrupt — git swaps both artifacts atomically.
+      summary: gc repacks a repo into one bitmapped pack and rewrites its commit-graph,
+        so the next clone reuses the bitmap instead of walking the whole object graph.
       tags:
       - git
   /v1/git/repos/{name}/mirror:
@@ -24508,8 +23984,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/repoView'
           description: ok
-      summary: |-
-        mirror imports an external git repository into the caller's repo, provisioning
+      summary: mirror imports an external git repository into the caller's repo, provisioning
         it on first use.
       tags:
       - git
@@ -24544,7 +24019,7 @@ paths:
                 $ref: '#/components/schemas/mirrorList'
           description: ok
       summary: listMirrors returns a repo's outbound mirror targets — the downstream
-        remotes
+        remotes the mirror reactor pushes to whenever a push lands here.
       tags:
       - git
     post:
@@ -24583,9 +24058,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/mirrorTargetView'
           description: created
-      summary: |-
-        addMirror registers a downstream remote the repo's advanced refs are pushed to
-        whenever a push lands here.
+      summary: addMirror registers a downstream remote the repo's advanced refs are
+        pushed to whenever a push lands here.
       tags:
       - git
   /v1/git/repos/{name}/mirrors/{id}:
@@ -24617,9 +24091,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/noContent'
           description: ok
-      summary: |-
-        deleteMirror removes one outbound mirror target; later pushes stop being
-        forwarded to it.
+      summary: deleteMirror removes one outbound mirror target; later pushes stop
+        being forwarded to it.
       tags:
       - git
   /v1/git/repos/{name}/push:
@@ -24666,9 +24139,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/pushResp'
           description: ok
-      summary: |-
-        pushFiles lands a set of files as one commit without a git client — the
-        hanzo.app builder's push.
+      summary: pushFiles lands a set of files as one commit without a git client —
+        the hanzo.app builder's push.
       tags:
       - git
   /v1/git/repos/{name}/readme:
@@ -24704,9 +24176,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/readmeJSON'
           description: ok
-      summary: |-
-        browseReadme returns the README at the tree root as plain text — unrendered, so
-        the caller decides how to present it.
+      summary: browseReadme returns the README at the tree root as plain text — unrendered,
+        so the caller decides how to present it.
       tags:
       - git
   /v1/git/repos/{name}/refs:
@@ -24739,9 +24210,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/refsJSON'
           description: ok
-      summary: |-
-        browseRefs lists a repo's branches, tags and default branch — what a branch
-        picker needs in one call.
+      summary: browseRefs lists a repo's branches, tags and default branch — what
+        a branch picker needs in one call.
       tags:
       - git
   /v1/git/repos/{name}/subscriptions:
@@ -24776,7 +24246,7 @@ paths:
                 $ref: '#/components/schemas/subscriptionList'
           description: ok
       summary: listSubscriptions returns a repo's Slack subscriptions — which channels
-        the
+        the lifecycle notifier posts this repo's push and deploy events to.
       tags:
       - git
     post:
@@ -24812,9 +24282,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/subscriptionView'
           description: created
-      summary: |-
-        subscribe binds a Slack channel to a repo, so the lifecycle notifier posts
-        that repo's push and deploy events there.
+      summary: subscribe binds a Slack channel to a repo, so the lifecycle notifier
+        posts that repo's push and deploy events there.
       tags:
       - git
   /v1/git/repos/{name}/subscriptions/{id}:
@@ -24846,9 +24315,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/noContent'
           description: ok
-      summary: |-
-        unsubscribe removes one Slack subscription from a repo; the notifier stops
-        posting that repo's events to that channel.
+      summary: unsubscribe removes one Slack subscription from a repo; the notifier
+        stops posting that repo's events to that channel.
       tags:
       - git
   /v1/git/repos/{name}/tree:
@@ -24893,8 +24361,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/treeJSON'
           description: ok
-      summary: |-
-        browseTree lists the immediate children of one directory at one revision,
+      summary: browseTree lists the immediate children of one directory at one revision,
         directories before files.
       tags:
       - git
@@ -24923,9 +24390,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/usageView'
           description: ok
-      summary: |-
-        usage returns per-repo and total storage bytes for the caller's org — the
-        queryable, per-tenant number commerce and o11y meter on.
+      summary: usage returns per-repo and total storage bytes for the caller's org
+        — the queryable, per-tenant number commerce and o11y meter on.
       tags:
       - git
   /v1/git/webhook:
@@ -25005,7 +24471,8 @@ paths:
                 $ref: '#/components/schemas/gpuList'
           description: ok
       summary: listGPUs returns one row per physical accelerator the caller's org
-        has, derived
+        has, derived from its real GPU machines (the size slug says how many cards
+        a node holds) and from the accelerators BYO workers report through nvidia-smi.
       tags:
       - gpus
   /v1/gpus/alerts:
@@ -25025,9 +24492,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/gpuAlertList'
           description: ok
-      summary: |-
-        gpuAlerts is an HONEST empty surface: Visor exposes no GPU alert inventory, so
-        this returns [] rather than fabricating alerts.
+      summary: 'gpuAlerts is an HONEST empty surface: Visor exposes no GPU alert inventory,
+        so this returns [] rather than fabricating alerts.'
       tags:
       - gpus
   /v1/guide:
@@ -25047,7 +24513,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/overviewView'
           description: ok
-      summary: 'Overview returns the caller org''s launch journey: the active curriculum''s'
+      summary: 'Overview returns the caller org''s launch journey: the active curriculum''s
+        version and title, every step with its state, whether it is available, what
+        blocks it and whether the Business AI can run it, the done/total/percent progress
+        with the next step to take, and the org''s analytics funnel folded in.'
       tags:
       - guide
   /v1/guide/actions:
@@ -25065,10 +24534,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/actionsView'
           description: ok
-      summary: |-
-        ListActions returns the caller org's Business AI action ledger, most recent
-        first: every "do it for me" tool call, the arguments it ran with, its result and
-        whether it succeeded.
+      summary: 'ListActions returns the caller org''s Business AI action ledger, most
+        recent first: every "do it for me" tool call, the arguments it ran with, its
+        result and whether it succeeded.'
       tags:
       - guide
   /v1/guide/analytics:
@@ -25087,9 +24555,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/analyticsView'
           description: ok
-      summary: |-
-        Analytics returns the caller org's funnel from the analytics lens plus the GTM
-        recommendations derived from it.
+      summary: Analytics returns the caller org's funnel from the analytics lens plus
+        the GTM recommendations derived from it.
       tags:
       - guide
   /v1/guide/blueprint:
@@ -25110,8 +24577,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/blueprintView'
           description: ok
-      summary: |-
-        GetBlueprint returns the FULL authored brand blueprint — every principle,
+      summary: GetBlueprint returns the FULL authored brand blueprint — every principle,
         section, step, strategy and template WITH its enabled flag made explicit,
         including the disabled items the org-facing reads never see — plus the active
         version number, the brand key it is stored under and the item counts.
@@ -25154,9 +24620,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/blueprintVersionsView'
           description: ok
-      summary: |-
-        ListBlueprintVersions returns the brand blueprint's version history — every
-        stored version's number and edit time, newest first — which is the
+      summary: ListBlueprintVersions returns the brand blueprint's version history
+        — every stored version's number and edit time, newest first — which is the
         point-in-time-recovery and audit trail behind the authoring plane.
       tags:
       - guide
@@ -25186,11 +24651,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/chatResponse'
           description: ok
-      summary: |-
-        Chat answers a founder's question about their launch journey as the Business AI
-        coach: it grounds the reply in the org's REAL progress, its ranked available
-        quests and its analytics funnel, and returns those candidate quests alongside so
-        the caller can act on one.
+      summary: 'Chat answers a founder''s question about their launch journey as the
+        Business AI coach: it grounds the reply in the org''s REAL progress, its ranked
+        available quests and its analytics funnel, and returns those candidate quests
+        alongside so the caller can act on one.'
       tags:
       - guide
   /v1/guide/curriculum:
@@ -25208,7 +24672,7 @@ paths:
                 $ref: '#/components/schemas/curriculumView'
           description: ok
       summary: DeleteCurriculum clears the caller org's curriculum override and returns
-        the
+        the journey it falls back to — the brand blueprint, else the embedded fixture.
       tags:
       - guide
     get:
@@ -25225,7 +24689,8 @@ paths:
                 $ref: '#/components/schemas/curriculumView'
           description: ok
       summary: GetCurriculum returns the journey the caller's org is actually running,
-        and
+        and whether it comes from the org's OWN override (custom) or from the platform
+        default — the brand blueprint, else the embedded fixture.
       tags:
       - guide
     put:
@@ -25251,9 +24716,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/profileResponse'
           description: ok
-      summary: |-
-        Profile returns the caller org's OBSERVED growth profile — the signal set, the
-        classified growth stage, and the org's own key metrics.
+      summary: Profile returns the caller org's OBSERVED growth profile — the signal
+        set, the classified growth stage, and the org's own key metrics.
       tags:
       - guide
   /v1/guide/steps/{id}/do:
@@ -25293,12 +24757,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/stepRef'
-        required: true
       responses:
         "200":
           content:
@@ -25306,9 +24764,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/overviewView'
           description: ok
-      summary: |-
-        ResetStep returns one step of the caller org's journey to todo — clearing a
-        manual mark or a skip — and returns the refreshed journey.
+      summary: ResetStep returns one step of the caller org's journey to todo — clearing
+        a manual mark or a skip — and returns the refreshed journey.
       tags:
       - guide
   /v1/guide/steps/{id}/skip:
@@ -25327,12 +24784,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/stepRef'
-        required: true
       responses:
         "200":
           content:
@@ -25340,9 +24791,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/overviewView'
           description: ok
-      summary: |-
-        SkipStep marks one step of the caller org's journey skipped and returns the
-        refreshed journey.
+      summary: SkipStep marks one step of the caller org's journey skipped and returns
+        the refreshed journey.
       tags:
       - guide
   /v1/guide/steps/{id}/start:
@@ -25398,11 +24848,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/corpusView'
           description: ok
-      summary: |-
-        Strategies returns the ENABLED tactics corpus for the caller's org: the tactics
-        library narrowed by the explicit category/workload filters AND by the org's
-        OBSERVED growth stage and capability signals (a tactic's tags are
-        preconditions, so it surfaces only once the org can act on it).
+      summary: 'Strategies returns the ENABLED tactics corpus for the caller''s org:
+        the tactics library narrowed by the explicit category/workload filters AND
+        by the org''s OBSERVED growth stage and capability signals (a tactic''s tags
+        are preconditions, so it surfaces only once the org can act on it).'
       tags:
       - guide
   /v1/guide/suggest:
@@ -25423,11 +24872,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/suggestResponse'
           description: ok
-      summary: |-
-        Suggest returns the caller org's next-best quests: the available, non-terminal
-        steps of its journey ranked by how much downstream work each unblocks, each with
-        the grounded reason it is a good next move and whether the Business AI can run
-        it, plus the org's funnel and the GTM recommendations derived from it.
+      summary: 'Suggest returns the caller org''s next-best quests: the available,
+        non-terminal steps of its journey ranked by how much downstream work each
+        unblocks, each with the grounded reason it is a good next move and whether
+        the Business AI can run it, plus the org''s funnel and the GTM recommendations
+        derived from it.'
       tags:
       - guide
   /v1/help/articles:
@@ -25611,10 +25060,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/apiKeyList'
           description: ok
-      summary: |-
-        GetKey returns the caller's own API keys — every type they hold, read
-        AUTHORITATIVELY from IAM rather than from the session claim, which lags a key
-        minted moments ago.
+      summary: GetKey returns the caller's own API keys — every type they hold, read
+        AUTHORITATIVELY from IAM rather than from the session claim, which lags a
+        key minted moments ago.
       tags:
       - iam
     post:
@@ -25641,9 +25089,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/mintedKey'
           description: ok
-      summary: |-
-        MintKey creates — or rotates — the caller's API key of the requested type and
-        returns it ONCE.
+      summary: MintKey creates — or rotates — the caller's API key of the requested
+        type and returns it ONCE.
       tags:
       - iam
   /v1/iam/onboard:
@@ -25857,8 +25304,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ingressMiddlewares'
           description: ok
-      summary: |-
-        ListMiddlewares returns every edge transform the caller's org has configured,
+      summary: ListMiddlewares returns every edge transform the caller's org has configured,
         ordered by id.
       tags:
       - ingress
@@ -25910,9 +25356,8 @@ paths:
       responses:
         "204":
           description: no content
-      summary: |-
-        DeleteMiddleware removes one of the caller org's edge transforms and hot-applies
-        the change.
+      summary: DeleteMiddleware removes one of the caller org's edge transforms and
+        hot-applies the change.
       tags:
       - ingress
     get:
@@ -25990,9 +25435,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ingressRoutes'
           description: ok
-      summary: |-
-        ListRoutes returns every routing rule the caller's org has configured, ordered
-        by id.
+      summary: ListRoutes returns every routing rule the caller's org has configured,
+        ordered by id.
       tags:
       - ingress
     post:
@@ -26021,9 +25465,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Route'
           description: ok
-      summary: |-
-        PutRoute creates or replaces one routing rule and hot-applies the new table —
-        there is no config file and no restart.
+      summary: PutRoute creates or replaces one routing rule and hot-applies the new
+        table — there is no config file and no restart.
       tags:
       - ingress
   /v1/ingress/routes/{id}:
@@ -26044,9 +25487,8 @@ paths:
       responses:
         "204":
           description: no content
-      summary: |-
-        DeleteRoute removes one of the caller org's routing rules and hot-applies the
-        shrunken table, freeing its host for another claim.
+      summary: DeleteRoute removes one of the caller org's routing rules and hot-applies
+        the shrunken table, freeing its host for another claim.
       tags:
       - ingress
     get:
@@ -26106,9 +25548,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Route'
           description: ok
-      summary: |-
-        PutRoute creates or replaces one routing rule and hot-applies the new table —
-        there is no config file and no restart.
+      summary: PutRoute creates or replaces one routing rule and hot-applies the new
+        table — there is no config file and no restart.
       tags:
       - ingress
   /v1/ingress/services:
@@ -26125,8 +25566,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ingressServices'
           description: ok
-      summary: |-
-        ListServices returns every backend pool the caller's org has configured,
+      summary: ListServices returns every backend pool the caller's org has configured,
         ordered by id.
       tags:
       - ingress
@@ -26177,9 +25617,8 @@ paths:
       responses:
         "204":
           description: no content
-      summary: |-
-        DeleteService removes one of the caller org's backend pools and hot-applies the
-        change.
+      summary: DeleteService removes one of the caller org's backend pools and hot-applies
+        the change.
       tags:
       - ingress
     get:
@@ -26258,7 +25697,10 @@ paths:
                 $ref: '#/components/schemas/ingressStatus'
           description: ok
       summary: 'Status reports the ingress edge''s live posture: the role this instance
-        runs in'
+        runs in (app or edge), whether its listeners are bound and on which addresses,
+        the ACME posture (staging flag and certificate cache directory), how many
+        hosts the compiled route table currently serves, and how many the ACME HostPolicy
+        will issue a certificate for.'
       tags:
       - ingress
   /v1/ingress/tls:
@@ -26278,8 +25720,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ingressTLS'
           description: ok
-      summary: GetTLS returns the caller org's ACME intent together with the edge-wide
-        TLS
+      summary: 'GetTLS returns the caller org''s ACME intent together with the edge-wide
+        TLS facts it lands in: which role this instance runs in, whether its listeners
+        are bound, every host the ACME HostPolicy will issue a certificate for (the
+        union across ALL orgs of TLS-marked routes and configured extraHosts, because
+        one process holds one certificate cache), and the ACME directory and account
+        email the process was started with.'
       tags:
       - ingress
     put:
@@ -26306,9 +25752,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/TLSConfig'
           description: ok
-      summary: |-
-        PutTLS replaces the caller org's ACME intent and hot-applies what can be
-        hot-applied.
+      summary: PutTLS replaces the caller org's ACME intent and hot-applies what can
+        be hot-applied.
       tags:
       - ingress
   /v1/insights/e:
@@ -26356,11 +25801,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/listOut'
           description: ok
-      summary: |-
-        list returns every registered integration provider together with THIS org's
-        connection status for it — the catalog the console's Integrations page renders.
-        Org-authed: a caller with no validated principal is 403, because the status is
-        per-org and there is no org-less answer.
+      summary: list returns every registered integration provider together with THIS
+        org's connection status for it — the catalog the console's Integrations page
+        renders.
       tags:
       - integrations
   /v1/integrations/{provider}:
@@ -26395,9 +25838,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/providerView'
           description: ok
-      summary: |-
-        get returns ONE provider with this org's connection status — the same view list
-        carries, for a single id.
+      summary: get returns ONE provider with this org's connection status — the same
+        view list carries, for a single id.
       tags:
       - integrations
   /v1/integrations/{provider}/callback:
@@ -26479,14 +25921,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              provider: slack
-            schema:
-              $ref: '#/components/schemas/providerRef'
-        required: true
       responses:
         "200":
           content:
@@ -26496,9 +25930,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/disconnectOut'
           description: ok
-      summary: |-
-        disconnect revokes (best-effort) and forgets an org's connection: it deletes
-        every custodied KMS secret and the connection row.
+      summary: 'disconnect revokes (best-effort) and forgets an org''s connection:
+        it deletes every custodied KMS secret and the connection row.'
       tags:
       - integrations
   /v1/integrations/{provider}/verify:
@@ -26522,14 +25955,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              provider: cloudflare
-            schema:
-              $ref: '#/components/schemas/providerRef'
-        required: true
       responses:
         "200":
           content:
@@ -26544,9 +25969,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/verifyOut'
           description: ok
-      summary: |-
-        verifyConn re-checks a CONNECTED apikey connector's stored credential against the
-        provider, live (`hanzo connector verify`).
+      summary: verifyConn re-checks a CONNECTED apikey connector's stored credential
+        against the provider, live (`hanzo connector verify`).
       tags:
       - integrations
   /v1/integrations/discord/interactions:
@@ -26601,7 +26025,8 @@ paths:
                 $ref: '#/components/schemas/githubBackfillResult'
           description: ok
       summary: githubIssuesBackfill seeds the native tracker with the EXISTING issues
-        across the
+        across the org's granted repos (default state=open); the webhook keeps them
+        live thereafter.
       tags:
       - integrations
   /v1/integrations/github/repos:
@@ -26630,9 +26055,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/githubReposOut'
           description: ok
-      summary: |-
-        githubRepos lists the org's granted GitHub repositories, each annotated with its
-        native import + sync status from the git object plane.
+      summary: githubRepos lists the org's granted GitHub repositories, each annotated
+        with its native import + sync status from the git object plane.
       tags:
       - integrations
   /v1/integrations/github/repos/{repo}/pages:
@@ -26701,9 +26125,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/githubPagesView'
           description: ok
-      summary: |-
-        githubPagesGet returns the repo's Pages status, live URL, custom domain and build
-        source.
+      summary: githubPagesGet returns the repo's Pages status, live URL, custom domain
+        and build source.
       tags:
       - integrations
     post:
@@ -26748,11 +26171,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/githubPagesView'
           description: ok
-      summary: |-
-        githubPagesEnable creates the repo's Pages site and answers 201 Created with it.
-        With buildType "workflow" the site builds via GitHub Actions; otherwise it builds
-        from a branch source, defaulting to the repo's own default branch when none is
-        given.
+      summary: githubPagesEnable creates the repo's Pages site and answers 201 Created
+        with it.
       tags:
       - integrations
     put:
@@ -26789,9 +26209,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/githubPagesUpdatedOut'
           description: ok
-      summary: |-
-        githubPagesUpdate sets or clears the custom domain (cname) and updates HTTPS
-        enforcement, build type, or source.
+      summary: githubPagesUpdate sets or clears the custom domain (cname) and updates
+        HTTPS enforcement, build type, or source.
       tags:
       - integrations
   /v1/integrations/github/repos/{repo}/pages/builds:
@@ -26813,14 +26232,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              repo: widgets
-            schema:
-              $ref: '#/components/schemas/githubRepoRef'
-        required: true
       responses:
         "202":
           content:
@@ -26832,10 +26243,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/githubPagesBuildOut'
           description: accepted
-      summary: |-
-        GithubPagesBuild requests a Pages rebuild and returns the queued build's status.
-        The build is queued AT GITHUB, not completed here, so the answer is 202 Accepted
-        and its status is the one GitHub reported at queue time.
+      summary: GithubPagesBuild requests a Pages rebuild and returns the queued build's
+        status.
       tags:
       - integrations
   /v1/integrations/github/repos/import:
@@ -26926,12 +26335,6 @@ paths:
         bind chat→org. It is short (128-bit hex) so it fits Telegram's 64-char `start`
         payload limit.
       operationId: post_v1_integrations_telegram_connect
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/noArgs'
-        required: true
       responses:
         "200":
           content:
@@ -26941,9 +26344,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/authorizeOut'
           description: ok
-      summary: |-
-        telegramConnect mints a short, single-use deep-link code bound to the caller's
-        org and returns the t.me link the console navigates to.
+      summary: telegramConnect mints a short, single-use deep-link code bound to the
+        caller's org and returns the t.me link the console navigates to.
       tags:
       - integrations
   /v1/integrations/telegram/link:
@@ -26990,9 +26392,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/clusterList'
           description: ok
-      summary: |-
-        listK8sClusters lists the org's DOKS clusters (Visor, house account) folded with
-        the org's BYO clusters — ONE fleet cluster view under the unified k8s noun.
+      summary: listK8sClusters lists the org's DOKS clusters (Visor, house account)
+        folded with the org's BYO clusters — ONE fleet cluster view under the unified
+        k8s noun.
       tags:
       - k8s
     post:
@@ -27032,10 +26434,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/clusterView'
           description: ok
-      summary: |-
-        createK8sCluster provisions a DOKS cluster for the caller's org and answers 201.
-        ADMIN-GATED — a SuperAdmin, or an OrgAdmin of the caller's own org — because
-        provisioning spends real infrastructure on the house account.
+      summary: createK8sCluster provisions a DOKS cluster for the caller's org and
+        answers 201.
       tags:
       - k8s
   /v1/k8s/clusters/{id}:
@@ -27124,10 +26524,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/nodeList'
           description: ok
-      summary: |-
-        listK8sNodes returns every DOKS worker node in the org's clusters as a machine —
-        the SAME set the fleet folds in (managedMachines), exposed directly under the k8s
-        noun.
+      summary: listK8sNodes returns every DOKS worker node in the org's clusters as
+        a machine — the SAME set the fleet folds in (managedMachines), exposed directly
+        under the k8s noun.
       tags:
       - k8s
   /v1/kb/connectors:
@@ -27254,10 +26653,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/apiKeyList'
           description: ok
-      summary: |-
-        GetKey returns the caller's own API keys — every type they hold, read
-        AUTHORITATIVELY from IAM rather than from the session claim, which lags a key
-        minted moments ago.
+      summary: GetKey returns the caller's own API keys — every type they hold, read
+        AUTHORITATIVELY from IAM rather than from the session claim, which lags a
+        key minted moments ago.
       tags:
       - keys
     post:
@@ -27284,9 +26682,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/mintedKey'
           description: ok
-      summary: |-
-        MintKey creates — or rotates — the caller's API key of the requested type and
-        returns it ONCE.
+      summary: MintKey creates — or rotates — the caller's API key of the requested
+        type and returns it ONCE.
       tags:
       - keys
   /v1/kms/auth/login:
@@ -27667,7 +27064,8 @@ paths:
                 $ref: '#/components/schemas/machineList'
           description: ok
       summary: listMachines returns every machine the caller's org has — Visor's registry,
-        the
+        the live DigitalOcean droplets and the DOKS worker nodes (deduped into one
+        union), plus the BYO machines that dialed in via `hanzo link` (provider "byo").
       tags:
       - machines
     post:
@@ -27749,9 +27147,8 @@ paths:
       responses:
         "204":
           description: no content
-      summary: |-
-        unbindMachineAgent detaches the agent runtime from one of the caller org's
-        machines.
+      summary: unbindMachineAgent detaches the agent runtime from one of the caller
+        org's machines.
       tags:
       - machines
     get:
@@ -27781,7 +27178,7 @@ paths:
                 $ref: '#/components/schemas/agentBinding'
           description: ok
       summary: getMachineAgentBinding returns the agent binding of one of the caller
-        org's
+        org's machines, or 404 when the machine runs no bot runtime.
       tags:
       - machines
   /v1/machines/{id}/bind-agent:
@@ -27818,9 +27215,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/agentBinding'
           description: ok
-      summary: |-
-        bindMachineAgent binds a cloud Agent to one of the caller org's machines: the
-        machine is recorded as running that Agent's @hanzo/bot runtime.
+      summary: 'bindMachineAgent binds a cloud Agent to one of the caller org''s machines:
+        the machine is recorded as running that Agent''s @hanzo/bot runtime.'
       tags:
       - machines
   /v1/marketing/audiences:
@@ -27951,11 +27347,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/AudiencePreview'
           description: ok
-      summary: |-
-        previewAudience evaluates the cohort LIVE — the same resolution an enrollment
-        would run — and reports how big it is and how many real mailboxes it reaches.
-        It is the honest answer to "is this send worth making": a cohort of 500 that
-        mails 3 says so, in deliverable and unmatched.
+      summary: previewAudience evaluates the cohort LIVE — the same resolution an
+        enrollment would run — and reports how big it is and how many real mailboxes
+        it reaches.
       tags:
       - marketing
   /v1/marketing/calendar:
@@ -27990,6 +27384,7 @@ paths:
                 $ref: '#/components/schemas/PostList'
           description: ok
       summary: listCalendarPosts returns the org's calendar, soonest scheduled first,
+        optionally narrowed to one status.
       tags:
       - marketing
     post:
@@ -28063,9 +27458,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/CalendarPost'
           description: ok
-      summary: |-
-        getCalendarPost returns one of the caller org's posts, including the exact
-        error behind a failed publish.
+      summary: getCalendarPost returns one of the caller org's posts, including the
+        exact error behind a failed publish.
       tags:
       - marketing
     put:
@@ -28119,14 +27513,6 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              id: cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468
-            schema:
-              $ref: '#/components/schemas/PostRef'
-        required: true
       responses:
         "200":
           content:
@@ -28134,8 +27520,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CalendarPost'
           description: ok
-      summary: |-
-        publishCalendarPost publishes a post NOW, synchronously, whatever its
+      summary: publishCalendarPost publishes a post NOW, synchronously, whatever its
         schedule.
       tags:
       - marketing
@@ -28171,6 +27556,7 @@ paths:
                 $ref: '#/components/schemas/CampaignList'
           description: ok
       summary: listCampaigns returns the org's campaigns, most recently updated first,
+        optionally narrowed to one lifecycle status.
       tags:
       - marketing
     post:
@@ -28341,7 +27727,8 @@ paths:
                 $ref: '#/components/schemas/PromoList'
           description: ok
       summary: 'listPromos returns every promo the deployment offers with its live
-        counters:'
+        counters: how many orgs have redeemed it and how many redemptions remain under
+        the cap.'
       tags:
       - marketing
   /v1/marketing/promos/{code}/eligibility:
@@ -28434,8 +27821,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/RedeemResult'
           description: ok
-      summary: |-
-        redeemPromo redeems the promo for the caller's org, crediting the discount
+      summary: redeemPromo redeems the promo for the caller's org, crediting the discount
         value to its wallet through the finance ledger.
       tags:
       - marketing
@@ -28461,9 +27847,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Redemption'
           description: ok
-      summary: |-
-        getRedemption returns the caller org's OWN redemption of a promo — an
-        org-scoped read, so it can never surface another tenant's.
+      summary: getRedemption returns the caller org's OWN redemption of a promo —
+        an org-scoped read, so it can never surface another tenant's.
       tags:
       - marketing
   /v1/marketing/sequences:
@@ -28538,9 +27923,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/SequenceView'
           description: ok
-      summary: |-
-        getSequence returns one of the caller org's sequences together with its steps
-        in send order.
+      summary: getSequence returns one of the caller org's sequences together with
+        its steps in send order.
       tags:
       - marketing
   /v1/marketing/sequences/{id}/enroll:
@@ -28584,9 +27968,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/EnrollResult'
           description: ok
-      summary: |-
-        enroll adds one contact or a whole audience to a sequence and schedules the
-        first step for each.
+      summary: enroll adds one contact or a whole audience to a sequence and schedules
+        the first step for each.
       tags:
       - marketing
   /v1/marketing/sequences/{id}/enrollments:
@@ -28619,7 +28002,7 @@ paths:
                 $ref: '#/components/schemas/EnrollmentList'
           description: ok
       summary: listEnrollments returns who is walking one sequence, most recently
-        enrolled
+        enrolled first, with each walk's current step and next due time.
       tags:
       - marketing
   /v1/marketing/sequences/{id}/enrollments/{eid}/cancel:
@@ -28647,21 +28030,11 @@ paths:
         required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            example:
-              eid: enr_2a8d6f0b4c1e9375a0d2f6b8c4e19f73
-              id: seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248
-            schema:
-              $ref: '#/components/schemas/EnrollmentRef'
-        required: true
       responses:
         "204":
           description: no content
-      summary: |-
-        cancelEnrollment stops one walk mid-sequence and answers 204: no further step
-        is sent, and steps already delivered are not recalled.
+      summary: 'cancelEnrollment stops one walk mid-sequence and answers 204: no further
+        step is sent, and steps already delivered are not recalled.'
       tags:
       - marketing
   /v1/marketing/sequences/{id}/status:
@@ -28695,9 +28068,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/SequenceStatus'
           description: ok
-      summary: |-
-        setSequenceStatus flips draft/active/archived — the activation gate for
-        sending, since only an active sequence accepts enrollments.
+      summary: setSequenceStatus flips draft/active/archived — the activation gate
+        for sending, since only an active sequence accepts enrollments.
       tags:
       - marketing
   /v1/marketing/sequences/{id}/steps:
@@ -28753,9 +28125,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Step'
           description: ok
-      summary: |-
-        addStep appends a message to the END of a sequence: the new step's idx is one
-        past the last, so steps arrive in the order they are added.
+      summary: 'addStep appends a message to the END of a sequence: the new step''s
+        idx is one past the last, so steps arrive in the order they are added.'
       tags:
       - marketing
   /v1/marketing/summary:
@@ -28777,7 +28148,7 @@ paths:
                 $ref: '#/components/schemas/Summary'
           description: ok
       summary: 'summary rolls up the caller org''s campaigns: how many there are,
-        how many are'
+        how many are active, and the summed budget and spend in cents.'
       tags:
       - marketing
   /v1/marketing/suppressions:
@@ -28848,7 +28219,7 @@ paths:
                 $ref: '#/components/schemas/SuppressionList'
           description: ok
       summary: listSuppressions returns the org's opt-out list, newest first — everyone
-        the
+        the send gate will refuse to deliver to.
       tags:
       - marketing
     post:
@@ -28875,8 +28246,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Suppression'
           description: ok
-      summary: |-
-        addSuppression records an opt-out for the org (admin / self-service
+      summary: addSuppression records an opt-out for the org (admin / self-service
         management).
       tags:
       - marketing
@@ -28932,9 +28302,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Unsubscribed'
           description: ok
-      summary: |-
-        unsubscribe is the PUBLIC one-click endpoint (no principal): a recipient
-        clicks the signed link in an email footer.
+      summary: 'unsubscribe is the PUBLIC one-click endpoint (no principal): a recipient
+        clicks the signed link in an email footer.'
       tags:
       - marketing
   /v1/marketplace:
@@ -28976,16 +28345,16 @@ paths:
     get:
       operationId: get_v1_mcp
       tags:
-      - tools
+      - mcp
   /v1/mcp/servers:
     get:
       operationId: get_v1_mcp_servers
       tags:
-      - tools
+      - mcp
     post:
       operationId: post_v1_mcp_servers
       tags:
-      - tools
+      - mcp
   /v1/mcp/servers/{id}:
     delete:
       operationId: delete_v1_mcp_servers_by_id
@@ -28996,7 +28365,7 @@ paths:
         schema:
           type: string
       tags:
-      - tools
+      - mcp
   /v1/meet/getToken:
     post:
       operationId: post_v1_meet_gettoken
@@ -29283,9 +28652,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/annQueueList'
           description: ok
-      summary: |-
-        ListAnnotationQueues returns a page of the caller org's human-review queues,
-        newest first, narrowed to the caller's project.
+      summary: ListAnnotationQueues returns a page of the caller org's human-review
+        queues, newest first, narrowed to the caller's project.
       tags:
       - o11y
     post:
@@ -29310,9 +28678,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/annQueueView'
           description: created
-      summary: |-
-        CreateAnnotationQueue creates a human-review queue in the caller's org and
-        project.
+      summary: CreateAnnotationQueue creates a human-review queue in the caller's
+        org and project.
       tags:
       - o11y
   /v1/o11y/annotation-queues/{id}:
@@ -29361,8 +28728,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/annQueueDetailView'
           description: ok
-      summary: |-
-        GetAnnotationQueue returns one review queue with its pending and completed
+      summary: GetAnnotationQueue returns one review queue with its pending and completed
         counts and its first page of items.
       tags:
       - o11y
@@ -29397,8 +28763,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/annQueueView'
           description: ok
-      summary: |-
-        UpdateAnnotationQueue changes a review queue's name, description or
+      summary: UpdateAnnotationQueue changes a review queue's name, description or
         score-config set.
       tags:
       - o11y
@@ -29444,9 +28809,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/annItemList'
           description: ok
-      summary: |-
-        ListAnnotationQueueItems returns a page of one review queue's items, newest
-        first, optionally filtered to PENDING or COMPLETED.
+      summary: ListAnnotationQueueItems returns a page of one review queue's items,
+        newest first, optionally filtered to PENDING or COMPLETED.
       tags:
       - o11y
     post:
@@ -29481,9 +28845,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/annItemsCreated'
           description: created
-      summary: |-
-        AddAnnotationQueueItems enqueues traces, observations or sessions on a review
-        queue.
+      summary: AddAnnotationQueueItems enqueues traces, observations or sessions on
+        a review queue.
       tags:
       - o11y
   /v1/o11y/annotation-queues/{id}/items/{itemId}:
@@ -29526,9 +28889,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/annItemView'
           description: ok
-      summary: |-
-        UpdateAnnotationQueueItem moves one queue item between PENDING and COMPLETED
-        and sets its assignee.
+      summary: UpdateAnnotationQueueItem moves one queue item between PENDING and
+        COMPLETED and sets its assignee.
       tags:
       - o11y
   /v1/o11y/api/v2/healthz:
@@ -29641,10 +29003,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/metricsResponse'
           description: ok
-      summary: |-
-        GetO11yMetrics returns one product's RED series — request rate, errors, p50
-        and p95 latency — for the caller's org, plus that org's LLM usage rollup over
-        the same window.
+      summary: GetO11yMetrics returns one product's RED series — request rate, errors,
+        p50 and p95 latency — for the caller's org, plus that org's LLM usage rollup
+        over the same window.
       tags:
       - o11y
   /v1/o11y/query:
@@ -29687,10 +29048,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/statusResult'
           description: ok
-      summary: |-
-        GetO11yStatus reports whether a product's service is live: an in-cluster
-        health probe with its measured latency, fused with the per-replica up
-        inventory.
+      summary: 'GetO11yStatus reports whether a product''s service is live: an in-cluster
+        health probe with its measured latency, fused with the per-replica up inventory.'
       tags:
       - o11y
   /v1/o11y/vm/query:
@@ -30452,12 +29811,12 @@ paths:
     get:
       operationId: get_v1_plugins
       tags:
-      - tools
+      - plugins
   /v1/plugins/authored:
     get:
       operationId: get_v1_plugins_authored
       tags:
-      - tools
+      - plugins
   /v1/plugins/authored/{id}:
     delete:
       operationId: delete_v1_plugins_authored_by_id
@@ -30468,12 +29827,12 @@ paths:
         schema:
           type: string
       tags:
-      - tools
+      - plugins
   /v1/plugins/build:
     post:
       operationId: post_v1_plugins_build
       tags:
-      - tools
+      - plugins
   /v1/prefs/:
     get:
       operationId: get_v1_prefs
@@ -30501,10 +29860,9 @@ paths:
                   type: object
                 type: object
           description: ok
-      summary: |-
-        GetPricing returns the whole pricing catalog in one document: Zen and
-        third-party models, providers, model families, the free-model list, plan and
-        infrastructure pricing.
+      summary: 'GetPricing returns the whole pricing catalog in one document: Zen
+        and third-party models, providers, model families, the free-model list, plan
+        and infrastructure pricing.'
       tags:
       - pricing
   /v1/pricing-policy:
@@ -30523,8 +29881,7 @@ paths:
                   type: object
                 type: object
           description: ok
-      summary: |-
-        GetPricingPolicyAlias returns the pricing policy document at its top-level
+      summary: GetPricingPolicyAlias returns the pricing policy document at its top-level
         address.
       tags:
       - pricing-policy
@@ -30543,6 +29900,8 @@ paths:
                 $ref: '#/components/schemas/pricingPlanList'
           description: ok
       summary: ListBasePlans returns the Hanzo Base plans — the managed-instance tiers,
+        each with its monthly and annual price, storage and request allowances and
+        feature list.
       tags:
       - pricing
   /v1/pricing/blockchain:
@@ -30559,7 +29918,8 @@ paths:
                 $ref: '#/components/schemas/pricingPlanList'
           description: ok
       summary: ListBlockchainPlans returns the blockchain access plans — the RPC and
-        node
+        node tiers, each with its monthly price, compute-unit allowance and feature
+        list.
       tags:
       - pricing
   /v1/pricing/cloud:
@@ -30580,9 +29940,8 @@ paths:
                   type: object
                 type: object
           description: ok
-      summary: |-
-        GetCloudPricing returns the public cloud section of the catalog in one
-        document: its instance plans, its regions and its block-storage prices.
+      summary: 'GetCloudPricing returns the public cloud section of the catalog in
+        one document: its instance plans, its regions and its block-storage prices.'
       tags:
       - pricing
   /v1/pricing/cloud/plans:
@@ -30599,9 +29958,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/pricingPlanList'
           description: ok
-      summary: |-
-        GetCloudPlans returns just the cloud instance plans — each with its vCPU,
-        memory, disk, CPU type, VM allowance, feature list and monthly and hourly
+      summary: GetCloudPlans returns just the cloud instance plans — each with its
+        vCPU, memory, disk, CPU type, VM allowance, feature list and monthly and hourly
         price.
       tags:
       - pricing
@@ -30619,9 +29977,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/pricingRegionList'
           description: ok
-      summary: |-
-        GetCloudRegions returns the regions a cloud instance can be placed in, each
-        with its id, display name and physical location.
+      summary: GetCloudRegions returns the regions a cloud instance can be placed
+        in, each with its id, display name and physical location.
       tags:
       - pricing
   /v1/pricing/cloud/storage:
@@ -30640,7 +29997,9 @@ paths:
                   type: object
                 type: object
           description: ok
-      summary: GetCloudStoragePricing returns the block-storage prices of the cloud
+      summary: 'GetCloudStoragePricing returns the block-storage prices of the cloud
+        section: the per-GB monthly rate and the volume size bounds a caller may ask
+        for.'
       tags:
       - pricing
   /v1/pricing/compute:
@@ -30661,10 +30020,9 @@ paths:
                   type: object
                 type: object
           description: ok
-      summary: |-
-        GetComputePricing returns the compute section of the catalog: the cloud
-        provider and region the prices are quoted for, the monthly markup applied to
-        them, the full instance-size tier list and the named presets.
+      summary: 'GetComputePricing returns the compute section of the catalog: the
+        cloud provider and region the prices are quoted for, the monthly markup applied
+        to them, the full instance-size tier list and the named presets.'
       tags:
       - pricing
   /v1/pricing/compute/presets:
@@ -30683,8 +30041,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/pricingPresetList'
           description: ok
-      summary: |-
-        GetComputePresets returns just the named compute sizes — the short,
+      summary: GetComputePresets returns just the named compute sizes — the short,
         human-labelled list ("Starter", "Pro") a size picker renders, each carrying
         its provider slug, vCPU, memory, disk and price.
       tags:
@@ -30703,9 +30060,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/pricingModelList'
           description: ok
-      summary: |-
-        ListFeaturedModels returns the models the catalog highlights, filtered to what
-        the caller's org may see.
+      summary: ListFeaturedModels returns the models the catalog highlights, filtered
+        to what the caller's org may see.
       tags:
       - pricing
   /v1/pricing/free:
@@ -30722,9 +30078,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/pricingModelList'
           description: ok
-      summary: |-
-        ListFreeModels returns the models that cost nothing to call, filtered to what
-        the caller's org may see.
+      summary: ListFreeModels returns the models that cost nothing to call, filtered
+        to what the caller's org may see.
       tags:
       - pricing
   /v1/pricing/gpu:
@@ -30741,6 +30096,7 @@ paths:
                 $ref: '#/components/schemas/pricingTierList'
           description: ok
       summary: ListGPUTiers returns the rentable GPU configurations, each with its
+        accelerator count and model, VRAM, vCPU, host memory and hourly price.
       tags:
       - pricing
   /v1/pricing/health:
@@ -30777,7 +30133,8 @@ paths:
                 $ref: '#/components/schemas/pricingPlanList'
           description: ok
       summary: ListIAMPlans returns the identity plans — the Hanzo IAM tiers, each
-        with its
+        with its monthly and annual price, monthly-active-user allowance and feature
+        list.
       tags:
       - pricing
   /v1/pricing/model/{name}:
@@ -30808,9 +30165,8 @@ paths:
                   type: object
                 type: object
           description: ok
-      summary: |-
-        GetModel returns one model's catalog entry — its pricing, context window and
-        capabilities as the pricing source records them.
+      summary: GetModel returns one model's catalog entry — its pricing, context window
+        and capabilities as the pricing source records them.
       tags:
       - pricing
   /v1/pricing/models:
@@ -30828,9 +30184,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/pricingModelList'
           description: ok
-      summary: |-
-        ListModels returns the whole model catalog — Hanzo's own Zen models and every
-        third-party model — filtered to what the caller's org may see.
+      summary: ListModels returns the whole model catalog — Hanzo's own Zen models
+        and every third-party model — filtered to what the caller's org may see.
       tags:
       - pricing
   /v1/pricing/paas:
@@ -30848,6 +30203,8 @@ paths:
                 $ref: '#/components/schemas/pricingPlanList'
           description: ok
       summary: ListPaaSPlans returns the application-hosting plans — the deploy-and-host
+        tiers, each with its monthly and annual price, app and memory allowances and
+        feature list.
       tags:
       - pricing
   /v1/pricing/policy:
@@ -30867,7 +30224,10 @@ paths:
                   type: object
                 type: object
           description: ok
-      summary: 'GetPricingPolicy returns the pricing policy document: the revenue-sharing'
+      summary: 'GetPricingPolicy returns the pricing policy document: the revenue-sharing
+        terms (the idle-resale share and the open-source share, each with its percentage
+        and who is eligible) and the commitments Hanzo makes about how it bills —
+        no hidden fees, no egress charges, no surprise bills.'
       tags:
       - pricing
   /v1/pricing/providers:
@@ -30885,9 +30245,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/pricingProviderList'
           description: ok
-      summary: |-
-        ListProviders returns the model providers the catalog knows, each with its
-        info object, filtered to what the caller's org may see.
+      summary: ListProviders returns the model providers the catalog knows, each with
+        its info object, filtered to what the caller's org may see.
       tags:
       - pricing
   /v1/pricing/subscriptions:
@@ -30905,6 +30264,8 @@ paths:
                 $ref: '#/components/schemas/pricingPlanList'
           description: ok
       summary: ListSubscriptionPlans returns the API subscription plans — the account-level
+        tiers a customer subscribes to, each with its monthly and annual price, included
+        credit, rate limits and feature list.
       tags:
       - pricing
   /v1/pricing/summary:
@@ -30924,9 +30285,8 @@ paths:
                   type: object
                 type: object
           description: ok
-      summary: |-
-        GetPricingSummary returns the catalog's headline statistics — model counts by
-        family and the provider directory.
+      summary: GetPricingSummary returns the catalog's headline statistics — model
+        counts by family and the provider directory.
       tags:
       - pricing
   /v1/pricing/sync:
@@ -30937,12 +30297,6 @@ paths:
         fetch runs in Go and the markup transform in the pricing bundle. SuperAdmin
         only; every other caller is refused.
       operationId: post_v1_pricing_sync
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/pricingNoInput'
-        required: true
       responses:
         "200":
           content:
@@ -30950,9 +30304,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/pricingSyncOut'
           description: ok
-      summary: |-
-        SyncPricing refreshes the third-party section of the catalog from its upstream
-        listings and returns the time the refreshed catalog was stamped with.
+      summary: SyncPricing refreshes the third-party section of the catalog from its
+        upstream listings and returns the time the refreshed catalog was stamped with.
       tags:
       - pricing
   /v1/pricing/tools:
@@ -30970,7 +30323,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/pricingToolList'
           description: ok
-      summary: ListToolPrices returns the per-use tool prices — web search, code
+      summary: ListToolPrices returns the per-use tool prices — web search, code interpreter,
+        file storage, image generation, speech-to-text and text-to-speech — each with
+        the unit it is billed by and its price in that unit.
       tags:
       - pricing
   /v1/projects:
@@ -31644,11 +30999,11 @@ paths:
     get:
       operationId: get_v1_skills
       tags:
-      - tools
+      - skills
     post:
       operationId: post_v1_skills
       tags:
-      - tools
+      - skills
   /v1/skills/{id}:
     delete:
       operationId: delete_v1_skills_by_id
@@ -31659,12 +31014,12 @@ paths:
         schema:
           type: string
       tags:
-      - tools
+      - skills
   /v1/skills/authored:
     get:
       operationId: get_v1_skills_authored
       tags:
-      - tools
+      - skills
   /v1/social/accounts:
     get:
       operationId: get_v1_social_accounts
@@ -32410,8 +31765,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/cookieAck'
           description: ok
-      summary: |-
-        ClearCookie signs this browser out of team by expiring the HttpOnly
+      summary: ClearCookie signs this browser out of team by expiring the HttpOnly
         account-token cookie the OAuth callback set.
       tags:
       - team
@@ -32441,9 +31795,8 @@ paths:
                   $ref: '#/components/schemas/ProviderInfo'
                 type: array
           description: ok
-      summary: |-
-        ListProviders returns the identity providers this deployment starts a login
-        with.
+      summary: ListProviders returns the identity providers this deployment starts
+        a login with.
       tags:
       - team
   /v1/team/billing/plan:
@@ -32471,9 +31824,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/planInfo'
           description: ok
-      summary: |-
-        ReadPlan returns the plan and seat counts for the caller's OWN org, resolved
-        from the VERIFIED team session token — never a client header.
+      summary: ReadPlan returns the plan and seat counts for the caller's OWN org,
+        resolved from the VERIFIED team session token — never a client header.
       tags:
       - team
   /v1/team/billing/ui:
@@ -32507,10 +31859,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/botRoster'
           description: ok
-      summary: |-
-        ListBots returns the caller org's bot members — the org's agents projected as
-        the workspace Employees they become, each with the member account uuid and
-        Person reference the roster addresses it by.
+      summary: ListBots returns the caller org's bot members — the org's agents projected
+        as the workspace Employees they become, each with the member account uuid
+        and Person reference the roster addresses it by.
       tags:
       - team
   /v1/team/bots/sync:
@@ -32529,9 +31880,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/botSync'
           description: ok
-      summary: |-
-        SyncBots re-projects the caller org's agents as workspace members into EVERY
-        workspace of the org, and removes the ones whose agent is gone.
+      summary: SyncBots re-projects the caller org's agents as workspace members into
+        EVERY workspace of the org, and removes the ones whose agent is gone.
       tags:
       - team
   /v1/team/files/{workspace}:
@@ -32641,10 +31991,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/statsOut'
           description: ok
-      summary: |-
-        Statistics returns the transactor's live sessions for the workspace the
-        caller's token names — the endpoint the front's workspace switcher and server
-        panel poll on the transactor base.
+      summary: Statistics returns the transactor's live sessions for the workspace
+        the caller's token names — the endpoint the front's workspace switcher and
+        server panel poll on the transactor base.
       tags:
       - team
   /v1/team/transactor/statistics:
@@ -32672,10 +32021,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/statsOut'
           description: ok
-      summary: |-
-        Statistics returns the transactor's live sessions for the workspace the
-        caller's token names — the endpoint the front's workspace switcher and server
-        panel poll on the transactor base.
+      summary: Statistics returns the transactor's live sessions for the workspace
+        the caller's token names — the endpoint the front's workspace switcher and
+        server panel poll on the transactor base.
       tags:
       - team
   /v1/templates:
@@ -33597,6 +32945,7 @@ tags:
 - name: machines
 - name: marketing
 - name: marketplace
+- name: mcp
 - name: meet
 - name: mesh
 - name: metrics
@@ -33609,6 +32958,7 @@ tags:
 - name: pipelines
 - name: plans
 - name: platform
+- name: plugins
 - name: prefs
 - name: pricing
 - name: pricing-policy
@@ -33629,6 +32979,7 @@ tags:
 - name: settings
 - name: share
 - name: sites
+- name: skills
 - name: social
 - name: sql
 - name: store

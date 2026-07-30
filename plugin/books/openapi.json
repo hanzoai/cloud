@@ -19,7 +19,7 @@
     "/v1/books/accounts": {
       "get": {
         "operationId": "get_v1_books_accounts",
-        "summary": "ListAccounts returns the org's chart of accounts — the seeded fixed chart every",
+        "summary": "ListAccounts returns the org's chart of accounts — the seeded fixed chart every posting key in the ledger refers to.",
         "description": "ListAccounts returns the org's chart of accounts — the seeded fixed chart every\nposting key in the ledger refers to.",
         "tags": [
           "books"
@@ -56,7 +56,7 @@
     "/v1/books/ask": {
       "post": {
         "operationId": "post_v1_books_ask",
-        "summary": "AskBooks answers a plain-language question about the caller's own books — \"what is my\nMRR?\", \"how long is my runway?\" — with figures taken from their ledger, never a guessed\nnumber.",
+        "summary": "AskBooks answers a plain-language question about the caller's own books — \"what is my MRR?\", \"how long is my runway?\" — with figures taken from their ledger, never a guessed number.",
         "description": "AskBooks answers a plain-language question about the caller's own books — \"what is my\nMRR?\", \"how long is my runway?\" — with figures taken from their ledger, never a guessed\nnumber. A deterministic keyword router picks the intent and reads the real metrics, and\nthose figures, followups and report sources are computed BEFORE any model call and are\nnever altered by one: the optional narration seam only rephrases the sentence, and it\ndegrades silently to the templated answer when no AI plane is wired. It is strictly\nread-only — it restates the books, it never posts to them.",
         "tags": [
           "books"
@@ -91,7 +91,7 @@
     "/v1/books/balance-sheet": {
       "get": {
         "operationId": "get_v1_books_balance-sheet",
-        "summary": "BalanceSheet returns the org's Balance Sheet as of `to` (empty = all time), with the",
+        "summary": "BalanceSheet returns the org's Balance Sheet as of `to` (empty = all time), with the Assets == Liabilities + Equity equation proof.",
         "description": "BalanceSheet returns the org's Balance Sheet as of `to` (empty = all time), with the\nAssets == Liabilities + Equity equation proof.",
         "tags": [
           "books"
@@ -180,21 +180,11 @@
     "/v1/books/bank/sync": {
       "post": {
         "operationId": "post_v1_books_bank_sync",
-        "summary": "SyncBank pulls every connected bank (Plaid/Teller) for the caller's org, maps each\nfetched transaction to a posting and books it idempotently, then advances that\nconnector's cursor so the next sync resumes where this one stopped.",
+        "summary": "SyncBank pulls every connected bank (Plaid/Teller) for the caller's org, maps each fetched transaction to a posting and books it idempotently, then advances that connector's cursor so the next sync resumes where this one stopped.",
         "description": "SyncBank pulls every connected bank (Plaid/Teller) for the caller's org, maps each\nfetched transaction to a posting and books it idempotently, then advances that\nconnector's cursor so the next sync resumes where this one stopped. One connector's\noutage is skipped rather than failing the whole sync. It reports the batch: how many\ntransactions were seen, how many vouchers posted, how many inflows reconciled against\nthe processor clearing account, how many raised a question, how many were own-account\ntransfers, and how many were already-processed no-ops. It is READ-ONLY against the\nbank — it ingests, it never sends money.",
         "tags": [
           "books"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/syncIn"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
@@ -212,7 +202,7 @@
     "/v1/books/bank/transactions": {
       "get": {
         "operationId": "get_v1_books_bank_transactions",
-        "summary": "ListBankTransactions returns the org's normalized bank transactions, newest first —",
+        "summary": "ListBankTransactions returns the org's normalized bank transactions, newest first — every row the import and connector paths have ingested, with its amount in exact cents, its direction, and whether it has been matched to a voucher yet.",
         "description": "ListBankTransactions returns the org's normalized bank transactions, newest first —\nevery row the import and connector paths have ingested, with its amount in exact cents,\nits direction, and whether it has been matched to a voucher yet.",
         "tags": [
           "books"
@@ -258,7 +248,7 @@
     "/v1/books/bank/unreconciled": {
       "get": {
         "operationId": "get_v1_books_bank_unreconciled",
-        "summary": "ListUnreconciled returns the org's unmatched bank inflows and their open clarifying",
+        "summary": "ListUnreconciled returns the org's unmatched bank inflows and their open clarifying questions — the queue a human answers so an unexplained deposit is never guessed into revenue.",
         "description": "ListUnreconciled returns the org's unmatched bank inflows and their open clarifying\nquestions — the queue a human answers so an unexplained deposit is never guessed into\nrevenue.",
         "tags": [
           "books"
@@ -292,7 +282,7 @@
     "/v1/books/export": {
       "get": {
         "operationId": "get_v1_books_export",
-        "summary": "ExportPackage returns the complete financial package for the caller's org over",
+        "summary": "ExportPackage returns the complete financial package for the caller's org over (from, to]: the trial balance, the P\u0026L, the balance sheet, and the GL detail behind them — the four statements a tax preparer or an investor asks for, assembled from the one ledger in a single read so they cannot disagree with each other.",
         "description": "ExportPackage returns the complete financial package for the caller's org over\n(from, to]: the trial balance, the P\u0026L, the balance sheet, and the GL detail behind\nthem — the four statements a tax preparer or an investor asks for, assembled from the\none ledger in a single read so they cannot disagree with each other.",
         "tags": [
           "books"
@@ -410,7 +400,7 @@
     "/v1/books/inbox": {
       "get": {
         "operationId": "get_v1_books_inbox",
-        "summary": "ListInbox returns the org's open document queue — everything uploaded but not yet\nbooked, newest first, each with its extracted summary and the confidence the scanner\nresolved its category at.",
+        "summary": "ListInbox returns the org's open document queue — everything uploaded but not yet booked, newest first, each with its extracted summary and the confidence the scanner resolved its category at.",
         "description": "ListInbox returns the org's open document queue — everything uploaded but not yet\nbooked, newest first, each with its extracted summary and the confidence the scanner\nresolved its category at. A booked document drops out of the queue.",
         "tags": [
           "books"
@@ -472,7 +462,7 @@
     "/v1/books/metrics": {
       "get": {
         "operationId": "get_v1_books_metrics",
-        "summary": "Metrics returns the org's deterministic SaaS-metrics snapshot over an optional\n(from, to] window — MRR, ARR, revenue, COGS, burn, gross margin, net income, cash,\ndeferred revenue, monthly burn and runway — as raw int64-cent figures AND the same\nfigures already formatted.",
+        "summary": "Metrics returns the org's deterministic SaaS-metrics snapshot over an optional (from, to] window — MRR, ARR, revenue, COGS, burn, gross margin, net income, cash, deferred revenue, monthly burn and runway — as raw int64-cent figures AND the same figures already formatted.",
         "description": "Metrics returns the org's deterministic SaaS-metrics snapshot over an optional\n(from, to] window — MRR, ARR, revenue, COGS, burn, gross margin, net income, cash,\ndeferred revenue, monthly burn and runway — as raw int64-cent figures AND the same\nfigures already formatted. Every number is the ledger, aggregated the one way the books\ndefine it, never a guess; it is the grounded read the unified /v1/ask advisor replays.",
         "tags": [
           "books"
@@ -525,7 +515,7 @@
     "/v1/books/pnl": {
       "get": {
         "operationId": "get_v1_books_pnl",
-        "summary": "ProfitAndLoss returns the org's accrual-basis Profit \u0026 Loss over an optional (from, to]",
+        "summary": "ProfitAndLoss returns the org's accrual-basis Profit \u0026 Loss over an optional (from, to] window of RFC3339 posting times: recognized revenue, matched cost, and the net.",
         "description": "ProfitAndLoss returns the org's accrual-basis Profit \u0026 Loss over an optional (from, to]\nwindow of RFC3339 posting times: recognized revenue, matched cost, and the net.",
         "tags": [
           "books"
@@ -578,7 +568,7 @@
     "/v1/books/questions": {
       "get": {
         "operationId": "get_v1_books_questions",
-        "summary": "ListQuestions returns the clarifying questions the caller's own recent GL raises — the\nunusual postings a founder should look at (outliers, reversals, round-offs, uncosted\nrevenue, an overdrawn wallet), sharpest first.",
+        "summary": "ListQuestions returns the clarifying questions the caller's own recent GL raises — the unusual postings a founder should look at (outliers, reversals, round-offs, uncosted revenue, an overdrawn wallet), sharpest first.",
         "description": "ListQuestions returns the clarifying questions the caller's own recent GL raises — the\nunusual postings a founder should look at (outliers, reversals, round-offs, uncosted\nrevenue, an overdrawn wallet), sharpest first. An empty list means the books look clean;\nthe detector is deterministic over the ledger and invents nothing.",
         "tags": [
           "books"
@@ -644,7 +634,7 @@
       },
       "post": {
         "operationId": "post_v1_books_rules",
-        "summary": "UpsertRule creates or updates one auto-categorization rule, keyed by its pattern —\nwriting a pattern that already exists REPLACES that row's category and priority.",
+        "summary": "UpsertRule creates or updates one auto-categorization rule, keyed by its pattern — writing a pattern that already exists REPLACES that row's category and priority.",
         "description": "UpsertRule creates or updates one auto-categorization rule, keyed by its pattern —\nwriting a pattern that already exists REPLACES that row's category and priority. The\ncategory is normalized to a real COA expense account, and anything unrecognized becomes\n5900 Uncategorized rather than a guessed real account. It answers the row exactly as\nstored, so the caller sees the normalization. A rule overrides a vendor's default\ncategory, so this is the standing instruction that decides how a future bill classifies.",
         "tags": [
           "books"
@@ -759,21 +749,11 @@
     "/v1/books/sync": {
       "post": {
         "operationId": "post_v1_books_sync",
-        "summary": "Sync ingests the caller's OWN org from commerce into BOTH ledgers (live and sandbox)\nand reports how many new vouchers posted to each.",
+        "summary": "Sync ingests the caller's OWN org from commerce into BOTH ledgers (live and sandbox) and reports how many new vouchers posted to each.",
         "description": "Sync ingests the caller's OWN org from commerce into BOTH ledgers (live and sandbox)\nand reports how many new vouchers posted to each. It is idempotent — money that has\nalready been booked posts nothing on a repeat — and it is read-only against commerce:\nit never mints a deposit, a credit or a payout, only the accounting twin of money that\nalready moved.",
         "tags": [
           "books"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/syncIn"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
@@ -791,7 +771,7 @@
     "/v1/books/transactions": {
       "get": {
         "operationId": "get_v1_books_transactions",
-        "summary": "ListTransactions returns the org's booked ledger as a single-line register, newest\nfirst: one row per voucher, with its date, description, vendor, category, source and\namount in exact cents.",
+        "summary": "ListTransactions returns the org's booked ledger as a single-line register, newest first: one row per voucher, with its date, description, vendor, category, source and amount in exact cents.",
         "description": "ListTransactions returns the org's booked ledger as a single-line register, newest\nfirst: one row per voucher, with its date, description, vendor, category, source and\namount in exact cents. It is the double-entry ledger projected to the register a human\nreads, filterable by posting-time window, category and vendor. Strictly read-only — it\nrestates the books, it never moves them.",
         "tags": [
           "books"
@@ -871,7 +851,7 @@
     "/v1/books/trial-balance": {
       "get": {
         "operationId": "get_v1_books_trial-balance",
-        "summary": "TrialBalance returns the org's trial balance over an optional [from, to] window of",
+        "summary": "TrialBalance returns the org's trial balance over an optional [from, to] window of RFC3339 posting times, including the opening/closing columns and the TotalDebit == TotalCredit proof that the books balance.",
         "description": "TrialBalance returns the org's trial balance over an optional [from, to] window of\nRFC3339 posting times, including the opening/closing columns and the\nTotalDebit == TotalCredit proof that the books balance.",
         "tags": [
           "books"
@@ -924,7 +904,7 @@
     "/v1/books/vendors": {
       "get": {
         "operationId": "get_v1_books_vendors",
-        "summary": "ListVendors returns the org's vendor book: each canonical vendor, the alias spellings a\nreceipt may print it under, and the expense account new bills from it default to.",
+        "summary": "ListVendors returns the org's vendor book: each canonical vendor, the alias spellings a receipt may print it under, and the expense account new bills from it default to.",
         "description": "ListVendors returns the org's vendor book: each canonical vendor, the alias spellings a\nreceipt may print it under, and the expense account new bills from it default to. A\nvendor here is what makes a scanned bill self-classify instead of asking again.",
         "tags": [
           "books"
@@ -956,7 +936,7 @@
       },
       "post": {
         "operationId": "post_v1_books_vendors",
-        "summary": "UpsertVendor creates or updates one vendor in the org's vendor book, keyed by its\ncanonical name — writing a canonical name that already exists REPLACES that row's\naliases and default category.",
+        "summary": "UpsertVendor creates or updates one vendor in the org's vendor book, keyed by its canonical name — writing a canonical name that already exists REPLACES that row's aliases and default category.",
         "description": "UpsertVendor creates or updates one vendor in the org's vendor book, keyed by its\ncanonical name — writing a canonical name that already exists REPLACES that row's\naliases and default category. A category given as a slug (\"software\") is normalized to\nits real COA expense account, and anything unrecognized becomes 5900 Uncategorized\nrather than a guessed real account. It answers the row exactly as stored, so the caller\nsees the normalization. Recording a vendor is what makes future bills from it\nself-classify instead of asking again.",
         "tags": [
           "books"
@@ -1778,10 +1758,6 @@
             "type": "array"
           }
         },
-        "type": "object"
-      },
-      "syncIn": {
-        "properties": {},
         "type": "object"
       },
       "syncTally": {
