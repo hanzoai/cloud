@@ -29,6 +29,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hanzoai/cloud/apps/analytics"
+
 	"github.com/hanzoai/cloud"
 )
 
@@ -44,6 +46,9 @@ type state struct {
 // mounted is the process-wide handle Shutdown reaches the dispatcher + stores through
 // (the same package-global pattern clients/crm and clients/books use).
 var mounted *state
+
+// removeSink unregisters the bridge's fan-out consumer on Shutdown.
+var removeSink func()
 
 // Mount opens the per-org registry stores, wires /v1/webhooks, and starts the bus
 // dispatcher (fail-soft). It never returns an error for a bus problem — only for a
@@ -72,6 +77,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// leaves /v1/webhooks fully serving while the consumer retries in the background.
 	st.disp.start()
 
+	// The ingest→bus half of the spine (bridge.go): every accepted /v1/event
+	// batch publishes onto the EVENTS stream this same dispatcher consumes.
+	removeSink = analytics.AddSink(st.disp.publishEvents)
+
 	b.Log.Info("webhooks mounted", "prefix", "/v1/webhooks")
 	return nil
 }
@@ -81,6 +90,10 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 func Shutdown(_ context.Context) error {
 	if mounted == nil {
 		return nil
+	}
+	if removeSink != nil {
+		removeSink()
+		removeSink = nil
 	}
 	if mounted.disp != nil {
 		mounted.disp.stop()
