@@ -4980,6 +4980,12 @@ components:
           $ref: '#/components/schemas/captableInstrumentTotal'
           description: Safes is the SAFEs total.
       type: object
+    captableDeleted:
+      properties:
+        success:
+          description: Success is true when the row was removed.
+          type: boolean
+      type: object
     captableEquityPlan:
       properties:
         boardApprovalDate:
@@ -5229,6 +5235,43 @@ components:
         targetAmount:
           description: TargetAmount is how much the round set out to raise.
           type: number
+      type: object
+    captableRoundDetail:
+      properties:
+        investments:
+          description: Investments is every investment into this round, oldest first.
+          items:
+            $ref: '#/components/schemas/captableRoundInvestment'
+          type: array
+        round:
+          $ref: '#/components/schemas/captableRound'
+          description: Round is the round itself.
+      type: object
+    captableRoundInvestment:
+      properties:
+        amount:
+          description: Amount is the cash invested.
+          type: number
+        comments:
+          description: Comments is the note recorded with the cheque, if any.
+          type: string
+        date:
+          description: Date is the ISO date of the investment.
+          type: string
+        id:
+          description: ID is the investment id.
+          type: string
+        shares:
+          description: |-
+            Shares is how many shares the investment bought; 0 when the round issues no
+            equity at the time of investment.
+          type: integer
+        stakeholderId:
+          description: StakeholderID is the investor.
+          type: string
+        stakeholderName:
+          description: StakeholderName is that investor's name.
+          type: string
       type: object
     captableRoundTotals:
       properties:
@@ -15999,13 +16042,28 @@ paths:
       - captable
   /v1/captable/convertibles/{id}:
     delete:
-      operationId: delete_v1_captable_convertibles_by_id
+      description: |-
+        DeleteConvertible removes one of the caller org's convertible notes, taking its
+        principal out of the cap table's unconverted-instrument totals. An id this org
+        does not hold is not found.
+      operationId: delete_v1_captable_convertibles_id
       parameters:
-      - in: path
+      - description: ID is the convertible note to delete.
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/captableDeleted'
+          description: ok
+      summary: |-
+        DeleteConvertible removes one of the caller org's convertible notes, taking its
+        principal out of the cap table's unconverted-instrument totals.
       tags:
       - captable
   /v1/captable/equity-plans:
@@ -16069,13 +16127,28 @@ paths:
       - captable
   /v1/captable/options/{id}:
     delete:
-      operationId: delete_v1_captable_options_by_id
+      description: |-
+        DeleteOption removes one of the caller org's option grants, taking its shares
+        out of the cap table's granted-options and fully-diluted counts. An id this org
+        does not hold is not found.
+      operationId: delete_v1_captable_options_id
       parameters:
-      - in: path
+      - description: ID is the option grant to delete.
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/captableDeleted'
+          description: ok
+      summary: |-
+        DeleteOption removes one of the caller org's option grants, taking its shares
+        out of the cap table's granted-options and fully-diluted counts.
       tags:
       - captable
   /v1/captable/rounds:
@@ -16101,13 +16174,32 @@ paths:
       - captable
   /v1/captable/rounds/{id}:
     get:
-      operationId: get_v1_captable_rounds_by_id
+      description: |-
+        GetRound returns one of the caller org's fundraising rounds together with every
+        investment written into it, oldest first. A round id that does not exist in the
+        caller's org is not found — including one that exists in another tenant, since
+        the org comes from the caller's principal and is part of the lookup.
+      operationId: get_v1_captable_rounds_id
       parameters:
-      - in: path
+      - description: |-
+          ID is the round to read. It is the path segment: the URL is the addressing
+          authority, and the org it is resolved in comes from the caller's principal,
+          so an id from another tenant is simply not found.
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/captableRoundDetail'
+          description: ok
+      summary: |-
+        GetRound returns one of the caller org's fundraising rounds together with every
+        investment written into it, oldest first.
       tags:
       - captable
   /v1/captable/rounds/{id}/close:
@@ -16155,13 +16247,28 @@ paths:
       - captable
   /v1/captable/safes/{id}:
     delete:
-      operationId: delete_v1_captable_safes_by_id
+      description: |-
+        DeleteSafe removes one of the caller org's SAFEs, taking its capital out of the
+        cap table's unconverted-instrument totals. An id this org does not hold is not
+        found.
+      operationId: delete_v1_captable_safes_id
       parameters:
-      - in: path
+      - description: ID is the SAFE to delete.
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/captableDeleted'
+          description: ok
+      summary: |-
+        DeleteSafe removes one of the caller org's SAFEs, taking its capital out of the
+        cap table's unconverted-instrument totals.
       tags:
       - captable
   /v1/captable/share-classes:
@@ -16222,13 +16329,28 @@ paths:
       - captable
   /v1/captable/shares/{id}:
     delete:
-      operationId: delete_v1_captable_shares_by_id
+      description: |-
+        DeleteShare removes one of the caller org's share certificates, taking its
+        shares out of the cap table's outstanding and fully-diluted counts. An id this
+        org does not hold is not found.
+      operationId: delete_v1_captable_shares_id
       parameters:
-      - in: path
+      - description: ID is the share certificate to delete.
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/captableDeleted'
+          description: ok
+      summary: |-
+        DeleteShare removes one of the caller org's share certificates, taking its
+        shares out of the cap table's outstanding and fully-diluted counts.
       tags:
       - captable
   /v1/captable/shares/transfer:
@@ -16261,13 +16383,27 @@ paths:
       - captable
   /v1/captable/stakeholders/{id}:
     delete:
-      operationId: delete_v1_captable_stakeholders_by_id
+      description: |-
+        DeleteStakeholder removes one of the caller org's stakeholders. It REFUSES to
+        orphan issued equity: a holder that still holds share certificates or option
+        grants cannot be deleted, and answers 400 saying so — release or transfer the
+        holdings first. An id this org does not hold is not found.
+      operationId: delete_v1_captable_stakeholders_id
       parameters:
-      - in: path
+      - description: ID is the stakeholder to delete.
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/captableDeleted'
+          description: ok
+      summary: DeleteStakeholder removes one of the caller org's stakeholders.
       tags:
       - captable
     patch:
