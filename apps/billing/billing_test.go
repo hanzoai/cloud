@@ -55,6 +55,7 @@ func (f *fakeCommerce) server(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/v1/billing/gpu-eligibility", h)
 	mux.HandleFunc("/v1/billing/gpu-charge", h)
 	mux.HandleFunc("/v1/billing/portal/payment-methods", h)
+	mux.HandleFunc("/v1/billing/payment-methods", h)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
@@ -380,5 +381,47 @@ func TestPinSubjectBody(t *testing.T) {
 	}
 	if m["user"] != "maxpower" {
 		t.Fatalf("empty body must still pin the subject: %v", m)
+	}
+}
+
+// TestCreatePaymentMethod_PostReachesCommerce_PinsSubject pins the save-card route
+// that did not exist: the GET-only registration made POST answer 405 on the specific
+// route (shadowing the wildcard), so the console's save-card call — and auto-recharge
+// behind it, which charges the vaulted card — were dead. It must reach commerce as a
+// POST, with the subject pinned to the caller's own org, forwarding status verbatim.
+func TestCreatePaymentMethod_PostReachesCommerce_PinsSubject(t *testing.T) {
+	f := &fakeCommerce{status: 402, body: `{"error":{"code":"card_declined","message":"Card was declined"}}`}
+	app := mountApp(t, f.server(t).URL, "svc-token")
+
+	code, body := callBody(t, app, http.MethodPost, "/v1/billing/payment-methods",
+		"maxpower/dave", "maxpower",
+		`{"user":"victim","customerId":"victim","providerRef":"cnon:card-nonce","brand":"visa"}`)
+	if code != 402 || string(body) != f.body {
+		t.Fatalf("save card: want the 402 decline verbatim, got %d (%s)", code, body)
+	}
+	if f.gotMethod != http.MethodPost || f.gotPath != "/v1/billing/payment-methods" {
+		t.Fatalf("commerce call: want POST /v1/billing/payment-methods, got %s %q", f.gotMethod, f.gotPath)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(f.gotBody, &got); err != nil {
+		t.Fatalf("commerce body not JSON: %v (%s)", err, f.gotBody)
+	}
+	for _, k := range []string{"user", "customerId"} {
+		if got[k] != "maxpower" {
+			t.Fatalf("body %q must be pinned to the caller's org, got %v", k, got[k])
+		}
+	}
+	if got["providerRef"] != "cnon:card-nonce" {
+		t.Fatalf("the card token must survive verbatim, got %v", got["providerRef"])
+	}
+}
+
+// TestCreatePaymentMethod_Unauthenticated401 — saving a card is a customer's own
+// billing action, so no identity is 401 "sign in", never the wildcard's admin 403.
+func TestCreatePaymentMethod_Unauthenticated401(t *testing.T) {
+	f := &fakeCommerce{status: 200, body: `{}`}
+	app := mountApp(t, f.server(t).URL, "svc-token")
+	if code, _ := callBody(t, app, http.MethodPost, "/v1/billing/payment-methods", "", "", `{}`); code != 401 {
+		t.Fatalf("unauth save card: want 401, got %d", code)
 	}
 }
