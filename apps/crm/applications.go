@@ -18,7 +18,29 @@ const (
 	// maxIntakeBody caps the raw JSON body of a public application (spam/DoS
 	// amplification guard on an unauthenticated route).
 	maxIntakeBody = 64 * 1024
-	// intakeRateLimit / intakeRateWindow bound submissions per client IP.
+	// intakeRateLimit / intakeRateWindow bound submissions per rate-limit KEY,
+	// and that key is NOT the client — a live defect, recorded here because this
+	// is where the "per client IP" claim used to be made.
+	//
+	// routes() keys the limiter on c.Fiber().IP(). zip configures fiber with no
+	// ProxyHeader and no trusted-proxy set (zip.go's fiber.Config), and fiber
+	// only reads a forwarding header when both are set (req.go IP():
+	// `IsProxyTrusted() && config.ProxyHeader != ""`), so IP() is the TCP peer.
+	// Public traffic reaches cloud through a proxy hop — cloud's own edge model
+	// says so, since EdgeRateLimit treats a request with NO X-Forwarded-For as an
+	// in-cluster direct caller — so for exactly the traffic this limiter exists to
+	// bound, the peer is the proxy and every public submission shares ONE bucket.
+	// 20/min is therefore a global cap: one host can spend the whole budget and
+	// lock every real applicant out, and it is shared with the three staff
+	// application routes registered after the limiter (TestIntakeRateLimitScope).
+	//
+	// The fix is NOT swapping in cloud.ClientIP (leftmost X-Forwarded-For, the
+	// one canonical client-IP read in this repo): zip's middleware.RateLimit
+	// keeps a bucket map it only ever RESETS, never deletes, so keying it on raw
+	// IPs grows without bound — which is why cloud's own EdgeRateLimit does not
+	// reuse that primitive and carries eviction instead. Closing this means the
+	// intake adopts an evicting per-client-IP limiter, which moves when callers
+	// see 429 and is a metering decision, not a typing one.
 	intakeRateLimit  = 20
 	intakeRateWindow = time.Minute
 	// screenTimeout bounds one AI screen call independent of the request.
