@@ -10,7 +10,7 @@ func init() {
 	zip.Describe("GET /v1/admin/invoices", zip.Doc{
 		Description: "Invoices answers GET /v1/admin/invoices.\n\n\tGET /v1/admin/invoices?org=&status=&limit=",
 		Fields: map[string]string{
-			"InvoicesIn.limit":  "Limit caps the rows returned. data2 still reports the full match count.",
+			"InvoicesIn.limit":  "Limit caps the rows returned. total still reports the full match count.",
 			"InvoicesIn.org":    "Org filters to one tenant, matched exactly.",
 			"InvoicesIn.status": "Status filters on the invoice's LATEST lifecycle status (paid, open, void, …),\nmatched case-insensitively.",
 		},

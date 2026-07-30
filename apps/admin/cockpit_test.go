@@ -98,7 +98,7 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 			fmt.Fprintf(w, `{"status":"ok","msg":"","data":[
 				{"owner":"admin","name":"acme","displayName":"Acme Inc","createdTime":%q},
 				{"owner":"admin","name":"globex","displayName":"Globex","createdTime":%q}
-			],"data2":2}`, acmeCreated, globexCreated)
+			],"total":2}`, acmeCreated, globexCreated)
 		case strings.HasSuffix(r.URL.Path, "/users"):
 			owner := q.Get("owner")
 			rows := []string{}
@@ -113,7 +113,7 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 				rows = append(rows, fmt.Sprintf(`{"owner":%q,"name":%q,"email":%q,"isAdmin":%v,"isForbidden":%v,"accessKey":%q,"createdTime":%q,"lastSigninTime":%q}`,
 					us.owner, us.name, us.email, us.admin, forb, us.key, created, now.AddDate(0, 0, -2).Format(time.RFC3339)))
 			}
-			fmt.Fprintf(w, `{"status":"ok","msg":"","data":[%s],"data2":%d}`, strings.Join(rows, ","), len(rows))
+			fmt.Fprintf(w, `{"status":"ok","msg":"","data":[%s],"total":%d}`, strings.Join(rows, ","), len(rows))
 		case strings.HasSuffix(r.URL.Path, "/users/get"):
 			id := q.Get("id")
 			parts := strings.SplitN(id, "/", 2)
@@ -240,12 +240,12 @@ func TestCustomers_ListRealFleet(t *testing.T) {
 	}
 	var env struct {
 		Data  []customer.CustomerRow `json:"data"`
-		Data2 int                    `json:"data2"`
+		Total int                    `json:"total"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if env.Data2 != 2 || len(env.Data) != 2 {
+	if env.Total != 2 || len(env.Data) != 2 {
 		t.Fatalf("want 2 customers, got %d (%+v)", len(env.Data), env.Data)
 	}
 	acme := env.Data[0] // sorted: acme, globex

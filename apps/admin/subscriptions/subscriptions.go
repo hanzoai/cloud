@@ -54,7 +54,7 @@ func Subscriptions(ctx context.Context, in *SubscriptionsIn) (*SubscriptionsOut,
 	// Honest-empty when the warehouse is not connected or the collector's events
 	// table is not provisioned yet (the emitter is still being wired).
 	if !core.BillingEventsReady(ctx) {
-		return &SubscriptionsOut{Status: core.OK, Data: []SubscriptionRow{}, Data2: core.Total(0)}, nil
+		return &SubscriptionsOut{Status: core.OK, Data: []SubscriptionRow{}, Total: core.Total(0)}, nil
 	}
 
 	rows, err := datastore.Query(ctx, subscriptionsSQL())
@@ -84,7 +84,7 @@ func Subscriptions(ctx context.Context, in *SubscriptionsIn) (*SubscriptionsOut,
 	if len(out) > limit {
 		out = out[:limit]
 	}
-	return &SubscriptionsOut{Status: core.OK, Data: out, Data2: core.Total(total)}, nil
+	return &SubscriptionsOut{Status: core.OK, Data: out, Total: core.Total(total)}, nil
 }
 
 // SubscriptionsIn is the GET /v1/admin/subscriptions filter.
@@ -94,17 +94,17 @@ type SubscriptionsIn struct {
 	Status string `json:"status"`
 	// Org filters to one tenant, matched exactly.
 	Org string `json:"org"`
-	// Limit caps the rows returned. data2 still reports the full match count.
+	// Limit caps the rows returned. total still reports the full match count.
 	Limit string `json:"limit"`
 }
 
-// SubscriptionsOut is the GET /v1/admin/subscriptions envelope. data2 is the count
+// SubscriptionsOut is the GET /v1/admin/subscriptions envelope. total is the count
 // BEFORE limit truncates.
 type SubscriptionsOut struct {
 	Status string            `json:"status"`
 	Msg    string            `json:"msg"`
 	Data   []SubscriptionRow `json:"data"`
-	Data2  *int              `json:"data2,omitempty"`
+	Total  *int              `json:"total,omitempty"`
 }
 
 // subscriptionsSQL resolves each subscription's LATEST lifecycle state from
