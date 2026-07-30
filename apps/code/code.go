@@ -31,8 +31,6 @@ package code
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -94,19 +92,43 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	}
 	mounted = s
 
-	g := app.Group("/v1/code")
-	g.Get("/search", s.handleSearch)
-	g.Post("/context", s.handleContext)
-	g.Get("/ask", s.handleAsk)
-	g.Post("/ask", s.handleAsk)
-	g.Post("/index", s.handleIndex)
-	// Repo-inspection primitives (the zread contract over the org's own index):
-	// tree = get_repo_structure, file = read_file.
-	g.Get("/tree", s.handleTree)
-	g.Get("/file", s.handleFile)
+	if err := routes(app, s); err != nil {
+		return err
+	}
 
 	s.log.Info("code surface mounted (native)",
 		"brand", deps.Brand, "semantic", s.embed.Enabled(), "synth", s.synth.Enabled())
+	return nil
+}
+
+// routes registers the /v1/code surface. It is a FUNCTION rather than inline in
+// Mount so this package's own tests drive the REAL registration — the Bridge
+// included — instead of a reconstruction of it that can drift from what the
+// binary serves.
+func routes(app cloud.Router, s *service) error {
+	g := app.Group("/v1/code")
+	// The Bridge FIRST, bounded to the subtree code owns: a typed op receives only
+	// a context, so the validated org has to be parked there, and fiber runs
+	// middleware in registration order — one installed after these leaves would
+	// never run. cloud.Serve installs one app-wide too; nesting is harmless, and
+	// having it here is what makes this package's own tests — which mount on a
+	// bare app — exercise the same tenancy the binary does.
+	g.Use(cloud.Bridge())
+
+	// Every route is a TYPED op: one registry entry, which is what the OpenAPI
+	// operation, the MCP tool, the CLI command and every generated SDK method are
+	// all projected from. This surface is built FOR coding agents, so the MCP tool
+	// list is not a side benefit of typing it — it is the point.
+	zip.Get(g, "/search", s.search)
+	zip.Post(g, "/context", s.context)
+	zip.Get(g, "/ask", s.askGet)
+	zip.Post(g, "/ask", s.askPost)
+	zip.Post(g, "/index", s.index)
+	// Repo-inspection primitives (the zread contract over the org's own index):
+	// tree = get_repo_structure, file = read_file.
+	zip.Get(g, "/tree", s.tree)
+	zip.Get(g, "/file", s.file)
+
 	return nil
 }
 
@@ -143,263 +165,474 @@ func (s *service) engineFor(org, billingOrg, project string) (*engine, error) {
 // org's code. This is the SAME gate clients/eval + clients/knowledge use.
 func org(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document
+// and the MCP tool list — Go drops comments at compile time. Run by
+// `make -C apps/code openapi`.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
+// ── the identity seam ────────────────────────────────────────────────────────
+
+// tenant is the VALIDATED org for a typed op — the one the gateway asserted and
+// cloud.Bridge parked on the context, never a field of In. An In field is
+// caller-supplied, so a tenant key read from one is a cross-tenant read the
+// caller asserted for itself. Fails closed off the HTTP path.
+func tenant(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("valid principal required")
+	}
+	return org, nil
+}
+
+// meter resolves the two facts a retrieval charges and scopes against, beyond
+// the tenant — the ONE reason this package reaches for the REQUEST.
+//
+// The PAYER is principal.Ledger: the SELECTED billing org, which a SuperAdmin
+// masquerade deliberately moves OFF the effective org, so it is not what
+// principal.OrgFrom carries. The PROJECT is X-Project-Id, a scope the gateway and
+// cloud.SanitizeIdentity mint SERVER-SIDE from a validated claim after stripping
+// any client copy; a caller-supplied one would let a request bill and scope an
+// embedding call under a project no minter ever validated, so neither may be an
+// In field.
+//
+// Off the HTTP path both are empty, which is the unbilled, default-project
+// answer — and tenant() has already refused before any op reaches here.
+func meter(ctx context.Context) (billingOrg, project string) {
+	c, ok := cloud.Request(ctx)
+	if !ok {
+		return "", ""
+	}
+	return principal.Ledger(c), principal.Project(c)
+}
+
 // ── HTTP shapes ──────────────────────────────────────────────────────────────
 
 type fileInput struct {
-	Path    string `json:"path"`
+	// Path is the file's repo-relative path, e.g. "internal/store/db.go".
+	Path string `json:"path"`
+	// Content is the file's full text. Max 1 MiB per file; binary files should
+	// simply be omitted rather than sent.
 	Content string `json:"content"`
 }
 
-type indexReq struct {
-	Repo  string      `json:"repo"`
-	Files []fileInput `json:"files"`
-	Prune bool        `json:"prune,omitempty"`
+// indexIn is one (re)index pass over a repo. Every field is BODY-only
+// (`url:"-"`): zip's binder fills an In field from the query string as well, and
+// this route has never taken a repo or a prune flag there — without the opt-out
+// `?prune=1` would delete files the body never asked to remove.
+type indexIn struct {
+	// Repo is the repository label to index under. Required, max 200 bytes. It is
+	// a stored column value, not a filesystem path.
+	Repo string `json:"repo" url:"-"`
+	// Files is the full set of files to index. Required and non-empty; max 20000
+	// files, 1 MiB per file and 1 GiB in total. Unchanged files are skipped by
+	// content hash, so re-sending the whole tree is cheap.
+	Files []fileInput `json:"files" url:"-"`
+	// Prune deletes indexed files that are NOT in this request — which makes the
+	// call a full sync of the repo rather than an upsert. Only pass it when Files
+	// is the complete tree.
+	Prune bool `json:"prune,omitempty" url:"-"`
 }
 
 type indexResult struct {
-	Repo     string `json:"repo"`
-	Indexed  int    `json:"indexed"`
-	Skipped  int    `json:"skipped"`
-	Pruned   int    `json:"pruned"`
-	Files    int    `json:"files"`
-	Symbols  int    `json:"symbols"`
-	Chunks   int    `json:"chunks"`
-	Vectors  int    `json:"vectors"`
-	Semantic bool   `json:"semantic"`
+	// Repo is the repository that was indexed.
+	Repo string `json:"repo"`
+	// Indexed is how many files were parsed and written on this pass.
+	Indexed int `json:"indexed"`
+	// Skipped is how many files were unchanged by content hash and left alone.
+	Skipped int `json:"skipped"`
+	// Pruned is how many stored files were deleted because prune was set and they
+	// were absent from the request.
+	Pruned int `json:"pruned"`
+	// Files is how many files the repo holds after this pass.
+	Files int `json:"files"`
+	// Symbols is how many symbol definitions the repo holds after this pass.
+	Symbols int `json:"symbols"`
+	// Chunks is how many AST-boundary chunks the repo holds after this pass.
+	Chunks int `json:"chunks"`
+	// Vectors is how many of those chunks carry an embedding.
+	Vectors int `json:"vectors"`
+	// Semantic reports whether the semantic tier was available for this pass. When
+	// false the index is lexical + symbolic only and hybrid search still works.
+	Semantic bool `json:"semantic"`
 }
 
-type contextReq struct {
-	Query        string `json:"query"`
-	BudgetTokens int    `json:"budgetTokens,omitempty"`
-	Repo         string `json:"repo,omitempty"`
+// contextIn asks for a budget-packed context bundle. Every field is BODY-only
+// (`url:"-"`), the way c.Bind read them.
+type contextIn struct {
+	// Query is what to retrieve context for. Required, max 4000 bytes.
+	Query string `json:"query" url:"-"`
+	// BudgetTokens caps the bundle's size. Clamped to [256, 32000]; 0 or absent
+	// uses 4000.
+	BudgetTokens int `json:"budgetTokens,omitempty" url:"-"`
+	// Repo narrows retrieval to one repository. Empty searches every repo the org
+	// has indexed.
+	Repo string `json:"repo,omitempty" url:"-"`
 }
 
-type askReq struct {
+// searchIn is one hybrid-search request. All three come from the query string.
+type searchIn struct {
+	// Q is the search query. Required, max 4000 bytes. For type=regex it is a
+	// regular expression; for type=symbol it is a symbol name.
+	Q string `json:"q"`
+	// Type selects the retrieval tier: "text" (FTS5 trigram), "regex",
+	// "symbol" (definitions), "semantic" (embeddings) or "hybrid". Anything
+	// else — including empty — reads as hybrid.
+	Type string `json:"type"`
+	// Repo narrows to one repository. Empty searches every repo the org has indexed.
+	Repo string `json:"repo"`
+	// Limit caps how many spans come back: default 20, maximum 100. A value that
+	// is not a positive integer reads as the default.
+	Limit int `json:"limit"`
+}
+
+// searchResults is what a search answers.
+type searchResults struct {
+	// Degraded is true when retrieval failed and the empty result set is an
+	// outage rather than a real absence of matches. Absent on a healthy answer.
+	Degraded bool `json:"degraded,omitempty"`
+	// Query echoes the query that was run.
 	Query string `json:"query"`
-	Repo  string `json:"repo,omitempty"`
+	// Results are the matching spans, best first. Never null — an empty search is
+	// an empty array.
+	Results []Span `json:"results"`
+	// Type echoes the retrieval tier that ran, after defaulting.
+	Type string `json:"type"`
 }
 
-// ── handlers ─────────────────────────────────────────────────────────────────
+// treeIn addresses one repository's file structure.
+type treeIn struct {
+	// Repo is the repository to walk. REQUIRED — a tree is repo-scoped.
+	Repo string `json:"repo"`
+}
 
-// handleSearch is the unified hybrid search entry point.
-func (s *service) handleSearch(c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("valid principal required")
+// repoTree is a repository's structure as the index knows it.
+type repoTree struct {
+	// Files are the repo's indexed files in path order, each with its language
+	// and how many symbols it defines. Never null.
+	Files []TreeEntry `json:"files"`
+	// Repo echoes the repository that was walked.
+	Repo string `json:"repo"`
+}
+
+// fileIn addresses one indexed file.
+type fileIn struct {
+	// Path is the file's repo-relative path. Required.
+	Path string `json:"path"`
+	// Repo is the repository the file belongs to. REQUIRED.
+	Repo string `json:"repo"`
+}
+
+// fileContent is one indexed file as the index holds it.
+type fileContent struct {
+	// Content is the file's text as the index stored it. It is NOT guaranteed
+	// byte-verbatim — the git object plane is the source of record for exact
+	// bytes, history and blame.
+	Content string `json:"content"`
+	// Lang is the detected language.
+	Lang string `json:"lang"`
+	// Path echoes the file that was read.
+	Path string `json:"path"`
+	// Repo echoes the repository it came from.
+	Repo string `json:"repo"`
+}
+
+// askIn is a question for the GET form, which reads it from the query string.
+type askIn struct {
+	// Q is the question to answer. Required, max 4000 bytes.
+	Q string `json:"q"`
+	// Repo narrows retrieval to one repository. Empty searches every repo the org
+	// has indexed.
+	Repo string `json:"repo"`
+}
+
+// askPostIn is a question for the POST form, which takes it in the BODY while
+// still honouring the query string the GET form uses.
+//
+// The two halves are spelled separately on purpose. This route has always read
+// `?q=` and `?repo=` FIRST and let a non-empty body field override them — the
+// opposite of zip's binding order, which fills a field from the body and then
+// lets the query overwrite it. One field per source, each opted out of the other
+// half with `json:"-"` / `url:"-"`, is what lets the handler reproduce the
+// original precedence exactly instead of inverting it.
+type askPostIn struct {
+	// Q is the question, from the QUERY STRING. The body's `query` wins over it
+	// when non-empty.
+	Q string `json:"-" url:"q"`
+	// RepoQuery is the repository narrowing, from the QUERY STRING. The body's
+	// `repo` wins over it when non-empty.
+	RepoQuery string `json:"-" url:"repo"`
+	// Query is the question, from the BODY. Takes precedence over `?q=`.
+	Query string `json:"query" url:"-"`
+	// Repo is the repository narrowing, from the BODY. Takes precedence over `?repo=`.
+	Repo string `json:"repo" url:"-"`
+}
+
+// ── ops ──────────────────────────────────────────────────────────────────────
+
+// search finds code in the caller org's index across three orthogonal retrieval
+// tiers fused by reciprocal-rank fusion: lexical (FTS5 trigram over
+// code-tokenized text), symbolic (real definition and reference edges), and
+// semantic (embedding cosine over AST-boundary chunks). Pick one tier with
+// `type`, or leave it to run all three as hybrid, which is what a coding agent
+// usually wants. It is FAIL-HONEST: a retrieval outage answers 200 with an empty
+// result set and "degraded": true rather than a 5xx, so an agent degrades instead
+// of stalling. A malformed regex is a 400.
+//
+// Example: {"q": "func openStore", "type": "hybrid", "repo": "cloud", "limit": 20}
+func (s *service) search(ctx context.Context, in *searchIn) (*searchResults, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	query := strings.TrimSpace(c.Query("q"))
+	query := strings.TrimSpace(in.Q)
 	if query == "" {
-		return zip.ErrBadRequest("q is required")
+		return nil, zip.ErrBadRequest("q is required")
 	}
 	if len(query) > maxQueryLen {
-		return zip.ErrBadRequest("q too long")
+		return nil, zip.ErrBadRequest("q too long")
 	}
-	typ := searchType(c.Query("type"))
-	repo, err := cleanRepo(c.Query("repo"), false)
+	typ := searchType(in.Type)
+	repo, err := cleanRepo(in.Repo, false)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	eng, err := s.engineFor(org, principal.Ledger(c), principal.Project(c))
+	billingOrg, project := meter(ctx)
+	eng, err := s.engineFor(org, billingOrg, project)
 	if err != nil {
-		return zip.ErrInternal("open index")
+		return nil, zip.ErrInternal("open index")
 	}
-	spans, err := eng.search(c.Context(), repo, typ, query, searchLimit(c))
+	spans, err := eng.search(ctx, repo, typ, query, clampSearchLimit(in.Limit))
 	if err != nil {
 		if typ == "regex" {
-			return zip.ErrBadRequest("invalid regex: " + err.Error())
+			return nil, zip.ErrBadRequest("invalid regex: " + err.Error())
 		}
 		// Fail-honest: a retrieval outage returns empty, never a 5xx to the agent.
 		s.log.Warn("code search failed", "org", org, "type", typ, "err", err)
-		return c.JSON(http.StatusOK, map[string]any{"query": query, "type": typ, "results": []Span{}, "degraded": true})
+		return &searchResults{Query: query, Type: typ, Results: []Span{}, Degraded: true}, nil
 	}
 	if spans == nil {
 		spans = []Span{}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"query": query, "type": typ, "results": spans})
+	return &searchResults{Query: query, Type: typ, Results: spans}, nil
 }
 
-// handleContext is THE agent primitive: a budget-packed context bundle.
-func (s *service) handleContext(c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("valid principal required")
+// context packs the most relevant code for a query into a token budget — THE
+// primitive for a coding agent that has to decide what to put in a prompt. It
+// retrieves seed spans, expands each with the definitions it calls and its key
+// callers, then greedily fills the budget, so the answer is a coherent slice of
+// the codebase rather than a list of disconnected matches. The top match is
+// always included, truncated if it alone overflows, so a matched query never
+// comes back empty. A retrieval outage answers 200 with an empty bundle rather
+// than a 5xx.
+//
+// Example: {"query": "how does the store open a per-org database", "budgetTokens": 4000, "repo": "cloud"}
+func (s *service) context(ctx context.Context, in *contextIn) (*ContextBundle, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body contextReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	query := strings.TrimSpace(body.Query)
+	query := strings.TrimSpace(in.Query)
 	if query == "" {
-		return zip.ErrBadRequest("query is required")
+		return nil, zip.ErrBadRequest("query is required")
 	}
 	if len(query) > maxQueryLen {
-		return zip.ErrBadRequest("query too long")
+		return nil, zip.ErrBadRequest("query too long")
 	}
-	repo, err := cleanRepo(body.Repo, false)
+	repo, err := cleanRepo(in.Repo, false)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	eng, err := s.engineFor(org, principal.Ledger(c), principal.Project(c))
+	billingOrg, project := meter(ctx)
+	eng, err := s.engineFor(org, billingOrg, project)
 	if err != nil {
-		return zip.ErrInternal("open index")
+		return nil, zip.ErrInternal("open index")
 	}
-	bundle, err := eng.packContext(c.Context(), repo, query, clampBudget(body.BudgetTokens))
+	bundle, err := eng.packContext(ctx, repo, query, clampBudget(in.BudgetTokens))
 	if err != nil {
 		s.log.Warn("code context failed", "org", org, "err", err)
-		return c.JSON(http.StatusOK, ContextBundle{Query: query, Repo: repo, BudgetTokens: clampBudget(body.BudgetTokens), Spans: []Span{}})
+		return &ContextBundle{Query: query, Repo: repo, BudgetTokens: clampBudget(in.BudgetTokens), Spans: []Span{}}, nil
 	}
 	if bundle.Spans == nil {
 		bundle.Spans = []Span{}
 	}
-	return c.JSON(http.StatusOK, bundle)
+	return &bundle, nil
 }
 
-// handleTree returns a repo's file structure with per-file symbol counts —
-// get_repo_structure over the org's own indexed corpus, no git checkout. An
-// unindexed repo returns an empty tree, never an error.
-func (s *service) handleTree(c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("valid principal required")
-	}
-	repo, err := cleanRepo(c.Query("repo"), true) // required: a tree is repo-scoped
+// tree returns one repository's file structure with a per-file symbol count —
+// get_repo_structure over the org's own index, with no git checkout involved. A
+// repository that has not been indexed answers an empty tree rather than an
+// error, so an agent can tell "nothing here" without handling a failure.
+//
+// Example: {"repo": "cloud"}
+func (s *service) tree(ctx context.Context, in *treeIn) (*repoTree, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	repo, err := cleanRepo(in.Repo, true) // required: a tree is repo-scoped
+	if err != nil {
+		return nil, err
 	}
 	store, err := s.storeFor(org)
 	if err != nil {
-		return zip.ErrInternal("open index")
+		return nil, zip.ErrInternal("open index")
 	}
-	entries, err := store.tree(c.Context(), repo)
+	entries, err := store.tree(ctx, repo)
 	if err != nil {
 		s.log.Warn("code tree failed", "org", org, "repo", repo, "err", err)
-		return c.JSON(http.StatusOK, map[string]any{"repo": repo, "files": []TreeEntry{}})
+		return &repoTree{Repo: repo, Files: []TreeEntry{}}, nil
 	}
 	if entries == nil {
 		entries = []TreeEntry{}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"repo": repo, "files": entries})
+	return &repoTree{Repo: repo, Files: entries}, nil
 }
 
-// handleFile returns the INDEXED content of one file (the chunks the search tiers
-// hold) — a fast "show the code the index knows" for context. It is NOT byte-
-// verbatim (see Store.fileContent): the git object plane (clients/git, S3-backed)
-// is the source of record for exact bytes, history, and blame. A file absent from
-// the index is a 404 so the agent can tell "not indexed" from an empty file.
-func (s *service) handleFile(c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("valid principal required")
-	}
-	repo, err := cleanRepo(c.Query("repo"), true)
+// file returns the INDEXED content of one file — read_file over the chunks the
+// search tiers hold, for pulling up code an agent just found. It is NOT
+// byte-verbatim: the git object plane is the source of record for exact bytes,
+// history and blame. A file absent from the index is a 404, so an agent can tell
+// "not indexed" from "empty file".
+//
+// Example: {"repo": "cloud", "path": "apps/code/store.go"}
+func (s *service) file(ctx context.Context, in *fileIn) (*fileContent, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	path := strings.TrimSpace(c.Query("path"))
+	repo, err := cleanRepo(in.Repo, true)
+	if err != nil {
+		return nil, err
+	}
+	path := strings.TrimSpace(in.Path)
 	if path == "" {
-		return zip.ErrBadRequest("path is required")
+		return nil, zip.ErrBadRequest("path is required")
 	}
 	store, err := s.storeFor(org)
 	if err != nil {
-		return zip.ErrInternal("open index")
+		return nil, zip.ErrInternal("open index")
 	}
-	content, lang, err := store.fileContent(c.Context(), repo, path)
+	content, lang, err := store.fileContent(ctx, repo, path)
 	if err != nil {
 		s.log.Warn("code file failed", "org", org, "repo", repo, "path", path, "err", err)
-		return zip.ErrInternal("read file")
+		return nil, zip.ErrInternal("read file")
 	}
 	if content == "" && lang == "" {
-		return zip.ErrNotFound("file not indexed: " + path)
+		return nil, zip.ErrNotFound("file not indexed: " + path)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"repo": repo, "path": path, "lang": lang, "content": content})
+	return &fileContent{Content: content, Lang: lang, Path: path, Repo: repo}, nil
 }
 
-// handleAsk is the cited RAG answer over the org's index.
-func (s *service) handleAsk(c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("valid principal required")
+// askGet answers a question about the caller org's code with a CITED answer:
+// retrieval packs grounding context, then the synthesizer writes the answer over
+// exactly those spans, which come back alongside it. It never answers without
+// grounding — with no matched code the answer is empty and says so, and with no
+// synthesizer available the citations still come back with "degraded": true so
+// the caller can reason over the spans itself.
+//
+// Example: {"q": "where is the per-org SQLite file opened", "repo": "cloud"}
+func (s *service) askGet(ctx context.Context, in *askIn) (*AskAnswer, error) {
+	return s.answer(ctx, in.Q, in.Repo)
+}
+
+// askPost is askGet with the question in the request BODY, for a question too
+// long or too awkward to put in a URL. `query` and `repo` in the body take
+// precedence over `?q=` and `?repo=`; either source works alone.
+//
+// Example: {"query": "where is the per-org SQLite file opened", "repo": "cloud"}
+func (s *service) askPost(ctx context.Context, in *askPostIn) (*AskAnswer, error) {
+	query, repo := in.Q, in.RepoQuery
+	if q := strings.TrimSpace(in.Query); q != "" {
+		query = q
 	}
-	query := strings.TrimSpace(c.Query("q"))
-	repo := c.Query("repo")
-	if c.Method() == http.MethodPost {
-		var body askReq
-		if err := c.Bind(&body); err != nil {
-			return err
-		}
-		if q := strings.TrimSpace(body.Query); q != "" {
-			query = q
-		}
-		if body.Repo != "" {
-			repo = body.Repo
-		}
+	if in.Repo != "" {
+		repo = in.Repo
 	}
+	return s.answer(ctx, query, repo)
+}
+
+// answer is the ONE cited-RAG path both /ask forms take, so the two verbs can
+// never drift into two behaviours.
+func (s *service) answer(ctx context.Context, rawQuery, rawRepo string) (*AskAnswer, error) {
+	org, err := tenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	query := strings.TrimSpace(rawQuery)
 	if query == "" {
-		return zip.ErrBadRequest("q is required")
+		return nil, zip.ErrBadRequest("q is required")
 	}
 	if len(query) > maxQueryLen {
-		return zip.ErrBadRequest("q too long")
+		return nil, zip.ErrBadRequest("q too long")
 	}
-	cleanedRepo, err := cleanRepo(repo, false)
+	cleanedRepo, err := cleanRepo(rawRepo, false)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	eng, err := s.engineFor(org, principal.Ledger(c), principal.Project(c))
+	billingOrg, project := meter(ctx)
+	eng, err := s.engineFor(org, billingOrg, project)
 	if err != nil {
-		return zip.ErrInternal("open index")
+		return nil, zip.ErrInternal("open index")
 	}
-	ans, err := eng.ask(c.Context(), s.synth, cleanedRepo, query)
+	ans, err := eng.ask(ctx, s.synth, cleanedRepo, query)
 	if err != nil {
 		s.log.Warn("code ask failed", "org", org, "err", err)
-		return c.JSON(http.StatusOK, AskAnswer{Question: query, Citations: []Citation{}, Degraded: true})
+		return &AskAnswer{Question: query, Citations: []Citation{}, Degraded: true}, nil
 	}
-	return c.JSON(http.StatusOK, ans)
+	return &ans, nil
 }
 
-// handleIndex (re)indexes a repo for the caller's org, incrementally (unchanged
-// files are skipped by content hash).
-func (s *service) handleIndex(c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("valid principal required")
-	}
-	var body indexReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	repo, err := cleanRepo(body.Repo, true)
+// index (re)indexes a repository for the caller's org, incrementally: files whose
+// content hash is unchanged are skipped, so re-sending a whole tree is cheap.
+// Each file is parsed for symbols, split at AST boundaries and — when the
+// semantic tier is available — embedded, which is what makes it searchable across
+// all three retrieval tiers. Pass `prune` to also DELETE indexed files absent
+// from the request, which turns the call into a full sync; without it the call is
+// an upsert. The index is written to the caller org's own physically separate
+// database.
+//
+// Example: {"repo": "cloud", "files": [{"path": "main.go", "content": "package main\n"}], "prune": true}
+func (s *service) index(ctx context.Context, in *indexIn) (*indexResult, error) {
+	org, err := tenant(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if len(body.Files) == 0 {
-		return zip.ErrBadRequest("files is required")
+	repo, err := cleanRepo(in.Repo, true)
+	if err != nil {
+		return nil, err
 	}
-	if len(body.Files) > maxIndexFiles {
-		return zip.ErrBadRequest(fmt.Sprintf("too many files (max %d)", maxIndexFiles))
+	if len(in.Files) == 0 {
+		return nil, zip.ErrBadRequest("files is required")
+	}
+	if len(in.Files) > maxIndexFiles {
+		return nil, zip.ErrBadRequest(fmt.Sprintf("too many files (max %d)", maxIndexFiles))
 	}
 	var total int
-	for _, f := range body.Files {
+	for _, f := range in.Files {
 		if strings.TrimSpace(f.Path) == "" {
-			return zip.ErrBadRequest("every file needs a path")
+			return nil, zip.ErrBadRequest("every file needs a path")
 		}
 		if len(f.Content) > maxFileBytes {
-			return zip.ErrBadRequest("file too large: " + f.Path)
+			return nil, zip.ErrBadRequest("file too large: " + f.Path)
 		}
 		total += len(f.Content)
 		if total > maxTotalBytes {
-			return zip.ErrBadRequest("index payload too large")
+			return nil, zip.ErrBadRequest("index payload too large")
 		}
 	}
 	store, err := s.storeFor(org)
 	if err != nil {
-		return zip.ErrInternal("open index")
+		return nil, zip.ErrInternal("open index")
 	}
-	res, err := s.indexRepo(c.Context(), org, principal.Ledger(c), principal.Project(c), store, repo, body.Files, body.Prune)
+	billingOrg, project := meter(ctx)
+	res, err := s.indexRepo(ctx, org, billingOrg, project, store, repo, in.Files, in.Prune)
 	if err != nil {
 		s.log.Warn("code index failed", "org", org, "repo", repo, "err", err)
-		return zip.ErrInternal("index failed")
+		return nil, zip.ErrInternal("index failed")
 	}
-	return c.JSON(http.StatusOK, res)
+	return &res, nil
 }
 
 // File is one file to index: its repo-relative path and content. The exported
@@ -530,9 +763,13 @@ func searchType(t string) string {
 	}
 }
 
-func searchLimit(c *zip.Ctx) int {
-	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
-	if err != nil || n <= 0 {
+// clampSearchLimit bounds a requested page size to (0, maxSearchLimit],
+// defaulting anything that is not a positive integer. A `?limit=` value zip
+// could not parse as an int arrives here as 0, which is exactly the "absent or
+// unusable" case the untyped strconv.Atoi branch answered with the default — so
+// the wire is unchanged.
+func clampSearchLimit(n int) int {
+	if n <= 0 {
 		return defaultSearchLimit
 	}
 	if n > maxSearchLimit {

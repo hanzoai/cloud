@@ -159,6 +159,33 @@ components:
         totals:
           $ref: '#/components/schemas/ActivityTotals'
       type: object
+    AdCampaign:
+      properties:
+        account:
+          description: provider ad-account ref (Meta act_<id>)
+          type: string
+        budget:
+          type: integer
+        createdAt:
+          type: integer
+        externalId:
+          description: provider campaign id after a launch
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        objective:
+          type: string
+        platform:
+          type: string
+        spend:
+          type: integer
+        status:
+          type: string
+        updatedAt:
+          type: integer
+      type: object
     Application:
       properties:
         company:
@@ -264,6 +291,19 @@ components:
         ts:
           type: integer
         visibility:
+          type: string
+      type: object
+    AskAnswer:
+      properties:
+        answer:
+          type: string
+        citations:
+          items:
+            $ref: '#/components/schemas/Citation'
+          type: array
+        degraded:
+          type: boolean
+        question:
           type: string
       type: object
     AskRequest:
@@ -1015,6 +1055,19 @@ components:
           description: pending | live | paused | failed | unavailable
           type: string
       type: object
+    Citation:
+      properties:
+        endLine:
+          type: integer
+        file:
+          type: string
+        line:
+          type: integer
+        repo:
+          type: string
+        symbol:
+          type: string
+      type: object
     Cluster:
       properties:
         id:
@@ -1225,6 +1278,21 @@ components:
           description: XLink is the person's X (Twitter) URL.
           type: string
       type: object
+    ContextBundle:
+      properties:
+        budgetTokens:
+          type: integer
+        query:
+          type: string
+        repo:
+          type: string
+        spans:
+          items:
+            $ref: '#/components/schemas/Span'
+          type: array
+        usedTokens:
+          type: integer
+      type: object
     CordonIn:
       properties:
         cordon:
@@ -1405,6 +1473,27 @@ components:
           type: string
         version:
           type: integer
+      type: object
+    DeliveryRow:
+      properties:
+        attempt:
+          type: integer
+        created:
+          type: string
+        delivery:
+          type: string
+        durationMs:
+          type: integer
+        endpoint:
+          type: string
+        error:
+          type: string
+        httpStatus:
+          type: integer
+        status:
+          type: string
+        subject:
+          type: string
       type: object
     DestinationField:
       properties:
@@ -1610,6 +1699,37 @@ components:
           type: string
         size:
           description: Size is the target DigitalOcean size slug on resize, e.g. "s-4vcpu-8gb".
+          type: string
+      type: object
+    Endpoint:
+      properties:
+        created:
+          type: string
+        deliveries7d:
+          description: |-
+            Deliveries7d / Failures7d are cheap usage counters computed from the delivery log
+            over usageWindow (not stored columns) and populated ONLY on list/get. They are 0
+            when there is no delivery history — never omitempty, so the console always sees them.
+          type: integer
+        description:
+          type: string
+        events:
+          items:
+            type: string
+          type: array
+        failures7d:
+          type: integer
+        id:
+          type: string
+        org:
+          type: string
+        secret:
+          type: string
+        status:
+          type: string
+        updated:
+          type: string
+        url:
           type: string
       type: object
     EnrollInput:
@@ -4885,6 +5005,30 @@ components:
           description: Warehouse is whether the usage warehouse answered the LLM block.
           type: boolean
       type: object
+    Span:
+      properties:
+        endLine:
+          type: integer
+        file:
+          type: string
+        kind:
+          type: string
+        line:
+          type: integer
+        repo:
+          type: string
+        role:
+          description: 'context: match | definition | caller'
+          type: string
+        score:
+          type: number
+        snippet:
+          type: string
+        symbol:
+          type: string
+        tier:
+          type: string
+      type: object
     Spec:
       properties:
         arch:
@@ -5633,6 +5777,15 @@ components:
           description: 'reserve > 0: at least some payout is backable'
           type: boolean
       type: object
+    TreeEntry:
+      properties:
+        lang:
+          type: string
+        path:
+          type: string
+        symbols:
+          type: integer
+      type: object
     TrialBalance:
       properties:
         balanced:
@@ -5998,6 +6151,44 @@ components:
             this, e.g. "scan".
           type: string
       type: object
+    Wallet:
+      properties:
+        accountId:
+          type: string
+        address:
+          type: string
+        agent:
+          type: string
+        chain:
+          type: string
+        createdAt:
+          type: integer
+        custody:
+          type: string
+        financeAccount:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        org:
+          type: string
+        project:
+          type: string
+        tier:
+          type: string
+      type: object
+    WalletAccount:
+      properties:
+        createdAt:
+          type: integer
+        id:
+          type: string
+        name:
+          type: string
+        org:
+          type: string
+      type: object
     WebOverview:
       properties:
         available:
@@ -6157,6 +6348,14 @@ components:
             $ref: '#/components/schemas/clusterResult'
           type: array
       type: object
+    accountList:
+      properties:
+        accounts:
+          description: Accounts are the org's accounts, newest first.
+          items:
+            $ref: '#/components/schemas/WalletAccount'
+          type: array
+      type: object
     accountView:
       properties:
         address:
@@ -6290,6 +6489,23 @@ components:
           type: string
         message:
           type: string
+      type: object
+    adSummary:
+      properties:
+        active:
+          description: Active is how many of those campaigns are in the active state.
+          type: integer
+        budget:
+          description: Budget is the summed budget of every campaign in the org, in
+            cents.
+          type: integer
+        campaigns:
+          description: Campaigns is how many campaigns the org has, in every state.
+          type: integer
+        spend:
+          description: Spend is the summed spend of every campaign in the org, in
+            cents.
+          type: integer
       type: object
     addItemsIn:
       properties:
@@ -6846,6 +7062,78 @@ components:
         status:
           type: string
       type: object
+    allowlistPutIn:
+      properties:
+        accessGroups:
+          additionalProperties:
+            additionalProperties:
+              items:
+                type: string
+              type: array
+            type: object
+          description: |-
+            AccessGroups REPLACES the org's named access groups, as
+            group name -> channel -> entries. Absent or null leaves them alone.
+          type: object
+        channel:
+          description: |-
+            Channel is the transport to edit: discord, slack, teams or telegram.
+            Required; an unknown value is a 404.
+          type: string
+        dm:
+          description: |-
+            DM REPLACES the config-managed DM allow entries. Absent or null leaves them
+            alone; an empty list clears them. It never touches senders approved through
+            pairing — a policy edit cannot revoke an approved pairing.
+          items:
+            type: string
+          type: array
+        dmPolicy:
+          description: |-
+            DMPolicy sets how direct messages are admitted: "pairing" (a person must be
+            approved first), "allowlist" (only listed senders) or "open". Empty leaves
+            it unchanged.
+          type: string
+        group:
+          description: |-
+            Group REPLACES the config-managed group allow entries. Absent or null
+            leaves them alone; an empty list clears them.
+          items:
+            type: string
+          type: array
+        groupPolicy:
+          description: |-
+            GroupPolicy sets how group and thread rooms are admitted: "open",
+            "allowlist" or "disabled". Empty leaves it unchanged.
+          type: string
+      type: object
+    allowlistView:
+      properties:
+        accessGroups:
+          additionalProperties:
+            additionalProperties:
+              items:
+                type: string
+              type: array
+            type: object
+          type: object
+        dm:
+          items:
+            type: string
+          type: array
+        dmPolicy:
+          type: string
+        group:
+          items:
+            type: string
+          type: array
+        groupPolicy:
+          type: string
+        paired:
+          items:
+            type: string
+          type: array
+      type: object
     analyticsData:
       properties:
         activeCustomers:
@@ -7237,6 +7525,18 @@ components:
             $ref: '#/components/schemas/Application'
           type: array
       type: object
+    approvePairingIn:
+      properties:
+        channel:
+          description: 'Channel is the transport the request came in on: discord,
+            slack, teams or telegram.'
+          type: string
+        code:
+          description: |-
+            Code is the pairing code from GET /v1/channels/pairing. It is a capability:
+            holding it is what authorises the approval, alongside org admin.
+          type: string
+      type: object
     approveRequest:
       properties:
         id:
@@ -7590,6 +7890,17 @@ components:
         total:
           description: Total is len(data).
           type: integer
+      type: object
+    askPostIn:
+      properties:
+        query:
+          description: Query is the question, from the BODY. Takes precedence over
+            `?q=`.
+          type: string
+        repo:
+          description: Repo is the repository narrowing, from the BODY. Takes precedence
+            over `?repo=`.
+          type: string
       type: object
     askRequest:
       properties:
@@ -8287,6 +8598,45 @@ components:
         version:
           type: string
       type: object
+    campaignInput:
+      properties:
+        account:
+          description: Account is the provider ad-account this campaign runs on (Meta
+            act_<id>). Optional.
+          type: string
+        budget:
+          description: Budget is the campaign budget in MINOR units (cents). Negative
+            values clamp to 0.
+          type: integer
+        name:
+          description: Name is the campaign's display label. Required; trimmed and
+            bounded to 1024 bytes.
+          type: string
+        objective:
+          description: Objective is the campaign goal as the provider names it. Optional,
+            bounded to 1024 bytes.
+          type: string
+        platform:
+          description: 'Platform is the ad network: meta, google, tiktok or x. Empty
+            defaults to meta.'
+          type: string
+        spend:
+          description: Spend is the amount spent so far in MINOR units (cents). Negative
+            values clamp to 0.
+          type: integer
+        status:
+          description: 'Status is the lifecycle state: draft, active, paused or completed.
+            Empty defaults to draft.'
+          type: string
+      type: object
+    campaignList:
+      properties:
+        data:
+          description: Data is the matching campaigns, newest-updated first.
+          items:
+            $ref: '#/components/schemas/AdCampaign'
+          type: array
+      type: object
     campaignPage:
       properties:
         data:
@@ -8454,6 +8804,19 @@ components:
             Org is the tenant to act on. Required for a SuperAdmin — they must name their
             target; ignored for a white-label admin, who always acts on their own org.
           type: string
+      type: object
+    capabilities:
+      properties:
+        actions:
+          type: boolean
+        dm:
+          type: boolean
+        group:
+          type: boolean
+        media:
+          type: boolean
+        thread:
+          type: boolean
       type: object
     captableClassHolding:
       properties:
@@ -9328,6 +9691,37 @@ components:
             $ref: '#/components/schemas/Channel'
           type: array
       type: object
+    channelView:
+      properties:
+        account:
+          type: string
+        accountLabel:
+          type: string
+        capabilities:
+          $ref: '#/components/schemas/capabilities'
+        connected:
+          type: boolean
+        dmPolicy:
+          type: string
+        groupPolicy:
+          type: string
+        id:
+          type: string
+        pendingPairing:
+          type: integer
+      type: object
+    chatChannels:
+      properties:
+        channels:
+          description: |-
+            Channels is every chat transport this deployment supports, in a fixed
+            order, each carrying whether the org has connected it, the account behind
+            the connection, what the transport can do, the org's DM/group access
+            policies for it, and how many pairing requests are waiting.
+          items:
+            $ref: '#/components/schemas/channelView'
+          type: array
+      type: object
     chatRequest:
       properties:
         message:
@@ -10187,6 +10581,22 @@ components:
           description: XLink is the person's X (Twitter) URL.
           type: string
       type: object
+    contextIn:
+      properties:
+        budgetTokens:
+          description: |-
+            BudgetTokens caps the bundle's size. Clamped to [256, 32000]; 0 or absent
+            uses 4000.
+          type: integer
+        query:
+          description: Query is what to retrieve context for. Required, max 4000 bytes.
+          type: string
+        repo:
+          description: |-
+            Repo narrows retrieval to one repository. Empty searches every repo the org
+            has indexed.
+          type: string
+      type: object
     controlCommandView:
       properties:
         command:
@@ -10258,6 +10668,14 @@ components:
           type: string
         success:
           type: boolean
+      type: object
+    createAccountIn:
+      properties:
+        name:
+          description: |-
+            Name is the account's label. Required, trimmed; it groups wallets and is
+            not itself a key.
+          type: string
       type: object
     createAgentIn:
       properties:
@@ -10347,6 +10765,33 @@ components:
         version:
           description: Version is the Kubernetes version slug; empty takes the provider
             default.
+          type: string
+      type: object
+    createEndpointIn:
+      properties:
+        description:
+          description: Description is a free-text label for the console. Optional,
+            clipped to 1024 bytes.
+          type: string
+        events:
+          description: |-
+            Events are NATS subject patterns to subscribe to (e.g. "commerce.order.>").
+            An empty or omitted list means EVERY event on the platform bus. Max 64
+            patterns, each max 256 bytes.
+          items:
+            type: string
+          type: array
+        status:
+          description: |-
+            Status is "active" or "disabled". Empty defaults to active. A disabled
+            endpoint receives no bus deliveries, but can still be exercised with
+            POST /v1/webhooks/{id}/test.
+          type: string
+        url:
+          description: |-
+            URL is the https:// address each matching event is POSTed to. Required,
+            max 2048 bytes; http:// and every other scheme is refused, because a
+            webhook carries signed event data and must not travel in the clear.
           type: string
       type: object
     createFlowReq:
@@ -10479,6 +10924,39 @@ components:
           description: |-
             Trigger is the root of the version's step tree. Optional: a version with no
             trigger is created invalid, and cannot run until one is set.
+      type: object
+    createWalletIn:
+      properties:
+        accountId:
+          description: |-
+            AccountID is the account this wallet belongs to. Required, and it must be
+            an account of the caller's own org — an unknown one is a 404.
+          type: string
+        agent:
+          description: |-
+            Agent optionally narrows the wallet to one agent within the org. It becomes
+            a segment of the key ref, so it must be a url-safe segment with no slash.
+          type: string
+        chain:
+          description: |-
+            Chain is the EVM chain this wallet is for, as "eip155:<n>" or a bare
+            decimal chain id. Optional; a Safe defaults to the Hanzo L1 (36963).
+          type: string
+        custody:
+          description: |-
+            Custody selects the signing backend: "kms" (in-process, always available),
+            "mpc" or "treasury" (the deployed MPC ring), or "safe" (a Safe smart wallet
+            owned by an MPC key). Empty uses the deployment's default. A backend that is
+            not configured fails CLOSED with 503 rather than fabricating a signature.
+          type: string
+        name:
+          description: Name is the wallet's display label. Optional.
+          type: string
+        tier:
+          description: |-
+            Tier is the MPC wallet tier: hot, warm, cold, gas, bridge, contract_admin,
+            validator, quarantine or disaster_recovery. Empty defaults to hot.
+          type: string
       type: object
     credentialIn:
       properties:
@@ -10652,6 +11130,14 @@ components:
         deleted:
           description: Deleted is the key that no longer exists.
           type: string
+      type: object
+    deliveryList:
+      properties:
+        data:
+          description: Data is the matching attempts, newest first.
+          items:
+            $ref: '#/components/schemas/DeliveryRow'
+          type: array
       type: object
     deployEmpty:
       properties: {}
@@ -11031,6 +11517,16 @@ components:
           description: 'Kind is the item''s namespace: "model", "provider" or "feature".'
           type: string
       type: object
+    endpointList:
+      properties:
+        data:
+          description: |-
+            Data is the org's endpoints, newest first, each with its signing secret
+            REDACTED — the secret leaves the server only on create and on rotate.
+          items:
+            $ref: '#/components/schemas/Endpoint'
+          type: array
+      type: object
     endpointReq:
       properties:
         connector:
@@ -11202,6 +11698,35 @@ components:
           description: Total is len(data) — the rows in this answer, not the store's
             history.
           type: integer
+      type: object
+    fileContent:
+      properties:
+        content:
+          description: |-
+            Content is the file's text as the index stored it. It is NOT guaranteed
+            byte-verbatim — the git object plane is the source of record for exact
+            bytes, history and blame.
+          type: string
+        lang:
+          description: Lang is the detected language.
+          type: string
+        path:
+          description: Path echoes the file that was read.
+          type: string
+        repo:
+          description: Repo echoes the repository it came from.
+          type: string
+      type: object
+    fileInput:
+      properties:
+        content:
+          description: |-
+            Content is the file's full text. Max 1 MiB per file; binary files should
+            simply be omitted rather than sent.
+          type: string
+        path:
+          description: Path is the file's repo-relative path, e.g. "internal/store/db.go".
+          type: string
       type: object
     fileJSON:
       properties:
@@ -12040,6 +12565,101 @@ components:
           items:
             $ref: '#/components/schemas/InboxItem'
           type: array
+      type: object
+    inboxPage:
+      properties:
+        cursor:
+          description: |-
+            Cursor is the row id to pass back as `since` for the next page. It is the
+            last message's id, or the requested cursor when the page is empty.
+          type: integer
+        messages:
+          description: Messages are the inbound messages, oldest first.
+          items:
+            $ref: '#/components/schemas/inboxView'
+          type: array
+      type: object
+    inboxView:
+      properties:
+        account:
+          type: string
+        channel:
+          type: string
+        createdAt:
+          type: integer
+        id:
+          type: integer
+        replyTo:
+          type: string
+        roomId:
+          type: string
+        roomKind:
+          type: string
+        sender:
+          type: string
+        senderUser:
+          type: string
+        text:
+          type: string
+      type: object
+    indexIn:
+      properties:
+        files:
+          description: |-
+            Files is the full set of files to index. Required and non-empty; max 20000
+            files, 1 MiB per file and 1 GiB in total. Unchanged files are skipped by
+            content hash, so re-sending the whole tree is cheap.
+          items:
+            $ref: '#/components/schemas/fileInput'
+          type: array
+        prune:
+          description: |-
+            Prune deletes indexed files that are NOT in this request — which makes the
+            call a full sync of the repo rather than an upsert. Only pass it when Files
+            is the complete tree.
+          type: boolean
+        repo:
+          description: |-
+            Repo is the repository label to index under. Required, max 200 bytes. It is
+            a stored column value, not a filesystem path.
+          type: string
+      type: object
+    indexResult:
+      properties:
+        chunks:
+          description: Chunks is how many AST-boundary chunks the repo holds after
+            this pass.
+          type: integer
+        files:
+          description: Files is how many files the repo holds after this pass.
+          type: integer
+        indexed:
+          description: Indexed is how many files were parsed and written on this pass.
+          type: integer
+        pruned:
+          description: |-
+            Pruned is how many stored files were deleted because prune was set and they
+            were absent from the request.
+          type: integer
+        repo:
+          description: Repo is the repository that was indexed.
+          type: string
+        semantic:
+          description: |-
+            Semantic reports whether the semantic tier was available for this pass. When
+            false the index is lexical + symbolic only and hybrid search still works.
+          type: boolean
+        skipped:
+          description: Skipped is how many files were unchanged by content hash and
+            left alone.
+          type: integer
+        symbols:
+          description: Symbols is how many symbol definitions the repo holds after
+            this pass.
+          type: integer
+        vectors:
+          description: Vectors is how many of those chunks carry an embedding.
+          type: integer
       type: object
     indexerView:
       properties:
@@ -13827,6 +14447,41 @@ components:
         version:
           type: string
       type: object
+    pairingApproved:
+      properties:
+        ownerBootstrapped:
+          description: |-
+            OwnerBootstrapped is true when this approval was the org's FIRST on the
+            channel and therefore also made the sender its owner.
+          type: boolean
+        sender:
+          description: Sender is the external chat identity that is now allowed to
+            DM the org's bot.
+          type: string
+      type: object
+    pairingQueue:
+      properties:
+        pending:
+          description: |-
+            Pending is every unexpired pairing request waiting on an org admin, each
+            carrying the channel, the requesting sender and the code to approve it with.
+          items:
+            $ref: '#/components/schemas/pairingView'
+          type: array
+      type: object
+    pairingView:
+      properties:
+        channel:
+          type: string
+        code:
+          type: string
+        createdAt:
+          type: integer
+        lastSeen:
+          type: integer
+        sender:
+          type: string
+      type: object
     patchApplicationIn:
       properties:
         id:
@@ -15400,6 +16055,19 @@ components:
             $ref: '#/components/schemas/repoView'
           type: array
       type: object
+    repoTree:
+      properties:
+        files:
+          description: |-
+            Files are the repo's indexed files in path order, each with its language
+            and how many symbols it defines. Never null.
+          items:
+            $ref: '#/components/schemas/TreeEntry'
+          type: array
+        repo:
+          description: Repo echoes the repository that was walked.
+          type: string
+      type: object
     repoView:
       properties:
         branches:
@@ -15836,6 +16504,48 @@ components:
           description: Provider is the wired e-signature provider's name.
           type: string
       type: object
+    safeProposal:
+      properties:
+        r:
+          description: R is the r component of the MPC threshold signature over the
+            Safe-tx hash.
+          type: string
+        s:
+          description: S is the s component of that signature.
+          type: string
+        safeAddress:
+          description: SafeAddress is the Safe contract this transaction is for.
+          type: string
+        safeTxHash:
+          description: |-
+            SafeTxHash is the EIP-712 Safe transaction hash, bound to the Safe contract
+            and the chain id — the value the owner approval signs.
+          type: string
+        walletId:
+          description: WalletID is the wallet whose Safe this is.
+          type: string
+      type: object
+    safeTxIn:
+      properties:
+        chainId:
+          description: |-
+            ChainID is the EVM chain the Safe transaction is bound to. 0 uses the
+            wallet's own chain, or the Hanzo L1 (36963) when it is chain-agnostic.
+          type: integer
+        data:
+          description: Data is the call data, hex-encoded.
+          type: string
+        nonce:
+          description: Nonce is the Safe's transaction nonce.
+          type: integer
+        to:
+          description: To is the transaction's target address.
+          type: string
+        value:
+          description: Value is the native-token amount to send, as a decimal string
+            in wei.
+          type: string
+      type: object
     sampleAccepted:
       properties:
         recorded:
@@ -16059,6 +16769,27 @@ components:
           items:
             $ref: '#/components/schemas/hit'
           type: array
+      type: object
+    searchResults:
+      properties:
+        degraded:
+          description: |-
+            Degraded is true when retrieval failed and the empty result set is an
+            outage rather than a real absence of matches. Absent on a healthy answer.
+          type: boolean
+        query:
+          description: Query echoes the query that was run.
+          type: string
+        results:
+          description: |-
+            Results are the matching spans, best first. Never null — an empty search is
+            an empty array.
+          items:
+            $ref: '#/components/schemas/Span'
+          type: array
+        type:
+          description: Type echoes the retrieval tier that ran, after defaulting.
+          type: string
       type: object
     searchStats:
       properties:
@@ -16484,6 +17215,19 @@ components:
             $ref: '#/components/schemas/shareView'
           type: array
       type: object
+    signIn:
+      properties:
+        digest:
+          description: |-
+            Digest is a pre-computed 32-byte digest as hex, with or without the 0x
+            prefix. When present it is signed verbatim and message is ignored.
+          type: string
+        message:
+          description: |-
+            Message is arbitrary text to hash with Keccak256 and sign. Used only when
+            digest is empty.
+          type: string
+      type: object
     signReply:
       properties:
         document:
@@ -16514,6 +17258,24 @@ components:
           items:
             $ref: '#/components/schemas/legalSigner'
           type: array
+      type: object
+    signature:
+      properties:
+        address:
+          description: Address is the wallet's on-chain address, the one this signature
+            recovers to.
+          type: string
+        digest:
+          description: Digest is the 32-byte digest that was signed, hex with an 0x
+            prefix.
+          type: string
+        signature:
+          description: Signature is the 65-byte secp256k1 signature, hex with an 0x
+            prefix.
+          type: string
+        walletId:
+          description: WalletID is the wallet that signed.
+          type: string
       type: object
     skillDeleted:
       properties:
@@ -17391,6 +18153,17 @@ components:
         version:
           type: integer
       type: object
+    testResult:
+      properties:
+        delivered:
+          type: boolean
+        durationMs:
+          type: integer
+        error:
+          type: string
+        httpStatus:
+          type: integer
+      type: object
     toolList:
       properties:
         tools:
@@ -17547,6 +18320,59 @@ components:
           items:
             type: string
           type: array
+      type: object
+    updateCampaignIn:
+      properties:
+        account:
+          description: Account is the provider ad-account this campaign runs on (Meta
+            act_<id>). Optional.
+          type: string
+        budget:
+          description: Budget is the campaign budget in MINOR units (cents). Negative
+            values clamp to 0.
+          type: integer
+        name:
+          description: Name is the campaign's display label. Required; trimmed and
+            bounded to 1024 bytes.
+          type: string
+        objective:
+          description: Objective is the campaign goal as the provider names it. Optional,
+            bounded to 1024 bytes.
+          type: string
+        platform:
+          description: 'Platform is the ad network: meta, google, tiktok or x. Empty
+            defaults to meta.'
+          type: string
+        spend:
+          description: Spend is the amount spent so far in MINOR units (cents). Negative
+            values clamp to 0.
+          type: integer
+        status:
+          description: 'Status is the lifecycle state: draft, active, paused or completed.
+            Empty defaults to draft.'
+          type: string
+      type: object
+    updateEndpointIn:
+      properties:
+        description:
+          description: Description is a free-text label for the console. Optional,
+            clipped to 1024 bytes.
+          type: string
+        events:
+          description: |-
+            Events are NATS subject patterns to subscribe to. An empty or omitted list
+            means EVERY event. Max 64 patterns, each max 256 bytes.
+          items:
+            type: string
+          type: array
+        status:
+          description: Status is "active" or "disabled". Empty defaults to active.
+          type: string
+        url:
+          description: |-
+            URL is the https:// address each matching event is POSTed to. Required,
+            max 2048 bytes; http:// and every other scheme is refused.
+          type: string
       type: object
     updateItemIn:
       properties:
@@ -18286,6 +19112,14 @@ components:
             WaitlistMode is true when the service is GATED to approved users, false when
             it is open. Always false for an ungoverned host.
           type: boolean
+      type: object
+    walletList:
+      properties:
+        wallets:
+          description: Wallets are the matching wallets, newest first.
+          items:
+            $ref: '#/components/schemas/Wallet'
+          type: array
       type: object
     walletTopupReq:
       properties:
@@ -22156,42 +22990,151 @@ paths:
       - admin
   /v1/ads/campaigns:
     get:
+      description: |-
+        listCampaigns returns the caller org's ad campaigns, most recently updated
+        first, optionally narrowed to one lifecycle status. The listing is bounded by
+        the org: another tenant's campaigns are not reachable from here at all.
       operationId: get_v1_ads_campaigns
+      parameters:
+      - description: |-
+          Status filters to one lifecycle state (draft, active, paused, completed).
+          Empty returns every campaign the org has.
+        example: active
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit caps how many campaigns come back: default 200, maximum 1000. A
+          value that is not a positive integer reads as the default.
+        example: 50
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/campaignList'
+          description: ok
+      summary: listCampaigns returns the caller org's ad campaigns, most recently
+        updated first, optionally narrowed to one lifecycle status.
       tags:
       - ads
     post:
+      description: |-
+        createCampaign registers a new ad campaign for the caller's org and answers
+        201 with the stored row. It only records the campaign — nothing is sent to the
+        ad network until POST /v1/ads/campaigns/{id}/launch runs it. The org is
+        stamped by the server from the validated principal, so a body can never place
+        a campaign in another tenant.
       operationId: post_v1_ads_campaigns
+      requestBody:
+        content:
+          application/json:
+            example:
+              budget: 50000
+              name: Spring Launch
+              objective: conversions
+              platform: meta
+            schema:
+              $ref: '#/components/schemas/campaignInput'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdCampaign'
+          description: created
+      summary: createCampaign registers a new ad campaign for the caller's org and
+        answers 201 with the stored row.
       tags:
       - ads
   /v1/ads/campaigns/{id}:
     delete:
-      operationId: delete_v1_ads_campaigns_by_id
+      description: |-
+        deleteCampaign removes one of the caller org's campaigns and answers 204 with
+        no body. It deletes the stored record only: a campaign already launched keeps
+        running on the ad network, which must be stopped there. An id another org owns
+        reads as not found.
+      operationId: delete_v1_ads_campaigns_id
       parameters:
-      - in: path
+      - example: camp_2f9c1d
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: deleteCampaign removes one of the caller org's campaigns and answers
+        204 with no body.
       tags:
       - ads
     get:
-      operationId: get_v1_ads_campaigns_by_id
+      description: |-
+        getCampaign returns one of the caller org's campaigns. An id another org owns
+        reads as not found, so the response cannot confirm that it exists.
+      operationId: get_v1_ads_campaigns_id
       parameters:
-      - in: path
+      - example: camp_2f9c1d
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdCampaign'
+          description: ok
+      summary: getCampaign returns one of the caller org's campaigns.
       tags:
       - ads
     put:
-      operationId: put_v1_ads_campaigns_by_id
+      description: |-
+        updateCampaign replaces the user-owned fields of one of the caller org's
+        campaigns and answers the stored row. It is a full replace, not a patch: every
+        field is written from the request, so an omitted one is cleared. externalId is
+        launch-owned and is never touched here, so editing a campaign cannot break its
+        link to a live provider execution.
+      operationId: put_v1_ads_campaigns_id
       parameters:
-      - in: path
+      - example: camp_2f9c1d
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              budget: 75000
+              id: camp_2f9c1d
+              name: Spring Launch
+              platform: meta
+              status: paused
+            schema:
+              $ref: '#/components/schemas/updateCampaignIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdCampaign'
+          description: ok
+      summary: updateCampaign replaces the user-owned fields of one of the caller
+        org's campaigns and answers the stored row.
       tags:
       - ads
   /v1/ads/campaigns/{id}/launch:
@@ -22207,7 +23150,22 @@ paths:
       - ads
   /v1/ads/summary:
     get:
+      description: |-
+        summary rolls the caller org's ad campaigns up into four numbers: how many
+        campaigns exist, how many are active, and the summed budget and spend across
+        all of them. Budget and spend are MINOR units (cents), the same units the
+        campaign rows carry. It counts only this org's campaigns.
       operationId: get_v1_ads_summary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/adSummary'
+          description: ok
+      summary: 'summary rolls the caller org''s ad campaigns up into four numbers:
+        how many campaigns exist, how many are active, and the summed budget and spend
+        across all of them.'
       tags:
       - ads
   /v1/affiliates:
@@ -26272,7 +27230,26 @@ paths:
       - catalog
   /v1/channels:
     get:
+      description: |-
+        list returns every chat transport channels can talk to — Discord, Slack, Teams
+        and Telegram — with the caller org's own facts on each: whether it is
+        connected and to which account, what the transport supports, the org's DM and
+        group access policies, and how many pairing requests are pending approval. The
+        order is fixed, so a console can render the same rows every time. A policy that
+        cannot be read leaves that channel's policy fields empty rather than failing
+        the whole listing.
       operationId: get_v1_channels
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/chatChannels'
+          description: ok
+      summary: 'list returns every chat transport channels can talk to — Discord,
+        Slack, Teams and Telegram — with the caller org''s own facts on each: whether
+        it is connected and to which account, what the transport supports, the org''s
+        DM and group access policies, and how many pairing requests are pending approval.'
       tags:
       - channels
   /v1/channels/{channel}/send:
@@ -26288,26 +27265,158 @@ paths:
       - channels
   /v1/channels/allowlist:
     get:
+      description: |-
+        allowlistGet returns the caller org's access policy for one channel: whether
+        DMs are pairing-gated, allowlisted or open, whether group rooms are open,
+        allowlisted or disabled, the config-managed DM and group allow entries, the
+        senders approved through PAIRING (read-only here), and the org's named access
+        groups. An unknown channel is a 404.
       operationId: get_v1_channels_allowlist
+      parameters:
+      - description: |-
+          Channel is the transport to read: discord, slack, teams or telegram.
+          Required; an unknown value is a 404.
+        example: slack
+        in: query
+        name: channel
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/allowlistView'
+          description: ok
+      summary: 'allowlistGet returns the caller org''s access policy for one channel:
+        whether DMs are pairing-gated, allowlisted or open, whether group rooms are
+        open, allowlisted or disabled, the config-managed DM and group allow entries,
+        the senders approved through PAIRING (read-only here), and the org''s named
+        access groups.'
       tags:
       - channels
     put:
+      description: |-
+        allowlistPut edits the caller org's access policy for one channel and answers
+        the policy as GET would, so both verbs return ONE shape. It requires ORG ADMIN.
+        Every field but `channel` is optional and applied only when provided: an empty
+        policy string leaves that policy alone, an absent or null list leaves that list
+        alone, and an EMPTY list clears it. It writes only CONFIG-sourced allow entries
+        — senders approved through pairing belong to the approval flow, so a policy
+        edit can never revoke one. An unknown channel is a 404.
       operationId: put_v1_channels_allowlist
+      requestBody:
+        content:
+          application/json:
+            example:
+              channel: slack
+              dm:
+              - U024BE7LH
+              dmPolicy: allowlist
+            schema:
+              $ref: '#/components/schemas/allowlistPutIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/allowlistView'
+          description: ok
+      summary: allowlistPut edits the caller org's access policy for one channel and
+        answers the policy as GET would, so both verbs return ONE shape.
       tags:
       - channels
   /v1/channels/inbox:
     get:
+      description: |-
+        inbox returns the messages people have sent to the caller org's connected chat
+        bots, oldest first, in the portable envelope shape every transport normalises
+        into. It is a CURSOR feed, not a search: pass the returned cursor back as
+        `since` to get only what has arrived since. Only this org's messages are
+        stored under this org, so the feed can never carry another tenant's chat.
       operationId: get_v1_channels_inbox
+      parameters:
+      - description: |-
+          Since is the exclusive cursor: only messages with a higher row id come
+          back. Empty starts at the beginning. Must parse as an integer.
+        example: "1042"
+        in: query
+        name: since
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit caps how many messages come back. Empty or 0 uses the store's
+          default page size. Must parse as an integer.
+        example: "100"
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inboxPage'
+          description: ok
+      summary: inbox returns the messages people have sent to the caller org's connected
+        chat bots, oldest first, in the portable envelope shape every transport normalises
+        into.
       tags:
       - channels
   /v1/channels/pairing:
     get:
+      description: |-
+        pairingList returns the pairing requests waiting for the caller org to approve
+        — one per person who messaged a connected bot on a channel whose DM policy is
+        "pairing" and who is not allowed yet. Each row carries the CODE an org admin
+        passes to POST /v1/channels/pairing/approve. Expired requests are not
+        returned. Codes are capability strings: they are shown here, and never logged.
       operationId: get_v1_channels_pairing
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pairingQueue'
+          description: ok
+      summary: pairingList returns the pairing requests waiting for the caller org
+        to approve — one per person who messaged a connected bot on a channel whose
+        DM policy is "pairing" and who is not allowed yet.
       tags:
       - channels
   /v1/channels/pairing/approve:
     post:
+      description: |-
+        pairingApprove turns one pending pairing code into a standing allow entry, so
+        that person can DM the org's bot on that channel from now on. It requires ORG
+        ADMIN, not merely membership. The first approval an org makes on a channel also
+        bootstraps that sender as the channel's owner, which the answer reports. An
+        unknown or expired code is a 404, and a code always belongs to exactly one
+        org, so it can never approve someone into another tenant.
       operationId: post_v1_channels_pairing_approve
+      requestBody:
+        content:
+          application/json:
+            example:
+              channel: telegram
+              code: PAIR-7Q2M
+            schema:
+              $ref: '#/components/schemas/approvePairingIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/pairingApproved'
+          description: ok
+      summary: pairingApprove turns one pending pairing code into a standing allow
+        entry, so that person can DM the org's bot on that channel from now on.
       tags:
       - channels
   /v1/cloud:
@@ -27597,36 +28706,262 @@ paths:
       - clusters
   /v1/code/ask:
     get:
+      description: |-
+        askGet answers a question about the caller org's code with a CITED answer:
+        retrieval packs grounding context, then the synthesizer writes the answer over
+        exactly those spans, which come back alongside it. It never answers without
+        grounding — with no matched code the answer is empty and says so, and with no
+        synthesizer available the citations still come back with "degraded": true so
+        the caller can reason over the spans itself.
       operationId: get_v1_code_ask
+      parameters:
+      - description: Q is the question to answer. Required, max 4000 bytes.
+        example: where is the per-org SQLite file opened
+        in: query
+        name: q
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Repo narrows retrieval to one repository. Empty searches every repo the org
+          has indexed.
+        example: cloud
+        in: query
+        name: repo
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AskAnswer'
+          description: ok
+      summary: 'askGet answers a question about the caller org''s code with a CITED
+        answer: retrieval packs grounding context, then the synthesizer writes the
+        answer over exactly those spans, which come back alongside it.'
       tags:
       - code
     post:
+      description: |-
+        askPost is askGet with the question in the request BODY, for a question too
+        long or too awkward to put in a URL. `query` and `repo` in the body take
+        precedence over `?q=` and `?repo=`; either source works alone.
       operationId: post_v1_code_ask
+      requestBody:
+        content:
+          application/json:
+            example:
+              query: where is the per-org SQLite file opened
+              repo: cloud
+            schema:
+              $ref: '#/components/schemas/askPostIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AskAnswer'
+          description: ok
+      summary: askPost is askGet with the question in the request BODY, for a question
+        too long or too awkward to put in a URL.
       tags:
       - code
   /v1/code/context:
     post:
+      description: |-
+        context packs the most relevant code for a query into a token budget — THE
+        primitive for a coding agent that has to decide what to put in a prompt. It
+        retrieves seed spans, expands each with the definitions it calls and its key
+        callers, then greedily fills the budget, so the answer is a coherent slice of
+        the codebase rather than a list of disconnected matches. The top match is
+        always included, truncated if it alone overflows, so a matched query never
+        comes back empty. A retrieval outage answers 200 with an empty bundle rather
+        than a 5xx.
       operationId: post_v1_code_context
+      requestBody:
+        content:
+          application/json:
+            example:
+              budgetTokens: 4000
+              query: how does the store open a per-org database
+              repo: cloud
+            schema:
+              $ref: '#/components/schemas/contextIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContextBundle'
+          description: ok
+      summary: context packs the most relevant code for a query into a token budget
+        — THE primitive for a coding agent that has to decide what to put in a prompt.
       tags:
       - code
   /v1/code/file:
     get:
+      description: |-
+        file returns the INDEXED content of one file — read_file over the chunks the
+        search tiers hold, for pulling up code an agent just found. It is NOT
+        byte-verbatim: the git object plane is the source of record for exact bytes,
+        history and blame. A file absent from the index is a 404, so an agent can tell
+        "not indexed" from "empty file".
       operationId: get_v1_code_file
+      parameters:
+      - description: Path is the file's repo-relative path. Required.
+        example: apps/code/store.go
+        in: query
+        name: path
+        required: false
+        schema:
+          type: string
+      - description: Repo is the repository the file belongs to. REQUIRED.
+        example: cloud
+        in: query
+        name: repo
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/fileContent'
+          description: ok
+      summary: file returns the INDEXED content of one file — read_file over the chunks
+        the search tiers hold, for pulling up code an agent just found.
       tags:
       - code
   /v1/code/index:
     post:
+      description: |-
+        index (re)indexes a repository for the caller's org, incrementally: files whose
+        content hash is unchanged are skipped, so re-sending a whole tree is cheap.
+        Each file is parsed for symbols, split at AST boundaries and — when the
+        semantic tier is available — embedded, which is what makes it searchable across
+        all three retrieval tiers. Pass `prune` to also DELETE indexed files absent
+        from the request, which turns the call into a full sync; without it the call is
+        an upsert. The index is written to the caller org's own physically separate
+        database.
       operationId: post_v1_code_index
+      requestBody:
+        content:
+          application/json:
+            example:
+              files:
+              - content: |
+                  package main
+                path: main.go
+              prune: true
+              repo: cloud
+            schema:
+              $ref: '#/components/schemas/indexIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexResult'
+          description: ok
+      summary: 'index (re)indexes a repository for the caller''s org, incrementally:
+        files whose content hash is unchanged are skipped, so re-sending a whole tree
+        is cheap.'
       tags:
       - code
   /v1/code/search:
     get:
+      description: |-
+        search finds code in the caller org's index across three orthogonal retrieval
+        tiers fused by reciprocal-rank fusion: lexical (FTS5 trigram over
+        code-tokenized text), symbolic (real definition and reference edges), and
+        semantic (embedding cosine over AST-boundary chunks). Pick one tier with
+        `type`, or leave it to run all three as hybrid, which is what a coding agent
+        usually wants. It is FAIL-HONEST: a retrieval outage answers 200 with an empty
+        result set and "degraded": true rather than a 5xx, so an agent degrades instead
+        of stalling. A malformed regex is a 400.
       operationId: get_v1_code_search
+      parameters:
+      - description: |-
+          Q is the search query. Required, max 4000 bytes. For type=regex it is a
+          regular expression; for type=symbol it is a symbol name.
+        example: func openStore
+        in: query
+        name: q
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Type selects the retrieval tier: "text" (FTS5 trigram), "regex",
+          "symbol" (definitions), "semantic" (embeddings) or "hybrid". Anything
+          else — including empty — reads as hybrid.
+        example: hybrid
+        in: query
+        name: type
+        required: false
+        schema:
+          type: string
+      - description: Repo narrows to one repository. Empty searches every repo the
+          org has indexed.
+        example: cloud
+        in: query
+        name: repo
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit caps how many spans come back: default 20, maximum 100. A value that
+          is not a positive integer reads as the default.
+        example: 20
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchResults'
+          description: ok
+      summary: 'search finds code in the caller org''s index across three orthogonal
+        retrieval tiers fused by reciprocal-rank fusion: lexical (FTS5 trigram over
+        code-tokenized text), symbolic (real definition and reference edges), and
+        semantic (embedding cosine over AST-boundary chunks).'
       tags:
       - code
   /v1/code/tree:
     get:
+      description: |-
+        tree returns one repository's file structure with a per-file symbol count —
+        get_repo_structure over the org's own index, with no git checkout involved. A
+        repository that has not been indexed answers an empty tree rather than an
+        error, so an agent can tell "nothing here" without handling a failure.
       operationId: get_v1_code_tree
+      parameters:
+      - description: Repo is the repository to walk. REQUIRED — a tree is repo-scoped.
+        example: cloud
+        in: query
+        name: repo
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/repoTree'
+          description: ok
+      summary: tree returns one repository's file structure with a per-file symbol
+        count — get_repo_structure over the org's own index, with no git checkout
+        involved.
       tags:
       - code
   /v1/collections:
@@ -45676,137 +47011,498 @@ paths:
       - vpcs
   /v1/wallets:
     get:
+      description: |-
+        listWallets returns the caller org's wallets, newest first, optionally NARROWED
+        within the org by project, agent or account. The org is always the bound
+        isolation boundary — the filters only ever narrow inside it, so a caller can
+        never widen past its own org.
       operationId: get_v1_wallets
+      parameters:
+      - description: Project narrows to wallets scoped to one project. Must be a url-safe
+          segment.
+        in: query
+        name: project
+        required: false
+        schema:
+          type: string
+      - description: Agent narrows to wallets scoped to one agent. Must be a url-safe
+          segment.
+        in: query
+        name: agent
+        required: false
+        schema:
+          type: string
+      - description: Account narrows to wallets under one account id. Must be a url-safe
+          segment.
+        example: acct_9f8c1d
+        in: query
+        name: account
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/walletList'
+          description: ok
+      summary: listWallets returns the caller org's wallets, newest first, optionally
+        NARROWED within the org by project, agent or account.
       tags:
       - wallets
     post:
+      description: |-
+        createWallet provisions a new signing identity under one of the caller org's
+        accounts and answers the stored wallet including its on-chain address. The
+        custody backend generates the key material — a KMS-sealed secp256k1 key, an
+        MPC threshold key on the ring, or a Safe smart wallet owned by one — and the
+        HANDLE to it is kept server-side and never returned. A custody kind the
+        deployment has not wired fails CLOSED with 503: a signature is never
+        fabricated. The wallet is scoped to the org, the caller's ambient project, and
+        optionally an agent and the named account; those narrowings are what its key
+        ref is derived from, so each must be a url-safe segment.
       operationId: post_v1_wallets
+      requestBody:
+        content:
+          application/json:
+            example:
+              accountId: acct_9f8c1d
+              chain: eip155:36963
+              custody: kms
+              name: ops hot wallet
+              tier: hot
+            schema:
+              $ref: '#/components/schemas/createWalletIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wallet'
+          description: ok
+      summary: createWallet provisions a new signing identity under one of the caller
+        org's accounts and answers the stored wallet including its on-chain address.
       tags:
       - wallets
   /v1/wallets/{id}:
     get:
-      operationId: get_v1_wallets_by_id
+      description: |-
+        getWallet returns one of the caller org's wallets: its scope, custody kind,
+        tier, chain and on-chain address. The custody handle to the signing material is
+        never part of the answer. A wallet id another org owns reads as not found, so
+        the response cannot confirm that it exists.
+      operationId: get_v1_wallets_id
       parameters:
-      - in: path
+      - example: wal_4b1e77
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wallet'
+          description: ok
+      summary: 'getWallet returns one of the caller org''s wallets: its scope, custody
+        kind, tier, chain and on-chain address.'
       tags:
       - wallets
   /v1/wallets/{id}/keys:
     post:
-      operationId: post_v1_wallets_by_id_keys
+      description: |-
+        rotateKeys rolls one wallet's signing material through its own custody backend
+        and answers the wallet with whatever address that produced. For KMS custody a
+        fresh secp256k1 key is generated and sealed, which CHANGES the address — funds
+        and approvals at the old address do not move. For a Safe the address is
+        counterfactual and the owner shares are ring-managed, so rotation is a no-op
+        and the address is unchanged. A backend that is not configured fails closed
+        with 503 rather than leaving the wallet half-rotated.
+      operationId: post_v1_wallets_id_keys
       parameters:
-      - in: path
+      - example: wal_4b1e77
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wallet'
+          description: ok
+      summary: rotateKeys rolls one wallet's signing material through its own custody
+        backend and answers the wallet with whatever address that produced.
       tags:
       - wallets
   /v1/wallets/{id}/safe-tx:
     post:
-      operationId: post_v1_wallets_by_id_safe-tx
+      description: |-
+        proposeSafeTx composes a Safe transaction on the MPC ring and answers its
+        EIP-712 hash together with the owner approval the ring's threshold signature
+        produced. Only a wallet whose custody is "safe" can do this — any other custody
+        is a 400, because the backend itself is asked whether it can propose rather
+        than the kind being switched on. The ring computes the Safe-tx hash bound to
+        the Safe contract and the chain id, so the hash a caller gets back is the one
+        the Safe will verify. This PROPOSES: it does not execute the transaction.
+      operationId: post_v1_wallets_id_safe-tx
       parameters:
-      - in: path
+      - example: wal_4b1e77
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              chainId: 36963
+              data: 0x
+              id: wal_4b1e77
+              nonce: 7
+              to: 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984
+              value: "0"
+            schema:
+              $ref: '#/components/schemas/safeTxIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/safeProposal'
+          description: ok
+      summary: proposeSafeTx composes a Safe transaction on the MPC ring and answers
+        its EIP-712 hash together with the owner approval the ring's threshold signature
+        produced.
       tags:
       - wallets
   /v1/wallets/{id}/sign:
     post:
-      operationId: post_v1_wallets_by_id_sign
+      description: |-
+        sign produces a secp256k1 signature from one of the caller org's wallets over
+        a 32-byte digest, through whichever custody backend that wallet uses. Give it
+        either a `digest` (32 bytes as hex, signed verbatim) or a `message` (hashed
+        with Keccak256 first) — exactly one is required. The private key never leaves
+        its backend: KMS custody opens the sealed key in-process, MPC custody produces
+        a threshold signature on the ring. The answer carries the digest that was
+        signed alongside the signature, so a caller can verify what it got.
+      operationId: post_v1_wallets_id_sign
       parameters:
-      - in: path
+      - example: wal_4b1e77
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              id: wal_4b1e77
+              message: approve withdrawal 42
+            schema:
+              $ref: '#/components/schemas/signIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/signature'
+          description: ok
+      summary: sign produces a secp256k1 signature from one of the caller org's wallets
+        over a 32-byte digest, through whichever custody backend that wallet uses.
       tags:
       - wallets
   /v1/wallets/accounts:
     get:
+      description: |-
+        listAccounts returns the caller org's wallet accounts, newest first. Accounts
+        are physically org-scoped, so another tenant's are not reachable from here.
       operationId: get_v1_wallets_accounts
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/accountList'
+          description: ok
+      summary: listAccounts returns the caller org's wallet accounts, newest first.
       tags:
       - wallets
     post:
+      description: |-
+        createAccount opens a named wallet account for the caller's org. An account is
+        a GROUPING of wallets, not a key or a balance: wallets are created under one
+        and can be listed by it. The org is stamped by the server from the validated
+        principal, so a request can never open an account in another tenant.
       operationId: post_v1_wallets_accounts
+      requestBody:
+        content:
+          application/json:
+            example:
+              name: treasury
+            schema:
+              $ref: '#/components/schemas/createAccountIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletAccount'
+          description: ok
+      summary: createAccount opens a named wallet account for the caller's org.
       tags:
       - wallets
-  /v1/webhooks/:
+  /v1/webhooks:
     get:
+      description: |-
+        listEndpoints returns every webhook endpoint the caller's org has registered,
+        newest first, each with its 7-day delivery and failure counts. Signing secrets
+        are redacted here — a secret leaves the server only on create and on rotate.
+        The listing is physically org-scoped, so another tenant's endpoints are not
+        reachable from this route at all.
       operationId: get_v1_webhooks
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/endpointList'
+          description: ok
+      summary: listEndpoints returns every webhook endpoint the caller's org has registered,
+        newest first, each with its 7-day delivery and failure counts.
       tags:
       - webhooks
     post:
+      description: |-
+        createEndpoint registers a new webhook subscription for the caller's org and
+        answers 201 with the endpoint INCLUDING its freshly minted signing secret.
+        This is one of only two responses that ever carry that secret (the other is
+        rotate) — store it now, because no later read returns it. The org is stamped by
+        the server from the validated principal, so a body can never register an
+        endpoint in another tenant.
       operationId: post_v1_webhooks
+      requestBody:
+        content:
+          application/json:
+            example:
+              description: order pipeline
+              events:
+              - commerce.order.>
+              url: https://acme.example/hooks/hanzo
+            schema:
+              $ref: '#/components/schemas/createEndpointIn'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Endpoint'
+          description: created
+      summary: createEndpoint registers a new webhook subscription for the caller's
+        org and answers 201 with the endpoint INCLUDING its freshly minted signing
+        secret.
       tags:
       - webhooks
   /v1/webhooks/{id}:
     delete:
-      operationId: delete_v1_webhooks_by_id
+      description: |-
+        deleteEndpoint removes one of the caller org's webhook endpoints and answers
+        204 with no body. Delivery stops immediately and the endpoint's signing secret
+        is gone with it; its recorded delivery history goes too. An id another org owns
+        reads as not found.
+      operationId: delete_v1_webhooks_id
       parameters:
-      - in: path
+      - example: wh_9f8c1d2e
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: deleteEndpoint removes one of the caller org's webhook endpoints and
+        answers 204 with no body.
       tags:
       - webhooks
     get:
-      operationId: get_v1_webhooks_by_id
+      description: |-
+        getEndpoint returns one of the caller org's webhook endpoints with its 7-day
+        delivery and failure counts, signing secret redacted. An id another org owns
+        reads as not found, so the response cannot confirm that it exists.
+      operationId: get_v1_webhooks_id
       parameters:
-      - in: path
+      - example: wh_9f8c1d2e
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Endpoint'
+          description: ok
+      summary: getEndpoint returns one of the caller org's webhook endpoints with
+        its 7-day delivery and failure counts, signing secret redacted.
       tags:
       - webhooks
     put:
-      operationId: put_v1_webhooks_by_id
+      description: |-
+        updateEndpoint replaces the editable fields of one of the caller org's
+        endpoints — url, events, status and description — and answers the stored row
+        with its secret redacted. It is a full replace, not a patch: an omitted field
+        is written as its empty value, and an omitted or empty events list resubscribes
+        the endpoint to EVERY event. The signing secret and the creation time are
+        immutable here; rotate the secret with POST /v1/webhooks/{id}/rotate-secret.
+      operationId: put_v1_webhooks_id
       parameters:
-      - in: path
+      - example: wh_9f8c1d2e
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              events:
+              - commerce.order.paid
+              id: wh_9f8c1d2e
+              status: disabled
+              url: https://acme.example/hooks/v2
+            schema:
+              $ref: '#/components/schemas/updateEndpointIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Endpoint'
+          description: ok
+      summary: updateEndpoint replaces the editable fields of one of the caller org's
+        endpoints — url, events, status and description — and answers the stored row
+        with its secret redacted.
       tags:
       - webhooks
   /v1/webhooks/{id}/deliveries:
     get:
-      operationId: get_v1_webhooks_by_id_deliveries
+      description: |-
+        listDeliveries returns one endpoint's per-attempt delivery log, newest first —
+        the record of what was sent, what the subscriber answered, and how long it
+        took. One event that retried three times appears as three rows sharing a
+        delivery id. It is org-scoped exactly like every other route here: the endpoint
+        lookup only ever finds THIS org's endpoint, so another org's id is a 404 and
+        never a window onto its logs.
+      operationId: get_v1_webhooks_id_deliveries
       parameters:
-      - in: path
+      - example: wh_9f8c1d2e
+        in: path
         name: id
         required: true
         schema:
           type: string
+      - description: |-
+          Limit caps how many attempts come back: default 50, maximum 200. A value
+          that is not a positive integer reads as the default.
+        example: 100
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      - description: |-
+          Status narrows the log to one outcome: "ok", "retrying" or "failed".
+          Empty returns every attempt.
+        example: failed
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/deliveryList'
+          description: ok
+      summary: listDeliveries returns one endpoint's per-attempt delivery log, newest
+        first — the record of what was sent, what the subscriber answered, and how
+        long it took.
       tags:
       - webhooks
   /v1/webhooks/{id}/rotate-secret:
     post:
-      operationId: post_v1_webhooks_by_id_rotate-secret
+      description: |-
+        rotateSecret mints a NEW HMAC signing secret for the endpoint and answers the
+        endpoint WITH it — the only other response besides create that ever carries a
+        secret. The old secret stops working the instant this returns: every subsequent
+        delivery signs with the new one, with no overlap window. Call it when the
+        subscriber is ready to swap the value on its side, not before.
+      operationId: post_v1_webhooks_id_rotate-secret
       parameters:
-      - in: path
+      - example: wh_9f8c1d2e
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Endpoint'
+          description: ok
+      summary: rotateSecret mints a NEW HMAC signing secret for the endpoint and answers
+        the endpoint WITH it — the only other response besides create that ever carries
+        a secret.
       tags:
       - webhooks
   /v1/webhooks/{id}/test:
     post:
-      operationId: post_v1_webhooks_by_id_test
+      description: |-
+        testEndpoint sends ONE signed test event to the endpoint right now and answers
+        the outcome inline, so the console can show whether the subscriber is reachable
+        without waiting for real traffic. It takes the same attempt path the bus
+        dispatcher takes — one attempt, 10s timeout, no retry ladder — and records the
+        result in the endpoint's delivery log. It works on a DISABLED endpoint too:
+        validating one you have paused is the whole point.
+      operationId: post_v1_webhooks_id_test
       parameters:
-      - in: path
+      - example: wh_9f8c1d2e
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/testResult'
+          description: ok
+      summary: testEndpoint sends ONE signed test event to the endpoint right now
+        and answers the outcome inline, so the console can show whether the subscriber
+        is reachable without waiting for real traffic.
       tags:
       - webhooks
   /v1/websearch/search:
