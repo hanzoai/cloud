@@ -266,3 +266,81 @@ func TestPublicDataSameAcrossOrgsButAuthRequired(t *testing.T) {
 		}
 	}
 }
+
+// TestCallerAuthorizationIsForwarded pins the ONE request fact these two typed ops
+// still reach for. Chain data is a public ledger, but the upstream may itself be
+// gated, so with no CHAIN_DATA_TOKEN configured the caller's own Authorization is
+// passed through (client.go's authorize, fed by graph.go's forwarded). A typed op
+// receives only a context, so that header crosses on cloud.Bridge — and if it ever
+// stops crossing, the read still answers 200 and the upstream silently sees an
+// anonymous caller. Nothing but this test would notice.
+func TestCallerAuthorizationIsForwarded(t *testing.T) {
+	var gotIndexer, gotGraph string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		gotIndexer = r.Header.Get("Authorization")
+		writeJSON(w, map[string]any{"healthy": true, "chain_name": "Lux C-Chain"})
+	})
+	mux.HandleFunc("/v1/explorer/blocks", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"items": []map[string]any{}})
+	})
+	mux.HandleFunc("/v1/explorer/graphql", func(w http.ResponseWriter, r *http.Request) {
+		gotGraph = r.Header.Get("Authorization")
+		writeJSON(w, map[string]any{"data": map[string]any{"priceFeeds": []map[string]any{}}})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	app := mountApp(t, srv.URL)
+	for _, path := range []string{"/v1/indexers", "/v1/oracles"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("X-Org-Id", "acme")
+		req.Header.Set("X-User-Id", "u-acme")
+		req.Header.Set("Authorization", "Bearer caller-token")
+		resp, err := app.Fiber().Test(req)
+		if err != nil {
+			t.Fatalf("Test %s: %v", path, err)
+		}
+		_ = resp.Body.Close()
+	}
+	if gotIndexer != "Bearer caller-token" {
+		t.Errorf("indexer saw Authorization %q, want the caller's own — a typed op that "+
+			"cannot reach the request drops the caller's identity on the far side of the hop", gotIndexer)
+	}
+	if gotGraph != "Bearer caller-token" {
+		t.Errorf("graph saw Authorization %q, want the caller's own", gotGraph)
+	}
+}
+
+// TestServiceTokenWinsOverCallerAuthorization pins the other half of the one-rule
+// model: a configured CHAIN_DATA_TOKEN replaces the caller's Authorization rather
+// than sitting beside it, so an upstream never sees two identities for one read.
+func TestServiceTokenWinsOverCallerAuthorization(t *testing.T) {
+	var got string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("Authorization")
+		writeJSON(w, map[string]any{"healthy": true})
+	})
+	mux.HandleFunc("/v1/explorer/blocks", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"items": []map[string]any{}})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	app := mountApp(t, srv.URL)
+	t.Setenv("CHAIN_DATA_TOKEN", "svc-token")
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/indexers", nil)
+	req.Header.Set("X-Org-Id", "acme")
+	req.Header.Set("X-User-Id", "u-acme")
+	req.Header.Set("Authorization", "Bearer caller-token")
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("Test: %v", err)
+	}
+	_ = resp.Body.Close()
+	if got != "Bearer svc-token" {
+		t.Errorf("indexer saw Authorization %q, want the service token", got)
+	}
+}

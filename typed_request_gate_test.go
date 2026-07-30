@@ -187,6 +187,26 @@ var allowedRequestUses = map[string]string{
 		"beside admin-ness. TWO functions in ONE file, delegating to the same resolveScope every raw handler " +
 		"beside them uses; both fail closed off the HTTP path, where there is no attested caller and therefore " +
 		"no scope.",
+	"apps/graph/graph.go": "forwarded — the chain-data reads PROXY to the deployment's indexer and " +
+		"graph, and where no service token is configured they pass the CALLER's own Authorization " +
+		"through (client.go's authorize). That credential is the caller's, not an addressing value, so " +
+		"it must not become an In field a caller could also put in a body — and principal.OrgFrom " +
+		"carries the org and nothing else. The org gate itself is principal.OrgFrom (gate, right beside " +
+		"it), never the request. Empty off the HTTP path, where there is no request and so no identity " +
+		"to forward — the upstream read then goes out unauthenticated, which is what a public ledger " +
+		"read already is.",
+	"apps/prefs/prefs.go": "subjectFrom — the preference OWNER, and it is not the org. The isolation " +
+		"key is the canonical `<owner>/<name>` identity, so it needs the validated USER claim " +
+		"(X-User-Id) and validated-ness itself alongside the org; principal.OrgFrom carries only the " +
+		"owner half, and keying on that alone would hand every member of an org the same document. ONE " +
+		"function, delegating to the same subject() the untyped PATCH beside it uses; fails closed off " +
+		"the HTTP path, where there is no principal and therefore no `own` document to serve.",
+	"apps/admission/waitlist.go": "requestHost — the ?host= default. This route resolves ONE host to " +
+		"its waitlist mode, and when the query is omitted the host it has always answered for is the " +
+		"one the REQUEST was addressed to (the Host header). That is a property of the request and of " +
+		"nothing else — it is not identity, and modeling it as a second In field would let a caller set " +
+		"the fallback, which is the one thing a fallback must not be. Empty off the HTTP path, which " +
+		"resolves to known=false: the same fail-open answer an unregistered host gets.",
 	"apps/destinations/destinations.go": "orgAdmin — the gate every destination MUTATION keeps " +
 		"(disconnect and test both forget or spend a credential). It reads org-admin-ness, which is " +
 		"X-User-IsOrgAdmin, a claim principal.OrgFrom does not carry. The tenant itself is read with " +
