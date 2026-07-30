@@ -92,9 +92,9 @@ func call(t *testing.T, app *zip.App, path, user, org string) (int, []byte) {
 	return resp.StatusCode, b
 }
 
-func decodeSummary(t *testing.T, b []byte) Summary {
+func decodeSummary(t *testing.T, b []byte) usageSummary {
 	t.Helper()
-	var s Summary
+	var s usageSummary
 	if err := json.Unmarshal(b, &s); err != nil {
 		t.Fatalf("decode summary: %v (%s)", err, b)
 	}
