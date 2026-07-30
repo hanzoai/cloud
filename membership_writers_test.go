@@ -7,7 +7,6 @@ import (
 	"github.com/hanzoai/cloud/internal/org"
 )
 
-
 // TestMembershipSourceStaticFallback: with no selector (dev / native-Go) the source IS
 // the static set — the exact wiring runs everywhere, no cluster required.
 func TestMembershipSourceStaticFallback(t *testing.T) {
