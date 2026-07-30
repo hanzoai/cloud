@@ -220,6 +220,23 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 		app.Post(d.path, cloud.Handle(s, d.ingest))
 	}
 
+	// The Sentry error wire, on the SAME door: POST /v1/event/{project}/envelope|store.
+	// The project segment is variable, so the door's owner carries the route and
+	// forwards to the obs plane's installed consumer (cloud.ObsErrorIngest — the
+	// o11y runtime, which authenticates the DSN key itself; no principal here by
+	// design). Resolved per-request: the o11y subsystem installs it during its own
+	// mount, order-independent of this one.
+	obsError := zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := cloud.ObsErrorIngest()
+		if h == nil {
+			http.Error(w, "error ingest not initialized", http.StatusServiceUnavailable)
+			return
+		}
+		h.ServeHTTP(w, r)
+	}))
+	app.Post("/v1/event/:project/envelope", obsError)
+	app.Post("/v1/event/:project/store", obsError)
+
 	// /v1/errors is the type:'error' read lens over the same rows — a validated
 	// principal, since a read never accepts the write-only publishable key. MINTING is
 	// a different concern and lives on the key resource, not here: POST /v1/keys with

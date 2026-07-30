@@ -1,6 +1,9 @@
 package cloud
 
-import "context"
+import (
+	"context"
+	"net/http"
+)
 
 // ObsEventIngestFunc is the observability plane's claim on the canonical event
 // door. POST /v1/event is ONE door for every event kind: the analytics app owns
@@ -21,3 +24,18 @@ func SetObsEventIngest(fn ObsEventIngestFunc) { obsEventIngest = fn }
 
 // ObsEventIngest returns the installed claim, or nil.
 func ObsEventIngest() ObsEventIngestFunc { return obsEventIngest }
+
+// obsErrorIngest is the Sentry-wire consumer behind the same door: the o11y
+// runtime handler that authenticates a DSN key and stores the envelope. The
+// door's owner (analytics) forwards POST /v1/event/{project}/envelope|store
+// here — the project segment is variable, so in the fleet router the door's
+// owner must carry the route; the consumer is installed, like the batch claim,
+// as a seam.
+var obsErrorIngest http.Handler
+
+// SetObsErrorIngest installs the Sentry-wire consumer. Called by the o11y
+// subsystem once its runtime handler exists.
+func SetObsErrorIngest(h http.Handler) { obsErrorIngest = h }
+
+// ObsErrorIngest returns the installed consumer, or nil.
+func ObsErrorIngest() http.Handler { return obsErrorIngest }

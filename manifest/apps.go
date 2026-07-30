@@ -34,13 +34,7 @@ var Apps = []App{
 	{Name: "account", Prefixes: []string{"/v1/commerce/topup/rails", "/v1/commerce/topup/wallet", "/v1/csrf", "/v1/embed-status", "/v1/iam/keys", "/v1/iam/onboard", "/v1/keys"}},
 	{Name: "iam", Prefixes: []string{"/login/oauth", "/v1/iam"}},
 	{Name: "base", Prefixes: []string{"/v1/base", "/v1/collections", "/v1/waitlist"}},
-	// /v1/event is ONE door with two owners by depth: analytics serves the root
-	// (POST /v1/event — every event kind: product events, the team SPA array, and
-	// LLM-obs batches the o11y plane claims in-process via cloud.ObsEventIngest —
-	// plus the sunsetting caller-owned /collect suffix); the o11y plane serves
-	// /v1/event/api, the Sentry wire (a DSN of …/v1/event/<project> expands to it).
-	// Deeper prefix wins, so neither app shadows the other.
-	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/sentry", "/v1/event/api"}, Eager: true},
+	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/sentry"}, Eager: true},
 	{Name: "authz", Prefixes: []string{"/v1/authz/check", "/v1/authz/health", "/v1/authz/policies", "/v1/authz/readyz"}},
 	// Commerce owns its published FAMILIES, never bare "/v1". As "/v1" this row was
 	// the fleet's route of last resort: every path no app named deeper — the whole
@@ -108,7 +102,7 @@ var Apps = []App{
 	// harmless while each app called its own routes(); it became the router when the
 	// mega-build died, so a missing prefix is now an outage. Bare "/v1/analytics" covers
 	// the batch door and the four read lenses; "/v1/event" covers the Team SPA's
-	// /v1/event/collect suffix. /v1/tracker is NOT here: apps/tracker owns that name.
+	// (product, team, LLM-obs, Sentry envelope). /v1/tracker is NOT here: apps/tracker owns that name.
 	{Name: "analytics", Prefixes: []string{"/v1/analytics", "/v1/errors", "/v1/event", "/v1/insights/e", "/v1/insights/events", "/v1/insights/health"}},
 	{Name: "git", Prefixes: []string{"/explore", "/git", "/v1/git"}},
 	{Name: "sync", Prefixes: []string{"/v1/sync"}},

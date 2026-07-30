@@ -8,7 +8,7 @@
 //	  - SuperAdmin VM proxy  /v1/o11y/vm/{query,query_range}   (vmproxy.go)
 //	  - flat builder query   /v1/o11y/{query,query_range}      (query.go)
 //	  - event ingest         POST /v1/event/ingestion          (event_ingest.go)
-//	  - Sentry-wire ingest   POST /v1/event/api/…              (eventToRuntimePath)
+//	  - Sentry-wire ingest   POST /v1/event/{project}/envelope|store (via cloud.ObsErrorIngest)
 //	RUNTIME handler the hanzoai/o11y wildcard (order 70) delegates to via
 //	  o11y.SetHandler — the in-process runtime (embed.go) or a reverse-proxy
 //	  fallback (this file).
@@ -239,42 +239,17 @@ func mountSentry(a cloud.Router) {
 	})))
 }
 
-// eventToRuntimePath maps a Sentry-wire ingest path on the ONE /v1/event door
-// to its runtime route: /v1/event/api/<project>/envelope|store(/) — the form a
-// real Sentry SDK produces from a DSN of …/v1/event/<project> (SDKs insert the
-// "api" segment) — onto the /v1/o11y/api ingest routes. ok=false for anything
-// else — the subtree carries ingest ONLY, so no READ API is reachable through
-// it and the principal gate's existing ingest exemption (isErrorIngestPath)
-// stays the only exemption on this path.
+// eventToRuntimePath maps the Sentry wire on the ONE /v1/event door to its
+// runtime route: POST /v1/event/<project>/envelope|store(/) onto the clean
+// /v1/sentry ingest routes. ok=false for anything else — the mapping carries
+// ingest ONLY, so no READ API is reachable through it.
 func eventToRuntimePath(method, path string) (string, bool) {
-	rest, found := strings.CutPrefix(path, "/v1/event/api/")
+	rest, found := strings.CutPrefix(path, "/v1/event/")
 	if !found {
 		return "", false
 	}
-	mapped := "/v1/o11y/api/" + rest
-	return mapped, isErrorIngestPath(method, mapped)
-}
-
-// mountEventFamily registers the /v1/event/api/* Sentry wire, rewritten onto
-// the runtime ingest routes and delegated to the SAME gated runtime handler
-// (the rewrite happens before the gate sees the path, so the existing ingest
-// exemption is the only exemption). Disjoint from analytics' exact /v1/event
-// and /v1/event/collect routes by construction.
-func mountEventFamily(a cloud.Router) {
-	a.All("/v1/event/api/*", zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mapped, ok := eventToRuntimePath(r.Method, r.URL.Path)
-		if !ok {
-			http.NotFound(w, r)
-			return
-		}
-		h := runtimeHandler
-		if h == nil {
-			http.Error(w, "o11y runtime not initialized", http.StatusServiceUnavailable)
-			return
-		}
-		r.URL.Path = mapped
-		h.ServeHTTP(w, r)
-	})))
+	mapped := "/v1/sentry/" + rest
+	return mapped, isSentryIngestPath(method, mapped)
 }
 
 // mountO11y is the ONE mount for the whole observability concept. It performs the
@@ -324,10 +299,27 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 	// to mount /v1/sentry as a second prefix or the request 404s before it ever
 	// reaches this process — see cloud.PluginSpec in apps.Wire().
 	mountSentry(a)
-	// /v1/event/api/… — the Sentry wire on the ONE /v1/event door. A DSN of
-	// https://<key>@api.hanzo.ai/v1/event/<project> works out of the box: Sentry
-	// SDKs expand it to …/v1/event/api/<project>/envelope/.
-	mountEventFamily(a)
+	// The Sentry wire on the ONE /v1/event door: POST /v1/event/{project}/envelope|store.
+	// The door's owner (analytics) carries the route — the project segment is
+	// variable, so no static prefix could route it here — and forwards through
+	// cloud.ObsErrorIngest to this handler, which rewrites onto the /v1/sentry
+	// runtime routes BEFORE the principal gate sees the path, so the existing
+	// ingest exemption stays the only exemption. No /api/ segment anywhere:
+	// /v1/ is the only prefix this platform speaks.
+	cloud.SetObsErrorIngest(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mapped, ok := eventToRuntimePath(r.Method, r.URL.Path)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		h := runtimeHandler
+		if h == nil {
+			http.Error(w, "o11y runtime not initialized", http.StatusServiceUnavailable)
+			return
+		}
+		r.URL.Path = mapped
+		h.ServeHTTP(w, r)
+	}))
 	// WRITE plane — opt-in, order-independent (no /v1/o11y/* Fiber route).
 	if err := mountIngest(deps); err != nil { // ZAP ingest collector (:4317)
 		return err
