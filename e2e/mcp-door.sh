@@ -71,9 +71,11 @@ tools = json.load(open(sys.argv[1]))["result"]["tools"]
 bare = [t["name"] for t in tools if not (t.get("description") or "").strip()]
 if bare:
     print("FAIL: tools listed with an EMPTY description:", ", ".join(bare[:10])); sys.exit(1)
-noschema = [t["name"] for t in tools if not t.get("inputSchema")]
+# ABSENT, not empty: `{}` is a real schema — it is what an op whose body is an
+# arbitrary document (a PostHog flag definition, say) honestly publishes.
+noschema = [t["name"] for t in tools if t.get("inputSchema") is None]
 if noschema:
-    print("FAIL: tools listed with no inputSchema:", ", ".join(noschema[:10])); sys.exit(1)
+    print("FAIL: tools listed with NO inputSchema at all:", ", ".join(noschema[:10])); sys.exit(1)
 print("every listed tool carries prose and a schema")
 PY
 
