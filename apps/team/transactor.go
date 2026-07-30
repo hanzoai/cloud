@@ -169,10 +169,24 @@ type statsUser struct {
 }
 
 // statsOut is the front's statistics shape ({metrics, statistics, admin}).
+//
+// Metrics is an ANONYMOUS EMPTY STRUCT because that is what the wire is —
+// `"metrics":{}` on every response, pinned byte-for-byte by
+// TestTypedStatisticsServesBothPaths. A `map[string]any` marshals to the same
+// `{}` and PROJECTS A FALSE SCHEMA: zip's schemaOf has no reflect.Interface
+// case, so the element type falls to the default and the document asserted
+// `additionalProperties: {"type": "object"}` — that every value here is a JSON
+// object — for a map that can never hold one, which an SDK generates as a
+// `Dict[str, Dict]` field carrying only `{}`. Empty-struct publishes the honest
+// shape instead, and ANONYMOUS keeps it out of the fleet's flat schema
+// namespace, since there is no value to name. (The class is zip-side and wider
+// than this field: openapi.yaml carries the same claim in 14 more places. The
+// one-line fix is a reflect.Interface case projecting the OPEN schema `true`.)
 type statsOut struct {
-	// Metrics is the upstream service's metrics block, which this server does
-	// not populate.
-	Metrics map[string]any `json:"metrics"`
+	// Metrics is the upstream transactor's metrics block. This server does not
+	// populate it, so it is always the empty object — the front reads the key,
+	// not its contents.
+	Metrics struct{} `json:"metrics"`
 	// Statistics carries the live sessions.
 	Statistics statsSessions `json:"statistics"`
 	// Admin is the upstream service's server-panel flag, always false here.
@@ -199,10 +213,9 @@ func (srv *transServer) statistics(ctx context.Context, in *statsIn) (*statsOut,
 	if t.Workspace != "" {
 		active[t.Workspace] = srv.hub.users(t.Workspace)
 	}
-	return &statsOut{
-		Metrics:    map[string]any{},
-		Statistics: statsSessions{ActiveSessions: active},
-	}, nil
+	// Metrics needs no initialiser: the zero value of an empty struct already
+	// marshals to the `{}` the front reads, so there is nothing to allocate.
+	return &statsOut{Statistics: statsSessions{ActiveSessions: active}}, nil
 }
 
 // session is one live transactor connection, scoped to a (workspace, account).

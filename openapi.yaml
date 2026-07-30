@@ -9085,11 +9085,11 @@ components:
             here.
           type: boolean
         metrics:
-          additionalProperties:
-            type: object
           description: |-
-            Metrics is the upstream service's metrics block, which this server does
-            not populate.
+            Metrics is the upstream transactor's metrics block. This server does not
+            populate it, so it is always the empty object — the front reads the key,
+            not its contents.
+          properties: {}
           type: object
         statistics:
           $ref: '#/components/schemas/statsSessions'
