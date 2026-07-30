@@ -1370,6 +1370,67 @@ here goes red and a stale reason goes red too. What it taught, beyond the counts
   for a bot MACHINE) and `translate.Entry` → `MemoryEntry` (six packages under
   `apps/` declare a type called `Entry`). Neither was published yet, so both were
   free; the weave is only the gate once one of them is.
+**The six-plugin pass (notify, product, referrals, validators, zero-trust,
+blueprint): 19 typed, 4 refused, out of 23 operations that published NOTHING.**
+All six subsets were at `described=0` — every operation carrying neither
+`description` nor `summary`, which is exactly the set that projects to no prose,
+no MCP tool, no CLI command and no typed SDK method. Now: notify 1/4, product
+4/4, referrals 4/4, validators 4/4, zero-trust 4/4, blueprint 2/3. Each package
+carries `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` +
+`TestEveryTypedOpIsDescribed` + `TestEveryPublishedFieldIsDescribed` in its own
+`typed_wire_test.go`, read off the LIVE router, so the two ledgers must sum to
+the served surface and a stale reason goes red too.
+
+The 4 refusals are ONE class, and it is the one zip cannot express: **two 200
+shapes at one address.** `POST /v1/notify/send{,/sms,/email}` return the bare
+`SendResponse` for a single recipient and `{items:[SendResponse]}` for several
+(apps/notify/notify.go handleSend); `GET /v1/blueprint/sbom` returns a bare
+`Estimate` for `?template=<id>` and `{data:[Estimate]}` for none
+(apps/blueprint/blueprint.go sbomRead). An op declares one Out, so either shape
+would publish the other as a lie — worse than publishing none, because every
+generated SDK binds it. `TestSendAnswersTwoShapes` MEASURES the notify pair
+rather than asserting it, so the day zip can declare a polymorphic response the
+conversion is a test away.
+
+Three things the pass had to invent, all reusable:
+
+- **A refusal moved ahead of the decode, without gating a sibling.** A typed op
+  runs AFTER `op.invoke` unmarshals the body, so an identity check moved into the
+  op answers 400 to an anonymous caller whose body is also malformed, where the
+  untyped handler answered 403. `zip.App.With(mw)` composes middleware *around*
+  the op and would fix it — but **zipdoc cannot resolve `With` as a router**
+  (`routerPrefix` only knows `*zip.App` and a `.Group("literal")`), so it fails
+  generation. The shape that works is a `g.Use(...)` on the subsystem's own group
+  carrying a METHOD-scoped gate (`requireOrgOnWrite`, apps/{referrals,validators}),
+  which leaves the sibling GETs — including the auto-registered `/health` — exactly
+  as they were. For an admin leaf whose PREFIX belongs to another app
+  (`/v1/admin/referrals` is affiliates'), the group is the exact leaf path and the
+  op is declared on the App with its whole path.
+- **`url:"-"` is not optional on a POST body field.** zip binds query OVER a
+  decoded body, so a body field that shares a name with nothing at all still gains
+  a higher-authority `?field=` twin the route never read. Every body-only field on
+  a converted POST here carries it, and `TestQueryCannotOutrankTheClaimBody` pins it.
+- **A query scalar is a STRING when the existing parse trims.** `strconv.Atoi(
+  strings.TrimSpace(v))` accepts `?limit=%2050`; zip's `setScalar` does not, so an
+  `int` field silently narrows what the route accepts. MEASURED: fiber
+  percent-decodes a QUERY value (and reads `+` as a space) but does NOT decode a
+  PATH segment, so the divergence is reachable on `?tokenId=` and unreachable on
+  `/{tokenId}`. Both stayed strings anyway — two parse rules for one value is how
+  they come to disagree (apps/validators `limitOf`/`parseTokenID`).
+
+Latent defects found and fixed: **three more instances of the apps/plan prefix
+defect** — `plugin/{product,zero-trust,referrals}/main.go` declared no
+`Prefixes`, so `MountPrefixes`'s `/v1/<Name>` default covered NOTHING product
+(`/v1/search-docs/*`, `/v1/vector/*`) or zero-trust (`/v1/networks`,
+`/v1/mesh/services`, `/v1/edge/nodes`) serves, and covered only half of
+referrals' (the two `/v1/admin/referrals/*` leaves were outside it); all three
+now pass `manifest.PrefixesFor(...)`. And **apps/zt had no `cloud.Bridge` at
+all** on any of its three prefixes — its own test harness mounts on a bare app
+with no `Serve`, so every typed op there would have seen no org and 403'd a valid
+request; `TestBridgeIsInstalledOnEveryPrefix` is the gate. Two response-side
+holes closed the way the analytics pass closed its: 26 referrals properties and
+12 zero-trust ones were about to reach openapi.yaml, every SDK and every MCP
+inputSchema bare.
 
 **The six-plugin pass (ai, destinations, dns, licensing, runtime, templates):
 9 typed, 29 refused, and the 29 are 4 registrations.** The work list came from the

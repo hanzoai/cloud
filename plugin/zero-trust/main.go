@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/zt"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the zero-trust app.
@@ -20,6 +21,15 @@ func main() {
 		Name:  "zero-trust",
 		Price: cloud.Free,
 		Mount: zt.Mount,
+		// This subsystem is named "zero-trust" and serves NEITHER "/v1/zero-trust"
+		// nor anything under it — its four routes are /v1/networks[/:id],
+		// /v1/mesh/services and /v1/edge/nodes. The /v1/<Name> convention
+		// MountPrefixes assumes therefore covered NOTHING it registers, so every
+		// request here was attributed to no subsystem and any middleware installed
+		// through the scoped Router landed on "/v1/zero-trust" and never ran. The
+		// apps/plan defect, one app over. The list comes from the manifest so it
+		// cannot drift from the prefixes the host routes here.
+		Prefixes: manifest.PrefixesFor("zero-trust"),
 	}}, []string{"zero-trust"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
