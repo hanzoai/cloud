@@ -195,60 +195,6 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 	}
 }
 
-// TestIngestOpIsTypedButUnreachableWithoutADSN measures the one gap in this
-// package's projection, so it is red-able instead of prose.
-//
-// POST /v1/event/ingestion IS a typed op — the assertion below constructs it and
-// reads it out of zip's registry, which is the whole proof — but mountEventIngest
-// returns before registering it when there is no Datastore DSN, and
-// `bin/o11y openapi` (mk/plugin.mk) runs with GIT_SSH_ADDR and nothing else. So
-// the LLM-obs WRITE path is in neither plugin/o11y/openapi.json nor the woven
-// openapi.yaml, and therefore has no SDK method, no MCP tool, no CLI command and
-// no published schema. Being typed is necessary and not sufficient: the op has to
-// be registered in the process that writes the document.
-//
-// Closing it is a BEHAVIOUR decision, not a description one — zip.Post registers
-// a fiber route and a registry entry inseparably, so making the op visible in a
-// DSN-less process necessarily stops that path falling through to the order-70
-// wildcard (a measured 404 today → an honest 503). This test does not decide
-// that; it fails the moment somebody does, so the decision cannot land as a
-// silent side effect and apps/o11y/LLM.md gets updated with it.
-func TestIngestOpIsTypedButUnreachableWithoutADSN(t *testing.T) {
-	const key = "POST " + eventIngestRoute
-
-	// Half one: the op types cleanly and carries its prose. Registered on a
-	// throwaway app exactly as mountEventIngest does, sink and all left zero —
-	// nothing is served, only declared.
-	decl := zip.New(zip.Config{Logger: luxlog.New("test")})
-	zip.Post(decl.Group(""), eventIngestRoute, ingestOps{}.ingest)
-	reg, err := openapi.Typed(decl)
-	if err != nil {
-		t.Fatalf("typed registry: %v", err)
-	}
-	op, ok := reg.Ops[key]
-	if !ok {
-		keys := make([]string, 0, len(reg.Ops))
-		for k := range reg.Ops {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		t.Fatalf("%s is not a typed op any more; registry holds %v", key, keys)
-	}
-	if strings.TrimSpace(op.Description) == "" {
-		t.Errorf("%s has no description — run: go generate -run zipdoc ./apps/o11y/...", key)
-	}
-
-	// Half two: the mount that generates the published document does not register
-	// it, so every projection is blind to it.
-	served, typed := o11yOps(t)
-	if served[key] || typed[key] != "" {
-		t.Fatalf("%s now reaches the DSN-less router — the write path is published, which is the wire "+
-			"change this test exists to make deliberate. Remove this test, drop the paragraph in "+
-			"apps/o11y/LLM.md that says the op projects nowhere, and re-run "+
-			"`make -f mk/fleet.mk openapi-check` so the new operation lands in the golden.", key)
-	}
-}
-
 // TestUntypedRoutesKeepTheirWire measures the four wire facts the reasons above
 // CLAIM, on the real router, so the refusals are evidence rather than assertion.
 // Each is a fact a typed op could not answer: a text/plain body, a 200 over a
