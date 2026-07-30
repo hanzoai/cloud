@@ -1100,7 +1100,7 @@ tree: they are disjoint, so agents do not collide in source.
 | A | ~~integrations 47~~ (done: 22 typed, 19 refused), cloudflare 34, platform 32, projects 31, captable 31 | 128 |
 | B | agents 26, ~~git 24~~ (done: 24 typed, 24 refused — four wire families, apps/git/LLM.md), ~~books 11~~ (done: 20 typed, 5 refused — 3 raw-byte uploads, 2 unconditional-501 link stubs; each named at its registration and pinned by a wire test), ~~o11y 11~~ (done: 12 typed, 8 refused, all wire-bound — 2 verbatim-status VM proxies, 3 reverse proxies (query/query_range/sessions), 2 text/plain Alertmanager receipts, 1 sentry wildcard; apps/o11y/LLM.md names each — the 11 counted 3 comment lines quoting `app.All("/v1/o11y/*")`, real count was 8), ~~company 22~~ (2 left, both permanent) | 50 |
 | C | ~~team 20~~ (done: 9 typed, 10 refused), ~~guide 20~~ (done: 13 typed, 6 refused — 2 YAML-or-JSON document PUTs, 3 structured-409 gated transitions of which /do also streams SSE, 1 opaque merge-patch; each named at its registration, the 409/YAML wires pinned by tests), ~~crm 20~~ (done: 19 typed, 1 refused — the public intake POST; see "crm is 19 of 20" below), ~~ingress 19~~ (done), ~~framework 19~~ (done: 17 typed, 2 refused — the document writes; see "apps/framework (17 of 19)" below), ~~account 19~~ (done: 11 typed, 7 refused) | 117 |
-| D | pricing 18, ml 18, ~~automations 18~~ (done: 14 typed, 4 refused), index 17, dataroom 17, ~~compliance 17~~ (done: 16 typed, 1 refused — the HMAC webhook: the signature is computed over the RAW body bytes and verified before any parse, and an unknown reference answers a second 200 shape), affiliates 17 | 104 |
+| D | pricing 18, ml 18, ~~automations 18~~ (done: 14 typed, 4 refused), index 17, dataroom 17, ~~compliance 17~~ (done: 16 typed, 1 refused — the HMAC webhook: the signature is computed over the RAW body bytes and verified before any parse, and an unknown reference answers a second 200 shape; the refusal is now GATED, not prose — `untypedByDesign` + `TestEveryRouteIsTypedOrNamed` in typed_wire_test.go), affiliates 17 | 104 |
 | E | eval 16, social 13, esign 13, link 12, functions 12, commerce 12, billing 12 | 90 |
 | F | the ~70 remaining packages, 1–11 routes each | ~358 |
 
@@ -1141,7 +1141,7 @@ are route only — no MCP tool, no CLI command, no SDK method, no schema, no
 prose.
 
 The typed packages are `apps/admin` and its eight sub-packages, plus `apps/account`,
-`apps/agents`, `apps/automations`, `apps/company`, `apps/crm`, `apps/framework`,
+`apps/agents`, `apps/automations`, `apps/company`, `apps/compliance`, `apps/crm`, `apps/framework`,
 `apps/git`, `apps/guide`, `apps/ingress`, `apps/integrations`, `apps/marketing`,
 `apps/o11y`, `apps/plugin`, `apps/search`, `apps/team`, `apps/visor`.
 `crm` is 19 of 20: its one refusal, the public Startup Program intake POST, is
@@ -1178,6 +1178,31 @@ are gone from the router oracle's `unreachable` ledger. The general lesson: a
 route's typed-ness is invisible to the manifest, so an app whose surface is not
 wholly under one `/v1/<name>` prefix can publish a perfect op the fleet never
 delivers, and only `manifest/router_test.go` asks the router.
+`compliance` is 16 of 17 and now carries the SAME gate, which is the part worth
+copying ahead of any remaining conversion: the gate reads the LIVE router
+(`openapi.Spec` for what is served, `openapi.Typed` for what carries a registry
+entry) rather than the source, so a route added anywhere in `routes()` surfaces
+whether or not anyone remembers this file, and its second arm fails on a
+`untypedByDesign` entry naming a route the app no longer serves — the refusal
+list cannot rot into stale prose. Both arms were proven to BITE by emptying the
+list (it named the webhook) and by adding a route that does not exist (it named
+the staleness); a gate nobody has watched fail is not known to run. Its one
+refusal is re-verified against zip v1.18.6's own source, not against the comment
+that claimed it: the HMAC covers the EXACT received bytes
+(`apps/idv/webhook.go` `Verify`: `mac.Write(body)`) which zip has already
+unmarshaled into `In` before the handler runs (`typed.go:234`), so a re-encoded
+`In` is not the signed value; and the route answers TWO 200 shapes (the
+reconciled check, or `{"ignored": …}` for a reference it does not know) where an
+op declares exactly one `Out` — unioning them would add zero-valued fields to
+the no-op body, which is a wire change. Re-check it when zip gains raw-body
+binding or multi-status (#78); until then 16 is this package's honest floor.
+The webhook is the shape of what an untyped route COSTS, visible in the
+published document: `openapi.yaml` carries
+`POST /v1/compliance/verifications/webhook` with an `operationId` and a tag and
+NOTHING else — no description, no requestBody, no responses — because
+`openapi.go`'s generator reads prose and schema off `a.ops` (the typed registry)
+and an untyped route is not in it. That is not a compliance defect to fix in
+compliance; it is the fleet-wide reason the migration exists.
 `apps/admin/core/typed.go` states the rule for that surface: every `/v1/admin/*`
 route is a typed op. Five carry NO untyped route at all — `admin`, `marketing`,
 `plugin`, `search` and now `ingress` (18 ops, converted whole in one pass).
