@@ -22418,6 +22418,77 @@ paths:
       operationId: post_v1_event_collect
       tags:
       - event
+  /v1/event/error/{wildcard1}:
+    delete:
+      operationId: delete_v1_event_error_by_wildcard1
+      parameters:
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      tags:
+      - event
+    get:
+      operationId: get_v1_event_error_by_wildcard1
+      parameters:
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      tags:
+      - event
+    options:
+      operationId: options_v1_event_error_by_wildcard1
+      parameters:
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      tags:
+      - event
+    patch:
+      operationId: patch_v1_event_error_by_wildcard1
+      parameters:
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      tags:
+      - event
+    post:
+      operationId: post_v1_event_error_by_wildcard1
+      parameters:
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      tags:
+      - event
+    put:
+      operationId: put_v1_event_error_by_wildcard1
+      parameters:
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      tags:
+      - event
+    trace:
+      operationId: trace_v1_event_error_by_wildcard1
+      parameters:
+      - in: path
+        name: wildcard1
+        required: true
+        schema:
+          type: string
+      tags:
+      - event
   /v1/exec:
     delete:
       operationId: delete_v1_exec

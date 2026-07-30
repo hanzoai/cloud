@@ -169,6 +169,19 @@ func init() {
 		},
 		Example: json.RawMessage(`{"id":"annq_1","itemId":"annqi_1","status":"COMPLETED"}`),
 	})
+	zip.Describe("POST /v1/event/ingestion", zip.Doc{
+		Description: "IngestO11yEvents persists a batch of LLM-observability events — traces,\nobservations and scores — for the caller's org. Each event routes to its table\nby type; an event carrying an unrecognised type is dropped and counted rather\nthan mis-routed, and a body over the inline cap is written to object storage\nwith only its reference kept on the row. The receipt says how many of each.",
+		Fields: map[string]string{
+			"ingestResult.accepted": "Accepted is how many events were persisted.",
+			"ingestResult.dropped":  "Dropped is how many were discarded for carrying an unrecognised type.",
+			"o11yBatch.batch":       "Batch is the events to persist, in one request.",
+			"o11yEvent.body":        "Body is the type-specific payload. A body over the inline cap is written\nto object storage and the row keeps only the reference.",
+			"o11yEvent.id":          "ID is the producer's id for this event; it becomes the row's primary key\nand the blob key when an oversized body overflows.",
+			"o11yEvent.timestamp":   "Timestamp is the producer's event time, stored verbatim.",
+			"o11yEvent.type":        "Type routes the event to its table: trace-create, score-create, or one of\nthe observation kinds (observation-*, span-*, generation-*, event-create).\nAn unrecognised type is dropped, never mis-routed.",
+		},
+		Example: json.RawMessage(`{"batch":[{"id":"e_1","type":"trace-create","timestamp":"2026-01-01T00:00:00Z","body":{}}]}`),
+	})
 	zip.Describe("POST /v1/o11y/annotation-queues", zip.Doc{
 		Description: "CreateAnnotationQueue creates a human-review queue in the caller's org and\nproject. A name already used by another queue in the same project is a 409.",
 		Fields: map[string]string{
@@ -210,18 +223,5 @@ func init() {
 			"itemInput.traceId":         "TraceID references a trace — the console-friendly form of\nobjectType=TRACE.",
 		},
 		Example: json.RawMessage(`{"id":"annq_1","items":[{"traceId":"tr_1"}]}`),
-	})
-	zip.Describe("POST /v1/event/ingestion", zip.Doc{
-		Description: "IngestO11yEvents persists a batch of LLM-observability events — traces,\nobservations and scores — for the caller's org. Each event routes to its table\nby type; an event carrying an unrecognised type is dropped and counted rather\nthan mis-routed, and a body over the inline cap is written to object storage\nwith only its reference kept on the row. The receipt says how many of each.",
-		Fields: map[string]string{
-			"ingestResult.accepted": "Accepted is how many events were persisted.",
-			"ingestResult.dropped":  "Dropped is how many were discarded for carrying an unrecognised type.",
-			"o11yBatch.batch":       "Batch is the events to persist, in one request.",
-			"o11yEvent.body":        "Body is the type-specific payload. A body over the inline cap is written\nto object storage and the row keeps only the reference.",
-			"o11yEvent.id":          "ID is the producer's id for this event; it becomes the row's primary key\nand the blob key when an oversized body overflows.",
-			"o11yEvent.timestamp":   "Timestamp is the producer's event time, stored verbatim.",
-			"o11yEvent.type":        "Type routes the event to its table: trace-create, score-create, or one of\nthe observation kinds (observation-*, span-*, generation-*, event-create).\nAn unrecognised type is dropped, never mis-routed.",
-		},
-		Example: json.RawMessage(`{"batch":[{"id":"e_1","type":"trace-create","timestamp":"2026-01-01T00:00:00Z","body":{}}]}`),
 	})
 }
