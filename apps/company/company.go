@@ -15,8 +15,40 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/principal"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/zap-proto/zip"
 )
+
+// The two routes on this surface that cannot be typed ops still have to be
+// DESCRIBED. "Cannot carry a zip registry entry" was being read as "publishes
+// nothing", and those are opposite facts: both of these rendered as an
+// operationId and a tag and no body at all, which is exactly what a route that
+// takes no input and returns none publishes. No consumer of the document can tell
+// the two apart, so every SDK generated off openapi.yaml offered a deck upload
+// with nowhere to put the deck and no return type for either call.
+//
+// openapi.Register is the seam for the halves that ARE statable — it attaches to
+// a route the router already carries, so it can never contradict the router — and
+// it does not make these typed ops: there is still no MCP tool, no CLI command and
+// no SDK method, because those come from zip's registry. See typed_wire_test.go
+// for why each one stays out of it.
+//
+// What is still NOT declared here, honestly — each a missing capability, not a
+// missing edit, so none of them is papered over with prose that overstates:
+//
+//   - the deck's `?name=` query parameter. The untyped projection derives PATH
+//     parameters from the router and has no vocabulary for query.
+//   - /payment's 402/503 denial bodies. apply states the success shape under the
+//     "2XX" range key only; the denial needs the same declarable-error-body
+//     capability that keeps this route untyped in the first place.
+//   - field prose on the shapes below. zipdoc lifts doc comments off TYPED ops
+//     only, and Register's reflection seam reads Go types, not comments — so
+//     deckOut publishes `documentId: string` with no description. formationView
+//     is unaffected: it is already described through the typed ops that share it.
+func init() {
+	openapi.Register("/v1/company/fundraise/deck", "POST", openapi.Binary{}, deckOut{})
+	openapi.Register("/v1/company/payment", "POST", nil, formationView{})
+}
 
 // company.go mounts the /v1/company surface and wires the state machine to its
 // provider seams. The design is decomplected: ACTION endpoints populate the
@@ -1042,10 +1074,20 @@ func (o ops) fundraiseRound(ctx context.Context, in *RoundInput) (*roundOut, err
 	return &roundOut{RoundID: id}, nil
 }
 
+// deckOut is the data room's receipt for an ingested pitch deck. It exists as a
+// named type so the response can be DECLARED (openapi.Register, see init) and so
+// the declaration and the value the handler returns are the same shape — a map
+// literal here and a struct in the document is how the two drift apart.
+type deckOut struct {
+	// DocumentID is the org data room's id for the stored deck.
+	DocumentID string `json:"documentId"`
+}
+
 // fundraiseDeck shares a pitch deck in the org's data room. It is the second
 // action on this surface that is NOT a typed op: the deck is the raw request
 // BODY (any content type, named by ?name=), not a JSON document, so a typed In
-// would declare a request shape the route does not take — see routes().
+// would declare a request shape the route does not take — see routes(). Its byte
+// request and this response ARE declared, through openapi.Register (see init).
 func fundraiseDeck(s *cloud.Service[state], c *zip.Ctx) error {
 	ctx := c.Context()
 	f, org, err := load(ctx, s)
@@ -1068,7 +1110,7 @@ func fundraiseDeck(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "data room ingest: %v", err)
 	}
-	return c.JSON(http.StatusCreated, map[string]any{"documentId": id})
+	return c.JSON(http.StatusCreated, deckOut{DocumentID: id})
 }
 
 // safeIn names the documents to sign and who signs them.
