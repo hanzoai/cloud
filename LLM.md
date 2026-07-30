@@ -1233,6 +1233,48 @@ hidden routes). The number to trust
 it against is `integrations`, whose 19 the corrected measure reproduces exactly
 and independently — the count its own conversion recorded as refusals.
 
+**Both commands are still blind to a route whose PATH is a variable**, and this
+is structural, not a tuning problem: every anchor above ends in `("` or `("/`, so
+`app.All(p, h)` inside `for _, p := range prefixes` matches nothing. It is not a
+corner case. `apps/exec` reads **ZERO** under both commands and serves **56
+published operations** — 4 prefixes x {exact, `/*`} x 7 methods — which is why it
+has never appeared in a tranche despite being the largest undescribed block per
+line of source in the repo. Same shape in `apps/knowledge` (9 registrations off
+`p+"/search"`… , subsystem.go:61-69), `apps/iam` (iam.go:258-259, 282) and
+`apps/commerce` (mount.go:551). The lesson is the one the phantom/hidden pair
+already teaches, one level up: **the grep is a hint and the published subset
+(`plugin/<app>/openapi.json`) is the denominator.** Count operations, not lines.
+
+**`apps/exec` is 0 typed of 56, and that is the finished answer, not a to-do.**
+It is a transparent edge: `Mount` hands all 8 paths to
+`httputil.NewSingleHostReverseProxy` and the sandboxed code executor supplies
+every byte, every Content-Type and every status. There is nothing here to
+describe and four independent wire facts that a typed op would move — a verbatim
+upstream status (`zip` answers its own declared one, typed.go:305-311), response
+fields this repo never named (an `Out` drops them), a multipart `/v1/upload` body
+(`zip` decodes every non-empty typed body with `jsonenc.Unmarshal`, typed.go:242)
+and a byte-bodied `/v1/download/{id}` (a typed op always `c.JSON`s, typed.go:311).
+The 16 `OPTIONS`/`TRACE` operations are not expressible at all: `zip` has typed
+registrars for Get/Post/Put/Patch/Delete and nothing else. `openapi.Register` is
+refused too rather than reached for — on this surface it could only publish a
+guess at a contract this repo does not own (`{lang, code, files?}` is
+`@librechat/agents`'), and `openapi.Binary`'s `application/octet-stream` is not
+what a multipart envelope is. The refusal is a GATE:
+`apps/exec/typed_wire_test.go` holds the closed ledger (`untypedPaths` x
+`servedMethods`, crossed to 56) plus eight measurements of those wire facts
+through the REAL `Mount`, so a route added here is typed by default, a stale
+reason goes red, and the day one becomes typable
+`TestTheSurfaceIsWhollyUndescribed` goes red and sends the next agent to this
+paragraph. Two things this surface cannot express and a reader should not assume:
+it has **no tenancy** — one process-wide `CODE_EXEC_API_KEY` (the gateway bypasses
+these paths, so `principal.OrgFrom` is never consulted) and session ids on
+`/v1/files/{sid}` and `/v1/download/{id}` are opaque and org-unscoped, so
+cross-session reads are prevented by id unguessability and not by a tenant check;
+and it claims three GENERIC top-level nouns (`/v1/files`, `/v1/upload`,
+`/v1/download`) which outrank `ai`'s bare `/v1/*` by static-prefix specificity
+regardless of mount order — harmless today (ai's files live at `/v1/ai/files`),
+and a silent shadow the moment `ai` adds OpenAI's own `/v1/files`.
+
 **Collisions, and the resolution.** Source does not collide; two artifacts do —
 the regenerated `openapi.yaml` golden and `go.sum`. Both resolve the same way:
 **rebase onto main, then regenerate** (`make -f mk/fleet.mk openapi-check`). The
