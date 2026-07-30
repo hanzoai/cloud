@@ -119,9 +119,17 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// DocType defines at run time. A typed op's schema is REFLECTED off its In
 	// type, and no Go struct both accepts that body verbatim and describes it, so
 	// typing them would publish a request schema naming the two path segments and
-	// nothing else — an SDK method that cannot send a document. zip needs an
-	// open-object input (`additionalProperties: true`) before these convert; a
-	// schema that lies is worse than the route-only entry they carry today.
+	// nothing else — an SDK method that cannot send a document.
+	//
+	// That takes THREE properties of zip, and any one alone converts nothing:
+	// DECLARE an open object (`map[string]any` projects `additionalProperties:
+	// {"type":"object"}` — every field VALUE an object), BIND the URL onto one
+	// (bindURL returns early unless the In is a struct), and carry the bound
+	// params OUTSIDE the body namespace (an open-object In can only receive them
+	// AS body keys, where a create body's `name` already means the requested
+	// document name). A schema that lies is worse than the route-only entry these
+	// two carry, so they convert together or not at all. rawRoutes and
+	// TestOpenObjectRefusalStillHolds (ops_projection_test.go) check that.
 	zip.Get(g, "/:doctype", o.listDocuments)
 	g.Post("/:doctype", cloud.Handle(s, createDocument))
 	zip.Get(g, "/:doctype/:name", o.getDocument)
