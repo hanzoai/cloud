@@ -68,6 +68,19 @@ regenerating zipdoc_gen.go, which left `zipdoc -check` red for this package on
 main; if you add a plane op, name the handler, write the doc comment, and run
 `go generate -run zipdoc ./...` here before committing.
 
+## Why the principal bridge is git-local
+
+Twenty apps install `cloud.Bridge()` on their group; git is the only one that
+parks its own value (`bridgePrincipal` + `tenantOf`, ops.go). That is not a
+divergence for its own sake: `cloud.Bridge` parks the ORG and nothing else
+(`principal.WithOrg` → `principal.OrgFrom`), and git's typed ops need two more
+facts off the validated request — the `X-Project-Id` sub-scope every repo row is
+keyed by, and the acting user an SSH key is owned by (keys.go). `principal` has
+no context form for either, so an app needing them has exactly one option today,
+which is the one this package took. The way to make it ONE bridge again is to
+widen the shared one — park the whole principal, not just the org — and delete
+this copy; typing more apps that carry a project scope will keep re-finding it.
+
 ## Known class instances (blocked on zip, counted not prosed)
 
 - Bodyless POST (playbook #7 in the root LLM.md): **1** — `POST
@@ -100,3 +113,83 @@ main; if you add a plane op, name the handler, write the doc comment, and run
   in 215 doc comments. Reflowing the prose so sentence one fits one 100-column
   line would leave the class alive for the next op anybody writes and make cloud
   a special case of a general bug. Do not "fix" this file's comments.
+
+- **NEW: THREE of git's typed ops project to ONE CLI command name.** `git
+  repos-delete` is the name zip derives for `DELETE /v1/git/repos/{name}`, for
+  `DELETE /v1/git/repos/{name}/mirrors/{id}` AND for `DELETE
+  /v1/git/repos/{name}/subscriptions/{id}`, so two of the 24 typed ops are
+  **unreachable from the CLI projection** — the runner has one name and three
+  routes behind it. `commandName` (zip/cli.go:253-311) keeps the path segments
+  BEFORE the first parameter and AFTER the last one and drops everything
+  between, so `mirrors` and `subscriptions` — the words that say WHICH thing is
+  being deleted — never reach the name. Neither the wire nor the document is
+  involved: both DELETEs are served, published and described, each with its own
+  operationId. It is the CLI, and only the CLI, that cannot spell them apart —
+  which is exactly the failure only TYPING can surface, because an untyped route
+  has no command at all to collide.
+
+  git holds the worst instance in the fleet (three ops on one name). The class is
+  **20 colliding names hiding 23 ops across 11 packages**, in four shapes:
+  interior segments dropped (git, cloudflare ×2, o11y), a collection colliding
+  with its own item when the last word is singular (compliance
+  `accreditation-get`, marketing `calendar-get`, framework `get`), PATCH and PUT
+  both spelling `update` (base, exec ×4, iam ×2, websearch), and one op mounted
+  at two addresses whose only difference is the version segment `isVersion`
+  strips (tasks ×5, `/tasks` vs `/v1/tasks`).
+
+  The fix is `commandName` carrying the interior static segments — NOT
+  `WithOperationID` here, which would make git's ids a special case (root
+  LLM.md, failure mode 6). Re-measure with zip's OWN derivation over the
+  committed subsets; a reimplementation of `commandName` in python would be a
+  second answer free to disagree with the one the CLI uses:
+
+      mkdir -p /tmp/cliname && cat > /tmp/cliname/main.go <<'EOF'
+      package main
+
+      import ("fmt"; "os"; "path/filepath"; "sort"; "github.com/zap-proto/zip")
+
+      func main() {
+          files, _ := filepath.Glob("plugin/*/openapi.json")
+          sort.Strings(files)
+          names, ops := 0, 0
+          for _, f := range files {
+              b, err := os.ReadFile(f); if err != nil { continue }
+              cmds, err := zip.CommandsFromSpec(b); if err != nil { continue }
+              by := map[string][]string{}
+              for _, c := range cmds { by[c.Service+" "+c.Name] = append(by[c.Service+" "+c.Name], c.Method+" "+c.Path) }
+              for n, ps := range by {
+                  if len(ps) > 1 { sort.Strings(ps); names++; ops += len(ps) - 1
+                      fmt.Println(filepath.Base(filepath.Dir(f)), n, "<-", ps) }
+              }
+          }
+          fmt.Println(names, "colliding names hiding", ops, "ops")
+      }
+      EOF
+      go run /tmp/cliname/main.go   # from the repo root, so it resolves this module's zip
+
+- **NEW: NINE host-gated root paths are published as if `api.hanzo.ai` served
+  them.** The six root UI pages (`/`, `/explore`, `/{org}/{repo}`, and the
+  tree/blob/commits forms) and the three root smart-HTTP routes are registered on
+  the ROOT router and gated to the git host by `onGitHost`, which falls through
+  with `c.Next()` on every other Host — `TestRootSmartHTTP_HostGuard` and
+  `TestRootUI_HostGuard` pin the 404 on `api.hanzo.test`. The document has ONE
+  `servers` entry, `https://api.hanzo.ai`, and no notion of a per-path host, so
+  all nine land in `plugin/git/openapi.json` and then in `openapi.yaml`
+  unqualified: every SDK generated from the golden gains nine methods that 404
+  against the server the document itself names. `GET /` is the sharpest — its
+  operationId is the bare word `get`.
+
+  This is the root playbook's #8 shape (a document describing a FALSE wire), not
+  its #7 shape (a true wire under-described), and it is the one class here that
+  cannot be closed inside this package: either the projection learns a per-path
+  `servers` (OpenAPI 3.1 allows it on a path item) or a host-gated route declares
+  itself out of the document. The `/git/*` six are NOT in this nine — those are
+  registered without a host gate and do serve on every host, so publishing them
+  is true (they answer HTML, which is why they are in `untypedByDesign`). Count
+  them from the golden, never from this list:
+
+      python3 - <<'EOF'
+      import json
+      d=json.load(open('plugin/git/openapi.json'))
+      print([p for p in sorted(d['paths']) if not p.startswith(('/v1/','/git'))])
+      EOF
