@@ -20,6 +20,13 @@ export GOWORK := off
 # temporaries to TMPDIR (not GOTMPDIR). Where /tmp is a tmpfs that is RAM, and a
 # fleet-wide target is a hundred links back to back. Point it at disk.
 export TMPDIR ?= $(HOME)/.cache/go-tmp
+# ...and it must EXIST. `go` does not create TMPDIR; it stats it and dies
+#   go: creating work dir: stat /root/.cache/go-tmp: no such file or directory
+# On a dev box ~/.cache is already there, so this only ever bit CI — where it
+# failed `test app-contract` and, through it, every cloud image since
+# 2026-07-29. The last good build was 01:10 that day; the AI balance-reader fix
+# sat un-shippable behind it while hanzo.app answered 503 balance_unavailable.
+TMPDIR_READY := $(shell mkdir -p $(TMPDIR) && echo ok)
 
 # Each link peaks in the GiBs. Unbounded parallelism is how a fleet target OOMs
 # a 128GiB box.
