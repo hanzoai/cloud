@@ -36,7 +36,7 @@ type envelope struct {
 	Status string          `json:"status"` // "ok" | "error"
 	Msg    string          `json:"msg"`
 	Data   json.RawMessage `json:"data"`
-	Data2  json.RawMessage `json:"data2"`
+	Total  json.RawMessage `json:"total"`
 }
 
 // dispatch maps an rpc.Call to a ZapReply by replaying it as a /v1 HTTP request.
@@ -91,7 +91,7 @@ func (d *dispatcher) dispatch(call zaprpc.Call, cookieHeader, authHeader, accept
 		return zapReply{ok: false, status: uint32(orStatus(res.StatusCode, http.StatusBadRequest)), errorJSON: string(ej)}
 	}
 
-	// Success. The REST `getList` path reads data2 (total) alongside data; the
+	// Success. The REST `getList` path reads total alongside data; the
 	// ZAP `list` twin only consumes `data` (Provider[]), so result == data.
 	// SuperJSON-wrap so console's SuperJSON.parse(reply.result) yields `data`.
 	return zapReply{ok: true, status: http.StatusOK, result: superJSONWrap(env.Data)}

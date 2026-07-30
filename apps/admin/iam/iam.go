@@ -93,7 +93,7 @@ func (c *Client) List(ctx context.Context, cr Creds, path string, q url.Values) 
 	if err != nil {
 		return List{}, err
 	}
-	total := envTotal(env.Data2, env.Data)
+	total := envTotal(env.Total, env.Data)
 	return List{Rows: env.Data, Total: total}, nil
 }
 
@@ -164,13 +164,20 @@ func (c *Client) SetUser(ctx context.Context, cr Creds, id string, user map[stri
 	return err
 }
 
-// envelope is the uniform /v1 response shape every /v1/iam handler returns.
-// data is the payload; data2 the list total (paginated reads).
+// envelope is what hanzoai/iam ANSWERS WITH — a decoder for a foreign wire, not
+// cloud's own shape. Cloud writes { status, msg, data, total } (see cloud's
+// envelope.go); IAM still writes Casdoor's { status, msg, data, data2 }, so the
+// tag here says data2 and the field says Total. One adapter, at the boundary,
+// naming both truths at once.
+//
+// It converges when IAM ships the same rename. Until then a "fix" that spells
+// this field total on the wire silently reads nothing: the total becomes zero
+// and every paginated admin list quietly reports its own page size.
 type envelope struct {
 	Status string          `json:"status"`
 	Msg    string          `json:"msg"`
 	Data   json.RawMessage `json:"data"`
-	Data2  json.RawMessage `json:"data2"`
+	Total  json.RawMessage `json:"data2"`
 }
 
 // get performs one authenticated GET and decodes the /v1 envelope.

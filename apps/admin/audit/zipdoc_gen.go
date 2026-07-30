@@ -28,7 +28,7 @@ func init() {
 			"RecordsIn.until":      "Until is the upper time bound, RFC3339, with the same tolerance.",
 		},
 		Example:  json.RawMessage(`{"org":"acme","action":"admin.waitlist.grant","since":"2026-07-01T00:00:00Z","pageSize":"50"}`),
-		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"seq":41,"ts":"2026-07-26T18:00:00Z","org":"acme","sub":"z@hanzo.ai","action":"admin.waitlist.grant","resource":"waitlist","result":"success"}],"data2":1,"integrity":{"ok":true,"count":42,"headHash":"9f2c","brokenAt":-1}}`),
+		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"seq":41,"ts":"2026-07-26T18:00:00Z","org":"acme","sub":"z@hanzo.ai","action":"admin.waitlist.grant","resource":"waitlist","result":"success"}],"total":1,"integrity":{"ok":true,"count":42,"headHash":"9f2c","brokenAt":-1}}`),
 	})
 	zip.Describe("GET /v1/admin/audit/verify", zip.Doc{
 		Description: "Verify walks the WHOLE hash chain and reports whether it is intact: how many records\nwere checked, the head hash to pin externally against tail-truncation, and — when the\nchain is broken — the seq of the first bad record and why.\n\nbrokenAt is -1 exactly when ok is true. An unconfigured store is an honest failure\nhere rather than a fabricated pass.",

@@ -15,9 +15,17 @@
 // envelope.go — the ONE /v1 response envelope, at the ONE home every subsystem
 // already imports.
 //
-// The canonical /v1 envelope is { status, msg, data, data2 }: the operator's
-// transport decodes get<T> from `data` and getList<T> from `data` + `data2`
-// (the total). This shape was first written in clients/admin/core, but the
+// The canonical /v1 envelope is { status, msg, data, total }: the operator's
+// transport decodes get<T> from `data` and getList<T> from `data` + `total`.
+//
+// The field is `total` because that is what it holds. It shipped for years as
+// `data2` — a name inherited whole from Casdoor's response type
+// ({Status, Msg, Data, Data2}), whose second slot was untyped and got used for
+// the row count. Casdoor is gone and HIP-0111 names {status,data,data2} as the
+// shape a list MUST NOT return, so the name went with it. Nothing about the
+// value changed: same int, same position, a name a reader can act on.
+//
+// This shape was first written in clients/admin/core, but the
 // writers are pure over *zip.Ctx and every subsystem needs them — trapping them
 // under clients/admin (whose sibling files pull in cloud + admin/iam +
 // principal) would force any package that wants ONE envelope to drag the whole
@@ -46,19 +54,19 @@ func OK(c *zip.Ctx, data any) error {
 	return c.JSON(200, map[string]any{"status": "ok", "msg": "", "data": data})
 }
 
-// OKList writes a { status:"ok", data:[...], data2:total } envelope (getList<T>).
+// OKList writes a { status:"ok", data:[...], total } envelope (getList<T>).
 func OKList(c *zip.Ctx, rows any, total int) error {
-	return c.JSON(200, map[string]any{"status": "ok", "msg": "", "data": rows, "data2": total})
+	return c.JSON(200, map[string]any{"status": "ok", "msg": "", "data": rows, "total": total})
 }
 
-// OKRaw writes a { status:"ok", data:<raw>, data2:total } envelope, forwarding a
+// OKRaw writes a { status:"ok", data:<raw>, total } envelope, forwarding a
 // pre-encoded payload verbatim so its exact wire shape reaches the operator
 // field-for-field. An empty payload is normalized to an empty array.
 func OKRaw(c *zip.Ctx, rows json.RawMessage, total int) error {
 	if len(rows) == 0 {
 		rows = json.RawMessage("[]")
 	}
-	return c.JSON(200, map[string]any{"status": "ok", "msg": "", "data": rows, "data2": total})
+	return c.JSON(200, map[string]any{"status": "ok", "msg": "", "data": rows, "total": total})
 }
 
 // Fail writes a { status:"error", msg } envelope. The operator's transport maps a

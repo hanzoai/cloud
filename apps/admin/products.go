@@ -37,7 +37,7 @@ import (
 // Response: {"status":"ok","msg":"","data":[{"name":"sql","kind":"sql","tier":"data",
 // "org":"hanzoai","cluster":"hanzo-k8s","env":"main","namespace":"hanzo","repo":"hanzoai/sql",
 // "phase":"Running","declaredTag":"v1.4.2","runningTag":"v1.4.2","latestTag":"","health":"green",
-// "drift":false,"driftSeverity":"ok","updated":""}],"data2":1}
+// "drift":false,"driftSeverity":"ok","updated":""}],"total":1}
 func products(ctx context.Context, in *productsIn) (*productsOut, error) {
 	c, err := core.Admit(ctx)
 	if err != nil {
@@ -63,7 +63,7 @@ func products(ctx context.Context, in *productsIn) (*productsOut, error) {
 		}
 		out = append(out, r)
 	}
-	return &productsOut{Status: core.OK, Data: out, Data2: core.Total(len(out))}, nil
+	return &productsOut{Status: core.OK, Data: out, Total: core.Total(len(out))}, nil
 }
 
 // productRollup is the fleet count the overview KPIs fold: total observed workloads, how many

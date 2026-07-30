@@ -98,7 +98,7 @@ func TestAdminAudit_ReturnsRealRecords(t *testing.T) {
 			Hash   string `json:"hash"`
 			Result string `json:"result"`
 		} `json:"data"`
-		Data2     int `json:"data2"`
+		Total     int `json:"total"`
 		Integrity struct {
 			OK    bool   `json:"ok"`
 			Count uint64 `json:"count"`
@@ -107,8 +107,8 @@ func TestAdminAudit_ReturnsRealRecords(t *testing.T) {
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode: %v (body=%s)", err, body)
 	}
-	if env.Data2 != 5 || len(env.Data) != 5 {
-		t.Fatalf("got %d rows / total %d, want 5/5", len(env.Data), env.Data2)
+	if env.Total != 5 || len(env.Data) != 5 {
+		t.Fatalf("got %d rows / total %d, want 5/5", len(env.Data), env.Total)
 	}
 	if env.Data[0].Seq < env.Data[len(env.Data)-1].Seq {
 		t.Errorf("not newest-first: %d..%d", env.Data[0].Seq, env.Data[len(env.Data)-1].Seq)
@@ -135,11 +135,11 @@ func TestAdminAudit_Filters(t *testing.T) {
 	}
 	var env struct {
 		Data  []map[string]any `json:"data"`
-		Data2 int              `json:"data2"`
+		Total int              `json:"total"`
 	}
 	_ = json.Unmarshal(body, &env)
-	if env.Data2 != 1 || len(env.Data) != 1 {
-		t.Fatalf("result=deny returned %d/%d, want 1/1", len(env.Data), env.Data2)
+	if env.Total != 1 || len(env.Data) != 1 {
+		t.Fatalf("result=deny returned %d/%d, want 1/1", len(env.Data), env.Total)
 	}
 	if env.Data[0]["result"] != "deny" {
 		t.Errorf("filtered row result = %v, want deny", env.Data[0]["result"])
