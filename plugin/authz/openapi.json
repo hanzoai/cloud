@@ -32,26 +32,6 @@
         ]
       }
     },
-    "/v1/authz/policies": {
-      "delete": {
-        "operationId": "delete_v1_authz_policies",
-        "tags": [
-          "authz"
-        ]
-      },
-      "get": {
-        "operationId": "get_v1_authz_policies",
-        "tags": [
-          "authz"
-        ]
-      },
-      "post": {
-        "operationId": "post_v1_authz_policies",
-        "tags": [
-          "authz"
-        ]
-      }
-    },
     "/v1/authz/readyz": {
       "get": {
         "operationId": "get_v1_authz_readyz",

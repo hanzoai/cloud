@@ -28,7 +28,7 @@
     "/v1/admin/catalog": {
       "get": {
         "operationId": "get_v1_admin_catalog",
-        "summary": "GetAdminCatalog returns the full model and provider catalog annotated with\neach entry's enablement state, for the operator console.",
+        "summary": "GetAdminCatalog returns the full model and provider catalog annotated with each entry's enablement state, for the operator console.",
         "description": "GetAdminCatalog returns the full model and provider catalog annotated with\neach entry's enablement state, for the operator console. Nothing is hidden:\nthis is the admin's view of what exists and what is currently off, in beta or\ngenerally available. SuperAdmin only; every other caller is refused.",
         "tags": [
           "admin"
@@ -86,7 +86,7 @@
     "/v1/admin/enablement": {
       "get": {
         "operationId": "get_v1_admin_enablement",
-        "summary": "ListEnablement returns every item an operator has set an enablement state on —\nits global state (off, beta or ga) and the orgs granted its beta.",
+        "summary": "ListEnablement returns every item an operator has set an enablement state on — its global state (off, beta or ga) and the orgs granted its beta.",
         "description": "ListEnablement returns every item an operator has set an enablement state on —\nits global state (off, beta or ga) and the orgs granted its beta. An item\nnobody has touched is absent, because an untouched item is generally\navailable; the console composes the candidate list from the live catalog.\nSuperAdmin only; every other caller is refused.",
         "tags": [
           "admin"
@@ -106,7 +106,7 @@
       },
       "put": {
         "operationId": "put_v1_admin_enablement",
-        "summary": "SetEnablement sets one item's global enablement state — off, beta or ga — and\noptionally replaces the list of orgs granted its beta.",
+        "summary": "SetEnablement sets one item's global enablement state — off, beta or ga — and optionally replaces the list of orgs granted its beta.",
         "description": "SetEnablement sets one item's global enablement state — off, beta or ga — and\noptionally replaces the list of orgs granted its beta. It is generic over\nkind, so the same call manages models, providers and product features through\nthe one registry. `off` is an absolute kill switch: a self-service opt-in can\nnever re-open it. SuperAdmin only; every other caller is refused.",
         "tags": [
           "admin"
@@ -146,7 +146,7 @@
     "/v1/enablement": {
       "get": {
         "operationId": "get_v1_enablement",
-        "summary": "GetEnablement returns what the caller's org can actually use: every managed\nitem with its global state, whether it is effective here, whether this org is\nalready opted into its beta, and whether it may still opt in.",
+        "summary": "GetEnablement returns what the caller's org can actually use: every managed item with its global state, whether it is effective here, whether this org is already opted into its beta, and whether it may still opt in.",
         "description": "GetEnablement returns what the caller's org can actually use: every managed\nitem with its global state, whether it is effective here, whether this org is\nalready opted into its beta, and whether it may still opt in. Read-only and\nsafe for any caller — one without a validated principal simply sees the\ngenerally-available items and no opt-in affordance, never another org's state.",
         "tags": [
           "enablement"
@@ -204,7 +204,7 @@
     "/v1/enablement/optout": {
       "post": {
         "operationId": "post_v1_enablement_optout",
-        "summary": "OptOutOfBeta removes the caller's OWN org from a beta item's grant list, the\nreverse of OptIntoBeta and idempotent.",
+        "summary": "OptOutOfBeta removes the caller's OWN org from a beta item's grant list, the reverse of OptIntoBeta and idempotent.",
         "description": "OptOutOfBeta removes the caller's OWN org from a beta item's grant list, the\nreverse of OptIntoBeta and idempotent. The org is the caller's validated one,\nso this can never revoke another org's grant. Requires a signed-in caller with\nan org.",
         "tags": [
           "enablement"
@@ -240,7 +240,7 @@
     "/v1/pricing": {
       "get": {
         "operationId": "get_v1_pricing",
-        "summary": "GetPricing returns the whole pricing catalog in one document: Zen and\nthird-party models, providers, model families, the free-model list, plan and\ninfrastructure pricing.",
+        "summary": "GetPricing returns the whole pricing catalog in one document: Zen and third-party models, providers, model families, the free-model list, plan and infrastructure pricing.",
         "description": "GetPricing returns the whole pricing catalog in one document: Zen and\nthird-party models, providers, model families, the free-model list, plan and\ninfrastructure pricing. Every model and provider it names is filtered to what\nthe caller's org may see — the same gate the leaf routes apply, so this can\nnever be an un-gated second source for what they hide.",
         "tags": [
           "pricing"
@@ -265,7 +265,7 @@
     "/v1/pricing-policy": {
       "get": {
         "operationId": "get_v1_pricing-policy",
-        "summary": "GetPricingPolicyAlias returns the pricing policy document at its top-level\naddress.",
+        "summary": "GetPricingPolicyAlias returns the pricing policy document at its top-level address.",
         "description": "GetPricingPolicyAlias returns the pricing policy document at its top-level\naddress. It is the same document GET /v1/pricing/policy returns, byte for\nbyte, at the shorter address the marketing surface links to.",
         "tags": [
           "pricing-policy"
@@ -290,7 +290,7 @@
     "/v1/pricing/base": {
       "get": {
         "operationId": "get_v1_pricing_base",
-        "summary": "ListBasePlans returns the Hanzo Base plans — the managed-instance tiers,",
+        "summary": "ListBasePlans returns the Hanzo Base plans — the managed-instance tiers, each with its monthly and annual price, storage and request allowances and feature list.",
         "description": "ListBasePlans returns the Hanzo Base plans — the managed-instance tiers,\neach with its monthly and annual price, storage and request allowances and\nfeature list.",
         "tags": [
           "pricing"
@@ -312,7 +312,7 @@
     "/v1/pricing/blockchain": {
       "get": {
         "operationId": "get_v1_pricing_blockchain",
-        "summary": "ListBlockchainPlans returns the blockchain access plans — the RPC and node",
+        "summary": "ListBlockchainPlans returns the blockchain access plans — the RPC and node tiers, each with its monthly price, compute-unit allowance and feature list.",
         "description": "ListBlockchainPlans returns the blockchain access plans — the RPC and node\ntiers, each with its monthly price, compute-unit allowance and feature list.",
         "tags": [
           "pricing"
@@ -334,7 +334,7 @@
     "/v1/pricing/cloud": {
       "get": {
         "operationId": "get_v1_pricing_cloud",
-        "summary": "GetCloudPricing returns the public cloud section of the catalog in one\ndocument: its instance plans, its regions and its block-storage prices.",
+        "summary": "GetCloudPricing returns the public cloud section of the catalog in one document: its instance plans, its regions and its block-storage prices.",
         "description": "GetCloudPricing returns the public cloud section of the catalog in one\ndocument: its instance plans, its regions and its block-storage prices. The\nsection's internal half — the provider costs Hanzo pays and the plan-to-\nprovider routing table — is stripped before it is served, so this is what a\ncustomer may see and nothing more.",
         "tags": [
           "pricing"
@@ -359,7 +359,7 @@
     "/v1/pricing/cloud/plans": {
       "get": {
         "operationId": "get_v1_pricing_cloud_plans",
-        "summary": "GetCloudPlans returns just the cloud instance plans — each with its vCPU,\nmemory, disk, CPU type, VM allowance, feature list and monthly and hourly\nprice.",
+        "summary": "GetCloudPlans returns just the cloud instance plans — each with its vCPU, memory, disk, CPU type, VM allowance, feature list and monthly and hourly price.",
         "description": "GetCloudPlans returns just the cloud instance plans — each with its vCPU,\nmemory, disk, CPU type, VM allowance, feature list and monthly and hourly\nprice. It is the plans of the cloud section on their own.",
         "tags": [
           "pricing"
@@ -381,7 +381,7 @@
     "/v1/pricing/cloud/regions": {
       "get": {
         "operationId": "get_v1_pricing_cloud_regions",
-        "summary": "GetCloudRegions returns the regions a cloud instance can be placed in, each\nwith its id, display name and physical location.",
+        "summary": "GetCloudRegions returns the regions a cloud instance can be placed in, each with its id, display name and physical location.",
         "description": "GetCloudRegions returns the regions a cloud instance can be placed in, each\nwith its id, display name and physical location. It is the regions of the\ncloud section on their own.",
         "tags": [
           "pricing"
@@ -403,7 +403,7 @@
     "/v1/pricing/cloud/storage": {
       "get": {
         "operationId": "get_v1_pricing_cloud_storage",
-        "summary": "GetCloudStoragePricing returns the block-storage prices of the cloud",
+        "summary": "GetCloudStoragePricing returns the block-storage prices of the cloud section: the per-GB monthly rate and the volume size bounds a caller may ask for.",
         "description": "GetCloudStoragePricing returns the block-storage prices of the cloud\nsection: the per-GB monthly rate and the volume size bounds a caller may ask\nfor.",
         "tags": [
           "pricing"
@@ -428,7 +428,7 @@
     "/v1/pricing/compute": {
       "get": {
         "operationId": "get_v1_pricing_compute",
-        "summary": "GetComputePricing returns the compute section of the catalog: the cloud\nprovider and region the prices are quoted for, the monthly markup applied to\nthem, the full instance-size tier list and the named presets.",
+        "summary": "GetComputePricing returns the compute section of the catalog: the cloud provider and region the prices are quoted for, the monthly markup applied to them, the full instance-size tier list and the named presets.",
         "description": "GetComputePricing returns the compute section of the catalog: the cloud\nprovider and region the prices are quoted for, the monthly markup applied to\nthem, the full instance-size tier list and the named presets. It is the\nwhole section as the pricing source records it, un-gated — no model or\nprovider identity appears in it.",
         "tags": [
           "pricing"
@@ -453,7 +453,7 @@
     "/v1/pricing/compute/presets": {
       "get": {
         "operationId": "get_v1_pricing_compute_presets",
-        "summary": "GetComputePresets returns just the named compute sizes — the short,\nhuman-labelled list (\"Starter\", \"Pro\") a size picker renders, each carrying\nits provider slug, vCPU, memory, disk and price.",
+        "summary": "GetComputePresets returns just the named compute sizes — the short, human-labelled list (\"Starter\", \"Pro\") a size picker renders, each carrying its provider slug, vCPU, memory, disk and price.",
         "description": "GetComputePresets returns just the named compute sizes — the short,\nhuman-labelled list (\"Starter\", \"Pro\") a size picker renders, each carrying\nits provider slug, vCPU, memory, disk and price. It is the presets of the\ncompute section on their own, for a caller that does not need the full tier\ntable.",
         "tags": [
           "pricing"
@@ -475,7 +475,7 @@
     "/v1/pricing/featured": {
       "get": {
         "operationId": "get_v1_pricing_featured",
-        "summary": "ListFeaturedModels returns the models the catalog highlights, filtered to what\nthe caller's org may see.",
+        "summary": "ListFeaturedModels returns the models the catalog highlights, filtered to what the caller's org may see.",
         "description": "ListFeaturedModels returns the models the catalog highlights, filtered to what\nthe caller's org may see. It is the same catalog as ListModels narrowed to\nentries the pricing source marks featured.",
         "tags": [
           "pricing"
@@ -497,7 +497,7 @@
     "/v1/pricing/free": {
       "get": {
         "operationId": "get_v1_pricing_free",
-        "summary": "ListFreeModels returns the models that cost nothing to call, filtered to what\nthe caller's org may see.",
+        "summary": "ListFreeModels returns the models that cost nothing to call, filtered to what the caller's org may see.",
         "description": "ListFreeModels returns the models that cost nothing to call, filtered to what\nthe caller's org may see. It is the same catalog as ListModels narrowed to\nentries the pricing source marks free.",
         "tags": [
           "pricing"
@@ -519,7 +519,7 @@
     "/v1/pricing/gpu": {
       "get": {
         "operationId": "get_v1_pricing_gpu",
-        "summary": "ListGPUTiers returns the rentable GPU configurations, each with its",
+        "summary": "ListGPUTiers returns the rentable GPU configurations, each with its accelerator count and model, VRAM, vCPU, host memory and hourly price.",
         "description": "ListGPUTiers returns the rentable GPU configurations, each with its\naccelerator count and model, VRAM, vCPU, host memory and hourly price.",
         "tags": [
           "pricing"
@@ -567,7 +567,7 @@
     "/v1/pricing/iam": {
       "get": {
         "operationId": "get_v1_pricing_iam",
-        "summary": "ListIAMPlans returns the identity plans — the Hanzo IAM tiers, each with its",
+        "summary": "ListIAMPlans returns the identity plans — the Hanzo IAM tiers, each with its monthly and annual price, monthly-active-user allowance and feature list.",
         "description": "ListIAMPlans returns the identity plans — the Hanzo IAM tiers, each with its\nmonthly and annual price, monthly-active-user allowance and feature list.",
         "tags": [
           "pricing"
@@ -589,7 +589,7 @@
     "/v1/pricing/model/{name}": {
       "get": {
         "operationId": "get_v1_pricing_model_name",
-        "summary": "GetModel returns one model's catalog entry — its pricing, context window and\ncapabilities as the pricing source records them.",
+        "summary": "GetModel returns one model's catalog entry — its pricing, context window and capabilities as the pricing source records them.",
         "description": "GetModel returns one model's catalog entry — its pricing, context window and\ncapabilities as the pricing source records them. A model hidden for the\ncaller's org answers the same 404 an unknown name does, so a disabled model\ngets no existence oracle.",
         "tags": [
           "pricing"
@@ -626,7 +626,7 @@
     "/v1/pricing/models": {
       "get": {
         "operationId": "get_v1_pricing_models",
-        "summary": "ListModels returns the whole model catalog — Hanzo's own Zen models and every\nthird-party model — filtered to what the caller's org may see.",
+        "summary": "ListModels returns the whole model catalog — Hanzo's own Zen models and every third-party model — filtered to what the caller's org may see.",
         "description": "ListModels returns the whole model catalog — Hanzo's own Zen models and every\nthird-party model — filtered to what the caller's org may see. A model an\nadmin has disabled is absent; one in beta appears only for an org granted it.\nA SuperAdmin sees every model, each annotated with its enablement state.",
         "tags": [
           "pricing"
@@ -648,7 +648,7 @@
     "/v1/pricing/paas": {
       "get": {
         "operationId": "get_v1_pricing_paas",
-        "summary": "ListPaaSPlans returns the application-hosting plans — the deploy-and-host",
+        "summary": "ListPaaSPlans returns the application-hosting plans — the deploy-and-host tiers, each with its monthly and annual price, app and memory allowances and feature list.",
         "description": "ListPaaSPlans returns the application-hosting plans — the deploy-and-host\ntiers, each with its monthly and annual price, app and memory allowances and\nfeature list.",
         "tags": [
           "pricing"
@@ -670,7 +670,7 @@
     "/v1/pricing/policy": {
       "get": {
         "operationId": "get_v1_pricing_policy",
-        "summary": "GetPricingPolicy returns the pricing policy document: the revenue-sharing",
+        "summary": "GetPricingPolicy returns the pricing policy document: the revenue-sharing terms (the idle-resale share and the open-source share, each with its percentage and who is eligible) and the commitments Hanzo makes about how it bills — no hidden fees, no egress charges, no surprise bills.",
         "description": "GetPricingPolicy returns the pricing policy document: the revenue-sharing\nterms (the idle-resale share and the open-source share, each with its\npercentage and who is eligible) and the commitments Hanzo makes about how it\nbills — no hidden fees, no egress charges, no surprise bills.",
         "tags": [
           "pricing"
@@ -695,7 +695,7 @@
     "/v1/pricing/providers": {
       "get": {
         "operationId": "get_v1_pricing_providers",
-        "summary": "ListProviders returns the model providers the catalog knows, each with its\ninfo object, filtered to what the caller's org may see.",
+        "summary": "ListProviders returns the model providers the catalog knows, each with its info object, filtered to what the caller's org may see.",
         "description": "ListProviders returns the model providers the catalog knows, each with its\ninfo object, filtered to what the caller's org may see. A provider an admin\nhas disabled is absent — and so are its models everywhere else on this\nsurface, because a provider's state cascades to what it serves.",
         "tags": [
           "pricing"
@@ -717,7 +717,7 @@
     "/v1/pricing/subscriptions": {
       "get": {
         "operationId": "get_v1_pricing_subscriptions",
-        "summary": "ListSubscriptionPlans returns the API subscription plans — the account-level",
+        "summary": "ListSubscriptionPlans returns the API subscription plans — the account-level tiers a customer subscribes to, each with its monthly and annual price, included credit, rate limits and feature list.",
         "description": "ListSubscriptionPlans returns the API subscription plans — the account-level\ntiers a customer subscribes to, each with its monthly and annual price,\nincluded credit, rate limits and feature list.",
         "tags": [
           "pricing"
@@ -739,7 +739,7 @@
     "/v1/pricing/summary": {
       "get": {
         "operationId": "get_v1_pricing_summary",
-        "summary": "GetPricingSummary returns the catalog's headline statistics — model counts by\nfamily and the provider directory.",
+        "summary": "GetPricingSummary returns the catalog's headline statistics — model counts by family and the provider directory.",
         "description": "GetPricingSummary returns the catalog's headline statistics — model counts by\nfamily and the provider directory. The provider sub-object is filtered to what\nthe caller's org may see, so a disabled provider's name never leaks; the\naggregate counts are the catalog's own, over everything it holds.",
         "tags": [
           "pricing"
@@ -764,21 +764,11 @@
     "/v1/pricing/sync": {
       "post": {
         "operationId": "post_v1_pricing_sync",
-        "summary": "SyncPricing refreshes the third-party section of the catalog from its upstream\nlistings and returns the time the refreshed catalog was stamped with.",
+        "summary": "SyncPricing refreshes the third-party section of the catalog from its upstream listings and returns the time the refreshed catalog was stamped with.",
         "description": "SyncPricing refreshes the third-party section of the catalog from its upstream\nlistings and returns the time the refreshed catalog was stamped with. The\nfetch runs in Go and the markup transform in the pricing bundle. SuperAdmin\nonly; every other caller is refused.",
         "tags": [
           "pricing"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/pricingNoInput"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
@@ -796,7 +786,7 @@
     "/v1/pricing/tools": {
       "get": {
         "operationId": "get_v1_pricing_tools",
-        "summary": "ListToolPrices returns the per-use tool prices — web search, code",
+        "summary": "ListToolPrices returns the per-use tool prices — web search, code interpreter, file storage, image generation, speech-to-text and text-to-speech — each with the unit it is billed by and its price in that unit.",
         "description": "ListToolPrices returns the per-use tool prices — web search, code\ninterpreter, file storage, image generation, speech-to-text and\ntext-to-speech — each with the unit it is billed by and its price in that\nunit.",
         "tags": [
           "pricing"
@@ -950,10 +940,6 @@
             "type": "object"
           }
         },
-        "type": "object"
-      },
-      "pricingNoInput": {
-        "properties": {},
         "type": "object"
       },
       "pricingPlanList": {

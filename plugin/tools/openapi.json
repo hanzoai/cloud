@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router \u2014 every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
     "version": "v1"
   },
   "servers": [
@@ -12,6 +12,15 @@
   ],
   "tags": [
     {
+      "name": "mcp"
+    },
+    {
+      "name": "plugins"
+    },
+    {
+      "name": "skills"
+    },
+    {
       "name": "tools"
     }
   ],
@@ -20,7 +29,7 @@
       "get": {
         "operationId": "get_v1_mcp",
         "tags": [
-          "tools"
+          "mcp"
         ]
       }
     },
@@ -28,13 +37,13 @@
       "get": {
         "operationId": "get_v1_mcp_servers",
         "tags": [
-          "tools"
+          "mcp"
         ]
       },
       "post": {
         "operationId": "post_v1_mcp_servers",
         "tags": [
-          "tools"
+          "mcp"
         ]
       }
     },
@@ -42,7 +51,7 @@
       "delete": {
         "operationId": "delete_v1_mcp_servers_by_id",
         "tags": [
-          "tools"
+          "mcp"
         ],
         "parameters": [
           {
@@ -60,7 +69,7 @@
       "get": {
         "operationId": "get_v1_plugins",
         "tags": [
-          "tools"
+          "plugins"
         ]
       }
     },
@@ -68,7 +77,7 @@
       "get": {
         "operationId": "get_v1_plugins_authored",
         "tags": [
-          "tools"
+          "plugins"
         ]
       }
     },
@@ -76,7 +85,7 @@
       "delete": {
         "operationId": "delete_v1_plugins_authored_by_id",
         "tags": [
-          "tools"
+          "plugins"
         ],
         "parameters": [
           {
@@ -94,7 +103,7 @@
       "post": {
         "operationId": "post_v1_plugins_build",
         "tags": [
-          "tools"
+          "plugins"
         ]
       }
     },
@@ -102,13 +111,13 @@
       "get": {
         "operationId": "get_v1_skills",
         "tags": [
-          "tools"
+          "skills"
         ]
       },
       "post": {
         "operationId": "post_v1_skills",
         "tags": [
-          "tools"
+          "skills"
         ]
       }
     },
@@ -116,7 +125,7 @@
       "get": {
         "operationId": "get_v1_skills_authored",
         "tags": [
-          "tools"
+          "skills"
         ]
       }
     },
@@ -124,7 +133,7 @@
       "delete": {
         "operationId": "delete_v1_skills_by_id",
         "tags": [
-          "tools"
+          "skills"
         ],
         "parameters": [
           {

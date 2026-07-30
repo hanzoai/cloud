@@ -19,7 +19,7 @@
     "/v1/guide": {
       "get": {
         "operationId": "get_v1_guide",
-        "summary": "Overview returns the caller org's launch journey: the active curriculum's",
+        "summary": "Overview returns the caller org's launch journey: the active curriculum's version and title, every step with its state, whether it is available, what blocks it and whether the Business AI can run it, the done/total/percent progress with the next step to take, and the org's analytics funnel folded in.",
         "description": "Overview returns the caller org's launch journey: the active curriculum's\nversion and title, every step with its state, whether it is available, what\nblocks it and whether the Business AI can run it, the done/total/percent\nprogress with the next step to take, and the org's analytics funnel folded in.\nAuto-detect runs first, so a step the org has already completed elsewhere reads\ndone without anyone marking it.",
         "tags": [
           "guide"
@@ -41,7 +41,7 @@
     "/v1/guide/actions": {
       "get": {
         "operationId": "get_v1_guide_actions",
-        "summary": "ListActions returns the caller org's Business AI action ledger, most recent\nfirst: every \"do it for me\" tool call, the arguments it ran with, its result and\nwhether it succeeded.",
+        "summary": "ListActions returns the caller org's Business AI action ledger, most recent first: every \"do it for me\" tool call, the arguments it ran with, its result and whether it succeeded.",
         "description": "ListActions returns the caller org's Business AI action ledger, most recent\nfirst: every \"do it for me\" tool call, the arguments it ran with, its result and\nwhether it succeeded. It is the audit-visible record of what the agent did on\nthe org's behalf, and the backing state for the \"acted\" auto-detect signal.",
         "tags": [
           "guide"
@@ -63,7 +63,7 @@
     "/v1/guide/analytics": {
       "get": {
         "operationId": "get_v1_guide_analytics",
-        "summary": "Analytics returns the caller org's funnel from the analytics lens plus the GTM\nrecommendations derived from it.",
+        "summary": "Analytics returns the caller org's funnel from the analytics lens plus the GTM recommendations derived from it.",
         "description": "Analytics returns the caller org's funnel from the analytics lens plus the GTM\nrecommendations derived from it. It is the Business AI's data-grounded read —\nwhat the funnel is doing, and the next-best action to move its weakest stage. An\nunreachable or silent warehouse answers available=false, never a fabricated\nnumber.",
         "tags": [
           "guide"
@@ -85,7 +85,7 @@
     "/v1/guide/blueprint": {
       "get": {
         "operationId": "get_v1_guide_blueprint",
-        "summary": "GetBlueprint returns the FULL authored brand blueprint — every principle,\nsection, step, strategy and template WITH its enabled flag made explicit,\nincluding the disabled items the org-facing reads never see — plus the active\nversion number, the brand key it is stored under and the item counts.",
+        "summary": "GetBlueprint returns the FULL authored brand blueprint — every principle, section, step, strategy and template WITH its enabled flag made explicit, including the disabled items the org-facing reads never see — plus the active version number, the brand key it is stored under and the item counts.",
         "description": "GetBlueprint returns the FULL authored brand blueprint — every principle,\nsection, step, strategy and template WITH its enabled flag made explicit,\nincluding the disabled items the org-facing reads never see — plus the active\nversion number, the brand key it is stored under and the item counts. It is the\nSuperAdmin authoring view of the platform blueprint, so it is refused 403 for\nanyone else, including a per-org admin: the brand blueprint is shared platform\ncontent, not a per-customer surface.",
         "tags": [
           "guide"
@@ -113,7 +113,7 @@
     "/v1/guide/blueprint/versions": {
       "get": {
         "operationId": "get_v1_guide_blueprint_versions",
-        "summary": "ListBlueprintVersions returns the brand blueprint's version history — every\nstored version's number and edit time, newest first — which is the\npoint-in-time-recovery and audit trail behind the authoring plane.",
+        "summary": "ListBlueprintVersions returns the brand blueprint's version history — every stored version's number and edit time, newest first — which is the point-in-time-recovery and audit trail behind the authoring plane.",
         "description": "ListBlueprintVersions returns the brand blueprint's version history — every\nstored version's number and edit time, newest first — which is the\npoint-in-time-recovery and audit trail behind the authoring plane. Metadata\nonly: the documents are not returned. SuperAdmin only, like the rest of this\nplane. The history is listable even when the current stored document no longer\nparses, so a schema-drifted row can still be diagnosed.",
         "tags": [
           "guide"
@@ -161,7 +161,7 @@
     "/v1/guide/chat": {
       "post": {
         "operationId": "post_v1_guide_chat",
-        "summary": "Chat answers a founder's question about their launch journey as the Business AI\ncoach: it grounds the reply in the org's REAL progress, its ranked available\nquests and its analytics funnel, and returns those candidate quests alongside so\nthe caller can act on one.",
+        "summary": "Chat answers a founder's question about their launch journey as the Business AI coach: it grounds the reply in the org's REAL progress, its ranked available quests and its analytics funnel, and returns those candidate quests alongside so the caller can act on one.",
         "description": "Chat answers a founder's question about their launch journey as the Business AI\ncoach: it grounds the reply in the org's REAL progress, its ranked available\nquests and its analytics funnel, and returns those candidate quests alongside so\nthe caller can act on one. READ-ONLY — it advises and never runs a step, so it\ncannot be talked into performing an action; the only executing path is POST\n/v1/guide/steps/{id}/do. One AI completion per call, billed to the caller's own\npayer.",
         "tags": [
           "guide"
@@ -196,7 +196,7 @@
     "/v1/guide/curriculum": {
       "delete": {
         "operationId": "delete_v1_guide_curriculum",
-        "summary": "DeleteCurriculum clears the caller org's curriculum override and returns the",
+        "summary": "DeleteCurriculum clears the caller org's curriculum override and returns the journey it falls back to — the brand blueprint, else the embedded fixture.",
         "description": "DeleteCurriculum clears the caller org's curriculum override and returns the\njourney it falls back to — the brand blueprint, else the embedded fixture.\nClearing an org that never set one is a no-op that answers the same default.",
         "tags": [
           "guide"
@@ -216,7 +216,7 @@
       },
       "get": {
         "operationId": "get_v1_guide_curriculum",
-        "summary": "GetCurriculum returns the journey the caller's org is actually running, and",
+        "summary": "GetCurriculum returns the journey the caller's org is actually running, and whether it comes from the org's OWN override (custom) or from the platform default — the brand blueprint, else the embedded fixture.",
         "description": "GetCurriculum returns the journey the caller's org is actually running, and\nwhether it comes from the org's OWN override (custom) or from the platform\ndefault — the brand blueprint, else the embedded fixture.",
         "tags": [
           "guide"
@@ -244,7 +244,7 @@
     "/v1/guide/profile": {
       "get": {
         "operationId": "get_v1_guide_profile",
-        "summary": "Profile returns the caller org's OBSERVED growth profile — the signal set, the\nclassified growth stage, and the org's own key metrics.",
+        "summary": "Profile returns the caller org's OBSERVED growth profile — the signal set, the classified growth stage, and the org's own key metrics.",
         "description": "Profile returns the caller org's OBSERVED growth profile — the signal set, the\nclassified growth stage, and the org's own key metrics. It is a pure READ,\nrecomputed from the org's CURRENT state each request (real-time by pull): it\nreuses the reconcile path (snapshotFor runs the detectors) for launch progress\nand runs the growth probes (observe) for the signals — it never caches, never\nruns a billable effect, never targets another org. Org-scoped on the validated\nprincipal; fail-closed without one. It PRODUCES the profile and classifies the\nstage; it decides NO recommendation (that is a later surface).",
         "tags": [
           "guide"
@@ -302,7 +302,7 @@
     "/v1/guide/steps/{id}/reset": {
       "post": {
         "operationId": "post_v1_guide_steps_id_reset",
-        "summary": "ResetStep returns one step of the caller org's journey to todo — clearing a\nmanual mark or a skip — and returns the refreshed journey.",
+        "summary": "ResetStep returns one step of the caller org's journey to todo — clearing a manual mark or a skip — and returns the refreshed journey.",
         "description": "ResetStep returns one step of the caller org's journey to todo — clearing a\nmanual mark or a skip — and returns the refreshed journey. Reset is never\ndependency-gated. Auto-detect runs on the next read, so a step the org has in\nfact completed elsewhere goes straight back to done.",
         "tags": [
           "guide"
@@ -318,16 +318,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/stepRef"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
@@ -345,7 +335,7 @@
     "/v1/guide/steps/{id}/skip": {
       "post": {
         "operationId": "post_v1_guide_steps_id_skip",
-        "summary": "SkipStep marks one step of the caller org's journey skipped and returns the\nrefreshed journey.",
+        "summary": "SkipStep marks one step of the caller org's journey skipped and returns the refreshed journey.",
         "description": "SkipStep marks one step of the caller org's journey skipped and returns the\nrefreshed journey. Skipping is never dependency-gated — the founder is\ndeclaring the step does not apply to them — so a step whose dependencies are\nunfinished can still be skipped, and a skipped step counts as terminal for\neverything downstream of it.",
         "tags": [
           "guide"
@@ -361,16 +351,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/stepRef"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
@@ -406,7 +386,7 @@
     "/v1/guide/strategies": {
       "get": {
         "operationId": "get_v1_guide_strategies",
-        "summary": "Strategies returns the ENABLED tactics corpus for the caller's org: the tactics\nlibrary narrowed by the explicit category/workload filters AND by the org's\nOBSERVED growth stage and capability signals (a tactic's tags are\npreconditions, so it surfaces only once the org can act on it).",
+        "summary": "Strategies returns the ENABLED tactics corpus for the caller's org: the tactics library narrowed by the explicit category/workload filters AND by the org's OBSERVED growth stage and capability signals (a tactic's tags are preconditions, so it surfaces only once the org can act on it).",
         "description": "Strategies returns the ENABLED tactics corpus for the caller's org: the tactics\nlibrary narrowed by the explicit category/workload filters AND by the org's\nOBSERVED growth stage and capability signals (a tactic's tags are\npreconditions, so it surfaces only once the org can act on it). Passing stage\nPREVIEWS the corpus at that stage instead of the observed one. The content is\nshared platform data — no org's records — and the read is never a billable\neffect.",
         "tags": [
           "guide"
@@ -459,7 +439,7 @@
     "/v1/guide/suggest": {
       "get": {
         "operationId": "get_v1_guide_suggest",
-        "summary": "Suggest returns the caller org's next-best quests: the available, non-terminal\nsteps of its journey ranked by how much downstream work each unblocks, each with\nthe grounded reason it is a good next move and whether the Business AI can run\nit, plus the org's funnel and the GTM recommendations derived from it.",
+        "summary": "Suggest returns the caller org's next-best quests: the available, non-terminal steps of its journey ranked by how much downstream work each unblocks, each with the grounded reason it is a good next move and whether the Business AI can run it, plus the org's funnel and the GTM recommendations derived from it.",
         "description": "Suggest returns the caller org's next-best quests: the available, non-terminal\nsteps of its journey ranked by how much downstream work each unblocks, each with\nthe grounded reason it is a good next move and whether the Business AI can run\nit, plus the org's funnel and the GTM recommendations derived from it. A\nbest-effort AI narrative over exactly those quests and numbers is included when\nan AI plane is wired. READ-ONLY: it advises and never runs a step — the only\nexecuting path is POST /v1/guide/steps/{id}/do.",
         "tags": [
           "guide"
@@ -1021,15 +1001,6 @@
           },
           "total": {
             "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "stepRef": {
-        "properties": {
-          "id": {
-            "description": "ID is the step's id, as it appears in the journey (e.g. \"gsuite\").",
-            "type": "string"
           }
         },
         "type": "object"

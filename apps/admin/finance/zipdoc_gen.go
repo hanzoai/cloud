@@ -11,6 +11,9 @@ import (
 func init() {
 	zip.Describe("GET /v1/admin/finance", zip.Doc{
 		Description: "Finance answers GET /v1/admin/finance. It reads the multi-vendor COGS from commerce\n/v1/costs, the DO promo-credit/burn-down treasury view, and the fleet commerce revenue,\nthen hands them to ComputeFinance. SuperAdmin only.",
+		Fields: map[string]string{
+			"Vendor.source": "\"actual\" | \"estimated\"",
+		},
 	})
 	zip.Describe("GET /v1/admin/providers/credit", zip.Doc{
 		Description: "ProvidersCredit serves GET /v1/admin/providers/credit — the per-provider upstream\ncredit ledger. SuperAdmin-guarded (see Routes).",

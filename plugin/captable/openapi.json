@@ -99,7 +99,7 @@
     "/v1/captable/convertibles/{id}": {
       "delete": {
         "operationId": "delete_v1_captable_convertibles_id",
-        "summary": "DeleteConvertible removes one of the caller org's convertible notes, taking its\nprincipal out of the cap table's unconverted-instrument totals.",
+        "summary": "DeleteConvertible removes one of the caller org's convertible notes, taking its principal out of the cap table's unconverted-instrument totals.",
         "description": "DeleteConvertible removes one of the caller org's convertible notes, taking its\nprincipal out of the cap table's unconverted-instrument totals. An id this org\ndoes not hold is not found.",
         "tags": [
           "captable"
@@ -210,7 +210,7 @@
     "/v1/captable/options/{id}": {
       "delete": {
         "operationId": "delete_v1_captable_options_id",
-        "summary": "DeleteOption removes one of the caller org's option grants, taking its shares\nout of the cap table's granted-options and fully-diluted counts.",
+        "summary": "DeleteOption removes one of the caller org's option grants, taking its shares out of the cap table's granted-options and fully-diluted counts.",
         "description": "DeleteOption removes one of the caller org's option grants, taking its shares\nout of the cap table's granted-options and fully-diluted counts. An id this org\ndoes not hold is not found.",
         "tags": [
           "captable"
@@ -271,7 +271,7 @@
     "/v1/captable/rounds/{id}": {
       "get": {
         "operationId": "get_v1_captable_rounds_id",
-        "summary": "GetRound returns one of the caller org's fundraising rounds together with every\ninvestment written into it, oldest first.",
+        "summary": "GetRound returns one of the caller org's fundraising rounds together with every investment written into it, oldest first.",
         "description": "GetRound returns one of the caller org's fundraising rounds together with every\ninvestment written into it, oldest first. A round id that does not exist in the\ncaller's org is not found — including one that exists in another tenant, since\nthe org comes from the caller's principal and is part of the lookup.",
         "tags": [
           "captable"
@@ -304,7 +304,7 @@
     "/v1/captable/rounds/{id}/close": {
       "post": {
         "operationId": "post_v1_captable_rounds_id_close",
-        "summary": "CloseRound closes one of the caller org's fundraising rounds, recording the\nclose date and moving its status to CLOSED.",
+        "summary": "CloseRound closes one of the caller org's fundraising rounds, recording the close date and moving its status to CLOSED.",
         "description": "CloseRound closes one of the caller org's fundraising rounds, recording the\nclose date and moving its status to CLOSED. Only an OPEN round can be closed:\na round that is already closed — like an id this org does not hold — is not\nfound. Closing a round does not change what was invested in it.",
         "tags": [
           "captable"
@@ -393,7 +393,7 @@
     "/v1/captable/safes/{id}": {
       "delete": {
         "operationId": "delete_v1_captable_safes_id",
-        "summary": "DeleteSafe removes one of the caller org's SAFEs, taking its capital out of the\ncap table's unconverted-instrument totals.",
+        "summary": "DeleteSafe removes one of the caller org's SAFEs, taking its capital out of the cap table's unconverted-instrument totals.",
         "description": "DeleteSafe removes one of the caller org's SAFEs, taking its capital out of the\ncap table's unconverted-instrument totals. An id this org does not hold is not\nfound.",
         "tags": [
           "captable"
@@ -511,7 +511,7 @@
     "/v1/captable/shares/{id}": {
       "delete": {
         "operationId": "delete_v1_captable_shares_id",
-        "summary": "DeleteShare removes one of the caller org's share certificates, taking its\nshares out of the cap table's outstanding and fully-diluted counts.",
+        "summary": "DeleteShare removes one of the caller org's share certificates, taking its shares out of the cap table's outstanding and fully-diluted counts.",
         "description": "DeleteShare removes one of the caller org's share certificates, taking its\nshares out of the cap table's outstanding and fully-diluted counts. An id this\norg does not hold is not found.",
         "tags": [
           "captable"
@@ -736,20 +736,16 @@
       "captableCompanyUpdate": {
         "properties": {
           "incorporationCountry": {
-            "description": "IncorporationCountry is the ISO country the entity is incorporated in.\nOptional; omitted, null or empty clears it. Any JSON scalar is accepted\nand stored as its text.",
-            "type": "string"
+            "description": "IncorporationCountry is the ISO country the entity is incorporated in.\nOptional; omitted, null or empty clears it. Any JSON scalar is accepted\nand stored as its text."
           },
           "incorporationState": {
-            "description": "IncorporationState is the state or province of incorporation. Optional;\nomitted, null or empty clears it. Any JSON scalar is accepted and stored\nas its text.",
-            "type": "string"
+            "description": "IncorporationState is the state or province of incorporation. Optional;\nomitted, null or empty clears it. Any JSON scalar is accepted and stored\nas its text."
           },
           "incorporationType": {
-            "description": "IncorporationType is the entity kind, e.g. LLC or C_CORP. Optional;\nomitted, null or empty clears it. Any JSON scalar is accepted and stored\nas its text.",
-            "type": "string"
+            "description": "IncorporationType is the entity kind, e.g. LLC or C_CORP. Optional;\nomitted, null or empty clears it. Any JSON scalar is accepted and stored\nas its text."
           },
           "name": {
-            "description": "Name is the company's legal name. Required, and it must be a non-empty\nstring — anything else is refused with the cap table's own validation\nerror.",
-            "type": "string"
+            "description": "Name is the company's legal name. Required, and it must be a non-empty\nstring — anything else is refused with the cap table's own validation\nerror."
           }
         },
         "type": "object"
@@ -1106,8 +1102,7 @@
       "captableRoundCloseRequest": {
         "properties": {
           "closeDate": {
-            "description": "CloseDate is the date to record the round as closed on. Optional: omitted,\nnull or empty records TODAY. Any JSON scalar is accepted and stored as its\ntext, and the text is stored unparsed, so a caller that wants an ISO date\nsends one.",
-            "type": "string"
+            "description": "CloseDate is the date to record the round as closed on. Optional: omitted,\nnull or empty records TODAY. Any JSON scalar is accepted and stored as its\ntext, and the text is stored unparsed, so a caller that wants an ISO date\nsends one."
           },
           "id": {
             "description": "ID is the round to close. It is the path segment: the URL is the\naddressing authority, and the org it is resolved in comes from the\ncaller's principal, so an id from another tenant is simply not found.",
@@ -1452,48 +1447,38 @@
       "captableStakeholderPatch": {
         "properties": {
           "city": {
-            "description": "City is the stakeholder's city.",
-            "type": "string"
+            "description": "City is the stakeholder's city."
           },
           "currentRelationship": {
-            "description": "CurrentRelationship is how the stakeholder relates to the company, e.g.\nFOUNDER, INVESTOR or EMPLOYEE. This route stores it as sent — unlike\nadding a stakeholder, it is not checked against the vocabulary.",
-            "type": "string"
+            "description": "CurrentRelationship is how the stakeholder relates to the company, e.g.\nFOUNDER, INVESTOR or EMPLOYEE. This route stores it as sent — unlike\nadding a stakeholder, it is not checked against the vocabulary."
           },
           "email": {
-            "description": "Email is the stakeholder's email. This route stores it as sent — unlike\nadding a stakeholder, it is not checked for shape or uniqueness.",
-            "type": "string"
+            "description": "Email is the stakeholder's email. This route stores it as sent — unlike\nadding a stakeholder, it is not checked for shape or uniqueness."
           },
           "id": {
             "description": "ID is the stakeholder to update. It is the path segment: the URL is the\naddressing authority, and the org it is resolved in comes from the\ncaller's principal, so an id from another tenant is simply not found.",
             "type": "string"
           },
           "institutionName": {
-            "description": "InstitutionName names the institution, when the stakeholder is one.",
-            "type": "string"
+            "description": "InstitutionName names the institution, when the stakeholder is one."
           },
           "name": {
-            "description": "Name is the stakeholder's full name.",
-            "type": "string"
+            "description": "Name is the stakeholder's full name."
           },
           "stakeholderType": {
-            "description": "StakeholderType is INDIVIDUAL or INSTITUTION. This route stores it as\nsent — unlike adding a stakeholder, it is not checked against the\nvocabulary.",
-            "type": "string"
+            "description": "StakeholderType is INDIVIDUAL or INSTITUTION. This route stores it as\nsent — unlike adding a stakeholder, it is not checked against the\nvocabulary."
           },
           "state": {
-            "description": "State is the stakeholder's state or province.",
-            "type": "string"
+            "description": "State is the stakeholder's state or province."
           },
           "streetAddress": {
-            "description": "StreetAddress is the stakeholder's street address.",
-            "type": "string"
+            "description": "StreetAddress is the stakeholder's street address."
           },
           "taxId": {
-            "description": "TaxID is the stakeholder's tax identifier.",
-            "type": "string"
+            "description": "TaxID is the stakeholder's tax identifier."
           },
           "zipcode": {
-            "description": "Zipcode is the stakeholder's postal code.",
-            "type": "string"
+            "description": "Zipcode is the stakeholder's postal code."
           }
         },
         "type": "object"
