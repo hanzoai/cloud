@@ -8928,6 +8928,28 @@ components:
           description: Reachable is whether the app answered the liveness probe.
           type: boolean
       type: object
+    enableResp:
+      properties:
+        accountToken:
+          description: |-
+            AccountToken is the org's own tunnel-account credential. Treat it as a secret:
+            it is what the CLI enables an environment with.
+          type: string
+        controller:
+          description: Controller is the public controller endpoint the CLI enables
+            against.
+          type: string
+        namespace:
+          description: |-
+            Namespace is the public frontend a share is published into, when the
+            deployment names one.
+          type: string
+        urlTemplate:
+          description: |-
+            URLTemplate is the shape a share token expands to, so the CLI can print the
+            resulting URL without asking again.
+          type: string
+      type: object
     enablementBoard:
       properties:
         betas:
@@ -9627,6 +9649,49 @@ components:
             first.
           items:
             $ref: '#/components/schemas/InboxItem'
+          type: array
+      type: object
+    indexerView:
+      properties:
+        chain:
+          description: Chain is the chain this indexer indexes, as the indexer names
+            it.
+          type: string
+        height:
+          description: |-
+            Height is the latest INDEXED block height, as a decimal string. Absent when
+            nothing has been indexed yet.
+          type: string
+        id:
+          description: 'ID identifies the indexer: its chain name, else its chain
+            id, else the brand.'
+          type: string
+        lag:
+          description: |-
+            Lag is how far behind the chain HEAD this indexer is. The indexer REST does not
+            expose the head, so it is always absent rather than a fabricated zero.
+          type: string
+        network:
+          description: 'Network is the deployment''s network tier: mainnet, testnet
+            or devnet.'
+          type: string
+        status:
+          description: Status is "degraded" when /health explicitly reports unhealthy,
+            else "active".
+          type: string
+        updatedAt:
+          description: UpdatedAt is the latest indexed block's timestamp, RFC 3339
+            UTC.
+          type: string
+      type: object
+    indexersOut:
+      properties:
+        indexers:
+          description: |-
+            Indexers is one row per reachable chain indexer, or an empty list when the
+            indexer is unreachable — never a fabricated row.
+          items:
+            $ref: '#/components/schemas/indexerView'
           type: array
       type: object
     ingressMiddlewares:
@@ -10747,6 +10812,42 @@ components:
         user:
           $ref: '#/components/schemas/userOptinView'
       type: object
+    oracleView:
+      properties:
+        feed:
+          description: Feed is the trading pair this feed prices.
+          type: string
+        id:
+          description: ID is the feed's own id, else its trading pair.
+          type: string
+        name:
+          description: Name is the feed's display name — the trading pair, e.g. "LUX/USD".
+          type: string
+        source:
+          description: Source is the oracle network the feed originates from; "O-Chain"
+            by default.
+          type: string
+        status:
+          description: Status is "active" for a listed feed.
+          type: string
+        updatedAt:
+          description: UpdatedAt is the feed's own timestamp, RFC 3339 UTC.
+          type: string
+        value:
+          description: Value is the feed's price, verbatim as the registry carries
+            it.
+          type: string
+      type: object
+    oraclesOut:
+      properties:
+        oracles:
+          description: |-
+            Oracles is one row per on-chain price feed, or an empty list when the graph is
+            unreachable or carries none — never a fabricated feed.
+          items:
+            $ref: '#/components/schemas/oracleView'
+          type: array
+      type: object
     orgOptinReq:
       properties:
         display:
@@ -11241,6 +11342,18 @@ components:
           $ref: '#/components/schemas/FlowVersion'
           description: Version is the flow's latest version — its display name and
             step tree.
+      type: object
+    prefsView:
+      properties:
+        prefs:
+          description: |-
+            Prefs is the caller's preference document: an opaque JSON object whose keys
+            the surfaces own, returned verbatim. `{}` when nothing has been saved.
+        updatedAt:
+          description: |-
+            UpdatedAt is when the document was last written, unix seconds. Absent when
+            nothing has been saved.
+          type: integer
       type: object
     pricingHealth:
       properties:
@@ -12879,6 +12992,89 @@ components:
           description: Key is the switch to write, taken from the path (e.g. "waitlist.chat").
           type: string
       type: object
+    settingsReq:
+      properties:
+        config:
+          additionalProperties:
+            type: object
+          description: |-
+            Config is the product's non-secret configuration, stored verbatim. Bounded at
+            64 KiB once serialized. Omit it to store an empty object.
+          type: object
+        product:
+          description: |-
+            Product is the catalog slug, from the PATH. zip binds the path last, so the
+            URL names the product being written whatever a body field claims.
+          type: string
+        secrets:
+          additionalProperties:
+            type: string
+          description: |-
+            Secrets are the secret fields, by name. Each VALUE is sealed into KMS and
+            never reaches this deployment's database; a value that is empty or equal to
+            the mask the read path returns means "unchanged" and is skipped, so a console
+            round-trip cannot blank a stored secret. A key must match
+            ^[a-z0-9][a-z0-9._-]{0,62}$, a value is bounded at 8 KiB, and an org may hold
+            at most 64 secret fields per product.
+          type: object
+      type: object
+    settingsView:
+      properties:
+        config:
+          description: |-
+            Config is the product's non-secret configuration, an opaque JSON object the
+            server stores and returns verbatim. `{}` when nothing has been saved.
+        createdAt:
+          description: CreatedAt is when this configuration was first written, RFC
+            3339 UTC.
+          type: string
+        product:
+          description: Product is the catalog slug this configuration belongs to.
+          type: string
+        secretKeys:
+          description: |-
+            SecretKeys names the secret fields that ARE set. Their VALUES live only in KMS
+            and are never returned here — the console renders a mask.
+          items:
+            type: string
+          type: array
+        updatedAt:
+          description: |-
+            UpdatedAt is when this configuration was last written, RFC 3339 UTC. Empty
+            when nothing has been saved.
+          type: string
+      type: object
+    shareView:
+      properties:
+        backend:
+          description: Backend is the local endpoint the share proxies to.
+          type: string
+        backendMode:
+          description: BackendMode is how the tunnel serves the backend, e.g. proxy
+            or web.
+          type: string
+        createdAt:
+          description: CreatedAt is when the share was opened, unix seconds.
+          type: integer
+        token:
+          description: Token is the share's own identifier, the leaf of its public
+            URL.
+          type: string
+        url:
+          description: URL is the share's public address, rendered from the deployment's
+            URL template.
+          type: string
+      type: object
+    sharesOut:
+      properties:
+        shares:
+          description: |-
+            Shares is the org's active shares — empty rather than absent when there are
+            none, or when the controller cannot be reached.
+          items:
+            $ref: '#/components/schemas/shareView'
+          type: array
+      type: object
     skillDeleted:
       properties:
         deleted:
@@ -14022,6 +14218,27 @@ components:
         waitlist:
           description: Waitlist is the waitlist slug the grant lands on. Required.
           type: string
+      type: object
+    waitlistModeView:
+      properties:
+        host:
+          description: Host is the queried host, normalized (lowercased, port stripped).
+          type: string
+        known:
+          description: |-
+            Known is false when no registered service claims this host, or when the
+            registry is unavailable — the guard then lets the request through, which is
+            why the two cases answer alike.
+          type: boolean
+        service:
+          description: Service is the registered service that governs this host, empty
+            when none does.
+          type: string
+        waitlistMode:
+          description: |-
+            WaitlistMode is true when the service is GATED to approved users, false when
+            it is open. Always false for an ungoverned host.
+          type: boolean
       type: object
     walletTopupReq:
       properties:
@@ -26747,7 +26964,35 @@ paths:
       - flags
   /v1/flags/waitlist:
     get:
+      description: |-
+        WaitlistMode reports whether ONE host is currently gated by the launch waitlist.
+        It resolves the host to the service that governs it and reads that service's
+        waitlist switch, so a guard sitting in front of a hosted surface can decide in one
+        call whether to show the waitlist or the product. It answers for the ONE host
+        asked about and never enumerates the registry, which is why it needs no
+        credential. It FAILS OPEN: an unregistered host, an unmounted registry and a store
+        fault all answer known=false with mode=false, so a request is never gated pre-boot
+        or on a registry fault.
       operationId: get_v1_flags_waitlist
+      parameters:
+      - description: |-
+          Host is the host to resolve, e.g. "chat.hanzo.ai". Defaults to the request's
+          own Host header when omitted, which is what lets a guard running on the
+          governed host ask about itself with no argument.
+        in: query
+        name: host
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/waitlistModeView'
+          description: ok
+      summary: WaitlistMode reports whether ONE host is currently gated by the launch
+        waitlist.
       tags:
       - flags
   /v1/fleet:
@@ -29443,7 +29688,23 @@ paths:
       - index
   /v1/indexers:
     get:
+      description: |-
+        ListIndexers reports the deployment's chain indexer(s) and how far each has
+        indexed. Identity and health come from the indexer's /health; the latest indexed
+        block (height + time) from its /v1/explorer/blocks. The row EXISTS if EITHER call
+        reaches the indexer; when the indexer is entirely unreachable the answer degrades
+        to an honest-EMPTY list at 200, not a 502. No chain HEAD is exposed by the indexer
+        REST, so `lag` is honestly omitted rather than fabricated.
       operationId: get_v1_indexers
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/indexersOut'
+          description: ok
+      summary: ListIndexers reports the deployment's chain indexer(s) and how far
+        each has indexed.
       tags:
       - indexers
   /v1/ingress/middlewares:
@@ -33517,7 +33778,21 @@ paths:
       operationId: get_v1_openapi.json
   /v1/oracles:
     get:
+      description: |-
+        ListOracles reports the on-chain price/data oracles from the graph's O-Chain
+        PriceFeed registry. A reachable graph with no feeds answers an honest empty list;
+        an unreachable or erroring graph likewise degrades to an empty list at 200 rather
+        than a 502, so the console never error-toasts. No feed is ever fabricated.
       operationId: get_v1_oracles
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/oraclesOut'
+          description: ok
+      summary: ListOracles reports the on-chain price/data oracles from the graph's
+        O-Chain PriceFeed registry.
       tags:
       - oracles
   /v1/orgs/{org}/entitlements:
@@ -34572,9 +34847,25 @@ paths:
           description: Success
       tags:
       - plugins
-  /v1/prefs/:
+  /v1/prefs:
     get:
+      description: |-
+        GetPrefs returns the signed-in caller's OWN preference document — the theme,
+        density and pinned nav that follow them across every Hanzo surface. There is no
+        path to another user's preferences: not for an org admin, not for a platform
+        SuperAdmin, because the subject is built from the validated credential and is the
+        mandatory predicate on the read. A caller who has never saved anything gets an
+        empty document at 200, never a 404, so the user menu always renders.
       operationId: get_v1_prefs
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/prefsView'
+          description: ok
+      summary: GetPrefs returns the signed-in caller's OWN preference document — the
+        theme, density and pinned nav that follow them across every Hanzo surface.
       tags:
       - prefs
     patch:
@@ -35852,33 +36143,106 @@ paths:
       - sentry
   /v1/settings/{product}:
     get:
-      operationId: get_v1_settings_by_product
+      description: |-
+        GetSettings reads the caller org's configuration for one product, with every
+        secret field MASKED — only the names of the set secrets come back, never their
+        values, which live in KMS. A product the org has never configured is not a 404:
+        it answers 200 with an empty config object, so the console's Settings tab always
+        renders and merges its own display defaults on top.
+      operationId: get_v1_settings_product
       parameters:
-      - in: path
+      - description: Product is the catalog slug, from the path. Must match ^[a-z0-9][a-z0-9._-]{0,62}$.
+        in: path
         name: product
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/settingsView'
+          description: ok
+      summary: GetSettings reads the caller org's configuration for one product, with
+        every secret field MASKED — only the names of the set secrets come back, never
+        their values, which live in KMS.
       tags:
       - settings
     put:
-      operationId: put_v1_settings_by_product
+      description: |-
+        PutSettings writes the caller org's configuration for one product and answers the
+        stored result, secrets masked. Secret VALUES are sealed into KMS under
+        orgs/{org}/settings/{product}/{key} and never touch this deployment's database;
+        with no KMS configured a write that carries any secret is refused whole (503)
+        rather than dropping it or persisting it in the clear. A secret the body omits
+        keeps its stored value, so a partial write never silently clears one.
+      operationId: put_v1_settings_product
       parameters:
-      - in: path
+      - description: |-
+          Product is the catalog slug, from the PATH. zip binds the path last, so the
+          URL names the product being written whatever a body field claims.
+        in: path
         name: product
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/settingsReq'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/settingsView'
+          description: ok
+      summary: PutSettings writes the caller org's configuration for one product and
+        answers the stored result, secrets masked.
       tags:
       - settings
-  /v1/share/:
+  /v1/share:
     get:
+      description: |-
+        ListShares returns the tunnel shares the caller's org currently has open, across
+        every environment that org has enabled. It is a READ and it degrades honestly: an
+        unconfigured deployment, an org that has not provisioned yet, and an unreachable
+        controller all answer an EMPTY list at 200 rather than an error, so the console
+        never error-toasts on load.
       operationId: get_v1_share
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/sharesOut'
+          description: ok
+      summary: ListShares returns the tunnel shares the caller's org currently has
+        open, across every environment that org has enabled.
       tags:
       - share
   /v1/share/enable:
     post:
+      description: |-
+        Enable provisions the caller org's tunnel account and returns the credential the
+        `hanzo share` CLI needs to run a tunnel. It is idempotent: the account is keyed
+        deterministically off the VALIDATED org, so a repeat call hands back the same
+        account rather than creating a second one, and a caller can only ever provision
+        their OWN org's account. 503 when the deployment has no share controller
+        configured; 502 when that controller is unreachable.
       operationId: post_v1_share_enable
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/enableResp'
+          description: ok
+      summary: Enable provisions the caller org's tunnel account and returns the credential
+        the `hanzo share` CLI needs to run a tunnel.
       tags:
       - share
   /v1/sites:
