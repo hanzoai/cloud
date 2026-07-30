@@ -16,6 +16,7 @@ package analytics
 import (
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -67,7 +68,22 @@ const (
 		"rate caps key on, the DNT/Sec-GPC headers, and the RAW body length that is the anonymous lane's " +
 		"64 KiB -> 413 bound (public.go maxPublicBytes) — invisible to a typed op, and far below the " +
 		"fleet's global zip BodyLimit. Reading a tenant off an In field is not the alternative: an In " +
-		"field is caller-supplied, so that is a cross-tenant write the caller asserted for itself."
+		"field is caller-supplied, so that is a cross-tenant write the caller asserted for itself. " +
+		precedenceReason
+
+	// precedenceReason is the blocker that survives even if a door's body were
+	// declarable and the request were reachable, so it is stated separately: ORDER.
+	// zip decodes the body BEFORE the handler runs (zip v1.18.11 typed.go, op.invoke:
+	// `if len(rawIn) > 0 { dec(rawIn, &in) }` → ErrBadRequest), while every one of
+	// this lane's refusals is decided AFTER the body is in hand and BEFORE it is
+	// parsed — publicCaptureEnabled 403, then the rate-limit 429, then the 64 KiB 413
+	// (public.go, in that order), and only then the decode. A typed op inverts that:
+	// an oversized or unparseable anonymous beacon would answer 400 where it answers
+	// 413 or 429 today. Error precedence is wire, and typing is a description task.
+	precedenceReason = "And ORDER is itself a blocker: zip's op.invoke decodes the body before the " +
+		"handler is entered, while this lane refuses 403 (capture disabled), then 429 (rate), then 413 " +
+		"(64 KiB) BEFORE any decode — so a typed op would answer 400 to a beacon that is answered 413 " +
+		"or 429 today."
 )
 
 // analyticsOps reads BOTH projections of the live router at their one shared address
@@ -150,6 +166,33 @@ func TestEveryTypedOpIsDescribed(t *testing.T) {
 	}
 }
 
+// proseless is the CLOSED list of published components whose properties carry NO
+// description, and it is a property of the SEAM they came through, not of anyone's
+// diligence. These are the bodies of the untyped ingest doors and the health probe,
+// declared through openapi.Register (event.go) because those routes cannot be typed
+// ops. Register derives a schema by REFLECTION from the Go type, and Go drops
+// comments at compile time — zipdoc, the pass that lifts field prose, walks zip's
+// TYPED registrations and can therefore never reach a type that arrives this way.
+// So the choice at each of these routes was a bare shape or NO shape, and a bare
+// shape is what an SDK needs to offer an ingest call with somewhere to put the
+// event at all.
+//
+// The list is exact in both directions. A bare property in any OTHER component is a
+// typed op's, which zipdoc CAN describe, and goes red. A component here that starts
+// publishing prose also goes red — that is the day cloud learns to lift comments for
+// Register (the fleet ships 1,627 bare properties for exactly this reason), and this
+// ledger must shrink when it comes rather than quietly outlive the limitation.
+var proseless = map[string]bool{
+	// The canonical ingest wire: Event | []Event | {batch:[…]}.
+	"Event": true, "CaptureBatch": true, "CaptureEvent": true, "UTM": true, "Exception": true,
+	// Every door's receipt.
+	"CaptureResult": true,
+	// The PostHog wire (/v1/insights/e).
+	"insightsBody": true, "insightsEvent": true,
+	// The health probe's report — the one body that is the same at 200 and 503.
+	"healthReport": true, "healthLenses": true, "healthLens": true,
+}
+
 // TestEveryPublishedFieldIsDescribed covers the RESPONSE side the op-level gate
 // cannot see. A typed op publishes its Out's whole schema, and a property that
 // reaches openapi.yaml with no description reaches every generated SDK and every MCP
@@ -185,11 +228,17 @@ func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 		t.Fatal("no published schemas at all — a typed op must publish its In/Out")
 	}
 	var bare []string
+	described := map[string]bool{}
 	for name, schema := range published.Components.Schemas {
 		for field, prop := range schema.Properties {
-			if strings.TrimSpace(prop.Description) == "" {
-				bare = append(bare, name+"."+field)
+			if strings.TrimSpace(prop.Description) != "" {
+				described[name] = true
+				continue
 			}
+			if proseless[name] {
+				continue
+			}
+			bare = append(bare, name+"."+field)
 		}
 	}
 	if len(bare) > 0 {
@@ -197,6 +246,17 @@ func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 		t.Errorf("%d published schema propert(ies) with no description: %s\n"+
 			"Write the field's doc comment and run: go generate -run zipdoc ./apps/analytics/...",
 			len(bare), strings.Join(bare, ", "))
+	}
+	// The ledger may only SHRINK, and only by a component gaining prose or leaving
+	// the document — never by an entry rotting unnoticed.
+	for name := range proseless {
+		if _, published := published.Components.Schemas[name]; !published {
+			t.Errorf("proseless names %q, which analytics no longer publishes", name)
+			continue
+		}
+		if described[name] {
+			t.Errorf("%q now publishes field prose — drop it from proseless", name)
+		}
 	}
 }
 
@@ -348,5 +408,59 @@ func TestHealthStillCarriesItsReportAt503(t *testing.T) {
 	}
 	if s, _ := got["reason"].(string); strings.TrimSpace(s) == "" {
 		t.Error("503 body carries no reason — the degraded report is what a typed op would drop")
+	}
+}
+
+// TestHealthReportKeepsTheMapItReplaced pins the probe's wire against the map literal
+// this struct replaced. Moving from map[string]any to a named type is what lets the
+// document state the report's shape (openapi.Register, event.go) — but only the field
+// NAMES and the presence rules are the wire, and a struct is exactly where a rename or
+// a stray omitempty would silently drop one.
+func TestHealthReportKeepsTheMapItReplaced(t *testing.T) {
+	degraded, err := json.Marshal(healthReport{
+		Service: "analytics", Status: "degraded", Datastore: false, Warehouse: "hanzo",
+		Reason: "datastore (datastore) not connected",
+	})
+	if err != nil {
+		t.Fatalf("marshal degraded: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(degraded, &got); err != nil {
+		t.Fatalf("degraded json: %v", err)
+	}
+	want := map[string]any{
+		"service": "analytics", "status": "degraded", "datastore": false, "warehouse": "hanzo",
+		"reason": "datastore (datastore) not connected",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("degraded report = %v, want exactly %v — lenses must be ABSENT, not null: the "+
+			"probe could not reach the tables it would describe", got, want)
+	}
+
+	ok, err := json.Marshal(healthReport{
+		Service: "analytics", Status: "ok", Datastore: true, Warehouse: "hanzo",
+		Lenses: &healthLenses{
+			LLM:    healthLens{Table: llmTable, Available: true},
+			Events: healthLens{Table: eventsTable, Available: false},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal ok: %v", err)
+	}
+	got = nil
+	if err := json.Unmarshal(ok, &got); err != nil {
+		t.Fatalf("ok json: %v", err)
+	}
+	if _, present := got["reason"]; present {
+		t.Error("healthy report carries a reason — omitempty must keep it out")
+	}
+	lenses, _ := got["lenses"].(map[string]any)
+	llm, _ := lenses["llm"].(map[string]any)
+	events, _ := lenses["events"].(map[string]any)
+	if llm["table"] != llmTable || llm["available"] != true {
+		t.Errorf("lenses.llm = %v, want {table:%s, available:true}", llm, llmTable)
+	}
+	if events["table"] != eventsTable || events["available"] != false {
+		t.Errorf("lenses.events = %v, want {table:%s, available:false}", events, eventsTable)
 	}
 }

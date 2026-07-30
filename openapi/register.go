@@ -37,9 +37,12 @@ type Response struct {
 }
 
 // registration is one declared operation body pair; nil means "not declared",
-// never "empty".
+// never "empty". alts is set only when req is [OneOf] — the alternative shapes in
+// declared order, kept as types because reflect.TypeOf on the OneOf slice itself
+// knows only that it is a slice of any.
 type registration struct {
 	req  reflect.Type
+	alts []reflect.Type
 	resp reflect.Type
 }
 
@@ -76,6 +79,28 @@ type Binary struct{}
 
 var binaryReq = reflect.TypeOf(Binary{})
 
+// OneOf is the request declaration for a body whose wire is POLYMORPHIC: one path
+// that accepts several unrelated JSON shapes, all decoded by the same handler.
+// Pass the zero value of each shape, in the order a reader should meet them:
+//
+//	openapi.Register("/v1/event", "POST",
+//	    openapi.OneOf{Event{}, []Event{}, CaptureBatch{}}, CaptureResult{})
+//
+// It exists for the same reason [Binary] does — the honest declaration a single Go
+// struct cannot make. The alternative was to name ONE of the shapes and call it the
+// wire, which is a document that omits the two forms every batching client actually
+// sends, and an SDK whose only ingest call cannot send a batch. OpenAPI's own
+// spelling for "several shapes, caller picks" is `oneOf`, which is what this
+// renders; each alternative is derived by reflection exactly as a lone req is, so a
+// named struct among them still becomes one shared component.
+//
+// REQUEST-only, like Binary: a response that varies by shape is a fact no route
+// here needs stated yet, and inventing the second half before one asks is how one
+// seam becomes two.
+type OneOf []any
+
+var oneOfReq = reflect.TypeOf(OneOf{})
+
 // Register declares the request and response body types for one route, keyed by
 // the fiber pattern exactly as the route is registered. Pass the zero value of
 // the handler's own binding struct (or a slice of the view type for list
@@ -87,12 +112,22 @@ var binaryReq = reflect.TypeOf(Binary{})
 // one operation.
 func Register(path, method string, req, resp any) {
 	key := opKey{method: strings.ToUpper(method), path: path}
+	reg := registration{req: reflect.TypeOf(req), resp: reflect.TypeOf(resp)}
+	if alts, poly := req.(OneOf); poly {
+		if len(alts) == 0 {
+			panic(fmt.Sprintf("openapi: empty OneOf for %s %s — a polymorphic body has alternatives", key.method, path))
+		}
+		reg.alts = make([]reflect.Type, len(alts))
+		for i, a := range alts {
+			reg.alts[i] = reflect.TypeOf(a)
+		}
+	}
 	regMu.Lock()
 	defer regMu.Unlock()
 	if _, dup := registry[key]; dup {
 		panic(fmt.Sprintf("openapi: duplicate Register for %s %s", key.method, key.path))
 	}
-	registry[key] = registration{req: reflect.TypeOf(req), resp: reflect.TypeOf(resp)}
+	registry[key] = reg
 }
 
 // registered returns the declaration for a live route, or nil.
@@ -128,6 +163,21 @@ func (r *registration) apply(op *Operation, c *components) error {
 		// it is declared inline under the content type that means "bytes".
 		op.RequestBody = &RequestBody{Content: map[string]Media{
 			"application/octet-stream": {Schema: &Schema{Type: "string", Format: "binary"}},
+		}}
+	case r.req == oneOfReq:
+		// One path, several accepted shapes. The alternatives are derived exactly
+		// as a lone request type is, so a named struct among them lands in
+		// components once and is $ref'd from here.
+		alts := make([]*Schema, len(r.alts))
+		for i, t := range r.alts {
+			s, err := schemaOf(t, c)
+			if err != nil {
+				return fmt.Errorf("%s request alternative %d: %w", op.OperationID, i, err)
+			}
+			alts[i] = s
+		}
+		op.RequestBody = &RequestBody{Content: map[string]Media{
+			"application/json": {Schema: &Schema{OneOf: alts}},
 		}}
 	case r.req != nil:
 		s, err := schemaOf(r.req, c)
