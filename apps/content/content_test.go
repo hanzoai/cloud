@@ -83,7 +83,9 @@ func TestLifecycleInvariants(t *testing.T) {
 // ---- unit: the before_save enforcement hook (hooks.go) ----
 
 func TestEnforceLifecycleHook(t *testing.T) {
-	doc := func(status string) *framework.Document { return &framework.Document{Data: map[string]any{"status": status}} }
+	doc := func(status string) *framework.Document {
+		return &framework.Document{Data: map[string]any{"status": status}}
+	}
 
 	// Create (Prev nil): draft OK, anything else rejected.
 	if err := enforceLifecycle(nil, &framework.Event{DocType: DocTypeCampaign, Doc: doc(StatusDraft)}); err != nil {

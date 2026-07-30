@@ -41,4 +41,6 @@ func (s commerceSeam) spendCents(ctx context.Context, org, user string) (int64, 
 }
 
 // newCommerceClient builds the production binding, delegating to clients/payout.
-func newCommerceClient(base, token string) commerce { return commerceSeam{payout.NewClient(base, token)} }
+func newCommerceClient(base, token string) commerce {
+	return commerceSeam{payout.NewClient(base, token)}
+}

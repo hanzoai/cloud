@@ -3,6 +3,7 @@ package cloud
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"github.com/hanzoai/authz/edge"
 	"os"
 	"testing"
 	"time"
@@ -29,7 +30,13 @@ func TestValidate_FailSecureOnEmptyTrustSet(t *testing.T) {
 
 	// Empty issuer set → deny (construct directly; trustedIssuers never yields empty
 	// with a primary, so bypass it to exercise the guard).
-	vEmptyIss := &identityValidator{issuers: nil, cache: newJWKSCache(jwks.URL, 0), keys: newIAMKeys()}
+	// An empty trusted-issuer set must DENY. trustedIssuers never yields empty with a
+	// primary, so the verifier is built directly to exercise the guard where it lives.
+	vEmptyIss := &identityValidator{
+		verifier: edge.NewVerifier(jwks.URL, nil, nil, 0),
+		claims:   newIdentityCache(),
+		keys:     newIAMKeys(),
+	}
 	if _, err := vEmptyIss.validate(tok); err == nil {
 		t.Error("empty issuer set must REJECT (fail-secure), not accept")
 	}
@@ -44,7 +51,7 @@ func TestTrustedIssuers_WhiteLabel(t *testing.T) {
 	want := map[string]bool{
 		"https://hanzo.id":     true,
 		"https://lux.id":       true,
-		"https://zoolabs.id":       true, // per cloud brand.go registry
+		"https://zoolabs.id":   true, // per cloud brand.go registry
 		"https://pars.id":      true,
 		"https://id.bootno.de": true, // bootnode brand also in the registry
 	}
@@ -107,14 +114,30 @@ func TestBrandIssuers(t *testing.T) {
 // full brand set, so a lux token would pass the issuer gate on the hanzo binary.
 func TestNewIdentityValidator_MultiIssuer(t *testing.T) {
 	os.Unsetenv("WHITELABEL_ISSUERS")
-	v := newIdentityValidator("https://hanzo.id", "http://iam.hanzo.svc/v1/iam/.well-known/jwks", 0)
-	if !issuerAllowed("https://lux.id", v.issuers) {
-		t.Fatalf("validator must trust the lux issuer, set=%v", v.issuers)
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !issuerAllowed("https://hanzo.id", v.issuers) {
-		t.Fatalf("validator must still trust hanzo (no regression), set=%v", v.issuers)
+	jwks := jwksServer(t, &key.PublicKey)
+	v := newIdentityValidator("https://hanzo.id", jwks.URL, 0)
+
+	// Asserted through validate() rather than by reading the trusted set: the set is
+	// the verifier's business now, and what this test is actually about is whether a
+	// lux token PASSES on the hanzo binary. Reading a field proves a value; signing a
+	// token proves the behaviour.
+	sign := func(issuer string) string {
+		c := tokenClaims("hanzo-console", "acme", "", false, time.Now().Add(time.Hour))
+		c.Issuer = issuer
+		return signWith(t, key, c)
 	}
-	if issuerAllowed("https://evil.id", v.issuers) {
-		t.Fatalf("validator must reject an untrusted issuer, set=%v", v.issuers)
+	// The REAL brand issuers, read from the one place they are configured — a literal
+	// list here would drift from brand.go, and zoo's is zoolabs.id, not zoo.id.
+	for _, iss := range append([]string{"https://hanzo.id"}, BrandIssuers()...) {
+		if _, err := v.validate(sign(iss)); err != nil {
+			t.Errorf("validator must trust the %s issuer: %v", iss, err)
+		}
+	}
+	if _, err := v.validate(sign("https://evil.id")); err == nil {
+		t.Error("validator must reject an untrusted issuer")
 	}
 }

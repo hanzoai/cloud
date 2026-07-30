@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/iam/pkg/model"
+	"github.com/hanzoai/authz"
 )
 
 // TestUsernamePrefersPreferredUsername pins the claim precedence the money path
@@ -16,7 +16,7 @@ import (
 // sat in `hanzo/z`; every signed-in completion 402'd against a funded account.
 func TestUsernamePrefersPreferredUsername(t *testing.T) {
 	// Both present: the username wins, never the human label.
-	c := &idClaims{Name: "Zach Kelling", PreferredUsername: "z"}
+	c := &idClaims{Claims: authz.Claims{Name: "Zach Kelling", PreferredUsername: "z"}}
 	if got := c.username(); got != "z" {
 		t.Fatalf("username() = %q; want %q (preferred_username must win over the display name)", got, "z")
 	}
@@ -27,7 +27,7 @@ func TestUsernamePrefersPreferredUsername(t *testing.T) {
 	}
 	// Legacy token minted before IAM emitted preferred_username: `name` is all
 	// there is, so it stays the answer rather than becoming empty.
-	legacy := &idClaims{Name: "z"}
+	legacy := &idClaims{Claims: authz.Claims{Name: "z"}}
 	if got := legacy.username(); got != "z" {
 		t.Fatalf("legacy username() = %q; want %q (fallback must be retained)", got, "z")
 	}
@@ -49,20 +49,20 @@ func TestUsernamePrefersPreferredUsername(t *testing.T) {
 func TestOrgAdminAdmitsOwner(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		orgs []model.OrgRef
+		orgs []authz.Membership
 		org  string
 		want bool
 	}{
-		{"owner of the org", []model.OrgRef{{Org: "acme", Role: "owner"}}, "acme", true},
-		{"admin of the org", []model.OrgRef{{Org: "acme", Role: "admin"}}, "acme", true},
-		{"role case is folded", []model.OrgRef{{Org: "acme", Role: "Owner"}}, "acme", true},
-		{"role is trimmed", []model.OrgRef{{Org: "acme", Role: " owner "}}, "acme", true},
-		{"plain member is not an admin", []model.OrgRef{{Org: "acme", Role: "member"}}, "acme", false},
-		{"unknown role admits nothing", []model.OrgRef{{Org: "acme", Role: "billing"}}, "acme", false},
-		{"owner ELSEWHERE does not admit here", []model.OrgRef{{Org: "other", Role: "owner"}}, "acme", false},
-		{"org compare stays VERBATIM", []model.OrgRef{{Org: "ACME", Role: "owner"}}, "acme", false},
+		{"owner of the org", []authz.Membership{{Org: "acme", Role: "owner"}}, "acme", true},
+		{"admin of the org", []authz.Membership{{Org: "acme", Role: "admin"}}, "acme", true},
+		{"role case is folded", []authz.Membership{{Org: "acme", Role: "Owner"}}, "acme", true},
+		{"role is trimmed", []authz.Membership{{Org: "acme", Role: " owner "}}, "acme", true},
+		{"plain member is not an admin", []authz.Membership{{Org: "acme", Role: "member"}}, "acme", false},
+		{"unknown role admits nothing", []authz.Membership{{Org: "acme", Role: "billing"}}, "acme", false},
+		{"owner ELSEWHERE does not admit here", []authz.Membership{{Org: "other", Role: "owner"}}, "acme", false},
+		{"org compare stays VERBATIM", []authz.Membership{{Org: "ACME", Role: "owner"}}, "acme", false},
 		{"empty set admits nothing", nil, "acme", false},
-		{"empty org admits nothing", []model.OrgRef{{Org: "acme", Role: "owner"}}, "", false},
+		{"empty org admits nothing", []authz.Membership{{Org: "acme", Role: "owner"}}, "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := isOrgAdmin(tc.orgs, tc.org); got != tc.want {

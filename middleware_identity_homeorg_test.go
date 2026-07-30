@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	model "github.com/hanzoai/iam/pkg/model"
+	"github.com/hanzoai/authz"
 	"github.com/zap-proto/zip"
 )
 
@@ -34,9 +34,9 @@ func crossAppClaims(appOrg, aud, userHome string, isAdmin bool, memberOf ...stri
 	c := tokenClaims(aud, appOrg, "alice@example.test", isAdmin, time.Now().Add(time.Hour))
 	c.Name = "alice"
 	c.Subject = "u-alice" // ONE person, whichever app mints the token
-	c.Orgs = []model.OrgRef{{Org: userHome, Role: "member"}}
+	c.Orgs = []authz.Membership{{Org: userHome, Role: "member"}}
 	for _, o := range memberOf {
-		c.Orgs = append(c.Orgs, model.OrgRef{Org: o, Role: "member"})
+		c.Orgs = append(c.Orgs, authz.Membership{Org: o, Role: "member"})
 	}
 	return c
 }
