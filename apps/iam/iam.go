@@ -16,7 +16,7 @@
 // matches the most specific pattern, so the fold is collision-free.
 //
 // It is therefore OPAQUE to cloud's document: the nested app holds 94 typed ops and
-// cloud's route table holds five wildcards, so none of the 30 operations the iam
+// cloud's route table holds five wildcards, so none of the 35 operations the iam
 // subset publishes can become a typed op. apps/iam/typed_wire_test.go gates that,
 // and cloud's LLM.md ("apps/iam (0 of 25, and why)") records what closing it needs.
 //

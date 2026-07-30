@@ -162,8 +162,13 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	}
 	// The two ledgers must SUM to the whole surface. Every served operation is either
 	// typed or sits at a named path, so counting the named paths' operations and the
-	// typed ones must reach exactly what the document publishes: 0 typed + 30 named
-	// (5 relays x the 6 methods the document projects) = 30.
+	// typed ones must reach exactly what the document publishes: 0 typed + 35 named
+	// (5 relays x the 7 methods the document projects) = 35.
+	//
+	// SEVEN, not the five a REST reader expects: `app.All` registers nine methods and
+	// openapi.From publishes seven of them — get/post/put/patch/delete, plus OPTIONS
+	// and TRACE. The count is derived here rather than written down for exactly that
+	// reason: a hand-counted 25 is what a reader assumes and it is wrong by ten.
 	named := 0
 	for key := range served {
 		_, path, _ := strings.Cut(key, " ")
