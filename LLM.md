@@ -749,8 +749,10 @@ document pipeline" below.)
   `iamserver.Handler(db)`: github.com/hanzoai/iam's ENTIRE standalone zip app —
   94 typed ops of its own — adapted to net/http and hung on a wildcard. The
   opaque class therefore has two shapes, and the difference decides what a fix
-  even looks like: `bot`/`licensing`/`sentry` proxy to ANOTHER PROCESS, where the
-  route table is genuinely not in this binary; `iam` proxies to a nested app IN
+  even looks like: `bot`/`sentry` proxy to ANOTHER PROCESS, where the
+  route table is genuinely not in this binary; `iam` — and `licensing`, whose
+  external Mount (hanzoai/licensing mount.go) hangs its own net/http mux on one
+  wildcard through `zip.AdaptNetHTTP` — proxies to a nested app IN
   this process, whose 94 ops each already carry a `WithSummary` and are already
   projected — at that nested app's own `/.well-known/openapi.json` and `/mcp`,
   which cloud's document does not read. So iam's 25 undescribed operations are
