@@ -81,7 +81,7 @@ func (o toolOps) listTools(ctx context.Context, in *toolQuery) (*toolList, error
 //  1. It is deliberately BODY-TOLERANT: a body that is not JSON answers HTTP 200
 //     carrying the JSON-RPC parse error (-32700), the MCP convention. A typed op
 //     cannot express that — zip's op.invoke unconditionally 400s on any
-//     unparseable non-empty body (zip@v1.18.11/typed.go:243) before the handler
+//     unparseable non-empty body (zip@v1.18.11/typed.go:242) before the handler
 //     runs, so typing this route turns every one of those 200s into a 400.
 //  2. Its request and its response are JSON-RPC ENVELOPES whose shape depends on
 //     `method`: params is `any` (tools/call reads name+arguments, initialize and
@@ -89,11 +89,57 @@ func (o toolOps) listTools(ctx context.Context, in *toolQuery) (*toolList, error
 //     and one Out cannot describe that without publishing a shape the wire does
 //     not carry.
 
+// mcpRequest is the JSON-RPC envelope this route accepts. Staying untyped costs
+// prose, an MCP tool and a CLI command — it does not have to cost the SHAPE, so
+// this struct is DECLARED through openapi.Register (tools.go's init). Without
+// that declaration the operation renders with no requestBody at all, which is
+// what a route taking no input publishes: every SDK generated off the document
+// offered an MCP call with nowhere to put the call.
 type mcpRequest struct {
+	// JSONRPC is the protocol version. Always "2.0".
 	JSONRPC string `json:"jsonrpc"`
-	ID      any    `json:"id,omitempty"`
-	Method  string `json:"method"`
-	Params  any    `json:"params,omitempty"`
+	// ID correlates the answer with this call. Any JSON value; absent for a
+	// notification, and echoed back verbatim.
+	ID any `json:"id,omitempty"`
+	// Method is the JSON-RPC method: initialize, ping, tools/list or tools/call.
+	Method string `json:"method"`
+	// Params are the method's arguments, and their shape depends on the method —
+	// tools/call reads name + arguments, initialize and ping read nothing. That
+	// per-method shape is the second reason this route is not a typed op.
+	Params any `json:"params,omitempty"`
+}
+
+// mcpResponse is the JSON-RPC envelope EVERY answer on this route carries:
+// jsonrpc and id, then exactly one of result or error. It is a named type so the
+// response can be DECLARED (openapi.Register, tools.go's init) and so the
+// declaration and the value the handler returns are the same shape — a map
+// literal here and a struct in the document is how the two drift apart.
+//
+// The fields are ALPHABETICAL because the wire they replace was a Go map, and
+// encoding/json writes a map in sorted key order. TestMCPEnvelopeIsByteIdentical
+// pins that, so naming the shape cannot move a byte of it.
+type mcpResponse struct {
+	// Error is the JSON-RPC error, present only on a failure. A parse error
+	// (-32700), an unknown method (-32601), missing params (-32602) and a tool
+	// that failed (-32000) all arrive here under HTTP 200 — the MCP convention.
+	Error *rpcErrorBody `json:"error,omitempty"`
+	// ID echoes the request's id, and is null when the request carried none — a
+	// body that did not parse leaves nothing to echo.
+	ID any `json:"id"`
+	// JSONRPC is the protocol version. Always "2.0".
+	JSONRPC string `json:"jsonrpc"`
+	// Result is the method's answer, present only on success. Its shape depends
+	// on the method: initialize returns the server info, tools/list a tools
+	// array, tools/call a content array.
+	Result any `json:"result,omitempty"`
+}
+
+// rpcErrorBody is one JSON-RPC error object. Alphabetical for the same reason.
+type rpcErrorBody struct {
+	// Code is the JSON-RPC error code.
+	Code int `json:"code"`
+	// Message says what failed, in prose.
+	Message string `json:"message"`
 }
 
 // mcp is the single JSON-RPC endpoint spanning EVERY source. Org-gated at the top:
@@ -388,12 +434,12 @@ func (o toolOps) deleteServer(ctx context.Context, in *serverRef) (*noContent, e
 
 // ── shared helpers ──────────────────────────────────────────────────────────────
 
-func rpcResult(id, result any) map[string]any {
-	return map[string]any{"jsonrpc": "2.0", "id": id, "result": result}
+func rpcResult(id, result any) *mcpResponse {
+	return &mcpResponse{ID: id, JSONRPC: "2.0", Result: result}
 }
 
-func rpcError(id any, code int, msg string) map[string]any {
-	return map[string]any{"jsonrpc": "2.0", "id": id, "error": map[string]any{"code": code, "message": msg}}
+func rpcError(id any, code int, msg string) *mcpResponse {
+	return &mcpResponse{Error: &rpcErrorBody{Code: code, Message: msg}, ID: id, JSONRPC: "2.0"}
 }
 
 // validToolName bounds an activation target: the flat tool-name shape every source
