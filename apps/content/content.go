@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -89,17 +88,41 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
+// zipdoc lifts the doc comment off each typed op and its In/Out fields into
+// zipdoc_gen.go, which is the ONLY way that prose reaches the published document,
+// the MCP tool list and the generated SDK — Go drops comments at compile time.
+// Run by `make openapi` and by this app's own `make -C apps/content openapi`.
+//
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 // routes registers the /v1/content/* surface. Static segments (lifecycle/board/
 // channels/generate/publish) never collide with the parameterised transition route
 // (which is three segments deep), so registration order is not load-bearing here.
+//
+// cloud.Bridge is installed on the group FIRST, ahead of every leaf: a typed op
+// receives a context.Context and its decoded In and nothing else, so the validated
+// org crosses on the context and there is no request for it to read. Serve installs
+// the same middleware for the whole binary, and nesting is harmless (the inner one
+// is the one the handler sees) — it is declared here so the subsystem is
+// self-sufficient: mounted on a bare app, by a test or by any composition root that
+// is not Serve, its typed ops still resolve their tenant instead of refusing every
+// caller.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/content")
-	g.Get("/lifecycle", cloud.Handle(s, getLifecycle))
-	g.Get("/board", cloud.Handle(s, getBoard))
-	g.Get("/channels", cloud.Handle(s, getChannels))
+	g.Use(cloud.Bridge())
+	o := contentOps{s: s}
+	zip.Get(g, "/lifecycle", o.getLifecycle)
+	zip.Get(g, "/board", o.getBoard)
+	zip.Get(g, "/channels", o.getChannels)
+	// UNTYPED, deliberately: a studio-render billing denial answers the platform
+	// resource-deny envelope (cloud.DenyResource — {"error":{"code","message"}} at
+	// 402/503, resource_billing.go:224), and a typed op can answer only its Out
+	// schema or zip's own {status,code,error} error envelope. Typing it would
+	// rewrite that body for every client that reads error.code, so it stays a raw
+	// handler until zip can declare a second response shape. See LLM.md.
 	g.Post("/generate", cloud.Handle(s, postGenerate))
-	g.Post("/publish", cloud.Handle(s, postPublish))
-	g.Post("/:doctype/:name/transition", cloud.Handle(s, postTransition))
+	zip.Post(g, "/publish", o.postPublish)
+	zip.Post(g, "/:doctype/:name/transition", o.postTransition)
 }
 
 // Shutdown releases the mounted singleton. Idempotent; content owns no store, so this
@@ -118,52 +141,109 @@ var (
 	errInvalidSource      = errors.New("content: invalid source_media")
 )
 
-// ---- handlers (free functions bound with cloud.Handle) ----
+// ---- typed ops ----
+//
+// contentOps binds the service to content's typed ops. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — there is no parameter for the service —
+// so it arrives as a RECEIVER and every op is a method value (o.getBoard), which is
+// also the only bound form cmd/zipdoc can lift prose from.
+type contentOps struct{ s *cloud.Service[state] }
 
-func getLifecycle(_ *cloud.Service[state], c *zip.Ctx) error {
-	if _, ok := principal.Org(c); !ok {
-		return zip.ErrForbidden("valid principal required")
+// noInput is the In of an op addressed entirely by the caller's principal: it takes
+// nothing off the wire. ONE of these for the whole package.
+type noInput struct{}
+
+// tenantOf is the validated org for a typed op — the one the gateway asserted and
+// cloud.Bridge parked on the context, never a field of In. An In field is
+// caller-supplied, so a tenant key read from one is a cross-tenant read the caller
+// asserted for itself. It IS the principal.Org gate the raw handlers use, refusing
+// with the same 403 and the same message.
+func tenantOf(ctx context.Context) (string, error) {
+	org, ok := principal.OrgFrom(ctx)
+	if !ok {
+		return "", zip.ErrForbidden("valid principal required")
 	}
-	return c.JSON(http.StatusOK, lifecycleGraph())
+	return org, nil
 }
 
-// getBoard aggregates the marketing content items across DocTypes into ONE queue board
-// — the cross-DocType read the framework's per-DocType list cannot give. It never 5xxs
-// on a partial failure: an un-installed or erroring DocType is skipped, not fatal.
-func getBoard(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("valid principal required")
+// GetLifecycle returns the ONE marketing-content state machine: the ordered
+// lifecycle states, which state a fresh document starts in, which one is publicly
+// live, and the legal successors of every state. The console builds its board
+// columns and its per-item action buttons from this single answer, so the UI and
+// the write-time enforcement hook can never disagree about what is legal.
+func (o contentOps) getLifecycle(ctx context.Context, _ *noInput) (*stateGraph, error) {
+	if _, err := tenantOf(ctx); err != nil {
+		return nil, err
 	}
-	limit := limitOf(c, 200)
+	g := lifecycleGraph()
+	return &g, nil
+}
+
+// boardQuery filters one read of the aggregate content board. Every field rides the
+// query string and every one is optional.
+type boardQuery struct {
+	// Status keeps only items in one lifecycle state (draft, in_review, approved,
+	// queued, published, archived). An undefined state is refused.
+	Status string `json:"status"`
+	// Project keeps only items in one brand/site sub-scope.
+	Project string `json:"project"`
+	// DocType keeps only one content type; omitted, the board spans every
+	// publishable type. An unknown type is refused.
+	DocType string `json:"doctype"`
+	// Limit caps the rows returned, clamped to 1000. Defaults to 200, which is also
+	// what a non-positive or unparseable value takes.
+	Limit int `json:"limit"`
+}
+
+// boardPage is one read of the aggregate content board.
+type boardPage struct {
+	// Data is the matching items, most recently updated first.
+	Data []boardItem `json:"data"`
+	// Count is the number of rows in THIS page — never the org's total.
+	Count int `json:"count"`
+}
+
+// GetBoard aggregates the caller org's marketing content across every publishable
+// content type into ONE queue board — the cross-type read the framework's
+// per-DocType list cannot give. It never fails on a partial outage: a content type
+// the org has not installed, or one whose search errors, is skipped and logged
+// rather than failing the whole board.
+//
+// Example: {"status": "queued", "limit": 50}
+func (o contentOps) getBoard(ctx context.Context, in *boardQuery) (*boardPage, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	limit := limitOf(in.Limit, 200)
 
 	filters := map[string]string{}
-	if status := strings.TrimSpace(c.Query("status")); status != "" {
+	if status := strings.TrimSpace(in.Status); status != "" {
 		if !IsStatus(status) {
-			return zip.ErrBadRequest("unknown status: " + status)
+			return nil, zip.ErrBadRequest("unknown status: " + status)
 		}
 		filters[StatusField] = status
 	}
-	if project := strings.TrimSpace(c.Query("project")); project != "" {
+	if project := strings.TrimSpace(in.Project); project != "" {
 		filters["project"] = project
 	}
 
 	types := publishableDocTypes
-	if only := strings.TrimSpace(c.Query("doctype")); only != "" {
+	if only := strings.TrimSpace(in.DocType); only != "" {
 		if !isPublishableDocType(only) {
-			return zip.ErrNotFound("unknown content type: " + only)
+			return nil, zip.ErrNotFound("unknown content type: " + only)
 		}
 		types = []string{only}
 	}
 
 	items := make([]boardItem, 0, limit)
 	for _, dt := range types {
-		if !framework.Installed(c.Context(), org, dt) {
+		if !framework.Installed(ctx, org, dt) {
 			continue // honest skip — the org has not installed the marketing module
 		}
-		docs, err := framework.Search(c.Context(), org, dt, filters, limit)
+		docs, err := framework.Search(ctx, org, dt, filters, limit)
 		if err != nil {
-			s.Log.Warn("board search degraded", "doctype", dt, "org", org, "err", err)
+			o.s.Log.Warn("board search degraded", "doctype", dt, "org", org, "err", err)
 			continue // one DocType's failure never fails the whole board
 		}
 		for _, d := range docs {
@@ -174,20 +254,101 @@ func getBoard(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(items) > limit {
 		items = items[:limit]
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": items, "count": len(items)})
+	return &boardPage{Data: items, Count: len(items)}, nil
 }
 
-func getChannels(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("valid principal required")
-	}
-	chans, err := s.State.dist.Channels(c.Context(), org)
-	if err != nil {
-		return opErr(err)
-	}
-	return c.JSON(http.StatusOK, map[string]any{"data": chans})
+// channelList is a brand's connected distribution channels.
+type channelList struct {
+	// Data is every social channel the caller's org has connected, disabled ones
+	// included (Disabled says which).
+	Data []Channel `json:"data"`
 }
+
+// GetChannels lists the distribution channels the caller's org has connected — the
+// social integrations a publish can target. A deployment with no distribution edge
+// wired answers 503 rather than an empty list that would read as "no channels".
+func (o contentOps) getChannels(ctx context.Context, _ *noInput) (*channelList, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	chans, err := o.s.State.dist.Channels(ctx, org)
+	if err != nil {
+		return nil, opErr(err)
+	}
+	return &channelList{Data: chans}, nil
+}
+
+// Publish distributes one CMS content item to the channels recorded on it and
+// returns the honest per-channel outcome. The item names itself — its caption,
+// media and channel list are read from the stored document, not from this request.
+// It is idempotent per channel (a channel already posted for this item is skipped),
+// and a publish that loses the per-item lease to a live publisher answers status
+// "in_progress" having posted nothing.
+//
+// Example: {"doctype": "SocialPost", "name": "spring-teaser"}
+func (o contentOps) postPublish(ctx context.Context, in *PublishInput) (*PublishResult, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	body := *in
+	body.DocType, body.Name = strings.TrimSpace(body.DocType), strings.TrimSpace(body.Name)
+	if body.DocType == "" || body.Name == "" {
+		return nil, zip.ErrBadRequest("doctype and name are required")
+	}
+	res, err := Publish(ctx, org, body)
+	if err != nil {
+		return nil, opErr(err)
+	}
+	return &res, nil
+}
+
+// transitionIn moves one content item to a new lifecycle state. doctype and name are
+// path segments: the URL is the addressing authority, so they bind from there
+// whatever a body says.
+type transitionIn struct {
+	// DocType is the content type to act on, from the path.
+	DocType string `json:"doctype"`
+	// Name is the document to act on, from the path.
+	Name string `json:"name"`
+	// To is the lifecycle state to move to. Required, and the move must be a legal
+	// edge from the item's current state.
+	To string `json:"to"`
+	// ScheduleAt is an ISO-8601 go-live time handed to the channel's own scheduler;
+	// "" distributes now.
+	ScheduleAt string `json:"scheduleAt,omitempty"`
+}
+
+// PostTransition moves one content item to a new lifecycle state and, on the move to
+// published, fans it out to the item's channels. The edge must be legal for the
+// item's current state — an illegal move is refused with 409 — and the status write
+// re-validates it at the storage boundary. Distribution is best effort: its honest
+// state is reported on the result and a distribution failure never rolls the status
+// change back.
+//
+// Example: {"doctype": "SocialPost", "name": "spring-teaser", "to": "published"}
+func (o contentOps) postTransition(ctx context.Context, in *transitionIn) (*TransitionResult, error) {
+	org, err := tenantOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	doctype, name := decodeSeg(in.DocType), decodeSeg(in.Name)
+	if !isPublishableDocType(doctype) {
+		return nil, zip.ErrNotFound("unknown content type: " + doctype)
+	}
+	to := strings.TrimSpace(in.To)
+	if to == "" {
+		return nil, zip.ErrBadRequest("to is required")
+	}
+	res, err := Transition(ctx, org, doctype, name, to, strings.TrimSpace(in.ScheduleAt))
+	if err != nil {
+		return nil, opErr(err)
+	}
+	return &res, nil
+}
+
+// ---- handlers (free functions bound with cloud.Handle) ----
 
 func postGenerate(_ *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
@@ -212,54 +373,6 @@ func postGenerate(_ *cloud.Service[state], c *zip.Ctx) error {
 		return opErr(err)
 	}
 	return c.JSON(http.StatusCreated, res)
-}
-
-func postPublish(_ *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("valid principal required")
-	}
-	var in PublishInput
-	if err := c.Bind(&in); err != nil {
-		return err
-	}
-	in.DocType, in.Name = strings.TrimSpace(in.DocType), strings.TrimSpace(in.Name)
-	if in.DocType == "" || in.Name == "" {
-		return zip.ErrBadRequest("doctype and name are required")
-	}
-	res, err := Publish(c.Context(), org, in)
-	if err != nil {
-		return opErr(err)
-	}
-	return c.JSON(http.StatusOK, res)
-}
-
-func postTransition(_ *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("valid principal required")
-	}
-	doctype := pathParam(c, "doctype")
-	name := pathParam(c, "name")
-	if !isPublishableDocType(doctype) {
-		return zip.ErrNotFound("unknown content type: " + doctype)
-	}
-	var body struct {
-		To         string `json:"to"`
-		ScheduleAt string `json:"scheduleAt,omitempty"`
-	}
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-	to := strings.TrimSpace(body.To)
-	if to == "" {
-		return zip.ErrBadRequest("to is required")
-	}
-	res, err := Transition(c.Context(), org, doctype, name, to, strings.TrimSpace(body.ScheduleAt))
-	if err != nil {
-		return opErr(err)
-	}
-	return c.JSON(http.StatusOK, res)
 }
 
 // ---- exported ops (the ONE implementation; handlers + connector both call these) ----
@@ -407,24 +520,24 @@ func configured(x any) bool {
 	return true
 }
 
-// limitOf reads ?limit (1..1000), defaulting to def.
-func limitOf(c *zip.Ctx, def int) int {
-	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
-			if n > 1000 {
-				n = 1000
-			}
-			return n
-		}
+// limitOf clamps a caller's requested page size to 1..1000, taking def for a
+// non-positive one. It reads a NUMBER rather than a request because zip's URL binder
+// already turns `?limit=` into the field — and leaves it at zero for a value it
+// cannot parse, which is the same "take the default" this has always meant.
+func limitOf(n, def int) int {
+	if n <= 0 {
+		return def
 	}
-	return def
+	if n > 1000 {
+		return 1000
+	}
+	return n
 }
 
-// pathParam reads and percent-decodes a URL path segment (a content type or a document
-// name), matching framework's own path decoding so a name with a reserved character
+// decodeSeg percent-decodes a URL path segment (a content type or a document name),
+// matching framework's own path decoding so a name with a reserved character
 // addresses its stored value.
-func pathParam(c *zip.Ctx, name string) string {
-	raw := c.Param(name)
+func decodeSeg(raw string) string {
 	if dec, err := url.PathUnescape(raw); err == nil {
 		raw = dec
 	}

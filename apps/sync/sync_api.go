@@ -32,20 +32,87 @@ var gitHostForProvider = map[string]string{
 	provGitLab: "gitlab.com",
 }
 
+// endpointReq is one end of a sync: which platform, and which resource on it.
 type endpointReq struct {
+	// Connector names the stored credential to reach this endpoint with.
 	Connector string `json:"connector,omitempty"`
-	Provider  string `json:"provider"`
-	Locator   string `json:"locator"`
+	// Provider is the platform: github or gitlab for a source; a target defaults to
+	// the native Hanzo Git plane.
+	Provider string `json:"provider"`
+	// Locator addresses the resource. For a git source it is the https clone URL on
+	// the provider's own host, with no embedded credentials; for a native target it
+	// is the repository name.
+	Locator string `json:"locator"`
 }
 
+// syncReq declares a sync between two endpoints.
 type syncReq struct {
-	Kind      string      `json:"kind"`      // default "git"
-	Source    endpointReq `json:"source"`    // {provider, locator[, connector]}
-	Target    endpointReq `json:"target"`    // optional for git — derived from source
-	Direction string      `json:"direction"` // default both
-	Trigger   string      `json:"trigger"`   // default webhook
-	Actor     string      `json:"actor"`     // optional loop-guard identity (default GIT_SYNC_ACTOR)
-	Run       bool        `json:"run"`       // reconcile immediately (background) after create
+	// Kind is what is being synced. Only "git" today, which is also the default.
+	Kind string `json:"kind"`
+	// Source is the upstream end. Required.
+	Source endpointReq `json:"source"`
+	// Target is the downstream end. Optional for git: a native repository named
+	// after the source is derived when it is omitted.
+	Target endpointReq `json:"target"`
+	// Direction is both (the default), pull, push or off.
+	Direction string `json:"direction"`
+	// Trigger is what starts a reconcile: webhook (the default), poll or manual.
+	Trigger string `json:"trigger"`
+	// Actor is the identity the sync writes as, used as the loop guard so its own
+	// writes do not re-trigger it. Defaults to the deployment's GIT_SYNC_ACTOR.
+	Actor string `json:"actor"`
+	// Run reconciles once immediately after the upsert, in the background.
+	Run bool `json:"run"`
+}
+
+// syncOps binds the service to sync's typed ops. A TypedHandler is
+// func(context.Context, *In) (*Out, error) — no parameter for the service — so it
+// arrives as a RECEIVER and every op is a method value, which is also the only bound
+// form cmd/zipdoc can lift prose from.
+type syncOps struct{ s *cloud.Service[state] }
+
+// noInput is the In of an op addressed entirely by the caller's principal: it takes
+// nothing off the wire. ONE of these for the whole package.
+type noInput struct{}
+
+// noContent is the Out of an op that answers 204 with an empty body. It is an ALIAS
+// for the unnamed empty struct, not a definition: zip keys the response on 204 only
+// when the Out type has no name, so a defined type here would publish "200 with a
+// body" about a route that answers 204 with none.
+type noContent = struct{}
+
+// syncRef addresses one sync. The id is the path segment: the URL is the addressing
+// authority, so it binds from there whatever a body says.
+type syncRef struct {
+	// ID is the sync to act on, from the path.
+	ID string `json:"id"`
+}
+
+// syncList is every sync link the caller's org has.
+type syncList struct {
+	// Data is the org's syncs, each with its endpoints, policy and last-synced time.
+	Data []syncView `json:"data"`
+}
+
+// syncQueued acknowledges a reconcile handed to the background worker.
+type syncQueued struct {
+	// Queued is true when the reconcile was accepted; it has not run yet.
+	Queued bool `json:"queued"`
+	// ID is the sync the reconcile was queued for.
+	ID string `json:"id"`
+}
+
+// orgOf is the validated org for a typed op — the one the gateway asserted and
+// cloud.Bridge parked on the context, never a field of In. An In field is
+// caller-supplied, so a tenant key read from one is a cross-tenant read the caller
+// asserted for itself. A malformed org is refused as hard as a missing one: the org
+// is a storage key here, so only the exact slug shape is admitted.
+func orgOf(ctx context.Context) (string, error) {
+	o, ok := principal.OrgFrom(ctx)
+	if !ok || !orgRE.MatchString(o) {
+		return "", zip.ErrUnauthorized("a validated principal is required")
+	}
+	return o, nil
 }
 
 type endpointView struct {
@@ -76,42 +143,47 @@ func syncToView(v Sync) syncView {
 	}
 }
 
-// createSync upserts a sync and (optionally) kicks a background reconcile. The org
-// comes from the validated principal — never a body field — so a sync can only bind
-// endpoints within the caller's own org.
-func createSync(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principalOrg(c)
-	if !ok {
-		return zip.ErrUnauthorized("a validated principal is required")
+// Create declares a sync between two endpoints and returns it. It is an UPSERT:
+// re-declaring the same source and target updates that link rather than piling up
+// duplicates, so a console that re-submits is safe. The org comes from the validated
+// principal, never from the request, so a sync can only ever bind endpoints inside
+// the caller's own org. A git source must be an https clone URL on the provider's own
+// host with no embedded credentials; a target left empty is derived as a native
+// repository named after the source. With run=true the first reconcile is queued in
+// the background, so a large initial import never blocks this response.
+//
+// Example: {"source": {"provider": "github", "locator": "https://github.com/acme/site"}, "run": true}
+func (o syncOps) create(ctx context.Context, in *syncReq) (*syncView, error) {
+	s := o.s
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
 	}
-	var body syncReq
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
 	kind := strings.ToLower(strings.TrimSpace(body.Kind))
 	if kind == "" {
 		kind = "git"
 	}
 	if kind != "git" {
-		return zip.ErrBadRequest("unsupported kind (only \"git\" today)")
+		return nil, zip.ErrBadRequest("unsupported kind (only \"git\" today)")
 	}
 	direction := strings.ToLower(strings.TrimSpace(body.Direction))
 	if direction == "" {
 		direction = dirBoth
 	}
 	if !validDirection(direction) {
-		return zip.ErrBadRequest("direction must be both|pull|push|off")
+		return nil, zip.ErrBadRequest("direction must be both|pull|push|off")
 	}
 	trigger := strings.ToLower(strings.TrimSpace(body.Trigger))
 	if trigger == "" {
 		trigger = trigWebhook
 	}
 	if !validTrigger(trigger) {
-		return zip.ErrBadRequest("trigger must be webhook|poll|manual")
+		return nil, zip.ErrBadRequest("trigger must be webhook|poll|manual")
 	}
 	src, err := validateGitSource(body.Source)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	tgt := deriveGitTarget(body.Target, src)
 	actor := strings.TrimSpace(body.Actor)
@@ -120,65 +192,86 @@ func createSync(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	store, err := storeFor(s, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
 	id, err := genID("sync")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	now := time.Now().Unix()
-	if err := store.Upsert(c.Context(), Sync{
+	if err := store.Upsert(ctx, Sync{
 		ID: id, Org: org, Kind: kind, Source: src, Target: tgt,
 		Direction: direction, Trigger: trigger, Actor: actor,
 		CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "upsert sync: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "upsert sync: %v", err)
 	}
-	stored, err := store.GetByEndpoints(c.Context(), org, kind, src.Locator, tgt.Locator)
+	stored, err := store.GetByEndpoints(ctx, org, kind, src.Locator, tgt.Locator)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "read sync: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "read sync: %v", err)
 	}
 	if body.Run {
 		spawnReconcile(store, stored)
 	}
-	return c.JSON(http.StatusOK, syncToView(stored))
+	v := syncToView(stored)
+	return &v, nil
 }
 
-// patchSync updates a sync's mutable policy (direction, trigger, actor) in place —
-// endpoints and kind are immutable (delete + recreate to re-point). A direction
-// change reconciles the derived outbound mirror (git).
-func patchSync(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principalOrg(c)
-	if !ok {
-		return zip.ErrUnauthorized("a validated principal is required")
+// patchSyncIn is a partial update of one sync's mutable policy. Every policy field is
+// a pointer so an OMITTED field is left alone; the id comes from the path.
+//
+// A JSON null and an absent key arrive identically here — encoding/json leaves a
+// pointer nil for both — and that is exactly what this route has always meant, since
+// none of these fields is clearable: each one either takes a new legal value or keeps
+// the stored one. The pointers therefore carry the wire unchanged rather than turning
+// a "clear" into a no-op, which is the trap a pointer In sets on a route that DOES
+// distinguish the two. Pinned by TestPatchSync_NullIsAbsent.
+type patchSyncIn struct {
+	// ID is the sync to update, from the path.
+	ID string `json:"id"`
+	// Direction is both, pull, push or off. Omitted, the stored direction stands.
+	Direction *string `json:"direction"`
+	// Trigger is webhook, poll or manual. Omitted, the stored trigger stands.
+	Trigger *string `json:"trigger"`
+	// Actor is the loop-guard identity the sync writes as. Omitted, the stored actor
+	// stands.
+	Actor *string `json:"actor"`
+}
+
+// Patch updates one sync's mutable policy — direction, trigger and actor — in place.
+// The endpoints and the kind are immutable: re-pointing a sync is a delete and a
+// create, so a link can never silently start syncing somewhere else. A field the
+// request omits is left as it was. Changing the direction immediately reconciles the
+// derived outbound mirror, so turning push off stops the upstream being written to
+// rather than merely recording the intent.
+//
+// Example: {"id": "sync_1", "direction": "pull"}
+func (o syncOps) patch(ctx context.Context, in *patchSyncIn) (*syncView, error) {
+	s := o.s
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
 	}
 	store, err := storeFor(s, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	cur, err := store.Get(c.Context(), org, strings.TrimSpace(c.Param("id")))
+	cur, err := store.Get(ctx, org, strings.TrimSpace(in.ID))
 	if err != nil {
-		return zip.ErrNotFound("sync not found")
+		return nil, zip.ErrNotFound("sync not found")
 	}
-	var body struct {
-		Direction *string `json:"direction"`
-		Trigger   *string `json:"trigger"`
-		Actor     *string `json:"actor"`
-	}
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
+	body := *in
 	if body.Direction != nil {
 		d := strings.ToLower(strings.TrimSpace(*body.Direction))
 		if !validDirection(d) {
-			return zip.ErrBadRequest("direction must be both|pull|push|off")
+			return nil, zip.ErrBadRequest("direction must be both|pull|push|off")
 		}
 		cur.Direction = d
 	}
 	if body.Trigger != nil {
 		tg := strings.ToLower(strings.TrimSpace(*body.Trigger))
 		if !validTrigger(tg) {
-			return zip.ErrBadRequest("trigger must be webhook|poll|manual")
+			return nil, zip.ErrBadRequest("trigger must be webhook|poll|manual")
 		}
 		cur.Trigger = tg
 	}
@@ -186,102 +279,118 @@ func patchSync(s *cloud.Service[state], c *zip.Ctx) error {
 		cur.Actor = strings.TrimSpace(*body.Actor)
 	}
 	cur.UpdatedAt = time.Now().Unix()
-	if err := store.Upsert(c.Context(), cur); err != nil { // endpoints unchanged → updates in place
-		return zip.Errorf(http.StatusInternalServerError, "update sync: %v", err)
+	if err := store.Upsert(ctx, cur); err != nil { // endpoints unchanged → updates in place
+		return nil, zip.Errorf(http.StatusInternalServerError, "update sync: %v", err)
 	}
 	// Reconcile the derived outbound push-mirror to the (possibly new) direction.
 	if cur.Kind == "git" {
-		reconcileOutboundMirror(c.Context(), s, cur, dirPushes(cur.Direction))
+		reconcileOutboundMirror(ctx, s, cur, dirPushes(cur.Direction))
 	}
-	stored, err := store.Get(c.Context(), org, cur.ID)
+	stored, err := store.Get(ctx, org, cur.ID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "read sync: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "read sync: %v", err)
 	}
-	return c.JSON(http.StatusOK, syncToView(stored))
+	v := syncToView(stored)
+	return &v, nil
 }
 
-// listSyncs returns every sync link for the caller's org.
-func listSyncs(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principalOrg(c)
-	if !ok {
-		return zip.ErrUnauthorized("a validated principal is required")
-	}
-	store, err := storeFor(s, org)
+// List returns every sync link the caller's org has, each with its two endpoints, its
+// direction and trigger policy, and the time it last reconciled. Scoped to the
+// caller's own org — another tenant's links are structurally unreachable.
+func (o syncOps) list(ctx context.Context, _ *noInput) (*syncList, error) {
+	org, err := orgOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	rows, err := store.List(c.Context(), org)
+	store, err := storeFor(o.s, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	rows, err := store.List(ctx, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
 	out := make([]syncView, 0, len(rows))
 	for _, v := range rows {
 		out = append(out, syncToView(v))
 	}
-	return c.JSON(http.StatusOK, map[string]any{"data": out})
+	return &syncList{Data: out}, nil
 }
 
-// getSync returns one sync by id (org-scoped).
-func getSync(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principalOrg(c)
-	if !ok {
-		return zip.ErrUnauthorized("a validated principal is required")
+// Get returns one sync by id. It is org-scoped: an id belonging to another tenant is
+// the same 404 an unknown id gives, so a probe learns nothing about what exists.
+//
+// Example: {"id": "sync_1"}
+func (o syncOps) get(ctx context.Context, in *syncRef) (*syncView, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+	store, err := storeFor(o.s, org)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	v, err := store.Get(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, zip.ErrNotFound("sync not found")
+	}
+	view := syncToView(v)
+	return &view, nil
+}
+
+// Delete removes one sync and tears down the outbound mirror it derived, answering
+// 204. The teardown is the point: without it an unsynced repository would keep
+// force-pushing to the upstream it is no longer linked to. Org-scoped, so another
+// tenant's id is the same 404 an unknown id gives.
+//
+// Example: {"id": "sync_1"}
+func (o syncOps) delete(ctx context.Context, in *syncRef) (*noContent, error) {
+	s := o.s
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
 	}
 	store, err := storeFor(s, org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	v, err := store.Get(c.Context(), org, strings.TrimSpace(c.Param("id")))
+	id := strings.TrimSpace(in.ID)
+	sy, err := store.Get(ctx, org, id)
 	if err != nil {
-		return zip.ErrNotFound("sync not found")
-	}
-	return c.JSON(http.StatusOK, syncToView(v))
-}
-
-// deleteSync removes a sync and tears down its derived outbound mirror (so an
-// unsynced repo can never keep force-pushing to the upstream).
-func deleteSync(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principalOrg(c)
-	if !ok {
-		return zip.ErrUnauthorized("a validated principal is required")
-	}
-	store, err := storeFor(s, org)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
-	}
-	id := strings.TrimSpace(c.Param("id"))
-	sy, err := store.Get(c.Context(), org, id)
-	if err != nil {
-		return zip.ErrNotFound("sync not found")
+		return nil, zip.ErrNotFound("sync not found")
 	}
 	// Tear down the outbound push-mirror (best-effort) so an unsynced repo never
 	// keeps pushing to the upstream.
 	if sy.Kind == "git" {
-		reconcileOutboundMirror(c.Context(), s, sy, false)
+		reconcileOutboundMirror(ctx, s, sy, false)
 	}
-	if _, err := store.Delete(c.Context(), org, id); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+	if _, err := store.Delete(ctx, org, id); err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
-	return c.NoContent(http.StatusNoContent)
+	return nil, nil
 }
 
-// runSync reconciles one sync immediately (a manual re-sync / initial import), in a
-// bounded background worker so a large mirror-in never blocks the request.
-func runSync(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principalOrg(c)
-	if !ok {
-		return zip.ErrUnauthorized("a validated principal is required")
-	}
-	store, err := storeFor(s, org)
+// Run reconciles one sync now — the manual re-sync, and the initial import for a link
+// created without run=true. The work is handed to a bounded background worker and the
+// call answers 202 immediately, so a large mirror-in never holds the request open;
+// queued=true means accepted, not finished.
+//
+// Example: {"id": "sync_1"}
+func (o syncOps) run(ctx context.Context, in *syncRef) (*syncQueued, error) {
+	org, err := orgOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+		return nil, err
 	}
-	sy, err := store.Get(c.Context(), org, strings.TrimSpace(c.Param("id")))
+	store, err := storeFor(o.s, org)
 	if err != nil {
-		return zip.ErrNotFound("sync not found")
+		return nil, zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	sy, err := store.Get(ctx, org, strings.TrimSpace(in.ID))
+	if err != nil {
+		return nil, zip.ErrNotFound("sync not found")
 	}
 	spawnReconcile(store, sy)
-	return c.JSON(http.StatusAccepted, map[string]any{"queued": true, "id": sy.ID})
+	return &syncQueued{Queued: true, ID: sy.ID}, nil
 }
 
 // ── validation + helpers ─────────────────────────────────────────────────────
@@ -322,16 +431,6 @@ func deriveGitTarget(e endpointReq, src Endpoint) Endpoint {
 		locator = repoNameFromLocator(src.Locator)
 	}
 	return Endpoint{Connector: strings.TrimSpace(e.Connector), Provider: provider, Locator: locator}
-}
-
-// principalOrg resolves the validated org for the request (gateway-minted, IAM-
-// validated), rejecting a malformed org.
-func principalOrg(c *zip.Ctx) (string, bool) {
-	o, ok := principal.Org(c)
-	if !ok || !orgRE.MatchString(o) {
-		return "", false
-	}
-	return o, true
 }
 
 // reconcileOutboundMirror ensures (push) or tears down (!push) the native repo's
