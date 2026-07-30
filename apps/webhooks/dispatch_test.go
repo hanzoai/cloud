@@ -15,8 +15,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/commerce/events"
 	"github.com/hanzoai/commerce/infra"
-	luxlog "github.com/luxfi/log"
 	psembed "github.com/hanzoai/pubsub/embed"
+	luxlog "github.com/luxfi/log"
 )
 
 // newTestDispatcher builds a dispatcher over a temp per-org store with the retry sleep
