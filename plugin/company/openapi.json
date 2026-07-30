@@ -740,19 +740,23 @@
       "Filing": {
         "properties": {
           "at": {
+            "description": "At is the unix second the filing record was written.",
             "type": "integer"
           },
           "note": {
+            "description": "Note explains a filing Hanzo did not perform itself: what remains to be done\nand by whom.",
             "type": "string"
           },
           "provider": {
+            "description": "Provider is the filing partner that performed the filing, or \"manual\" when no\npartner is wired.",
             "type": "string"
           },
           "ref": {
+            "description": "Ref is the partner's or the state's filing reference. Empty when nothing was\nactually filed — no filing id is ever fabricated.",
             "type": "string"
           },
           "status": {
-            "description": "manual | submitted | filed | rejected",
+            "description": "Status is manual (no partner wired — a registered agent files out-of-band),\nsubmitted (the partner accepted it, awaiting the state), filed (the state\naccepted it) or rejected.",
             "type": "string"
           }
         },
@@ -761,72 +765,88 @@
       "Formation": {
         "properties": {
           "alreadyIncorporated": {
-            "description": "SKIP path.",
+            "description": "AlreadyIncorporated declares an org that already has a legal entity, which\ntakes the import path (structure → import → company) instead of forming one.",
             "type": "boolean"
           },
           "capTableImported": {
+            "description": "CapTableImported reports whether the existing company's cap table has been\nimported onto the canonical cap table.",
             "type": "boolean"
           },
           "createdAt": {
+            "description": "CreatedAt is the unix second the formation was opened.",
             "type": "integer"
           },
           "documentIds": {
-            "description": "dataroom doc ids of generated formation docs",
+            "description": "DocumentIDs are the data room ids of the GENERATED formation documents.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "esignRef": {
+            "description": "EsignRef is the e-signature provider's reference for the signature request.",
             "type": "string"
           },
           "filing": {
-            "$ref": "#/components/schemas/Filing"
+            "$ref": "#/components/schemas/Filing",
+            "description": "Filing is the state-of-incorporation filing record, once documents exist."
           },
           "founders": {
+            "description": "Founders is every founding stakeholder, with its equity split and KYC state.",
             "items": {
               "$ref": "#/components/schemas/Founder"
             },
             "type": "array"
           },
           "genesis": {
-            "$ref": "#/components/schemas/Genesis"
+            "$ref": "#/components/schemas/Genesis",
+            "description": "Genesis is the cap-table equity genesis, once recorded."
           },
           "imported": {
+            "description": "Imported reports whether the existing company's corporate documents have been\ningested into the org's data room.",
             "type": "boolean"
           },
           "importedDocs": {
-            "description": "dataroom doc ids ingested from Drive",
+            "description": "ImportedDocs are the data room ids of the documents ingested from Drive.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "jurisdiction": {
+            "description": "Jurisdiction is the state of formation: DE or WY.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the company name the entity is being formed under.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the owning org — the tenant key, and the reason there is exactly one\nformation per org.",
             "type": "string"
           },
           "paid": {
+            "description": "Paid reports whether the one-time formation fee has been charged.",
             "type": "boolean"
           },
           "paymentRef": {
+            "description": "PaymentRef is the billing reference recorded for the charged formation fee on\nthe org's own ledger.",
             "type": "string"
           },
           "signed": {
+            "description": "Signed reports whether the formation documents have come back signed — the\ne-signature provider's answer, which a real provider's webhook drives.",
             "type": "boolean"
           },
           "stage": {
+            "description": "Stage is the machine's current state: structure, founders, payment, documents,\nesign or genesis on the formation path, import on the skip path, and company\nat the terminal.",
             "type": "string"
           },
           "structure": {
+            "description": "Structure is the legal entity being formed: c-corp, llc or dao-llc.",
             "type": "string"
           },
           "updatedAt": {
+            "description": "UpdatedAt is the unix second of the most recent write to the formation.",
             "type": "integer"
           }
         },
@@ -835,23 +855,27 @@
       "Founder": {
         "properties": {
           "decidedBy": {
-            "description": "who settled a terminal KYC status: the provider name, or a reviewer's user id",
+            "description": "DecidedBy is who settled a terminal KYC status: the provider name, or a\nreviewer's user id.",
             "type": "string"
           },
           "email": {
+            "description": "Email is the founder's email, and the key a KYC decision addresses a founder\nby — POST /v1/company/kyc/decision matches on it.",
             "type": "string"
           },
           "equityBps": {
+            "description": "EquityBps is the founder's ownership in basis points, 0–10000 (1% == 100 bps,\nso 10000 is the whole company). The founders' shares seed the cap-table genesis.",
             "type": "integer"
           },
           "kycRef": {
-            "description": "idv session reference",
+            "description": "KYCRef is the idv provider's session reference for this founder.",
             "type": "string"
           },
           "kycStatus": {
+            "description": "KYCStatus is the founder's identity-verification state: pending, verified (a\nreal idv provider reported a pass), reviewer_confirmed (a privileged reviewer\nconfirmed out-of-band) or failed. The payment stage is unreachable until every\nfounder passes.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the founder's full legal name, as it appears on the formation documents.",
             "type": "string"
           }
         },
@@ -860,27 +884,31 @@
       "Genesis": {
         "properties": {
           "at": {
+            "description": "At is the unix second the genesis root was computed.",
             "type": "integer"
           },
           "block": {
+            "description": "Block is the L1 block the anchoring transaction landed in. Set only once the\nreceipt has been read; absent otherwise.",
             "type": "integer"
           },
           "chainId": {
+            "description": "ChainID is the EVM chain the root is committed to — the Hanzo L1 by default.",
             "type": "integer"
           },
           "note": {
+            "description": "Note explains an unanchored genesis honestly — anchor wiring absent, or the\nsubmit error — rather than reporting a commit that did not happen.",
             "type": "string"
           },
           "root": {
-            "description": "0x… keccak root of the founding allocation",
+            "description": "Root is the 0x-prefixed keccak256 root of the founding allocation. It is\nALWAYS computed, whether or not the on-chain anchor is wired, because the root\nis the tamper-evident witness.",
             "type": "string"
           },
           "status": {
-            "description": "pending | anchored",
+            "description": "Status is pending (root computed, not yet on-chain) or anchored (committed).",
             "type": "string"
           },
           "txHash": {
-            "description": "L1 transaction hash (empty until anchored)",
+            "description": "TxHash is the L1 transaction hash of the anchoring commit. Empty until anchored.",
             "type": "string"
           }
         },
@@ -889,21 +917,27 @@
       "Registration": {
         "properties": {
           "createdAt": {
+            "description": "CreatedAt is the unix second the formation was opened.",
             "type": "integer"
           },
           "name": {
+            "description": "Name is the company name the entity is being formed under.",
             "type": "string"
           },
           "org": {
+            "description": "Org is the org whose formation this row projects.",
             "type": "string"
           },
           "stage": {
+            "description": "Stage is the formation's current state — what the platform reads to see which\nformations are stalled and where.",
             "type": "string"
           },
           "structure": {
+            "description": "Structure is the legal entity being formed: c-corp, llc or dao-llc.",
             "type": "string"
           },
           "updatedAt": {
+            "description": "UpdatedAt is the unix second of the most recent write to the formation, and\nthe key the register sorts on (newest activity first).",
             "type": "integer"
           }
         },
@@ -912,22 +946,27 @@
       "RoundInput": {
         "properties": {
           "name": {
+            "description": "Name is the round's name on the cap table, e.g. \"Seed\". Required.",
             "type": "string"
           },
           "preMoneyValuation": {
+            "description": "PreMoneyValuation is the valuation the round prices off, before the new money.",
             "type": "number"
           },
           "pricePerShare": {
+            "description": "PricePerShare is the per-share price of a priced round.",
             "type": "number"
           },
           "roundType": {
-            "description": "PRICED | SAFE | CONVERTIBLE_NOTE",
+            "description": "RoundType is PRICED, SAFE or CONVERTIBLE_NOTE. Defaults to PRICED.",
             "type": "string"
           },
           "shareClassId": {
+            "description": "ShareClassID is the cap table's share class the round issues into.",
             "type": "string"
           },
           "targetAmount": {
+            "description": "TargetAmount is the amount the round is raising, recorded verbatim on the\ncanonical cap table's rounds.create contract.",
             "type": "number"
           }
         },
@@ -936,9 +975,11 @@
       "Signer": {
         "properties": {
           "email": {
+            "description": "Email is the address the signature request is sent to.",
             "type": "string"
           },
           "name": {
+            "description": "Name is the recipient's name, as it appears on the signature request.",
             "type": "string"
           }
         },
