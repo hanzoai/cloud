@@ -23,10 +23,11 @@
 //	/tasks/*                            embedded React UI (console.hanzo.ai/tasks)
 //
 // Identity: cloud's gateway validates the IAM JWT and mints X-Org-Id / X-User-Id
-// (HIP-0026); clients/principal treats a credential-minted X-User-Id as the ONE
-// trust signal. gate refuses data requests lacking it (403, never the unscoped
-// store) and threads the validated org into the engine via
-// tasks/pkg/auth.WithIdentity, so per-(org,ns) shard scoping applies.
+// (HIP-0026). gate resolves those two through apps/principal — the ONE place the
+// cloud data plane turns a request into an org — and refuses (403, never the
+// unscoped store) anything that decision refuses, then threads the validated org
+// into the engine via tasks/pkg/auth.WithIdentity, so per-(org,ns) shard scoping
+// applies.
 package tasks
 
 import (
@@ -36,6 +37,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/cron"
+	"github.com/hanzoai/cloud/apps/principal"
 	tasksui "github.com/hanzoai/cloud/apps/tasks/ui"
 	tasksauth "github.com/hanzoai/tasks/pkg/auth"
 	tasks "github.com/hanzoai/tasks/pkg/tasks"
@@ -166,23 +168,38 @@ func httpMux(srv *tasks.Embedded) http.Handler {
 // the validated tenant into the handler context. The gateway (HIP-0026) mints
 // X-User-Id ONLY from a verified credential, X-Org-Id from the validated owner
 // claim, and X-Project-Id from the validated project claim; the fiber adaptor
-// forwards those request headers verbatim, so a non-empty X-User-Id is the SAME
-// trust signal clients/principal.Validated uses. Absent it, the request is the
+// forwards those request headers verbatim, so the pair is the SAME two facts
+// clients/principal decides on. A request that fails that decision is the
 // anonymous-forge path and is refused (403) — never served another tenant's data
-// nor the unscoped store. Present, the full org/project/user identity is threaded
+// nor the unscoped store. Admitted, the full org/project/user identity is threaded
 // into the engine via tasks/pkg/auth.WithIdentity so per-(org,ns) shard scoping
 // (and the project↔namespace convention) applies.
+//
+// The decision is principal.OrgOf and NOT a local copy of it. principal is the
+// ONE place the cloud data plane turns a request into an org, and OrgOf is that
+// decision over the only two facts it turns on — the validated user claim and the
+// org claim — taken as plain strings precisely so a reader that holds headers
+// rather than a *zip.Ctx (this one; the internal plane's capability envelope) asks
+// the same function. A local `user != ""` check is not the same rule: it admits a
+// validated principal carrying NO org, which the engine reads as the ZERO
+// Principal — the shared unscoped store (hanzoai/tasks store/principal.go:31,
+// <root>/_/_/_), not that caller's shard. cloud's identity boundary produces that
+// exact request on purpose: SanitizeIdentity mints X-User-Id from the claims but
+// leaves X-Org-Id unset whenever homeOrg() is empty (auth_identity.go:289 — a
+// token with no `orgs` claim), so it fails closed everywhere principal is asked
+// and, until this call, open here. TestOrglessValidatedPrincipalIsRefused.
 func gate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user := r.Header.Get(tasksauth.HeaderUserID)
-		if user == "" {
+		org, ok := principal.OrgOf(user, r.Header.Get(tasksauth.HeaderOrgID))
+		if !ok {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
 			_, _ = w.Write([]byte(`{"error":"identity required","code":403}`))
 			return
 		}
 		ctx := tasksauth.WithIdentity(r.Context(),
-			r.Header.Get(tasksauth.HeaderOrgID),
+			org,
 			r.Header.Get(tasksauth.HeaderProjectID),
 			user,
 			r.Header.Get(tasksauth.HeaderUserEmail))
