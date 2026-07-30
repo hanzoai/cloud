@@ -23,12 +23,10 @@
 package deploy
 
 import (
-	"net/http"
+	"context"
 	"sort"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/k8s"
-	"github.com/zap-proto/zip"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -90,22 +88,44 @@ type GitOpsPlane struct {
 	Applications []GitOpsApp `json:"applications"`
 }
 
-// gitOps lists every Hanzo CD Application in the cluster, newest deploy first.
-func gitOps(s *cloud.Service[state], c *zip.Ctx) error {
-	if err := ready(s); err != nil {
-		return err
+// GetDeployGitOps lists every Hanzo CD Application in the cluster: the git source
+// each one polls, the commit it last APPLIED, how its last sync operation ended,
+// and its recent deploy history — newest deploy first, ordered by namespace then
+// name.
+//
+// This is the layer ABOVE the application board, and the two disagree in exactly
+// the case an operator most needs to see: main carries a new image pin, CD has
+// not applied that commit yet, so every App CR still declares the old tag and the
+// application board is legitimately "Synced" while the deploy has not landed.
+// Only the applied revision here can show that.
+//
+// installed is false — with a reason and an empty list — when the CD CRD is not
+// served in this cluster. That is a FACT about the cluster rather than a failure
+// of the request, so the caller can say "no CD plane here" instead of rendering
+// an error it cannot act on; a genuine transport or RBAC failure still errors.
+//
+// Read-only, and platform SuperAdmin only: the CD plane is fleet infrastructure
+// with no tenant dimension. This view observes CD and never drives it — the sync
+// policy is automated with self-heal, and the actionable verb an operator has is
+// the per-application reconcile at POST /v1/deploy/applications/{name}/sync.
+func (o ops) gitops(ctx context.Context, _ *noInput) (*GitOpsPlane, error) {
+	if _, err := superAdminOf(ctx); err != nil {
+		return nil, err
+	}
+	if err := ready(o.s); err != nil {
+		return nil, err
 	}
 	// Cluster-wide: CD Applications live in the controller's namespace, and which
 	// namespace that is, is CD's business — not a constant this plane should hold.
-	list, err := s.State.dyn.Resource(k8s.CDApplications).Namespace("").List(c.Context(), metav1.ListOptions{})
+	list, err := o.s.State.dyn.Resource(k8s.CDApplications).Namespace("").List(ctx, metav1.ListOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return c.JSON(http.StatusOK, GitOpsPlane{
+			return &GitOpsPlane{
 				Reason:       "Hanzo CD is not installed in this cluster (no apps.hanzo.ai/Application CRD)",
 				Applications: []GitOpsApp{},
-			})
+			}, nil
 		}
-		return k8sErr(s, "list", err)
+		return nil, k8sErr(o.s, "list", err)
 	}
 	apps := make([]GitOpsApp, 0, len(list.Items))
 	for i := range list.Items {
@@ -117,7 +137,7 @@ func gitOps(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		return apps[i].Name < apps[j].Name
 	})
-	return c.JSON(http.StatusOK, GitOpsPlane{Installed: true, Applications: apps})
+	return &GitOpsPlane{Installed: true, Applications: apps}, nil
 }
 
 // observeGitOpsApp maps one Application CR to its view. Every field is read
