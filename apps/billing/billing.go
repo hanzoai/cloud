@@ -170,6 +170,12 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	app.Get("/v1/billing/gpu-eligibility", cloud.Handle(s, gpuEligibility))
 	app.Post("/v1/billing/gpu-charge", cloud.Handle(s, gpuCharge))
 	app.Get("/v1/billing/payment-methods", cloud.Handle(s, paymentMethods))
+	// Saving a card must be registered on the SAME router as the read: a specific
+	// route shadows the console pkg's /v1/billing/* wildcard for its whole path, so
+	// a GET-only registration made POST miss on METHOD (405) before the wildcard or
+	// the co-resident commerce app could serve it — the console's save-card call
+	// died there, and with it auto-recharge, which charges the vaulted card.
+	app.Post("/v1/billing/payment-methods", cloud.Handle(s, createPaymentMethod))
 
 	// The customer-facing /v1/finance/* PROJECTION of this same commerce plane (the
 	// finance.hanzo.ai + console Finance surfaces). It reuses this package's commerceProxy
@@ -384,6 +390,29 @@ func gpuEligibility(s *cloud.Service[state], c *zip.Ctx) error {
 // sees ONLY its OWN org's methods. Backs the launch gate's card-on-file check.
 func paymentMethods(s *cloud.Service[state], c *zip.Ctx) error {
 	return proxy(s, c, "/v1/billing/portal/payment-methods")
+}
+
+// createPaymentMethod → commerce POST /v1/billing/payment-methods: vault the Square
+// card token the browser produced as a card-on-file. Same discipline as gpuCharge —
+// the billing SUBJECT is pinned server-side to the caller's OWN org, so a forged body
+// can never attach a card to another tenant — and commerce's status is forwarded
+// VERBATIM (a 402 decline keeps its reason) rather than 500-masked.
+func createPaymentMethod(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := principal.Org(c)
+	if !ok {
+		return zip.ErrUnauthorized("sign in to save a card")
+	}
+	if !s.State.commerce.configured() {
+		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
+	}
+	body, status, err := s.State.commerce.post(c.Context(), "/v1/billing/payment-methods", org, pinSubjectBody(c.Body(), org))
+	if err != nil {
+		s.Log.Warn("commerce save card failed", "org", org, "err", err)
+		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
+	}
+	c.SetHeader("Content-Type", "application/json")
+	c.SetHeader("Cache-Control", "no-store")
+	return c.Bytes(status, body)
 }
 
 // gpuCharge → commerce POST /v1/billing/gpu-charge: the prepay-only, card-required GPU
