@@ -175,6 +175,14 @@ func gitProtocolEnv(protocol string) []string {
 //   - GIT_TERMINAL_PROMPT=0: never block on an interactive credential prompt.
 //   - GIT_NO_REPLACE_OBJECTS=1: ignore refs/replace remaps.
 //   - LC_ALL=C: stable, parseable output.
+//   - GIT_CONFIG_COUNT pack/mmap bounds: every git subprocess shares the
+//     writer's cgroup, and pack generation is proportional to REPO size, not
+//     request size — an unbounded upload-pack of a multi-GiB repo is a
+//     multi-GiB allocation the Go runtime cannot see or govern (GOMEMLIMIT
+//     bounds only the Go heap), landing as a kernel OOM kill of the whole
+//     API. The caps trade clone speed on the biggest repos for a bounded
+//     worst case: delta search 64m/thread x 2 threads, pack mmap 256m in 32m
+//     windows, delta cache 64m — a few hundred MB ceiling per operation.
 //
 // PATH is passed through (not a secret) so git can find its helper executables
 // (git-remote-https for mirror fetch); the binary itself is resolved to an
@@ -188,6 +196,12 @@ func baseGitEnv() []string {
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_NO_REPLACE_OBJECTS=1",
 		"LC_ALL=C",
+		"GIT_CONFIG_COUNT=5",
+		"GIT_CONFIG_KEY_0=pack.windowMemory", "GIT_CONFIG_VALUE_0=64m",
+		"GIT_CONFIG_KEY_1=pack.threads", "GIT_CONFIG_VALUE_1=2",
+		"GIT_CONFIG_KEY_2=core.packedGitLimit", "GIT_CONFIG_VALUE_2=256m",
+		"GIT_CONFIG_KEY_3=core.packedGitWindowSize", "GIT_CONFIG_VALUE_3=32m",
+		"GIT_CONFIG_KEY_4=pack.deltaCacheSize", "GIT_CONFIG_VALUE_4=64m",
 	}
 }
 
