@@ -47,7 +47,7 @@ func TestBareNounIsARedirect(t *testing.T) {
 }
 
 // TestOneWildcardCarriesFourContentTypes pins the four answer shapes that ONE
-// route — app.All("/v1/tasks/*", …), tasks.go:57 — carries at once: the engine's
+// route — app.All("/v1/tasks/*", …) in Mount — carries at once: the engine's
 // JSON API, the text/plain 404 its ServeMux writes for a path or method it does
 // not serve, the text/plain 405 the MCP endpoint writes for a non-POST, and the
 // event stream.
@@ -69,7 +69,7 @@ func TestOneWildcardCarriesFourContentTypes(t *testing.T) {
 		{http.MethodGet, "/v1/tasks/mcp", 405, "text/plain"},
 	} {
 		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, principal(httptest.NewRequest(c.method, c.path, nil)))
+		mux.ServeHTTP(rec, validated(httptest.NewRequest(c.method, c.path, nil)))
 		if rec.Code != c.code {
 			t.Errorf("%s %s = %d, want %d (%s)", c.method, c.path, rec.Code, c.code, rec.Body.String())
 		}
@@ -83,7 +83,7 @@ func TestOneWildcardCarriesFourContentTypes(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, principal(httptest.NewRequest(http.MethodGet, "/v1/tasks/events", nil)).WithContext(ctx))
+	mux.ServeHTTP(rec, validated(httptest.NewRequest(http.MethodGet, "/v1/tasks/events", nil)).WithContext(ctx))
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
 		t.Errorf("GET /v1/tasks/events content-type = %q, want text/event-stream", ct)
 	}
@@ -94,8 +94,8 @@ func TestOneWildcardCarriesFourContentTypes(t *testing.T) {
 // wildcard.
 //
 // The engine writes {"error":…,"code":403} with code a JSON NUMBER (hanzoai/tasks
-// pkg/tasks/embed.go writeErr; cloud's gate, tasks.go:138, writes the same shape
-// for the refusal). zip writes its HTTPError — {"status":403,"error":…}, with
+// pkg/tasks/embed.go writeErr; cloud's gate writes the same shape for the
+// refusal). zip writes its HTTPError — {"status":403,"error":…}, with
 // `code` a STRING that is omitted when empty (zip ctx.go:201-218). A typed op
 // converted out of this subtree would answer errors in the second shape while
 // every sibling path behind the same wildcard kept the first, so one product
@@ -150,7 +150,7 @@ func TestCancelIgnoresAMalformedBody(t *testing.T) {
 	mux := httpMux(testEngine(t))
 
 	post := func(path, body string) (int, string) {
-		r := principal(httptest.NewRequest(http.MethodPost, path, bytes.NewReader([]byte(body))))
+		r := validated(httptest.NewRequest(http.MethodPost, path, bytes.NewReader([]byte(body))))
 		r.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, r)
@@ -179,10 +179,10 @@ func TestCancelIgnoresAMalformedBody(t *testing.T) {
 	}
 }
 
-// principal presents r as a VALIDATED caller the way cloud's identity boundary
-// does — X-User-Id is minted only from a verified credential, and gate honors
-// X-Org-Id only alongside it.
-func principal(r *http.Request) *http.Request {
+// validated presents r as a caller cloud's identity boundary has already
+// resolved: X-User-Id is minted only from a verified credential, and gate admits
+// it only alongside an org (apps/principal.OrgOf decides both).
+func validated(r *http.Request) *http.Request {
 	r.Header.Set("X-Org-Id", "acme")
 	r.Header.Set("X-User-Id", "u-acme")
 	return r
