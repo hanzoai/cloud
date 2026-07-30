@@ -134,12 +134,46 @@ func TestHumanTokenWithNoOrgsStillFailsClosed(t *testing.T) {
 	}
 }
 
-// TestMachineJWTResolvesItsAppOrg: a client_credentials machine (IAM type
-// "application") has no membership set and no subject row, and reads `owner` — the
-// application's own org. A machine cannot choose which app it is, so there is no
-// app-selection hazard here; omitting this would fail closed on the KMS sync
+// TestMachineJWTResolvesItsAppOrg: a POSITIVELY IDENTIFIED machine — the per-org
+// KMS sync identity, named by its owner-bound "<owner>-platform-kms" audience —
+// reads `owner`, the application's own org. That machine cannot choose which app it
+// is and obtaining its token at all requires that app's client secret, so there is
+// no app-selection hazard; omitting the branch would fail closed on the KMS sync
 // identity, whose org-scoped access runs through this boundary.
+//
+// It is keyed on the AUDIENCE rather than on IAM's `type` claim because the IAM line
+// this runs against stamps "application" nowhere, so a `type`-keyed branch never
+// fired in production while the test asserting it passed.
 func TestMachineJWTResolvesItsAppOrg(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("rsa: %v", err)
+	}
+	jwks := jwksServer(t, &key.PublicKey)
+	v := newIdentityValidator(testIssuer, jwks.URL, 0)
+
+	m := tokenClaims("gotham-labs-platform-kms", "gotham-labs", "svc@example.test", false, time.Now().Add(time.Hour))
+	m.Orgs = nil
+	tok := signWith(t, key, m)
+
+	status, org := orgScopedProbe(t, v, func(r *http.Request) {
+		r.Header.Set("Authorization", "Bearer "+tok)
+	})
+	if status != http.StatusOK || org != "gotham-labs" {
+		t.Fatalf("KMS machine JWT: status=%d org=%q, want 200 and %q", status, org, "gotham-labs")
+	}
+}
+
+// TestGenericMachineJWTResolvesNoOrg: a machine that is NOT positively identified
+// resolves NO org, and is refused.
+//
+// Its token is indistinguishable from a human's minted before the `orgs` claim
+// shipped — no membership set, an ordinary audience — and reading `owner` for it is
+// precisely the app-selection hazard homeOrg exists to remove: `owner` is the org of
+// whichever application minted the token. So the rule is ONE rule, with no third
+// case to get wrong: a token carrying no membership set never has an org read out of
+// `owner` unless the owner-bound machine audience vouches for it.
+func TestGenericMachineJWTResolvesNoOrg(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("rsa: %v", err)
@@ -149,14 +183,13 @@ func TestMachineJWTResolvesItsAppOrg(t *testing.T) {
 
 	m := tokenClaims("hanzo-cloud", "gotham-labs", "svc@example.test", false, time.Now().Add(time.Hour))
 	m.Orgs = nil
-	m.Type = "application"
 	tok := signWith(t, key, m)
 
 	status, org := orgScopedProbe(t, v, func(r *http.Request) {
 		r.Header.Set("Authorization", "Bearer "+tok)
 	})
-	if status != http.StatusOK || org != "gotham-labs" {
-		t.Fatalf("machine JWT: status=%d org=%q, want 200 and %q", status, org, "gotham-labs")
+	if status == http.StatusOK || org != "" {
+		t.Fatalf("generic machine JWT: status=%d org=%q, want a refusal and no org", status, org)
 	}
 }
 

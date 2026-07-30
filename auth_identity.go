@@ -48,14 +48,16 @@ type idClaims struct {
 	PreferredUsername string `json:"preferred_username"` // id fallback
 	Email             string `json:"email"`
 	IsAdmin           bool   `json:"isAdmin"`
-	// Type is IAM's account kind: "application" for a client_credentials MACHINE
-	// identity (object/token_oauth.go stamps Type:"application"), else a human kind
-	// ("normal-user", …). It is the discriminator that keeps a machine token — of ANY
-	// app, not only the KMS-sync one — from ever being granted SuperAdmin. Empty on a
-	// token that predates the claim ⟹ treated as non-machine (fail toward the KMS-aud
-	// check below, never toward granting admin).
-	Type string         `json:"type"`
-	Orgs []model.OrgRef `json:"orgs"` // membership SET (home first); empty on legacy tokens
+	// Type is IAM's account kind as the token carries it. It is NOT the machine
+	// discriminator: the IAM line this runs against stamps "application" nowhere —
+	// tokenType takes exactly "access-token" and "id-token" — so reading it as one
+	// admitted every machine as a human. Orgs is the discriminator; see
+	// isMachinePrincipal.
+	Type string `json:"type"`
+	// Orgs is the membership SET (home org first). Its ABSENCE is the machine signal:
+	// IAM signs no membership for a client_credentials token, and every user token
+	// carries at least the home org.
+	Orgs []model.OrgRef `json:"orgs"`
 
 	// subjectOrg is the org resolved from the token SUBJECT rather than from any
 	// claim — set ONLY by the API-key resolver (iamKeys.lookup), from the IAM user
@@ -281,7 +283,7 @@ func (c *idClaims) homeOrg() string {
 	if c.subjectOrg != "" {
 		return c.subjectOrg // API key: resolved from the subject
 	}
-	if isMachinePrincipal(c) {
+	if isKMSMachinePrincipal(c) {
 		return c.Owner // machine JWT: the app IS the principal
 	}
 	if len(c.Orgs) == 0 {
@@ -313,19 +315,38 @@ func isKMSMachinePrincipal(claims *idClaims) bool {
 	return false
 }
 
-// isMachinePrincipal reports whether a validated token is a MACHINE (non-human)
-// identity — the predicate SanitizeIdentity uses to DENY SuperAdmin and the org-admin
-// signal. A client_credentials token carries IAM's `type` == "application"
-// (object/token_oauth.go), which catches EVERY machine app regardless of its audience;
-// this is the fix for the audience-decomplection widening SuperAdmin's reach — a
-// generic admin-org machine app must not become platform-admin just because it belongs
-// to the admin org. It UNIONS the owner-bound KMS-sync check so a machine token is
-// still excluded even on the (defensive) path where `type` is absent but the
-// <owner>-platform-kms audience is present. Fail-closed: unknown/empty type is treated
-// as NON-machine so a real human admin (who may carry no `type`) is never locked out —
-// the KMS-aud fallback still catches the one machine family we can identify audience-only.
-func isMachinePrincipal(claims *idClaims) bool {
-	return claims.Type == "application" || isKMSMachinePrincipal(claims)
+// isHuman reports whether a validated token positively identifies a PERSON. It is
+// the gate on both admin scopes: SuperAdmin and the org-admin signal are granted
+// only to a principal that answers yes.
+//
+// The signal is the MEMBERSHIP SET, because that is the one IAM guarantees. Every
+// USER token carries at least the home org — store.MemberOrgRefs opens with
+// {user.Owner, HomeRole(user)} before it appends anything else. A
+// client_credentials token carries none, and IAM says why at the call that mints
+// it: "a machine token has no user and therefore no membership set", so "an app
+// token can never carry a tenancy it did not earn". Authority here IS membership,
+// so an identity holding no memberships holds none of it. Same predicate as
+// authz.Claims.Machine, so this side of the boundary and the edge agree.
+//
+// WHAT THIS REPLACES: `type == "application"`. The IAM line this cloud runs against
+// stamps that value NOWHERE — `tokenType` takes exactly "access-token" and
+// "id-token" (internal/oidc/jwt.go), and the object/token_oauth.go the old comment
+// cited is not in it. So the check could not fire, every machine fell through to the
+// KMS-audience clause, and that clause matches ONE identity in the estate. A generic
+// admin-org client_credentials token therefore read as a HUMAN and took the
+// SuperAdmin arm: cross-tenant reads, and the org-switch that decides which ledger
+// pays. The repo's own probe (TestRedIso_C_AdminCrossOrg) reproduces it.
+//
+// The KMS machine is excluded on its own owner-bound audience as well, so that one
+// identity is denied the admin scopes by two independent signals.
+//
+// FAIL-CLOSED, and it costs something. A human token carrying no `orgs` — minted
+// before that claim shipped — is not positively a person and loses the two admin
+// scopes. That is an availability cost bounded by the token TTL, taken deliberately
+// over the alternative: admitting an unidentifiable principal to the only
+// cross-tenant scope in the system.
+func isHuman(claims *idClaims) bool {
+	return len(claims.Orgs) > 0 && !isKMSMachinePrincipal(claims)
 }
 
 // isMember reports whether org is in the token's signed membership set — the
