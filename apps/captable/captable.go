@@ -104,14 +104,20 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 // routes wires the /v1/captable/* route table → bundle route names, in TWO
 // planes over one dispatch.
 //
-// The READS are TYPED ops (typed.go), so they carry In/Out types and reach the
-// document, the MCP tool list, the CLI and the generated SDKs. The WRITES stay
-// untyped relays, each because typing it would MOVE THE WIRE, and each says why
-// below. The shared reason is that this surface relays the goja bundle's own
-// (status, body): a write answers 400 {success,message,errors} on a validation
-// failure and 404/409 {success,message} otherwise, and a typed op's failure path
-// can only render zip's {status,code,error}. Several also read the request body
-// VERBATIM in ways a Go struct cannot express — see each line.
+// The BODYLESS routes are TYPED ops (typed.go), so they carry In/Out types and
+// reach the document, the MCP tool list, the CLI and the generated SDKs: the
+// eleven collection reads, the round detail read, and the five deletes. A bodyless
+// route's whole input is one path segment, so its In cannot accept less than the
+// route always did, and its refusals relay the bundle's own bytes through
+// bundleErr.
+//
+// The BODY-CARRYING writes stay untyped relays, and the reason is the REQUEST, not
+// the response. The bundle validates with COERCING helpers (goja/src/validate.ts):
+// `num` accepts a number OR a numeric string, `optString` accepts any scalar and
+// stringifies it, and stakeholders.add accepts an object OR an array. zip decodes a
+// typed In with encoding/json, which refuses those shapes with a 400 the route has
+// never sent — so typing one would make it accept LESS. Each line below says which
+// of its fields does that.
 func routes(app cloud.Router, s *cloud.Service[state]) {
 	g := app.Group("/v1/captable")
 	// Bridge FIRST: a typed op receives only a context, so the validated org
@@ -121,13 +127,22 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	// the leaves below; it is prefix-scoped, and nesting under Serve's own Bridge
 	// is harmless (the inner one is what the handler sees).
 	g.Use(cloud.Bridge())
+	// Then the bundle's own envelope: a typed op that must answer the bundle's
+	// 400/404/409/500 returns a bundleErr, and this writes those bytes back
+	// verbatim. Also before the leaves, for the same registration-order reason.
+	g.Use(bundleEnvelope())
 
-	// ---- the typed reads (typed.go carries the models and the prose) ----
+	// ---- the typed ops (typed.go carries the models and the prose) ----
 	//
 	// Declared on the GROUP, so each op's path is the prefix composed with its
 	// leaf — the same composition the router does, and the identity every
 	// projection keys on. cmd/zipdoc resolves the prefix the same way, so the doc
 	// comments reach the document and the MCP tool list.
+	//
+	// Order is free here: no two /v1/captable routes overlap on method + pattern
+	// (every DELETE has its own collection prefix, and the only two parameterised
+	// POSTs differ in their third segment), so nothing below can shadow anything
+	// else. TestEveryRouteIsTypedOrNamed counts the table either way.
 	o := ops{s: s}
 	zip.Get(g, "/company", o.getCompany)
 	zip.Get(g, "/stakeholders", o.listStakeholders)
@@ -140,57 +155,59 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Get(g, "/rounds", o.listRounds)
 	zip.Get(g, "/investments", o.listInvestments)
 	zip.Get(g, "/summary", o.getSummary)
+	zip.Get(g, "/rounds/:id", o.getRound)
+	zip.Delete(g, "/stakeholders/:id", o.deleteStakeholder)
+	zip.Delete(g, "/shares/:id", o.deleteShare)
+	zip.Delete(g, "/options/:id", o.deleteOption)
+	zip.Delete(g, "/safes/:id", o.deleteSafe)
+	zip.Delete(g, "/convertibles/:id", o.deleteConvertible)
 
-	// ---- the untyped relays, and why each one is still untyped ----
+	// ---- the untyped relays, and which field keeps each one untyped ----
 
-	// company.update: 400 {success,message,errors} when `name` is missing.
+	// company.update: `incorporationType/Country/State` go through optString, which
+	// stringifies ANY scalar — a typed string field would 400 on the number this
+	// route stores as "5".
 	g.Put("/company", route(s, "company.update", nil, true))
 	// stakeholders.add: the body is a single object OR an array (the tRPC
-	// contract), and a bad enum/email answers 400 with the bundle's error list.
+	// contract). A Go struct decodes one or the other, never both.
 	g.Post("/stakeholders", route(s, "stakeholders.add", nil, true))
-	// stakeholders.update: a PARTIAL update keyed on `key !== undefined`, so a
-	// typed In would send zero values for omitted fields and overwrite them; 404
-	// on an unknown id.
+	// stakeholders.update: a PARTIAL update keyed on `key !== undefined`, and it
+	// writes the RAW value — so both "omitted" and "explicit null" have meanings a
+	// re-marshalled Go struct cannot tell apart.
 	g.Patch("/stakeholders/:id", routeID(s, "stakeholders.update", true))
-	// stakeholders.delete: 400 when the holder still holds equity, 404 otherwise.
-	g.Delete("/stakeholders/:id", routeID(s, "stakeholders.delete", false))
-	// shareClasses.create: 400 with the bundle's validation list.
+	// shareClasses.create: `initialSharesAuthorized`, `votesPerShare`, `parValue`,
+	// `pricePerShare`, `seniority` and both multiples go through num/intNum, which
+	// accept a numeric STRING.
 	g.Post("/share-classes", route(s, "shareClasses.create", nil, true))
-	// shareClasses.update: 400 with the validation list, 404 on an unknown id.
+	// shareClasses.update: same coercing validator as create.
 	g.Patch("/share-classes/:id", routeID(s, "shareClasses.update", true))
-	// equityPlans.create: 400 with the validation list, including the
-	// shareClassId referential check.
+	// equityPlans.create: `initialSharesReserved` goes through intNum (numeric
+	// string accepted), `comments` through optString.
 	g.Post("/equity-plans", route(s, "equityPlans.create", nil, true))
-	// shares.add: 400 with the validation list, 409 on a duplicate certificate id.
+	// shares.add: `quantity`, `pricePerShare` and `capitalContribution` are coerced
+	// numbers; `companyLegends` is validated per element, not per array type.
 	g.Post("/shares", route(s, "shares.add", nil, true))
 	// shares.transfer: `quantity` OMITTED means "transfer the whole certificate",
-	// which a typed In cannot say (its zero value means 0); 400/404/409 besides.
-	// Registered before /shares/:id (different methods anyway) so it can never be
-	// shadowed.
+	// which a typed In cannot say (its zero value means 0), and it is coerced too.
 	g.Post("/shares/transfer", route(s, "shares.transfer", nil, true))
-	// shares.delete: 404 {success,message} on an unknown id.
-	g.Delete("/shares/:id", routeID(s, "shares.delete", false))
-	// options.add: 400 with the validation list, 409 on a duplicate grant id.
+	// options.add: `quantity`, `exercisePrice`, `cliffYears` and `vestingYears` are
+	// coerced numbers.
 	g.Post("/options", route(s, "options.add", nil, true))
-	// options.delete: 404 {success,message} on an unknown id.
-	g.Delete("/options/:id", routeID(s, "options.delete", false))
-	// safes.create: 400 with the validation list, 409 on a duplicate SAFE id.
+	// safes.create: `capital`, `valuationCap` and `discountRate` are coerced
+	// numbers.
 	g.Post("/safes", route(s, "safes.create", nil, true))
-	// safes.delete: 404 {success,message} on an unknown id.
-	g.Delete("/safes/:id", routeID(s, "safes.delete", false))
-	// convertibles.create: 400 with the validation list, 409 on a duplicate id.
+	// convertibles.create: `capital`, `conversionCap`, `discountRate` and
+	// `interestRate` are coerced numbers.
 	g.Post("/convertibles", route(s, "convertibles.create", nil, true))
-	// convertibles.delete: 404 {success,message} on an unknown id.
-	g.Delete("/convertibles/:id", routeID(s, "convertibles.delete", false))
-	// rounds.create: 400 with the validation list, including the priced-round
-	// price and share-class checks.
+	// rounds.create: `targetAmount`, `pricePerShare` and `preMoneyValuation` are
+	// coerced numbers.
 	g.Post("/rounds", route(s, "rounds.create", nil, true))
-	// rounds.get: 404 {success,message} on an unknown id — pinned as the bundle's
-	// OWN 404 by TestHTTPEndToEnd.
-	g.Get("/rounds/:id", routeID(s, "rounds.get", false))
-	// rounds.close: `closeDate` OMITTED means today; 404 when no OPEN round matches.
+	// rounds.close: `closeDate` goes through optDateString, which stringifies any
+	// scalar — and OMITTED means today, which a typed string cannot distinguish
+	// from the empty string it also accepts.
 	g.Post("/rounds/:id/close", routeID(s, "rounds.close", true))
-	// rounds.investments.add: `date` OMITTED means today; 400/404 besides.
+	// rounds.investments.add: `amount` is a coerced number and `date`/`comments`
+	// go through optDateString/optString.
 	g.Post("/rounds/:id/investments", routeID(s, "rounds.investments.add", true))
 }
 

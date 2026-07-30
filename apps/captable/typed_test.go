@@ -31,9 +31,9 @@ var typedReads = map[string]string{
 
 // bundleBytes runs a bundle route straight on the tenant's store — the RELAY the
 // typed op replaced — and returns its status and body verbatim.
-func bundleBytes(t *testing.T, org, route string) (int, []byte) {
+func bundleBytes(t *testing.T, org, route string, params map[string]string) (int, []byte) {
 	t.Helper()
-	resp, err := mounted.State.host.Dispatch(context.Background(), org, goja.BaseRequest{Route: route})
+	resp, err := mounted.State.host.Dispatch(context.Background(), org, goja.BaseRequest{Route: route, Params: params})
 	if err != nil {
 		t.Fatalf("bundle dispatch %s: %v", route, err)
 	}
@@ -51,7 +51,7 @@ func TestTypedReadsAreByteIdenticalToTheBundle(t *testing.T) {
 	// An EMPTY tenant first: every list is [] or {"data":[]}, the summary has
 	// zero totals, and the seeded company row is present.
 	for path, route := range typedReads {
-		wantStatus, want := bundleBytes(t, "empty", route)
+		wantStatus, want := bundleBytes(t, "empty", route, nil)
 		if wantStatus != http.StatusOK {
 			t.Fatalf("%s on an empty tenant: bundle answered %d (%s)", route, wantStatus, want)
 		}
@@ -70,19 +70,19 @@ func TestTypedReadsAreByteIdenticalToTheBundle(t *testing.T) {
 
 	// Non-vacuity: the comparison below must run over REAL rows, not over the
 	// empty collections that would make every pair trivially equal.
-	for _, probe := range []struct{ path, want string }{
+	for _, chk := range []struct{ path, want string }{
 		{"/v1/captable/shares", "CS-1"},
 		{"/v1/captable/safes", "SAFE-1"},
 		{"/v1/captable/rounds", "Series A"},
 		{"/v1/captable/summary", "ownershipPct"},
 	} {
-		if _, b := req(t, app, http.MethodGet, probe.path, "acme", nil); !strings.Contains(string(b), probe.want) {
-			t.Fatalf("seed did not populate %s: %q missing from %s", probe.path, probe.want, b)
+		if _, b := req(t, app, http.MethodGet, chk.path, "acme", nil); !strings.Contains(string(b), chk.want) {
+			t.Fatalf("seed did not populate %s: %q missing from %s", chk.path, chk.want, b)
 		}
 	}
 
 	for path, route := range typedReads {
-		wantStatus, want := bundleBytes(t, "acme", route)
+		wantStatus, want := bundleBytes(t, "acme", route, nil)
 		if wantStatus != http.StatusOK {
 			t.Fatalf("%s on a populated tenant: bundle answered %d (%s)", route, wantStatus, want)
 		}
@@ -147,9 +147,10 @@ func TestTypedReadsAreOrgScoped(t *testing.T) {
 }
 
 // TestEveryRouteIsTypedOrNamed closes the migration: /v1/captable has 31 routes,
-// 11 typed and 20 relays that each carry a written reason at their registration
-// in routes(). A new route here is typed by default, or it takes a deliberate
-// edit to this count with the reason written beside it.
+// 17 typed — every route with NO request body — and 14 body-carrying relays that
+// each name the coerced field keeping them untyped at their registration in
+// routes(). A new route here is typed by default, or it takes a deliberate edit to
+// this count with the reason written beside it.
 func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	app := mountApp(t)
 	var total, typed int
@@ -176,8 +177,8 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 	if total != 31 {
 		t.Fatalf("/v1/captable has %d routes, expected 31 — type the new one or record why it cannot be", total)
 	}
-	if typed != 11 {
-		t.Fatalf("/v1/captable has %d typed ops, expected 11", typed)
+	if typed != 17 {
+		t.Fatalf("/v1/captable has %d typed ops, expected 17", typed)
 	}
 }
 
