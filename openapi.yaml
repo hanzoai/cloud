@@ -3536,6 +3536,24 @@ components:
         seats:
           type: integer
       type: object
+    RateCard:
+      properties:
+        basis:
+          description: |-
+            Basis names where the rates come from, so a published price can be
+            explained rather than merely asserted.
+          type: string
+        microUsdPerGbHour:
+          description: |-
+            MicroUSDPerGBHour is the price of one GiB of memory for one hour, in
+            millionths of a US dollar.
+          type: integer
+        microUsdPerVcpuHour:
+          description: |-
+            MicroUSDPerVCPUHour is the price of one vCPU for one hour, in millionths of
+            a US dollar.
+          type: integer
+      type: object
     ReadOut:
       properties:
         data:
@@ -5632,6 +5650,30 @@ components:
             $ref: '#/components/schemas/itemInput'
           type: array
       type: object
+    adminBonusDirectory:
+      properties:
+        referrals:
+          description: Referrals is every referral in the ledger, both orgs exposed.
+          items:
+            $ref: '#/components/schemas/adminReferralView'
+          type: array
+        summary:
+          $ref: '#/components/schemas/adminSummary'
+          description: Summary is the fleet tally across those referrals.
+      type: object
+    adminBonusesEnvelope:
+      properties:
+        data:
+          $ref: '#/components/schemas/adminBonusDirectory'
+          description: Data is the directory itself.
+        msg:
+          description: Msg is empty on success; the console surfaces it when status
+            is not "ok".
+          type: string
+        status:
+          description: Status is "ok" on success.
+          type: string
+      type: object
     adminCatalogOut:
       properties:
         models:
@@ -5711,6 +5753,79 @@ components:
           items:
             type: string
           type: array
+      type: object
+    adminReferralView:
+      properties:
+        code:
+          description: Code is the referral code the referral was recorded against.
+          type: string
+        createdAt:
+          description: CreatedAt is when the referral was recorded, as a Unix timestamp.
+          type: integer
+        creditedAt:
+          description: |-
+            CreditedAt is when the bonuses were latched and granted, as a Unix
+            timestamp; 0 until they are.
+          type: integer
+        id:
+          description: ID is the referral's handle.
+          type: string
+        qualifiedAt:
+          description: |-
+            QualifiedAt is when the referee first made metered spend, as a Unix
+            timestamp; 0 while still pending.
+          type: integer
+        refereeGrantCents:
+          description: |-
+            RefereeGrantCents is what the referee was granted, in USD cents; 0 until the
+            referral is credited.
+          type: integer
+        refereeOrg:
+          description: RefereeOrg is the org that signed up with it.
+          type: string
+        refereeTxn:
+          description: |-
+            RefereeTxn is the commerce ledger transaction that carried the referee's
+            grant, omitted until one exists.
+          type: string
+        referrerGrantCents:
+          description: |-
+            ReferrerGrantCents is what the referrer was granted, in USD cents; 0 until
+            the referral is credited.
+          type: integer
+        referrerOrg:
+          description: ReferrerOrg is the org whose code was used.
+          type: string
+        referrerTxn:
+          description: |-
+            ReferrerTxn is the commerce ledger transaction that carried the referrer's
+            grant, omitted until one exists.
+          type: string
+        status:
+          description: |-
+            Status is the referral's lifecycle state: "signed_up", "qualified" or
+            "credited".
+          type: string
+      type: object
+    adminSummary:
+      properties:
+        credited:
+          description: Credited is how many have paid both bonuses.
+          type: integer
+        grantedCents:
+          description: |-
+            GrantedCents is the promo credit granted across BOTH sides of every
+            referral, in USD cents — the program's total liability to date.
+          type: integer
+        qualified:
+          description: Qualified is how many have qualified but are not yet credited.
+          type: integer
+        signedUp:
+          description: SignedUp is how many are recorded but not yet qualified.
+          type: integer
+        total:
+          description: Total is every referral in the ledger.
+          type: integer
       type: object
     advanceIn:
       properties:
@@ -6853,6 +6968,50 @@ components:
         templates:
           type: integer
       type: object
+    blueprintHealth:
+      properties:
+        blueprints:
+          description: Blueprints is how many blueprints this build has embedded and
+            priced.
+          type: integer
+        rateCard:
+          $ref: '#/components/schemas/RateCard'
+          description: |-
+            RateCard is the rate card actually in force after the operator env overlay
+            (CLOUD_BLUEPRINT_UCPU_HR / CLOUD_BLUEPRINT_UGB_HR), not the shipped default.
+        service:
+          description: Service names the subsystem answering — always "blueprint".
+          type: string
+        status:
+          description: Status is "ok"; the route answers 200 whenever the subsystem
+            is mounted.
+          type: string
+      type: object
+    blueprintIndex:
+      properties:
+        data:
+          description: Data is one row per embedded blueprint, sorted by template
+            id.
+          items:
+            $ref: '#/components/schemas/blueprintRow'
+          type: array
+      type: object
+    blueprintRow:
+      properties:
+        estCentsPerMonth:
+          description: |-
+            CentsPerMonth is the estimated compute cost of running the whole stack for
+            one month, in USD cents, from the rate card GET /v1/blueprint/health echoes.
+          type: integer
+        services:
+          description: Services is how many compose services the stack runs.
+          type: integer
+        templateId:
+          description: |-
+            TemplateID is the blueprint slug — the id GET /v1/blueprint/sbom takes as
+            ?template= and the path under templates.hanzo.ai/blueprints/<id>/.
+          type: string
+      type: object
     blueprintVersionsView:
       properties:
         brand:
@@ -7989,6 +8148,30 @@ components:
             sizes itself on.
           type: integer
       type: object
+    challengeView:
+      properties:
+        expiresAt:
+          description: ExpiresAt is when the nonce stops being redeemable, as a Unix
+            timestamp.
+          type: integer
+        message:
+          description: |-
+            Message is the EXACT text to personal_sign. It is reconstructed server-side
+            from the validated org, the slot and the nonce at redemption, so signing
+            anything else cannot claim the slot.
+          type: string
+        nonce:
+          description: |-
+            Nonce is the single-use, org-bound challenge value to send back with the
+            signature.
+          type: string
+        tokenId:
+          description: TokenID is the slot the challenge was issued for.
+          type: integer
+        ttlSeconds:
+          description: TTLSeconds is the challenge lifetime in seconds.
+          type: integer
+      type: object
     channelList:
       properties:
         data:
@@ -8086,6 +8269,37 @@ components:
           type: string
         targetId:
           description: TargetID is the machine the key authenticates.
+          type: string
+      type: object
+    claimRequest:
+      properties:
+        code:
+          description: |-
+            Code is the referrer's referral code, as it appeared in their ?ref= link.
+            Case and surrounding whitespace do not matter.
+          type: string
+      type: object
+    claimView:
+      properties:
+        code:
+          description: Code is the referral code the referral was recorded against.
+          type: string
+        created:
+          description: |-
+            Created is true when this call recorded the referral and false when it found
+            one already recorded for this referee — the idempotent replay.
+          type: boolean
+        createdAt:
+          description: CreatedAt is when the referral was first recorded, as a Unix
+            timestamp.
+          type: integer
+        id:
+          description: ID is the referral's handle.
+          type: string
+        status:
+          description: |-
+            Status is the referral's lifecycle state: "signed_up" until the referee
+            makes metered spend, then "qualified", then "credited".
           type: string
       type: object
     clusterAttach:
@@ -9002,6 +9216,15 @@ components:
         usedGiB:
           type: number
       type: object
+    dayCount:
+      properties:
+        count:
+          description: Count is that day's total.
+          type: integer
+        date:
+          description: Date is the day, YYYY-MM-DD.
+          type: string
+      type: object
     decisionIn:
       properties:
         email:
@@ -9147,6 +9370,35 @@ components:
           type: string
         project:
           description: Project is the Pages project name, from the path.
+          type: string
+      type: object
+    edgeNodeList:
+      properties:
+        nodes:
+          description: Nodes is one row per ZT edge-router tagged with the caller's
+            org role.
+          items:
+            $ref: '#/components/schemas/edgeNodeView'
+          type: array
+      type: object
+    edgeNodeView:
+      properties:
+        id:
+          description: ID is the ZT edge-router's id.
+          type: string
+        name:
+          description: Name is the edge-router's name, falling back to its id when
+            it has none.
+          type: string
+        region:
+          description: |-
+            Region comes from a "region-<slug>" role attribute and is omitted when the
+            router carries none, so the column renders "—" rather than a guess.
+          type: string
+        status:
+          description: |-
+            Status is the controller's own health signal: "online" when connected,
+            "disabled" when administratively disabled, "offline" otherwise.
           type: string
       type: object
     embedStatusResp:
@@ -10447,6 +10699,34 @@ components:
         status:
           type: string
       type: object
+    meshServiceList:
+      properties:
+        services:
+          description: Services is one row per ZT edge service tagged with the caller's
+            org role.
+          items:
+            $ref: '#/components/schemas/meshView'
+          type: array
+      type: object
+    meshView:
+      properties:
+        id:
+          description: ID is the ZT edge service's id.
+          type: string
+        mtls:
+          description: |-
+            Mtls is "required" when the service mandates end-to-end encryption, else
+            "enabled" — the fabric mutually authenticates every link, so it is never
+            truly off.
+          type: string
+        service:
+          description: Service is the edge service's name.
+          type: string
+        status:
+          description: 'Status is "active": a listed service is a configured, dialable
+            mesh entry.'
+          type: string
+      type: object
     metricList:
       properties:
         data:
@@ -10792,11 +11072,106 @@ components:
             type: string
           type: array
       type: object
+    myReferralView:
+      properties:
+        createdAt:
+          description: CreatedAt is when the referral was recorded, as a Unix timestamp.
+          type: integer
+        creditedAt:
+          description: |-
+            CreditedAt is when the bonuses were latched and granted, as a Unix
+            timestamp; 0 until they are. It is the at-most-once latch.
+          type: integer
+        creditsCents:
+          description: |-
+            CreditsCents is what I earned from this referral, in USD cents. It is 0
+            until the referee qualifies.
+          type: integer
+        id:
+          description: ID is the referral's handle.
+          type: string
+        qualifiedAt:
+          description: |-
+            QualifiedAt is when the referee first made metered spend, as a Unix
+            timestamp; 0 while the referral is still pending.
+          type: integer
+        referee:
+          description: Referee is the org that signed up with my code.
+          type: string
+        status:
+          description: |-
+            Status is the referral's lifecycle state: "signed_up" until the referee
+            makes metered spend, then "qualified", then "credited".
+          type: string
+      type: object
+    myReferrals:
+      properties:
+        code:
+          description: |-
+            Code is the org's STABLE referral code — a deterministic function of the org
+            id, so it never changes and never has to be stored to be reproduced.
+          type: string
+        counts:
+          $ref: '#/components/schemas/statusCounts'
+          description: Counts tallies this org's referrals by status.
+        creditsEarnedCents:
+          description: |-
+            CreditsEarnedCents is the total promo credit this org has earned as the
+            REFERRER, in USD cents.
+          type: integer
+        link:
+          description: Link is the shareable signup link carrying the code, on the
+            brand's own host.
+          type: string
+        refereeBonusCents:
+          description: RefereeBonusCents is what a referee is granted on qualification,
+            in USD cents.
+          type: integer
+        referrals:
+          description: Referrals is one row per org that signed up with this code.
+          items:
+            $ref: '#/components/schemas/myReferralView'
+          type: array
+        referrerBonusCents:
+          description: |-
+            ReferrerBonusCents is what the referrer is granted when a referee qualifies,
+            in USD cents.
+          type: integer
+      type: object
     namespaceCreateIn:
       properties:
         title:
           description: Title is the namespace's display title. Cloudflare mints the
             id.
+          type: string
+      type: object
+    networkList:
+      properties:
+        networks:
+          description: |-
+            Networks holds the org's overlay network, or is empty when the org has no
+            edge-routers on the fabric (no nodes → no network, never a fabricated one).
+          items:
+            $ref: '#/components/schemas/networkView'
+          type: array
+      type: object
+    networkView:
+      properties:
+        id:
+          description: |-
+            ID is the org-derived id of the overlay network — the key
+            GET /v1/networks/{id} addresses.
+          type: string
+        name:
+          description: Name is the org the overlay belongs to.
+          type: string
+        nodes:
+          description: Nodes is how many edge-routers the org has on the fabric.
+          type: integer
+        status:
+          description: |-
+            Status is "connected" once at least one of the org's edge-routers is
+            online, else "provisioning" (routers exist but none has dialed home).
           type: string
       type: object
     noContent:
@@ -10827,6 +11202,16 @@ components:
         poolId:
           type: string
         size:
+          type: string
+      type: object
+    notifyHealth:
+      properties:
+        service:
+          description: Service names the subsystem answering — always "notify".
+          type: string
+        status:
+          description: Status is "ok"; the route answers 200 whenever the subsystem
+            is mounted.
           type: string
       type: object
     o11yGlobal:
@@ -12536,6 +12921,20 @@ components:
         title:
           type: string
       type: object
+    registrationView:
+      properties:
+        id:
+          description: ID is the registration's handle.
+          type: string
+        nodeID:
+          description: NodeID is the luxd node the registration is for.
+          type: string
+        status:
+          description: |-
+            Status is the registration's lifecycle state; "pending_owner_approval" until
+            the owner co-signs it out of band.
+          type: string
+      type: object
     replaceKitIn:
       properties:
         category:
@@ -12998,6 +13397,54 @@ components:
         unit:
           type: string
       type: object
+    searchIndex:
+      properties:
+        createdAt:
+          description: |-
+            CreatedAt is the index's creation time (RFC 3339); it falls back to now when
+            the index list could not be read.
+          type: string
+        docCount:
+          description: DocCount is how many documents the index currently holds.
+          type: integer
+        lastIndexedAt:
+          description: |-
+            LastIndexedAt is the index's last update time (RFC 3339), null when the
+            index list could not be read.
+          type: string
+        name:
+          description: Name is the index uid.
+          type: string
+      type: object
+    searchIndexList:
+      properties:
+        indexes:
+          description: |-
+            Indexes is one row per Meilisearch index, sorted by name. Empty — never
+            absent — when the search service cannot be reached.
+          items:
+            $ref: '#/components/schemas/searchIndex'
+          type: array
+      type: object
+    searchStats:
+      properties:
+        searchesPerDay:
+          description: SearchesPerDay is always empty, for the same reason as totalSearches.
+          items:
+            $ref: '#/components/schemas/dayCount'
+          type: array
+        totalDocuments:
+          description: TotalDocuments is the sum of every index's document count.
+          type: integer
+        totalSearches:
+          description: |-
+            TotalSearches is always 0: Meilisearch keeps no query-history counter, so
+            this surface reports the honest zero rather than an estimate.
+          type: integer
+        totalSessions:
+          description: TotalSessions is always 0, for the same reason as totalSearches.
+          type: integer
+      type: object
     seriesLine:
       properties:
         key:
@@ -13391,6 +13838,55 @@ components:
           description: Skill is the skill as stored, with its derived id and creation
             time.
       type: object
+    slotView:
+      properties:
+        blsPubkey:
+          description: BLSPubkey is the node's BLS public key, hex.
+          type: string
+        crName:
+          description: CRName is the LuxNetwork custom resource that materializes
+            the node.
+          type: string
+        createdAt:
+          description: CreatedAt is when the slot was first claimed, as a Unix timestamp.
+          type: integer
+        namespace:
+          description: Namespace is the Kubernetes namespace the node's CR lives in.
+          type: string
+        network:
+          description: Network is the luxd network slug the node joins.
+          type: string
+        nodeID:
+          description: |-
+            NodeID is the luxd node id derived from the sealed staking identity. It is
+            stable across re-claims of the same slot.
+          type: string
+        nodeStatus:
+          description: |-
+            NodeStatus is the provisioning state of the node: "node_created" once the CR
+            is applied, "node_pending" when no cluster is reachable (the slot is still
+            claimed and the keys are still sealed).
+          type: string
+        registration:
+          $ref: '#/components/schemas/registrationView'
+          description: Registration is the queued owner-gated registration, absent
+            until one exists.
+        slot:
+          description: |-
+            Slot is the validator slot number — the same value as tokenId, under the
+            name the portal reads.
+          type: integer
+        tokenId:
+          description: TokenID is the GenesisNFT token id that IS this slot.
+          type: integer
+        updatedAt:
+          description: UpdatedAt is when the slot last changed, as a Unix timestamp.
+          type: integer
+        wallet:
+          description: Wallet is the lowercase Ethereum address that proved ownership
+            of the NFT.
+          type: string
+      type: object
     sourceToolList:
       properties:
         source:
@@ -13453,6 +13949,21 @@ components:
         userId:
           description: UserID is the account the session is authenticated as.
           type: string
+      type: object
+    statusCounts:
+      properties:
+        credited:
+          description: Credited is how many referrals have paid both bonuses.
+          type: integer
+        qualified:
+          description: Qualified is how many referees have spent but are not yet credited.
+          type: integer
+        signedUp:
+          description: SignedUp is how many referees have signed up but not yet spent.
+          type: integer
+        total:
+          description: Total is every referral this org has made.
+          type: integer
       type: object
     statusResult:
       properties:
@@ -13860,6 +14371,30 @@ components:
           type: integer
         documents:
           description: Documents is how many documents exist across them.
+          type: integer
+      type: object
+    sweepEnvelope:
+      properties:
+        data:
+          $ref: '#/components/schemas/sweepResult'
+          description: Data is the sweep's counters.
+        msg:
+          description: Msg is empty on success; the console surfaces it when status
+            is not "ok".
+          type: string
+        status:
+          description: Status is "ok" on success.
+          type: string
+      type: object
+    sweepResult:
+      properties:
+        credited:
+          description: |-
+            Credited is how many of those referrals qualified on this pass and were
+            granted their bonuses.
+          type: integer
+        swept:
+          description: Swept is how many pending referrals were checked.
           type: integer
       type: object
     syncList:
@@ -14334,6 +14869,83 @@ components:
         status:
           type: string
         total:
+          type: integer
+      type: object
+    validatorClaim:
+      properties:
+        nonce:
+          description: Nonce is the value GET /v1/validators/challenge issued for
+            this slot.
+          type: string
+        signature:
+          description: |-
+            Signature is the wallet's personal_sign over the challenge message, hex with
+            a 0x prefix.
+          type: string
+        tokenId:
+          description: |-
+            TokenID is the Validator-tier GenesisNFT token id being claimed. It IS the
+            validator slot.
+          type: integer
+      type: object
+    validatorList:
+      properties:
+        data:
+          description: Data is one entry per slot this org has claimed.
+          items:
+            $ref: '#/components/schemas/slotView'
+          type: array
+        network:
+          description: Network is the luxd network slug new nodes join on this deployment.
+          type: string
+      type: object
+    vectorCollection:
+      properties:
+        createdAt:
+          description: |-
+            CreatedAt is the collection's creation time (RFC 3339); Qdrant does not
+            report one, so it is empty today.
+          type: string
+        dimension:
+          description: Dimension is the size of one vector in the collection.
+          type: integer
+        distanceMetric:
+          description: |-
+            DistanceMetric is the collection's distance function; "cosine" when the
+            collection's detail could not be read.
+          type: string
+        name:
+          description: Name is the collection name.
+          type: string
+        storageBytes:
+          description: StorageBytes is the collection's on-disk size, omitted when
+            unknown.
+          type: integer
+        vectorCount:
+          description: VectorCount is the collection's point count.
+          type: integer
+      type: object
+    vectorCollectionList:
+      properties:
+        collections:
+          description: |-
+            Collections is one row per Qdrant collection, sorted by name. Empty — never
+            absent — when the vector service cannot be reached.
+          items:
+            $ref: '#/components/schemas/vectorCollection'
+          type: array
+      type: object
+    vectorStats:
+      properties:
+        totalCollections:
+          description: TotalCollections is how many collections the store holds.
+          type: integer
+        totalStorageBytes:
+          description: TotalStorageBytes is the sum of every collection's on-disk
+            size.
+          type: integer
+        totalVectors:
+          description: TotalVectors is the sum of every collection's point count.
           type: integer
       type: object
     vendorsOut:
@@ -17295,12 +17907,65 @@ paths:
       - admin
   /v1/admin/referrals/bonuses:
     get:
+      description: |-
+        adminList returns every one-time referral bonus in the ledger with a fleet summary.
+
+        SuperAdmin only, fail-closed. This is the ONE-TIME BONUS ledger — who referred
+        whom, what each side was granted and which ledger transactions carried it. The
+        cross-tenant referral ANALYTICS board (top referrers, conversion, multi-level
+        accrual liability) is a different surface, GET /v1/admin/referrals, owned by the
+        affiliates subsystem over the shared attribution spine.
       operationId: get_v1_admin_referrals_bonuses
+      parameters:
+      - description: |-
+          Limit is how many referrals to return, as a decimal string in the `?limit=`
+          query. Absent, unparseable or non-positive means 500; over 1000 is clamped to
+          1000. It is a string rather than a number because the parse that has always
+          served this route trims surrounding whitespace, and one parse rule is better
+          than two.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/adminBonusesEnvelope'
+          description: ok
+      summary: adminList returns every one-time referral bonus in the ledger with
+        a fleet summary.
       tags:
       - admin
   /v1/admin/referrals/sweep:
     post:
+      description: |-
+        adminSweep qualify-checks every pending referral and grants the ones that now qualify.
+
+        SuperAdmin only, fail-closed. This is the cron path: a referee QUALIFIES once
+        they have made metered spend — the honest signal that they actually used the
+        product rather than merely claiming a welcome grant — and qualifying grants the
+        referrer and the referee their bonuses in one latched step.
+
+        The grant is backed against the platform reserve fund before it is latched, so
+        an empty fund leaves the referral honestly pending rather than minting unbacked
+        credit, and the latch makes it at-most-once: this sweep, a concurrent sweep and
+        the lazy check on GET /v1/referrals can never double-pay. One pass is bounded,
+        so a large backlog drains over several runs instead of wedging one request.
+
+        It reads nothing from the caller — the counters it returns are the whole result.
       operationId: post_v1_admin_referrals_sweep
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/sweepEnvelope'
+          description: ok
+      summary: adminSweep qualify-checks every pending referral and grants the ones
+        that now qualify.
       tags:
       - admin
   /v1/admin/revenue:
@@ -19998,12 +20663,46 @@ paths:
       - billing
   /v1/blueprint:
     get:
+      description: |-
+        list returns every deployable blueprint with its service count and estimated
+        monthly compute cost.
+
+        It is the lightweight index the console renders as a template gallery before
+        drilling into one stack's bill of images — GET /v1/blueprint/sbom?template=<id>
+        is the detail view. The cost is the same figure the deploy path meters the
+        deploying org on and the 20% author royalty is taken from, priced from the
+        active rate card (GET /v1/blueprint/health echoes that card).
       operationId: get_v1_blueprint
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/blueprintIndex'
+          description: ok
+      summary: list returns every deployable blueprint with its service count and
+        estimated monthly compute cost.
       tags:
       - blueprint
   /v1/blueprint/health:
     get:
+      description: |-
+        health reports blueprint liveness and echoes the compute rate card in force.
+
+        The rate card is the one the estimator actually applies after the operator env
+        overlay, so an operator can confirm a tuned knob took effect rather than
+        inferring it from a price. Not JWT-gated — a liveness probe must be reachable —
+        and it always answers 200 while the subsystem is mounted.
       operationId: get_v1_blueprint_health
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/blueprintHealth'
+          description: ok
+      summary: health reports blueprint liveness and echoes the compute rate card
+        in force.
       tags:
       - blueprint
   /v1/blueprint/sbom:
@@ -26460,7 +27159,27 @@ paths:
       - download
   /v1/edge/nodes:
     get:
+      description: |-
+        listEdgeNodes returns the Zero Trust edge-routers the caller's org owns.
+
+        One row per real ZT edge-router tagged with the org's "org-<org>" role attribute,
+        carrying the controller's own health signal: "online" when connected, "disabled"
+        when administratively disabled, "offline" otherwise. region is filled only from a
+        "region-<slug>" role attribute and omitted when the router carries none, so the
+        column renders "—" rather than a guess.
+
+        The read degrades rather than erroring: a deployment with no ZT credential, and a
+        controller that cannot be reached, both answer 200 with an empty list.
       operationId: get_v1_edge_nodes
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/edgeNodeList'
+          description: ok
+      summary: listEdgeNodes returns the Zero Trust edge-routers the caller's org
+        owns.
       tags:
       - edge
   /v1/embed-status:
@@ -33476,7 +34195,29 @@ paths:
       - meet
   /v1/mesh/services:
     get:
+      description: |-
+        listMeshServices returns the Zero Trust edge services the caller's org owns.
+
+        One row per real ZT edge service tagged with the org's "org-<org>" role
+        attribute: mtls is "required" when the service mandates end-to-end encryption and
+        "enabled" otherwise (the fabric always mutually authenticates every link), and
+        status is "active" because a listed service is a configured, dialable entry. A
+        service tagged for another org, or tagged for none, is invisible here.
+
+        Unlike the network and edge-node reads this does NOT degrade: an unconfigured
+        deployment answers 503 and an unreachable controller surfaces the upstream's
+        status, so a mesh page never renders "no services" for a fabric it simply could
+        not read.
       operationId: get_v1_mesh_services
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/meshServiceList'
+          description: ok
+      summary: listMeshServices returns the Zero Trust edge services the caller's
+        org owns.
       tags:
       - mesh
   /v1/metrics/batch:
@@ -33600,23 +34341,78 @@ paths:
       - ml
   /v1/networks:
     get:
+      description: |-
+        listNetworks returns the caller's org overlay network on the Zero Trust fabric.
+
+        The org has at most ONE overlay, projected from the edge-routers tagged with its
+        "org-<org>" role attribute: nodes is the real router count and status is
+        "connected" once at least one router has dialed home, "provisioning" while none
+        has. An org with no routers gets an empty list, never a fabricated network.
+
+        The read degrades rather than erroring: a deployment with no ZT credential, and a
+        controller that cannot be reached, both answer 200 with an empty list so the
+        console's Networks page renders a clean empty state instead of an error.
       operationId: get_v1_networks
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/networkList'
+          description: ok
+      summary: listNetworks returns the caller's org overlay network on the Zero Trust
+        fabric.
       tags:
       - networks
   /v1/networks/{id}:
     get:
-      operationId: get_v1_networks_by_id
+      description: |-
+        getNetwork returns one overlay network by id, scoped to the caller's org.
+
+        The org has exactly one overlay network and its id is derived from the org, so
+        any other id — another tenant's, or one that does not exist — is 404 rather than
+        a peek across the tenant boundary. An org whose network exists but has no
+        edge-routers is 404 too, for the same reason the list is empty: there is no
+        overlay until something is on it.
+      operationId: get_v1_networks_id
       parameters:
-      - in: path
+      - description: |-
+          ID is the network id from the path. The URL is the addressing authority, so
+          it binds from there whatever else the request carries.
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/networkView'
+          description: ok
+      summary: getNetwork returns one overlay network by id, scoped to the caller's
+        org.
       tags:
       - networks
   /v1/notify/health:
     get:
+      description: |-
+        health reports that the notify send surface is mounted.
+
+        It is a pure liveness probe: it answers 200 whenever this subsystem is mounted
+        and checks nothing downstream, so an "ok" here says the routes are reachable, not
+        that any provider credential is configured. The body is notifyd's verbatim, so
+        probes and clients that keyed on the standalone service keep working unchanged.
       operationId: get_v1_notify_health
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/notifyHealth'
+          description: ok
+      summary: health reports that the notify send surface is mounted.
       tags:
       - notify
   /v1/notify/send:
@@ -36091,12 +36887,64 @@ paths:
       - prompts
   /v1/referrals:
     get:
+      description: |-
+        mine returns the caller's referral code, share link and the referrals they have made.
+
+        The code is a stable, deterministic function of the org, so the link in this
+        response is the same one every time. Each row carries the referee, its status and
+        the credit this org earned from it; creditsEarnedCents is their sum.
+
+        The read is self-updating: before listing, it runs the qualify check over this
+        org's still-pending referees, so a referee who has since made metered spend is
+        credited by the act of the referrer loading their page. That check is
+        best-effort and bounded — a commerce hiccup leaves the referral pending for the
+        next check rather than failing the page — and the grant is latched at-most-once,
+        so this path and the admin sweep can never double-pay.
       operationId: get_v1_referrals
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/myReferrals'
+          description: ok
+      summary: mine returns the caller's referral code, share link and the referrals
+        they have made.
       tags:
       - referrals
   /v1/referrals/claim:
     post:
+      description: |-
+        claim records that the caller's org signed up through a referral code.
+
+        The REFEREE is the validated caller, never a client field, and the referrer is
+        resolved from the code — so a caller can only ever attach THEMSELVES to someone
+        else's code. Referring yourself is 400 and an unknown code is 404.
+
+        It is idempotent and first-touch: an org can be referred once, ever. A repeat
+        call returns the referral already on file with created=false and 200, where the
+        first call answers 201.
+
+        Recording a referral grants nothing. Both bonuses are granted later, when the
+        referee actually makes metered spend — see GET /v1/referrals and
+        POST /v1/admin/referrals/sweep.
       operationId: post_v1_referrals_claim
+      requestBody:
+        content:
+          application/json:
+            example:
+              code: H4NZ0ABC
+            schema:
+              $ref: '#/components/schemas/claimRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/claimView'
+          description: ok
+      summary: claim records that the caller's org signed up through a referral code.
       tags:
       - referrals
   /v1/releases:
@@ -36436,12 +37284,46 @@ paths:
       - search
   /v1/search-docs/indexes:
     get:
+      description: |-
+        searchIndexes lists the search indexes with their document counts and timestamps.
+
+        It reads the in-cluster Meilisearch service and reshapes its /stats and
+        /indexes replies into the rows the console's Search panel renders. The read is
+        degrade-friendly by design: an unreachable Meilisearch answers 200 with an
+        EMPTY list, so the panel shows an honest empty state instead of an error.
+        createdAt falls back to now and lastIndexedAt to null when the index list is
+        unavailable.
       operationId: get_v1_search-docs_indexes
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchIndexList'
+          description: ok
+      summary: searchIndexes lists the search indexes with their document counts and
+        timestamps.
       tags:
       - search-docs
   /v1/search-docs/stats:
     get:
+      description: |-
+        searchStats totals the documents across every search index.
+
+        totalDocuments is summed from Meilisearch's own per-index counts. The other
+        three fields are structurally zero rather than estimated: Meilisearch keeps no
+        query-history counters, so searches, sessions and the per-day series are not
+        derivable from the index and this surface reports the honest zero instead of a
+        fabricated number. An unreachable Meilisearch answers 200 with all zeros.
       operationId: get_v1_search-docs_stats
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchStats'
+          description: ok
+      summary: searchStats totals the documents across every search index.
       tags:
       - search-docs
   /v1/search/{name}:
@@ -39038,27 +39920,142 @@ paths:
       - usage
   /v1/validators:
     get:
+      description: |-
+        list returns the validator slots the caller's org has claimed.
+
+        One entry per claimed slot with its node identity, its live-ish node status and
+        the owner-gated registration queued for it, if any. Slots are org-scoped by the
+        validated identity, so a caller can only ever see their own — a slot claimed by
+        another org is not merely hidden from this list, it is unreachable through the
+        whole surface.
       operationId: get_v1_validators
+      parameters:
+      - description: |-
+          Limit is how many slots to return, as a decimal string in the `?limit=`
+          query. Absent, unparseable or non-positive means 200; over 1000 is clamped
+          to 1000. It is a string rather than a number because the parse that has
+          always served this route trims surrounding whitespace, and one parse rule is
+          better than two.
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/validatorList'
+          description: ok
+      summary: list returns the validator slots the caller's org has claimed.
       tags:
       - validators
     post:
+      description: |-
+        provision claims a validator slot and provisions its node, after proving the
+        caller's wallet owns the slot's NFT.
+
+        The pipeline, all server-enforced: burn the single-use challenge (so a replayed
+        or forged nonce dies before any chain read), recover the signer from the message
+        this server rebuilds, require that wallet to hold Validator-tier GenesisNFT
+        #tokenId on Ethereum mainnet, generate a fresh luxd staking identity and seal it
+        into KMS, write a LuxNetwork CR for a NEW node, and ENQUEUE an owner-gated
+        registration. The registration is never auto-submitted to any P-Chain — the
+        owner co-signs it out of band — and the stake weight is set at co-sign time,
+        never derived from the NFT.
+
+        It fails CLOSED at every gate: a bad signature, a non-owner, a non-tier slot or
+        an unavailable KMS all leave no claim persisted and no key material exposed.
+        Re-claiming a slot this org already holds re-applies the node CR and returns 200
+        with the existing identity (keys and NodeID are stable); a slot held by another
+        org is 409. A cluster-less deployment still claims the slot, seals the keys and
+        queues the registration, reporting the node as "node_pending".
       operationId: post_v1_validators
+      requestBody:
+        content:
+          application/json:
+            example:
+              nonce: 5f3a…
+              signature: 0x…
+              tokenId: 7
+            schema:
+              $ref: '#/components/schemas/validatorClaim'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/slotView'
+          description: ok
+      summary: provision claims a validator slot and provisions its node, after proving
+        the caller's wallet owns the slot's NFT.
       tags:
       - validators
   /v1/validators/{tokenId}:
     get:
-      operationId: get_v1_validators_by_tokenid
+      description: |-
+        get returns one claimed validator slot, scoped to the caller's org.
+
+        A slot another org holds, and a slot nobody holds, are both 404 — never a
+        different status, so this route cannot be used to probe which slots are taken.
+      operationId: get_v1_validators_tokenId
       parameters:
-      - in: path
+      - description: |-
+          TokenID is the slot's GenesisNFT token id, from the path, as a decimal
+          string. A value that is not a positive integer is 400. It is a string
+          rather than a number because the parse that has always served this route
+          trims surrounding whitespace, and one parse rule is better than two.
+        in: path
         name: tokenId
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/slotView'
+          description: ok
+      summary: get returns one claimed validator slot, scoped to the caller's org.
       tags:
       - validators
   /v1/validators/challenge:
     get:
+      description: |-
+        challenge issues the single-use nonce and the exact message a wallet must sign
+        to claim a validator slot.
+
+        The nonce is bound to (validated org, slot) and stored server-side, so a
+        signature obtained for one org or one slot can never be replayed for another,
+        and the message POST /v1/validators verifies is rebuilt from those same server
+        facts rather than trusted from the caller. Redeem it with
+        POST /v1/validators before it expires; it can be redeemed once.
+
+        A tokenId outside the Validator tier is refused here rather than after signing.
       operationId: get_v1_validators_challenge
+      parameters:
+      - description: |-
+          TokenID is the Validator-tier GenesisNFT token id, as a decimal string in
+          the `?tokenId=` query. A value that is not a positive integer is 400. It is
+          a string rather than a number because the parse that has always served this
+          route trims surrounding whitespace, and one parse rule is better than two.
+        in: query
+        name: tokenId
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/challengeView'
+          description: ok
+      summary: challenge issues the single-use nonce and the exact message a wallet
+        must sign to claim a validator slot.
       tags:
       - validators
   /v1/vector:
@@ -39148,12 +40145,44 @@ paths:
       - vector
   /v1/vector/collections:
     get:
+      description: |-
+        vectorCollections lists the vector collections with their size and geometry.
+
+        It reads the in-cluster Qdrant service: the collection list, then each
+        collection's detail for its point count, vector dimension and distance metric.
+        Per-collection detail is best-effort — one collection that fails to describe
+        itself keeps its name and defaults (dimension 0, cosine) rather than blanking
+        the whole panel — and an unreachable Qdrant answers 200 with an EMPTY list.
       operationId: get_v1_vector_collections
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/vectorCollectionList'
+          description: ok
+      summary: vectorCollections lists the vector collections with their size and
+        geometry.
       tags:
       - vector
   /v1/vector/stats:
     get:
+      description: |-
+        vectorStats totals the collections, vectors and storage across the vector store.
+
+        Every figure is summed from the same per-collection detail
+        GET /v1/vector/collections returns, so the two panels can never disagree. An
+        unreachable Qdrant answers 200 with all zeros rather than an error.
       operationId: get_v1_vector_stats
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/vectorStats'
+          description: ok
+      summary: vectorStats totals the collections, vectors and storage across the
+        vector store.
       tags:
       - vector
   /v1/vpcs:

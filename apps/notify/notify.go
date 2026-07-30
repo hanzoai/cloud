@@ -46,6 +46,8 @@
 // read from the environment, or logged.
 package notify
 
+//go:generate go run github.com/zap-proto/zip/cmd/zipdoc
+
 import (
 	"context"
 	"crypto/rand"
@@ -100,7 +102,16 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	s.send = s.sendReal
 
 	g := app.Group("/v1/notify")
-	g.Get("/health", s.health)
+	zip.Get(g, "/health", s.health)
+	// UNTYPED, all three, and they have to be: ONE address answers with TWO shapes
+	// at 200. A send to a SINGLE recipient returns the bare SendResponse
+	// ({messageId,status}); a send to several returns the {items:[SendResponse]}
+	// envelope (see handleSend's tail). A typed op declares one Out, so either
+	// shape would publish the other as a lie — and publishing a false response
+	// schema is worse than publishing none, because every generated SDK binds it.
+	// They convert the day zip can declare a polymorphic response (the #78 family);
+	// typing them then also needs a cloud.Bridge on this group, which no route here
+	// needs today.
 	g.Post("/send", s.handleSend(""))
 	g.Post("/send/sms", s.handleSend(string(ntypes.ChannelSMS)))
 	g.Post("/send/email", s.handleSend(string(ntypes.ChannelEmail)))
@@ -111,10 +122,27 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	return nil
 }
 
-// health mirrors notifyd's GET /v1/notify/health body verbatim so probes and
+// noIn is the input of an op that takes nothing: no body, no path parameter, no
+// query. GET carries no request body (zip's hasBody), so this publishes nothing.
+type noIn struct{}
+
+// notifyHealth is the GET /v1/notify/health body — notifyd's verbatim, so probes and
 // clients that keyed on it keep working unchanged.
-func (s *service) health(c *zip.Ctx) error {
-	return c.JSON(http.StatusOK, map[string]string{"service": "notify", "status": "ok"})
+type notifyHealth struct {
+	// Service names the subsystem answering — always "notify".
+	Service string `json:"service"`
+	// Status is "ok"; the route answers 200 whenever the subsystem is mounted.
+	Status string `json:"status"`
+}
+
+// health reports that the notify send surface is mounted.
+//
+// It is a pure liveness probe: it answers 200 whenever this subsystem is mounted
+// and checks nothing downstream, so an "ok" here says the routes are reachable, not
+// that any provider credential is configured. The body is notifyd's verbatim, so
+// probes and clients that keyed on the standalone service keep working unchanged.
+func (s *service) health(ctx context.Context, _ *noIn) (*notifyHealth, error) {
+	return &notifyHealth{Service: "notify", Status: "ok"}, nil
 }
 
 // handleSend returns the POST /v1/notify/send handler. pinnedChannel is set on the
