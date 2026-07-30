@@ -1,8 +1,15 @@
-// Package tools is the ONE tool plane for Hanzo Cloud: a single registry where
-// every callable capability — a connector action, a user function, a zap service
-// route, a cloud /v1 control ("full-cloud-control"), an agent, a skill, or a tool
-// on an org's own external MCP server — is a Tool with a Source, a JSON-Schema, a
+// Package tools is the ONE tool plane for Hanzo Cloud's PER-TENANT capabilities:
+// a single registry where every callable thing an ORG owns — a connector action, a
+// user function, a zap service route, an agent, an authored skill, or a tool on
+// the org's own external MCP server — is a Tool with a Source, a JSON-Schema, a
 // per-(org,project) activation state, and an optional price.
+//
+// Per-tenant is the whole boundary. Cloud's OWN typed ops are not here and never
+// were a Source: they are code, known at build time, and the fleet publishes them
+// as MCP tools straight from the typed-op registry onto the host's one door
+// (plugin/<app>/mcp.json → zip.Plugin.Tools). What lives here is ROWS — a tool
+// whose existence, price and activation depend on which org is asking — reached
+// from that same door through the typed POST /v1/tools/call.
 //
 // Decomplected on the Rich Hickey seam: a Source knows how to LIST its tools and
 // DISPATCH one; the registry knows nothing about how any single source works. Each
@@ -13,8 +20,7 @@
 // Every dispatch flows through ONE per-principal plane: the caller's VALIDATED org
 // (principal.Org) gates the call, the tool must be ACTIVATED for that (org,project)
 // or the call is 403, a priced tool settles through the explicit x402 Charger seam,
-// and the platform meters one unit. The same isolation boundary the connectors MCP
-// endpoint (clients/automations) already ships — generalized across every source.
+// and the platform meters one unit. One plane, one policy, every source.
 package tools
 
 import (
@@ -30,10 +36,6 @@ import (
 type Source string
 
 const (
-	// SourceBuiltin is a cloud /v1 route exposed as a tool ("full-cloud-control"):
-	// a per-user token does over MCP exactly what that user may do over HTTP, gated
-	// by the SAME IAM check because dispatch replays the request in-process.
-	SourceBuiltin Source = "builtin"
 	// SourceConnector is a connector action from clients/automations.
 	SourceConnector Source = "connector"
 	// SourceFunction is a user-defined function from clients/functions.
@@ -50,12 +52,11 @@ const (
 )
 
 // precedence ranks sources so a name collision resolves deterministically: the
-// LOWEST rank wins. A native cloud control (builtin) can never be shadowed by an
-// org's external MCP server; a first-party connector outranks an external tool of
-// the same name. This is the ONE precedence policy, honored by both List (dedup)
-// and Dispatch (which source runs).
+// LOWEST rank wins. A first-party connector outranks an external tool of the same
+// name, and an org's external MCP server ranks last, so it can never shadow
+// anything first-party. This is the ONE precedence policy, honored by both List
+// (dedup) and Dispatch (which source runs).
 var precedence = map[Source]int{
-	SourceBuiltin:    0,
 	SourceConnector:  1,
 	SourceFunction:   2,
 	SourceZAPService: 3,
@@ -92,8 +93,8 @@ type Tool struct {
 	// tools/call passes. Unique across sources: a collision is resolved by source
 	// precedence before the caller ever sees it.
 	Name string `json:"name"`
-	// Source is where the tool comes from: builtin, connector, function,
-	// zap-service, agent, skill or mcp.
+	// Source is where the tool comes from: connector, function, zap-service,
+	// agent, skill or mcp.
 	Source Source `json:"source"`
 	// Description is the prose a model reads to decide whether to call the tool.
 	Description string `json:"description"`
@@ -120,54 +121,32 @@ type Scope struct {
 }
 
 // Principal is the VALIDATED caller a dispatch runs as — resolved once from the
-// request and threaded to every source. Org/Project/User/Owner/IsAdmin are the
-// IAM-native identity; credential is the caller's OWN credential headers, replayed
-// by a builtin tool so a /v1 route runs under the SAME IAM check as a direct HTTP
-// call (cloud's SanitizeIdentity strips minted headers on ingress and re-mints them
-// ONLY from a re-validated credential, so replaying the credential — never the
-// minted headers — is the one way an in-process call carries the caller's identity;
-// this is exactly the zapface in-process-dispatch contract).
+// request and threaded to every source. It is the IAM-native identity and nothing
+// else: cloud's SanitizeIdentity strips minted authority headers on ingress and
+// re-mints them ONLY from a re-validated credential, so by the time a dispatch
+// sees a Principal the authority question is already settled upstream.
 type Principal struct {
 	Org     string
 	Project string
 	User    string
 	Owner   string
 	IsAdmin bool
-
-	credential map[string]string
 }
-
-// credentialHeaders are the request headers a builtin replay carries: the caller's
-// own credential (which cloud re-validates) plus request-shaping context. NO minted
-// authority header (X-Org-Id/X-User-Id/…) is replayed — those are stripped on
-// ingress and re-derived from the credential, so replaying them is a no-op at best
-// and confusing at worst.
-var credentialHeaders = []string{"Authorization", "X-Authorization", "Cookie", "Accept-Language", "X-Forwarded-For"}
 
 // PrincipalFrom resolves the validated caller from a request context. It returns
 // ok=false (the caller must answer 403) unless a validated principal carries a
-// non-empty org — the SAME gate principal.Org enforces. Because c.User() is set
-// ONLY from a re-validated credential, a successful resolve guarantees a replayable
-// credential is present; it is captured so a builtin tool can act as this exact
-// caller and never escalate.
+// non-empty org — the SAME gate principal.Org enforces.
 func PrincipalFrom(c *zip.Ctx) (Principal, bool) {
 	org, ok := principal.Org(c)
 	if !ok {
 		return Principal{}, false
 	}
-	cred := map[string]string{}
-	for _, h := range credentialHeaders {
-		if v := c.Header(h); v != "" {
-			cred[h] = v
-		}
-	}
 	return Principal{
-		Org:        org,
-		Project:    principal.Project(c),
-		User:       c.User(),
-		Owner:      principal.Owner(c),
-		IsAdmin:    c.IsAdmin(),
-		credential: cred,
+		Org:     org,
+		Project: principal.Project(c),
+		User:    c.User(),
+		Owner:   principal.Owner(c),
+		IsAdmin: c.IsAdmin(),
 	}, true
 }
 
@@ -180,7 +159,7 @@ type Provider interface {
 	Source() Source
 	// List returns the tools this source offers for scope. It is scope-aware:
 	// a connector source lists an org's connected connectors; the external-MCP
-	// source lists tools from the org's registered servers; builtin lists routes.
+	// source lists tools from the org's registered servers.
 	List(ctx context.Context, scope Scope) ([]Tool, error)
 	// Dispatch invokes the named tool with JSON args, bound to the principal, and
 	// returns the JSON-encodable result. A source that only lists (skills) returns

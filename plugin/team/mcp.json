@@ -1,0 +1,135 @@
+[
+  {
+    "description": "ClearCookie signs this browser out of team by expiring the HttpOnly\naccount-token cookie the OAuth callback set. It is the counterpart of the\ncookie PUT, it takes nothing — the cookie it clears is named by this service,\nnever by the caller — and it is unconditional: a caller with no cookie, an\nexpired one or a forged one all get the same acknowledgement, because clearing\nsomething that is not there is the same outcome as clearing something that is.\n\nIt clears ONLY the team session cookie. The IAM access-token cookie the same\ncallback set is a different credential with a different lifetime and is left\nalone, so this is a team sign-out, not a platform one.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "delete_v1_team_account_cookie"
+  },
+  {
+    "description": "DeleteBlob removes one blob from a workspace's file store. The caller must\nhold a verified session AND be a member of the workspace; anything else — an\nunknown workspace, another tenant's workspace, a workspace the caller is not\nin — answers the same 404, so a probe learns nothing about what exists.\n\nIt is IDEMPOTENT: deleting a present or an absent blob both answer 204, so a\ndelete never confirms a blob's existence and a foreign blob id (a physical key\nthe caller can never name into another tenant's box) is a harmless no-op. A\nstorage backend that is unavailable fails closed with 502 rather than lying\nabout success.",
+    "inputSchema": {
+      "properties": {
+        "file": {
+          "description": "File is the blob id, and wins over the path segment when both are present.",
+          "type": "string"
+        },
+        "filename": {
+          "description": "Filename is the last path segment, which the front sets to the blob id\nwhen it sends no explicit `file`.",
+          "type": "string"
+        },
+        "workspace": {
+          "description": "Workspace is the workspace uuid the blob belongs to, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_team_files_workspace_filename"
+  },
+  {
+    "description": "ListProviders returns the identity providers this deployment starts a login\nwith. It is always exactly one — hanzo.id. Which identities that door accepts\n(Google, GitHub, passkey, password) is IAM's question, answered on IAM's own\npage next to the identity check and the training-data consent that must\nprecede a first session; listing them here would be a second place holding\nthat answer, and the two drift the moment IAM gains or drops one.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_team_account_providers"
+  },
+  {
+    "description": "ReadPlan returns the plan and seat counts for the caller's OWN org, resolved\nfrom the VERIFIED team session token — never a client header. Seats and guests\nare the org's distinct active human members (a bot member is not a seat); the\nplan comes from the licensing entitlement and is empty when that read is\nunavailable, so the page shows an honest dash rather than a fabricated tier. A\ncaller with no verified session gets 401, and a real seat-read failure is a\n502 rather than a false \"0 members\".",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_team_billing_plan"
+  },
+  {
+    "description": "ListBots returns the caller org's bot members — the org's agents projected as\nthe workspace Employees they become, each with the member account uuid and\nPerson reference the roster addresses it by. An agents subsystem that is not\nmounted answers an empty list, never an error.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_team_bots"
+  },
+  {
+    "description": "Statistics returns the transactor's live sessions for the workspace the\ncaller's token names — the endpoint the front's workspace switcher and server\npanel poll on the transactor base. The token is verified exactly like the\nWebSocket upgrade is, and activeSessions carries ONLY that token's own\nworkspace, never another tenant's sessions. An invalid or expired token is\n401.",
+    "inputSchema": {
+      "properties": {
+        "token": {
+          "description": "Token is the workspace token minted by selectWorkspace.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_team_transactor_api_v1_statistics"
+  },
+  {
+    "description": "Statistics returns the transactor's live sessions for the workspace the\ncaller's token names — the endpoint the front's workspace switcher and server\npanel poll on the transactor base. The token is verified exactly like the\nWebSocket upgrade is, and activeSessions carries ONLY that token's own\nworkspace, never another tenant's sessions. An invalid or expired token is\n401.",
+    "inputSchema": {
+      "properties": {
+        "token": {
+          "description": "Token is the workspace token minted by selectWorkspace.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_team_transactor_statistics"
+  },
+  {
+    "description": "CollabRPC is the collaborative-markup snapshot plane the Team front's editor\nspeaks: createContent stores a document field's markup at a fresh, immutable\nblob ref and returns it, updateContent stores a new snapshot and answers\nnothing, and getContent reads back the exact snapshot a ref names.\n\ncreateContent ALSO seeds the live-editing update log from the front-supplied\nY.js update, so a dialog-authored description is visible in the collaborative\neditor — which replays that log — and not only in snapshot reads.\nupdateContent never touches that log: peers may be live-editing the document,\nand their edits are not this call's to overwrite.\n\nEvery call is scoped to the caller's VERIFIED session or workspace token: the\ndocumentId's workspace must be the token's workspace when the token names one,\nand the caller must be a member of it. An unknown workspace, another tenant's\nworkspace and a workspace the caller is not in all answer the same 404, so a\nprobe learns nothing about what exists.",
+    "inputSchema": {
+      "$defs": {
+        "collabPayload": {
+          "properties": {
+            "content": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Content maps a document field to its ProseMirror markup JSON.",
+              "type": "object"
+            },
+            "source": {
+              "description": "Source is the blob ref a getContent reads the snapshot from. Absent means\nthere is no snapshot to read, which answers empty content.",
+              "type": "string"
+            },
+            "updates": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Updates carries, per field, a base64 Y.js state update encoding the SAME\nmarkup — the front computes it (markupToYDoc → encodeStateAsUpdate) so a\ncreateContent seeds the live-editing lane's update log, not just the\nsnapshot blob. Without it a dialog-created description is invisible in the\ncollaborative editor, which replays the ydoc log, never the snapshot.",
+              "type": "object"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "documentId": {
+          "description": "DocumentID addresses the document field, as\n\"\u003cworkspaceUuid\u003e|\u003cobjectClass\u003e|\u003cobjectId\u003e|\u003cobjectAttr\u003e\" — the\ncollaborator-client encodeDocumentId shape, from the path.",
+          "type": "string"
+        },
+        "method": {
+          "description": "Method is the verb: createContent, updateContent or getContent.",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/collabPayload",
+          "description": "Payload is the verb's argument."
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_collaborator_rpc_documentId"
+  },
+  {
+    "description": "SyncBots re-projects the caller org's agents as workspace members into EVERY\nworkspace of the org, and removes the ones whose agent is gone. It is\nidempotent, and admin only: mutating a workspace's roster requires the\ngateway-minted admin flag, which a client can never forge. It answers how many\nroster entries the reconcile touched.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "post_v1_team_bots_sync"
+  }
+]

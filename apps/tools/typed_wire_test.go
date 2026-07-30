@@ -11,7 +11,7 @@ import (
 )
 
 // This file makes the tool plane's typed partition a GATE instead of a paragraph.
-// "14 of 16" is prose, and prose cannot fail: a route added tomorrow as a raw
+// "all but one" is prose, and prose cannot fail: a route added tomorrow as a raw
 // func(*zip.Ctx) error would leave the claim standing and the route invisible to
 // every projection — no schema, no description, no MCP tool, no CLI command, no
 // SDK method. Here the claim is a test, so the route that falsifies it says so.
@@ -20,30 +20,15 @@ import (
 // ops, each with the wire fact that keeps it raw. The address is written the way
 // the DOCUMENT writes it, which is the identity every projection keys on.
 //
-// Both entries are wire-bound and both were re-read against the PINNED zip
-// (v1.18.11), not inherited as prose from an older pass.
+// It holds ONE entry now. The other was the hand-rolled MCP JSON-RPC surface at
+// POST /v1/tools/mcp, and it is gone rather than typed: the fleet serves ONE MCP
+// door, on the host, and this plane reaches it as a typed op (POST /v1/tools/call)
+// like everything else. A JSON-RPC envelope is a transport, and there is now
+// exactly one place in the fleet that speaks it.
+//
+// The remaining entry is wire-bound and was re-read against the PINNED zip
+// (v1.18.12), not inherited as prose from an older pass.
 var untypedByDesign = map[string]string{
-	// The unified MCP JSON-RPC surface. Two facts, either one sufficient.
-	//
-	// 1. IT IS DELIBERATELY BODY-TOLERANT. A body that is not JSON answers HTTP
-	//    200 carrying the JSON-RPC parse error (-32700) — the MCP convention, and
-	//    what TestMCPToleratesAMalformedBody below pins. op.invoke decodes the
-	//    body BEFORE the handler runs and returns ErrBadRequest on any failure
-	//    (v1.18.11 typed.go:240-243), so typing this route turns every one of
-	//    those 200s into a 400 that no MCP client expects.
-	// 2. ITS REQUEST AND RESPONSE ARE ENVELOPES WHOSE SHAPE DEPENDS ON `method`.
-	//    params is `any` — tools/call reads name+arguments, initialize and ping
-	//    read nothing — and the result object differs per method. One In and one
-	//    Out cannot describe that without publishing a shape the wire does not
-	//    carry.
-	//
-	// Neither is closable inside cloud: zip has no body-TOLERANT op and no
-	// per-method response vocabulary. Note this route is not invisible to agents
-	// for it — it IS the MCP surface, reached as JSON-RPC rather than as a tool.
-	"POST /v1/tools/mcp": "deliberately body-tolerant (a malformed body is HTTP 200 + JSON-RPC -32700, " +
-		"which op.invoke's unconditional 400 on an unparseable body cannot express) and its request/response " +
-		"are JSON-RPC envelopes whose shape depends on `method`.",
-
 	// The plugin builder. A FAILED build answers 422 carrying the build
 	// DIAGNOSTICS as a domain body — the bundler's error, the source that failed,
 	// and whether the model wrote it — which is the only thing that lets a caller
@@ -124,10 +109,10 @@ func TestEveryRouteIsTypedOrNamed(t *testing.T) {
 		t.Errorf("typed(%d) + named(%d) = %d, served = %d — the ledgers must partition the surface",
 			len(typed), len(untypedByDesign), got, want)
 	}
-	// The MEASURED partition, so "14 of 16" in the docs cannot drift from the
+	// The MEASURED partition, so "all but one" in the docs cannot drift from the
 	// binary. Changing these numbers is a deliberate edit, which is the point.
-	if len(served) != 16 || len(typed) != 14 {
-		t.Errorf("served = %d (want 16), typed = %d (want 14)", len(served), len(typed))
+	if len(served) != 15 || len(typed) != 14 {
+		t.Errorf("served = %d (want 15), typed = %d (want 14)", len(served), len(typed))
 	}
 }
 
@@ -190,24 +175,9 @@ func TestEveryPublishedFieldIsDescribed(t *testing.T) {
 	}
 }
 
-// ── the wire the two refusals protect ───────────────────────────────────────────
+// ── the wire the one refusal protects ───────────────────────────────────────────
 
-// TestMCPToleratesAMalformedBody is the pin under the first untypedByDesign entry.
-// A body that is not JSON is HTTP 200 carrying JSON-RPC -32700, because that is
-// what an MCP client parses. Type this route and op.invoke answers 400 before the
-// handler runs — this test is what turns that from a regression into a failure.
-func TestMCPToleratesAMalformedBody(t *testing.T) {
-	app := newApp(t, nil)
-	r := rpc(t, app, "acme", `{not json`)
-	if r.Code != 200 {
-		t.Fatalf("malformed MCP body = %d (%s), want 200 — the JSON-RPC parse error is a 200 body", r.Code, r.Body)
-	}
-	if !strings.Contains(string(r.Body), "-32700") {
-		t.Errorf("malformed MCP body must answer JSON-RPC -32700, got %s", r.Body)
-	}
-}
-
-// TestBuildFailureCarriesItsDiagnostics is the pin under the second entry. A build
+// TestBuildFailureCarriesItsDiagnostics is the pin under the single entry. A build
 // that does not compile answers 422 with the bundler's detail, the source that
 // failed and whether a model wrote it — the only thing that lets a caller fix the
 // plugin, and a shape zip's flat HTTPError has nowhere to put.
@@ -230,15 +200,14 @@ func TestBuildFailureCarriesItsDiagnostics(t *testing.T) {
 	}
 }
 
-// TestTheUntypedRoutesStillDeclareTheirBodies is the OTHER half of a refusal.
+// TestTheUntypedRouteStillDeclaresItsBody is the OTHER half of a refusal.
 // Staying out of zip's registry costs prose, an MCP tool, a CLI command and a
-// typed SDK method — it must not also cost the SHAPE. Both of these rendered as
-// an operationId and a tag and nothing else, which is precisely what a route
-// taking no input and returning none publishes, so no consumer of the document
-// could tell "takes a JSON-RPC envelope" from "takes nothing". openapi.Register
-// (tools.go's init) states the halves that ARE statable; this is the gate that
-// they stay stated.
-func TestTheUntypedRoutesStillDeclareTheirBodies(t *testing.T) {
+// typed SDK method — it must not also cost the SHAPE. This route rendered as an
+// operationId and a tag and nothing else, which is precisely what a route taking
+// no input and returning none publishes, so no consumer of the document could
+// tell "takes a plugin source" from "takes nothing". openapi.Register (tools.go's
+// init) states the half that IS statable; this is the gate that it stays stated.
+func TestTheUntypedRouteStillDeclaresItsBody(t *testing.T) {
 	app := newApp(t, nil)
 	doc, err := openapi.Spec(app, openapi.Info{Title: "tools", Version: "v1"})
 	if err != nil {
@@ -253,7 +222,6 @@ func TestTheUntypedRoutesStillDeclareTheirBodies(t *testing.T) {
 		} `json:"schema"`
 	}
 	for _, c := range []struct{ path, req, resp string }{
-		{"/v1/tools/mcp", "mcpRequest", "mcpResponse"},
 		{"/v1/plugins/build", "buildRequest", "buildOut"},
 	} {
 		raw, err := json.Marshal(doc.Paths[c.path]["post"])
@@ -306,53 +274,10 @@ func TestTheUntypedRoutesStillDeclareTheirBodies(t *testing.T) {
 	}
 }
 
-// TestMCPEnvelopeIsByteIdentical pins the rename that made the MCP response
-// declarable. The envelope was a Go map, which encoding/json writes in SORTED KEY
-// order; mcpResponse's fields are alphabetical for exactly that reason. Asserting
-// the marshalled BYTES is what proves naming the shape did not move the wire —
-// a status-code test would pass either way.
-func TestMCPEnvelopeIsByteIdentical(t *testing.T) {
-	for _, c := range []struct {
-		name       string
-		got, maply any
-	}{
-		{
-			"result",
-			rpcResult(7, map[string]any{"tools": []any{}}),
-			map[string]any{"jsonrpc": "2.0", "id": 7, "result": map[string]any{"tools": []any{}}},
-		},
-		{
-			"result with a null id",
-			rpcResult(nil, map[string]any{}),
-			map[string]any{"jsonrpc": "2.0", "id": nil, "result": map[string]any{}},
-		},
-		{
-			"error",
-			rpcError("abc", -32601, "method not found: nope"),
-			map[string]any{"jsonrpc": "2.0", "id": "abc", "error": map[string]any{"code": -32601, "message": "method not found: nope"}},
-		},
-		{
-			"parse error, no id to echo",
-			rpcError(nil, -32700, "parse error: x"),
-			map[string]any{"jsonrpc": "2.0", "id": nil, "error": map[string]any{"code": -32700, "message": "parse error: x"}},
-		},
-	} {
-		got, err := json.Marshal(c.got)
-		if err != nil {
-			t.Fatalf("%s: marshal struct: %v", c.name, err)
-		}
-		want, err := json.Marshal(c.maply)
-		if err != nil {
-			t.Fatalf("%s: marshal map: %v", c.name, err)
-		}
-		if string(got) != string(want) {
-			t.Errorf("%s:\n got %s\nwant %s", c.name, got, want)
-		}
-	}
-}
-
-// TestBuildReceiptIsByteIdentical is the same pin for the builder's 201 body,
-// which was also a map. buildOut's fields are alphabetical so the bytes match.
+// TestBuildReceiptIsByteIdentical pins the builder's 201 body, which was a Go map
+// — encoding/json writes a map in SORTED KEY order, so buildOut's fields are
+// alphabetical. Asserting the marshalled BYTES is what proves naming the shape did
+// not move the wire; a status-code test would pass either way.
 func TestBuildReceiptIsByteIdentical(t *testing.T) {
 	stored := AuthoredPlugin{ID: "p1", Org: "acme", Name: "hello", Source: "export default {}", CreatedAt: 42}
 	got, err := json.Marshal(buildOut{Bytes: 12, Generated: true, Plugin: stored})
@@ -368,7 +293,7 @@ func TestBuildReceiptIsByteIdentical(t *testing.T) {
 	}
 }
 
-// ── the wire the fourteen typed ops kept ────────────────────────────────────────
+// ── the wire the typed ops kept ─────────────────────────────────────────────────
 
 // TestActivatedFilterIsTheLiteralTrue pins why the three filter fields are STRINGS
 // and not bools. These routes have always compared the raw query value to "true",
@@ -379,10 +304,9 @@ func TestActivatedFilterIsTheLiteralTrue(t *testing.T) {
 	app := newApp(t, nil)
 	std.Register(&fakeProvider{src: SourceConnector, tools: []Tool{tool("acme_hello", SourceConnector)}})
 
-	// Count the ONE unactivated tool the fake source contributes. The listing also
-	// carries the builtin "full-cloud-control" tools this very mount produces, so
-	// the assertion is on the tool under test and not on a total that grows with
-	// every route added here.
+	// Count the ONE unactivated tool the fake source contributes — the assertion is
+	// on the tool under test and not on a total, so a source registered by some
+	// other part of this mount cannot move it.
 	count := func(path string) int {
 		r := do(t, app, http.MethodGet, path, "acme", nil)
 		if r.Code != 200 {
@@ -505,7 +429,7 @@ func TestTypedOpsFailClosedWithoutAPrincipal(t *testing.T) {
 		{http.MethodPost, "/v1/skills", map[string]any{"name": "x", "content": "y"}},
 		{http.MethodGet, "/v1/skills/authored", nil},
 		{http.MethodDelete, "/v1/skills/x", nil},
-		{http.MethodGet, "/v1/mcp", nil},
+		{http.MethodPost, "/v1/tools/call", map[string]any{"name": "x", "arguments": map[string]any{}}},
 		{http.MethodGet, "/v1/mcp/servers", nil},
 		{http.MethodPost, "/v1/mcp/servers", map[string]any{"name": "x", "url": "https://mcp.example.com"}},
 		{http.MethodDelete, "/v1/mcp/servers/x", nil},

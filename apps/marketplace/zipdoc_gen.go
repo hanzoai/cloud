@@ -28,7 +28,7 @@ func init() {
 			"Tool.inputSchema":    "Schema is the JSON Schema of the call arguments — the MCP inputSchema.\nAbsent for a tool that takes none.",
 			"Tool.name":           "Name is the tool's id in the flat, fleet-wide tool namespace — the value a\ntools/call passes. Unique across sources: a collision is resolved by source\nprecedence before the caller ever sees it.",
 			"Tool.price":          "Price is what a call costs and who is paid, absent for a free tool.\nEnforcement is the x402 settlement seam; this is the declaration.",
-			"Tool.source":         "Source is where the tool comes from: builtin, connector, function,\nzap-service, agent, skill or mcp.",
+			"Tool.source":         "Source is where the tool comes from: connector, function, zap-service,\nagent, skill or mcp.",
 			"marketCatalog.items": "Items is every capability the caller can see in their own (org, project),\neach carrying any public listing's shop metadata and whether it is installed.",
 		},
 	})

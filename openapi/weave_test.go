@@ -13,7 +13,7 @@ package openapi_test
 // What it proves is COMPOSITION and only composition: that the subsets compose
 // without two apps claiming one address or one schema name, and that the golden
 // is what they compose to. Both sides are derived, so it cannot prove either is
-// still the routes — `make -f mk/fleet.mk openapi-check` regenerates them from
+// still the routes — `make -f mk/fleet.mk surface-check` regenerates them from
 // source for that, and manifest/router_test.go asks the router whether the fleet
 // delivers what they describe. Three questions, three gates, each answered where
 // its answer lives.
@@ -65,7 +65,7 @@ func parts(t *testing.T) []openapi.Part {
 		path := filepath.Join(specDir, a.Name, "openapi.json")
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			t.Fatalf("%s: %v\n\nEvery app publishes its own subset. Run `make -f mk/fleet.mk openapi-apps`.", path, err)
+			t.Fatalf("%s: %v\n\nEvery app publishes its own subset. Run `make -f mk/fleet.mk describe-apps`.", path, err)
 		}
 		var doc openapi.Document
 		if err := json.Unmarshal(raw, &doc); err != nil {

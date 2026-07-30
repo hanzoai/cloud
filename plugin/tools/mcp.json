@@ -1,0 +1,205 @@
+[
+  {
+    "description": "DeleteServer deregisters one of the caller org's external MCP servers, so its\ntools leave the registry. Scoped to the caller's org, so an id belonging to\nanother tenant is a 404 and not a delete. Answers 204 with no body; a server\nthis org does not have is 404.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the server to deregister, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_mcp_servers_id"
+  },
+  {
+    "description": "DeleteAuthoredPlugin removes one of the caller org's built plugins, so the\nruntime can no longer load it. Scoped to the caller's org, so an id belonging\nto another tenant answers 404 and is not deleted.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the plugin to remove, from the path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_plugins_authored_id"
+  },
+  {
+    "description": "DeleteSkill removes one of the caller org's authored skills. Scoped to the\ncaller's org, so an id belonging to another tenant is never reached. Removing\nwhat is not there is not an error — the caller's intent is \"gone\", and it is.",
+    "inputSchema": {
+      "properties": {
+        "id": {
+          "description": "ID is the skill to remove, from the path. It is the skill's name.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "delete_v1_skills_id"
+  },
+  {
+    "description": "ListServers lists the external MCP servers the caller's org has registered.\nEach record carries the URL and the name of the header its credential is\ninjected into; the credential VALUE lives only in KMS and is never returned,\nso hasSecret is the whole of what this surface says about it.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_mcp_servers"
+  },
+  {
+    "description": "ListPlugins reports what this deployment actually mounted: every subsystem the\ncomposition root declared and whether it is switched on. A plugin here is\nMOUNTED CODE that extends the deployment's own surface — not a tool an agent\ncalls — so this is an inventory and not a tool source. It is read off the same\nboot snapshot every traced request resolves its subsystem label against, so it\ncannot drift from what is serving. Enabled-only by default, because a caller\nasking what this deployment can do wants what is running; ?all=true adds the\nconfigured-but-off ones.",
+    "inputSchema": {
+      "properties": {
+        "all": {
+          "description": "All includes the configured-but-disabled subsystems too, but only when it is\nexactly the string \"true\". Otherwise only the running ones are reported.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_plugins"
+  },
+  {
+    "description": "ListAuthoredPlugins lists the plugins the caller's org BUILT, newest first,\neach with the TypeScript as authored. That is a different set with a different\nlifecycle from GET /v1/plugins, which reports the subsystems this deployment\nmounted. The bundled CommonJS the runtime executes is never included, and\nneither is any credential — a plugin names the connectors provider it needs and\nreads the credential from ctx.auth at run time.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_plugins_authored"
+  },
+  {
+    "description": "ListSkills lists the skills the caller's org can reach — the brand's embedded\ncatalogue plus the org's own authored ones — with each one's activation flag.\nA skill is discovery and activation metadata attached to an agent, never called\ndirectly, so every entry here is non-dispatchable. It is GET /v1/tools narrowed\nto one source, not a second store: a name a caller sees here is the same entry,\nwith the same activation state, that discovery reports.",
+    "inputSchema": {
+      "properties": {
+        "activated": {
+          "description": "Activated keeps only the tools activated for the caller's org and project,\nand only when it is exactly the string \"true\".",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_skills"
+  },
+  {
+    "description": "ListAuthoredSkills lists the caller org's OWN skills with their SKILL.md\nbodies. GET /v1/skills is the registry view — the brand's catalogue plus this\norg's, with activation flags and no bodies; this is the EDITABLE set, so it\ncarries the content that view omits and nothing the org did not write.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_skills_authored"
+  },
+  {
+    "description": "ListTools lists every tool the caller's org and project can reach, from every\nsource, each flagged with whether it is activated. This is the discovery\nsurface: one flat set of names spanning connector actions, user functions,\nzap-service routes, agents, skills and the org's own external MCP servers,\ndeduplicated by name so the highest-precedence source wins a collision. It\nlists; it does not call — dispatch is POST /v1/tools/call.",
+    "inputSchema": {
+      "properties": {
+        "activated": {
+          "description": "Activated keeps only the tools activated for the caller's org and project,\nand only when it is exactly the string \"true\".",
+          "type": "string"
+        },
+        "source": {
+          "description": "Source keeps only tools from one source — connector, function, zap-service,\nagent, skill or mcp. Empty keeps every source.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "get_v1_tools"
+  },
+  {
+    "description": "GetActivation reports which tools are switched on for the caller's org and\nproject. Activation is what makes a tool dispatchable and what makes it visible\nto an agent, so this is the set the MCP tool list is drawn from — every other\ntool in the registry is discoverable but refused at call time.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "get_v1_tools_activation"
+  },
+  {
+    "description": "CreateServer registers one of the caller org's own external MCP servers, so its\ntools join the unified registry and become activatable. The credential VALUE is\nsealed in KMS under a per-org ref; the row keeps only the URL, the header name\nto inject it into, and a has-secret flag — so a secret with no KMS configured\nis refused 503 rather than stored in the clear. The URL is SSRF-validated here\nand re-checked by the dialer at connect time, which is the DNS-rebinding\ndefense. Answers 201 with the stored record.",
+    "inputSchema": {
+      "properties": {
+        "authHeader": {
+          "description": "AuthHeader is the request header the credential is injected into, e.g.\n\"Authorization\". Empty means the server needs no credential.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name labels the server for the org. Required, at most 128 characters.",
+          "type": "string"
+        },
+        "secret": {
+          "description": "Secret is the credential VALUE. It is sealed into KMS under a per-org ref\nand never stored in SQLite, never listed, and never returned.",
+          "type": "string"
+        },
+        "url": {
+          "description": "URL is the server's JSON-RPC endpoint. It must be an http(s) URL naming a\nPUBLIC host: loopback, link-local, private and cloud-metadata addresses are\nrefused here and again when the dialer connects.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_mcp_servers"
+  },
+  {
+    "description": "PutSkill adds or revises one of the caller org's own skills, and answers 201\nwith the stored record. The id is derived from the name, so writing the same\nname again REVISES that skill rather than accumulating near-duplicates that\nwould then collide in the registry. An org's skills are private to it by\nconstruction — they live in a different store from the brand's embedded\ncatalogue and have no path into the public gallery — and a brand skill always\nwins a name collision against an org's.",
+    "inputSchema": {
+      "properties": {
+        "content": {
+          "description": "Content is the SKILL.md body. Required, at most 256 KiB.",
+          "type": "string"
+        },
+        "description": {
+          "description": "Description is the one-line summary discovery shows for the skill.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name is the skill's id within the org: one lowercase path segment\n(a-z0-9, _ or -). Writing an existing name REVISES that skill.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_skills"
+  },
+  {
+    "description": "CallTool runs one of the caller's activated tools and answers with its output.\n\nThis is the door onto the tool plane's DYNAMIC half — the half no build-time\ncatalogue can hold, because it is per-tenant: an org's connected connector\nactions, its authored skills, its agents and functions, and the tools of every\nexternal MCP server it registered. A tool's existence, its price and its\nactivation are all rows, not code, so they cannot be known until the caller is.\n\nOne policy, the registry's: resolve by precedence, refuse an unactivated tool\n403, settle a priced one through the x402 seam or fail closed 402, then\ndispatch to the winning source bound to the caller's own (org, project). One\nmetered unit, one audit record. A caller can only ever dispatch its own tools.\n\nDiscovery is GET /v1/tools — ?activated=true for the callable set.",
+    "inputSchema": {
+      "properties": {
+        "arguments": {
+          "additionalProperties": {
+            "type": "object"
+          },
+          "description": "Arguments is the tool's own input object, passed through verbatim to\nwhichever source owns it.",
+          "type": "object"
+        },
+        "name": {
+          "description": "Name is the tool to run, exactly as GET /v1/tools reports it.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "post_v1_tools_call"
+  },
+  {
+    "description": "PutActivation switches tools on and off for the caller's org and project, and\nanswers with the resulting activated set. It is the ONE write path that turns\nskills, plugins and connectors into callable tools — an unactivated tool is\nlisted by discovery but refused 403 at dispatch. Activate is applied before\nDeactivate, so a name in both lists ends up off. More than 256 toggles in one\nrequest is refused 413.",
+    "inputSchema": {
+      "properties": {
+        "activate": {
+          "description": "Activate switches these tool names on for the caller's org and project.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "deactivate": {
+          "description": "Deactivate switches these tool names off.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "name": "put_v1_tools_activation"
+  }
+]

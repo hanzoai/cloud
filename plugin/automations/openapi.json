@@ -506,14 +506,6 @@
         ]
       }
     },
-    "/v1/automations/mcp": {
-      "post": {
-        "operationId": "post_v1_automations_mcp",
-        "tags": [
-          "automations"
-        ]
-      }
-    },
     "/v1/automations/pieces": {
       "get": {
         "operationId": "get_v1_automations_pieces",
