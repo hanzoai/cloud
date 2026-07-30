@@ -21,7 +21,7 @@ import (
 var untypedByDesign = map[string]string{
 	// The translate door itself. Its refusal is a DOMAIN body, and a typed op
 	// cannot write one — the apps/ml and apps/company class, re-measured against
-	// the PINNED zip (v1.18.11) rather than inherited as prose.
+	// the PINNED zip (v1.18.12) rather than inherited as prose.
 	//
 	// A bulk-tier gate or engine refusal answers cloud.DenyResource, the fleet-wide
 	// NESTED {"error":{"code","message"}} at 402/503 that the console routes to a
@@ -32,7 +32,7 @@ var untypedByDesign = map[string]string{
 	// op — the multi-status gap (task #78), not an oversight. The two call sites are
 	// translate.go's `s.Bill.Gate(...) -> cloud.DenyResource` and its
 	// ErrInsufficientBalance / ErrSpendCapExceeded branch; cloud.DenyResource
-	// (deny.go) is where the nested shape is written.
+	// (resource_billing.go) is where the nested shape is written.
 	"POST /v1/translate": "a bulk-tier spend denial answers 402/503 carrying the fleet's NESTED " +
 		"{\"error\":{\"code\",\"message\"}} domain body (cloud.DenyResource); a typed op's only refusal is a " +
 		"returned error, which zip renders as the flat HTTPError with nowhere to put it.",

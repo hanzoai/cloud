@@ -18,7 +18,7 @@ import (
 // ops, each with the wire fact that keeps it raw. The address is written the way the
 // DOCUMENT writes it, which is the identity every projection keys on.
 //
-// Both were re-read against the PINNED zip (v1.18.11) rather than inherited, and
+// Both were re-read against the PINNED zip (v1.18.12) rather than inherited, and
 // both are STRUCTURAL: there is no shape of In/Out that serves these wires.
 var untypedByDesign = map[string]string{
 	// The catalogue. Three independent facts, any one sufficient.
