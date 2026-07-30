@@ -4,10 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strconv"
-	"strings"
 
-	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -31,31 +28,56 @@ type controlCommandView struct {
 	Payload json.RawMessage `json:"payload,omitempty"`
 }
 
-// drainControl returns KindControl commands with seq > ?after for the caller's
-// own session. Bounded (200/poll) and cursor-driven, so a steady poll is cheap
-// and never redelivers an applied command.
-func drainControl(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	id := idParam(c)
-	if _, err := s.State.store.GetSession(c.Context(), org, id); err == errSessionNotFound {
-		return zip.ErrNotFound("session not found")
-	} else if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
-	}
+// controlDrainIn is the poller's cursor over one session's steering queue.
+type controlDrainIn struct {
+	// ID is the session whose commands are being drained, from the path.
+	ID string `json:"id"`
+	// After is the last seq this poller applied; only commands newer than it come
+	// back. Absent or negative reads as 0, which drains from the beginning.
+	After int64 `json:"after"`
+}
 
-	after := int64(0)
-	if q := strings.TrimSpace(c.Query("after")); q != "" {
-		if n, perr := strconv.ParseInt(q, 10, 64); perr == nil && n >= 0 {
-			after = n
-		}
-	}
+// controlDrain is a page of steering commands plus the cursor to poll from next.
+type controlDrain struct {
+	// Commands is the session's control commands newer than the cursor, oldest first.
+	Commands []controlCommandView `json:"commands"`
+	// Cursor is the seq to send as `after` on the next poll — the highest seq in
+	// this page, or the cursor sent in when the page is empty.
+	Cursor int64 `json:"cursor"`
+}
 
-	evs, err := s.State.store.ListControlAfter(c.Context(), org, id, after, 200)
+// DrainSessionControl returns the steering commands (pause/resume/stop/message)
+// recorded against the caller's own session that are newer than the cursor,
+// oldest first, with the cursor to poll from next. It is how a locally started
+// `hanzo code` session — which is not task-backed, so nothing forwards its
+// commands to an execution engine — consumes what the dashboard posted. Read-only
+// and bounded at 200 per poll, so a steady poll is cheap and an applied command is
+// never redelivered.
+//
+// Example: {"id": "sess_1", "after": 12}
+func (o sessionOps) drain(ctx context.Context, in *controlDrainIn) (*controlDrain, error) {
+	s := o.s
+	org, err := tenantOf(ctx)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "drain control: %v", err)
+		return nil, err
+	}
+	id := in.ID
+	if _, err := s.State.store.GetSession(ctx, org, id); err == errSessionNotFound {
+		return nil, zip.ErrNotFound("session not found")
+	} else if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+	}
+
+	// A negative cursor is not a position: it reads as 0, the same answer an
+	// unparseable ?after= has always produced.
+	after := in.After
+	if after < 0 {
+		after = 0
+	}
+
+	evs, err := s.State.store.ListControlAfter(ctx, org, id, after, 200)
+	if err != nil {
+		return nil, zip.Errorf(http.StatusInternalServerError, "drain control: %v", err)
 	}
 
 	cursor := after
@@ -73,7 +95,7 @@ func drainControl(s *cloud.Service[state], c *zip.Ctx) error {
 			cursor = e.Seq
 		}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"commands": cmds, "cursor": cursor})
+	return &controlDrain{Commands: cmds, Cursor: cursor}, nil
 }
 
 // ListControlAfter returns a session's KindControl events with seq > since,
