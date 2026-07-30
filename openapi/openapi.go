@@ -176,6 +176,11 @@ type Tag struct {
 // body ([Binary]) — because that is the only distinction this generator can make
 // that a consumer acts on: an SDK generator emits a file/bytes parameter for
 // `string/binary` and a text parameter for a bare `string`.
+// OneOf carries the alternatives of a POLYMORPHIC body ([OneOf] the declaration
+// value) and is empty on every other schema. It is the one place this generator
+// says "several shapes, and the caller picks" — a fact a single Go type cannot
+// state, which is why declaring one alternative and calling it the wire would
+// under-describe a route that accepts three.
 type Schema struct {
 	Type                 string             `json:"type,omitempty"`
 	Format               string             `json:"format,omitempty"`
@@ -183,6 +188,7 @@ type Schema struct {
 	Items                *Schema            `json:"items,omitempty"`
 	Properties           map[string]*Schema `json:"properties,omitempty"`
 	AdditionalProperties *Schema            `json:"additionalProperties,omitempty"`
+	OneOf                []*Schema          `json:"oneOf,omitempty"`
 }
 
 // Parameter is an OpenAPI parameter object.
