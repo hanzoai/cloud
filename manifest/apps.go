@@ -35,11 +35,11 @@ var Apps = []App{
 	{Name: "iam", Prefixes: []string{"/login/oauth", "/v1/iam"}},
 	{Name: "base", Prefixes: []string{"/v1/base", "/v1/collections", "/v1/waitlist"}},
 	// /v1/event is ONE family with two owners by depth: analytics serves the root
-	// (the canonical product-event door and the Team SPA's /collect suffix), and the
-	// o11y plane serves the deeper ingest leaves — /v1/event/ingestion (LLM-obs
-	// batch) and /v1/event/error (the Sentry wire, DSN-addressable). Deeper prefix
-	// wins, so neither app shadows the other.
-	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/sentry", "/v1/event/ingestion", "/v1/event/error"}, Eager: true},
+	// (POST /v1/event — every event kind, including LLM-obs batches the o11y plane
+	// claims in-process via cloud.ObsEventIngest — and the Team SPA's /collect
+	// suffix); the o11y plane serves the deeper /v1/event/error leaf (the Sentry
+	// wire, DSN-addressable). Deeper prefix wins, so neither app shadows the other.
+	{Name: "o11y", Prefixes: []string{"/v1/o11y", "/v1/sentry", "/v1/event/error"}, Eager: true},
 	{Name: "authz", Prefixes: []string{"/v1/authz/check", "/v1/authz/health", "/v1/authz/policies", "/v1/authz/readyz"}},
 	// Commerce owns its published FAMILIES, never bare "/v1". As "/v1" this row was
 	// the fleet's route of last resort: every path no app named deeper — the whole
