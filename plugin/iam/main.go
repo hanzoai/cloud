@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/manifest"
 	"github.com/hanzoai/cloud/apps/iam"
 )
 
@@ -20,7 +21,7 @@ func main() {
 		Name:     "iam",
 		Price:    cloud.Free,
 		Mount:    iam.Mount,
-		Prefixes: iam.Prefixes,
+		Prefixes: manifest.PrefixesFor("iam"),
 	}}, []string{"iam"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
