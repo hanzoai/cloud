@@ -217,7 +217,10 @@ func routes(app cloud.Router, s *cloud.Service[state]) {
 	zip.Post(g, "/steps/:id/reset", o.resetStep)
 	// /do stays UNTYPED for a second reason on top of the 409: it STREAMS the
 	// agent's actions as SSE when the caller asks for them, and a typed op answers
-	// exactly one JSON value.
+	// exactly one JSON value. TestDoStreamsSSE pins that wire fact — both triggers,
+	// the Accept header and the ?stream=1 alias — so the refusal cannot rot into a
+	// stale claim, the same discipline TestDocumentPutsAcceptYAML gives the two
+	// document PUTs.
 	g.Post("/steps/:id/do", cloud.Handle(s, doStep))
 
 	// The SuperAdmin BLUEPRINT plane (tier 2 authoring): the platform/brand blueprint,
