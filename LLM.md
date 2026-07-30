@@ -1250,10 +1250,10 @@ command, no typed SDK method. It was 38 operations. Two things it taught:
   `hanzoai/ai`, next to the handlers; nothing cloud can do at the mount point
   reaches it.
 
-`templates` went 5 of 5, `destinations` 4 of 5 — both now gated by
-`untypedByDesign` + `TestEveryRouteIsTypedOrNamed` + `TestEveryTypedOpIsDescribed`
-reading the LIVE router of the real `Mount`. Three findings worth carrying
-forward:
+`templates` went 5 of 5 (a closed ledger, `TestEveryRouteIsATypedOp` — no
+refusals to name), `destinations` 4 of 5 (`untypedByDesign` +
+`TestEveryRouteIsTypedOrNamed`), both reading the LIVE router of the real
+`Mount`. Three findings worth carrying forward:
 
 1. **`url:"-"` is not optional on a body field, and zip v1.18.11 is what makes it
    possible.** The binder fills an In field from the QUERY as well as the body
@@ -1276,6 +1276,58 @@ forward:
    input whose every field is already a path param. `POST /v1/destinations/
    {platform}/test` types cleanly and publishes no request body. The 27-instance
    class named above should be re-counted on the current pin, not inherited.
+
+**The follow-on pass re-derived the same 29 refusals and found what the op-level
+count cannot see: the RESPONSE side was undocumented in both converted packages.**
+Re-running the work list from the published subsets reproduced the ledger exactly
+— 29 undescribed operations, 5 registrations, every one re-refused against zip
+v1.18.11 source rather than against the prose above (`typed.go:302-311` is the
+citation: a typed op's only response path is `c.JSON(out)` under its DECLARED
+status, which is what a verbatim relay cannot survive). Nothing new was
+convertible. But **26 published schema properties across the four view types
+carried NO description** — every property of `DestinationStatus` (the card all
+five destinations routes answer with) and of `DestinationField`, and eleven of
+`StarterKit` plus `Variant.source`. They reached openapi.yaml, every generated SDK
+and every MCP inputSchema bare.
+
+The split is the lesson, and it is the same one company found: the In types —
+written AT the conversion — described every field, while the OUT types, which
+predate it, described almost none. **Typing a route documents its ADDRESS and its
+SHAPE; it does not document the shape's FIELDS.** A caller could see that a
+destination card carries `connected`, `enabled` and `live` and nowhere that those
+are three DIFFERENT facts (configured once / forwarding now / a credential still
+resolves) — which is the whole distinction an operator acts on — or that
+templates' `tier` and `rating` are public-catalog curation no request can set.
+`TestEveryPublishedFieldIsDescribed` now gates both packages, mutation-checked to
+fail on a single blanked description.
+
+**Do not read this as two packages' problem.** Running the check below over the
+committed subsets the moment it existed put the class at **1,601 bare published
+properties across 17 packages** — admin 710, agents 209, visor 153, books 100,
+guide 90, platform 69, automations 69, framework 38, marketing 29, cloudflare 28,
+compliance 27, plugins 25, pricing 18, o11y 16, provisioning 12, git 7, company 1
+— against 12 packages that describe every property they publish. Several of the
+17 are packages this table already marks done, which is the point: the op-level
+gate every finished pass installed is blind to this, so "finished" has meant the
+request side only. Count it from the subsets, never tally it in prose:
+
+    python3 - <<'EOF'
+    import json,glob,os
+    for f in sorted(glob.glob('plugin/*/openapi.json')):
+        d=json.load(open(f)); bare=[f'{n}.{p}'
+          for n,v in (d.get('components',{}).get('schemas',{}) or {}).items()
+          for p,s in ((v.get('properties') or {}) if isinstance(v,dict) else {}).items()
+          if isinstance(s,dict) and not s.get('description')]
+        if bare: print(os.path.basename(os.path.dirname(f)), len(bare), bare[:8])
+    EOF
+
+The same pass moved `dns` and `runtime` from a refusal written in prose at the
+registration to one that is GATED — `untypedByDesign` +
+`TestEveryRouteIsTypedOrNamed` in `apps/{dns,runtime}/typed_wire_test.go`, reading
+the live router of the real `Mount`, so a route added to either is typed by
+default and a reason that stops being true goes red. `ai` and `licensing` stay
+ungated on purpose: their registrations are in another module, so there is no
+cloud-side route for a cloud-side gate to hold.
 
 Re-measure rather than trusting the table — with the ONE command below, because
 the two this file used to carry were each half-right and disagreed by 83 routes:
