@@ -1382,6 +1382,48 @@
           },
           "binding": {
             "$ref": "#/components/schemas/agentBinding"
+          },
+          "createdTime": {
+            "type": "string"
+          },
+          "gpu": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string"
+          },
+          "mem": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
+          },
+          "privateIp": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "publicIp": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "vcpu": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -1517,11 +1559,50 @@
       },
       "clusterDetailView": {
         "properties": {
+          "amdGpu": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "doClusterId": {
+            "type": "string"
+          },
+          "doksClusterId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nodeCount": {
+            "type": "integer"
+          },
+          "nodePools": {
+            "items": {
+              "$ref": "#/components/schemas/nodePoolView"
+            },
+            "type": "array"
+          },
+          "nodeSize": {
+            "type": "string"
+          },
           "nodes": {
             "items": {
               "$ref": "#/components/schemas/machineView"
             },
             "type": "array"
+          },
+          "nvidiaGpu": {
+            "type": "integer"
+          },
+          "region": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
           }
         },
         "type": "object"

@@ -175,7 +175,7 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// upstream shows up as a red test rather than as stale prose.
 	zip.Get(zapp, "/v1/admin/catalog", o.adminCatalog)
 	app.Patch("/v1/admin/catalog/models/*", adminPatchModel)
-	app.Patch("/v1/admin/catalog/providers/:name", adminPatchProvider)
+	zip.Patch(zapp, "/v1/admin/catalog/providers/:name", adminPatchProvider)
 
 	// Enablement registry (#30/#31) over the SAME overlay store (see enablement.go):
 	// global off|beta|ga (admin) + per-user/org beta self-opt-in (any authed user).
