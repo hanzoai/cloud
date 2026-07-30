@@ -79,7 +79,7 @@ func TestObsPlaneGetsFirstRefusalOnTheCanonicalDoor(t *testing.T) {
 	}
 }
 
-// TestTeamWireRidesTheCanonicalDoor pins the fold of /v1/event/collect: the
+// TestTeamWireRidesTheCanonicalDoor pins the team-wire fold: the
 // team SPA's bare snake_case array, POSTed to the CANONICAL door, decodes via
 // the team mapping (kind named, events survive admission) — and the canonical
 // array wire still decodes as itself (positive-signal dispatch only).

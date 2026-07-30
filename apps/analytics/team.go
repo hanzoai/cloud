@@ -15,8 +15,11 @@
 // team.go — the Hanzo Team SPA's ingest WIRE, and the team session token as an
 // ingest CREDENTIAL. Two independent things, which is why they are two functions:
 //
-//	POST /v1/event (or the sunsetting caller-owned /v1/event/collect)
-//	body: [TeamEvent]   -> {accepted, dropped}
+//	POST /v1/event   body: [TeamEvent]   -> {accepted, dropped}
+//
+// There is no /collect door: the ONE canonical decode dispatches this wire by
+// shape (isTeamArray, event.go), so the SPA's collector URL points at /v1/event
+// and nothing else.
 //
 // THE WIRE. The team SPA is a PUBLISHED bundle (ghcr.io/hanzoai/front), so its
 // emitter is a caller fact we adapt to, not a design we choose. It POSTs a BARE
@@ -53,11 +56,6 @@ import (
 	"github.com/hanzoai/cloud/apps/team/token"
 	"github.com/zap-proto/zip"
 )
-
-// sourceTeam tags every row that arrived on the team SPA's door, so "is the team
-// pipe live" is a warehouse query (properties.$source = 'team') and not a guess —
-// the same closing signal the sunsetting aliases carry.
-const sourceTeam = "team"
 
 // teamEvent is ONE element of the team SPA's wire. Four fields; a retried batch also
 // carries a top-level `retryCount`, which is ignored here exactly as encoding/json
