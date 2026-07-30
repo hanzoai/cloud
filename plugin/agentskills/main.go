@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/apps/agentskills"
+	"github.com/hanzoai/cloud/manifest"
 )
 
 // Standalone entry for the agentskills app.
@@ -20,6 +21,14 @@ func main() {
 		Name:  "agentskills",
 		Price: cloud.Free,
 		Mount: agentskills.Mount,
+		// This subsystem serves the ROOT discovery convention
+		// (/.well-known/agent-skills/…), so the /v1/<Name> default MountPrefixes
+		// assumes covers NOTHING it registers: SubsystemOf resolved every request to
+		// "" and PriceOf to Undeclared, and any middleware the subsystem installed
+		// through its own router landed on "/v1/agentskills" and never ran. Same
+		// defect as apps/plan, whose name was one letter off its prefix. The list
+		// comes from the manifest so it cannot drift from what the host routes here.
+		Prefixes: manifest.PrefixesFor("agentskills"),
 	}}, []string{"agentskills"}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
