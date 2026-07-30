@@ -149,6 +149,27 @@ var allowedRequestUses = map[string]string{
 		"tenant itself is read with principal.OrgFrom (tenant, right beside them), never through the " +
 		"request. All fail closed off the HTTP path: no request, no attested reviewer, no audit actor " +
 		"to invent, nothing cached.",
+	"apps/leaderboard/leaderboard.go": "requestOf — the leaderboard's ONE identity seam, asked by the " +
+		"three readers beside it. A public board is a CONSENT surface, so it turns on facts " +
+		"principal.OrgFrom does not carry: the caller's own ledger row is keyed by the validated username " +
+		"(X-User-Name, selfLedgerID — without it a member cannot find or set their own opt-in), naming " +
+		"other members and setting the ORG's listing require org-admin-ness (X-User-IsOrgAdmin), and the " +
+		"rollup seed requires platform-admin-ness (X-User-IsAdmin). noStore is the fourth reader and is " +
+		"not identity at all: per-tenant analytics must never be held by a browser or an intermediary, " +
+		"and only the request reaches the RESPONSE header. The tenant itself is read with " +
+		"principal.OrgFrom (tenantOf, in this same file), never through the request. ONE function, so " +
+		"six typed ops share one seam; every reader fails closed off the HTTP path — no request means no " +
+		"self, no admin and no elevation.",
+	"apps/marketplace/marketplace.go": "projectOf / callerOf / record. An install is scoped to (org, " +
+		"PROJECT) and the project is a server-minted header (X-Project-Id) that principal.OrgFrom does " +
+		"not carry, so the activation write and the tool-existence check both need it — and they must " +
+		"agree with the tool plane, which reads the same principal.Project. An activation is also " +
+		"ATTRIBUTED: the store records the validated user id (X-User-Id) who turned a capability on. " +
+		"record is the tamper-evident trail for a publish/unpublish/install, and every fact it carries " +
+		"beyond the org (user id, email, admin-ness, method, path, source IP, request id) rides on the " +
+		"request too. The tenant itself is read with principal.OrgFrom (tenantOf, in this same file), " +
+		"never through the request. All three fail closed off the HTTP path: no request means the org's " +
+		"default project, no actor, and no audit row — an unattributable record is worse than none.",
 	"apps/destinations/destinations.go": "orgAdmin — the gate every destination MUTATION keeps " +
 		"(disconnect and test both forget or spend a credential). It reads org-admin-ness, which is " +
 		"X-User-IsOrgAdmin, a claim principal.OrgFrom does not carry. The tenant itself is read with " +

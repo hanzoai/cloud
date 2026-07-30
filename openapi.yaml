@@ -72,6 +72,61 @@ components:
         tool:
           type: string
       type: object
+    ActivityPoint:
+      properties:
+        costCents:
+          type: integer
+        day:
+          description: '"2006-01-02"'
+          type: string
+        requests:
+          type: integer
+        tokens:
+          type: integer
+      type: object
+    ActivityTotals:
+      properties:
+        activeDays:
+          description: days with any usage
+          type: integer
+        costCents:
+          type: integer
+        maxRequests:
+          type: integer
+        maxTokens:
+          description: busiest day's tokens (heatmap intensity ceiling)
+          type: integer
+        requests:
+          type: integer
+        tokens:
+          type: integer
+      type: object
+    ActivityView:
+      properties:
+        available:
+          type: boolean
+        days:
+          items:
+            $ref: '#/components/schemas/ActivityPoint'
+          type: array
+        from:
+          type: string
+        id:
+          description: resolved subject id (echoed)
+          type: string
+        note:
+          description: honest note (e.g. project attribution not in the ledger)
+          type: string
+        source:
+          type: string
+        subject:
+          description: user|org|project
+          type: string
+        to:
+          type: string
+        totals:
+          $ref: '#/components/schemas/ActivityTotals'
+      type: object
     Application:
       properties:
         company:
@@ -653,6 +708,54 @@ components:
           items:
             $ref: '#/components/schemas/ConnectorMetadata'
           type: array
+      type: object
+    CatalogEntry:
+      properties:
+        labels:
+          items:
+            type: string
+          type: array
+        name:
+          type: string
+        prompt:
+          type: string
+        tags:
+          items:
+            type: string
+          type: array
+        type:
+          type: string
+      type: object
+    Channel:
+      properties:
+        disabled:
+          type: boolean
+        id:
+          description: the social integration id to target in a post
+          type: string
+        name:
+          type: string
+        provider:
+          description: '"x" | "instagram" | "tiktok" | ...'
+          type: string
+      type: object
+    ChannelResult:
+      properties:
+        channel:
+          description: the social integration id targeted
+          type: string
+        error:
+          description: short reason, when it failed
+          type: string
+        externalId:
+          description: social post id, when it went out
+          type: string
+        provider:
+          description: '"x" | "instagram" | ... when known'
+          type: string
+        status:
+          description: '"distributed" | "scheduled" | "failed"'
+          type: string
       type: object
     Cluster:
       properties:
@@ -2110,6 +2213,58 @@ components:
           description: Tokens is prompt plus completion tokens over those calls.
           type: integer
       type: object
+    LeaderboardRow:
+      properties:
+        anonymous:
+          type: boolean
+        costCents:
+          type: integer
+        handle:
+          type: string
+        metric:
+          type: integer
+        rank:
+          type: integer
+        requests:
+          type: integer
+        self:
+          type: boolean
+        tokens:
+          type: integer
+      type: object
+    LeaderboardView:
+      properties:
+        available:
+          type: boolean
+        end:
+          type: string
+        metric:
+          description: tokens|requests|cost
+          type: string
+        period:
+          description: day|week|month|all|custom
+          type: string
+        rows:
+          items:
+            $ref: '#/components/schemas/LeaderboardRow'
+          type: array
+        scope:
+          description: personal|org|global
+          type: string
+        self:
+          $ref: '#/components/schemas/SelfRank'
+        source:
+          type: string
+        start:
+          description: '"" for all'
+          type: string
+        subject:
+          description: user|org
+          type: string
+        total:
+          description: ranked subjects in the window
+          type: integer
+      type: object
     Leg:
       properties:
         account:
@@ -2148,6 +2303,32 @@ components:
           type: string
         total:
           type: integer
+      type: object
+    Listing:
+      properties:
+        category:
+          type: string
+        createdAt:
+          type: integer
+        currency:
+          type: string
+        description:
+          type: string
+        id:
+          type: string
+        priceCents:
+          type: integer
+        public:
+          type: boolean
+        publisherOrg:
+          type: string
+        recipient:
+          description: seller payout wallet (x402 Payee).
+          type: string
+        title:
+          type: string
+        tool:
+          type: string
       type: object
     LoadBalancer:
       properties:
@@ -2877,6 +3058,33 @@ components:
         status:
           type: string
       type: object
+    PublishInput:
+      properties:
+        doctype:
+          type: string
+        name:
+          type: string
+        scheduleAt:
+          description: '"" = now'
+          type: string
+      type: object
+    PublishResult:
+      properties:
+        channels:
+          items:
+            type: string
+          type: array
+        externalIds:
+          additionalProperties:
+            type: string
+          type: object
+        results:
+          items:
+            $ref: '#/components/schemas/ChannelResult'
+          type: array
+        status:
+          type: string
+      type: object
     Question:
       properties:
         account:
@@ -3432,6 +3640,28 @@ components:
         title:
           type: string
       type: object
+    SelfRank:
+      properties:
+        costCents:
+          type: integer
+        handle:
+          type: string
+        listed:
+          description: is the caller publicly listed (opted in)
+          type: boolean
+        metric:
+          type: integer
+        ofTotal:
+          type: integer
+        rank:
+          type: integer
+        ranked:
+          type: boolean
+        requests:
+          type: integer
+        tokens:
+          type: integer
+      type: object
     Sequence:
       properties:
         createdAt:
@@ -3864,6 +4094,17 @@ components:
         triggerName:
           type: string
       type: object
+    StorefrontResult:
+      properties:
+        imageUrl:
+          type: string
+        slug:
+          type: string
+        status:
+          type: string
+        store:
+          type: string
+      type: object
     Strategy:
       properties:
         action:
@@ -4231,6 +4472,21 @@ components:
           type: integer
         wastedGiB:
           type: integer
+      type: object
+    TransitionResult:
+      properties:
+        distribution:
+          $ref: '#/components/schemas/PublishResult'
+        doctype:
+          type: string
+        from:
+          type: string
+        name:
+          type: string
+        storefront:
+          $ref: '#/components/schemas/StorefrontResult'
+        to:
+          type: string
       type: object
     TrialBalance:
       properties:
@@ -5576,6 +5832,35 @@ components:
           description: AuthorizeURL is the provider consent (or bot deep-link) URL.
           type: string
       type: object
+    backfillQuery:
+      properties:
+        before:
+          description: |-
+            Before bounds the seed to ledger rows written before this RFC3339 instant.
+            Defaults to now; pass the incremental view's creation instant so the seed and
+            the live view never overlap and double a day.
+          type: string
+        force:
+          description: |-
+            Force must be exactly "true" to seed a rollup that already holds rows. It is
+            spelled as a string, not a flag, because the guard has always compared this
+            value literally — "1" and "yes" do NOT force.
+          type: string
+      type: object
+    backfillResult:
+      properties:
+        forced:
+          description: Forced is true when the caller overrode the already-populated
+            guard.
+          type: boolean
+        seededBefore:
+          description: SeededBefore is the RFC3339 upper bound the seed actually used.
+          type: string
+        status:
+          description: Status is "ok" — a seed that did not run answered an error
+            instead.
+          type: string
+      type: object
     baseInstance:
       properties:
         created:
@@ -5729,6 +6014,33 @@ components:
             Version is the active stored version number (1 is the seed). Each edit
             appends a new one; nothing is ever overwritten.
           type: integer
+      type: object
+    boardItem:
+      properties:
+        doctype:
+          type: string
+        name:
+          type: string
+        project:
+          type: string
+        status:
+          type: string
+        title:
+          type: string
+        updatedAt:
+          type: integer
+      type: object
+    boardPage:
+      properties:
+        count:
+          description: Count is the number of rows in THIS page — never the org's
+            total.
+          type: integer
+        data:
+          description: Data is the matching items, most recently updated first.
+          items:
+            $ref: '#/components/schemas/boardItem'
+          type: array
       type: object
     botList:
       properties:
@@ -6771,6 +7083,25 @@ components:
           description: URL is the full page address the error fired on. Omitted when
             absent.
           type: string
+      type: object
+    catalogList:
+      properties:
+        data:
+          description: Data is every starter prompt, each importable as-is with POST
+            /v1/prompts.
+          items:
+            $ref: '#/components/schemas/CatalogEntry'
+          type: array
+      type: object
+    channelList:
+      properties:
+        data:
+          description: |-
+            Data is every social channel the caller's org has connected, disabled ones
+            included (Disabled says which).
+          items:
+            $ref: '#/components/schemas/Channel'
+          type: array
       type: object
     chatRequest:
       properties:
@@ -7856,6 +8187,33 @@ components:
           description: 'Kind is the item''s namespace: "model", "provider" or "feature".'
           type: string
       type: object
+    endpointReq:
+      properties:
+        connector:
+          description: Connector names the stored credential to reach this endpoint
+            with.
+          type: string
+        locator:
+          description: |-
+            Locator addresses the resource. For a git source it is the https clone URL on
+            the provider's own host, with no embedded credentials; for a native target it
+            is the repository name.
+          type: string
+        provider:
+          description: |-
+            Provider is the platform: github or gitlab for a source; a target defaults to
+            the native Hanzo Git plane.
+          type: string
+      type: object
+    endpointView:
+      properties:
+        connector:
+          type: string
+        locator:
+          type: string
+        provider:
+          type: string
+      type: object
     engineAdvertisement:
       properties:
         apis:
@@ -8579,6 +8937,23 @@ components:
           description: 'Surface is the path prefix this status covers: /v1/insights.'
           type: string
       type: object
+    installReq:
+      properties:
+        tool:
+          description: |-
+            Tool is the registry name of the capability to activate (or deactivate) for
+            the caller's own org and project. Required.
+          type: string
+      type: object
+    installState:
+      properties:
+        installed:
+          description: Installed is its activation after the write.
+          type: boolean
+        tool:
+          description: Tool is the capability the write applied to.
+          type: string
+      type: object
     itemInput:
       properties:
         assignee:
@@ -8770,6 +9145,16 @@ components:
             $ref: '#/components/schemas/providerView'
           type: array
       type: object
+    listingPage:
+      properties:
+        listings:
+          description: |-
+            Listings is every listing this org has published, private ones included
+            (Public says which are discoverable by others).
+          items:
+            $ref: '#/components/schemas/Listing'
+          type: array
+      type: object
     logLine:
       properties:
         body:
@@ -8842,6 +9227,38 @@ components:
         vcpu:
           type: integer
       type: object
+    marketCatalog:
+      properties:
+        items:
+          description: |-
+            Items is every capability the caller can see in their own (org, project),
+            each carrying any public listing's shop metadata and whether it is installed.
+          items:
+            $ref: '#/components/schemas/marketItem'
+          type: array
+      type: object
+    marketItem:
+      properties:
+        activated:
+          type: boolean
+        category:
+          type: string
+        description:
+          type: string
+        dispatchable:
+          type: boolean
+        inputSchema: {}
+        installed:
+          type: boolean
+        name:
+          type: string
+        price:
+          $ref: '#/components/schemas/Price'
+        source:
+          type: string
+        title:
+          type: string
+      type: object
     mcpRequest:
       properties:
         id: {}
@@ -8878,6 +9295,29 @@ components:
           type: string
         status:
           type: string
+      type: object
+    metricList:
+      properties:
+        data:
+          description: Data is one row per prompt the org owns.
+          items:
+            $ref: '#/components/schemas/metricRow'
+          type: array
+      type: object
+    metricRow:
+      properties:
+        createdAt:
+          type: string
+        currentVersion:
+          type: integer
+        lastUpdatedAt:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        versions:
+          type: integer
       type: object
     metricsResponse:
       properties:
@@ -9469,6 +9909,37 @@ components:
             (case-insensitive). Empty defaults to NEW.
           type: string
       type: object
+    optinView:
+      properties:
+        org:
+          $ref: '#/components/schemas/orgOptinView'
+        user:
+          $ref: '#/components/schemas/userOptinView'
+      type: object
+    orgOptinReq:
+      properties:
+        display:
+          description: |-
+            Display is the name shown for the org on that board: 1-40 characters of
+            letters, digits, space, dot, underscore, apostrophe or hyphen. Left empty on a
+            listing opt-in it defaults to the org id.
+          type: string
+        listed:
+          description: |-
+            Listed publishes the org on the cross-org global board when true, and withdraws
+            it when false.
+          type: boolean
+      type: object
+    orgOptinView:
+      properties:
+        canManage:
+          description: may the caller edit the org opt-in
+          type: boolean
+        display:
+          type: string
+        listed:
+          type: boolean
+      type: object
     orgRow:
       properties:
         created:
@@ -9621,6 +10092,25 @@ components:
             "" detaches.'
           type: string
         title:
+          type: string
+      type: object
+    patchSyncIn:
+      properties:
+        actor:
+          description: |-
+            Actor is the loop-guard identity the sync writes as. Omitted, the stored actor
+            stands.
+          type: string
+        direction:
+          description: Direction is both, pull, push or off. Omitted, the stored direction
+            stands.
+          type: string
+        id:
+          description: ID is the sync to update, from the path.
+          type: string
+        trigger:
+          description: Trigger is webhook, poll or manual. Omitted, the stored trigger
+            stands.
           type: string
       type: object
     patchTargetIn:
@@ -10215,6 +10705,92 @@ components:
           description: Start is when the offer opens (RFC3339).
           type: string
       type: object
+    promptDetail:
+      properties:
+        createdAt:
+          type: string
+        labels:
+          items:
+            type: string
+          type: array
+        lastUpdatedAt:
+          type: string
+        name:
+          type: string
+        prompt:
+          type: string
+        tags:
+          items:
+            type: string
+          type: array
+        type:
+          type: string
+        version:
+          type: integer
+        versionHistory:
+          items:
+            $ref: '#/components/schemas/versionView'
+          type: array
+      type: object
+    promptList:
+      properties:
+        data:
+          description: |-
+            Data is one row per prompt the org owns, each with its version numbers and
+            taxonomy — never the template bodies.
+          items:
+            $ref: '#/components/schemas/promptMeta'
+          type: array
+      type: object
+    promptMeta:
+      properties:
+        labels:
+          items:
+            type: string
+          type: array
+        lastUpdatedAt:
+          type: string
+        name:
+          type: string
+        tags:
+          items:
+            type: string
+          type: array
+        type:
+          type: string
+        versions:
+          items:
+            type: integer
+          type: array
+      type: object
+    promptReq:
+      properties:
+        labels:
+          description: Labels is free-form taxonomy, each up to 64 characters, capped
+            at 32 entries.
+          items:
+            type: string
+          type: array
+        name:
+          description: |-
+            Name is the org-unique handle AND the URL segment the prompt is addressed by:
+            1-64 characters matching ^[A-Za-z0-9][A-Za-z0-9._-]*$. "metrics", "new" and
+            "catalog" are reserved. A name that already exists appends a new version.
+          type: string
+        prompt:
+          description: |-
+            Prompt is the template body, capped at 64 KiB. It holds template text only —
+            never a secret.
+          type: string
+        tags:
+          description: Tags is free-form taxonomy under the same bounds as Labels.
+          items:
+            type: string
+          type: array
+        type:
+          description: Type labels the template's kind; defaults to "text".
+          type: string
+      type: object
     providerPatchIn:
       properties:
         beta:
@@ -10404,6 +10980,40 @@ components:
           items:
             $ref: '#/components/schemas/Variant'
           type: array
+      type: object
+    publishReq:
+      properties:
+        category:
+          description: Category groups the listing in the shop window.
+          type: string
+        currency:
+          description: Currency denominates PriceCents.
+          type: string
+        description:
+          description: Description is the long copy, clipped at 4096 characters.
+          type: string
+        priceCents:
+          description: |-
+            PriceCents is the per-call price. 0 (the default) publishes it free; any
+            positive price makes the listing monetized and requires Recipient.
+          type: integer
+        public:
+          description: Public makes the listing discoverable by other orgs. Private
+            otherwise.
+          type: boolean
+        recipient:
+          description: |-
+            Recipient is the seller's payout wallet — the x402 payee. Required for a
+            monetized listing.
+          type: string
+        title:
+          description: Title is the shop-window name, 1-200 characters. Required.
+          type: string
+        tool:
+          description: |-
+            Tool is the registry name of the capability being offered. It must already
+            resolve in the publisher's own scope — there are no phantom listings.
+          type: string
       type: object
     purgeIn:
       properties:
@@ -11442,6 +12052,23 @@ components:
             $ref: '#/components/schemas/Tool'
           type: array
       type: object
+    stateGraph:
+      properties:
+        initial:
+          type: string
+        live:
+          type: string
+        states:
+          items:
+            type: string
+          type: array
+        transitions:
+          additionalProperties:
+            items:
+              type: string
+            type: array
+          type: object
+      type: object
     statsOut:
       properties:
         admin:
@@ -11885,6 +12512,15 @@ components:
           description: Documents is how many documents exist across them.
           type: integer
       type: object
+    syncList:
+      properties:
+        data:
+          description: Data is the org's syncs, each with its endpoints, policy and
+            last-synced time.
+          items:
+            $ref: '#/components/schemas/syncView'
+          type: array
+      type: object
     syncOut:
       properties:
         data:
@@ -11892,6 +12528,46 @@ components:
         msg:
           type: string
         status:
+          type: string
+      type: object
+    syncQueued:
+      properties:
+        id:
+          description: ID is the sync the reconcile was queued for.
+          type: string
+        queued:
+          description: Queued is true when the reconcile was accepted; it has not
+            run yet.
+          type: boolean
+      type: object
+    syncReq:
+      properties:
+        actor:
+          description: |-
+            Actor is the identity the sync writes as, used as the loop guard so its own
+            writes do not re-trigger it. Defaults to the deployment's GIT_SYNC_ACTOR.
+          type: string
+        direction:
+          description: Direction is both (the default), pull, push or off.
+          type: string
+        kind:
+          description: Kind is what is being synced. Only "git" today, which is also
+            the default.
+          type: string
+        run:
+          description: Run reconciles once immediately after the upsert, in the background.
+          type: boolean
+        source:
+          $ref: '#/components/schemas/endpointReq'
+          description: Source is the upstream end. Required.
+        target:
+          $ref: '#/components/schemas/endpointReq'
+          description: |-
+            Target is the downstream end. Optional for git: a native repository named
+            after the source is derived when it is omitted.
+        trigger:
+          description: 'Trigger is what starts a reconcile: webhook (the default),
+            poll or manual.'
           type: string
       type: object
     syncStarted:
@@ -11907,6 +12583,28 @@ components:
         sandbox:
           description: Sandbox is the number newly posted to the sandbox ledger.
           type: integer
+      type: object
+    syncView:
+      properties:
+        actor:
+          type: string
+        createdAt:
+          type: string
+        direction:
+          type: string
+        id:
+          type: string
+        kind:
+          type: string
+        source:
+          $ref: '#/components/schemas/endpointView'
+        target:
+          $ref: '#/components/schemas/endpointView'
+        trigger:
+          type: string
+        updatedAt:
+          description: bumped on every reconcile — the last-synced time
+          type: string
       type: object
     targetDeleted:
       properties:
@@ -11988,6 +12686,25 @@ components:
           items:
             $ref: '#/components/schemas/Txn'
           type: array
+      type: object
+    transitionIn:
+      properties:
+        doctype:
+          description: DocType is the content type to act on, from the path.
+          type: string
+        name:
+          description: Name is the document to act on, from the path.
+          type: string
+        scheduleAt:
+          description: |-
+            ScheduleAt is an ISO-8601 go-live time handed to the channel's own scheduler;
+            "" distributes now.
+          type: string
+        to:
+          description: |-
+            To is the lifecycle state to move to. Required, and the move must be a legal
+            edge from the item's current state.
+          type: string
       type: object
     treeEntryJSON:
       properties:
@@ -12212,6 +12929,30 @@ components:
           description: off|beta|ga
           type: string
       type: object
+    userOptinReq:
+      properties:
+        handle:
+          description: |-
+            Handle is the display name shown on a listed row: 1-40 characters of letters,
+            digits, space, dot, underscore, apostrophe or hyphen. Left empty on a listing
+            opt-in it defaults to the caller's username.
+          type: string
+        listed:
+          description: |-
+            Listed publishes the caller's row to other viewers of the board when true, and
+            anonymizes it when false.
+          type: boolean
+      type: object
+    userOptinView:
+      properties:
+        canSet:
+          description: false when the caller's identity can't be resolved
+          type: boolean
+        handle:
+          type: string
+        listed:
+          type: boolean
+      type: object
     usersOut:
       properties:
         data:
@@ -12312,6 +13053,15 @@ components:
           items:
             $ref: '#/components/schemas/FlowVersion'
           type: array
+      type: object
+    versionView:
+      properties:
+        createdAt:
+          type: string
+        type:
+          type: string
+        version:
+          type: integer
       type: object
     waiting:
       properties:
@@ -22240,28 +22990,120 @@ paths:
       - connectors
   /v1/content/{doctype}/{name}/transition:
     post:
-      operationId: post_v1_content_by_doctype_by_name_transition
+      description: |-
+        PostTransition moves one content item to a new lifecycle state and, on the move to
+        published, fans it out to the item's channels. The edge must be legal for the
+        item's current state — an illegal move is refused with 409 — and the status write
+        re-validates it at the storage boundary. Distribution is best effort: its honest
+        state is reported on the result and a distribution failure never rolls the status
+        change back.
+      operationId: post_v1_content_doctype_name_transition
       parameters:
-      - in: path
+      - description: DocType is the content type to act on, from the path.
+        example: SocialPost
+        in: path
         name: doctype
         required: true
         schema:
           type: string
-      - in: path
+      - description: Name is the document to act on, from the path.
+        example: spring-teaser
+        in: path
         name: name
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              doctype: SocialPost
+              name: spring-teaser
+              to: published
+            schema:
+              $ref: '#/components/schemas/transitionIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransitionResult'
+          description: ok
+      summary: PostTransition moves one content item to a new lifecycle state and,
+        on the move to published, fans it out to the item's channels.
       tags:
       - content
   /v1/content/board:
     get:
+      description: |-
+        GetBoard aggregates the caller org's marketing content across every publishable
+        content type into ONE queue board — the cross-type read the framework's
+        per-DocType list cannot give. It never fails on a partial outage: a content type
+        the org has not installed, or one whose search errors, is skipped and logged
+        rather than failing the whole board.
       operationId: get_v1_content_board
+      parameters:
+      - description: |-
+          Status keeps only items in one lifecycle state (draft, in_review, approved,
+          queued, published, archived). An undefined state is refused.
+        example: queued
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
+      - description: Project keeps only items in one brand/site sub-scope.
+        in: query
+        name: project
+        required: false
+        schema:
+          type: string
+      - description: |-
+          DocType keeps only one content type; omitted, the board spans every
+          publishable type. An unknown type is refused.
+        in: query
+        name: doctype
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit caps the rows returned, clamped to 1000. Defaults to 200, which is also
+          what a non-positive or unparseable value takes.
+        example: 50
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/boardPage'
+          description: ok
+      summary: GetBoard aggregates the caller org's marketing content across every
+        publishable content type into ONE queue board — the cross-type read the framework's
+        per-DocType list cannot give.
       tags:
       - content
   /v1/content/channels:
     get:
+      description: |-
+        GetChannels lists the distribution channels the caller's org has connected — the
+        social integrations a publish can target. A deployment with no distribution edge
+        wired answers 503 rather than an empty list that would read as "no channels".
       operationId: get_v1_content_channels
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/channelList'
+          description: ok
+      summary: GetChannels lists the distribution channels the caller's org has connected
+        — the social integrations a publish can target.
       tags:
       - content
   /v1/content/generate:
@@ -22271,12 +23113,53 @@ paths:
       - content
   /v1/content/lifecycle:
     get:
+      description: |-
+        GetLifecycle returns the ONE marketing-content state machine: the ordered
+        lifecycle states, which state a fresh document starts in, which one is publicly
+        live, and the legal successors of every state. The console builds its board
+        columns and its per-item action buttons from this single answer, so the UI and
+        the write-time enforcement hook can never disagree about what is legal.
       operationId: get_v1_content_lifecycle
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/stateGraph'
+          description: ok
+      summary: 'GetLifecycle returns the ONE marketing-content state machine: the
+        ordered lifecycle states, which state a fresh document starts in, which one
+        is publicly live, and the legal successors of every state.'
       tags:
       - content
   /v1/content/publish:
     post:
+      description: |-
+        Publish distributes one CMS content item to the channels recorded on it and
+        returns the honest per-channel outcome. The item names itself — its caption,
+        media and channel list are read from the stored document, not from this request.
+        It is idempotent per channel (a channel already posted for this item is skipped),
+        and a publish that loses the per-item lease to a live publisher answers status
+        "in_progress" having posted nothing.
       operationId: post_v1_content_publish
+      requestBody:
+        content:
+          application/json:
+            example:
+              doctype: SocialPost
+              name: spring-teaser
+            schema:
+              $ref: '#/components/schemas/PublishInput'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishResult'
+          description: ok
+      summary: Publish distributes one CMS content item to the channels recorded on
+        it and returns the honest per-channel outcome.
       tags:
       - content
   /v1/crawl/:
@@ -30234,37 +31117,148 @@ paths:
       - marketing
   /v1/marketplace:
     get:
+      description: |-
+        Discover lists every tool and agent the caller can reach in their own org and
+        project, enriched with any public listing's title, category and price, and with
+        installed=true on the ones already activated for that scope. It is the shop
+        window: one read that answers what exists, what it costs and what is already on.
       operationId: get_v1_marketplace
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/marketCatalog'
+          description: ok
+      summary: Discover lists every tool and agent the caller can reach in their own
+        org and project, enriched with any public listing's title, category and price,
+        and with installed=true on the ones already activated for that scope.
       tags:
       - marketplace
   /v1/marketplace/install:
     post:
+      description: |-
+        Install activates one tool for the caller's own org and project. A marketplace
+        install IS the tool plane's activation write — one store, one truth — so an
+        installed capability is immediately dispatchable and a monetized one is priced
+        from its listing at every call. The tool must resolve in the caller's scope, so
+        installing something that does not exist is refused rather than recorded.
       operationId: post_v1_marketplace_install
+      requestBody:
+        content:
+          application/json:
+            example:
+              tool: summarize
+            schema:
+              $ref: '#/components/schemas/installReq'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/installState'
+          description: ok
+      summary: Install activates one tool for the caller's own org and project.
       tags:
       - marketplace
   /v1/marketplace/listings:
     get:
+      description: |-
+        ListListings returns the listings the caller's own org has published — what this
+        org is offering, not what it can buy. A publisher only ever sees its own rows.
       operationId: get_v1_marketplace_listings
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/listingPage'
+          description: ok
+      summary: ListListings returns the listings the caller's own org has published
+        — what this org is offering, not what it can buy.
       tags:
       - marketplace
     post:
+      description: |-
+        Publish offers one tool on the marketplace, optionally monetized. The tool must
+        already resolve in the publisher's own scope, so a listing can never advertise a
+        capability that does not exist; a listing with a price must name the payout wallet
+        the x402 seam settles to, so a monetized offer is never unpayable. The listing is
+        owned by the publishing org and answers 201 with the created row.
       operationId: post_v1_marketplace_listings
+      requestBody:
+        content:
+          application/json:
+            example:
+              priceCents: 25
+              public: true
+              recipient: "0xabc"
+              title: Summarize
+              tool: summarize
+            schema:
+              $ref: '#/components/schemas/publishReq'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+          description: created
+      summary: Publish offers one tool on the marketplace, optionally monetized.
       tags:
       - marketplace
   /v1/marketplace/listings/{id}:
     delete:
-      operationId: delete_v1_marketplace_listings_by_id
+      description: |-
+        Unpublish withdraws one of the caller org's listings from the marketplace and
+        answers 204. Only the publishing org can remove its own listing; an id that is
+        unknown, or belongs to another org, is the same 404, so a probe learns nothing
+        about what exists. Removing a listing removes its price from per-call enforcement;
+        it does not uninstall the tool for anyone who already installed it.
+      operationId: delete_v1_marketplace_listings_id
       parameters:
-      - in: path
+      - description: ID is the listing to unpublish, from the path.
+        example: lst_1
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: Unpublish withdraws one of the caller org's listings from the marketplace
+        and answers 204.
       tags:
       - marketplace
   /v1/marketplace/uninstall:
     post:
+      description: |-
+        Uninstall deactivates one tool for the caller's own org and project, so it stops
+        being dispatchable there. It is the exact inverse of install and touches the same
+        activation record; deactivating something that was never active is not an error.
+        The listing itself is untouched — this withdraws the caller's use of a capability,
+        not anyone's offer of it.
       operationId: post_v1_marketplace_uninstall
+      requestBody:
+        content:
+          application/json:
+            example:
+              tool: summarize
+            schema:
+              $ref: '#/components/schemas/installReq'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/installState'
+          description: ok
+      summary: Uninstall deactivates one tool for the caller's own org and project,
+        so it stops being dispatchable there.
       tags:
       - marketplace
   /v1/mcp:
@@ -32784,42 +33778,139 @@ paths:
       - projects
   /v1/prompts:
     get:
+      description: |-
+        List returns the caller org's prompt library as one row per prompt: its name,
+        type, every version number it has, its taxonomy and when it last changed. The
+        template bodies are deliberately absent — fetch one prompt to read its text.
       operationId: get_v1_prompts
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/promptList'
+          description: ok
+      summary: 'List returns the caller org''s prompt library as one row per prompt:
+        its name, type, every version number it has, its taxonomy and when it last
+        changed.'
       tags:
       - prompts
     post:
+      description: |-
+        Create records a prompt for the caller's org and answers 201 with it. A name the
+        org already uses is NOT an error and NOT an overwrite: it appends a new version,
+        so the library keeps real, inspectable history and the response carries the whole
+        version list. The name is also the URL segment the prompt is fetched by, which is
+        why its shape is constrained and a handful of names are reserved.
       operationId: post_v1_prompts
+      requestBody:
+        content:
+          application/json:
+            example:
+              name: greeting
+              prompt: You are a helpful assistant.
+              tags:
+              - support
+            schema:
+              $ref: '#/components/schemas/promptReq'
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/promptDetail'
+          description: created
+      summary: Create records a prompt for the caller's org and answers 201 with it.
       tags:
       - prompts
   /v1/prompts/{name}:
     delete:
-      operationId: delete_v1_prompts_by_name
+      description: |-
+        Delete removes one of the caller org's prompts and every version of it, answering
+        204. It is scoped to the caller's org, so a name another tenant owns is the same
+        404 an unknown name gives. There is no undo: the version history goes with it.
+      operationId: delete_v1_prompts_name
       parameters:
-      - in: path
+      - description: Name is the prompt to act on, from the path.
+        example: greeting
+        in: path
         name: name
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: Delete removes one of the caller org's prompts and every version of
+        it, answering 204.
       tags:
       - prompts
     get:
-      operationId: get_v1_prompts_by_name
+      description: |-
+        Get returns one of the caller org's prompts: its CURRENT template text plus the
+        metadata of every version it has had. The history carries version numbers, types
+        and timestamps only — not each version's body — so a long history cannot inflate
+        this response. A name the caller's org does not own is 404, whoever owns it.
+      operationId: get_v1_prompts_name
       parameters:
-      - in: path
+      - description: Name is the prompt to act on, from the path.
+        example: greeting
+        in: path
         name: name
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/promptDetail'
+          description: ok
+      summary: 'Get returns one of the caller org''s prompts: its CURRENT template
+        text plus the metadata of every version it has had.'
       tags:
       - prompts
   /v1/prompts/catalog:
     get:
+      description: |-
+        Catalog returns the read-only starter prompt library shipped with the binary —
+        reference content every tenant sees the same, NOT the caller's own prompts and
+        never mixed into them. An org's library stays honestly empty until someone
+        explicitly imports a starter, which is an ordinary POST /v1/prompts. Entries that
+        would fail the create guards are dropped, so everything offered here can actually
+        be imported.
       operationId: get_v1_prompts_catalog
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/catalogList'
+          description: ok
+      summary: Catalog returns the read-only starter prompt library shipped with the
+        binary — reference content every tenant sees the same, NOT the caller's own
+        prompts and never mixed into them.
       tags:
       - prompts
   /v1/prompts/metrics:
     get:
+      description: |-
+        Metrics returns real per-prompt statistics for the caller's org: how many versions
+        each prompt has, which one is current, and when it was created and last changed.
+        Every number is counted from the store — nothing here is estimated or fabricated.
       operationId: get_v1_prompts_metrics
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/metricList'
+          description: ok
+      summary: 'Metrics returns real per-prompt statistics for the caller''s org:
+        how many versions each prompt has, which one is current, and when it was created
+        and last changed.'
       tags:
       - prompts
   /v1/referrals:
@@ -34111,53 +35202,162 @@ paths:
       - store
   /v1/sync:
     get:
+      description: |-
+        List returns every sync link the caller's org has, each with its two endpoints, its
+        direction and trigger policy, and the time it last reconciled. Scoped to the
+        caller's own org — another tenant's links are structurally unreachable.
       operationId: get_v1_sync
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/syncList'
+          description: ok
+      summary: List returns every sync link the caller's org has, each with its two
+        endpoints, its direction and trigger policy, and the time it last reconciled.
       tags:
       - sync
     post:
+      description: |-
+        Create declares a sync between two endpoints and returns it. It is an UPSERT:
+        re-declaring the same source and target updates that link rather than piling up
+        duplicates, so a console that re-submits is safe. The org comes from the validated
+        principal, never from the request, so a sync can only ever bind endpoints inside
+        the caller's own org. A git source must be an https clone URL on the provider's own
+        host with no embedded credentials; a target left empty is derived as a native
+        repository named after the source. With run=true the first reconcile is queued in
+        the background, so a large initial import never blocks this response.
       operationId: post_v1_sync
+      requestBody:
+        content:
+          application/json:
+            example:
+              run: true
+              source:
+                locator: https://github.com/acme/site
+                provider: github
+            schema:
+              $ref: '#/components/schemas/syncReq'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/syncView'
+          description: ok
+      summary: Create declares a sync between two endpoints and returns it.
       tags:
       - sync
   /v1/sync/{id}:
     delete:
-      operationId: delete_v1_sync_by_id
+      description: |-
+        Delete removes one sync and tears down the outbound mirror it derived, answering
+        204. The teardown is the point: without it an unsynced repository would keep
+        force-pushing to the upstream it is no longer linked to. Org-scoped, so another
+        tenant's id is the same 404 an unknown id gives.
+      operationId: delete_v1_sync_id
       parameters:
-      - in: path
+      - description: ID is the sync to act on, from the path.
+        example: sync_1
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "204":
+          description: no content
+      summary: Delete removes one sync and tears down the outbound mirror it derived,
+        answering 204.
       tags:
       - sync
     get:
-      operationId: get_v1_sync_by_id
+      description: |-
+        Get returns one sync by id. It is org-scoped: an id belonging to another tenant is
+        the same 404 an unknown id gives, so a probe learns nothing about what exists.
+      operationId: get_v1_sync_id
       parameters:
-      - in: path
+      - description: ID is the sync to act on, from the path.
+        example: sync_1
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/syncView'
+          description: ok
+      summary: Get returns one sync by id.
       tags:
       - sync
     patch:
-      operationId: patch_v1_sync_by_id
+      description: |-
+        Patch updates one sync's mutable policy — direction, trigger and actor — in place.
+        The endpoints and the kind are immutable: re-pointing a sync is a delete and a
+        create, so a link can never silently start syncing somewhere else. A field the
+        request omits is left as it was. Changing the direction immediately reconciles the
+        derived outbound mirror, so turning push off stops the upstream being written to
+        rather than merely recording the intent.
+      operationId: patch_v1_sync_id
       parameters:
-      - in: path
+      - description: ID is the sync to update, from the path.
+        example: sync_1
+        in: path
         name: id
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            example:
+              direction: pull
+              id: sync_1
+            schema:
+              $ref: '#/components/schemas/patchSyncIn'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/syncView'
+          description: ok
+      summary: Patch updates one sync's mutable policy — direction, trigger and actor
+        — in place.
       tags:
       - sync
   /v1/sync/{id}/run:
     post:
-      operationId: post_v1_sync_by_id_run
+      description: |-
+        Run reconciles one sync now — the manual re-sync, and the initial import for a link
+        created without run=true. The work is handed to a bounded background worker and the
+        call answers 202 immediately, so a large mirror-in never holds the request open;
+        queued=true means accepted, not finished.
+      operationId: post_v1_sync_id_run
       parameters:
-      - in: path
+      - description: ID is the sync to act on, from the path.
+        example: sync_1
+        in: path
         name: id
         required: true
         schema:
           type: string
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/syncQueued'
+          description: accepted
+      summary: Run reconciles one sync now — the manual re-sync, and the initial import
+        for a link created without run=true.
       tags:
       - sync
   /v1/tasks:
@@ -35226,7 +36426,61 @@ paths:
       - usage
   /v1/usage/activity:
     get:
+      description: |-
+        Activity returns the per-day usage series for ONE authorized subject — the points a
+        contribution heatmap and a timeline are drawn from, gap-filled so every day in the
+        range is present. Authorization is resolved server-side from the validated
+        principal, so a caller can never widen the subject past what they are entitled to:
+        a non-admin reads only themselves and their own org. subject=project answers empty
+        with a note, because the usage ledger records no project column yet. When the
+        warehouse is not connected the series answers empty with available=false rather
+        than fabricated days.
       operationId: get_v1_usage_activity
+      parameters:
+      - description: 'Subject is what the series is about: "user" (default), "org"
+          or "project".'
+        example: user
+        in: query
+        name: subject
+        required: false
+        schema:
+          type: string
+      - description: |-
+          ID names the subject within what the caller is entitled to see. Omitted (or
+          "me") it is the caller themselves, or their own org. Another user requires org
+          admin and must belong to the caller's org; another org requires a SuperAdmin.
+        in: query
+        name: id
+        required: false
+        schema:
+          type: string
+      - description: From is the first day of the range, "2006-01-02". Defaults to
+          90 days back.
+        example: "2026-01-01"
+        in: query
+        name: from
+        required: false
+        schema:
+          type: string
+      - description: |-
+          To is the last day of the range, "2006-01-02". Defaults to today; the span is
+          clamped to 366 days.
+        example: "2026-03-31"
+        in: query
+        name: to
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityView'
+          description: ok
+      summary: Activity returns the per-day usage series for ONE authorized subject
+        — the points a contribution heatmap and a timeline are drawn from, gap-filled
+        so every day in the range is present.
       tags:
       - usage
   /v1/usage/analytics:
@@ -35241,26 +36495,161 @@ paths:
       - usage
   /v1/usage/leaderboard:
     get:
+      description: |-
+        Leaderboard ranks AI usage over a window, either the users of the caller's own org
+        or organizations against each other, and always reports the caller's own standing
+        even when it falls outside the returned page. Identities are private by default: a
+        caller sees themselves, plus the peers or orgs that opted into public listing, and
+        only an admin sees their own org's members named. Cross-org spend is restricted to
+        platform admins. When the warehouse is not connected the board answers empty with
+        available=false rather than a fabricated rank.
       operationId: get_v1_usage_leaderboard
+      parameters:
+      - description: |-
+          Scope picks the board: "personal" (default) ranks the caller among their own
+          org's users, "org" is that same org board named for an admin, "global" ranks
+          organizations against each other.
+        example: personal
+        in: query
+        name: scope
+        required: false
+        schema:
+          type: string
+      - description: 'Metric is the value ranked: tokens (default), requests, or cost.'
+        example: tokens
+        in: query
+        name: metric
+        required: false
+        schema:
+          type: string
+      - description: 'Period is the window ranked: day, week, month (default) or all.'
+        example: week
+        in: query
+        name: period
+        required: false
+        schema:
+          type: string
+      - description: |-
+          Limit caps the rows returned, clamped to 100. Defaults to 10, which is also
+          what a non-positive or unparseable value takes.
+        example: 10
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaderboardView'
+          description: ok
+      summary: Leaderboard ranks AI usage over a window, either the users of the caller's
+        own org or organizations against each other, and always reports the caller's
+        own standing even when it falls outside the returned page.
       tags:
       - usage
   /v1/usage/leaderboard/optin:
     get:
+      description: |-
+        GetOptin returns the caller's own public-listing preference and their org's,
+        each with whether the caller may change it. Public listing is opt-in and private
+        by default, so a fresh caller reads listed=false for both.
       operationId: get_v1_usage_leaderboard_optin
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/optinView'
+          description: ok
+      summary: GetOptin returns the caller's own public-listing preference and their
+        org's, each with whether the caller may change it.
       tags:
       - usage
     put:
+      description: |-
+        PutUserOptin sets the CALLER's own public-listing preference on the leaderboard.
+        Self only: the row written is keyed by the caller's validated ledger identity, so
+        this can never edit another member's visibility whatever the request says. A
+        caller opting in with no handle is given their username, so a listed row never
+        renders as "Anonymous" to its own owner.
       operationId: put_v1_usage_leaderboard_optin
+      requestBody:
+        content:
+          application/json:
+            example:
+              handle: ada
+              listed: true
+            schema:
+              $ref: '#/components/schemas/userOptinReq'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/userOptinView'
+          description: ok
+      summary: PutUserOptin sets the CALLER's own public-listing preference on the
+        leaderboard.
       tags:
       - usage
   /v1/usage/leaderboard/optin/org:
     put:
+      description: |-
+        PutOrgOptin sets the ORG's listing on the cross-org global board. Only an admin of
+        the caller's own org — an org admin or a platform SuperAdmin — may change it, and
+        the org written is the caller's validated tenant, never a value from the request.
+        Listing consents to publishing the org's usage VOLUME; cross-org spend stays
+        restricted to platform admins regardless.
       operationId: put_v1_usage_leaderboard_optin_org
+      requestBody:
+        content:
+          application/json:
+            example:
+              display: Acme
+              listed: true
+            schema:
+              $ref: '#/components/schemas/orgOptinReq'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/orgOptinView'
+          description: ok
+      summary: PutOrgOptin sets the ORG's listing on the cross-org global board.
       tags:
       - usage
   /v1/usage/rollup/backfill:
     post:
+      description: |-
+        Backfill seeds the derived usage rollup from ledger history — the rows written
+        before the incremental view existed, which that view can never capture. SuperAdmin
+        only. Because the rollup accumulates, a second unguarded run would double every
+        day it re-reads, so it refuses with 409 when the rollup already holds rows unless
+        force=true is passed; forcing WILL double-count.
       operationId: post_v1_usage_rollup_backfill
+      requestBody:
+        content:
+          application/json:
+            example:
+              before: "2026-01-01T00:00:00Z"
+            schema:
+              $ref: '#/components/schemas/backfillQuery'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/backfillResult'
+          description: ok
+      summary: Backfill seeds the derived usage rollup from ledger history — the rows
+        written before the incremental view existed, which that view can never capture.
       tags:
       - usage
   /v1/usage/samples:
