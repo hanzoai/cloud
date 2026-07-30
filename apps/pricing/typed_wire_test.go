@@ -14,62 +14,45 @@ import (
 )
 
 // This file is the GATE on the typed/raw partition of the pricing surface: the
-// 17 raw routes are a CLOSED list, each named with the wire fact that keeps it
+// 2 raw routes are a CLOSED list, each named with the wire fact that keeps it
 // raw, and any route that is neither a typed op nor on that list fails the
 // suite — so the next pricing route is typed by default, and dropping one out
 // of the registry takes a deliberate edit with a reason. Same shape as
 // apps/team/typed_wire_test.go, which is the worked example of pinning a split
 // tranche with a test instead of prose.
 
-// verbatimProxy is the one wire fact behind fifteen of the refusals: the route
-// is a byte-for-byte proxy of the @hanzo/pricing goja bundle. The bundle picks
-// the status (200, or 503 when the section is absent) and its bytes are written
-// unmodified (passthrough); a typed op answers the ONE status it declared, over
-// a Go re-marshal that re-orders keys and re-formats numbers. Two wire changes,
-// so the route stays raw until zip can express the proxy class. The GATED
-// catalog routes do not have this property — they already decoded and
-// re-marshalled through Go — which is why they are typed and these are not.
-const verbatimProxy = "a verbatim status+bytes proxy of the @hanzo/pricing bundle; " +
-	"a typed op answers one declared status over a Go re-marshal."
-
 // untypedByDesign is the CLOSED list of pricing operations that are NOT typed
 // ops, each with the reason it cannot be one. A typed op is a route PLUS a
 // registry entry — the one value the OpenAPI operation, the MCP tool, the CLI
 // command and the SDK method all come from — so an operation missing from that
-// registry is invisible to all four. These 17 are missing on purpose. Addresses
+// registry is invisible to all four. These 2 are missing on purpose. Addresses
 // are written the way the DOCUMENT writes them, which is the identity every
 // projection keys on. Each reason was re-verified against zip v1.18.6's own
-// source (typed.go: invoke unmarshals before the handler, the dispatch ends in
-// c.JSON(out) under one declared status; openapi.go: schemaOf reflects []byte
-// as an integer array), because "cannot be typed" is a claim about a dependency
-// and a dependency moves — re-check when zip ships raw passthrough (#78's
-// family) and convert.
+// source (typed.go: invoke unmarshals before the handler and binds the URL by
+// fiber's own parameter name; openapi.go: schemaOf reflects []byte as an integer
+// array) and against openapi.translate here, because "cannot be typed" is a
+// claim about a dependency and a dependency moves — re-check on the next zip
+// bump and convert.
+//
+// It was 17. The fifteen fixed sections came off it once the premise was
+// re-checked: they were held to be verbatim byte proxies of the @hanzo/pricing
+// bundle, but apps/goja re-marshals the bundle's answer through Go's
+// encoding/json (Host.DispatchWith) before any handler sees it, so a typed op
+// re-marshalling the same decoded value is byte-identical — which
+// sections_wire_test.go proves route by route against the live router.
 var untypedByDesign = map[string]string{
-	"GET /v1/pricing/base":            verbatimProxy,
-	"GET /v1/pricing/blockchain":      verbatimProxy,
-	"GET /v1/pricing/cloud":           verbatimProxy,
-	"GET /v1/pricing/cloud/plans":     verbatimProxy,
-	"GET /v1/pricing/cloud/regions":   verbatimProxy,
-	"GET /v1/pricing/cloud/storage":   verbatimProxy,
-	"GET /v1/pricing/compute":         verbatimProxy,
-	"GET /v1/pricing/compute/presets": verbatimProxy,
-	"GET /v1/pricing/gpu":             verbatimProxy,
-	"GET /v1/pricing/iam":             verbatimProxy,
-	"GET /v1/pricing/paas":            verbatimProxy,
-	"GET /v1/pricing/policy":          verbatimProxy,
-	"GET /v1/pricing/subscriptions":   verbatimProxy,
-	"GET /v1/pricing/tools":           verbatimProxy,
-	"GET /v1/pricing-policy":          verbatimProxy,
-
 	"PATCH /v1/admin/catalog/models/{wildcard1}": "the model id may contain '/' " +
 		"(anthropic/claude-opus-4.6), so it routes through a greedy wildcard fiber names `*1`; " +
 		"binding it needs an In field tagged json:\"*1\", which every projection would then " +
-		"publish — a schema nobody can read is worse than none. Its body also carries " +
+		"publish — and the document names that same segment {wildcard1}, because `*1` is not a " +
+		"legal URI-template name, so the published parameter and the bound field cannot even " +
+		"agree. A schema nobody can read is worse than none. Its body also carries " +
 		"`overrides` (see providers/{name}).",
 	"PATCH /v1/admin/catalog/providers/{name}": "the body carries `overrides`, a raw JSON " +
-		"merge patch (RFC 7386): zip reflects json.RawMessage — it is []byte — as an ARRAY OF " +
-		"INTEGERS, a false schema; and retyping the field map[string]any moves " +
-		"{\"overrides\":null} from \"clear the override\" to \"leave it alone\", a wire change.",
+		"merge patch (RFC 7386) stored and echoed verbatim: zip reflects json.RawMessage — it " +
+		"is []byte — as an ARRAY OF INTEGERS, a false schema; and retyping the field " +
+		"map[string]any re-marshals the patch, sorting its keys, so the overlay this route " +
+		"echoes and GET /v1/admin/catalog echoes later comes back reordered. A wire change.",
 }
 
 // pricingOps reads BOTH projections of the live router at their one shared
@@ -121,7 +104,7 @@ func pricingOps(t *testing.T) (served map[string]bool, typed map[string]string) 
 }
 
 // TestEveryRouteIsTypedOrNamed fails when a pricing operation is neither a
-// typed op nor one of the 17 above — so the next route added here is typed by
+// typed op nor one of the 2 above — so the next route added here is typed by
 // default, and dropping one out of the registry takes a deliberate edit with a
 // reason.
 func TestEveryRouteIsTypedOrNamed(t *testing.T) {

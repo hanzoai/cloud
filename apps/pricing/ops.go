@@ -12,24 +12,32 @@ package pricing
 // WHAT STAYS RAW, and why it is a property of the wire rather than of effort.
 // The partition is PINNED by typed_wire_test.go (untypedByDesign +
 // TestEveryRouteIsTypedOrNamed): a route that is neither a typed op nor on that
-// closed list fails the suite, so the next route here is typed by default.
+// closed list fails the suite, so the next route here is typed by default. Two
+// of thirty-two are left, and both are the SAME route pattern's two halves — the
+// admin overlay PATCHes:
 //
-//   - the fourteen /v1/pricing/{compute,cloud,subscriptions,…} routes and
-//     /v1/pricing-policy are a VERBATIM proxy of the @hanzo/pricing bundle: the
-//     bundle picks the status (200, or 503 when a section is absent) and its
-//     bytes are written unmodified (passthrough). A typed op answers the ONE
-//     status it declared, over a Go re-marshal — two wire changes, so they stay
-//     raw until the proxy class is expressible.
 //   - PATCH /v1/admin/catalog/models/* addresses a model id that may contain
 //     '/', so it routes through a greedy wildcard. fiber names that parameter
 //     `*1`; binding it would need an input field tagged `json:"*1"`, which is
-//     what every projection would then publish. A schema nobody can read is
-//     worse than none.
+//     what every projection would then publish — while the DOCUMENT names the
+//     same segment `{wildcard1}` (openapi.translate), because `*1` is not a
+//     legal URI-template name. So the published parameter and the bound field
+//     could not even agree on a name. A schema nobody can read is worse than
+//     none.
 //   - PATCH /v1/admin/catalog/providers/:name carries `overrides`, a raw JSON
-//     merge patch (RFC 7386). zip reflects json.RawMessage as an ARRAY OF
-//     INTEGERS (it is []byte), so typing it publishes a false schema; and
-//     retyping the field to map[string]any moves `{"overrides":null}` from
-//     "clear the override" to "leave it alone", which is a wire change.
+//     merge patch (RFC 7386) that is STORED and echoed verbatim. zip reflects
+//     json.RawMessage as an ARRAY OF INTEGERS (it is []byte — openapi.go's
+//     schemaOf takes the Slice arm), so typing it as it stands publishes a false
+//     schema; and retyping the field map[string]any re-marshals the patch, which
+//     sorts its keys — so the overlay this route echoes, and the one GET
+//     /v1/admin/catalog echoes later under "_overlay", would come back in a
+//     different order than the admin sent. That is a wire change.
+//
+// The fifteen fixed sections (/v1/pricing/{compute,cloud,subscriptions,…} and
+// /v1/pricing-policy) were on this list too, on the grounds that they proxy the
+// bundle's bytes verbatim. They do not: apps/goja re-marshals the bundle's
+// answer with Go's encoding/json before it ever reaches a handler, so decoding
+// and re-marshalling it is byte-identical. They are ops now — see sections.go.
 
 import (
 	"context"

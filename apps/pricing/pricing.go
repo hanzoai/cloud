@@ -144,30 +144,11 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// /v1/pricing/* read surface (mirrors server.mjs handler-for-handler). The
 	// catalog routes (the root blob + models/free/featured/providers/summary +
 	// the single model lookup) are gated below by the enablement overlay;
-	// everything else is a straight pass-through of the bundle's output. The
-	// `fixed` list is audited to carry NO model/provider identities (plans/infra/
-	// tools/gpu/policy only) — confirmed against the plans catalog.
-	type binding struct{ path, route string }
-	fixed := []binding{
-		{"/v1/pricing/compute", "compute"},
-		{"/v1/pricing/compute/presets", "compute/presets"},
-		{"/v1/pricing/cloud", "cloud"},
-		{"/v1/pricing/cloud/plans", "cloud/plans"},
-		{"/v1/pricing/cloud/regions", "cloud/regions"},
-		{"/v1/pricing/cloud/storage", "cloud/storage"},
-		{"/v1/pricing/subscriptions", "subscriptions"},
-		{"/v1/pricing/blockchain", "blockchain"},
-		{"/v1/pricing/iam", "iam"},
-		{"/v1/pricing/base", "base"},
-		{"/v1/pricing/paas", "paas"},
-		{"/v1/pricing/policy", "policy"},
-		{"/v1/pricing/tools", "tools"},
-		{"/v1/pricing/gpu", "gpu"},
-	}
-	for _, b := range fixed {
-		route := b.route
-		app.Get(b.path, func(c *zip.Ctx) error { return dispatch(c, route, nil) })
-	}
+	// the fixed sections carry NO model/provider identity (plans/infra/tools/
+	// gpu/policy only — audited against the plans catalog) so there is nothing
+	// for the overlay to gate and they answer the section verbatim. Both halves
+	// are typed ops; the sections live in sections.go.
+	mountSections(zapp, o)
 
 	// Gated catalog read path: the overlay filters disabled/beta entries and
 	// merges overrides for the calling org (admins see everything, flagged).
@@ -182,10 +163,14 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	zip.Get(zapp, "/v1/pricing/summary", o.summary)
 	zip.Get(zapp, "/v1/pricing/model/:name", o.getModel)
 
-	// Admin write surface for the overlay (SuperAdmin only; see admin.go). The two
-	// PATCHes stay raw: the model id routes through a greedy wildcard fiber names
-	// `*1`, and the shared `overrides` field is a raw JSON merge patch zip would
-	// publish as an array of integers. See ops.go.
+	// Admin write surface for the overlay (SuperAdmin only; see admin.go). These
+	// two PATCHes are the ONLY untyped routes left on this surface, and both for a
+	// wire fact: the model id routes through a greedy wildcard fiber names `*1`
+	// while the document names it `{wildcard1}`, so the bound field and the
+	// published parameter cannot agree; and the shared `overrides` field is an RFC
+	// 7386 merge patch stored and echoed VERBATIM, which zip publishes as an array
+	// of integers (it is []byte) and which map[string]any would reorder. ops.go
+	// carries the full reasoning; typed_wire_test.go pins it.
 	zip.Get(zapp, "/v1/admin/catalog", o.adminCatalog)
 	app.Patch("/v1/admin/catalog/models/*", adminPatchModel)
 	app.Patch("/v1/admin/catalog/providers/:name", adminPatchProvider)
@@ -208,14 +193,15 @@ func Mount(app cloud.Router, deps cloud.Deps) error {
 	// strictly under /v1/pricing/*. (Same reasoning the note below records for
 	// /v1/plans, /v1/tools, /v1/gpu, /v1/cloud, /v1/subscriptions, /v1/iam —
 	// all owned by other subsystems at the top level to avoid collisions.)
-	app.Get("/v1/pricing-policy", func(c *zip.Ctx) error { return dispatch(c, "policy", nil) })
+	// The ONE top-level alias this surface does serve, /v1/pricing-policy, is
+	// declared with the other sections in sections.go.
 
 	// Live sync trigger — admin only. Network fetch in Go, markup in goja.
 	zip.Post(zapp, "/v1/pricing/sync", o.sync)
 
 	logger.Info("pricing mounted",
 		"prefix", "/v1/pricing",
-		"fixed_routes", len(fixed),
+		"section_routes", 15, // the fixed plans/infra/tools/gpu/policy sections + the policy alias
 		"gated_routes", 6, // models, free, featured, providers, summary, model/:name
 		"admin_routes", 3, // GET /v1/admin/catalog + PATCH models/* + PATCH providers/:name
 		"overlay_db", dbPath,
@@ -249,24 +235,6 @@ func rawDispatch(ctx context.Context, route string, params map[string]string) (i
 		return 0, nil, err
 	}
 	return resp.Status, resp.Body, nil
-}
-
-// dispatch writes a goja route's output verbatim — the ungated pass-through for
-// the non-catalog read routes, and the reason they are not typed ops: the STATUS
-// and the BYTES both come from the @hanzo/pricing bundle, and a typed op can
-// state neither (see ops.go).
-func dispatch(c *zip.Ctx, route string, params map[string]string) error {
-	status, body, err := rawDispatch(c.Context(), route, params)
-	if err != nil {
-		c.Log().Error("pricing dispatch failed", "route", route, "err", err)
-		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "pricing dispatch failed"})
-	}
-	return passthrough(c, status, body)
-}
-
-func passthrough(c *zip.Ctx, status int, body json.RawMessage) error {
-	c.SetHeader("Content-Type", "application/json")
-	return c.Bytes(status, body)
 }
 
 // ---- the typed read plane ----
@@ -318,10 +286,11 @@ type pricingProviderList struct {
 	Updated any `json:"updated"`
 }
 
-// pricingBlob is a whole document from the pricing catalog whose keys are the
-// pricing source's own — the root payload and the stats summary. It is
-// deliberately not enumerated here: @hanzo/pricing owns the catalog's shape, and
-// a Go struct claiming to know it would be a second, staler source.
+// pricingBlob is an object whose keys are the pricing source's own — a whole
+// document (the root payload, the stats summary, a catalog section) or one entry
+// inside a section's list. It is deliberately not enumerated: @hanzo/pricing and
+// @hanzo/plans own the catalog's shape, and a Go struct claiming to know it would
+// be a second, staler source that silently drops every field they add.
 type pricingBlob map[string]any
 
 // pricingModelRef addresses one catalog model.
