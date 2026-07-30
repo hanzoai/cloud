@@ -51,7 +51,7 @@ const (
 	EventViewContent   StandardEvent = "view_content"
 	EventSearch        StandardEvent = "search"
 	EventLead          StandardEvent = "lead"
-	EventSignUp        StandardEvent = "sign_up"
+	EventSignUp        StandardEvent = "signup"
 	EventStartCheckout StandardEvent = "start_checkout"
 	EventAddToCart     StandardEvent = "add_to_cart"
 	EventPurchase      StandardEvent = "purchase"
