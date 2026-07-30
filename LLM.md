@@ -179,8 +179,38 @@ Test modes: `make test` is pure-Go (`CGO_ENABLED=0`). Encrypted-at-rest OrgDB
 tests (`cek`, `CLOUD_KMS_MASTER_KEY_REF` set) REQUIRE `CGO_ENABLED=1` +
 libsqlcipher (`cek/cek.go` refuses to encrypt in pure-Go); those run only in the
 Dockerfile's dedicated `-tags libsqlite3` CGO stage, and fail under `make test`
-by design (apps/git, kms, flags, x402, plugin/kmsreseal, finance). Bundle-embed
+by design (kms, flags, x402, plugin/kmsreseal, finance). Bundle-embed
 tests (apps/tasks/ui) need `make deploy-ui` first (real bundle is gitignored).
+(`apps/git` was in that list and no longer belongs: measured green under exactly
+that posture — `TEST_ENV` dev key, `-tags sqlite_fts5`, `CGO_ENABLED=0` — in 18s.)
+
+**Under cgo, `sqlite_math_functions` is a COMPILE-TIME REQUIREMENT, not a
+preference.** `hanzoai/base` declares a deliberate compile error without it
+(`base/core/sqlite_math_required.go`, `//go:build cgo && !sqlite_math_functions`):
+its search layer emits SQL calling `acos/cos/sin/radians/sqrt`, which the cgo
+sqlite has only behind that tag, so base refuses to build a binary whose SQL
+surface is smaller than the code above it writes against. **47 of cloud's 306
+packages reach `base/core`** (apps/git, apps/agents, apps/billing, apps/base, …
+plus their `plugin/<app>` mains), so a cgo build without the tag does not compile
+them. The Dockerfile carries it; the Makefile is `CGO_ENABLED=0` so it never
+needed it; `hanzo.yml`'s two RAW-go steps carried neither, and that is how they
+drifted — `go-vet` sets no `CGO_ENABLED` (the toolchain default is 1 wherever a C
+toolchain exists, which the CI runner provisions) and `go-unit` sets it to 1
+explicitly, so both failed to BUILD those 47 packages and reported
+`[build failed]` where a test run was expected. Both now pass the same
+`-tags "sqlite_fts5 sqlite_math_functions"` the image builds with. Re-derive the
+count, never trust it: `go list ./... | xargs -P12 -I{} sh -c 'go list -deps {} |
+grep -qx github.com/hanzoai/base/core && echo {}' | wc -l`.
+
+STILL DIVERGENT, and a decision for the owner rather than a patch: `go-unit`
+declares no `CLOUD_KMS_MASTER_KEY_REF`, while `make test` injects a dev key
+(`TEST_ENV`) precisely so the suite has one dev posture instead of a copy per
+package — and `hanzoai/ci` exports only GIT_TOKEN / S3 / registry creds into the
+step, never that key. So every cek-backed package still fails there for want of
+it (measured: `apps/code`, 6 tests, "cek: CLOUD_KMS_MASTER_KEY_REF is required").
+The fix is one of two shapes and both are policy: give CI the dev key, or route
+the step through the Makefile so the posture is declared once. Copying the key
+into `hanzo.yml` would make it two declarations, which is the drift above again.
 
 Store-heavy subsystem tests are fsync-bound, not CPU-bound. A mount opens its own
 SQLite stores, so a test that mounts several subsystems commits many times, and
