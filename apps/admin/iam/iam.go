@@ -99,12 +99,12 @@ func (c *Client) List(ctx context.Context, cr Creds, path string, q url.Values) 
 
 // Orgs lists organizations (GET /v1/iam/organizations).
 func (c *Client) Orgs(ctx context.Context, cr Creds, q url.Values) (List, error) {
-	return c.List(ctx, cr, "/v1/iam/organizations", q)
+	return c.List(ctx, cr, "/v1/iam/get-organizations", q)
 }
 
 // Users lists users (GET /v1/iam/users).
 func (c *Client) Users(ctx context.Context, cr Creds, q url.Values) (List, error) {
-	return c.List(ctx, cr, "/v1/iam/users", q)
+	return c.List(ctx, cr, "/v1/iam/get-users", q)
 }
 
 // Org fetches ONE organization row (GET /v1/iam/organizations/get?owner=&name=)
@@ -115,7 +115,7 @@ func (c *Client) Users(ctx context.Context, cr Creds, q url.Values) (List, error
 // error and falls back to a name-only row.
 func (c *Client) Org(ctx context.Context, cr Creds, id string) (Org, error) {
 	q := url.Values{"id": {id}}
-	env, err := c.get(ctx, cr, "/v1/iam/organizations/get", q)
+	env, err := c.get(ctx, cr, "/v1/iam/get-organization", q)
 	if err != nil {
 		return Org{}, err
 	}
@@ -134,7 +134,7 @@ func (c *Client) Org(ctx context.Context, cr Creds, id string) (Org, error) {
 // read as the same validated SuperAdmin.
 func (c *Client) User(ctx context.Context, cr Creds, id string) (map[string]any, error) {
 	q := url.Values{"id": {id}}
-	env, err := c.get(ctx, cr, "/v1/iam/users/get", q)
+	env, err := c.get(ctx, cr, "/v1/iam/get-user", q)
 	if err != nil {
 		return nil, err
 	}
