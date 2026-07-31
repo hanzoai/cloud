@@ -288,7 +288,7 @@ type createServerReq struct {
 // adding a near-duplicate beside it, so a retried enable is the same one server.
 // Answers 201 with the stored record.
 //
-// Example: {"listing": "com.acme_mcp", "authHeader": "Authorization", "secret": "Bearer …"}
+// Example: {"listing": "com.stripe_mcp", "authHeader": "Authorization", "secret": "Bearer …"}
 func (o toolOps) createServer(ctx context.Context, in *createServerReq) (*MCPServer, error) {
 	org, err := tenantOf(ctx)
 	if err != nil {
@@ -519,7 +519,7 @@ func (o toolOps) listCatalog(ctx context.Context, in *catalogQuery) (*mcpCatalog
 // is the addressing authority.
 type listingRef struct {
 	// ID is the listing, from the path. It is the publisher's reverse-DNS name
-	// with its one slash written as an underscore — "com.acme_mcp".
+	// with its one slash written as an underscore — "com.stripe_mcp".
 	ID string `json:"id"`
 }
 
