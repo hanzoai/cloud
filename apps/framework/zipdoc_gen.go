@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/framework/:doctype/:name", zip.Doc{
-		Description: "deleteDocument removes one document, after its on_trash hooks agree. A\nSUBMITTED document cannot be deleted — cancel it first. Answers 204.",
+		Description: "Removes one document, after its on_trash hooks agree. A\nSUBMITTED document cannot be deleted — cancel it first. Answers 204.",
 		Fields: map[string]string{
 			"docRef.doctype": "DocType is the document's DocType, from the path.",
 			"docRef.name":    "Name is the document's name — its key within the DocType — from the path.\nA name containing a space arrives percent-encoded and is decoded before it\nis matched against the stored one.",
@@ -18,14 +18,14 @@ func init() {
 		Example: json.RawMessage(`{"doctype":"Task","name":"TASK-00001"}`),
 	})
 	zip.Describe("DELETE /v1/framework/doctypes/:name", zip.Doc{
-		Description: "deleteDocType removes a DocType and every document stored under it. The\ndefinition and its data go together — a document with no schema can be neither\nvalidated nor read back — so there is no undo. Manager-only. Answers 204.",
+		Description: "Removes a DocType and every document stored under it. The\ndefinition and its data go together — a document with no schema can be neither\nvalidated nor read back — so there is no undo. Manager-only. Answers 204.",
 		Fields: map[string]string{
 			"docTypeRef.name": "Name is the DocType's name, from the path. A name containing a space\n(\"Sales Invoice\") arrives percent-encoded and is decoded before it is\nmatched against the stored one.",
 		},
 		Example: json.RawMessage(`{"name":"Task"}`),
 	})
 	zip.Describe("DELETE /v1/framework/roles/:user/:role", zip.Doc{
-		Description: "revokeRole removes one (user, role) grant in the caller's org. Manager-only.\nAnswers 204; a grant that does not exist is not found.",
+		Description: "Removes one (user, role) grant in the caller's org. Manager-only.\nAnswers 204; a grant that does not exist is not found.",
 		Fields: map[string]string{
 			"roleRef.role": "Role is the role to revoke, from the path. A role name containing a space\n(\"System Manager\") arrives percent-encoded and is decoded before it is\nmatched against the stored assignment.",
 			"roleRef.user": "User is the assignee whose grant is being revoked, from the path.",
@@ -33,7 +33,7 @@ func init() {
 		Example: json.RawMessage(`{"user":"u_alice","role":"System Manager"}`),
 	})
 	zip.Describe("GET /v1/framework/:doctype", zip.Doc{
-		Description: "listDocuments returns the caller org's documents of one DocType, filtered,\nordered and projected by the query. The DocType is resolved FIRST — through\nthe same permission gate the list itself uses — because the query is validated\nagainst its schema: a filter, sort or field name the DocType does not declare\nis refused rather than reaching the store.",
+		Description: "Returns the caller org's documents of one DocType, filtered,\nordered and projected by the query. The DocType is resolved FIRST — through\nthe same permission gate the list itself uses — because the query is validated\nagainst its schema: a filter, sort or field name the DocType does not declare\nis refused rather than reaching the store.",
 		Fields: map[string]string{
 			"documentList.data":        "Data is the matching documents, newest-updated first unless order_by said\notherwise, each projected to the requested fields plus the envelope keys.",
 			"listDocumentsIn.doctype":  "DocType is the DocType to list, from the path.",
@@ -45,7 +45,7 @@ func init() {
 		Example: json.RawMessage(`{"doctype":"Task","filters":"{\"priority\":\"High\"}","order_by":"estimate asc","limit":"20"}`),
 	})
 	zip.Describe("GET /v1/framework/:doctype/:name", zip.Doc{
-		Description: "getDocument returns one document by name, with Password fields redacted.",
+		Description: "Returns one document by name, with Password fields redacted.",
 		Fields: map[string]string{
 			"docRef.doctype": "DocType is the document's DocType, from the path.",
 			"docRef.name":    "Name is the document's name — its key within the DocType — from the path.\nA name containing a space arrives percent-encoded and is decoded before it\nis matched against the stored one.",
@@ -53,46 +53,46 @@ func init() {
 		Example: json.RawMessage(`{"doctype":"Task","name":"TASK-00001"}`),
 	})
 	zip.Describe("GET /v1/framework/doctypes", zip.Doc{
-		Description: "listDocTypes returns every DocType defined in the caller's org. Another\ntenant's definitions are never included: the org is part of the store key.",
+		Description: "Returns every DocType defined in the caller's org. Another\ntenant's definitions are never included: the org is part of the store key.",
 		Fields: map[string]string{
 			"docTypeList.data": "Data is every DocType defined in the caller's org.",
 		},
 	})
 	zip.Describe("GET /v1/framework/doctypes/:name", zip.Doc{
-		Description: "getDocType returns one DocType definition — its fields, naming rule,\npermissions and lifecycle flags. Scoped to the caller's org, so another\ntenant's DocType of the same name is simply not found.",
+		Description: "Returns one DocType definition — its fields, naming rule,\npermissions and lifecycle flags. Scoped to the caller's org, so another\ntenant's DocType of the same name is simply not found.",
 		Fields: map[string]string{
 			"docTypeRef.name": "Name is the DocType's name, from the path. A name containing a space\n(\"Sales Invoice\") arrives percent-encoded and is decoded before it is\nmatched against the stored one.",
 		},
 		Example: json.RawMessage(`{"name":"Task"}`),
 	})
 	zip.Describe("GET /v1/framework/modules", zip.Doc{
-		Description: "listModules returns every app lane compiled into this deployment and the\nDocTypes each one installs. It describes the BINARY, not the org: what a given\norg has actually installed is the per-module state below.",
+		Description: "Returns every app lane compiled into this deployment and the\nDocTypes each one installs. It describes the BINARY, not the org: what a given\norg has actually installed is the per-module state below.",
 		Fields: map[string]string{
 			"moduleList.data": "Data is every module compiled into this binary, with the DocTypes it installs.",
 		},
 	})
 	zip.Describe("GET /v1/framework/modules/:module", zip.Doc{
-		Description: "getModule returns one app lane's install state for the caller's org: the\nDocTypes the lane declares, and which of them already exist in the org. That\nis the honest \"set up\" versus \"installed\" answer a console renders.",
+		Description: "Returns one app lane's install state for the caller's org: the\nDocTypes the lane declares, and which of them already exist in the org. That\nis the honest \"set up\" versus \"installed\" answer a console renders.",
 		Fields: map[string]string{
 			"moduleRef.module": "Module is the lane's registered name (\"cms\", \"erp\"), from the path.",
 		},
 		Example: json.RawMessage(`{"module":"cms"}`),
 	})
 	zip.Describe("GET /v1/framework/roles", zip.Doc{
-		Description: "listRoles returns every (user, role) assignment in the caller's org. Roles are\nwhat DocType permissions are written against, so this is the grant table the\npermission calculus resolves a member's rights from.",
+		Description: "Returns every (user, role) assignment in the caller's org. Roles are\nwhat DocType permissions are written against, so this is the grant table the\npermission calculus resolves a member's rights from.",
 		Fields: map[string]string{
 			"roleList.data": "Data is every (user, role) assignment in the caller's org.",
 		},
 	})
 	zip.Describe("GET /v1/framework/summary", zip.Doc{
-		Description: "summary reports how much of the DocType surface the caller's org uses: how\nmany DocTypes it has defined, and how many documents exist across them.",
+		Description: "Reports how much of the DocType surface the caller's org uses: how\nmany DocTypes it has defined, and how many documents exist across them.",
 		Fields: map[string]string{
 			"summaryView.doctypes":  "DocTypes is how many DocTypes the org has defined.",
 			"summaryView.documents": "Documents is how many documents exist across them.",
 		},
 	})
 	zip.Describe("POST /v1/framework/:doctype/:name/cancel", zip.Doc{
-		Description: "cancelDocument moves a submitted document to cancelled (docstatus 1 → 2) after\nits on_cancel hooks agree. Cancelling is terminal — a cancelled document\ncannot be re-submitted — but it CAN then be deleted.",
+		Description: "Moves a submitted document to cancelled (docstatus 1 → 2) after\nits on_cancel hooks agree. Cancelling is terminal — a cancelled document\ncannot be re-submitted — but it CAN then be deleted.",
 		Fields: map[string]string{
 			"docRef.doctype": "DocType is the document's DocType, from the path.",
 			"docRef.name":    "Name is the document's name — its key within the DocType — from the path.\nA name containing a space arrives percent-encoded and is decoded before it\nis matched against the stored one.",
@@ -100,7 +100,7 @@ func init() {
 		Example: json.RawMessage(`{"doctype":"Task","name":"TASK-00001"}`),
 	})
 	zip.Describe("POST /v1/framework/:doctype/:name/submit", zip.Doc{
-		Description: "submitDocument moves a draft to submitted (docstatus 0 → 1) after its\non_submit hooks agree. A submitted document is IMMUTABLE: further writes and\ndeletes are refused until it is cancelled. Only a submittable DocType has this\nlifecycle; any other docstatus is an illegal transition.",
+		Description: "Moves a draft to submitted (docstatus 0 → 1) after its\non_submit hooks agree. A submitted document is IMMUTABLE: further writes and\ndeletes are refused until it is cancelled. Only a submittable DocType has this\nlifecycle; any other docstatus is an illegal transition.",
 		Fields: map[string]string{
 			"docRef.doctype": "DocType is the document's DocType, from the path.",
 			"docRef.name":    "Name is the document's name — its key within the DocType — from the path.\nA name containing a space arrives percent-encoded and is decoded before it\nis matched against the stored one.",
@@ -108,22 +108,22 @@ func init() {
 		Example: json.RawMessage(`{"doctype":"Task","name":"TASK-00001"}`),
 	})
 	zip.Describe("POST /v1/framework/doctypes", zip.Doc{
-		Description: "createDocType defines a DocType in the caller's org: the metadata that gives a\ndocument surface its fields, its naming rule, whether it has a submit/cancel\nlifecycle, and which role may do what to it. Manager-only — on a fresh org the\nfirst caller to administer it is seeded as its System Manager, after which\nonly a System Manager (or a platform admin) may define. Answers 201.",
+		Description: "Defines a DocType in the caller's org: the metadata that gives a\ndocument surface its fields, its naming rule, whether it has a submit/cancel\nlifecycle, and which role may do what to it. Manager-only — on a fresh org the\nfirst caller to administer it is seeded as its System Manager, after which\nonly a System Manager (or a platform admin) may define. Answers 201.",
 		Example:     json.RawMessage(`{"name":"Task","autoname":"TASK-.#####","fields":[{"fieldname":"subject","fieldtype":"Data","reqd":true}]}`),
 	})
 	zip.Describe("POST /v1/framework/modules/:module/install", zip.Doc{
-		Description: "installModule creates an app lane's DocTypes in the caller's org. Idempotent\nand create-if-absent: a DocType the org already has is reported as existing\nand never replaced, so re-installing cannot clobber a definition the org has\nsince edited. Manager-only.",
+		Description: "Creates an app lane's DocTypes in the caller's org. Idempotent\nand create-if-absent: a DocType the org already has is reported as existing\nand never replaced, so re-installing cannot clobber a definition the org has\nsince edited. Manager-only.",
 		Fields: map[string]string{
 			"moduleRef.module": "Module is the lane's registered name (\"cms\", \"erp\"), from the path.",
 		},
 		Example: json.RawMessage(`{"module":"cms"}`),
 	})
 	zip.Describe("POST /v1/framework/roles", zip.Doc{
-		Description: "assignRole grants one user one role in the caller's org — how a member gains\nrights on a DocType, since permissions name roles and never users.\nManager-only. Answers 201.",
+		Description: "Grants one user one role in the caller's org — how a member gains\nrights on a DocType, since permissions name roles and never users.\nManager-only. Answers 201.",
 		Example:     json.RawMessage(`{"user":"u_alice","role":"System Manager"}`),
 	})
 	zip.Describe("PUT /v1/framework/doctypes/:name", zip.Doc{
-		Description: "replaceDocType replaces a DocType definition wholesale (PUT semantics): the\nstored definition becomes the body. The name in the URL is authoritative over\nthe body's, and documents already stored under the DocType are left intact.\nManager-only.",
+		Description: "Replaces a DocType definition wholesale (PUT semantics): the\nstored definition becomes the body. The name in the URL is authoritative over\nthe body's, and documents already stored under the DocType are left intact.\nManager-only.",
 		Example:     json.RawMessage(`{"name":"Task","fields":[{"fieldname":"subject","fieldtype":"Data"}]}`),
 	})
 }

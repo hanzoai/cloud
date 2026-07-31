@@ -128,7 +128,7 @@ func init() {
 			"MCPListing.hidden":      "Hidden keeps the listing out of the org-visible catalog. Curation: a sync\nnever changes it. Only a SuperAdmin sets it, and only a SuperAdmin sees a\nhidden entry listed.",
 			"MCPListing.id":          "ID addresses the listing in a URL. It is the reverse-DNS NAME with its one\nslash written as an underscore — reversible, because a namespace never\ncontains an underscore — so the id is readable and stable rather than a\nhash that means nothing to whoever reads a link.",
 			"MCPListing.logo":        "Logo is the brand mark to render for the listing — the publisher's icon when\nthe entry carries one, or the one an admin set. Curation.",
-			"MCPListing.name":        "Name is the publisher's reverse-DNS name, e.g. \"com.stripe/mcp\".",
+			"MCPListing.name":        "Name is the publisher's reverse-DNS name, e.g. \"com.acme/mcp\".",
 			"MCPListing.official":    "Official is whether this is the vendor's OWN server rather than someone\nelse's copy of it. Derived on every sync (see isOfficial) until a\nSuperAdmin sets it explicitly, after which the admin's answer stands.",
 			"MCPListing.packages":    "Packages are the runnable package forms — npm, pypi, oci — each with the\nruntime that launches it and the transport it then speaks.",
 			"MCPListing.registry":    "Registry is the upstream this row was synced from.",
@@ -166,7 +166,7 @@ func init() {
 			"MCPListing.hidden":      "Hidden keeps the listing out of the org-visible catalog. Curation: a sync\nnever changes it. Only a SuperAdmin sets it, and only a SuperAdmin sees a\nhidden entry listed.",
 			"MCPListing.id":          "ID addresses the listing in a URL. It is the reverse-DNS NAME with its one\nslash written as an underscore — reversible, because a namespace never\ncontains an underscore — so the id is readable and stable rather than a\nhash that means nothing to whoever reads a link.",
 			"MCPListing.logo":        "Logo is the brand mark to render for the listing — the publisher's icon when\nthe entry carries one, or the one an admin set. Curation.",
-			"MCPListing.name":        "Name is the publisher's reverse-DNS name, e.g. \"com.stripe/mcp\".",
+			"MCPListing.name":        "Name is the publisher's reverse-DNS name, e.g. \"com.acme/mcp\".",
 			"MCPListing.official":    "Official is whether this is the vendor's OWN server rather than someone\nelse's copy of it. Derived on every sync (see isOfficial) until a\nSuperAdmin sets it explicitly, after which the admin's answer stands.",
 			"MCPListing.packages":    "Packages are the runnable package forms — npm, pypi, oci — each with the\nruntime that launches it and the transport it then speaks.",
 			"MCPListing.registry":    "Registry is the upstream this row was synced from.",
@@ -185,7 +185,7 @@ func init() {
 			"MCPPackage.version":     "Version is the exact published package version.",
 			"MCPRemote.transport":    "Transport is \"streamable-http\" or \"sse\".",
 			"MCPRemote.url":          "URL is the endpoint.",
-			"listingRef.id":          "ID is the listing, from the path. It is the publisher's reverse-DNS name\nwith its one slash written as an underscore — \"com.stripe_mcp\".",
+			"listingRef.id":          "ID is the listing, from the path. It is the publisher's reverse-DNS name\nwith its one slash written as an underscore — \"com.acme_mcp\".",
 		},
 	})
 	zip.Describe("PATCH /v1/tools/catalog/:id", zip.Doc{
@@ -196,7 +196,7 @@ func init() {
 			"MCPListing.hidden":      "Hidden keeps the listing out of the org-visible catalog. Curation: a sync\nnever changes it. Only a SuperAdmin sets it, and only a SuperAdmin sees a\nhidden entry listed.",
 			"MCPListing.id":          "ID addresses the listing in a URL. It is the reverse-DNS NAME with its one\nslash written as an underscore — reversible, because a namespace never\ncontains an underscore — so the id is readable and stable rather than a\nhash that means nothing to whoever reads a link.",
 			"MCPListing.logo":        "Logo is the brand mark to render for the listing — the publisher's icon when\nthe entry carries one, or the one an admin set. Curation.",
-			"MCPListing.name":        "Name is the publisher's reverse-DNS name, e.g. \"com.stripe/mcp\".",
+			"MCPListing.name":        "Name is the publisher's reverse-DNS name, e.g. \"com.acme/mcp\".",
 			"MCPListing.official":    "Official is whether this is the vendor's OWN server rather than someone\nelse's copy of it. Derived on every sync (see isOfficial) until a\nSuperAdmin sets it explicitly, after which the admin's answer stands.",
 			"MCPListing.packages":    "Packages are the runnable package forms — npm, pypi, oci — each with the\nruntime that launches it and the transport it then speaks.",
 			"MCPListing.registry":    "Registry is the upstream this row was synced from.",
@@ -241,7 +241,7 @@ func init() {
 			"createServerReq.secret":     "Secret is the credential VALUE. It is sealed into KMS under a per-org ref\nand never stored in SQLite, never listed, and never returned.",
 			"createServerReq.url":        "URL is the server's JSON-RPC endpoint. It must be an http(s) URL naming a\nPUBLIC host: loopback, link-local, private and cloud-metadata addresses are\nrefused here and again when the dialer connects.",
 		},
-		Example: json.RawMessage(`{"listing":"com.stripe_mcp","authHeader":"Authorization","secret":"Bearer …"}`),
+		Example: json.RawMessage(`{"listing":"com.acme_mcp","authHeader":"Authorization","secret":"Bearer …"}`),
 	})
 	zip.Describe("POST /v1/skills", zip.Doc{
 		Description: "PutSkill adds or revises one of the caller org's own skills, and answers 201\nwith the stored record. The id is derived from the name, so writing the same\nname again REVISES that skill rather than accumulating near-duplicates that\nwould then collide in the registry. An org's skills are private to it by\nconstruction — they live in a different store from the brand's embedded\ncatalogue and have no path into the public gallery — and a brand skill always\nwins a name collision against an org's.",

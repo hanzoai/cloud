@@ -61,9 +61,14 @@ import (
 //     catalog answered "sign in to view billing" to a pricing page and the
 //     card endpoints answered it to a buyer. commerce's row names each one
 //     deeper than the sibling that was swallowing it now.)
-//   - NO APP AT ALL (9). git's /:org/:repo tree and iam's /.well-known/* are
+//   - NO APP AT ALL (12). git's /:org/:repo tree and iam's /.well-known/* are
 //     claimed by nobody, so they fall past every prefix to the console the host
-//     serves at "/" — an SDK call gets the HTML shell. (team's /collaborator pair
+//     serves at "/" — an SDK call gets the HTML shell. The three newest are the
+//     PROJECT-scoped form of git's smart-HTTP transport (811ff080): a bare-root
+//     /:org/:project/:repo alongside the /:org/:repo it joins, unclaimed for the
+//     same reason and reaching the same shell. They are recorded on the first
+//     regeneration that published them, not on the commit that served them — which
+//     is the gap this ledger exists to close. (team's /collaborator pair
 //     used to sit here: the Team front derives BOTH the Y.js WebSocket and the
 //     markup-snapshot RPC from COLLABORATOR_URL, so neither is under /v1/team, and
 //     unnamed in Apps the collaborative editor got the console shell while the
@@ -98,6 +103,9 @@ var unreachable = []string{
 	// commerce dropped it. The published operation is identical from either app —
 	// same id, same tag, no declared body — so nothing moved but the ownership.
 	"git / -> nothing",
+	"git /{org}/{project}/{repo}/git-receive-pack -> nothing",
+	"git /{org}/{project}/{repo}/git-upload-pack -> nothing",
+	"git /{org}/{project}/{repo}/info/refs -> nothing",
 	"git /{org}/{repo} -> nothing",
 	"git /{org}/{repo}/blob/{wildcard1} -> nothing",
 	"git /{org}/{repo}/commits -> nothing",

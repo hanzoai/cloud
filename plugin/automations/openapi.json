@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package automations is /v1/automations: an org authors flows — a trigger and a tree of connector actions — and this runs them durably, on a schedule or a webhook, and keeps their run history.",
     "version": "v1"
   },
   "servers": [

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package esign folds hanzoai/esign (the Documenso fork — \"open-source DocuSign\") into the unified hanzoai/cloud binary as an in-process subsystem (HIP-0106, task #100, epic #96).",
     "version": "v1"
   },
   "servers": [

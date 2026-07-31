@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package plan is the plan catalog at /v1/plans/*: every purchasable tier — cloud, subscription, blockchain, DNS, GPU, storage — with what it costs, what it grants (the entitlement vocabulary and its JSON Schema), and a resolver from a plan id to both.",
     "version": "v1"
   },
   "servers": [

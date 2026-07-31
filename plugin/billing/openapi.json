@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package billing is the customer's own money door: what my org holds, what it has spent, and the cards it pays with.",
     "version": "v1"
   },
   "servers": [
@@ -46,6 +46,12 @@
     "/v1/billing/payment-methods": {
       "get": {
         "operationId": "get_v1_billing_payment-methods",
+        "tags": [
+          "billing"
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_billing_payment-methods",
         "tags": [
           "billing"
         ]

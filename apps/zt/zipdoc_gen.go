@@ -8,7 +8,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/edge/nodes", zip.Doc{
-		Description: "listEdgeNodes returns the Zero Trust edge-routers the caller's org owns.\n\nOne row per real ZT edge-router tagged with the org's \"org-<org>\" role attribute,\ncarrying the controller's own health signal: \"online\" when connected, \"disabled\"\nwhen administratively disabled, \"offline\" otherwise. region is filled only from a\n\"region-<slug>\" role attribute and omitted when the router carries none, so the\ncolumn renders \"—\" rather than a guess.\n\nThe read degrades rather than erroring: a deployment with no ZT credential, and a\ncontroller that cannot be reached, both answer 200 with an empty list.",
+		Description: "Returns the Zero Trust edge-routers the caller's org owns.\n\nOne row per real ZT edge-router tagged with the org's \"org-<org>\" role attribute,\ncarrying the controller's own health signal: \"online\" when connected, \"disabled\"\nwhen administratively disabled, \"offline\" otherwise. region is filled only from a\n\"region-<slug>\" role attribute and omitted when the router carries none, so the\ncolumn renders \"—\" rather than a guess.\n\nThe read degrades rather than erroring: a deployment with no ZT credential, and a\ncontroller that cannot be reached, both answer 200 with an empty list.",
 		Fields: map[string]string{
 			"edgeNodeList.nodes":  "Nodes is one row per ZT edge-router tagged with the caller's org role.",
 			"edgeNodeView.id":     "ID is the ZT edge-router's id.",
@@ -18,7 +18,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/mesh/services", zip.Doc{
-		Description: "listMeshServices returns the Zero Trust edge services the caller's org owns.\n\nOne row per real ZT edge service tagged with the org's \"org-<org>\" role\nattribute: mtls is \"required\" when the service mandates end-to-end encryption and\n\"enabled\" otherwise (the fabric always mutually authenticates every link), and\nstatus is \"active\" because a listed service is a configured, dialable entry. A\nservice tagged for another org, or tagged for none, is invisible here.\n\nUnlike the network and edge-node reads this does NOT degrade: an unconfigured\ndeployment answers 503 and an unreachable controller surfaces the upstream's\nstatus, so a mesh page never renders \"no services\" for a fabric it simply could\nnot read.",
+		Description: "Returns the Zero Trust edge services the caller's org owns.\n\nOne row per real ZT edge service tagged with the org's \"org-<org>\" role\nattribute: mtls is \"required\" when the service mandates end-to-end encryption and\n\"enabled\" otherwise (the fabric always mutually authenticates every link), and\nstatus is \"active\" because a listed service is a configured, dialable entry. A\nservice tagged for another org, or tagged for none, is invisible here.\n\nUnlike the network and edge-node reads this does NOT degrade: an unconfigured\ndeployment answers 503 and an unreachable controller surfaces the upstream's\nstatus, so a mesh page never renders \"no services\" for a fabric it simply could\nnot read.",
 		Fields: map[string]string{
 			"meshServiceList.services": "Services is one row per ZT edge service tagged with the caller's org role.",
 			"meshView.id":              "ID is the ZT edge service's id.",
@@ -28,7 +28,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/networks", zip.Doc{
-		Description: "listNetworks returns the caller's org overlay network on the Zero Trust fabric.\n\nThe org has at most ONE overlay, projected from the edge-routers tagged with its\n\"org-<org>\" role attribute: nodes is the real router count and status is\n\"connected\" once at least one router has dialed home, \"provisioning\" while none\nhas. An org with no routers gets an empty list, never a fabricated network.\n\nThe read degrades rather than erroring: a deployment with no ZT credential, and a\ncontroller that cannot be reached, both answer 200 with an empty list so the\nconsole's Networks page renders a clean empty state instead of an error.",
+		Description: "Returns the caller's org overlay network on the Zero Trust fabric.\n\nThe org has at most ONE overlay, projected from the edge-routers tagged with its\n\"org-<org>\" role attribute: nodes is the real router count and status is\n\"connected\" once at least one router has dialed home, \"provisioning\" while none\nhas. An org with no routers gets an empty list, never a fabricated network.\n\nThe read degrades rather than erroring: a deployment with no ZT credential, and a\ncontroller that cannot be reached, both answer 200 with an empty list so the\nconsole's Networks page renders a clean empty state instead of an error.",
 		Fields: map[string]string{
 			"networkList.networks": "Networks holds the org's overlay network, or is empty when the org has no\nedge-routers on the fabric (no nodes → no network, never a fabricated one).",
 			"networkView.id":       "ID is the org-derived id of the overlay network — the key\nGET /v1/networks/{id} addresses.",
@@ -38,7 +38,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/networks/:id", zip.Doc{
-		Description: "getNetwork returns one overlay network by id, scoped to the caller's org.\n\nThe org has exactly one overlay network and its id is derived from the org, so\nany other id — another tenant's, or one that does not exist — is 404 rather than\na peek across the tenant boundary. An org whose network exists but has no\nedge-routers is 404 too, for the same reason the list is empty: there is no\noverlay until something is on it.",
+		Description: "Returns one overlay network by id, scoped to the caller's org.\n\nThe org has exactly one overlay network and its id is derived from the org, so\nany other id — another tenant's, or one that does not exist — is 404 rather than\na peek across the tenant boundary. An org whose network exists but has no\nedge-routers is 404 too, for the same reason the list is empty: there is no\noverlay until something is on it.",
 		Fields: map[string]string{
 			"networkRef.id":      "ID is the network id from the path. The URL is the addressing authority, so\nit binds from there whatever else the request carries.",
 			"networkView.id":     "ID is the org-derived id of the overlay network — the key\nGET /v1/networks/{id} addresses.",

@@ -10,28 +10,28 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/marketing/audiences/:id", zip.Doc{
-		Description: "deleteAudience removes one of the caller org's audiences and answers 204. It\ndeletes the saved filter only — no customer, event or enrollment is touched.",
+		Description: "Removes one of the caller org's audiences and answers 204. It\ndeletes the saved filter only — no customer, event or enrollment is touched.",
 		Fields: map[string]string{
 			"AudienceRef.id": "ID is the audience id from the path, as returned by create.",
 		},
 		Example: json.RawMessage(`{"id":"aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}`),
 	})
 	zip.Describe("DELETE /v1/marketing/calendar/:id", zip.Doc{
-		Description: "deleteCalendarPost removes one of the caller org's posts and answers 204. A\npost already published is deleted from the calendar only — nothing is\nretracted from the network it went out on.",
+		Description: "Removes one of the caller org's posts and answers 204. A\npost already published is deleted from the calendar only — nothing is\nretracted from the network it went out on.",
 		Fields: map[string]string{
 			"PostRef.id": "ID is the post id from the path, as returned by create.",
 		},
 		Example: json.RawMessage(`{"id":"cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468"}`),
 	})
 	zip.Describe("DELETE /v1/marketing/campaigns/:id", zip.Doc{
-		Description: "deleteCampaign removes one of the caller org's campaigns and answers 204. A\ncampaign belonging to another org reads as not found and is left untouched.",
+		Description: "Removes one of the caller org's campaigns and answers 204. A\ncampaign belonging to another org reads as not found and is left untouched.",
 		Fields: map[string]string{
 			"CampaignRef.id": "ID is the campaign id from the path, as returned by create.",
 		},
 		Example: json.RawMessage(`{"id":"camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}`),
 	})
 	zip.Describe("DELETE /v1/marketing/suppressions", zip.Doc{
-		Description: "removeSuppression re-subscribes an address on one channel and answers 204. An\naddress that is not on the list reads as not found.",
+		Description: "Re-subscribes an address on one channel and answers 204. An\naddress that is not on the list reads as not found.",
 		Fields: map[string]string{
 			"Suppression.address":   "Address is the recipient, normalized (lower-cased, trimmed) so an opt-out\ncannot be slipped past on a case or whitespace difference. Required.",
 			"Suppression.channel":   "Channel is the surface opted out of: email, sms, social, meta, google or\ntiktok. Empty means email. Opting out of one leaves the others reachable.",
@@ -41,7 +41,7 @@ func init() {
 		Example: json.RawMessage(`{"channel":"email","address":"person@example.com"}`),
 	})
 	zip.Describe("GET /v1/marketing/audiences", zip.Doc{
-		Description: "listAudiences returns the org's saved audiences, most recently updated first.",
+		Description: "Returns the org's saved audiences, most recently updated first.",
 		Fields: map[string]string{
 			"Audience.createdAt":  "CreatedAt and UpdatedAt are unix seconds, both server-assigned.",
 			"Audience.event":      "Event is the analytics event a member must have fired. EMPTY MEANS NO\nFILTER: the audience is then every mailable customer in the org, and no\nwarehouse is consulted.",
@@ -54,7 +54,7 @@ func init() {
 		Example: json.RawMessage(`{"limit":50}`),
 	})
 	zip.Describe("GET /v1/marketing/audiences/:id", zip.Doc{
-		Description: "getAudience returns one of the caller org's saved audiences. An audience\nbelonging to another org reads as not found.",
+		Description: "Returns one of the caller org's saved audiences. An audience\nbelonging to another org reads as not found.",
 		Fields: map[string]string{
 			"Audience.createdAt":  "CreatedAt and UpdatedAt are unix seconds, both server-assigned.",
 			"Audience.event":      "Event is the analytics event a member must have fired. EMPTY MEANS NO\nFILTER: the audience is then every mailable customer in the org, and no\nwarehouse is consulted.",
@@ -66,7 +66,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"aud_4c1e9b7a2d6f0538e4a7c9b1d3f5027a"}`),
 	})
 	zip.Describe("GET /v1/marketing/audiences/:id/preview", zip.Doc{
-		Description: "previewAudience evaluates the cohort LIVE — the same resolution an enrollment\nwould run — and reports how big it is and how many real mailboxes it reaches.\nIt is the honest answer to \"is this send worth making\": a cohort of 500 that\nmails 3 says so, in deliverable and unmatched. Nothing is sent.",
+		Description: "Evaluates the cohort LIVE — the same resolution an enrollment\nwould run — and reports how big it is and how many real mailboxes it reaches.\nIt is the honest answer to \"is this send worth making\": a cohort of 500 that\nmails 3 says so, in deliverable and unmatched. Nothing is sent.",
 		Fields: map[string]string{
 			"AudiencePreview.available":   "Available is false when the roster or the warehouse could not be read; the\ncounts are then zero because nothing was measured, not because the cohort\nis empty, and Reason says which read failed.",
 			"AudiencePreview.count":       "Count is the cohort size: distinct warehouse identifiers for an event\naudience, mailable customers for an event-less (whole-org) one.",
@@ -79,7 +79,7 @@ func init() {
 		Response: json.RawMessage(`{"available":true,"count":500,"deliverable":3,"unmatched":497,"sample":["u_1","u_2"],"source":"hanzo.events"}`),
 	})
 	zip.Describe("GET /v1/marketing/calendar", zip.Doc{
-		Description: "listCalendarPosts returns the org's calendar, soonest scheduled first,\noptionally narrowed to one status.",
+		Description: "Returns the org's calendar, soonest scheduled first,\noptionally narrowed to one status.",
 		Fields: map[string]string{
 			"CalendarPost.body":        "Body is the post text. Required.",
 			"CalendarPost.channel":     "Channel is the target network: x, facebook, instagram, linkedin, tiktok,\nyoutube or threads. Required — a post must name where it goes.",
@@ -96,7 +96,7 @@ func init() {
 		Example: json.RawMessage(`{"status":"scheduled","limit":50}`),
 	})
 	zip.Describe("GET /v1/marketing/calendar/:id", zip.Doc{
-		Description: "getCalendarPost returns one of the caller org's posts, including the exact\nerror behind a failed publish. A post belonging to another org reads as not\nfound.",
+		Description: "Returns one of the caller org's posts, including the exact\nerror behind a failed publish. A post belonging to another org reads as not\nfound.",
 		Fields: map[string]string{
 			"CalendarPost.body":        "Body is the post text. Required.",
 			"CalendarPost.channel":     "Channel is the target network: x, facebook, instagram, linkedin, tiktok,\nyoutube or threads. Required — a post must name where it goes.",
@@ -112,7 +112,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468"}`),
 	})
 	zip.Describe("GET /v1/marketing/campaigns", zip.Doc{
-		Description: "listCampaigns returns the org's campaigns, most recently updated first,\noptionally narrowed to one lifecycle status.",
+		Description: "Returns the org's campaigns, most recently updated first,\noptionally narrowed to one lifecycle status.",
 		Fields: map[string]string{
 			"Campaign.budget":      "Budget and Spend are minor units (USD cents), clamped to >= 0.",
 			"Campaign.channel":     "Channel is the delivery surface: email, sms, social, meta, google or\ntiktok. Empty means email.",
@@ -129,7 +129,7 @@ func init() {
 		Example: json.RawMessage(`{"status":"active","limit":25}`),
 	})
 	zip.Describe("GET /v1/marketing/campaigns/:id", zip.Doc{
-		Description: "getCampaign returns one of the caller org's campaigns. A campaign belonging to\nanother org reads as not found.",
+		Description: "Returns one of the caller org's campaigns. A campaign belonging to\nanother org reads as not found.",
 		Fields: map[string]string{
 			"Campaign.budget":      "Budget and Spend are minor units (USD cents), clamped to >= 0.",
 			"Campaign.channel":     "Channel is the delivery surface: email, sms, social, meta, google or\ntiktok. Empty means email.",
@@ -144,7 +144,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60"}`),
 	})
 	zip.Describe("GET /v1/marketing/promos", zip.Doc{
-		Description: "listPromos returns every promo the deployment offers with its live counters:\nhow many orgs have redeemed it and how many redemptions remain under the cap.\nThe promos are fleet-wide, not per-org — only the counters move.",
+		Description: "Returns every promo the deployment offers with its live counters:\nhow many orgs have redeemed it and how many redemptions remain under the cap.\nThe promos are fleet-wide, not per-org — only the counters move.",
 		Fields: map[string]string{
 			"Promo.active":         "Active is false for a promo that is no longer offered; an inactive promo\nquotes as ineligible and refuses to redeem.",
 			"Promo.code":           "Code is the promo id, e.g. \"first1000\".",
@@ -159,7 +159,7 @@ func init() {
 		Response: json.RawMessage(`{"data":[{"promo":{"code":"first1000","percentOff":90,"maxRedemptions":1000,"active":true},"redeemed":137,"remaining":863}]}`),
 	})
 	zip.Describe("GET /v1/marketing/promos/:code/eligibility", zip.Doc{
-		Description: "quotePromo prices a promo against a plan and seat count. It is PURE: nothing\nis redeemed, credited or counted, so it is safe to call from a pricing page on\nevery keystroke. An inactive promo or an exhausted cap quotes ineligible with\nthe reason rather than erroring.",
+		Description: "Prices a promo against a plan and seat count. It is PURE: nothing\nis redeemed, credited or counted, so it is safe to call from a pricing page on\nevery keystroke. An inactive promo or an exhausted cap quotes ineligible with\nthe reason rather than erroring.",
 		Fields: map[string]string{
 			"Quote.code":       "Code, Plan and Seats echo what was quoted.",
 			"Quote.eligible":   "Eligible says whether a redeem would be accepted right now; Reason says\nwhy not when it would not.",
@@ -173,7 +173,7 @@ func init() {
 		Response: json.RawMessage(`{"code":"first1000","plan":"team","seats":12,"eligible":true,"listCents":19900,"chargeCents":418900,"discountCents":179100,"remaining":863}`),
 	})
 	zip.Describe("GET /v1/marketing/promos/:code/redemption", zip.Doc{
-		Description: "getRedemption returns the caller org's OWN redemption of a promo — an\norg-scoped read, so it can never surface another tenant's. Not found when this\norg has not redeemed it.",
+		Description: "Returns the caller org's OWN redemption of a promo — an\norg-scoped read, so it can never surface another tenant's. Not found when this\norg has not redeemed it.",
 		Fields: map[string]string{
 			"PromoRef.code":            "Code is the promo code from the path, e.g. \"first1000\".",
 			"Redemption.code":          "Code is the promo redeemed.",
@@ -185,7 +185,7 @@ func init() {
 		Example: json.RawMessage(`{"code":"first1000"}`),
 	})
 	zip.Describe("GET /v1/marketing/sequences", zip.Doc{
-		Description: "listSequences returns the org's drip sequences, most recently updated first.",
+		Description: "Returns the org's drip sequences, most recently updated first.",
 		Fields: map[string]string{
 			"Page.limit":         "Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.",
 			"Sequence.createdAt": "CreatedAt and UpdatedAt are unix seconds, both server-assigned.",
@@ -197,7 +197,7 @@ func init() {
 		Example: json.RawMessage(`{"limit":50}`),
 	})
 	zip.Describe("GET /v1/marketing/sequences/:id", zip.Doc{
-		Description: "getSequence returns one of the caller org's sequences together with its steps\nin send order. A sequence belonging to another org reads as not found.",
+		Description: "Returns one of the caller org's sequences together with its steps\nin send order. A sequence belonging to another org reads as not found.",
 		Fields: map[string]string{
 			"Sequence.createdAt": "CreatedAt and UpdatedAt are unix seconds, both server-assigned.",
 			"Sequence.id":        "ID is the server-assigned sequence id (\"seq_\" + 128 random bits).",
@@ -216,7 +216,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248"}`),
 	})
 	zip.Describe("GET /v1/marketing/sequences/:id/enrollments", zip.Doc{
-		Description: "listEnrollments returns who is walking one sequence, most recently enrolled\nfirst, with each walk's current step and next due time.",
+		Description: "Returns who is walking one sequence, most recently enrolled\nfirst, with each walk's current step and next due time.",
 		Fields: map[string]string{
 			"Enrollment.address":     "Address is the normalized (lower-cased, trimmed) recipient.",
 			"Enrollment.channel":     "Channel is the delivery surface the steps go out on.",
@@ -232,7 +232,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248","limit":100}`),
 	})
 	zip.Describe("GET /v1/marketing/sequences/:id/steps", zip.Doc{
-		Description: "listSteps returns one sequence's steps in send order.",
+		Description: "Returns one sequence's steps in send order.",
 		Fields: map[string]string{
 			"SequenceRef.id":    "ID is the sequence id from the path, as returned by create.",
 			"Step.body":         "Body is the message text. Required. The signed one-click unsubscribe link\nis appended to it at send time.",
@@ -246,7 +246,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248"}`),
 	})
 	zip.Describe("GET /v1/marketing/summary", zip.Doc{
-		Description: "summary rolls up the caller org's campaigns: how many there are, how many are\nactive, and the summed budget and spend in cents.",
+		Description: "Rolls up the caller org's campaigns: how many there are, how many are\nactive, and the summed budget and spend in cents.",
 		Fields: map[string]string{
 			"Summary.budget":    "Budget and Spend are the summed campaign budget and spend, in cents.",
 			"Summary.campaigns": "Campaigns is how many campaigns the org has, Active how many are running.",
@@ -254,7 +254,7 @@ func init() {
 		Response: json.RawMessage(`{"campaigns":12,"active":3,"budget":500000,"spend":128400}`),
 	})
 	zip.Describe("GET /v1/marketing/suppressions", zip.Doc{
-		Description: "listSuppressions returns the org's opt-out list, newest first — everyone the\nsend gate will refuse to deliver to.",
+		Description: "Returns the org's opt-out list, newest first — everyone the\nsend gate will refuse to deliver to.",
 		Fields: map[string]string{
 			"Page.limit":            "Limit caps the rows returned; 0 means 200 and nothing above 1000 is honoured.",
 			"Suppression.address":   "Address is the recipient, normalized (lower-cased, trimmed) so an opt-out\ncannot be slipped past on a case or whitespace difference. Required.",
@@ -265,7 +265,7 @@ func init() {
 		Example: json.RawMessage(`{"limit":100}`),
 	})
 	zip.Describe("GET /v1/marketing/unsubscribe", zip.Doc{
-		Description: "unsubscribe is the PUBLIC one-click endpoint (no principal): a recipient\nclicks the signed link in an email footer. The token binds (org, channel,\naddress), so a caller can only opt OUT exactly the tuple it was minted for —\nnever another address and never another org. An invalid token is refused, and\na deployment with no KMS-sealed key refuses rather than accepting anything.",
+		Description: "Is the PUBLIC one-click endpoint (no principal): a recipient\nclicks the signed link in an email footer. The token binds (org, channel,\naddress), so a caller can only opt OUT exactly the tuple it was minted for —\nnever another address and never another org. An invalid token is refused, and\na deployment with no KMS-sealed key refuses rather than accepting anything.",
 		Fields: map[string]string{
 			"UnsubscribeInput.address": "Address is the recipient to opt out.",
 			"UnsubscribeInput.channel": "Channel is the surface to opt out of.",
@@ -276,7 +276,7 @@ func init() {
 		Response: json.RawMessage(`{"unsubscribed":true,"address":"person@example.com","channel":"email"}`),
 	})
 	zip.Describe("POST /v1/marketing/audiences", zip.Doc{
-		Description: "createAudience saves a cohort filter for the caller's org. Name is required.\nOmitting event saves the WHOLE-ORG audience — every mailable customer — which\nneeds no analytics warehouse; naming one narrows that roster to the customers\nwho fired it within windowDays.",
+		Description: "Saves a cohort filter for the caller's org. Name is required.\nOmitting event saves the WHOLE-ORG audience — every mailable customer — which\nneeds no analytics warehouse; naming one narrows that roster to the customers\nwho fired it within windowDays.",
 		Fields: map[string]string{
 			"Audience.createdAt":  "CreatedAt and UpdatedAt are unix seconds, both server-assigned.",
 			"Audience.event":      "Event is the analytics event a member must have fired. EMPTY MEANS NO\nFILTER: the audience is then every mailable customer in the org, and no\nwarehouse is consulted.",
@@ -287,7 +287,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"Model users, last 30d","event":"model.invoked","windowDays":30}`),
 	})
 	zip.Describe("POST /v1/marketing/calendar", zip.Doc{
-		Description: "createCalendarPost adds a post to the content calendar. Channel and body are\nrequired. A scheduledAt in the future makes the post \"scheduled\" and the\ndurable sweep publishes it when it comes due — claimed once, so a post\npublishes at most once; without one it stays a draft.",
+		Description: "Adds a post to the content calendar. Channel and body are\nrequired. A scheduledAt in the future makes the post \"scheduled\" and the\ndurable sweep publishes it when it comes due — claimed once, so a post\npublishes at most once; without one it stays a draft.",
 		Fields: map[string]string{
 			"CalendarPost.body":        "Body is the post text. Required.",
 			"CalendarPost.channel":     "Channel is the target network: x, facebook, instagram, linkedin, tiktok,\nyoutube or threads. Required — a post must name where it goes.",
@@ -302,7 +302,7 @@ func init() {
 		Example: json.RawMessage(`{"title":"Launch day","body":"Hanzo Cloud is live.","channel":"x","scheduledAt":1780000000}`),
 	})
 	zip.Describe("POST /v1/marketing/calendar/:id/publish", zip.Doc{
-		Description: "publishCalendarPost publishes a post NOW, synchronously, whatever its\nschedule. No social connector is wired today, so every channel answers an\nhonest 501 naming the seam a real one would plug into, and the post is\nrecorded failed with that exact reason — never a faked \"published\".",
+		Description: "Publishes a post NOW, synchronously, whatever its\nschedule. No social connector is wired today, so every channel answers an\nhonest 501 naming the seam a real one would plug into, and the post is\nrecorded failed with that exact reason — never a faked \"published\".",
 		Fields: map[string]string{
 			"CalendarPost.body":        "Body is the post text. Required.",
 			"CalendarPost.channel":     "Channel is the target network: x, facebook, instagram, linkedin, tiktok,\nyoutube or threads. Required — a post must name where it goes.",
@@ -318,7 +318,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"cal_1d7f3b9e5a2c8046f1b3d5a7c9e02468"}`),
 	})
 	zip.Describe("POST /v1/marketing/campaigns", zip.Doc{
-		Description: "createCampaign registers a campaign in the caller's org. Name is required;\nchannel defaults to email and status to draft, and a future scheduledAt with\nno explicit status makes the campaign \"scheduled\". Budget and spend are cents\nand are clamped to >= 0. The id, createdAt and updatedAt of the input are\nignored — the server assigns them.",
+		Description: "Registers a campaign in the caller's org. Name is required;\nchannel defaults to email and status to draft, and a future scheduledAt with\nno explicit status makes the campaign \"scheduled\". Budget and spend are cents\nand are clamped to >= 0. The id, createdAt and updatedAt of the input are\nignored — the server assigns them.",
 		Fields: map[string]string{
 			"Campaign.budget":      "Budget and Spend are minor units (USD cents), clamped to >= 0.",
 			"Campaign.channel":     "Channel is the delivery surface: email, sms, social, meta, google or\ntiktok. Empty means email.",
@@ -332,7 +332,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"Spring Launch","channel":"meta","objective":"signups","budget":50000,"scheduledAt":1780000000}`),
 	})
 	zip.Describe("POST /v1/marketing/campaigns/:id/schedule", zip.Doc{
-		Description: "scheduleCampaign sets a campaign's send time and moves it to \"scheduled\". A\nscheduledAt of 0 clears the schedule and returns it to \"draft\".",
+		Description: "Sets a campaign's send time and moves it to \"scheduled\". A\nscheduledAt of 0 clears the schedule and returns it to \"draft\".",
 		Fields: map[string]string{
 			"Campaign.budget":           "Budget and Spend are minor units (USD cents), clamped to >= 0.",
 			"Campaign.channel":          "Channel is the delivery surface: email, sms, social, meta, google or\ntiktok. Empty means email.",
@@ -348,7 +348,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"camp_9f2a1c7d4e8b0a6f3d2c5b1e7a9f4c60","scheduledAt":1780000000}`),
 	})
 	zip.Describe("POST /v1/marketing/promos/:code/redeem", zip.Doc{
-		Description: "redeemPromo redeems the promo for the caller's org, crediting the discount\nvalue to its wallet through the finance ledger. Three guards run under one\nlock so the cap cannot be raced past: the fleet-wide redemption cap, one\nredemption per org, and one per payment instrument.\n\nIt is IDEMPOTENT: an org that already redeemed gets its original redemption\nback with alreadyRedeemed true and is not credited twice.",
+		Description: "Redeems the promo for the caller's org, crediting the discount\nvalue to its wallet through the finance ledger. Three guards run under one\nlock so the cap cannot be raced past: the fleet-wide redemption cap, one\nredemption per org, and one per payment instrument.\n\nIt is IDEMPOTENT: an org that already redeemed gets its original redemption\nback with alreadyRedeemed true and is not credited twice.",
 		Fields: map[string]string{
 			"RedeemInput.code":             "Code is the promo code from the path.",
 			"RedeemInput.instrument":       "Instrument identifies the payment method. It is the anti-farming key: one\nredemption per instrument, fleet-wide.",
@@ -365,7 +365,7 @@ func init() {
 		Example: json.RawMessage(`{"code":"first1000","plan":"pro","seats":1,"instrument":"pm_1QxYz2AbCdEf"}`),
 	})
 	zip.Describe("POST /v1/marketing/sequences", zip.Doc{
-		Description: "createSequence registers a drip sequence in the caller's org. Name is\nrequired; status defaults to draft, and a sequence must be ACTIVE before it\nwill accept enrollments. The id, createdAt and updatedAt of the input are\nignored — the server assigns them.",
+		Description: "Registers a drip sequence in the caller's org. Name is\nrequired; status defaults to draft, and a sequence must be ACTIVE before it\nwill accept enrollments. The id, createdAt and updatedAt of the input are\nignored — the server assigns them.",
 		Fields: map[string]string{
 			"Sequence.createdAt": "CreatedAt and UpdatedAt are unix seconds, both server-assigned.",
 			"Sequence.id":        "ID is the server-assigned sequence id (\"seq_\" + 128 random bits).",
@@ -375,7 +375,7 @@ func init() {
 		Example: json.RawMessage(`{"name":"Trial onboarding","status":"draft"}`),
 	})
 	zip.Describe("POST /v1/marketing/sequences/:id/enroll", zip.Doc{
-		Description: "enroll adds one contact or a whole audience to a sequence and schedules the\nfirst step for each. The sequence must be ACTIVE (a draft sends nothing), and\nthe request must name exactly one of address or audienceId.\n\nEnrolling is ALL this does: the message itself is sent later by the drip\nengine, through the suppression gate, so an opted-out customer can be enrolled\nhere and still never be mailed. Re-posting is safe — an address this sequence\nalready took is counted in alreadyEnrolled and never double-dripped — which is\nwhat makes retrying a partially-applied announcement a resume rather than a\nsecond send.",
+		Description: "Adds one contact or a whole audience to a sequence and schedules the\nfirst step for each. The sequence must be ACTIVE (a draft sends nothing), and\nthe request must name exactly one of address or audienceId.\n\nEnrolling is ALL this does: the message itself is sent later by the drip\nengine, through the suppression gate, so an opted-out customer can be enrolled\nhere and still never be mailed. Re-posting is safe — an address this sequence\nalready took is counted in alreadyEnrolled and never double-dripped — which is\nwhat makes retrying a partially-applied announcement a resume rather than a\nsecond send.",
 		Fields: map[string]string{
 			"EnrollInput.address":          "Address is a single recipient, normalized (lower-cased, trimmed) before\nuse. Give this OR audienceId, never both and never neither.",
 			"EnrollInput.audienceId":       "AudienceID fans the sequence out over a saved audience, resolved live to\nthe org's mailable customers. Email only.",
@@ -390,7 +390,7 @@ func init() {
 		Response: json.RawMessage(`{"resolved":412,"enrolled":409,"alreadyEnrolled":3}`),
 	})
 	zip.Describe("POST /v1/marketing/sequences/:id/enrollments/:eid/cancel", zip.Doc{
-		Description: "cancelEnrollment stops one walk mid-sequence and answers 204: no further step\nis sent, and steps already delivered are not recalled. Only an ACTIVE\nenrollment can be canceled — one already completed or canceled reads as not\nfound.",
+		Description: "Stops one walk mid-sequence and answers 204: no further step\nis sent, and steps already delivered are not recalled. Only an ACTIVE\nenrollment can be canceled — one already completed or canceled reads as not\nfound.",
 		Fields: map[string]string{
 			"EnrollmentRef.eid": "EID is the enrollment id from the path, as returned by a single-address\nenroll.",
 			"EnrollmentRef.id":  "ID is the sequence id from the path.",
@@ -398,7 +398,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248","eid":"enr_2a8d6f0b4c1e9375a0d2f6b8c4e19f73"}`),
 	})
 	zip.Describe("POST /v1/marketing/sequences/:id/status", zip.Doc{
-		Description: "setSequenceStatus flips draft/active/archived — the activation gate for\nsending, since only an active sequence accepts enrollments. It does not touch\nenrollments already walking: archiving stops new ones, not in-flight ones.",
+		Description: "Flips draft/active/archived — the activation gate for\nsending, since only an active sequence accepts enrollments. It does not touch\nenrollments already walking: archiving stops new ones, not in-flight ones.",
 		Fields: map[string]string{
 			"SequenceStatus.id":     "ID is the sequence id from the path.",
 			"SequenceStatus.status": "Status is draft, active or archived. Required; there is no default here,\nunlike on create. Only an active sequence accepts enrollments.",
@@ -406,7 +406,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"seq_7b3e5a1c9d024f68b0a3e7c5d9f1a248","status":"active"}`),
 	})
 	zip.Describe("POST /v1/marketing/sequences/:id/steps", zip.Doc{
-		Description: "addStep appends a message to the END of a sequence: the new step's idx is one\npast the last, so steps arrive in the order they are added. Body is required\nand delaySeconds must be >= 0. Adding a step does not disturb enrollments\nalready walking — one that has passed this index simply never sees it.",
+		Description: "Appends a message to the END of a sequence: the new step's idx is one\npast the last, so steps arrive in the order they are added. Body is required\nand delaySeconds must be >= 0. Adding a step does not disturb enrollments\nalready walking — one that has passed this index simply never sees it.",
 		Fields: map[string]string{
 			"Step.body":              "Body is the message text. Required. The signed one-click unsubscribe link\nis appended to it at send time.",
 			"Step.createdAt":         "CreatedAt is unix seconds, server-assigned.",
@@ -423,7 +423,7 @@ func init() {
 		Example: json.RawMessage(`{"delaySeconds":86400,"subject":"Day 1: your first model call","body":"Here is how to make your first request…"}`),
 	})
 	zip.Describe("POST /v1/marketing/suppressions", zip.Doc{
-		Description: "addSuppression records an opt-out for the org (admin / self-service\nmanagement). Address is required; channel defaults to email. It is idempotent:\nre-suppressing the same tuple keeps the original record rather than erroring.\nFrom here on the ONE send gate refuses that recipient on that channel.",
+		Description: "Records an opt-out for the org (admin / self-service\nmanagement). Address is required; channel defaults to email. It is idempotent:\nre-suppressing the same tuple keeps the original record rather than erroring.\nFrom here on the ONE send gate refuses that recipient on that channel.",
 		Fields: map[string]string{
 			"Suppression.address":   "Address is the recipient, normalized (lower-cased, trimmed) so an opt-out\ncannot be slipped past on a case or whitespace difference. Required.",
 			"Suppression.channel":   "Channel is the surface opted out of: email, sms, social, meta, google or\ntiktok. Empty means email. Opting out of one leaves the others reachable.",
@@ -433,7 +433,7 @@ func init() {
 		Example: json.RawMessage(`{"channel":"email","address":"person@example.com","reason":"asked support to stop"}`),
 	})
 	zip.Describe("PUT /v1/marketing/calendar/:id", zip.Doc{
-		Description: "updateCalendarPost replaces a post's editable fields. It is a full write, not\na patch, and it RESETS the lifecycle from the schedule: a scheduledAt makes\nthe post \"scheduled\" again and none makes it a draft — so editing a failed\npost requeues it rather than leaving it stuck.",
+		Description: "Replaces a post's editable fields. It is a full write, not\na patch, and it RESETS the lifecycle from the schedule: a scheduledAt makes\nthe post \"scheduled\" again and none makes it a draft — so editing a failed\npost requeues it rather than leaving it stuck.",
 		Fields: map[string]string{
 			"CalendarPost.body":        "Body is the post text. Required.",
 			"CalendarPost.channel":     "Channel is the target network: x, facebook, instagram, linkedin, tiktok,\nyoutube or threads. Required — a post must name where it goes.",
@@ -448,7 +448,7 @@ func init() {
 		Example: json.RawMessage(`{"title":"Launch day","body":"Hanzo Cloud is live — try it free.","channel":"x","scheduledAt":1780003600}`),
 	})
 	zip.Describe("PUT /v1/marketing/campaigns/:id", zip.Doc{
-		Description: "updateCampaign replaces a campaign's editable fields. It is a full write, not\na patch: every field takes the value in the body, and an omitted one is\ncleared. The id comes from the path — the body cannot retarget another\ncampaign — and createdAt is never rewritten.",
+		Description: "Replaces a campaign's editable fields. It is a full write, not\na patch: every field takes the value in the body, and an omitted one is\ncleared. The id comes from the path — the body cannot retarget another\ncampaign — and createdAt is never rewritten.",
 		Fields: map[string]string{
 			"Campaign.budget":      "Budget and Spend are minor units (USD cents), clamped to >= 0.",
 			"Campaign.channel":     "Channel is the delivery surface: email, sms, social, meta, google or\ntiktok. Empty means email.",

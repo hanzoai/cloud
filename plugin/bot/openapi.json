@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package bot is /v1/bot, the node control plane: bot nodes on user machines dial in and hold a socket, and an org lists its connected nodes and invokes commands on one, authorized once at the socket.",
     "version": "v1"
   },
   "servers": [
@@ -27,8 +27,8 @@
     "/v1/bot/nodes": {
       "get": {
         "operationId": "get_v1_bot_nodes",
-        "summary": "listNodes returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported.",
-        "description": "listNodes returns the caller org's currently connected bot nodes: what each one\ncalls itself, the platform it runs on, its agent version, when its socket was\nestablished, and the capabilities and commands it reported.\n\nOnly this org's nodes are listed — the org is half of every key in the table it\nreads — and only nodes attached to THIS replica, because the list is of live\nsockets rather than of registrations. The capability and command lists are the\nnode's own self-report: useful to show, never load-bearing, because what a node\nmay actually be asked to do is decided at the socket against the deployment's\nallowlist.",
+        "summary": "Returns the caller org's currently connected bot nodes: what each one calls itself, the platform it runs on, its agent version, when its socket was established, and the capabilities and commands it reported.",
+        "description": "Returns the caller org's currently connected bot nodes: what each one\ncalls itself, the platform it runs on, its agent version, when its socket was\nestablished, and the capabilities and commands it reported.\n\nOnly this org's nodes are listed — the org is half of every key in the table it\nreads — and only nodes attached to THIS replica, because the list is of live\nsockets rather than of registrations. The capability and command lists are the\nnode's own self-report: useful to show, never load-bearing, because what a node\nmay actually be asked to do is decided at the socket against the deployment's\nallowlist.",
         "tags": [
           "bot"
         ],

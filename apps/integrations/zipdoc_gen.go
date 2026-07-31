@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/connectors/:id", zip.Doc{
-		Description: "dropConn forgets a connector: every custodied secret, then the row.\nIdempotent — dropping a never-connected id still answers {disconnected:true}\n(disconnect() parity). No provider Revoke: none of the user-plane providers\nexposes a revoke endpoint.",
+		Description: "Forgets a connector: every custodied secret, then the row.\nIdempotent — dropping a never-connected id still answers {disconnected:true}\n(disconnect() parity). No provider Revoke: none of the user-plane providers\nexposes a revoke endpoint.",
 		Fields: map[string]string{
 			"connectorRef.id":            "ID is the connector id, provider + \":\" + label (\"openai:default\") — the\nauth-profile-id shape. Another user's id is simply no row, so 404.",
 			"disconnectOut.disconnected": "Disconnected is always true — the org's secrets and connection row are gone.",
@@ -19,7 +19,7 @@ func init() {
 		Response: json.RawMessage(`{"disconnected":true}`),
 	})
 	zip.Describe("DELETE /v1/integrations/github/repos/:repo/pages", zip.Doc{
-		Description: "githubPagesDisable deletes the repo's Pages site. 404 when there is none, so a\ncaller can tell \"turned it off\" from \"there was nothing on\".",
+		Description: "Deletes the repo's Pages site. 404 when there is none, so a\ncaller can tell \"turned it off\" from \"there was nothing on\".",
 		Fields: map[string]string{
 			"githubPagesDisabledOut.disabled": "Disabled is always true — a failure is an HTTP error, never this shape.",
 			"githubPagesDisabledOut.repo":     "Repo is the repository whose site was deleted.",
@@ -29,7 +29,7 @@ func init() {
 		Response: json.RawMessage(`{"repo":"widgets","disabled":true}`),
 	})
 	zip.Describe("GET /v1/connectors", zip.Doc{
-		Description: "connectors lists the caller's OWN connectors across every provider — the set\n`hanzo connector ls` prints. Rows are keyed (org,user), so this can never\nsurface another user's connector, and no secret is in the view.",
+		Description: "Lists the caller's OWN connectors across every provider — the set\n`hanzo connector ls` prints. Rows are keyed (org,user), so this can never\nsurface another user's connector, and no secret is in the view.",
 		Fields: map[string]string{
 			"connView.account":         "Account is the provider's label for the connected account.",
 			"connView.connectedAt":     "ConnectedAt is when the connector was last (re)established, RFC 3339 UTC.",
@@ -44,7 +44,7 @@ func init() {
 		Response: json.RawMessage(`{"connectors":[{"id":"openai:default","provider":"openai","label":"default","account":"me@acme.com","externalId":"u-42","scopes":["api"],"expiresAt":"2026-07-01T11:00:00Z","connectedAt":"2026-07-01T10:00:00Z"}]}`),
 	})
 	zip.Describe("GET /v1/connectors/:id/token", zip.Doc{
-		Description: "tokenConn hands the custodied access token to its owner — the ONE place\ncustody exits. The (org,user)-keyed row IS the same-user gate: another user's\nid is simply \"no row\" → 404. fresh() auto-rotates within the refreshSkew\nwindow; static providers degenerate to a plain kmsGet of Secrets[0]. Refresh\ntokens are NEVER returned — custody keeps the sink. The token is never logged.",
+		Description: "Hands the custodied access token to its owner — the ONE place\ncustody exits. The (org,user)-keyed row IS the same-user gate: another user's\nid is simply \"no row\" → 404. fresh() auto-rotates within the refreshSkew\nwindow; static providers degenerate to a plain kmsGet of Secrets[0]. Refresh\ntokens are NEVER returned — custody keeps the sink. The token is never logged.",
 		Fields: map[string]string{
 			"connectorRef.id":             "ID is the connector id, provider + \":\" + label (\"openai:default\") — the\nauth-profile-id shape. Another user's id is simply no row, so 404.",
 			"connectorTokenOut.expiresAt": "ExpiresAt is when this token expires, RFC 3339 UTC; empty if non-expiring.",
@@ -56,7 +56,7 @@ func init() {
 		Response: json.RawMessage(`{"token":"<the access token>","provider":"openai","label":"work","expiresAt":"2026-07-01T11:00:00Z"}`),
 	})
 	zip.Describe("GET /v1/connectors/providers", zip.Doc{
-		Description: "connectorProviders lists the user-scoped provider cards — the catalog of what a\nuser can connect, and how. Methods derive from capabilities (Device/Adopt/Verify\n— Mount asserts at least one), never from a parallel kind enum.",
+		Description: "Lists the user-scoped provider cards — the catalog of what a\nuser can connect, and how. Methods derive from capabilities (Device/Adopt/Verify\n— Mount asserts at least one), never from a parallel kind enum.",
 		Fields: map[string]string{
 			"connectorProviderView.category":    "Category groups the card.",
 			"connectorProviderView.description": "Description is the one-line pitch the console card shows.",
@@ -69,7 +69,7 @@ func init() {
 		Response: json.RawMessage(`{"providers":[{"id":"openai","name":"OpenAI","description":"Use your own OpenAI account.","category":"AI","scopes":["api"],"methods":["device","token"]}]}`),
 	})
 	zip.Describe("GET /v1/integrations", zip.Doc{
-		Description: "list returns every registered integration provider together with THIS org's\nconnection status for it — the catalog the console's Integrations page renders.\nOrg-authed: a caller with no validated principal is 403, because the status is\nper-org and there is no org-less answer. User-plane providers (the /v1/connectors\nsurface) are omitted; the two planes are disjoint.",
+		Description: "Returns every registered integration provider together with THIS org's\nconnection status for it — the catalog the console's Integrations page renders.\nOrg-authed: a caller with no validated principal is 403, because the status is\nper-org and there is no org-less answer. User-plane providers (the /v1/connectors\nsurface) are omitted; the two planes are disjoint.",
 		Fields: map[string]string{
 			"connectionView.account":     "Account is the human label of the connected third-party account (the Slack\nteam name, the GitHub org login). Provider-supplied and sanitized on ingest.",
 			"connectionView.connectedAt": "ConnectedAt is when the connection was last (re)established, RFC 3339 UTC.",
@@ -87,7 +87,7 @@ func init() {
 		Response: json.RawMessage(`{"providers":[{"id":"slack","name":"Slack","description":"Connect your workspace.","category":"Communication","available":true,"connected":true,"connection":{"account":"Acme","externalId":"T0231","scopes":["chat:write"],"connectedAt":"2026-07-01T10:00:00Z"}}]}`),
 	})
 	zip.Describe("GET /v1/integrations/:provider", zip.Doc{
-		Description: "get returns ONE provider with this org's connection status — the same view list\ncarries, for a single id. An unknown id is 404, and so is a user-plane provider:\nthe org surface never resolves one.",
+		Description: "Returns ONE provider with this org's connection status — the same view list\ncarries, for a single id. An unknown id is 404, and so is a user-plane provider:\nthe org surface never resolves one.",
 		Fields: map[string]string{
 			"connectionView.account":     "Account is the human label of the connected third-party account (the Slack\nteam name, the GitHub org login). Provider-supplied and sanitized on ingest.",
 			"connectionView.connectedAt": "ConnectedAt is when the connection was last (re)established, RFC 3339 UTC.",
@@ -106,7 +106,7 @@ func init() {
 		Response: json.RawMessage(`{"id":"slack","name":"Slack","description":"Connect your workspace.","category":"Communication","available":true,"connected":false}`),
 	})
 	zip.Describe("GET /v1/integrations/github/repos", zip.Doc{
-		Description: "githubRepos lists the org's granted GitHub repositories, each annotated with its\nnative import + sync status from the git object plane. Org-authed: the org comes\nfrom the validated principal, and the granted set is bounded to THAT org's\ninstallation token — an org can never enumerate another org's repos. The console\npolls it to watch an import flip a repo to imported.",
+		Description: "Lists the org's granted GitHub repositories, each annotated with its\nnative import + sync status from the git object plane. Org-authed: the org comes\nfrom the validated principal, and the granted set is bounded to THAT org's\ninstallation token — an org can never enumerate another org's repos. The console\npolls it to watch an import flip a repo to imported.",
 		Fields: map[string]string{
 			"githubRepoView.defaultBranch": "DefaultBranch is the repo's default branch at GitHub.",
 			"githubRepoView.fullName":      "FullName is GitHub's owner/name.",
@@ -121,7 +121,7 @@ func init() {
 		Response: json.RawMessage(`{"repos":[{"name":"widgets","fullName":"acme/widgets","private":true,"defaultBranch":"main","imported":true,"syncStatus":"synced","lastSyncedAt":"2026-07-01T10:00:00Z","htmlUrl":"https://github.com/acme/widgets"}]}`),
 	})
 	zip.Describe("GET /v1/integrations/github/repos/:repo/pages", zip.Doc{
-		Description: "githubPagesGet returns the repo's Pages status, live URL, custom domain and build\nsource. The repo is resolved against the org installation's GRANTED set, so a\ncaller can never address a repo the App was not granted; 404 when the repo has no\nPages site.",
+		Description: "Returns the repo's Pages status, live URL, custom domain and build\nsource. The repo is resolved against the org installation's GRANTED set, so a\ncaller can never address a repo the App was not granted; 404 when the repo has no\nPages site.",
 		Fields: map[string]string{
 			"githubPagesSource.branch":      "Branch is the branch the site builds from.",
 			"githubPagesSource.path":        "Path is the directory within that branch: \"/\" or \"/docs\".",
@@ -139,7 +139,7 @@ func init() {
 		Response: json.RawMessage(`{"repo":"widgets","status":"built","url":"https://acme.github.io/widgets/","cname":"docs.acme.com","custom404":false,"buildType":"legacy","httpsEnforced":true,"source":{"branch":"main","path":"/docs"}}`),
 	})
 	zip.Describe("POST /v1/connectors/:id/refresh", zip.Doc{
-		Description: "refreshConn forces a token rotation for a connected connector, ahead of the\nautomatic rotation a token read would do inside the expiry window. Only\nproviders that declare a Refresh support it.",
+		Description: "Forces a token rotation for a connected connector, ahead of the\nautomatic rotation a token read would do inside the expiry window. Only\nproviders that declare a Refresh support it.",
 		Fields: map[string]string{
 			"connView.account":     "Account is the provider's label for the connected account.",
 			"connView.connectedAt": "ConnectedAt is when the connector was last (re)established, RFC 3339 UTC.",
@@ -157,7 +157,7 @@ func init() {
 		Response: json.RawMessage(`{"refreshed":true,"connector":{"id":"openai:work","provider":"openai","label":"work","account":"me@acme.com","externalId":"u-42","scopes":["api"],"expiresAt":"2026-07-01T12:00:00Z","connectedAt":"2026-07-01T10:00:00Z"}}`),
 	})
 	zip.Describe("POST /v1/connectors/:provider/credential", zip.Doc{
-		Description: "credential is the direct intake path: a customer-held token/setup-token\n(Verify) or an externally obtained OAuth bundle from the CLI's local PKCE\n(Adopt). ALWAYS verify-before-store: a bad credential is refused and NOTHING\nis persisted (connectByCredential's fail-closed order).",
+		Description: "Is the direct intake path: a customer-held token/setup-token\n(Verify) or an externally obtained OAuth bundle from the CLI's local PKCE\n(Adopt). ALWAYS verify-before-store: a bad credential is refused and NOTHING\nis persisted (connectByCredential's fail-closed order).",
 		Fields: map[string]string{
 			"connView.account":        "Account is the provider's label for the connected account.",
 			"connView.connectedAt":    "ConnectedAt is when the connector was last (re)established, RFC 3339 UTC.",
@@ -182,7 +182,7 @@ func init() {
 		Response: json.RawMessage(`{"connected":true,"connector":{"id":"openai:work","provider":"openai","label":"work","account":"me@acme.com","externalId":"u-42","scopes":["api"],"expiresAt":"","connectedAt":"2026-07-01T10:00:00Z"}}`),
 	})
 	zip.Describe("POST /v1/connectors/:provider/device", zip.Doc{
-		Description: "startDevice begins a device sign-in and returns the code to show the user plus\nhow to poll for completion. KMS readiness is checked NOW rather than dead-ending\nthe user at poll-done (connect() parity), and the per-provider connector cap is\nchecked before the provider is called. The provider's device code is persisted\nonly in the encrypted grants table and is NEVER returned.",
+		Description: "Begins a device sign-in and returns the code to show the user plus\nhow to poll for completion. KMS readiness is checked NOW rather than dead-ending\nthe user at poll-done (connect() parity), and the per-provider connector cap is\nchecked before the provider is called. The provider's device code is persisted\nonly in the encrypted grants table and is NEVER returned.",
 		Fields: map[string]string{
 			"deviceStartIn.label":      "Label names this connection so one user can hold several per provider\n(\"work\", \"personal\"). Empty means \"default\". 1-64 of [A-Za-z0-9._-].",
 			"deviceStartIn.provider":   "Provider is the user-scoped provider's registry id, from the path.",
@@ -196,7 +196,7 @@ func init() {
 		Response: json.RawMessage(`{"flow":"g_7f2c","userCode":"WDJB-MJHT","verifyUrl":"https://example.com/device","interval":5,"expiresAt":"2026-07-01T10:15:00Z"}`),
 	})
 	zip.Describe("POST /v1/connectors/:provider/device/:flow/poll", zip.Doc{
-		Description: "pollDevice advances a device sign-in. Terminal outcomes are DATA, not errors\n(verifyConn {active:false} discipline) — the status set is closed:\npending|connected|denied|expired. pollSlow collapses to \"pending\" on the\nwire; the raised cadence rides interval.",
+		Description: "Advances a device sign-in. Terminal outcomes are DATA, not errors\n(verifyConn {active:false} discipline) — the status set is closed:\npending|connected|denied|expired. pollSlow collapses to \"pending\" on the\nwire; the raised cadence rides interval.",
 		Fields: map[string]string{
 			"connView.account":        "Account is the provider's label for the connected account.",
 			"connView.connectedAt":    "ConnectedAt is when the connector was last (re)established, RFC 3339 UTC.",
@@ -216,7 +216,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"connected","connector":{"id":"openai:work","provider":"openai","label":"work","account":"me@acme.com","externalId":"u-42","scopes":["api"],"expiresAt":"2026-07-01T11:00:00Z","connectedAt":"2026-07-01T10:05:00Z"}}`),
 	})
 	zip.Describe("POST /v1/integrations/:provider/connect", zip.Doc{
-		Description: "connect acquires the org's credential for one provider. It has TWO paths and the\nREQUEST picks which: a \"token\" key in the body seals that credential directly\n(verify-before-store), and its absence begins the 3-legged OAuth flow — minting a\nsingle-use nonce plus an HMAC-signed state that binds this org to this provider,\nand answering with the provider's authorize URL for the caller to redirect to.\n\nFail-closed order, unchanged: no principal → 403; unknown provider → 404; an\nAdminOnly connector without the caller's own-org admin bit → 403; not configured\n→ 503; KMS not ready → 503 (the flow WILL need to seal a token, so refuse now\nrather than dead-end at the callback).",
+		Description: "Acquires the org's credential for one provider. It has TWO paths and the\nREQUEST picks which: a \"token\" key in the body seals that credential directly\n(verify-before-store), and its absence begins the 3-legged OAuth flow — minting a\nsingle-use nonce plus an HMAC-signed state that binds this org to this provider,\nand answering with the provider's authorize URL for the caller to redirect to.\n\nFail-closed order, unchanged: no principal → 403; unknown provider → 404; an\nAdminOnly connector without the caller's own-org admin bit → 403; not configured\n→ 503; KMS not ready → 503 (the flow WILL need to seal a token, so refuse now\nrather than dead-end at the callback).",
 		Fields: map[string]string{
 			"connectIn.accountId":     "AccountID is the provider account the credential should be scoped to, for the\nproviders whose Verify needs one (Cloudflare). Ignored by the OAuth path.",
 			"connectIn.provider":      "Provider is the connector's registry id, from the :provider path segment.",
@@ -232,7 +232,7 @@ func init() {
 		Response: json.RawMessage(`{"connected":true,"provider":"cloudflare","account":"Acme","externalId":"a1b2c3","scopes":[]}`),
 	})
 	zip.Describe("POST /v1/integrations/:provider/disconnect", zip.Doc{
-		Description: "disconnect revokes (best-effort) and forgets an org's connection: it deletes\nevery custodied KMS secret and the connection row. Idempotent — disconnecting a\nprovider that was never connected still returns {disconnected:true}. Symmetric\nwith connect: an AdminOnly connector needs the caller's own-org admin bit.",
+		Description: "Revokes (best-effort) and forgets an org's connection: it deletes\nevery custodied KMS secret and the connection row. Idempotent — disconnecting a\nprovider that was never connected still returns {disconnected:true}. Symmetric\nwith connect: an AdminOnly connector needs the caller's own-org admin bit.",
 		Fields: map[string]string{
 			"disconnectOut.disconnected": "Disconnected is always true — the org's secrets and connection row are gone.",
 			"providerRef.provider":       "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/connectors)\nproviders, which this surface never resolves.",
@@ -241,7 +241,7 @@ func init() {
 		Response: json.RawMessage(`{"disconnected":true}`),
 	})
 	zip.Describe("POST /v1/integrations/:provider/verify", zip.Doc{
-		Description: "verifyConn re-checks a CONNECTED apikey connector's stored credential against the\nprovider, live (`hanzo connector verify`). Org-scoped (any member may check\nstatus); the credential is read from KMS, verified, and NEVER returned or logged.\nA verification failure is reported as {active:false}, not an error — the console/\nCLI renders it. Only apikey providers support verify (OAuth tokens are checked at\nuse, not re-verified here).",
+		Description: "Re-checks a CONNECTED apikey connector's stored credential against the\nprovider, live (`hanzo connector verify`). Org-scoped (any member may check\nstatus); the credential is read from KMS, verified, and NEVER returned or logged.\nA verification failure is reported as {active:false}, not an error — the console/\nCLI renders it. Only apikey providers support verify (OAuth tokens are checked at\nuse, not re-verified here).",
 		Fields: map[string]string{
 			"providerRef.provider": "Provider is the registry id of the connector — \"slack\", \"github\",\n\"cloudflare\". Unknown ids are 404, as are the user-plane (/v1/connectors)\nproviders, which this surface never resolves.",
 			"verifyOut.account":    "Account is the account label the provider reported. Present only when active.",
@@ -255,7 +255,7 @@ func init() {
 		Response: json.RawMessage(`{"provider":"cloudflare","active":true,"account":"Acme","externalId":"a1b2c3","scopes":["zone:read"]}`),
 	})
 	zip.Describe("POST /v1/integrations/github/issues/backfill", zip.Doc{
-		Description: "githubIssuesBackfill seeds the native tracker with the EXISTING issues across the\norg's granted repos (default state=open); the webhook keeps them live thereafter.\nOrg-scoped by the validated principal — a caller only ever backfills its OWN org.\nSynchronous + bounded (a total time budget and an issue cap) so it returns the\ncounts directly; idempotent by ExtRef, so a re-run continues where a truncated\npass left off and never duplicates.",
+		Description: "Seeds the native tracker with the EXISTING issues across the\norg's granted repos (default state=open); the webhook keeps them live thereafter.\nOrg-scoped by the validated principal — a caller only ever backfills its OWN org.\nSynchronous + bounded (a total time budget and an issue cap) so it returns the\ncounts directly; idempotent by ExtRef, so a re-run continues where a truncated\npass left off and never duplicates.",
 		Fields: map[string]string{
 			"githubBackfillIn.state":         "State is the GitHub issue state to walk: \"open\" (the default), \"closed\" or\n\"all\". Anything else is a 400.",
 			"githubBackfillResult.created":   "Created is how many native issues this pass created.",
@@ -269,7 +269,7 @@ func init() {
 		Response: json.RawMessage(`{"repos":12,"issues":430,"created":410,"updated":20,"failed":0}`),
 	})
 	zip.Describe("POST /v1/integrations/github/repos/:repo/pages", zip.Doc{
-		Description: "githubPagesEnable creates the repo's Pages site and answers 201 Created with it.\nWith buildType \"workflow\" the site builds via GitHub Actions; otherwise it builds\nfrom a branch source, defaulting to the repo's own default branch when none is\ngiven. Only \"/\" and \"/docs\" are legal source paths (GitHub's rule).",
+		Description: "Creates the repo's Pages site and answers 201 Created with it.\nWith buildType \"workflow\" the site builds via GitHub Actions; otherwise it builds\nfrom a branch source, defaulting to the repo's own default branch when none is\ngiven. Only \"/\" and \"/docs\" are legal source paths (GitHub's rule).",
 		Fields: map[string]string{
 			"githubPagesEnableReq.branch":    "Branch is the legacy source branch; empty defaults to the repo's own default\nbranch. Ignored when buildType is \"workflow\".",
 			"githubPagesEnableReq.buildType": "BuildType selects the builder: \"workflow\" builds via GitHub Actions, anything\nelse builds from the branch source above.",
@@ -301,22 +301,25 @@ func init() {
 		Response: json.RawMessage(`{"repo":"widgets","status":"queued","url":"https://api.github.com/repos/acme/widgets/pages/builds/1"}`),
 	})
 	zip.Describe("POST /v1/integrations/github/repos/import", zip.Doc{
+		Description: "GithubImport imports the selected (or all) granted repos into git.hanzo.ai. The\nselection is intersected with the installation's GRANTED set, so a client can\nnever import a repo the App was not granted (org isolation + a grant check). The\nimport runs in a bounded background worker (don't block the request), so the\nanswer is 202 Accepted; poll GET /v1/integrations/github/repos for the per-repo\nstatus to flip to imported.",
 		Fields: map[string]string{
 			"githubImportIn.all":     "All imports every repository the installation grants, instead of naming\nthem. Archived and disabled repositories are skipped either way — they\ncannot be fetched.",
 			"githubImportIn.repos":   "Repos names the repositories to import, either owner-qualified\n(\"hanzo-apps/ai\") or as a bare name (\"ai\"); a trailing \".git\" is stripped.\nA bare name that matches more than one granted repository is an error\nrather than a guess, because one Hanzo org may hold several GitHub\ninstallations and a name is only unique within an owner.\nIgnored when all is true.",
 			"githubImportOut.queued": "Queued is how many repositories were handed to the background importer.",
 			"githubImportOut.repos":  "Repos names those repositories, in the installation's listing order.",
 		},
+		Example:  json.RawMessage(`{"repos":["widgets"]}`),
+		Response: json.RawMessage(`{"queued":1,"repos":["widgets"]}`),
 	})
 	zip.Describe("POST /v1/integrations/telegram/connect", zip.Doc{
-		Description: "telegramConnect mints a short, single-use deep-link code bound to the caller's\norg and returns the t.me link the console navigates to. Org-authed: a caller with\nno validated principal is 403 (same gate as the framework connect). The code is\nstored as an oauth_nonce (org,telegram); the webhook's /start handler claims it to\nbind chat→org. It is short (128-bit hex) so it fits Telegram's 64-char `start`\npayload limit.",
+		Description: "Mints a short, single-use deep-link code bound to the caller's\norg and returns the t.me link the console navigates to. Org-authed: a caller with\nno validated principal is 403 (same gate as the framework connect). The code is\nstored as an oauth_nonce (org,telegram); the webhook's /start handler claims it to\nbind chat→org. It is short (128-bit hex) so it fits Telegram's 64-char `start`\npayload limit.",
 		Fields: map[string]string{
 			"authorizeOut.authorizeUrl": "AuthorizeURL is the provider consent (or bot deep-link) URL.",
 		},
 		Response: json.RawMessage(`{"authorizeUrl":"https://t.me/hanzo_bot?start=9f3c1d2e4b5a6c7d8e9f0a1b2c3d4e5f"}`),
 	})
 	zip.Describe("PUT /v1/integrations/github/repos/:repo/pages", zip.Doc{
-		Description: "githubPagesUpdate sets or clears the custom domain (cname) and updates HTTPS\nenforcement, build type, or source. ONLY the provided fields are sent to GitHub,\nso an update never resets a setting the caller did not mention.",
+		Description: "Sets or clears the custom domain (cname) and updates HTTPS\nenforcement, build type, or source. ONLY the provided fields are sent to GitHub,\nso an update never resets a setting the caller did not mention.",
 		Fields: map[string]string{
 			"githubPagesUpdateReq.branch":        "Branch switches the legacy source branch. Empty leaves the source alone.",
 			"githubPagesUpdateReq.buildType":     "BuildType switches the builder: \"legacy\" or \"workflow\". Empty leaves it.",

@@ -8,7 +8,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/usage/analytics", zip.Doc{
-		Description: "analytics is the entitlement-GATED per-provider breakdown of the caller org's LLM\nusage — the paid lens over the same warehouse ledger GET /v1/usage/summary reads\nits totals from. Basic own-org usage stays ungated at /v1/usage/summary.\n\nA plan that does not grant the analytics datastore is refused with 402, and an\nunresolvable plan fails closed to the free floor, which does not grant it. The\nwindow is clamped forward to the plan's retention entitlement, so a tenant can\nnever read older than its plan allows even with a custom start. The response is\nmarked no-store.\n\nINTERIM (mirrors apps/world's limits echo): no org→plan resolver exists in cloud\nyet — the subscription lookup is owned by the billing plane and the gateway\nprincipal carries no plan claim — so the caller passes the plan and the gate\nresolves THAT plan's access.",
+		Description: "Is the entitlement-GATED per-provider breakdown of the caller org's LLM\nusage — the paid lens over the same warehouse ledger GET /v1/usage/summary reads\nits totals from. Basic own-org usage stays ungated at /v1/usage/summary.\n\nA plan that does not grant the analytics datastore is refused with 402, and an\nunresolvable plan fails closed to the free floor, which does not grant it. The\nwindow is clamped forward to the plan's retention entitlement, so a tenant can\nnever read older than its plan allows even with a custom start. The response is\nmarked no-store.\n\nINTERIM (mirrors apps/world's limits echo): no org→plan resolver exists in cloud\nyet — the subscription lookup is owned by the billing plane and the gateway\nprincipal carries no plan claim — so the caller passes the plan and the gate\nresolves THAT plan's access.",
 		Fields: map[string]string{
 			"ProviderBreakdown.available":      "Available is false when the warehouse could not be read, which means \"no\nanswer\" and NOT \"no usage\" — Items is then empty for a reason.",
 			"ProviderBreakdown.items":          "Items is one row per provider, most tokens first.",
@@ -34,7 +34,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/usage/analytics/access", zip.Doc{
-		Description: "analyticsAccess echoes a plan's resolved analytics entitlement so a dashboard can\nconfigure itself against the LIVE catalog instead of hardcoding tier numbers. An\nempty plan resolves the free floor, and a catalog resolution failure serves that\nsame floor rather than erroring — so this always answers 200. It is a read-only\ncontract echo and carries no tenant data.",
+		Description: "Echoes a plan's resolved analytics entitlement so a dashboard can\nconfigure itself against the LIVE catalog instead of hardcoding tier numbers. An\nempty plan resolves the free floor, and a catalog resolution failure serves that\nsame floor rather than erroring — so this always answers 200. It is a read-only\ncontract echo and carries no tenant data.",
 		Fields: map[string]string{
 			"usageAnalyticsAccess.access":       "Access is what that plan grants.",
 			"usageAnalyticsAccess.plan":         "Plan echoes the plan id that was resolved, exactly as it was asked for.",
@@ -45,7 +45,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/usage/samples", zip.Doc{
-		Description: "samples is the PER-PROVIDER view: one connected account's own consumption of its\nown plan — \"my Claude Max plan is 47% through its 6h window, resets at 14:20\".\n\n`current` is the newest instance of each lane (the headline); `windows` is the\nhistory behind it. Both come from ONE deduped read, so they can never disagree.\nThe rows are the caller's OWN linked accounts, scoped to the validated principal\nand its subject — never another user's, and never another org's.",
+		Description: "Is the PER-PROVIDER view: one connected account's own consumption of its\nown plan — \"my Claude Max plan is 47% through its 6h window, resets at 14:20\".\n\n`current` is the newest instance of each lane (the headline); `windows` is the\nhistory behind it. Both come from ONE deduped read, so they can never disagree.\nThe rows are the caller's OWN linked accounts, scoped to the validated principal\nand its subject — never another user's, and never another org's.",
 		Fields: map[string]string{
 			"dashResp.account":                  "Account is the linked account that was asked about, when one was named.",
 			"dashResp.available":                "Available is false when the warehouse could not be read. That means \"no\nanswer\", NOT \"no usage\" — the two lists below are then empty for a reason.",
@@ -83,7 +83,7 @@ func init() {
 		},
 	})
 	zip.Describe("GET /v1/usage/summary", zip.Doc{
-		Description: "summary answers GET /v1/usage/summary: the caller's own usage footprint over one\nwindow — the categorized spend roll-up from the commerce ledger, the org's LLM\nusage totals from the warehouse, and the caller's OWN linked provider accounts\nbeside the org's Hanzo-routed usage.\n\nEvery source degrades INDEPENDENTLY to honest zeros and says so in `sources` and\nin its own `available` flag, so a partial deploy reports \"no data\" rather than\nfabricating spend. The account rows and the Hanzo rows are concatenated and never\nsummed: a plan's percent is not money.\n\nThe response is org-scoped from the validated principal and marked no-store — a\nsigned-out caller is refused.",
+		Description: "Answers GET /v1/usage/summary: the caller's own usage footprint over one\nwindow — the categorized spend roll-up from the commerce ledger, the org's LLM\nusage totals from the warehouse, and the caller's OWN linked provider accounts\nbeside the org's Hanzo-routed usage.\n\nEvery source degrades INDEPENDENTLY to honest zeros and says so in `sources` and\nin its own `available` flag, so a partial deploy reports \"no data\" rather than\nfabricating spend. The account rows and the Hanzo rows are concatenated and never\nsummed: a plan's percent is not money.\n\nThe response is org-scoped from the validated principal and marked no-store — a\nsigned-out caller is refused.",
 		Fields: map[string]string{
 			"Accounts.account":       "Account is the state of the caller's own linked-account side.",
 			"Accounts.hanzo":         "Hanzo is the state of the org's Hanzo-routed side.",
@@ -143,7 +143,7 @@ func init() {
 		},
 	})
 	zip.Describe("POST /v1/usage", zip.Doc{
-		Description: "record ingests a batch of account-usage samples — what a developer's OWN AI\naccounts have consumed of their OWN plans, metered from each provider's own\nlogin — and appends them to the warehouse series. Answers 202.\n\nSend either a `samples` array or one sample's fields at the top level. Every\nsample needs a provider, a machine and a known window class; an unknown window or\nkind is refused rather than silently rewritten, because a dash filled with a class\nnobody reported is worse than an error. There is no timestamp field: the server\nowns the observation clock, and a sample says which window it measured with\nwindowStart or resetsAt.\n\nIt is FAIL-SOFT on storage: a warehouse outage costs a poll of history\n(stored:false), never a failed request. It records usage ONLY — the link registry\nis refreshed separately via POST /v1/links, so there is one and only one way to\nupdate an account row.",
+		Description: "Ingests a batch of account-usage samples — what a developer's OWN AI\naccounts have consumed of their OWN plans, metered from each provider's own\nlogin — and appends them to the warehouse series. Answers 202.\n\nSend either a `samples` array or one sample's fields at the top level. Every\nsample needs a provider, a machine and a known window class; an unknown window or\nkind is refused rather than silently rewritten, because a dash filled with a class\nnobody reported is worse than an error. There is no timestamp field: the server\nowns the observation clock, and a sample says which window it measured with\nwindowStart or resetsAt.\n\nIt is FAIL-SOFT on storage: a warehouse outage costs a poll of history\n(stored:false), never a failed request. It records usage ONLY — the link registry\nis refreshed separately via POST /v1/links, so there is one and only one way to\nupdate an account row.",
 		Fields: map[string]string{
 			"reportReq.account":           "Account is the linked account the window was metered from.",
 			"reportReq.cachedInputTokens": "CachedInputTokens is the prompt tokens the provider served from cache.",

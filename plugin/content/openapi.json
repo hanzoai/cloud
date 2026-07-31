@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package content is the Hanzo agentic-marketing lane: the marketing content loop (generate → CMS → review → approve → publish → distribute) built natively on the framework DocType engine, the ONE Go-native replacement for the bespoke karma Python scripts, multi-tenant for ANY brand (org = tenant, project = brand/site sub-scope).",
     "version": "v1"
   },
   "servers": [

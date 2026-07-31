@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hanzo Cloud API",
-    "description": "Generated from the live router — every operation below is a route the unified cloud binary actually serves. Tagged by product: the first path segment after /v1/.",
+    "description": "Package rollingcap installs the ai gate's rolling-window AI-spend cap — the Anthropic-style burst limit that resets continuously (usage older than the window drops out of the trailing sum, so there is no fixed reset boundary).",
     "version": "v1"
   },
   "servers": [

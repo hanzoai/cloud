@@ -10,7 +10,7 @@ import (
 
 func init() {
 	zip.Describe("GET /v1/admin/plugins", zip.Doc{
-		Description: "list reports what each host is actually running: every loaded plugin with its\nversion, pid, uptime, reload and restart counts, and its measured CPU, RSS,\nthread and fd cost — read from the kernel, which is only answerable at all\nbecause a plugin is a process.\n\nReading this from deployment config would answer what was INTENDED. Only the\nprocess knows what is TRUE, and during a rolling upgrade the two disagree on\npurpose.",
+		Description: "Reports what each host is actually running: every loaded plugin with its\nversion, pid, uptime, reload and restart counts, and its measured CPU, RSS,\nthread and fd cost — read from the kernel, which is only answerable at all\nbecause a plugin is a process.\n\nReading this from deployment config would answer what was INTENDED. Only the\nprocess knows what is TRUE, and during a rolling upgrade the two disagree on\npurpose.",
 		Fields: map[string]string{
 			"Host.error":      "Err is set when a peer could not be reached. Its plugins are then\nunknown, which is NOT the same as none, so the list stays empty and the\ndrift below refuses to conclude anything from it.",
 			"Host.host":       "Host is the pod's stable id, and Addr where it was reached. Self is true\nfor the host that answered the request.",
@@ -34,7 +34,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"","data":[{"host":"cloud-0","self":true,"plugins":[{"name":"billing","prefix":"/v1/billing","source":"url","version":"9f2c…","running":true,"reloads":1,"restarts":0}]}],"drift":[{"name":"billing","versions":["9f2c…"],"running":1,"drifted":false}]}`),
 	})
 	zip.Describe("POST /v1/admin/plugins/:name/disable", zip.Doc{
-		Description: "disable stops the plugin. Its routes STAY REGISTERED and answer 503 — not 404.\n\nThat is zip's choice and this keeps it. Removing the routes would mutate the\nroute table, and re-adding them on enable would grow it without bound across\nrepeated cycles, which is the invariant that makes reloads flat in memory. It\nis also the better answer: 404 says \"no such API\" and a client may cache it\nand stop retrying, while 503 says \"this API exists and is down right now\",\nwhich is true and retryable. Which of the two 503s this is — deliberate stop\nor crash — is what the status's disabled flag reports.",
+		Description: "Stops the plugin. Its routes STAY REGISTERED and answer 503 — not 404.\n\nThat is zip's choice and this keeps it. Removing the routes would mutate the\nroute table, and re-adding them on enable would grow it without bound across\nrepeated cycles, which is the invariant that makes reloads flat in memory. It\nis also the better answer: 404 says \"no such API\" and a client may cache it\nand stop retrying, while 503 says \"this API exists and is down right now\",\nwhich is true and retryable. Which of the two 503s this is — deliberate stop\nor crash — is what the status's disabled flag reports.",
 		Fields: map[string]string{
 			"NameIn.name":  "Name is the app, from the path.",
 			"NameIn.scope": "Scope \"host\" applies here only; default \"fleet\" applies everywhere.",
@@ -43,7 +43,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"billing disabled","data":[{"host":"cloud-0","ok":true}]}`),
 	})
 	zip.Describe("POST /v1/admin/plugins/:name/enable", zip.Doc{
-		Description: "enable brings a stopped or disabled plugin back on the artifact it already\nhas: the zero Plugin names no new artifact, so Reload reuses the loaded spec\nand clears the disabled flag. Named for what an operator means by it.",
+		Description: "Brings a stopped or disabled plugin back on the artifact it already\nhas: the zero Plugin names no new artifact, so Reload reuses the loaded spec\nand clears the disabled flag. Named for what an operator means by it.",
 		Fields: map[string]string{
 			"NameIn.name":  "Name is the app, from the path.",
 			"NameIn.scope": "Scope \"host\" applies here only; default \"fleet\" applies everywhere.",
@@ -52,7 +52,7 @@ func init() {
 		Response: json.RawMessage(`{"status":"ok","msg":"billing enabled","data":[{"host":"cloud-0","ok":true}]}`),
 	})
 	zip.Describe("POST /v1/admin/plugins/:name/reload", zip.Doc{
-		Description: "reload swaps a plugin for another build without dropping a request. The\nreplacement is started and proven to be LISTENING before any traffic moves to\nit, so a bad build leaves the old one serving and returns an error rather\nthan a hole; the old process then drains before it is killed.\n\nWith a version or url+sum it pins; naming a digest this host has run before is\nthe rollback, and costs no network because the digest IS the cache key. With\nneither it restarts what is already loaded.\n\nFleet scope applies it to one host at a time and STOPS at the first failure,\nso a build that cannot come up reaches exactly one host.",
+		Description: "Swaps a plugin for another build without dropping a request. The\nreplacement is started and proven to be LISTENING before any traffic moves to\nit, so a bad build leaves the old one serving and returns an error rather\nthan a hole; the old process then drains before it is killed.\n\nWith a version or url+sum it pins; naming a digest this host has run before is\nthe rollback, and costs no network because the digest IS the cache key. With\nneither it restarts what is already loaded.\n\nFleet scope applies it to one host at a time and STOPS at the first failure,\nso a build that cannot come up reaches exactly one host.",
 		Fields: map[string]string{
 			"ReloadIn.name":    "Name is the app, from the path. It must be one the manifest declares.",
 			"ReloadIn.scope":   "Scope \"host\" applies here only. Default \"fleet\" rolls it out one host at\na time, halting on the first host that fails to come up.",

@@ -10,25 +10,25 @@ import (
 
 func init() {
 	zip.Describe("DELETE /v1/webhooks/:id", zip.Doc{
-		Description: "deleteEndpoint removes one of the caller org's webhook endpoints and answers\n204 with no body. Delivery stops immediately and the endpoint's signing secret\nis gone with it; its recorded delivery history goes too. An id another org owns\nreads as not found.",
+		Description: "Removes one of the caller org's webhook endpoints and answers\n204 with no body. Delivery stops immediately and the endpoint's signing secret\nis gone with it; its recorded delivery history goes too. An id another org owns\nreads as not found.",
 		Example:     json.RawMessage(`{"id":"wh_9f8c1d2e"}`),
 	})
 	zip.Describe("GET /v1/webhooks", zip.Doc{
-		Description: "listEndpoints returns every webhook endpoint the caller's org has registered,\nnewest first, each with its 7-day delivery and failure counts. Signing secrets\nare redacted here — a secret leaves the server only on create and on rotate.\nThe listing is physically org-scoped, so another tenant's endpoints are not\nreachable from this route at all.",
+		Description: "Returns every webhook endpoint the caller's org has registered,\nnewest first, each with its 7-day delivery and failure counts. Signing secrets\nare redacted here — a secret leaves the server only on create and on rotate.\nThe listing is physically org-scoped, so another tenant's endpoints are not\nreachable from this route at all.",
 		Fields: map[string]string{
 			"Endpoint.deliveries7d": "Deliveries7d / Failures7d are cheap usage counters computed from the delivery log\nover usageWindow (not stored columns) and populated ONLY on list/get. They are 0\nwhen there is no delivery history — never omitempty, so the console always sees them.",
 			"endpointList.data":     "Data is the org's endpoints, newest first, each with its signing secret\nREDACTED — the secret leaves the server only on create and on rotate.",
 		},
 	})
 	zip.Describe("GET /v1/webhooks/:id", zip.Doc{
-		Description: "getEndpoint returns one of the caller org's webhook endpoints with its 7-day\ndelivery and failure counts, signing secret redacted. An id another org owns\nreads as not found, so the response cannot confirm that it exists.",
+		Description: "Returns one of the caller org's webhook endpoints with its 7-day\ndelivery and failure counts, signing secret redacted. An id another org owns\nreads as not found, so the response cannot confirm that it exists.",
 		Fields: map[string]string{
 			"Endpoint.deliveries7d": "Deliveries7d / Failures7d are cheap usage counters computed from the delivery log\nover usageWindow (not stored columns) and populated ONLY on list/get. They are 0\nwhen there is no delivery history — never omitempty, so the console always sees them.",
 		},
 		Example: json.RawMessage(`{"id":"wh_9f8c1d2e"}`),
 	})
 	zip.Describe("GET /v1/webhooks/:id/deliveries", zip.Doc{
-		Description: "listDeliveries returns one endpoint's per-attempt delivery log, newest first —\nthe record of what was sent, what the subscriber answered, and how long it\ntook. One event that retried three times appears as three rows sharing a\ndelivery id. It is org-scoped exactly like every other route here: the endpoint\nlookup only ever finds THIS org's endpoint, so another org's id is a 404 and\nnever a window onto its logs.",
+		Description: "Returns one endpoint's per-attempt delivery log, newest first —\nthe record of what was sent, what the subscriber answered, and how long it\ntook. One event that retried three times appears as three rows sharing a\ndelivery id. It is org-scoped exactly like every other route here: the endpoint\nlookup only ever finds THIS org's endpoint, so another org's id is a 404 and\nnever a window onto its logs.",
 		Fields: map[string]string{
 			"deliveryList.data":       "Data is the matching attempts, newest first.",
 			"listDeliveriesIn.limit":  "Limit caps how many attempts come back: default 50, maximum 200. A value\nthat is not a positive integer reads as the default.",
@@ -37,7 +37,7 @@ func init() {
 		Example: json.RawMessage(`{"id":"wh_9f8c1d2e","status":"failed","limit":100}`),
 	})
 	zip.Describe("POST /v1/webhooks", zip.Doc{
-		Description: "createEndpoint registers a new webhook subscription for the caller's org and\nanswers 201 with the endpoint INCLUDING its freshly minted signing secret.\nThis is one of only two responses that ever carry that secret (the other is\nrotate) — store it now, because no later read returns it. The org is stamped by\nthe server from the validated principal, so a body can never register an\nendpoint in another tenant.",
+		Description: "Registers a new webhook subscription for the caller's org and\nanswers 201 with the endpoint INCLUDING its freshly minted signing secret.\nThis is one of only two responses that ever carry that secret (the other is\nrotate) — store it now, because no later read returns it. The org is stamped by\nthe server from the validated principal, so a body can never register an\nendpoint in another tenant.",
 		Fields: map[string]string{
 			"Endpoint.deliveries7d":        "Deliveries7d / Failures7d are cheap usage counters computed from the delivery log\nover usageWindow (not stored columns) and populated ONLY on list/get. They are 0\nwhen there is no delivery history — never omitempty, so the console always sees them.",
 			"createEndpointIn.description": "Description is a free-text label for the console. Optional, clipped to 1024 bytes.",
@@ -48,18 +48,18 @@ func init() {
 		Example: json.RawMessage(`{"url":"https://acme.example/hooks/hanzo","events":["commerce.order.>"],"description":"order pipeline"}`),
 	})
 	zip.Describe("POST /v1/webhooks/:id/rotate-secret", zip.Doc{
-		Description: "rotateSecret mints a NEW HMAC signing secret for the endpoint and answers the\nendpoint WITH it — the only other response besides create that ever carries a\nsecret. The old secret stops working the instant this returns: every subsequent\ndelivery signs with the new one, with no overlap window. Call it when the\nsubscriber is ready to swap the value on its side, not before.",
+		Description: "Mints a NEW HMAC signing secret for the endpoint and answers the\nendpoint WITH it — the only other response besides create that ever carries a\nsecret. The old secret stops working the instant this returns: every subsequent\ndelivery signs with the new one, with no overlap window. Call it when the\nsubscriber is ready to swap the value on its side, not before.",
 		Fields: map[string]string{
 			"Endpoint.deliveries7d": "Deliveries7d / Failures7d are cheap usage counters computed from the delivery log\nover usageWindow (not stored columns) and populated ONLY on list/get. They are 0\nwhen there is no delivery history — never omitempty, so the console always sees them.",
 		},
 		Example: json.RawMessage(`{"id":"wh_9f8c1d2e"}`),
 	})
 	zip.Describe("POST /v1/webhooks/:id/test", zip.Doc{
-		Description: "testEndpoint sends ONE signed test event to the endpoint right now and answers\nthe outcome inline, so the console can show whether the subscriber is reachable\nwithout waiting for real traffic. It takes the same attempt path the bus\ndispatcher takes — one attempt, 10s timeout, no retry ladder — and records the\nresult in the endpoint's delivery log. It works on a DISABLED endpoint too:\nvalidating one you have paused is the whole point.",
+		Description: "Sends ONE signed test event to the endpoint right now and answers\nthe outcome inline, so the console can show whether the subscriber is reachable\nwithout waiting for real traffic. It takes the same attempt path the bus\ndispatcher takes — one attempt, 10s timeout, no retry ladder — and records the\nresult in the endpoint's delivery log. It works on a DISABLED endpoint too:\nvalidating one you have paused is the whole point.",
 		Example:     json.RawMessage(`{"id":"wh_9f8c1d2e"}`),
 	})
 	zip.Describe("PUT /v1/webhooks/:id", zip.Doc{
-		Description: "updateEndpoint replaces the editable fields of one of the caller org's\nendpoints — url, events, status and description — and answers the stored row\nwith its secret redacted. It is a full replace, not a patch: an omitted field\nis written as its empty value, and an omitted or empty events list resubscribes\nthe endpoint to EVERY event. The signing secret and the creation time are\nimmutable here; rotate the secret with POST /v1/webhooks/{id}/rotate-secret.",
+		Description: "Replaces the editable fields of one of the caller org's\nendpoints — url, events, status and description — and answers the stored row\nwith its secret redacted. It is a full replace, not a patch: an omitted field\nis written as its empty value, and an omitted or empty events list resubscribes\nthe endpoint to EVERY event. The signing secret and the creation time are\nimmutable here; rotate the secret with POST /v1/webhooks/{id}/rotate-secret.",
 		Fields: map[string]string{
 			"Endpoint.deliveries7d":        "Deliveries7d / Failures7d are cheap usage counters computed from the delivery log\nover usageWindow (not stored columns) and populated ONLY on list/get. They are 0\nwhen there is no delivery history — never omitempty, so the console always sees them.",
 			"updateEndpointIn.description": "Description is a free-text label for the console. Optional, clipped to 1024 bytes.",
