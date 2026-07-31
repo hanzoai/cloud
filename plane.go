@@ -236,15 +236,25 @@ func reach(ctx context.Context, app string) error {
 		return fmt.Errorf("wake %s: %w", app, err)
 	}
 	defer func() { _ = c.Close() }()
-	if _, err := zip.Call[plane.StartIn, plane.Started](ctx, c, plane.HostStart,
-		&plane.StartIn{App: app}); err != nil {
-		var he *zip.HTTPError
-		if errors.As(err, &he) && he.Status == 404 {
-			// The router looked and there is no such app in this fleet.
-			return fmt.Errorf("%w: %s (%s)", ErrNoPeer, app, he.Msg)
-		}
-		// It is deployed and would not start. An outage, never an absence.
+	// EVERY error here is an outage, and only an ANSWER can say the app is absent.
+	// This used to read a 404 as absence, and three different things answer 404 on
+	// this wire — the router's own "no such app", zip's "unknown op" when the router
+	// predates this op, and any framework 404 for the path. They rebuild into the
+	// same *HTTPError with an empty Code, so nothing but the message text separated
+	// them. On a rolling deploy the middle one is live: an older host answers
+	// "unknown op: host_start", the rail would have read version skew as "this fleet
+	// prices nothing", and every priced tool goes free until the last pod turns over.
+	out, err := zip.Call[plane.StartIn, plane.Started](ctx, c, plane.HostStart,
+		&plane.StartIn{App: app})
+	switch {
+	case err != nil:
 		return fmt.Errorf("wake %s: %w", app, err)
+	case out == nil:
+		// A void reply from the only thing that knows the manifest is not an answer.
+		return fmt.Errorf("wake %s: the router answered nothing", app)
+	case !out.Known:
+		// The router looked in its own plugin table and there is no such app here.
+		return fmt.Errorf("%w: %s (the router runs no such app)", ErrNoPeer, app)
 	}
 	if !exists(zip.SocketPath(app)) {
 		// The router started it and its plane socket is still not there. ServePlane

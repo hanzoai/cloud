@@ -57,17 +57,22 @@ func serveWake(app *zip.App) {
 			// children this host spawned.
 			addr, err := app.Start(in.App)
 			if err != nil {
-				// zip says "no plugin named X" for a name this fleet does not run.
-				// That is a 404 and it is an ANSWER — the caller reads it as "not
-				// deployed here" and falls back. Anything else is a deployed app
-				// that would not start, which is an outage and must not be
-				// mistaken for an absence.
+				// "This fleet does not run that app" is an ANSWER and it goes back
+				// as one — a 200 saying Known=false — because it is the single fact
+				// a caller is allowed to read as "nothing is priced here". As a 404
+				// it was indistinguishable from zip's own "unknown op" 404, which is
+				// exactly what a host pod on an older build answers, so a rolling
+				// deploy would have read a version skew as a deployment fact and
+				// given away every priced tool for the length of the window.
+				//
+				// Anything else is a deployed app that would not start: an outage,
+				// and an outage must fail the call rather than describe the fleet.
 				if isUnknownApp(app, in.App) {
-					return nil, zip.ErrNotFound("no app named " + in.App + " in this fleet")
+					return &plane.Started{}, nil
 				}
 				return nil, zip.Errorf(503, "start %s: %v", in.App, err)
 			}
-			return &plane.Started{Addr: addr}, nil
+			return &plane.Started{Addr: addr, Known: true}, nil
 		},
 		zip.WithOperationID(plane.HostStart),
 		zip.WithSummary("Start one lazily-mounted app"))

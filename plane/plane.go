@@ -464,9 +464,23 @@ type StartIn struct {
 	App string `json:"app" validate:"required"`
 }
 
-// Started reports the address the app now serves its own routes on. The caller
-// does not use it — it dials the app's canonical socket — but a start that
-// reports nothing is indistinguishable from one that did not happen.
+// Started reports what the router did.
+//
+// Known is the load-bearing field and it is on a 200, not on a status code. "This
+// fleet does not run that app" is the ONE answer a caller may read as free, and
+// carrying it as a 404 made it indistinguishable from two other 404s on the same
+// wire: zip's own "unknown op" when the router predates this op, and any framework
+// 404 for the path. All three rebuild into the same *HTTPError with an empty Code,
+// so only the message text differed — and matching on text is not a fact.
+//
+// That mattered on a rolling deploy. A host pod on an older build answers "unknown
+// op: host_start", which as a status is 404, which as a fact would have been "not
+// deployed here" — and a payment rail reading that concludes nothing is priced and
+// serves every priced tool free, fleet-wide, for the whole skew window.
+//
+// So an answer states the fact and EVERY error is an outage. A router that cannot
+// answer this op cannot claim anything about the fleet.
 type Started struct {
-	Addr string `json:"addr"`
+	Addr  string `json:"addr"`
+	Known bool   `json:"known"`
 }
